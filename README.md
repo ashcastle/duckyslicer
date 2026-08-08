@@ -29,7 +29,7 @@ cloud service, or network permission.
 - A full-screen print bed that keeps the model and G-code at their real millimetre scale
 - One-finger orbit and two-finger pan/zoom for the whole scene
 - Full-layer preview by default, with a two-handle slider for choosing a visible layer range
-- Role colors for walls, infill, solid surfaces, support, bridges, and bed adhesion
+- Outlined role colors plus adjustable height shading for walls, infill, solid surfaces, support, bridges, and bed adhesion
 - Adaptive preview detail that stays lighter while the camera is moving and refines after release
 - Working move, rotate, scale, center, reset, and remove controls for imported models
 - Snapmaker U1 profiles for 0.2, 0.4, 0.6, and 0.8 mm nozzles

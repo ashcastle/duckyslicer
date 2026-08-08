@@ -102,6 +102,7 @@
     <string name="layer_range">전체 %3$d개 중 %1$d–%2$d 레이어</string>
     <string name="z_range">Z %1$.2f–%2$.2f mm</string>
     <string name="toolpath_opacity">툴패스 표시 강도 · %1$d%%</string>
+    <string name="toolpath_depth_contrast">높이 대비 · %1$d%%</string>
     <string name="toolpath_outer_wall">외벽</string>
     <string name="toolpath_inner_wall">내벽</string>
     <string name="toolpath_infill">인필</string>

@@ -102,6 +102,7 @@
     <string name="layer_range">Layers %1$d–%2$d of %3$d</string>
     <string name="z_range">Z %1$.2f–%2$.2f mm</string>
     <string name="toolpath_opacity">Toolpath visibility · %1$d%%</string>
+    <string name="toolpath_depth_contrast">Height contrast · %1$d%%</string>
     <string name="toolpath_outer_wall">Outer wall</string>
     <string name="toolpath_inner_wall">Inner wall</string>
     <string name="toolpath_infill">Infill</string>
