@@ -19,7 +19,7 @@ val orcaProfileRoot = repositoryRoot.resolve(
     "build/native-slicer/source/app/src/main/cpp/orcaslicer/resources/profiles",
 )
 val profileCatalogGenerator = repositoryRoot.resolve("tools/generate_profile_catalog.py")
-val generatedProfileCatalog = generatedProfileAssets.map { it.file("profile_catalog_v3.json") }
+val generatedProfileCatalog = generatedProfileAssets.map { it.file("profile_catalog_v4.json") }
 val ndkSharedRuntime = nativeNdkDirectory.map { ndk ->
     val prebuiltRoot = ndk.asFile.resolve("toolchains/llvm/prebuilt")
     val candidates = prebuiltRoot.listFiles()
@@ -79,9 +79,27 @@ val generateOrcaProfileCatalog = tasks.register<Exec>("generateOrcaProfileCatalo
     )
     inputs.file(profileCatalogGenerator)
     inputs.dir(orcaProfileRoot)
-    inputs.property("profileSchemaVersion", 3)
+    inputs.property("profileSchemaVersion", 4)
     inputs.property("orcaRevision", "2c8a5385bc53cbc16211b4dd36ef9963ee185f4a")
     outputs.file(generatedProfileCatalog)
+    outputs.upToDateWhen {
+        val expected = generatedProfileCatalog.get().asFile
+        expected.parentFile.listFiles()?.none { candidate ->
+            candidate != expected &&
+                candidate.name.startsWith("profile_catalog_v") &&
+                candidate.extension == "json"
+        } ?: true
+    }
+    doFirst {
+        val expected = generatedProfileCatalog.get().asFile
+        expected.parentFile.listFiles()?.filter { candidate ->
+            candidate != expected &&
+                candidate.name.startsWith("profile_catalog_v") &&
+                candidate.extension == "json"
+        }?.forEach { obsolete ->
+            check(obsolete.delete()) { "Could not remove obsolete profile catalog: $obsolete" }
+        }
+    }
 }
 
 val buildRustNative = tasks.register<Exec>("buildRustNative") {

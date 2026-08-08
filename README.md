@@ -39,6 +39,7 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - Layer-aware preview detail that preserves complete representative perimeter loops instead of punching gaps through walls
 - Working move, rotate, scale, center, reset, duplicate, arrange, and remove controls
 - A pinned Orca-derived catalog with 785 printer variants, 3,306 filament presets, and 2,140 slicing processes
+- Orca process fidelity for independent outer/inner walls, sparse infill, internal solid, top surface, and support speeds and line widths, plus feature accelerations
 - Searchable printer, filament, and slicing selectors with collapsible brand and personal-profile groups
 - Printer compatibility filtering, validated profile inheritance, and unsafe-entry rejection during the build
 - Editable settings and schema-versioned named user profiles saved entirely in app-private storage
@@ -52,7 +53,9 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 
 The device test suite uses a repository geometry fixture and verifies Rust mesh
 inspection, native slicing, non-empty G-code, all generated layers, extrusion paths
-with real Z coordinates, and project recovery through native reinspection. Local
+with real Z coordinates, project recovery through native reinspection, and semantic
+G-code contracts for real Creality/Marlin, Prusa/Marlin 2, and Anycubic/Klipper
+profiles. Local
 simulated OctoPrint and Moonraker endpoints also verify
 authentication, status parsing, uploads, explicit print start, and encrypted key storage.
 

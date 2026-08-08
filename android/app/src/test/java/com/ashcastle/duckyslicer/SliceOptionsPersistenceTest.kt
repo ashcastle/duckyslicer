@@ -23,6 +23,21 @@ class SliceOptionsPersistenceTest {
         assertEquals(248, restored.nozzleTemp)
         assertEquals(0.64f, restored.outerWallLineWidth)
         assertEquals(0.68f, restored.innerWallLineWidth)
+        assertEquals(0.55f, restored.topSurfaceLineWidth)
+        assertEquals(0.72f, restored.sparseInfillLineWidth)
+        assertEquals(0.61f, restored.internalSolidInfillLineWidth)
+        assertEquals(0.58f, restored.supportLineWidth)
+        assertEquals(175f, restored.innerWallSpeed)
+        assertEquals(210f, restored.sparseInfillSpeed)
+        assertEquals(165f, restored.internalSolidInfillSpeed)
+        assertEquals(95f, restored.topSurfaceSpeed)
+        assertEquals(85f, restored.supportSpeed)
+        assertEquals(4_000f, restored.defaultAcceleration)
+        assertEquals(2_000f, restored.outerWallAcceleration)
+        assertEquals(3_500f, restored.innerWallAcceleration)
+        assertEquals(1_200f, restored.topSurfaceAcceleration)
+        assertEquals(5_000f, restored.travelAcceleration)
+        assertEquals(600f, restored.firstLayerAcceleration)
         assertEquals("classic", restored.wallGenerator)
         assertEquals("outer-inner", restored.wallSequence)
         assertEquals("klipper", restored.gcodeFlavor)
@@ -92,6 +107,21 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         brimWidth = 5f,
         outerWallLineWidth = 0.64f,
         innerWallLineWidth = 0.68f,
+        topSurfaceLineWidth = 0.55f,
+        sparseInfillLineWidth = 0.72f,
+        internalSolidInfillLineWidth = 0.61f,
+        supportLineWidth = 0.58f,
+        innerWallSpeed = 175f,
+        sparseInfillSpeed = 210f,
+        internalSolidInfillSpeed = 165f,
+        topSurfaceSpeed = 95f,
+        supportSpeed = 85f,
+        defaultAcceleration = 4_000f,
+        outerWallAcceleration = 2_000f,
+        innerWallAcceleration = 3_500f,
+        topSurfaceAcceleration = 1_200f,
+        travelAcceleration = 5_000f,
+        firstLayerAcceleration = 600f,
         wallGenerator = "classic",
         wallSequence = "outer-inner",
         detectThinWalls = true,

@@ -50,6 +50,17 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         perimeters = perimeters,
         fillDensity = fillDensity,
         printSpeed = printSpeed,
+        innerWallSpeed = innerWallSpeed,
+        sparseInfillSpeed = sparseInfillSpeed,
+        internalSolidInfillSpeed = internalSolidInfillSpeed,
+        topSurfaceSpeed = topSurfaceSpeed,
+        supportSpeed = supportSpeed,
+        defaultAcceleration = defaultAcceleration,
+        outerWallAcceleration = outerWallAcceleration,
+        innerWallAcceleration = innerWallAcceleration,
+        topSurfaceAcceleration = topSurfaceAcceleration,
+        travelAcceleration = travelAcceleration,
+        firstLayerAcceleration = firstLayerAcceleration,
         nozzleDiameter = nozzleDiameter,
         supportEnabled = supportEnabled,
         brimWidth = brimWidth,
@@ -64,6 +75,10 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         skirtDistance = skirtDistance,
         outerWallLineWidth = outerWallLineWidth,
         innerWallLineWidth = innerWallLineWidth,
+        topSurfaceLineWidth = topSurfaceLineWidth,
+        sparseInfillLineWidth = sparseInfillLineWidth,
+        internalSolidInfillLineWidth = internalSolidInfillLineWidth,
+        supportLineWidth = supportLineWidth,
         wallGenerator = wallGenerator,
         wallSequence = wallSequence,
         detectThinWalls = detectThinWalls,
@@ -107,7 +122,7 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 2
+private const val SLICE_OPTIONS_FORMAT_VERSION = 3
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f

@@ -46,6 +46,21 @@ class NativeEngineInstrumentedTest {
                     fillDensity = 0.23f,
                     outerWallLineWidth = 0.63f,
                     innerWallLineWidth = 0.69f,
+                    topSurfaceLineWidth = 0.57f,
+                    sparseInfillLineWidth = 0.72f,
+                    internalSolidInfillLineWidth = 0.66f,
+                    supportLineWidth = 0.58f,
+                    innerWallSpeed = 175f,
+                    sparseInfillSpeed = 205f,
+                    internalSolidInfillSpeed = 165f,
+                    topSurfaceSpeed = 95f,
+                    supportSpeed = 80f,
+                    defaultAcceleration = 4_200f,
+                    outerWallAcceleration = 2_100f,
+                    innerWallAcceleration = 3_800f,
+                    topSurfaceAcceleration = 1_300f,
+                    travelAcceleration = 4_700f,
+                    firstLayerAcceleration = 650f,
                     wallGenerator = "classic",
                     wallSequence = "outer-inner",
                     gcodeFlavor = "klipper",
@@ -84,6 +99,21 @@ class NativeEngineInstrumentedTest {
             assertEquals(0.23f, restoredDocument.sliceOptions?.fillDensity)
             assertEquals(0.63f, restoredDocument.sliceOptions?.outerWallLineWidth)
             assertEquals(0.69f, restoredDocument.sliceOptions?.innerWallLineWidth)
+            assertEquals(0.57f, restoredDocument.sliceOptions?.topSurfaceLineWidth)
+            assertEquals(0.72f, restoredDocument.sliceOptions?.sparseInfillLineWidth)
+            assertEquals(0.66f, restoredDocument.sliceOptions?.internalSolidInfillLineWidth)
+            assertEquals(0.58f, restoredDocument.sliceOptions?.supportLineWidth)
+            assertEquals(175f, restoredDocument.sliceOptions?.innerWallSpeed)
+            assertEquals(205f, restoredDocument.sliceOptions?.sparseInfillSpeed)
+            assertEquals(165f, restoredDocument.sliceOptions?.internalSolidInfillSpeed)
+            assertEquals(95f, restoredDocument.sliceOptions?.topSurfaceSpeed)
+            assertEquals(80f, restoredDocument.sliceOptions?.supportSpeed)
+            assertEquals(4_200f, restoredDocument.sliceOptions?.defaultAcceleration)
+            assertEquals(2_100f, restoredDocument.sliceOptions?.outerWallAcceleration)
+            assertEquals(3_800f, restoredDocument.sliceOptions?.innerWallAcceleration)
+            assertEquals(1_300f, restoredDocument.sliceOptions?.topSurfaceAcceleration)
+            assertEquals(4_700f, restoredDocument.sliceOptions?.travelAcceleration)
+            assertEquals(650f, restoredDocument.sliceOptions?.firstLayerAcceleration)
             assertEquals("classic", restoredDocument.sliceOptions?.wallGenerator)
             assertEquals("outer-inner", restoredDocument.sliceOptions?.wallSequence)
             assertEquals("klipper", restoredDocument.sliceOptions?.gcodeFlavor)
@@ -115,6 +145,21 @@ class NativeEngineInstrumentedTest {
                 pressureAdvance = 0.035f,
                 outerWallLineWidth = 0.64f,
                 innerWallLineWidth = 0.68f,
+                topSurfaceLineWidth = 0.56f,
+                sparseInfillLineWidth = 0.72f,
+                internalSolidInfillLineWidth = 0.66f,
+                supportLineWidth = 0.58f,
+                innerWallSpeed = 180f,
+                sparseInfillSpeed = 220f,
+                internalSolidInfillSpeed = 170f,
+                topSurfaceSpeed = 100f,
+                supportSpeed = 85f,
+                defaultAcceleration = 4_000f,
+                outerWallAcceleration = 2_000f,
+                innerWallAcceleration = 3_500f,
+                topSurfaceAcceleration = 1_200f,
+                travelAcceleration = 4_500f,
+                firstLayerAcceleration = 600f,
                 wallGenerator = "classic",
                 wallSequence = "outer-inner",
                 detectThinWalls = true,
@@ -148,6 +193,21 @@ class NativeEngineInstrumentedTest {
         assertEquals(0.035f, restored.filaments.last().pressureAdvance)
         assertEquals(0.64f, restored.slicing.last().outerWallLineWidth)
         assertEquals(0.68f, restored.slicing.last().innerWallLineWidth)
+        assertEquals(0.56f, restored.slicing.last().topSurfaceLineWidth)
+        assertEquals(0.72f, restored.slicing.last().sparseInfillLineWidth)
+        assertEquals(0.66f, restored.slicing.last().internalSolidInfillLineWidth)
+        assertEquals(0.58f, restored.slicing.last().supportLineWidth)
+        assertEquals(180f, restored.slicing.last().innerWallSpeed)
+        assertEquals(220f, restored.slicing.last().sparseInfillSpeed)
+        assertEquals(170f, restored.slicing.last().internalSolidInfillSpeed)
+        assertEquals(100f, restored.slicing.last().topSurfaceSpeed)
+        assertEquals(85f, restored.slicing.last().supportSpeed)
+        assertEquals(4_000f, restored.slicing.last().defaultAcceleration)
+        assertEquals(2_000f, restored.slicing.last().outerWallAcceleration)
+        assertEquals(3_500f, restored.slicing.last().innerWallAcceleration)
+        assertEquals(1_200f, restored.slicing.last().topSurfaceAcceleration)
+        assertEquals(4_500f, restored.slicing.last().travelAcceleration)
+        assertEquals(600f, restored.slicing.last().firstLayerAcceleration)
         assertEquals("classic", restored.slicing.last().wallGenerator)
         assertEquals("outer-inner", restored.slicing.last().wallSequence)
         assertTrue(restored.slicing.last().detectThinWalls)
@@ -160,7 +220,7 @@ class NativeEngineInstrumentedTest {
         assertEquals(7f, restored.printers.last().maxJerkX)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
-        assertEquals(5, JSONObject(file.readText()).getInt("schemaVersion"))
+        assertEquals(6, JSONObject(file.readText()).getInt("schemaVersion"))
         assertTrue("Saved profiles must stay in app-private storage", file.canonicalPath.startsWith(context.cacheDir.canonicalPath))
         file.delete()
         directory.delete()
@@ -189,7 +249,7 @@ class NativeEngineInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val catalog = OrcaProfileCatalog(context).load()
 
-        assertEquals(3, catalog.schemaVersion)
+        assertEquals(4, catalog.schemaVersion)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include Orca filament presets", catalog.filaments.size > 3_000)
@@ -198,6 +258,9 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.filaments.all(ProfileValidation::filament))
         assertTrue(catalog.slicing.all(ProfileValidation::slicing))
         assertTrue(catalog.slicing.any { it.outerWallLineWidth != it.innerWallLineWidth })
+        assertTrue(catalog.slicing.any { it.topSurfaceLineWidth != it.internalSolidInfillLineWidth })
+        assertTrue(catalog.slicing.any { it.printSpeed != it.innerWallSpeed })
+        assertTrue(catalog.slicing.any { it.sparseInfillSpeed != it.internalSolidInfillSpeed })
         assertTrue(catalog.slicing.map { it.wallGenerator }.toSet().containsAll(listOf("arachne", "classic")))
         assertTrue(catalog.slicing.map { it.wallSequence }.toSet().containsAll(listOf("inner-outer", "outer-inner")))
         assertTrue(catalog.printers.mapNotNull { it.brand }.containsAll(listOf("Creality", "Prusa", "Anycubic")))
@@ -268,6 +331,21 @@ class NativeEngineInstrumentedTest {
                 perimeters = 3,
                 outerWallLineWidth = 0.62f,
                 innerWallLineWidth = 0.68f,
+                topSurfaceLineWidth = 0.58f,
+                sparseInfillLineWidth = 0.71f,
+                internalSolidInfillLineWidth = 0.66f,
+                supportLineWidth = 0.55f,
+                innerWallSpeed = 177f,
+                sparseInfillSpeed = 188f,
+                internalSolidInfillSpeed = 166f,
+                topSurfaceSpeed = 99f,
+                supportSpeed = 77f,
+                defaultAcceleration = 4_567f,
+                outerWallAcceleration = 2_345f,
+                innerWallAcceleration = 3_456f,
+                topSurfaceAcceleration = 1_234f,
+                travelAcceleration = 5_678f,
+                firstLayerAcceleration = 678f,
                 wallGenerator = "arachne",
                 wallSequence = "outer-inner",
                 detectThinWalls = true,
@@ -305,6 +383,21 @@ class NativeEngineInstrumentedTest {
         assertTrue("Wall count must reach Orca", gcode.contains("; wall_loops = 3"))
         assertTrue("Outer-wall width must remain independent", gcode.contains("; outer_wall_line_width = 0.62"))
         assertTrue("Inner-wall width must remain independent", gcode.contains("; inner_wall_line_width = 0.68"))
+        assertTrue("Top-surface width must remain independent", gcode.contains("; top_surface_line_width = 0.58"))
+        assertTrue("Sparse-infill width must remain independent", gcode.contains("; sparse_infill_line_width = 0.71"))
+        assertTrue("Internal-solid width must remain independent", gcode.contains("; internal_solid_infill_line_width = 0.66"))
+        assertTrue("Support width must remain independent", gcode.contains("; support_line_width = 0.55"))
+        assertTrue("Inner-wall speed must reach Orca", gcode.contains("; inner_wall_speed = 177"))
+        assertTrue("Sparse-infill speed must reach Orca", gcode.contains("; sparse_infill_speed = 188"))
+        assertTrue("Internal-solid speed must reach Orca", gcode.contains("; internal_solid_infill_speed = 166"))
+        assertTrue("Top-surface speed must reach Orca", gcode.contains("; top_surface_speed = 99"))
+        assertTrue("Support speed must reach Orca", gcode.contains("; support_speed = 77"))
+        assertTrue("Default acceleration must reach Orca", gcode.contains("; default_acceleration = 4567"))
+        assertTrue("Outer-wall acceleration must reach Orca", gcode.contains("; outer_wall_acceleration = 2345"))
+        assertTrue("Inner-wall acceleration must reach Orca", gcode.contains("; inner_wall_acceleration = 3456"))
+        assertTrue("Top-surface acceleration must reach Orca", gcode.contains("; top_surface_acceleration = 1234"))
+        assertTrue("Travel acceleration must reach Orca", gcode.contains("; travel_acceleration = 5678"))
+        assertTrue("First-layer acceleration must reach Orca", gcode.contains("; initial_layer_acceleration = 678"))
         assertTrue("Arachne selection must reach Orca", gcode.contains("; wall_generator = arachne"))
         assertTrue("Wall order must reach Orca", gcode.contains("; wall_sequence = outer wall/inner wall"))
         assertTrue("Thin-wall detection must reach Orca", gcode.contains("; detect_thin_wall = 1"))
@@ -427,26 +520,101 @@ class NativeEngineInstrumentedTest {
     @Test
     fun marlinAndKlipperFirmwareContractsReachOrca() {
         val model = fixtureModel()
-        for (flavor in listOf("marlin", "marlin2", "klipper")) {
-            val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(
-                id = "contract-$flavor",
-                name = "Contract $flavor",
-                gcodeFlavor = flavor,
-                maxAccelerationExtruding = 3_000f,
-                maxAccelerationTravel = 4_000f,
-            )
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val catalog = OrcaProfileCatalog(context).load()
+        data class Contract(
+            val flavor: String,
+            val printerId: String,
+            val processId: String,
+            val expectedSettings: Map<String, String>,
+        )
+        val contracts = listOf(
+            Contract(
+                flavor = "marlin",
+                printerId = "orca-printer-b0d4d6e7890c59e89228",
+                processId = "orca-process-ce89c8ef371d6032980c",
+                expectedSettings = mapOf(
+                    "outer_wall_speed" to "40",
+                    "inner_wall_speed" to "40",
+                    "sparse_infill_speed" to "60",
+                    "internal_solid_infill_speed" to "50",
+                    "top_surface_speed" to "30",
+                    "support_speed" to "40",
+                    "top_surface_line_width" to "0.4",
+                    "internal_solid_infill_line_width" to "0.45",
+                    "support_line_width" to "0.38",
+                    "wall_generator" to "arachne",
+                ),
+            ),
+            Contract(
+                flavor = "marlin2",
+                printerId = "orca-printer-62803969e82d53d3720a",
+                processId = "orca-process-f42a24b8fb07dff14515",
+                expectedSettings = mapOf(
+                    "outer_wall_speed" to "170",
+                    "inner_wall_speed" to "170",
+                    "sparse_infill_speed" to "200",
+                    "internal_solid_infill_speed" to "200",
+                    "top_surface_speed" to "100",
+                    "support_speed" to "150",
+                    "default_acceleration" to "4000",
+                    "outer_wall_acceleration" to "3000",
+                    "inner_wall_acceleration" to "4000",
+                    "top_surface_acceleration" to "1000",
+                    "travel_acceleration" to "4000",
+                    "initial_layer_acceleration" to "700",
+                    "top_surface_line_width" to "0.375",
+                    "internal_solid_infill_line_width" to "0.48",
+                    "support_line_width" to "0.384",
+                    "wall_generator" to "arachne",
+                ),
+            ),
+            Contract(
+                flavor = "klipper",
+                printerId = "orca-printer-8d5fc727726c00b46b13",
+                processId = "orca-process-169e5f32752a1719ac3e",
+                expectedSettings = mapOf(
+                    "outer_wall_speed" to "120",
+                    "inner_wall_speed" to "300",
+                    "sparse_infill_speed" to "300",
+                    "internal_solid_infill_speed" to "240",
+                    "top_surface_speed" to "120",
+                    "support_speed" to "150",
+                    "default_acceleration" to "10000",
+                    "outer_wall_acceleration" to "5000",
+                    "inner_wall_acceleration" to "10000",
+                    "top_surface_acceleration" to "2000",
+                    "travel_acceleration" to "10000",
+                    "initial_layer_acceleration" to "5000",
+                    "top_surface_line_width" to "0.42",
+                    "internal_solid_infill_line_width" to "0.42",
+                    "support_line_width" to "0.4",
+                    "wall_generator" to "classic",
+                ),
+            ),
+        )
+
+        for (contract in contracts) {
+            val printer = requireNotNull(catalog.printers.find { it.id == contract.printerId })
+            val process = requireNotNull(catalog.slicing.find { it.id == contract.processId })
             val outcome = OnDeviceSlicer.slice(
                 model,
                 SliceOptions()
                     .selectPrinter(printer)
                     .selectFilament(FilamentProfile.GENERIC_PLA)
-                    .selectQuality(QualityProfile.DRAFT),
+                    .selectQuality(process),
             )
             val gcode = outcome.output.readText()
+            val settings = gcode.lineSequence()
+                .filter { it.startsWith("; ") && it.contains(" = ") }
+                .associate { line -> line.removePrefix("; ").split(" = ", limit = 2).let { it[0] to it[1] } }
 
-            assertTrue("$flavor metadata must reach Orca", gcode.contains("; gcode_flavor = $flavor"))
-            assertTrue("$flavor output must contain extrusion", gcode.contains(";TYPE:Outer wall"))
-            if (flavor == "klipper") {
+            assertEquals("${contract.flavor} metadata must reach Orca", contract.flavor, settings["gcode_flavor"])
+            contract.expectedSettings.forEach { (key, value) ->
+                assertEquals("${contract.flavor} must preserve $key", value, settings[key])
+            }
+            assertTrue("${contract.flavor} output must contain extrusion", gcode.contains(";TYPE:Outer wall"))
+            if (contract.flavor == "klipper") {
                 assertTrue(
                     "Klipper must use its native acceleration command",
                     gcode.contains("SET_VELOCITY_LIMIT ACCEL="),
