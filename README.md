@@ -34,11 +34,11 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - Import, select, duplicate, arrange, and slice multiple objects in one project, with undo and redo
 - Automatic app-private project recovery that keeps imported models, selection, placement, and effective printer, filament, and slicing settings across process restarts
 - Full-layer preview by default, with a two-handle slider for choosing a visible layer range
-- Depth-tested extrusion beads with dark side faces, role-colored outlines, and adjustable height shading for outer walls, inner walls, infill, solid surfaces, support, bridges, and bed adhesion
-- Orca role preservation from generated G-code through the Rust parser, with regression tests that require distinct outer- and inner-wall paths
+- Depth-tested extrusion beads with dark side faces, role-colored outlines, adjustable height shading, and tap-to-isolate controls for outer walls, inner walls, infill, solid surfaces, support, bridges, and bed adhesion
+- Orca role preservation from generated G-code through the Rust parser, with geometry regression tests that require distinct exterior, cavity-facing, and structural inner-wall paths
 - Layer-aware preview detail that preserves complete representative perimeter loops instead of punching gaps through walls
 - Working move, rotate, scale, center, reset, duplicate, arrange, and remove controls
-- A pinned Orca-derived catalog with 785 printer variants, 3,306 filament presets, and 2,140 slicing processes
+- A pinned Orca-derived catalog with 785 printer variants, 3,306 filament presets, and 2,140 slicing processes, streamed from a compact validated binary asset
 - Orca process fidelity for independent outer/inner walls, sparse infill, internal solid, top surface, and support speeds and line widths, plus feature accelerations
 - Orca bridge, gap-fill, first-layer solid, shell-thickness, feature-flow, and support-interface settings preserved through profiles, projects, and on-device G-code
 - Orca sparse, top, bottom, and internal-solid patterns preserved independently—including crosshatch—along with seam, ironing, overhang-unit, and support-pattern semantics
@@ -61,7 +61,7 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 
 The device test suite uses a repository geometry fixture and verifies Rust mesh
 inspection, native slicing, non-empty G-code, all generated layers, extrusion paths
-with real Z coordinates, project recovery through native reinspection, and semantic
+with real Z coordinates, hollow-solid cavity preservation, project recovery through native reinspection, and semantic
 G-code contracts for real Creality/Marlin, Prusa/Marlin 2, and Anycubic/Klipper
 profiles. Local
 simulated OctoPrint and Moonraker endpoints also verify
