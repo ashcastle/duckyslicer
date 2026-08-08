@@ -21,7 +21,7 @@ avoid introducing an account or cloud requirement.
 ```shell
 git clone --recurse-submodules <repository-url>
 cd duckyslicer/android
-./gradlew assembleDebug
+./gradlew --dependency-verification=strict assembleDebug
 ```
 
 The first build reconstructs the pinned ARM64 slicer runtime from source and can
@@ -39,12 +39,14 @@ cargo test --locked
 cargo clippy --locked -- -D warnings
 
 cd ../../android
-./gradlew :app:testDebugUnitTest :app:assembleDebug \
+./gradlew --dependency-verification=strict \
+  :app:testDebugUnitTest :app:assembleDebug \
   :app:assembleDebugAndroidTest :app:lintDebug
 
 cd ..
-python3 -m unittest tools.test_verify_apk
+python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain
 python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
+python3 tools/verify_gradle_supply_chain.py
 python3 tools/verify_workflows.py
 ```
 
@@ -63,6 +65,30 @@ usable.
 Workflow changes must keep third-party Actions pinned to full commit hashes. A
 tagged release must preserve the build → ARM64 device test → publish dependency;
 publishing an APK before device tests finish is not an accepted fallback.
+
+## Updating Android dependencies
+
+Gradle dependency changes must update both `android/app/gradle.lockfile` and
+`android/gradle/verification-metadata.xml`. Generate trust data from an empty
+Gradle user home so previously cached plug-in metadata cannot hide a missing
+checksum, then review every new coordinate and checksum before committing it:
+
+```shell
+cd android
+verification_home="$(mktemp -d)"
+GRADLE_USER_HOME="$verification_home" ./gradlew --no-daemon \
+  --write-locks --write-verification-metadata sha256 \
+  :app:testDebugUnitTest :app:lintRelease :app:assembleDebug \
+  :app:assembleDebugAndroidTest :app:assembleRelease
+
+cd ..
+python3 tools/verify_gradle_supply_chain.py
+git diff -- android/app/gradle.lockfile android/gradle/verification-metadata.xml
+```
+
+Do not add trusted-artifact or ignored-key bypasses. If a repository publishes a
+new checksum for an existing coordinate, stop and verify the upstream artifact
+instead of accepting both values automatically.
 
 ## Pull requests
 

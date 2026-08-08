@@ -44,8 +44,10 @@ jobs:
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
           cargo install cargo-ndk --version 4.1.2 --locked
 
-      - name: Verify workflow supply chain
-        run: python3 tools/verify_workflows.py
+      - name: Verify build supply chain
+        run: |
+          python3 tools/verify_workflows.py
+          python3 tools/verify_gradle_supply_chain.py
 
       - name: Restore native build cache
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
@@ -87,7 +89,8 @@ jobs:
       - name: Build signed release and device-test APKs
         working-directory: android
         run: |
-          ./gradlew :app:testDebugUnitTest :app:lintRelease \
+          ./gradlew --dependency-verification=strict \
+            :app:testDebugUnitTest :app:lintRelease \
             :app:assembleDebug :app:assembleDebugAndroidTest :app:assembleRelease \
             :app:writeReleaseDependencyInventory \
             -Pduckyslicer.versionName="$DUCKYSLICER_RELEASE_VERSION" \
@@ -98,7 +101,7 @@ jobs:
           release_apk="android/app/build/outputs/apk/release/app-release.apk"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$release_apk"
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$release_apk"
-          python3 -m unittest tools.test_verify_apk
+          python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain
           python3 tools/verify_apk.py "$release_apk"
           python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
 

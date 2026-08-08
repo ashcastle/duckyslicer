@@ -32,7 +32,20 @@ def main() -> None:
             if PINNED_REF.fullmatch(revision) is None:
                 errors.append(f"{workflow.name}: Action is not pinned to a full commit: {reference}")
 
+    android_source = (WORKFLOW_ROOT / "android.yml").read_text(encoding="utf-8")
     release_source = (WORKFLOW_ROOT / "release.yml").read_text(encoding="utf-8")
+    required_android_gates = {
+        "Gradle uses strict dependency verification": (
+            "./gradlew --dependency-verification=strict"
+        ),
+        "Gradle trust data is structurally verified": (
+            "python3 tools/verify_gradle_supply_chain.py"
+        ),
+    }
+    for description, marker in required_android_gates.items():
+        if marker not in android_source:
+            errors.append(f"android.yml: missing gate: {description}")
+
     required_release_gates = {
         "device-tests depends on build": "  device-tests:\n    needs: build\n",
         "publish depends on device tests": "  publish:\n    needs: [build, device-tests]\n",
@@ -45,6 +58,12 @@ def main() -> None:
             "            -n com.ashcastle.duckyslicer/.MainActivity"
         ),
         "release APK runs structural verifier": "python3 tools/verify_apk.py \"$release_apk\"",
+        "Gradle uses strict dependency verification": (
+            "./gradlew --dependency-verification=strict"
+        ),
+        "Gradle trust data is structurally verified": (
+            "python3 tools/verify_gradle_supply_chain.py"
+        ),
     }
     for description, marker in required_release_gates.items():
         if marker not in release_source:

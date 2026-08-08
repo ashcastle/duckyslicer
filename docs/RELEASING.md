@@ -7,6 +7,8 @@ dependency graph and a build-provenance attestation. Every external GitHub Actio
 is pinned to an immutable commit. The publish job cannot run until the signed build
 finishes, the matching release-candidate test APK passes the complete ARM64 Android
 device suite, and the signed minified APK installs and cold-launches on that emulator.
+Gradle plug-ins, module metadata, and library artifacts are resolved from a checked-in
+lock and must match the reviewed SHA-256 verification metadata.
 
 ## One-time repository setup
 
@@ -42,10 +44,12 @@ the monotonically increasing Android `versionCode`.
 
 ```shell
 cd android
-./gradlew :app:testDebugUnitTest :app:lintRelease :app:assembleRelease
+./gradlew --dependency-verification=strict \
+  :app:testDebugUnitTest :app:lintRelease :app:assembleRelease
 cd ..
-python3 -m unittest tools.test_verify_apk
+python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain
 python3 tools/verify_apk.py android/app/build/outputs/apk/release/app-release-unsigned.apk
+python3 tools/verify_gradle_supply_chain.py
 python3 tools/verify_workflows.py
 ```
 
