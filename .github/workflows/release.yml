@@ -16,11 +16,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    outputs:
+      release_version: ${{ steps.release_version.outputs.version }}
     env:
       DUCKYSLICER_NATIVE_JOBS: "4"
-      DUCKYSLICER_STORE_PASSWORD: ${{ secrets.DUCKYSLICER_STORE_PASSWORD }}
-      DUCKYSLICER_KEY_ALIAS: ${{ secrets.DUCKYSLICER_KEY_ALIAS }}
-      DUCKYSLICER_KEY_PASSWORD: ${{ secrets.DUCKYSLICER_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -58,6 +57,7 @@ jobs:
           key: android-native-${{ runner.os }}-${{ hashFiles('native/slicer-runtime/versions.env', 'native/slicer-runtime/runtime.patch') }}
 
       - name: Validate release tag
+        id: release_version
         run: |
           version="${GITHUB_REF_NAME#v}"
           if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
@@ -65,19 +65,7 @@ jobs:
             exit 1
           fi
           echo "DUCKYSLICER_RELEASE_VERSION=$version" >> "$GITHUB_ENV"
-
-      - name: Materialize signing key
-        env:
-          DUCKYSLICER_KEYSTORE_BASE64: ${{ secrets.DUCKYSLICER_KEYSTORE_BASE64 }}
-        run: |
-          test -n "$DUCKYSLICER_KEYSTORE_BASE64"
-          test -n "$DUCKYSLICER_STORE_PASSWORD"
-          test -n "$DUCKYSLICER_KEY_ALIAS"
-          test -n "$DUCKYSLICER_KEY_PASSWORD"
-          key_file="$RUNNER_TEMP/duckyslicer-release.jks"
-          printf '%s' "$DUCKYSLICER_KEYSTORE_BASE64" | base64 --decode > "$key_file"
-          chmod 600 "$key_file"
-          echo "DUCKYSLICER_KEYSTORE_FILE=$key_file" >> "$GITHUB_ENV"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Check Rust boundary
         working-directory: rust/duckyslicer-jni
@@ -86,7 +74,7 @@ jobs:
           cargo test --locked
           cargo clippy --locked -- -D warnings
 
-      - name: Build signed release and device-test APKs
+      - name: Build unsigned release and device-test APKs
         working-directory: android
         run: |
           ./gradlew --dependency-verification=strict \
@@ -96,34 +84,25 @@ jobs:
             -Pduckyslicer.versionName="$DUCKYSLICER_RELEASE_VERSION" \
             -Pduckyslicer.versionCode="${GITHUB_RUN_NUMBER}"
 
-      - name: Verify signing and APK invariants
+      - name: Verify unsigned APK invariants
         run: |
-          release_apk="android/app/build/outputs/apk/release/app-release.apk"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$release_apk"
+          release_apk="android/app/build/outputs/apk/release/app-release-unsigned.apk"
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$release_apk"
           python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain
           python3 tools/verify_apk.py "$release_apk"
           python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Generate CycloneDX SBOM
-        run: |
-          python3 tools/generate_sbom.py \
-            android/app/build/outputs/apk/release/app-release.apk \
-            "DuckySlicer-$DUCKYSLICER_RELEASE_VERSION.cdx.json" \
-            "$DUCKYSLICER_RELEASE_VERSION" \
-            android/app/build/reports/dependencies/release.txt
-
-      - name: Name release APK
-        run: |
-          cp android/app/build/outputs/apk/release/app-release.apk \
-            "DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-arm64.apk"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: duckyslicer-release-unsigned
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+          retention-days: 7
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: duckyslicer-release-bundle
-          path: |
-            DuckySlicer-*-arm64.apk
-            DuckySlicer-*.cdx.json
+          name: duckyslicer-release-metadata
+          path: android/app/build/reports/dependencies/release.txt
           if-no-files-found: error
           retention-days: 7
 
@@ -136,13 +115,88 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  device-tests:
+  sign:
     needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      actions: read
+    steps:
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+
+      - name: Install pinned signing tool
+        run: sdkmanager "build-tools;36.0.0"
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: duckyslicer-release-unsigned
+          path: unsigned
+
+      - name: Sign and verify release APK
+        env:
+          DUCKYSLICER_KEYSTORE_BASE64: ${{ secrets.DUCKYSLICER_KEYSTORE_BASE64 }}
+          DUCKYSLICER_STORE_PASSWORD: ${{ secrets.DUCKYSLICER_STORE_PASSWORD }}
+          DUCKYSLICER_KEY_ALIAS: ${{ secrets.DUCKYSLICER_KEY_ALIAS }}
+          DUCKYSLICER_KEY_PASSWORD: ${{ secrets.DUCKYSLICER_KEY_PASSWORD }}
+          DUCKYSLICER_SIGNING_CERT_SHA256: ${{ vars.DUCKYSLICER_SIGNING_CERT_SHA256 }}
+          DUCKYSLICER_RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+        run: |
+          test -n "$DUCKYSLICER_KEYSTORE_BASE64"
+          test -n "$DUCKYSLICER_STORE_PASSWORD"
+          test -n "$DUCKYSLICER_KEY_ALIAS"
+          test -n "$DUCKYSLICER_KEY_PASSWORD"
+          expected_fingerprint=$(printf '%s' "$DUCKYSLICER_SIGNING_CERT_SHA256" \
+            | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')
+          if [[ ! "$expected_fingerprint" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "DUCKYSLICER_SIGNING_CERT_SHA256 must be a SHA-256 fingerprint" >&2
+            exit 1
+          fi
+
+          key_file="$RUNNER_TEMP/duckyslicer-release.jks"
+          trap 'rm -f "$key_file"' EXIT
+          printf '%s' "$DUCKYSLICER_KEYSTORE_BASE64" | base64 --decode > "$key_file"
+          chmod 600 "$key_file"
+          mkdir -p signed
+          unsigned_apk="unsigned/app-release-unsigned.apk"
+          signed_apk="signed/DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-arm64.apk"
+          apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          "$apksigner" sign \
+            --ks "$key_file" \
+            --ks-key-alias "$DUCKYSLICER_KEY_ALIAS" \
+            --ks-pass env:DUCKYSLICER_STORE_PASSWORD \
+            --key-pass env:DUCKYSLICER_KEY_PASSWORD \
+            --v1-signing-enabled false \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --v4-signing-enabled false \
+            --out "$signed_apk" \
+            "$unsigned_apk"
+
+          signer_report=$("$apksigner" verify --verbose --print-certs "$signed_apk")
+          printf '%s\n' "$signer_report"
+          actual_fingerprint=$(printf '%s\n' "$signer_report" \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
+            | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')
+          if [ "$actual_fingerprint" != "$expected_fingerprint" ]; then
+            echo "Release signing certificate does not match the pinned fingerprint" >&2
+            exit 1
+          fi
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$signed_apk"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: duckyslicer-release-signed
+          path: signed/DuckySlicer-*-arm64.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  device-tests:
+    needs: [build, sign]
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     permissions:
       actions: read
-      contents: read
     steps:
       - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
 
@@ -153,7 +207,7 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: duckyslicer-release-bundle
+          name: duckyslicer-release-signed
           path: release
 
       - name: Install ARM64 emulator image
@@ -252,7 +306,7 @@ jobs:
           retention-days: 7
 
   publish:
-    needs: [build, device-tests]
+    needs: [build, sign, device-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -261,10 +315,42 @@ jobs:
       contents: write
       id-token: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: duckyslicer-release-bundle
+          name: duckyslicer-release-signed
           path: release
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: duckyslicer-release-metadata
+          path: release-metadata
+
+      - name: Verify signed artifact and generate CycloneDX SBOM
+        env:
+          DUCKYSLICER_RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+        run: |
+          mapfile -t release_apks < <(find release -maxdepth 1 -type f -name 'DuckySlicer-*-arm64.apk')
+          mapfile -t inventories < <(find release-metadata -type f -name 'release.txt')
+          if [ "${#release_apks[@]}" -ne 1 ] || [ "${#inventories[@]}" -ne 1 ]; then
+            echo "Expected exactly one signed APK and one dependency inventory" >&2
+            exit 1
+          fi
+          python3 tools/verify_apk.py "${release_apks[0]}"
+          python3 tools/generate_sbom.py \
+            "${release_apks[0]}" \
+            "release/DuckySlicer-$DUCKYSLICER_RELEASE_VERSION.cdx.json" \
+            "$DUCKYSLICER_RELEASE_VERSION" \
+            "${inventories[0]}"
+          (
+            cd release
+            sha256sum \
+              "DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-arm64.apk" \
+              "DuckySlicer-$DUCKYSLICER_RELEASE_VERSION.cdx.json" \
+              > "DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-SHA256SUMS.txt"
+            sha256sum --check "DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-SHA256SUMS.txt"
+          )
 
       - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
@@ -277,3 +363,4 @@ jobs:
           files: |
             release/DuckySlicer-*-arm64.apk
             release/DuckySlicer-*.cdx.json
+            release/DuckySlicer-*-SHA256SUMS.txt

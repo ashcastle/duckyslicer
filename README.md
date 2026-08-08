@@ -103,6 +103,10 @@ and its dynamic-library allowlist before packaging it. Tagged releases repeat th
 checks on the complete APK and are published only after release-candidate device tests.
 The Gradle wrapper distribution, Maven metadata, plug-ins, and library artifacts are
 also locked to reviewed versions and SHA-256 checksums.
+Release builds produce an unsigned candidate without access to signing secrets. A
+separate protected job—with no source checkout or project build execution—signs it,
+checks the public certificate fingerprint, and hands that exact APK to device tests
+and publication.
 
 ## Build the APK
 
