@@ -17,11 +17,11 @@ unsafe extern "C" {
 
 #[derive(Debug, Error)]
 enum EngineError {
-    #[error("STL 파일을 열 수 없습니다: {0}")]
+    #[error("Unable to open file: {0}")]
     Open(#[from] std::io::Error),
-    #[error("STL 메시를 읽을 수 없습니다: {0}")]
+    #[error("Unable to parse STL mesh: {0}")]
     Parse(String),
-    #[error("STL에 정점이 없습니다")]
+    #[error("STL contains no vertices")]
     Empty,
 }
 
@@ -41,10 +41,12 @@ struct StlInspection {
 #[serde(rename_all = "camelCase")]
 struct GcodeLayerPreview {
     ok: bool,
-    layer: usize,
+    start_layer: usize,
+    end_layer: usize,
     layer_count: usize,
-    z_mm: f32,
-    segments: Vec<[f32; 4]>,
+    min_z_mm: f32,
+    max_z_mm: f32,
+    segments: Vec<[f32; 5]>,
 }
 
 #[derive(Serialize)]
@@ -106,17 +108,26 @@ fn parse_axis(line: &str, axis: char) -> Option<f32> {
         .and_then(|value| value.parse().ok())
 }
 
-fn preview_gcode(path: &str, requested_layer: usize) -> Result<GcodeLayerPreview, EngineError> {
+fn preview_gcode(
+    path: &str,
+    requested_start_layer: usize,
+    requested_end_layer: usize,
+) -> Result<GcodeLayerPreview, EngineError> {
+    let start_layer = requested_start_layer.min(requested_end_layer);
+    let end_layer = requested_start_layer.max(requested_end_layer);
     let reader = BufReader::new(File::open(path)?);
     let mut current_layer: Option<usize> = None;
     let mut layer_count = 0usize;
     let mut layer_z = 0.0f32;
-    let mut requested_z = 0.0f32;
+    let mut min_requested_z: Option<f32> = None;
+    let mut max_requested_z: Option<f32> = None;
     let mut x = 0.0f32;
     let mut y = 0.0f32;
     let mut e = 0.0f32;
     let mut relative_extrusion = false;
     let mut segments = Vec::new();
+    let mut segment_stride = 1usize;
+    let mut seen_segments = 0usize;
 
     for line in reader.lines() {
         let line = line?;
@@ -130,8 +141,11 @@ fn preview_gcode(path: &str, requested_layer: usize) -> Result<GcodeLayerPreview
         if let Some(value) = trimmed.strip_prefix(";Z:") {
             if let Ok(parsed) = value.parse::<f32>() {
                 layer_z = parsed;
-                if current_layer == Some(requested_layer) {
-                    requested_z = parsed;
+                if current_layer.is_some_and(|layer| (start_layer..=end_layer).contains(&layer)) {
+                    min_requested_z =
+                        Some(min_requested_z.map_or(parsed, |value| value.min(parsed)));
+                    max_requested_z =
+                        Some(max_requested_z.map_or(parsed, |value| value.max(parsed)));
                 }
             }
             continue;
@@ -167,8 +181,18 @@ fn preview_gcode(path: &str, requested_layer: usize) -> Result<GcodeLayerPreview
             }
         });
 
-        if current_layer == Some(requested_layer) && extruding && (next_x != x || next_y != y) {
-            segments.push([x, y, next_x, next_y]);
+        let in_requested_range =
+            current_layer.is_some_and(|layer| (start_layer..=end_layer).contains(&layer));
+        if in_requested_range && extruding && (next_x != x || next_y != y) {
+            seen_segments += 1;
+            if seen_segments.is_multiple_of(segment_stride) {
+                segments.push([x, y, next_x, next_y, layer_z]);
+            }
+            const SEGMENT_LIMIT: usize = 60_000;
+            if segments.len() > SEGMENT_LIMIT {
+                segments = segments.into_iter().step_by(2).collect();
+                segment_stride = segment_stride.saturating_mul(2);
+            }
         }
 
         x = next_x;
@@ -180,22 +204,15 @@ fn preview_gcode(path: &str, requested_layer: usize) -> Result<GcodeLayerPreview
                 next_e
             };
         }
-        if current_layer == Some(requested_layer) {
-            requested_z = layer_z;
-        }
-    }
-
-    const SEGMENT_LIMIT: usize = 30_000;
-    if segments.len() > SEGMENT_LIMIT {
-        let step = segments.len().div_ceil(SEGMENT_LIMIT);
-        segments = segments.into_iter().step_by(step).collect();
     }
 
     Ok(GcodeLayerPreview {
         ok: true,
-        layer: requested_layer,
+        start_layer,
+        end_layer: end_layer.min(layer_count.saturating_sub(1)),
         layer_count,
-        z_mm: requested_z,
+        min_z_mm: min_requested_z.unwrap_or(0.0),
+        max_z_mm: max_requested_z.unwrap_or(0.0),
         segments,
     })
 }
@@ -231,7 +248,7 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_inspectStl(
     let path = match env.get_string(&path) {
         Ok(path) => path.to_string_lossy().into_owned(),
         Err(error) => {
-            let message = format!("파일 경로를 읽을 수 없습니다: {error}");
+            let message = format!("Unable to read file path: {error}");
             let response = serde_json::to_string(&ErrorResponse {
                 ok: false,
                 error: &message,
@@ -248,17 +265,18 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_inspectStl(
             error: &error.to_string(),
         }),
     }
-    .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"직렬화 오류\"}".to_owned());
+    .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"Serialization failed\"}".to_owned());
 
     make_java_string(&env, &response)
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_previewGcode(
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRange(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     path: JString<'_>,
-    layer: jint,
+    start_layer: jint,
+    end_layer: jint,
 ) -> jstring {
     let path = match env.get_string(&path) {
         Ok(path) => path.to_string_lossy().into_owned(),
@@ -273,7 +291,11 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_previewGcode(
         }
     };
 
-    let response = match preview_gcode(&path, layer.max(0) as usize) {
+    let response = match preview_gcode(
+        &path,
+        start_layer.max(0) as usize,
+        end_layer.max(0) as usize,
+    ) {
         Ok(preview) => serde_json::to_string(&preview),
         Err(error) => serde_json::to_string(&ErrorResponse {
             ok: false,
@@ -296,7 +318,7 @@ mod tests {
     }
 
     #[test]
-    fn gcode_preview_keeps_only_extrusion_paths_for_requested_layer() {
+    fn gcode_preview_keeps_extrusion_paths_and_z_for_requested_range() {
         let path = std::env::temp_dir().join(format!(
             "duckyslicer-preview-{}-{}.gcode",
             std::process::id(),
@@ -307,11 +329,17 @@ mod tests {
             .expect("write fixture");
         drop(file);
 
-        let preview = preview_gcode(path.to_str().expect("utf8 path"), 0).expect("parse gcode");
+        let preview = preview_gcode(path.to_str().expect("utf8 path"), 0, 1).expect("parse gcode");
         std::fs::remove_file(path).expect("remove fixture");
 
         assert_eq!(preview.layer_count, 2);
-        assert_eq!(preview.z_mm, 0.2);
-        assert_eq!(preview.segments, vec![[10.0, 10.0, 20.0, 10.0]]);
+        assert_eq!(preview.start_layer, 0);
+        assert_eq!(preview.end_layer, 1);
+        assert_eq!(preview.min_z_mm, 0.2);
+        assert_eq!(preview.max_z_mm, 0.4);
+        assert_eq!(
+            preview.segments,
+            vec![[10.0, 10.0, 20.0, 10.0, 0.2], [20.0, 10.0, 20.0, 20.0, 0.4],]
+        );
     }
 }

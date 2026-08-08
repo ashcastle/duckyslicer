@@ -1,11 +1,14 @@
 package com.ashcastle.duckyslicer
 
 import android.content.Context
+import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.MaterialTheme
@@ -76,6 +79,10 @@ data class ModelInfo(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
+        )
         setContent {
             MaterialTheme(colorScheme = DuckyColors) {
                 DuckySlicerScreen()
@@ -107,7 +114,7 @@ private fun DuckySlicerScreen() {
     var sliceOptions by remember { mutableStateOf(SliceOptions()) }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
+        if (uri != null && !slicing && !previewLoading) {
             importing = true
             error = null
             notice = null
@@ -150,14 +157,16 @@ private fun DuckySlicerScreen() {
         }
     }
 
-    val loadPreviewLayer: (Int) -> Unit = { layer ->
+    val loadPreviewRange: (Int, Int) -> Unit = { startLayer, endLayer ->
         val output = sliceOutcome?.output
         if (output != null && !previewLoading) {
             previewLoading = true
             scope.launch {
                 runCatching {
                     withContext(Dispatchers.IO) {
-                        GcodeLayerPreview.fromJson(NativeEngine.previewGcode(output.absolutePath, layer))
+                        GcodeLayerPreview.fromJson(
+                            NativeEngine.previewGcodeRange(output.absolutePath, startLayer, endLayer),
+                        )
                     }
                 }.onSuccess {
                     layerPreview = it
@@ -172,7 +181,7 @@ private fun DuckySlicerScreen() {
 
     val startSlice = {
         val selected = model
-        if (selected != null && !slicing) {
+        if (selected != null && !slicing && !importing && !previewLoading) {
             slicing = true
             sliceProgress = 0
             sliceOutcome = null
@@ -195,10 +204,17 @@ private fun DuckySlicerScreen() {
                         runCatching {
                             withContext(Dispatchers.IO) {
                                 GcodeLayerPreview.fromJson(
-                                    NativeEngine.previewGcode(outcome.output.absolutePath, 0),
+                                    NativeEngine.previewGcodeRange(
+                                        outcome.output.absolutePath,
+                                        0,
+                                        Int.MAX_VALUE,
+                                    ),
                                 )
                             }
-                        }.onSuccess { layerPreview = it }
+                        }.onSuccess { preview ->
+                            layerPreview = preview
+                            sliceOutcome = outcome.copy(layers = preview.layerCount)
+                        }
                             .onFailure { error = previewError }
                         previewLoading = false
                     }
@@ -234,14 +250,22 @@ private fun DuckySlicerScreen() {
         onTabSelected = { tab ->
             selectedTab = tab
             if (tab == WorkspaceTab.PREVIEW && sliceOutcome != null && layerPreview == null) {
-                loadPreviewLayer(0)
+                loadPreviewRange(0, Int.MAX_VALUE)
             }
         },
         onChoose = { filePicker.launch(arrayOf("model/stl", "application/sla", "*/*")) },
         onSlice = startSlice,
         onSave = saveGcode,
-        onSliceOptionsChanged = { sliceOptions = it },
-        onLayerSelected = loadPreviewLayer,
+        onSliceOptionsChanged = {
+            if (it != sliceOptions) {
+                sliceOptions = it
+                sliceOutcome = null
+                layerPreview = null
+                sliceProgress = 0
+                notice = null
+            }
+        },
+        onLayerRangeSelected = loadPreviewRange,
     )
 }
 

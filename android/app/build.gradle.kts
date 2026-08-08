@@ -7,12 +7,15 @@ plugins {
 
 val repositoryRoot = rootDir.parentFile
 val nativeOutput = layout.projectDirectory.dir("src/main/jniLibs").asFile
+val nativeNdkDirectory = androidComponents.sdkComponents.ndkDirectory
 
 val buildRustNative = tasks.register<Exec>("buildRustNative") {
     group = "build"
     description = "Builds the Rust JNI library for arm64-v8a."
     workingDir(repositoryRoot.resolve("rust/duckyslicer-jni"))
-    environment("ANDROID_NDK_HOME", "${System.getProperty("user.home")}/Library/Android/sdk/ndk/28.2.13676358")
+    doFirst {
+        environment("ANDROID_NDK_HOME", nativeNdkDirectory.get().asFile.absolutePath)
+    }
     commandLine(
         "cargo",
         "ndk",
