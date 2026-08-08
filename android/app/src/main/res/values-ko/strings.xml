@@ -117,6 +117,10 @@
     <string name="wall_order_inner_outer">내벽 → 외벽</string>
     <string name="wall_order_outer_inner">외벽 → 내벽</string>
     <string name="wall_order_inner_outer_inner">내벽 → 외벽 → 내벽</string>
+    <string name="wall_direction">벽 출력 방향</string>
+    <string name="wall_direction_auto">자동</string>
+    <string name="wall_direction_counter_clockwise">반시계 방향</string>
+    <string name="wall_direction_clockwise">시계 방향</string>
     <string name="outer_wall_width">외벽 선폭</string>
     <string name="inner_wall_width">내벽 선폭</string>
     <string name="top_surface_width">상단 표면 선폭</string>
@@ -172,7 +176,13 @@
     <string name="top_surface_flow_ratio">상단 표면 유량</string>
     <string name="bottom_surface_flow_ratio">하단 표면 유량</string>
     <string name="travel_speed">이동 속도</string>
+    <string name="avoid_crossing_walls">벽을 가로지르는 이동 방지</string>
+    <string name="maximum_travel_detour">최대 우회 이동 거리</string>
+    <string name="reduce_infill_retraction">인필 영역 리트랙션 줄이기</string>
     <string name="first_layer_speed">첫 레이어 속도</string>
+    <string name="small_perimeter_speed">작은 둘레 속도</string>
+    <string name="small_perimeter_threshold">작은 둘레 기준 길이</string>
+    <string name="slowdown_for_curled_perimeters">말려 올라간 둘레 감속</string>
     <string name="feature_acceleration">가속도</string>
     <string name="default_acceleration">일반 출력 가속도</string>
     <string name="outer_wall_acceleration">외벽 가속도</string>
@@ -214,6 +224,13 @@
     <string name="sparse_infill_acceleration">희소 인필 가속도</string>
     <string name="internal_solid_acceleration">내부 솔리드 가속도</string>
     <string name="seam_position">솔기 위치</string>
+    <string name="staggered_inner_seams">내부 솔기 엇갈리게 배치</string>
+    <string name="seam_gap">솔기 간격</string>
+    <string name="wipe_before_external_loop">외벽 출력 전 와이프</string>
+    <string name="wipe_on_loops">루프에서 와이프</string>
+    <string name="role_based_wipe_speed">툴패스 속도로 와이프</string>
+    <string name="wipe_speed">와이프 속도</string>
+    <string name="path_resolution">툴패스 해상도</string>
     <string name="overhang_speed">오버행 감속</string>
     <string name="overhang_speed_1">완만한 오버행</string>
     <string name="overhang_speed_2">중간 오버행</string>
@@ -245,6 +262,7 @@
     <string name="brim_width">브림 너비</string>
     <string name="millimeters_value">%1$.0f mm</string>
     <string name="millimeters_value_precise">%1$.2f mm</string>
+    <string name="millimeters_value_fine">%1$.3f mm</string>
     <string name="flow_ratio_value">%1$.2f</string>
     <string name="volumetric_speed_value">%1$.0f mm³/s</string>
     <string name="print_speed_value">%1$.0f mm/s</string>

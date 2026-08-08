@@ -97,6 +97,12 @@ internal object ProfileValidation {
             profile.bridgeDensity in 10f..100f &&
             profile.internalBridgeDensity in 10f..100f &&
             profile.travelSpeed in 1f..2_000f &&
+            profile.maxTravelDetourDistance in 0f..1_000f &&
+            optionalFeatureSpeedIsValid(profile.smallPerimeterSpeed, profile.smallPerimeterSpeedPercent) &&
+            profile.smallPerimeterThreshold in 0f..1_000_000f &&
+            profile.resolution in 0.001f..100f &&
+            profile.seamGap in 0f..1_000f &&
+            optionalFeatureSpeedIsValid(profile.wipeSpeed, profile.wipeSpeedPercent) &&
             listOf(
                 profile.outerWallLineWidth,
                 profile.innerWallLineWidth,
@@ -108,6 +114,7 @@ internal object ProfileValidation {
             ).all { it in 0f..3f } &&
             profile.wallGenerator in setOf("arachne", "classic") &&
             profile.wallSequence in setOf("inner-outer", "outer-inner", "inner-outer-inner") &&
+            profile.wallDirection in setOf("auto", "ccw", "cw") &&
             profile.topSolidLayers in 0..100 &&
             profile.bottomSolidLayers in 0..100 &&
             profile.topShellThickness in 0f..100f &&
@@ -172,6 +179,9 @@ internal object ProfileValidation {
 
     private fun featureSpeedIsValid(value: Float, percent: Boolean): Boolean =
         value in 1f..(if (percent) 1_000f else 2_000f)
+
+    private fun optionalFeatureSpeedIsValid(value: Float, percent: Boolean): Boolean =
+        value in 0f..(if (percent) 1_000f else 2_000f)
 
     private fun featureAccelerationIsValid(value: Float, percent: Boolean): Boolean =
         value in 0f..(if (percent) 1_000f else 100_000f)

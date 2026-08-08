@@ -253,8 +253,25 @@ class NativeEngineInstrumentedTest {
                 infillAnchorMaxPercent = false,
                 gapFillTarget = "topbottom",
                 filterOutGapFill = 0.8f,
+                reduceCrossingWall = true,
+                maxTravelDetourDistance = 154f,
+                maxTravelDetourDistancePercent = true,
+                reduceInfillRetraction = true,
                 initialLayerLineWidth = 0.73f,
+                smallPerimeterSpeed = 78f,
+                smallPerimeterSpeedPercent = false,
+                smallPerimeterThreshold = 6.25f,
+                slowdownForCurledPerimeters = false,
+                resolution = 0.024f,
                 seamPosition = "nearest",
+                staggeredInnerSeams = true,
+                seamGap = 3.25f,
+                seamGapPercent = true,
+                wipeBeforeExternalLoop = true,
+                wipeOnLoops = true,
+                roleBasedWipeSpeed = false,
+                wipeSpeed = 67f,
+                wipeSpeedPercent = false,
                 ironingType = "top",
                 ironingPattern = "concentric",
                 ironingFlow = 12f,
@@ -274,6 +291,7 @@ class NativeEngineInstrumentedTest {
                 internalSolidInfillAccelerationPercent = true,
                 wallGenerator = "classic",
                 wallSequence = "outer-inner",
+                wallDirection = "cw",
                 detectThinWalls = true,
                 onlyOneWallOnTop = false,
                 onlyOneWallFirstLayer = true,
@@ -339,6 +357,10 @@ class NativeEngineInstrumentedTest {
         assertEquals(false, restored.slicing.last().infillAnchorMaxPercent)
         assertEquals("topbottom", restored.slicing.last().gapFillTarget)
         assertEquals(0.8f, restored.slicing.last().filterOutGapFill)
+        assertTrue(restored.slicing.last().reduceCrossingWall)
+        assertEquals(154f, restored.slicing.last().maxTravelDetourDistance)
+        assertTrue(restored.slicing.last().maxTravelDetourDistancePercent)
+        assertTrue(restored.slicing.last().reduceInfillRetraction)
         assertEquals(88f, restored.slicing.last().bridgeDensity)
         assertEquals(74f, restored.slicing.last().internalBridgeDensity)
         assertTrue(restored.slicing.last().bridgeNoSupport)
@@ -384,6 +406,20 @@ class NativeEngineInstrumentedTest {
         assertEquals(600f, restored.slicing.last().firstLayerAcceleration)
         assertEquals("classic", restored.slicing.last().wallGenerator)
         assertEquals("outer-inner", restored.slicing.last().wallSequence)
+        assertEquals("cw", restored.slicing.last().wallDirection)
+        assertEquals(78f, restored.slicing.last().smallPerimeterSpeed)
+        assertEquals(false, restored.slicing.last().smallPerimeterSpeedPercent)
+        assertEquals(6.25f, restored.slicing.last().smallPerimeterThreshold)
+        assertEquals(false, restored.slicing.last().slowdownForCurledPerimeters)
+        assertEquals(0.024f, restored.slicing.last().resolution)
+        assertTrue(restored.slicing.last().staggeredInnerSeams)
+        assertEquals(3.25f, restored.slicing.last().seamGap)
+        assertTrue(restored.slicing.last().seamGapPercent)
+        assertTrue(restored.slicing.last().wipeBeforeExternalLoop)
+        assertTrue(restored.slicing.last().wipeOnLoops)
+        assertEquals(false, restored.slicing.last().roleBasedWipeSpeed)
+        assertEquals(67f, restored.slicing.last().wipeSpeed)
+        assertEquals(false, restored.slicing.last().wipeSpeedPercent)
         assertTrue(restored.slicing.last().detectThinWalls)
         assertEquals(false, restored.slicing.last().onlyOneWallOnTop)
         assertTrue(restored.slicing.last().onlyOneWallFirstLayer)
@@ -403,7 +439,7 @@ class NativeEngineInstrumentedTest {
         assertEquals(7f, restored.printers.last().maxJerkX)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
-        assertEquals(10, JSONObject(file.readText()).getInt("schemaVersion"))
+        assertEquals(11, JSONObject(file.readText()).getInt("schemaVersion"))
         assertTrue("Saved profiles must stay in app-private storage", file.canonicalPath.startsWith(context.cacheDir.canonicalPath))
         file.delete()
         directory.delete()
@@ -432,7 +468,7 @@ class NativeEngineInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val catalog = OrcaProfileCatalog(context).load()
 
-        assertEquals(8, catalog.schemaVersion)
+        assertEquals(9, catalog.schemaVersion)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include Orca filament presets", catalog.filaments.size > 3_000)
@@ -467,6 +503,14 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.filterOutGapFill > 0f })
         assertTrue(catalog.slicing.any { it.minimumSparseInfillArea != 15f })
         assertTrue(catalog.slicing.any { it.maxBridgeLength != 10f })
+        assertTrue(catalog.slicing.any { it.reduceCrossingWall })
+        assertTrue(catalog.slicing.any { it.reduceInfillRetraction })
+        assertTrue(catalog.slicing.any { it.maxTravelDetourDistancePercent })
+        assertTrue(catalog.slicing.any { !it.smallPerimeterSpeedPercent })
+        assertTrue(catalog.slicing.any { it.seamGapPercent && it.seamGap != 10f })
+        assertTrue(catalog.slicing.any { it.wipeOnLoops })
+        assertTrue(catalog.slicing.any { !it.roleBasedWipeSpeed })
+        assertTrue(catalog.slicing.any { it.resolution == 0.012f })
         val legacyDecimalComma = requireNotNull(
             catalog.slicing.find { it.name == "0.05mm Detail @MK3.5" },
         )
@@ -616,8 +660,25 @@ class NativeEngineInstrumentedTest {
                 infillAnchorMaxPercent = false,
                 gapFillTarget = "everywhere",
                 filterOutGapFill = 0.9f,
+                reduceCrossingWall = true,
+                maxTravelDetourDistance = 123f,
+                maxTravelDetourDistancePercent = true,
+                reduceInfillRetraction = true,
                 initialLayerLineWidth = 0.73f,
+                smallPerimeterSpeed = 69f,
+                smallPerimeterSpeedPercent = true,
+                smallPerimeterThreshold = 7.5f,
+                slowdownForCurledPerimeters = false,
+                resolution = 0.021f,
                 seamPosition = "nearest",
+                staggeredInnerSeams = true,
+                seamGap = 7f,
+                seamGapPercent = true,
+                wipeBeforeExternalLoop = true,
+                wipeOnLoops = true,
+                roleBasedWipeSpeed = false,
+                wipeSpeed = 61f,
+                wipeSpeedPercent = false,
                 ironingType = "top",
                 ironingPattern = "concentric",
                 ironingFlow = 13f,
@@ -637,6 +698,7 @@ class NativeEngineInstrumentedTest {
                 internalSolidInfillAccelerationPercent = true,
                 wallGenerator = "arachne",
                 wallSequence = "outer-inner",
+                wallDirection = "cw",
                 detectThinWalls = true,
                 detectOverhangWalls = false,
                 onlyOneWallOnTop = false,
@@ -743,6 +805,9 @@ class NativeEngineInstrumentedTest {
         assertTrue("Maximum infill anchor must preserve absolute units", gcode.contains("; infill_anchor_max = 17.5"))
         assertTrue("Gap-fill surface policy must reach Orca", gcode.contains("; gap_fill_target = everywhere"))
         assertTrue("Tiny-gap filter must reach Orca", gcode.contains("; filter_out_gap_fill = 0.9"))
+        assertTrue("Wall-crossing avoidance must reach Orca", gcode.contains("; reduce_crossing_wall = 1"))
+        assertTrue("Travel detour must preserve percent units", gcode.contains("; max_travel_detour_distance = 123%"))
+        assertTrue("Infill retraction policy must reach Orca", gcode.contains("; reduce_infill_retraction = 1"))
         assertTrue("Default acceleration must reach Orca", gcode.contains("; default_acceleration = 4567"))
         assertTrue("Outer-wall acceleration must reach Orca", gcode.contains("; outer_wall_acceleration = 2345"))
         assertTrue("Inner-wall acceleration must reach Orca", gcode.contains("; inner_wall_acceleration = 3456"))
@@ -754,6 +819,17 @@ class NativeEngineInstrumentedTest {
         assertTrue("Internal solid acceleration must preserve percent units", gcode.contains("; internal_solid_infill_acceleration = 83%"))
         assertTrue("Arachne selection must reach Orca", gcode.contains("; wall_generator = arachne"))
         assertTrue("Wall order must reach Orca", gcode.contains("; wall_sequence = outer wall/inner wall"))
+        assertTrue("Wall direction must reach Orca", gcode.contains("; wall_direction = cw"))
+        assertTrue("Small-perimeter speed must preserve percent units", gcode.contains("; small_perimeter_speed = 69%"))
+        assertTrue("Small-perimeter threshold must reach Orca", gcode.contains("; small_perimeter_threshold = 7.5"))
+        assertTrue("Curled-perimeter slowdown must reach Orca", gcode.contains("; slowdown_for_curled_perimeters = 0"))
+        assertTrue("Toolpath resolution must reach Orca", gcode.contains("; resolution = 0.021"))
+        assertTrue("Inner seam staggering must reach Orca", gcode.contains("; staggered_inner_seams = 1"))
+        assertTrue("Seam gap must preserve percent units", gcode.contains("; seam_gap = 7%"))
+        assertTrue("Outer-wall pre-wipe must reach Orca", gcode.contains("; wipe_before_external_loop = 1"))
+        assertTrue("Loop wipe must reach Orca", gcode.contains("; wipe_on_loops = 1"))
+        assertTrue("Role-based wipe policy must reach Orca", gcode.contains("; role_based_wipe_speed = 0"))
+        assertTrue("Absolute wipe speed must reach Orca", gcode.contains("; wipe_speed = 61"))
         assertTrue("Thin-wall detection must reach Orca", gcode.contains("; detect_thin_wall = 1"))
         assertTrue("Overhang-wall detection must reach Orca", gcode.contains("; detect_overhang_wall = 0"))
         assertTrue("Top-surface wall rule must reach Orca", gcode.contains("; only_one_wall_top = 0"))
@@ -970,6 +1046,11 @@ class NativeEngineInstrumentedTest {
                     "gap_fill_target" to "nowhere",
                     "elefant_foot_compensation" to "0.1",
                     "ensure_vertical_shell_thickness" to "ensure_all",
+                    "reduce_infill_retraction" to "1",
+                    "small_perimeter_speed" to "50%",
+                    "resolution" to "0.012",
+                    "seam_gap" to "10%",
+                    "wipe_speed" to "80%",
                 ),
             ),
             Contract(
@@ -1020,6 +1101,11 @@ class NativeEngineInstrumentedTest {
                     "infill_anchor_max" to "20",
                     "gap_fill_target" to "nowhere",
                     "detect_narrow_internal_solid_infill" to "1",
+                    "reduce_infill_retraction" to "1",
+                    "small_perimeter_speed" to "50%",
+                    "resolution" to "0.012",
+                    "seam_gap" to "10%",
+                    "wall_direction" to "auto",
                 ),
             ),
             Contract(
@@ -1069,6 +1155,11 @@ class NativeEngineInstrumentedTest {
                     "ensure_vertical_shell_thickness" to "ensure_moderate",
                     "elefant_foot_compensation" to "0.15",
                     "max_bridge_length" to "10",
+                    "reduce_infill_retraction" to "1",
+                    "small_perimeter_speed" to "50%",
+                    "slowdown_for_curled_perimeters" to "0",
+                    "resolution" to "0.012",
+                    "seam_gap" to "0",
                 ),
             ),
         )

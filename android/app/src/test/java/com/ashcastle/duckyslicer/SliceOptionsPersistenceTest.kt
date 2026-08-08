@@ -70,6 +70,10 @@ class SliceOptionsPersistenceTest {
         assertEquals(false, restored.infillAnchorMaxPercent)
         assertEquals("everywhere", restored.gapFillTarget)
         assertEquals(0.9f, restored.filterOutGapFill)
+        assertEquals(true, restored.reduceCrossingWall)
+        assertEquals(155f, restored.maxTravelDetourDistance)
+        assertEquals(true, restored.maxTravelDetourDistancePercent)
+        assertEquals(true, restored.reduceInfillRetraction)
         assertEquals(87f, restored.bridgeDensity)
         assertEquals(73f, restored.internalBridgeDensity)
         assertEquals(true, restored.bridgeNoSupport)
@@ -103,6 +107,20 @@ class SliceOptionsPersistenceTest {
         assertEquals(true, restored.internalSolidInfillAccelerationPercent)
         assertEquals("classic", restored.wallGenerator)
         assertEquals("outer-inner", restored.wallSequence)
+        assertEquals("cw", restored.wallDirection)
+        assertEquals(77f, restored.smallPerimeterSpeed)
+        assertEquals(false, restored.smallPerimeterSpeedPercent)
+        assertEquals(6.5f, restored.smallPerimeterThreshold)
+        assertEquals(false, restored.slowdownForCurledPerimeters)
+        assertEquals(0.023f, restored.resolution)
+        assertEquals(true, restored.staggeredInnerSeams)
+        assertEquals(3.5f, restored.seamGap)
+        assertEquals(true, restored.seamGapPercent)
+        assertEquals(true, restored.wipeBeforeExternalLoop)
+        assertEquals(true, restored.wipeOnLoops)
+        assertEquals(false, restored.roleBasedWipeSpeed)
+        assertEquals(66f, restored.wipeSpeed)
+        assertEquals(false, restored.wipeSpeedPercent)
         assertEquals(true, restored.onlyOneWallFirstLayer)
         assertEquals(true, restored.extraPerimetersOnOverhangs)
         assertEquals("ensure_moderate", restored.ensureVerticalShellThickness)
@@ -243,8 +261,25 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         infillAnchorMaxPercent = false,
         gapFillTarget = "everywhere",
         filterOutGapFill = 0.9f,
+        reduceCrossingWall = true,
+        maxTravelDetourDistance = 155f,
+        maxTravelDetourDistancePercent = true,
+        reduceInfillRetraction = true,
         initialLayerLineWidth = 0.74f,
+        smallPerimeterSpeed = 77f,
+        smallPerimeterSpeedPercent = false,
+        smallPerimeterThreshold = 6.5f,
+        slowdownForCurledPerimeters = false,
+        resolution = 0.023f,
         seamPosition = "nearest",
+        staggeredInnerSeams = true,
+        seamGap = 3.5f,
+        seamGapPercent = true,
+        wipeBeforeExternalLoop = true,
+        wipeOnLoops = true,
+        roleBasedWipeSpeed = false,
+        wipeSpeed = 66f,
+        wipeSpeedPercent = false,
         ironingType = "top",
         ironingPattern = "concentric",
         ironingFlow = 13f,
@@ -264,6 +299,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         internalSolidInfillAccelerationPercent = true,
         wallGenerator = "classic",
         wallSequence = "outer-inner",
+        wallDirection = "cw",
         detectThinWalls = true,
         detectOverhangWalls = false,
         onlyOneWallOnTop = true,
