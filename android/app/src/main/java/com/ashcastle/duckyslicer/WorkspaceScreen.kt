@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -43,6 +44,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -91,6 +94,7 @@ fun WorkspaceScreen(
     selectedTab: WorkspaceTab,
     model: ModelInfo?,
     sliceOptions: SliceOptions,
+    profileCatalog: ProfileCatalog,
     sliceOutcome: SliceOutcome?,
     layerPreview: GcodeLayerPreview?,
     importing: Boolean,
@@ -104,26 +108,29 @@ fun WorkspaceScreen(
     onSlice: () -> Unit,
     onSave: () -> Unit,
     onSliceOptionsChanged: (SliceOptions) -> Unit,
+    onSavePrinterProfile: (String) -> Unit,
+    onSaveFilamentProfile: (String) -> Unit,
+    onSaveSlicingProfile: (String) -> Unit,
     onLayerRangeSelected: (Int, Int) -> Unit,
-) {
+) = BoxWithConstraints {
+    val tabletLayout = maxWidth >= 600.dp
+    val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
     Scaffold(
         containerColor = Color(0xFF191A18),
         bottomBar = {
-            WorkspaceNavigation(selectedTab = selectedTab, onSelected = onTabSelected)
+            if (!tabletLayout) WorkspaceNavigation(selectedTab = selectedTab, onSelected = onTabSelected)
         },
     ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-        ) {
-            BedScene(
-                model = model,
-                preview = if (selectedTab == WorkspaceTab.PREVIEW) layerPreview else null,
-                bedSizeX = sliceOptions.bedSizeX,
-                bedSizeY = sliceOptions.bedSizeY,
-                modifier = Modifier.fillMaxSize(),
-            )
+        Row(Modifier.fillMaxSize().padding(padding)) {
+            if (tabletLayout) WorkspaceNavigationRail(selectedTab = selectedTab, onSelected = onTabSelected)
+            Box(modifier = Modifier.weight(1f).fillMaxSize()) {
+                BedScene(
+                    model = model,
+                    preview = if (selectedTab == WorkspaceTab.PREVIEW) layerPreview else null,
+                    bedSizeX = sliceOptions.bedSizeX,
+                    bedSizeY = sliceOptions.bedSizeY,
+                    modifier = Modifier.fillMaxSize(),
+                )
 
             WorkspaceMenu(
                 importing = importing,
@@ -159,6 +166,7 @@ fun WorkspaceScreen(
                 WorkspaceTab.SLICE -> SliceSheet(
                     model = model,
                     options = sliceOptions,
+                    catalog = profileCatalog,
                     importing = importing,
                     previewLoading = previewLoading,
                     slicing = slicing,
@@ -167,7 +175,10 @@ fun WorkspaceScreen(
                     notice = notice,
                     onSlice = onSlice,
                     onOptionsChanged = onSliceOptionsChanged,
-                    modifier = Modifier.align(Alignment.BottomCenter),
+                    onSavePrinter = onSavePrinterProfile,
+                    onSaveFilament = onSaveFilamentProfile,
+                    onSaveSlicing = onSaveSlicingProfile,
+                    modifier = Modifier.align(panelAlignment),
                 )
 
                 WorkspaceTab.PREVIEW -> PreviewSheet(
@@ -177,29 +188,30 @@ fun WorkspaceScreen(
                     error = error,
                     onLayerRangeSelected = onLayerRangeSelected,
                     onGoToSlice = { onTabSelected(WorkspaceTab.SLICE) },
-                    modifier = Modifier.align(Alignment.BottomCenter),
+                    modifier = Modifier.align(panelAlignment),
                 )
 
                 WorkspaceTab.DEVICE -> SimpleSheet(
                     title = stringResource(R.string.device_profiles),
                     body = stringResource(R.string.device_message),
-                    modifier = Modifier.align(Alignment.BottomCenter),
+                    modifier = Modifier.align(panelAlignment),
                 )
 
                 WorkspaceTab.PROJECT -> ProjectSheet(
                     model = model,
                     outcome = sliceOutcome,
-                    modifier = Modifier.align(Alignment.BottomCenter),
+                    modifier = Modifier.align(panelAlignment),
                 )
 
                 WorkspaceTab.SETTINGS -> SimpleSheet(
                     title = stringResource(R.string.settings),
                     body = stringResource(R.string.settings_message),
-                    modifier = Modifier.align(Alignment.BottomCenter),
+                    modifier = Modifier.align(panelAlignment),
                 )
             }
         }
     }
+}
 }
 
 @Composable
@@ -256,15 +268,8 @@ private fun WorkspaceNavigation(
     selectedTab: WorkspaceTab,
     onSelected: (WorkspaceTab) -> Unit,
 ) {
-    val items = listOf(
-        Triple(WorkspaceTab.SLICE, Icons.Default.Tune, R.string.tab_slice),
-        Triple(WorkspaceTab.PREVIEW, Icons.Default.Visibility, R.string.tab_preview),
-        Triple(WorkspaceTab.DEVICE, Icons.Default.Devices, R.string.tab_device),
-        Triple(WorkspaceTab.PROJECT, Icons.Default.Folder, R.string.tab_project),
-        Triple(WorkspaceTab.SETTINGS, Icons.Default.Settings, R.string.settings),
-    )
     NavigationBar(containerColor = Color(0xFF242522)) {
-        items.forEach { (tab, icon, label) ->
+        workspaceNavigationItems().forEach { (tab, icon, label) ->
             NavigationBarItem(
                 selected = selectedTab == tab,
                 onClick = { onSelected(tab) },
@@ -274,6 +279,32 @@ private fun WorkspaceNavigation(
         }
     }
 }
+
+@Composable
+private fun WorkspaceNavigationRail(
+    selectedTab: WorkspaceTab,
+    onSelected: (WorkspaceTab) -> Unit,
+) {
+    NavigationRail(containerColor = Color(0xFF242522)) {
+        Spacer(Modifier.height(72.dp))
+        workspaceNavigationItems().forEach { (tab, icon, label) ->
+            NavigationRailItem(
+                selected = selectedTab == tab,
+                onClick = { onSelected(tab) },
+                icon = { Icon(icon, contentDescription = null) },
+                label = { Text(stringResource(label), maxLines = 1) },
+            )
+        }
+    }
+}
+
+private fun workspaceNavigationItems() = listOf(
+    Triple(WorkspaceTab.SLICE, Icons.Default.Tune, R.string.tab_slice),
+    Triple(WorkspaceTab.PREVIEW, Icons.Default.Visibility, R.string.tab_preview),
+    Triple(WorkspaceTab.DEVICE, Icons.Default.Devices, R.string.tab_device),
+    Triple(WorkspaceTab.PROJECT, Icons.Default.Folder, R.string.tab_project),
+    Triple(WorkspaceTab.SETTINGS, Icons.Default.Settings, R.string.settings),
+)
 
 @Composable
 private fun BedScene(
@@ -421,6 +452,7 @@ private fun BedScene(
 private fun SliceSheet(
     model: ModelInfo?,
     options: SliceOptions,
+    catalog: ProfileCatalog,
     importing: Boolean,
     previewLoading: Boolean,
     slicing: Boolean,
@@ -429,13 +461,20 @@ private fun SliceSheet(
     notice: String?,
     onSlice: () -> Unit,
     onOptionsChanged: (SliceOptions) -> Unit,
+    onSavePrinter: (String) -> Unit,
+    onSaveFilament: (String) -> Unit,
+    onSaveSlicing: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     WorkspaceCard(modifier) {
         ProfileSettings(
             options = options,
+            catalog = catalog,
             enabled = !slicing && !importing && !previewLoading,
             onOptionsChanged = onOptionsChanged,
+            onSavePrinter = onSavePrinter,
+            onSaveFilament = onSaveFilament,
+            onSaveSlicing = onSaveSlicing,
         )
         if (model != null) {
             Text(

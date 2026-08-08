@@ -99,6 +99,7 @@ private fun DuckySlicerScreen() {
     val sliceError = stringResource(R.string.slice_error)
     val saveError = stringResource(R.string.save_error)
     val savedNotice = stringResource(R.string.gcode_saved)
+    val profileSavedNotice = stringResource(R.string.profile_saved)
     val previewError = stringResource(R.string.preview_error)
 
     var model by remember { mutableStateOf<ModelInfo?>(null) }
@@ -112,6 +113,18 @@ private fun DuckySlicerScreen() {
     var layerPreview by remember { mutableStateOf<GcodeLayerPreview?>(null) }
     var previewLoading by remember { mutableStateOf(false) }
     var sliceOptions by remember { mutableStateOf(SliceOptions()) }
+    val profileStore = remember(context.applicationContext) { ProfileStore(context.applicationContext) }
+    var profileCatalog by remember { mutableStateOf(profileStore.load()) }
+
+    fun applyOptions(options: SliceOptions) {
+        if (options != sliceOptions) {
+            sliceOptions = options
+            sliceOutcome = null
+            layerPreview = null
+            sliceProgress = 0
+            notice = null
+        }
+    }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && !slicing && !previewLoading) {
@@ -239,6 +252,7 @@ private fun DuckySlicerScreen() {
         selectedTab = selectedTab,
         model = model,
         sliceOptions = sliceOptions,
+        profileCatalog = profileCatalog,
         sliceOutcome = sliceOutcome,
         layerPreview = layerPreview,
         importing = importing,
@@ -256,14 +270,24 @@ private fun DuckySlicerScreen() {
         onChoose = { filePicker.launch(arrayOf("model/stl", "application/sla", "*/*")) },
         onSlice = startSlice,
         onSave = saveGcode,
-        onSliceOptionsChanged = {
-            if (it != sliceOptions) {
-                sliceOptions = it
-                sliceOutcome = null
-                layerPreview = null
-                sliceProgress = 0
-                notice = null
-            }
+        onSliceOptionsChanged = ::applyOptions,
+        onSavePrinterProfile = { name ->
+            val saved = profileStore.savePrinter(name, sliceOptions)
+            profileCatalog = profileStore.load()
+            applyOptions(sliceOptions.selectPrinter(saved))
+            notice = profileSavedNotice
+        },
+        onSaveFilamentProfile = { name ->
+            val saved = profileStore.saveFilament(name, sliceOptions)
+            profileCatalog = profileStore.load()
+            applyOptions(sliceOptions.selectFilament(saved))
+            notice = profileSavedNotice
+        },
+        onSaveSlicingProfile = { name ->
+            val saved = profileStore.saveSlicing(name, sliceOptions)
+            profileCatalog = profileStore.load()
+            applyOptions(sliceOptions.selectQuality(saved))
+            notice = profileSavedNotice
         },
         onLayerRangeSelected = loadPreviewRange,
     )
