@@ -117,6 +117,15 @@ class ProfileStore private constructor(
             gapInfillSpeed = options.gapInfillSpeed,
             firstLayerInfillSpeed = options.firstLayerInfillSpeed,
             supportInterfaceSpeed = options.supportInterfaceSpeed,
+            overhangSpeedEnabled = options.overhangSpeedEnabled,
+            overhangSpeed1 = options.overhangSpeed1,
+            overhangSpeed1Percent = options.overhangSpeed1Percent,
+            overhangSpeed2 = options.overhangSpeed2,
+            overhangSpeed2Percent = options.overhangSpeed2Percent,
+            overhangSpeed3 = options.overhangSpeed3,
+            overhangSpeed3Percent = options.overhangSpeed3Percent,
+            overhangSpeed4 = options.overhangSpeed4,
+            overhangSpeed4Percent = options.overhangSpeed4Percent,
             bridgeFlowRatio = options.bridgeFlowRatio,
             internalBridgeFlowRatio = options.internalBridgeFlowRatio,
             topSurfaceFlowRatio = options.topSurfaceFlowRatio,
@@ -134,6 +143,9 @@ class ProfileStore private constructor(
             topShellThickness = options.topShellThickness,
             bottomShellThickness = options.bottomShellThickness,
             fillPattern = options.fillPattern,
+            topSurfacePattern = options.topSurfacePattern,
+            bottomSurfacePattern = options.bottomSurfacePattern,
+            internalSolidInfillPattern = options.internalSolidInfillPattern,
             travelSpeed = options.travelSpeed,
             firstLayerSpeed = options.firstLayerSpeed,
             supportType = options.supportType,
@@ -145,6 +157,9 @@ class ProfileStore private constructor(
             supportTopZDistance = options.supportTopZDistance,
             supportBottomZDistance = options.supportBottomZDistance,
             supportObjectXYDistance = options.supportObjectXYDistance,
+            supportBasePattern = options.supportBasePattern,
+            supportInterfacePattern = options.supportInterfacePattern,
+            supportStyle = options.supportStyle,
             skirtLoops = options.skirtLoops,
             skirtDistance = options.skirtDistance,
             outerWallLineWidth = options.outerWallLineWidth,
@@ -154,6 +169,12 @@ class ProfileStore private constructor(
             internalSolidInfillLineWidth = options.internalSolidInfillLineWidth,
             supportLineWidth = options.supportLineWidth,
             initialLayerLineWidth = options.initialLayerLineWidth,
+            seamPosition = options.seamPosition,
+            ironingType = options.ironingType,
+            ironingPattern = options.ironingPattern,
+            ironingFlow = options.ironingFlow,
+            ironingSpacing = options.ironingSpacing,
+            ironingSpeed = options.ironingSpeed,
             wallGenerator = options.wallGenerator,
             wallSequence = options.wallSequence,
             detectThinWalls = options.detectThinWalls,
@@ -199,7 +220,7 @@ class ProfileStore private constructor(
         ?: throw IllegalArgumentException("Profile name is required")
 
     private companion object {
-        const val USER_PROFILE_SCHEMA_VERSION = 7
+        const val USER_PROFILE_SCHEMA_VERSION = 8
     }
 }
 
@@ -250,6 +271,11 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("gapInfillSpeed", gapInfillSpeed)
     .put("firstLayerInfillSpeed", firstLayerInfillSpeed)
     .put("supportInterfaceSpeed", supportInterfaceSpeed)
+    .put("overhangSpeedEnabled", overhangSpeedEnabled)
+    .put("overhangSpeed1", overhangSpeed1).put("overhangSpeed1Percent", overhangSpeed1Percent)
+    .put("overhangSpeed2", overhangSpeed2).put("overhangSpeed2Percent", overhangSpeed2Percent)
+    .put("overhangSpeed3", overhangSpeed3).put("overhangSpeed3Percent", overhangSpeed3Percent)
+    .put("overhangSpeed4", overhangSpeed4).put("overhangSpeed4Percent", overhangSpeed4Percent)
     .put("bridgeFlowRatio", bridgeFlowRatio)
     .put("internalBridgeFlowRatio", internalBridgeFlowRatio)
     .put("topSurfaceFlowRatio", topSurfaceFlowRatio)
@@ -263,7 +289,11 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("supportEnabled", supportEnabled).put("brimWidth", brimWidth)
     .put("topSolidLayers", topSolidLayers).put("bottomSolidLayers", bottomSolidLayers)
     .put("topShellThickness", topShellThickness).put("bottomShellThickness", bottomShellThickness)
-    .put("fillPattern", fillPattern).put("travelSpeed", travelSpeed)
+    .put("fillPattern", fillPattern)
+    .put("topSurfacePattern", topSurfacePattern)
+    .put("bottomSurfacePattern", bottomSurfacePattern)
+    .put("internalSolidInfillPattern", internalSolidInfillPattern)
+    .put("travelSpeed", travelSpeed)
     .put("firstLayerSpeed", firstLayerSpeed).put("supportType", supportType)
     .put("supportAngle", supportAngle).put("skirtLoops", skirtLoops)
     .put("supportInterfaceTopLayers", supportInterfaceTopLayers)
@@ -273,6 +303,9 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("supportTopZDistance", supportTopZDistance)
     .put("supportBottomZDistance", supportBottomZDistance)
     .put("supportObjectXYDistance", supportObjectXYDistance)
+    .put("supportBasePattern", supportBasePattern)
+    .put("supportInterfacePattern", supportInterfacePattern)
+    .put("supportStyle", supportStyle)
     .put("skirtDistance", skirtDistance)
     .put("outerWallLineWidth", outerWallLineWidth)
     .put("innerWallLineWidth", innerWallLineWidth)
@@ -281,6 +314,12 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("internalSolidInfillLineWidth", internalSolidInfillLineWidth)
     .put("supportLineWidth", supportLineWidth)
     .put("initialLayerLineWidth", initialLayerLineWidth)
+    .put("seamPosition", seamPosition)
+    .put("ironingType", ironingType)
+    .put("ironingPattern", ironingPattern)
+    .put("ironingFlow", ironingFlow)
+    .put("ironingSpacing", ironingSpacing)
+    .put("ironingSpeed", ironingSpeed)
     .put("wallGenerator", wallGenerator)
     .put("wallSequence", wallSequence)
     .put("detectThinWalls", detectThinWalls)
@@ -357,6 +396,15 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         gapInfillSpeed = optDouble("gapInfillSpeed", 0.0).toFloat(),
         firstLayerInfillSpeed = optDouble("firstLayerInfillSpeed", 0.0).toFloat(),
         supportInterfaceSpeed = optDouble("supportInterfaceSpeed", 0.0).toFloat(),
+        overhangSpeedEnabled = optBoolean("overhangSpeedEnabled", true),
+        overhangSpeed1 = optDouble("overhangSpeed1", 55.0).toFloat(),
+        overhangSpeed1Percent = optBoolean("overhangSpeed1Percent"),
+        overhangSpeed2 = optDouble("overhangSpeed2", 30.0).toFloat(),
+        overhangSpeed2Percent = optBoolean("overhangSpeed2Percent"),
+        overhangSpeed3 = optDouble("overhangSpeed3", 10.0).toFloat(),
+        overhangSpeed3Percent = optBoolean("overhangSpeed3Percent"),
+        overhangSpeed4 = optDouble("overhangSpeed4", 10.0).toFloat(),
+        overhangSpeed4Percent = optBoolean("overhangSpeed4Percent"),
         bridgeFlowRatio = optDouble("bridgeFlowRatio", 1.0).toFloat(),
         internalBridgeFlowRatio = optDouble("internalBridgeFlowRatio", 1.0).toFloat(),
         topSurfaceFlowRatio = optDouble("topSurfaceFlowRatio", 1.0).toFloat(),
@@ -375,6 +423,9 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         topShellThickness = optDouble("topShellThickness", 0.0).toFloat(),
         bottomShellThickness = optDouble("bottomShellThickness", 0.0).toFloat(),
         fillPattern = optString("fillPattern", "gyroid"),
+        topSurfacePattern = optString("topSurfacePattern", "monotonicline"),
+        bottomSurfacePattern = optString("bottomSurfacePattern", "monotonic"),
+        internalSolidInfillPattern = optString("internalSolidInfillPattern", "monotonic"),
         travelSpeed = optDouble("travelSpeed", 500.0).toFloat(),
         firstLayerSpeed = optDouble("firstLayerSpeed", 50.0).toFloat(),
         supportType = optString("supportType", "normal"),
@@ -386,6 +437,9 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         supportTopZDistance = optDouble("supportTopZDistance", 0.2).toFloat(),
         supportBottomZDistance = optDouble("supportBottomZDistance", 0.2).toFloat(),
         supportObjectXYDistance = optDouble("supportObjectXYDistance", 0.35).toFloat(),
+        supportBasePattern = optString("supportBasePattern", "default"),
+        supportInterfacePattern = optString("supportInterfacePattern", "auto"),
+        supportStyle = optString("supportStyle", "default"),
         skirtLoops = optInt("skirtLoops", 0),
         skirtDistance = optDouble("skirtDistance", 6.0).toFloat(),
         outerWallLineWidth = optDouble("outerWallLineWidth", 0.0).toFloat(),
@@ -395,6 +449,12 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         internalSolidInfillLineWidth = optDouble("internalSolidInfillLineWidth", 0.0).toFloat(),
         supportLineWidth = optDouble("supportLineWidth", 0.0).toFloat(),
         initialLayerLineWidth = optDouble("initialLayerLineWidth", 0.0).toFloat(),
+        seamPosition = optString("seamPosition", "aligned"),
+        ironingType = optString("ironingType", "no ironing"),
+        ironingPattern = optString("ironingPattern", "rectilinear"),
+        ironingFlow = optDouble("ironingFlow", 10.0).toFloat(),
+        ironingSpacing = optDouble("ironingSpacing", 0.1).toFloat(),
+        ironingSpeed = optDouble("ironingSpeed", 20.0).toFloat(),
         wallGenerator = optString("wallGenerator", "arachne"),
         wallSequence = optString("wallSequence", "inner-outer"),
         detectThinWalls = optBoolean("detectThinWalls"),

@@ -11,8 +11,16 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
+INFILL_PATTERNS = {
+    "monotonic", "monotonicline", "rectilinear", "alignedrectilinear",
+    "zigzag", "crosszag", "lockedzag", "line", "grid", "triangles",
+    "tri-hexagon", "cubic", "adaptivecubic", "quartercubic", "supportcubic",
+    "lightning", "honeycomb", "3dhoneycomb", "lateral-honeycomb",
+    "lateral-lattice", "crosshatch", "tpmsd", "tpmsfk", "gyroid",
+    "concentric", "hilbertcurve", "archimedeanchords", "octagramspiral",
+}
 
 
 def scalar(value: Any, default: Any = None) -> Any:
@@ -201,6 +209,23 @@ def absolute_number(value: Any, default: float) -> float:
     return default if candidate.endswith("%") else number(candidate, default)
 
 
+def float_or_percent(value: Any, default: float) -> tuple[float, bool]:
+    candidate = str(scalar(value, default)).strip()
+    return number(candidate, default), candidate.endswith("%")
+
+
+def infill_pattern(value: Any, default: str) -> str:
+    candidate = str(scalar(value, default)).strip().lower()
+    if candidate == "zig-zag":
+        candidate = "rectilinear"
+    return candidate if candidate in INFILL_PATTERNS else default
+
+
+def enum_value(value: Any, allowed: set[str], default: str) -> str:
+    candidate = str(scalar(value, default)).strip().lower()
+    return candidate if candidate in allowed else default
+
+
 def wall_sequence(value: Any) -> str:
     return {
         "inner wall/outer wall": "inner-outer",
@@ -319,6 +344,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     outer_wall_speed = number(raw.get("outer_wall_speed"), 100)
     first_layer_speed = absolute_number(raw.get("initial_layer_speed"), 30)
     support_speed = number(raw.get("support_speed"), 100)
+    overhang_1_speed, overhang_1_percent = float_or_percent(raw.get("overhang_1_4_speed"), 0)
+    overhang_2_speed, overhang_2_percent = float_or_percent(raw.get("overhang_2_4_speed"), 0)
+    overhang_3_speed, overhang_3_percent = float_or_percent(raw.get("overhang_3_4_speed"), 0)
+    overhang_4_speed, overhang_4_percent = float_or_percent(raw.get("overhang_4_4_speed"), 0)
     profile = {
         "id": stable_id("process", brand, name),
         "name": name,
@@ -337,6 +366,15 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "gapInfillSpeed": number(raw.get("gap_infill_speed"), outer_wall_speed * 1.25),
         "firstLayerInfillSpeed": number(raw.get("initial_layer_infill_speed"), 60),
         "supportInterfaceSpeed": absolute_number(raw.get("support_interface_speed"), 80),
+        "overhangSpeedEnabled": boolean(raw.get("enable_overhang_speed"), True),
+        "overhangSpeed1": overhang_1_speed,
+        "overhangSpeed1Percent": overhang_1_percent,
+        "overhangSpeed2": overhang_2_speed,
+        "overhangSpeed2Percent": overhang_2_percent,
+        "overhangSpeed3": overhang_3_speed,
+        "overhangSpeed3Percent": overhang_3_percent,
+        "overhangSpeed4": overhang_4_speed,
+        "overhangSpeed4Percent": overhang_4_percent,
         "bridgeFlowRatio": number(raw.get("bridge_flow"), 1),
         "internalBridgeFlowRatio": number(raw.get("internal_bridge_flow"), 1),
         "topSurfaceFlowRatio": number(raw.get("top_solid_infill_flow_ratio"), 1),
@@ -354,7 +392,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "bottomSolidLayers": integer(raw.get("bottom_shell_layers"), 4),
         "topShellThickness": number(raw.get("top_shell_thickness"), 0),
         "bottomShellThickness": number(raw.get("bottom_shell_thickness"), 0),
-        "fillPattern": str(raw.get("sparse_infill_pattern", "gyroid")),
+        "fillPattern": infill_pattern(raw.get("sparse_infill_pattern"), "gyroid"),
+        "topSurfacePattern": infill_pattern(raw.get("top_surface_pattern"), "monotonicline"),
+        "bottomSurfacePattern": infill_pattern(raw.get("bottom_surface_pattern"), "monotonic"),
+        "internalSolidInfillPattern": infill_pattern(raw.get("internal_solid_infill_pattern"), "monotonic"),
         "travelSpeed": number(raw.get("travel_speed"), 300),
         "firstLayerSpeed": first_layer_speed,
         "supportType": "tree" if "tree" in support_type else "normal",
@@ -366,6 +407,21 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "supportTopZDistance": number(raw.get("support_top_z_distance"), 0.2),
         "supportBottomZDistance": number(raw.get("support_bottom_z_distance"), 0.2),
         "supportObjectXYDistance": absolute_number(raw.get("support_object_xy_distance"), 0.35),
+        "supportBasePattern": enum_value(
+            raw.get("support_base_pattern"),
+            {"default", "rectilinear", "rectilinear-grid", "honeycomb", "lightning", "hollow"},
+            "default",
+        ),
+        "supportInterfacePattern": enum_value(
+            raw.get("support_interface_pattern"),
+            {"auto", "rectilinear", "concentric", "rectilinear_interlaced", "grid"},
+            "auto",
+        ),
+        "supportStyle": enum_value(
+            raw.get("support_style"),
+            {"default", "grid", "snug", "organic", "tree_slim", "tree_strong", "tree_hybrid"},
+            "default",
+        ),
         "skirtLoops": integer(raw.get("skirt_loops"), 0),
         "skirtDistance": number(raw.get("skirt_distance"), 6),
         "outerWallLineWidth": outer_wall_line_width,
@@ -375,6 +431,16 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "internalSolidInfillLineWidth": internal_solid_infill_line_width,
         "supportLineWidth": support_line_width,
         "initialLayerLineWidth": initial_layer_line_width,
+        "seamPosition": enum_value(
+            raw.get("seam_position"), {"nearest", "aligned", "aligned_back", "back", "random"}, "aligned"
+        ),
+        "ironingType": enum_value(
+            raw.get("ironing_type"), {"no ironing", "top", "topmost", "solid"}, "no ironing"
+        ),
+        "ironingPattern": infill_pattern(raw.get("ironing_pattern"), "rectilinear"),
+        "ironingFlow": number(raw.get("ironing_flow"), 10),
+        "ironingSpacing": number(raw.get("ironing_spacing"), 0.1),
+        "ironingSpeed": number(raw.get("ironing_speed"), 20),
         "wallGenerator": wall_generator(raw.get("wall_generator")),
         "wallSequence": wall_sequence(raw.get("wall_sequence")),
         "detectThinWalls": boolean(raw.get("detect_thin_wall")),
@@ -401,6 +467,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
             ]
         )
         and 1 <= profile["travelSpeed"] <= 2_000
+        and all(
+            0 <= profile[key] <= (100 if profile[f"{key}Percent"] else 2_000)
+            for key in ["overhangSpeed1", "overhangSpeed2", "overhangSpeed3", "overhangSpeed4"]
+        )
         and all(
             0.1 <= profile[key] <= 2
             for key in [
@@ -442,6 +512,14 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0 <= profile["supportTopZDistance"] <= 20
         and 0 <= profile["supportBottomZDistance"] <= 20
         and 0 <= profile["supportObjectXYDistance"] <= 20
+        and profile["fillPattern"] in INFILL_PATTERNS
+        and profile["topSurfacePattern"] in INFILL_PATTERNS
+        and profile["bottomSurfacePattern"] in INFILL_PATTERNS
+        and profile["internalSolidInfillPattern"] in INFILL_PATTERNS
+        and profile["ironingPattern"] in INFILL_PATTERNS
+        and 0 <= profile["ironingFlow"] <= 100
+        and 0 <= profile["ironingSpacing"] <= 1
+        and 1 <= profile["ironingSpeed"] <= 2_000
     ):
         raise ValueError("unsafe process limits")
     return profile

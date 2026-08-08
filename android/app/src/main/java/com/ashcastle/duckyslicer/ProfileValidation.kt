@@ -69,6 +69,10 @@ internal object ProfileValidation {
                 profile.firstLayerInfillSpeed,
                 profile.supportInterfaceSpeed,
             ).all { it in 0f..2_000f } &&
+            overhangSpeedIsValid(profile.overhangSpeed1, profile.overhangSpeed1Percent) &&
+            overhangSpeedIsValid(profile.overhangSpeed2, profile.overhangSpeed2Percent) &&
+            overhangSpeedIsValid(profile.overhangSpeed3, profile.overhangSpeed3Percent) &&
+            overhangSpeedIsValid(profile.overhangSpeed4, profile.overhangSpeed4Percent) &&
             listOf(
                 profile.bridgeFlowRatio,
                 profile.internalBridgeFlowRatio,
@@ -99,7 +103,10 @@ internal object ProfileValidation {
             profile.bottomSolidLayers in 0..100 &&
             profile.topShellThickness in 0f..100f &&
             profile.bottomShellThickness in 0f..100f &&
-            profile.fillPattern.isSafeLabel() &&
+            profile.fillPattern in INFILL_PATTERNS &&
+            profile.topSurfacePattern in INFILL_PATTERNS &&
+            profile.bottomSurfacePattern in INFILL_PATTERNS &&
+            profile.internalSolidInfillPattern in INFILL_PATTERNS &&
             profile.supportType in setOf("normal", "tree") &&
             profile.supportAngle in 0f..90f &&
             profile.supportInterfaceTopLayers in 0..20 &&
@@ -109,6 +116,15 @@ internal object ProfileValidation {
             profile.supportTopZDistance in 0f..20f &&
             profile.supportBottomZDistance in 0f..20f &&
             profile.supportObjectXYDistance in 0f..20f &&
+            profile.supportBasePattern in SUPPORT_BASE_PATTERNS &&
+            profile.supportInterfacePattern in SUPPORT_INTERFACE_PATTERNS &&
+            profile.supportStyle in SUPPORT_STYLES &&
+            profile.seamPosition in SEAM_POSITIONS &&
+            profile.ironingType in IRONING_TYPES &&
+            profile.ironingPattern in INFILL_PATTERNS &&
+            profile.ironingFlow in 0f..100f &&
+            profile.ironingSpacing in 0f..1f &&
+            profile.ironingSpeed in 0f..2_000f &&
             profile.skirtLoops in 0..100 &&
             profile.skirtDistance in 0f..1_000f &&
             profile.brimWidth in 0f..1_000f &&
@@ -120,6 +136,29 @@ internal object ProfileValidation {
 
     private fun List<String>.isSafeCompatibilityList(): Boolean =
         size <= MAX_COMPATIBILITY_ENTRIES && all { it.isSafeLabel() }
+
+    private fun overhangSpeedIsValid(value: Float, percent: Boolean): Boolean =
+        value in 0f..(if (percent) 100f else 2_000f)
+
+    private val INFILL_PATTERNS = setOf(
+        "monotonic", "monotonicline", "rectilinear", "alignedrectilinear", "zigzag",
+        "crosszag", "lockedzag", "line", "grid", "triangles", "tri-hexagon", "cubic",
+        "adaptivecubic", "quartercubic", "supportcubic", "lightning", "honeycomb",
+        "3dhoneycomb", "lateral-honeycomb", "lateral-lattice", "crosshatch", "tpmsd",
+        "tpmsfk", "gyroid", "concentric", "hilbertcurve", "archimedeanchords",
+        "octagramspiral",
+    )
+    private val SUPPORT_BASE_PATTERNS = setOf(
+        "default", "rectilinear", "lightning", "hollow", "rectilinear-grid",
+    )
+    private val SUPPORT_INTERFACE_PATTERNS = setOf(
+        "auto", "rectilinear", "rectilinear_interlaced", "concentric", "grid",
+    )
+    private val SUPPORT_STYLES = setOf(
+        "default", "grid", "snug", "organic", "tree_hybrid", "tree_slim",
+    )
+    private val SEAM_POSITIONS = setOf("aligned", "nearest", "back", "random")
+    private val IRONING_TYPES = setOf("no ironing", "top", "topmost", "solid")
 
     private const val MAX_LABEL_LENGTH = 512
     private const val MAX_COMPATIBILITY_ENTRIES = 512

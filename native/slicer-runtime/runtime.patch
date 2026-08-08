@@ -47,10 +47,10 @@ index 963808df..2f2043a3 100644
  else()
      target_link_libraries(libslic3r PRIVATE
 diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
-index 116a4a85..db11926e 100644
+index 116a4a85..bf283375 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -40,14 +40,39 @@ struct SliceConfig {
+@@ -40,14 +40,51 @@ struct SliceConfig {
      int perimeters = 2;
      int top_solid_layers = 5;
      int bottom_solid_layers = 4;
@@ -58,6 +58,9 @@ index 116a4a85..db11926e 100644
 +    float bottom_shell_thickness = 0.0f;
      float fill_density = 0.15f;  // 0.0 - 1.0
      std::string fill_pattern = "gyroid";
++    std::string top_surface_pattern = "monotonicline";
++    std::string bottom_surface_pattern = "monotonic";
++    std::string internal_solid_infill_pattern = "monotonic";
  
      // Speed settings (mm/s)
      float print_speed = 60.0f;
@@ -70,6 +73,15 @@ index 116a4a85..db11926e 100644
 +    float gap_infill_speed = 75.0f;
 +    float first_layer_infill_speed = 42.0f;
 +    float support_interface_speed = 80.0f;
++    bool overhang_speed_enabled = true;
++    float overhang_speed_1 = 55.0f;
++    bool overhang_speed_1_percent = false;
++    float overhang_speed_2 = 30.0f;
++    bool overhang_speed_2_percent = false;
++    float overhang_speed_3 = 10.0f;
++    bool overhang_speed_3_percent = false;
++    float overhang_speed_4 = 10.0f;
++    bool overhang_speed_4_percent = false;
      float travel_speed = 150.0f;
      float first_layer_speed = 20.0f;
  
@@ -90,7 +102,7 @@ index 116a4a85..db11926e 100644
      // Temperature
      int nozzle_temp = 210;
      int bed_temp = 60;
-@@ -60,6 +85,13 @@ struct SliceConfig {
+@@ -60,6 +97,16 @@ struct SliceConfig {
      bool support_enabled = false;
      std::string support_type = "normal"; // "normal", "tree"
      float support_angle = 45.0f;
@@ -101,10 +113,13 @@ index 116a4a85..db11926e 100644
 +    float support_top_z_distance = 0.2f;
 +    float support_bottom_z_distance = 0.2f;
 +    float support_object_xy_distance = 0.35f;
++    std::string support_base_pattern = "default";
++    std::string support_interface_pattern = "auto";
++    std::string support_style = "default";
      int support_filament = 0;            // 1-based Orca filament index; 0 = default
      int support_interface_filament = 0;  // 1-based Orca filament index; 0 = default
  
-@@ -68,6 +100,22 @@ struct SliceConfig {
+@@ -68,6 +115,28 @@ struct SliceConfig {
      float skirt_distance = 6.0f;
      float brim_width = 0.0f;
  
@@ -117,6 +132,12 @@ index 116a4a85..db11926e 100644
 +    float internal_solid_infill_line_width = 0.45f;
 +    float support_line_width = 0.42f;
 +    float initial_layer_line_width = 0.5f;
++    std::string seam_position = "aligned";
++    std::string ironing_type = "no ironing";
++    std::string ironing_pattern = "rectilinear";
++    float ironing_flow = 10.0f;
++    float ironing_spacing = 0.1f;
++    float ironing_speed = 20.0f;
 +    std::string wall_generator = "arachne";
 +    std::string wall_sequence = "inner-outer";
 +    bool detect_thin_walls = false;
@@ -127,7 +148,7 @@ index 116a4a85..db11926e 100644
      // Printer bed (Snapmaker U1: 270x270x270mm)
      float bed_size_x = 270.0f;
      float bed_size_y = 270.0f;
-@@ -98,6 +146,22 @@ struct SliceConfig {
+@@ -98,6 +167,22 @@ struct SliceConfig {
      // template expressions at G-code generation time.
      std::string machine_start_gcode;
      std::string machine_end_gcode;
@@ -180,10 +201,10 @@ index 51a2f8fb..f5cdd410 100644
  } } // namespace Feature::FuzzySkin
  
 diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
-index d93efb7d..e3eec0b2 100644
+index d93efb7d..dab7aac7 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -92,10 +92,31 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -92,10 +92,43 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.perimeters = getInt("perimeters");
      config.top_solid_layers = getInt("topSolidLayers");
      config.bottom_solid_layers = getInt("bottomSolidLayers");
@@ -191,6 +212,9 @@ index d93efb7d..e3eec0b2 100644
 +    config.bottom_shell_thickness = getFloat("bottomShellThickness");
      config.fill_density = getFloat("fillDensity");
      config.fill_pattern = getString("fillPattern");
++    config.top_surface_pattern = getString("topSurfacePattern");
++    config.bottom_surface_pattern = getString("bottomSurfacePattern");
++    config.internal_solid_infill_pattern = getString("internalSolidInfillPattern");
  
      config.print_speed = getFloat("printSpeed");
 +    config.inner_wall_speed = getFloat("innerWallSpeed");
@@ -202,6 +226,15 @@ index d93efb7d..e3eec0b2 100644
 +    config.gap_infill_speed = getFloat("gapInfillSpeed");
 +    config.first_layer_infill_speed = getFloat("firstLayerInfillSpeed");
 +    config.support_interface_speed = getFloat("supportInterfaceSpeed");
++    config.overhang_speed_enabled = getBool("overhangSpeedEnabled");
++    config.overhang_speed_1 = getFloat("overhangSpeed1");
++    config.overhang_speed_1_percent = getBool("overhangSpeed1Percent");
++    config.overhang_speed_2 = getFloat("overhangSpeed2");
++    config.overhang_speed_2_percent = getBool("overhangSpeed2Percent");
++    config.overhang_speed_3 = getFloat("overhangSpeed3");
++    config.overhang_speed_3_percent = getBool("overhangSpeed3Percent");
++    config.overhang_speed_4 = getFloat("overhangSpeed4");
++    config.overhang_speed_4_percent = getBool("overhangSpeed4Percent");
 +    config.bridge_flow_ratio = getFloat("bridgeFlowRatio");
 +    config.internal_bridge_flow_ratio = getFloat("internalBridgeFlowRatio");
 +    config.top_surface_flow_ratio = getFloat("topSurfaceFlowRatio");
@@ -215,7 +248,7 @@ index d93efb7d..e3eec0b2 100644
      config.travel_speed = getFloat("travelSpeed");
      config.first_layer_speed = getFloat("firstLayerSpeed");
  
-@@ -108,12 +129,32 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -108,12 +141,41 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.support_enabled = getBool("supportEnabled");
      config.support_type = getString("supportType");
      config.support_angle = getFloat("supportAngle");
@@ -226,6 +259,9 @@ index d93efb7d..e3eec0b2 100644
 +    config.support_top_z_distance = getFloat("supportTopZDistance");
 +    config.support_bottom_z_distance = getFloat("supportBottomZDistance");
 +    config.support_object_xy_distance = getFloat("supportObjectXYDistance");
++    config.support_base_pattern = getString("supportBasePattern");
++    config.support_interface_pattern = getString("supportInterfacePattern");
++    config.support_style = getString("supportStyle");
      config.support_filament = getInt("supportFilament");
      config.support_interface_filament = getInt("supportInterfaceFilament");
  
@@ -239,6 +275,12 @@ index d93efb7d..e3eec0b2 100644
 +    config.internal_solid_infill_line_width = getFloat("internalSolidInfillLineWidth");
 +    config.support_line_width = getFloat("supportLineWidth");
 +    config.initial_layer_line_width = getFloat("initialLayerLineWidth");
++    config.seam_position = getString("seamPosition");
++    config.ironing_type = getString("ironingType");
++    config.ironing_pattern = getString("ironingPattern");
++    config.ironing_flow = getFloat("ironingFlow");
++    config.ironing_spacing = getFloat("ironingSpacing");
++    config.ironing_speed = getFloat("ironingSpeed");
 +    config.wall_generator = getString("wallGenerator");
 +    config.wall_sequence = getString("wallSequence");
 +    config.detect_thin_walls = getBool("detectThinWalls");
@@ -248,7 +290,7 @@ index d93efb7d..e3eec0b2 100644
  
      config.bed_size_x = getFloat("bedSizeX");
      config.bed_size_y = getFloat("bedSizeY");
-@@ -137,6 +178,22 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -137,6 +199,22 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
      config.machine_start_gcode = getString("machineStartGcode");
      config.machine_end_gcode = getString("machineEndGcode");
@@ -271,7 +313,7 @@ index d93efb7d..e3eec0b2 100644
  
      // F91: per-extruder filament tuning from the user's filament library.
      config.filament_flow_ratios = getFloatArray("filamentFlowRatios");
-@@ -235,9 +292,30 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -235,9 +313,42 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setInt("perimeters", config.perimeters);
      setInt("topSolidLayers", config.top_solid_layers);
      setInt("bottomSolidLayers", config.bottom_solid_layers);
@@ -279,6 +321,9 @@ index d93efb7d..e3eec0b2 100644
 +    setFloat("bottomShellThickness", config.bottom_shell_thickness);
      setFloat("fillDensity", config.fill_density);
      setString("fillPattern", config.fill_pattern);
++    setString("topSurfacePattern", config.top_surface_pattern);
++    setString("bottomSurfacePattern", config.bottom_surface_pattern);
++    setString("internalSolidInfillPattern", config.internal_solid_infill_pattern);
      setFloat("printSpeed", config.print_speed);
 +    setFloat("innerWallSpeed", config.inner_wall_speed);
 +    setFloat("sparseInfillSpeed", config.sparse_infill_speed);
@@ -289,6 +334,15 @@ index d93efb7d..e3eec0b2 100644
 +    setFloat("gapInfillSpeed", config.gap_infill_speed);
 +    setFloat("firstLayerInfillSpeed", config.first_layer_infill_speed);
 +    setFloat("supportInterfaceSpeed", config.support_interface_speed);
++    setBool("overhangSpeedEnabled", config.overhang_speed_enabled);
++    setFloat("overhangSpeed1", config.overhang_speed_1);
++    setBool("overhangSpeed1Percent", config.overhang_speed_1_percent);
++    setFloat("overhangSpeed2", config.overhang_speed_2);
++    setBool("overhangSpeed2Percent", config.overhang_speed_2_percent);
++    setFloat("overhangSpeed3", config.overhang_speed_3);
++    setBool("overhangSpeed3Percent", config.overhang_speed_3_percent);
++    setFloat("overhangSpeed4", config.overhang_speed_4);
++    setBool("overhangSpeed4Percent", config.overhang_speed_4_percent);
 +    setFloat("bridgeFlowRatio", config.bridge_flow_ratio);
 +    setFloat("internalBridgeFlowRatio", config.internal_bridge_flow_ratio);
 +    setFloat("topSurfaceFlowRatio", config.top_surface_flow_ratio);
@@ -302,7 +356,7 @@ index d93efb7d..e3eec0b2 100644
      setFloat("travelSpeed", config.travel_speed);
      setFloat("firstLayerSpeed", config.first_layer_speed);
      setInt("nozzleTemp", config.nozzle_temp);
-@@ -247,11 +325,31 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -247,11 +358,40 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setBool("supportEnabled", config.support_enabled);
      setString("supportType", config.support_type);
      setFloat("supportAngle", config.support_angle);
@@ -313,6 +367,9 @@ index d93efb7d..e3eec0b2 100644
 +    setFloat("supportTopZDistance", config.support_top_z_distance);
 +    setFloat("supportBottomZDistance", config.support_bottom_z_distance);
 +    setFloat("supportObjectXYDistance", config.support_object_xy_distance);
++    setString("supportBasePattern", config.support_base_pattern);
++    setString("supportInterfacePattern", config.support_interface_pattern);
++    setString("supportStyle", config.support_style);
      setInt("supportFilament", config.support_filament);
      setInt("supportInterfaceFilament", config.support_interface_filament);
      setInt("skirtLoops", config.skirt_loops);
@@ -325,6 +382,12 @@ index d93efb7d..e3eec0b2 100644
 +    setFloat("internalSolidInfillLineWidth", config.internal_solid_infill_line_width);
 +    setFloat("supportLineWidth", config.support_line_width);
 +    setFloat("initialLayerLineWidth", config.initial_layer_line_width);
++    setString("seamPosition", config.seam_position);
++    setString("ironingType", config.ironing_type);
++    setString("ironingPattern", config.ironing_pattern);
++    setFloat("ironingFlow", config.ironing_flow);
++    setFloat("ironingSpacing", config.ironing_spacing);
++    setFloat("ironingSpeed", config.ironing_speed);
 +    setString("wallGenerator", config.wall_generator);
 +    setString("wallSequence", config.wall_sequence);
 +    setBool("detectThinWalls", config.detect_thin_walls);
@@ -334,7 +397,7 @@ index d93efb7d..e3eec0b2 100644
      setFloat("bedSizeX", config.bed_size_x);
      setFloat("bedSizeY", config.bed_size_y);
      setFloat("maxPrintHeight", config.max_print_height);
-@@ -271,6 +369,22 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -271,6 +411,22 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setFloat("wipeTowerWidth", config.wipe_tower_width);
      setString("machineStartGcode", config.machine_start_gcode);
      setString("machineEndGcode", config.machine_end_gcode);
@@ -358,19 +421,42 @@ index d93efb7d..e3eec0b2 100644
      env->DeleteLocalRef(cls);
      return obj;
 diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
-index 8d61c9cf..b857a13b 100644
+index 8d61c9cf..fb5ad330 100644
 --- a/app/src/main/cpp/src/sapil_print.cpp
 +++ b/app/src/main/cpp/src/sapil_print.cpp
-@@ -183,6 +183,8 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -183,84 +183,110 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
      dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
      dpc.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(config.bottom_solid_layers));
+-
+-    // Infill (OrcaSlicer keys)
+-    Slic3r::InfillPattern pattern = Slic3r::InfillPattern::ipGyroid;
+-    if (config.fill_pattern == "grid") pattern = Slic3r::InfillPattern::ipGrid;
+-    else if (config.fill_pattern == "honeycomb") pattern = Slic3r::InfillPattern::ipHoneycomb;
+-    else if (config.fill_pattern == "line") pattern = Slic3r::InfillPattern::ipLine;
+-    else if (config.fill_pattern == "rectilinear") pattern = Slic3r::InfillPattern::ipRectilinear;
+-
+-    // F87/F91 (2026-05-25): gate fallbacks on !has_embedded_profile so an imported
+-    // OrcaSlicer process profile / user-tuned library filament can win. When the Kotlin
+-    // ProfileEmbedder has authored the embed (is_snapmaker_profile=true) the embed's
+-    // values came from the layered: printer profile + bundled process + library +
+-    // SlicingOverrides, so trust it. Raw STL (no embed) still gets these SliceConfig-
+-    // derived defaults.
+-    if (!has_embedded_profile) {
+-        dpc.set_key_value("sparse_infill_pattern", new Slic3r::ConfigOptionEnum<Slic3r::InfillPattern>(pattern));
+-        dpc.set_key_value("sparse_infill_density", new Slic3r::ConfigOptionPercent(config.fill_density * 100.0));
+-    }
 +    dpc.set_key_value("top_shell_thickness", new Slic3r::ConfigOptionFloat(config.top_shell_thickness));
 +    dpc.set_key_value("bottom_shell_thickness", new Slic3r::ConfigOptionFloat(config.bottom_shell_thickness));
- 
-     // Infill (OrcaSlicer keys)
-     Slic3r::InfillPattern pattern = Slic3r::InfillPattern::ipGyroid;
-@@ -204,63 +206,96 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
++
++    // Preserve Orca's complete enum vocabulary. The old hand-written mapping silently
++    // turned unsupported values (notably crosshatch) into gyroid and made distinct
++    // sparse/top/bottom/internal-solid regions look like one generic fill.
++    dpc.set_deserialize_strict("sparse_infill_pattern", config.fill_pattern);
++    dpc.set_deserialize_strict("top_surface_pattern", config.top_surface_pattern);
++    dpc.set_deserialize_strict("bottom_surface_pattern", config.bottom_surface_pattern);
++    dpc.set_deserialize_strict("internal_solid_infill_pattern", config.internal_solid_infill_pattern);
++    dpc.set_key_value("sparse_infill_density", new Slic3r::ConfigOptionPercent(config.fill_density * 100.0));
  
      // Speed (OrcaSlicer keys).
      // outer_wall_speed is the primary speed control — set from the user's "print speed" setting.
@@ -513,7 +599,7 @@ index 8d61c9cf..b857a13b 100644
  
      // Multi-extruder setup
      int n_ext = std::max(1, config.extruder_count);
-@@ -461,11 +496,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -461,11 +487,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      applyPerExtFloats("slow_down_layer_time",    config.filament_slow_down_layer_times, 4.0);
      applyPerExtFloats("slow_down_min_speed",     config.filament_slow_down_min_speeds, 20.0);
  
@@ -528,7 +614,7 @@ index 8d61c9cf..b857a13b 100644
  
      // Deretraction speed — OrcaSlicer defaults to 0 (= same as retraction speed).
      // Snapmaker profile uses 35 mm/s for smoother prime-after-retract.
-@@ -480,19 +513,45 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -480,29 +504,53 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      // the literal 0, not the auto-resolved value, causing Flow::rounded_rectangle_extrusion_spacing()
      // to throw FlowErrorNegativeSpacing on multi-color models.
      double nd = config.nozzle_diameter;
@@ -559,6 +645,11 @@ index 8d61c9cf..b857a13b 100644
 -    // — surfaced 2026-05-25 when F87 first un-gated this key. Pre-existing OrcaSlicer
 -    // issue; until it's fixed upstream we must not let the user reach the classic path.
 -    dpc.set_key_value("wall_generator", new Slic3r::ConfigOptionEnum<Slic3r::PerimeterGeneratorType>(Slic3r::PerimeterGeneratorType::Arachne));
+-
+-    // F87 (2026-05-25): gate seam_position + reduce_infill_retraction on
+-    // !has_embedded_profile so an imported process profile or user SlicingOverride
+-    // can win. `buildProfileOverrides` already writes the resolved values into the
+-    // embed map for Snapmaker-authored embeds.
 +    dpc.set_key_value("outer_wall_line_width",   new Slic3r::ConfigOptionFloatOrPercent(outer_wall_width, false));
 +    dpc.set_key_value("inner_wall_line_width",   new Slic3r::ConfigOptionFloatOrPercent(inner_wall_width, false));
 +    dpc.set_key_value("top_surface_line_width",  new Slic3r::ConfigOptionFloatOrPercent(top_surface_width, false));
@@ -583,10 +674,22 @@ index 8d61c9cf..b857a13b 100644
 +    dpc.set_key_value("detect_overhang_wall", new Slic3r::ConfigOptionBool(config.detect_overhang_walls));
 +    dpc.set_key_value("only_one_wall_top", new Slic3r::ConfigOptionBool(config.only_one_wall_on_top));
 +    dpc.set_key_value("precise_outer_wall", new Slic3r::ConfigOptionBool(config.precise_outer_walls));
++
++    dpc.set_deserialize_strict("seam_position", config.seam_position);
++    dpc.set_deserialize_strict("ironing_type", config.ironing_type);
++    dpc.set_deserialize_strict("ironing_pattern", config.ironing_pattern);
++    dpc.set_key_value("ironing_flow", new Slic3r::ConfigOptionPercent(config.ironing_flow));
++    dpc.set_key_value("ironing_spacing", new Slic3r::ConfigOptionFloat(config.ironing_spacing));
++    dpc.set_key_value("ironing_speed", new Slic3r::ConfigOptionFloat(config.ironing_speed));
+     if (!has_embedded_profile) {
+-        // Seam position - aligned is the default; set explicitly for STL files.
+-        dpc.set_key_value("seam_position", new Slic3r::ConfigOptionEnum<Slic3r::SeamPosition>(Slic3r::spAligned));
+-
+-        // Reduce infill retraction - off by default for Snapmaker U1.
+         dpc.set_key_value("reduce_infill_retraction", new Slic3r::ConfigOptionBool(false));
+     }
  
-     // F87 (2026-05-25): gate seam_position + reduce_infill_retraction on
-     // !has_embedded_profile so an imported process profile or user SlicingOverride
-@@ -568,10 +627,16 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -568,19 +616,27 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          dpc.set_key_value("filament_cost", new Slic3r::ConfigOptionFloats(std::move(v)));
      }
  
@@ -594,6 +697,15 @@ index 8d61c9cf..b857a13b 100644
 -    // Snapmaker profile values so future OrcaSlicer changes don't silently regress.
 -    dpc.set_key_value("support_speed", new Slic3r::ConfigOptionFloat(100.0));
 -    dpc.set_key_value("support_interface_speed", new Slic3r::ConfigOptionFloat(80.0));
+-
+-    // Overhang speed control — OrcaSlicer defaults enable_overhang_speed=true with all
+-    // overhang speeds at 0 (= use wall speed).  Pin to Snapmaker 0.4mm nozzle profile
+-    // values so a future default change doesn't break overhang quality.
+-    dpc.set_key_value("enable_overhang_speed", new Slic3r::ConfigOptionBool(true));
+-    dpc.set_key_value("overhang_1_4_speed", new Slic3r::ConfigOptionFloatOrPercent(55, false));
+-    dpc.set_key_value("overhang_2_4_speed", new Slic3r::ConfigOptionFloatOrPercent(30, false));
+-    dpc.set_key_value("overhang_3_4_speed", new Slic3r::ConfigOptionFloatOrPercent(10, false));
+-    dpc.set_key_value("overhang_4_4_speed", new Slic3r::ConfigOptionFloatOrPercent(10, false));
 +    // Preserve the active process profile's support speed.
 +    dpc.set_key_value("support_speed", new Slic3r::ConfigOptionFloat(config.support_speed));
 +    dpc.set_key_value("support_interface_speed", new Slic3r::ConfigOptionFloat(config.support_interface_speed));
@@ -604,9 +716,20 @@ index 8d61c9cf..b857a13b 100644
 +    dpc.set_key_value("support_top_z_distance", new Slic3r::ConfigOptionFloat(config.support_top_z_distance));
 +    dpc.set_key_value("support_bottom_z_distance", new Slic3r::ConfigOptionFloat(config.support_bottom_z_distance));
 +    dpc.set_key_value("support_object_xy_distance", new Slic3r::ConfigOptionFloat(config.support_object_xy_distance));
++    dpc.set_deserialize_strict("support_base_pattern", config.support_base_pattern);
++    dpc.set_deserialize_strict("support_interface_pattern", config.support_interface_pattern);
++    dpc.set_deserialize_strict("support_style", config.support_style);
++
++    // Orca profiles intentionally mix absolute mm/s and percentages of outer-wall
++    // speed. Preserve both the numeric value and its unit semantics per stage.
++    dpc.set_key_value("enable_overhang_speed", new Slic3r::ConfigOptionBool(config.overhang_speed_enabled));
++    dpc.set_key_value("overhang_1_4_speed", new Slic3r::ConfigOptionFloatOrPercent(config.overhang_speed_1, config.overhang_speed_1_percent));
++    dpc.set_key_value("overhang_2_4_speed", new Slic3r::ConfigOptionFloatOrPercent(config.overhang_speed_2, config.overhang_speed_2_percent));
++    dpc.set_key_value("overhang_3_4_speed", new Slic3r::ConfigOptionFloatOrPercent(config.overhang_speed_3, config.overhang_speed_3_percent));
++    dpc.set_key_value("overhang_4_4_speed", new Slic3r::ConfigOptionFloatOrPercent(config.overhang_speed_4, config.overhang_speed_4_percent));
  
-     // Overhang speed control — OrcaSlicer defaults enable_overhang_speed=true with all
-     // overhang speeds at 0 (= use wall speed).  Pin to Snapmaker 0.4mm nozzle profile
+     // Idle extruder standby temperature — prevents idle nozzles from staying at full print temp.
+     // Snapmaker profiles embed ooze_prevention=0 and standby_temperature_delta=-5, which leaves
 diff --git a/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp b/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp
 index 4e0ddd0f3f..4e8e2b2ef3 100644
 --- a/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp

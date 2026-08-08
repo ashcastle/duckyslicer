@@ -36,6 +36,22 @@ class SliceOptionsPersistenceTest {
         assertEquals(133f, restored.gapInfillSpeed)
         assertEquals(61f, restored.firstLayerInfillSpeed)
         assertEquals(52f, restored.supportInterfaceSpeed)
+        assertEquals(false, restored.overhangSpeedEnabled)
+        assertEquals(81f, restored.overhangSpeed1)
+        assertEquals(true, restored.overhangSpeed1Percent)
+        assertEquals("crosshatch", restored.fillPattern)
+        assertEquals("monotonic", restored.topSurfacePattern)
+        assertEquals("concentric", restored.bottomSurfacePattern)
+        assertEquals("rectilinear", restored.internalSolidInfillPattern)
+        assertEquals("nearest", restored.seamPosition)
+        assertEquals("top", restored.ironingType)
+        assertEquals("concentric", restored.ironingPattern)
+        assertEquals(13f, restored.ironingFlow)
+        assertEquals(0.17f, restored.ironingSpacing)
+        assertEquals(27f, restored.ironingSpeed)
+        assertEquals("rectilinear-grid", restored.supportBasePattern)
+        assertEquals("rectilinear_interlaced", restored.supportInterfacePattern)
+        assertEquals("snug", restored.supportStyle)
         assertEquals(0.91f, restored.bridgeFlowRatio)
         assertEquals(0.96f, restored.internalBridgeFlowRatio)
         assertEquals(0.97f, restored.topSurfaceFlowRatio)
@@ -114,7 +130,10 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         printSpeed = 145f,
         topSolidLayers = 7,
         bottomSolidLayers = 6,
-        fillPattern = "grid",
+        fillPattern = "crosshatch",
+        topSurfacePattern = "monotonic",
+        bottomSurfacePattern = "concentric",
+        internalSolidInfillPattern = "rectilinear",
         travelSpeed = 410f,
         firstLayerSpeed = 32f,
         supportEnabled = true,
@@ -138,6 +157,15 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         gapInfillSpeed = 133f,
         firstLayerInfillSpeed = 61f,
         supportInterfaceSpeed = 52f,
+        overhangSpeedEnabled = false,
+        overhangSpeed1 = 81f,
+        overhangSpeed1Percent = true,
+        overhangSpeed2 = 52f,
+        overhangSpeed2Percent = false,
+        overhangSpeed3 = 33f,
+        overhangSpeed3Percent = true,
+        overhangSpeed4 = 21f,
+        overhangSpeed4Percent = false,
         bridgeFlowRatio = 0.91f,
         internalBridgeFlowRatio = 0.96f,
         topSurfaceFlowRatio = 0.97f,
@@ -151,7 +179,16 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         supportTopZDistance = 0.18f,
         supportBottomZDistance = 0.22f,
         supportObjectXYDistance = 0.4f,
+        supportBasePattern = "rectilinear-grid",
+        supportInterfacePattern = "rectilinear_interlaced",
+        supportStyle = "snug",
         initialLayerLineWidth = 0.74f,
+        seamPosition = "nearest",
+        ironingType = "top",
+        ironingPattern = "concentric",
+        ironingFlow = 13f,
+        ironingSpacing = 0.17f,
+        ironingSpeed = 27f,
         defaultAcceleration = 4_000f,
         outerWallAcceleration = 2_000f,
         innerWallAcceleration = 3_500f,

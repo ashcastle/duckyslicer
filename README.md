@@ -41,6 +41,7 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - A pinned Orca-derived catalog with 785 printer variants, 3,306 filament presets, and 2,140 slicing processes
 - Orca process fidelity for independent outer/inner walls, sparse infill, internal solid, top surface, and support speeds and line widths, plus feature accelerations
 - Orca bridge, gap-fill, first-layer solid, shell-thickness, feature-flow, and support-interface settings preserved through profiles, projects, and on-device G-code
+- Orca sparse, top, bottom, and internal-solid patterns preserved independently—including crosshatch—along with seam, ironing, overhang-unit, and support-pattern semantics
 - Searchable printer, filament, and slicing selectors with collapsible brand and personal-profile groups
 - Printer compatibility filtering, validated profile inheritance, and unsafe-entry rejection during the build
 - Editable settings and schema-versioned named user profiles saved entirely in app-private storage
