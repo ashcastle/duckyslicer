@@ -123,6 +123,7 @@
     <string name="sparse_infill_width">Sparse infill width</string>
     <string name="internal_solid_infill_width">Internal solid width</string>
     <string name="support_line_width">Support width</string>
+    <string name="initial_layer_line_width">Initial layer width</string>
     <string name="wall_generator">Wall generator</string>
     <string name="wall_generator_arachne">Arachne</string>
     <string name="wall_generator_classic">Classic</string>
@@ -133,6 +134,8 @@
     <string name="quality">Quality</string>
     <string name="top_shell_layers">Top shell layers</string>
     <string name="bottom_shell_layers">Bottom shell layers</string>
+    <string name="top_shell_thickness">Minimum top thickness</string>
+    <string name="bottom_shell_thickness">Minimum bottom thickness</string>
     <string name="infill">Infill</string>
     <string name="infill_gyroid">Gyroid</string>
     <string name="infill_grid">Grid</string>
@@ -146,6 +149,15 @@
     <string name="internal_solid_infill_speed">Internal solid speed</string>
     <string name="top_surface_speed">Top surface speed</string>
     <string name="support_speed">Support speed</string>
+    <string name="bridge_speed">Bridge speed</string>
+    <string name="gap_infill_speed">Gap infill speed</string>
+    <string name="first_layer_infill_speed">Initial layer solid speed</string>
+    <string name="support_interface_speed">Support interface speed</string>
+    <string name="feature_flow_ratio">Feature flow</string>
+    <string name="bridge_flow_ratio">Bridge flow</string>
+    <string name="internal_bridge_flow_ratio">Internal bridge flow</string>
+    <string name="top_surface_flow_ratio">Top surface flow</string>
+    <string name="bottom_surface_flow_ratio">Bottom surface flow</string>
     <string name="travel_speed">Travel speed</string>
     <string name="first_layer_speed">First layer speed</string>
     <string name="feature_acceleration">Acceleration</string>
@@ -160,6 +172,14 @@
     <string name="normal_support">Normal</string>
     <string name="tree_support">Tree</string>
     <string name="support_threshold_angle">Threshold angle</string>
+    <string name="support_top_interface_layers">Top interface layers</string>
+    <string name="support_bottom_interface_layers">Bottom interface layers</string>
+    <string name="same_as_top">Same as top</string>
+    <string name="support_interface_spacing">Top interface spacing</string>
+    <string name="support_bottom_interface_spacing">Bottom interface spacing</string>
+    <string name="support_top_z_distance">Top Z distance</string>
+    <string name="support_bottom_z_distance">Bottom Z distance</string>
+    <string name="support_object_xy_distance">Object XY distance</string>
     <string name="bed_adhesion">Bed adhesion</string>
     <string name="skirt_loops">Skirt loops</string>
     <string name="skirt_distance">Skirt distance</string>

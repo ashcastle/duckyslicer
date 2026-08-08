@@ -480,6 +480,7 @@ private fun SlicingSettingsSheet(
         options.sparseInfillLineWidth,
         options.internalSolidInfillLineWidth,
         options.supportLineWidth,
+        options.initialLayerLineWidth,
     ).maxOrNull() ?: options.nozzleDiameter * 2f
     val lineWidthSteps = ((maximumLineWidth - minimumLineWidth) / 0.01f).roundToInt().coerceAtLeast(2) - 1
     val maximumFeatureSpeed = listOf(
@@ -490,8 +491,20 @@ private fun SlicingSettingsSheet(
         options.internalSolidInfillSpeed,
         options.topSurfaceSpeed,
         options.supportSpeed,
+        options.bridgeSpeed,
+        options.gapInfillSpeed,
+        options.firstLayerInfillSpeed,
+        options.supportInterfaceSpeed,
     ).maxOrNull() ?: 500f
-    val featureSpeedSteps = ((maximumFeatureSpeed - 10f) / 10f).roundToInt().coerceAtLeast(2) - 1
+    val featureSpeedSteps = ((maximumFeatureSpeed - 10f) / 5f).roundToInt().coerceAtLeast(2) - 1
+    val maximumFlowRatio = listOf(
+        1.5f,
+        options.bridgeFlowRatio,
+        options.internalBridgeFlowRatio,
+        options.topSurfaceFlowRatio,
+        options.bottomSurfaceFlowRatio,
+    ).maxOrNull() ?: 1.5f
+    val flowRatioSteps = ((maximumFlowRatio - 0.5f) / 0.01f).roundToInt().coerceAtLeast(2) - 1
     val maximumFeatureAcceleration = listOf(
         20_000f,
         options.defaultAcceleration,
@@ -529,6 +542,14 @@ private fun SlicingSettingsSheet(
         range = 0.10f..0.50f,
         steps = 39,
         onValueChange = { onOptionsChanged(options.copy(firstLayerHeight = it)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.initial_layer_line_width),
+        valueText = stringResource(R.string.millimeters_value_precise, options.initialLayerLineWidth),
+        value = options.initialLayerLineWidth,
+        range = minimumLineWidth..maximumLineWidth,
+        steps = lineWidthSteps,
+        onValueChange = { onOptionsChanged(options.copy(initialLayerLineWidth = it)) },
     )
     SettingSlider(
         label = stringResource(R.string.walls),
@@ -633,6 +654,22 @@ private fun SlicingSettingsSheet(
         steps = 11,
         onValueChange = { onOptionsChanged(options.copy(bottomSolidLayers = it.roundToInt())) },
     )
+    SettingSlider(
+        label = stringResource(R.string.top_shell_thickness),
+        valueText = stringResource(R.string.millimeters_value_precise, options.topShellThickness),
+        value = options.topShellThickness,
+        range = 0f..max(5f, options.topShellThickness),
+        steps = (max(5f, options.topShellThickness) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
+        onValueChange = { onOptionsChanged(options.copy(topShellThickness = (it / 0.05f).roundToInt() * 0.05f)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.bottom_shell_thickness),
+        valueText = stringResource(R.string.millimeters_value_precise, options.bottomShellThickness),
+        value = options.bottomShellThickness,
+        range = 0f..max(5f, options.bottomShellThickness),
+        steps = (max(5f, options.bottomShellThickness) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
+        onValueChange = { onOptionsChanged(options.copy(bottomShellThickness = (it / 0.05f).roundToInt() * 0.05f)) },
+    )
     SettingsGroupTitle(stringResource(R.string.infill))
     CompactChoices(
         entries = listOf("gyroid", "grid", "honeycomb", "rectilinear", "alignedrectilinear"),
@@ -663,7 +700,7 @@ private fun SlicingSettingsSheet(
         value = options.printSpeed,
         range = 10f..maximumFeatureSpeed,
         steps = featureSpeedSteps,
-        onValueChange = { onOptionsChanged(options.copy(printSpeed = (it / 10f).roundToInt() * 10f)) },
+        onValueChange = { onOptionsChanged(options.copy(printSpeed = (it / 5f).roundToInt() * 5f)) },
     )
     SettingSlider(
         label = stringResource(R.string.inner_wall_speed),
@@ -671,7 +708,7 @@ private fun SlicingSettingsSheet(
         value = options.innerWallSpeed,
         range = 10f..maximumFeatureSpeed,
         steps = featureSpeedSteps,
-        onValueChange = { onOptionsChanged(options.copy(innerWallSpeed = (it / 10f).roundToInt() * 10f)) },
+        onValueChange = { onOptionsChanged(options.copy(innerWallSpeed = (it / 5f).roundToInt() * 5f)) },
     )
     SettingSlider(
         label = stringResource(R.string.sparse_infill_speed),
@@ -679,7 +716,7 @@ private fun SlicingSettingsSheet(
         value = options.sparseInfillSpeed,
         range = 10f..maximumFeatureSpeed,
         steps = featureSpeedSteps,
-        onValueChange = { onOptionsChanged(options.copy(sparseInfillSpeed = (it / 10f).roundToInt() * 10f)) },
+        onValueChange = { onOptionsChanged(options.copy(sparseInfillSpeed = (it / 5f).roundToInt() * 5f)) },
     )
     SettingSlider(
         label = stringResource(R.string.internal_solid_infill_speed),
@@ -687,7 +724,7 @@ private fun SlicingSettingsSheet(
         value = options.internalSolidInfillSpeed,
         range = 10f..maximumFeatureSpeed,
         steps = featureSpeedSteps,
-        onValueChange = { onOptionsChanged(options.copy(internalSolidInfillSpeed = (it / 10f).roundToInt() * 10f)) },
+        onValueChange = { onOptionsChanged(options.copy(internalSolidInfillSpeed = (it / 5f).roundToInt() * 5f)) },
     )
     SettingSlider(
         label = stringResource(R.string.top_surface_speed),
@@ -695,15 +732,15 @@ private fun SlicingSettingsSheet(
         value = options.topSurfaceSpeed,
         range = 10f..maximumFeatureSpeed,
         steps = featureSpeedSteps,
-        onValueChange = { onOptionsChanged(options.copy(topSurfaceSpeed = (it / 10f).roundToInt() * 10f)) },
+        onValueChange = { onOptionsChanged(options.copy(topSurfaceSpeed = (it / 5f).roundToInt() * 5f)) },
     )
     SettingSlider(
         label = stringResource(R.string.travel_speed),
         valueText = stringResource(R.string.print_speed_value, options.travelSpeed),
         value = options.travelSpeed,
         range = 10f..max(700f, options.travelSpeed),
-        steps = ((max(700f, options.travelSpeed) - 10f) / 10f).roundToInt().coerceAtLeast(2) - 1,
-        onValueChange = { onOptionsChanged(options.copy(travelSpeed = (it / 10f).roundToInt() * 10f)) },
+        steps = ((max(700f, options.travelSpeed) - 10f) / 5f).roundToInt().coerceAtLeast(2) - 1,
+        onValueChange = { onOptionsChanged(options.copy(travelSpeed = (it / 5f).roundToInt() * 5f)) },
     )
     SettingSlider(
         label = stringResource(R.string.first_layer_speed),
@@ -712,6 +749,63 @@ private fun SlicingSettingsSheet(
         range = 10f..150f,
         steps = 27,
         onValueChange = { onOptionsChanged(options.copy(firstLayerSpeed = (it / 5f).roundToInt() * 5f)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.first_layer_infill_speed),
+        valueText = stringResource(R.string.print_speed_value, options.firstLayerInfillSpeed),
+        value = options.firstLayerInfillSpeed,
+        range = 10f..maximumFeatureSpeed,
+        steps = featureSpeedSteps,
+        onValueChange = { onOptionsChanged(options.copy(firstLayerInfillSpeed = (it / 5f).roundToInt() * 5f)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.bridge_speed),
+        valueText = stringResource(R.string.print_speed_value, options.bridgeSpeed),
+        value = options.bridgeSpeed,
+        range = 10f..maximumFeatureSpeed,
+        steps = featureSpeedSteps,
+        onValueChange = { onOptionsChanged(options.copy(bridgeSpeed = (it / 5f).roundToInt() * 5f)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.gap_infill_speed),
+        valueText = stringResource(R.string.print_speed_value, options.gapInfillSpeed),
+        value = options.gapInfillSpeed,
+        range = 10f..maximumFeatureSpeed,
+        steps = featureSpeedSteps,
+        onValueChange = { onOptionsChanged(options.copy(gapInfillSpeed = (it / 5f).roundToInt() * 5f)) },
+    )
+    SettingsGroupTitle(stringResource(R.string.feature_flow_ratio))
+    SettingSlider(
+        label = stringResource(R.string.bridge_flow_ratio),
+        valueText = String.format(Locale.ROOT, "%.2f", options.bridgeFlowRatio),
+        value = options.bridgeFlowRatio,
+        range = 0.5f..maximumFlowRatio,
+        steps = flowRatioSteps,
+        onValueChange = { onOptionsChanged(options.copy(bridgeFlowRatio = it)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.internal_bridge_flow_ratio),
+        valueText = String.format(Locale.ROOT, "%.2f", options.internalBridgeFlowRatio),
+        value = options.internalBridgeFlowRatio,
+        range = 0.5f..maximumFlowRatio,
+        steps = flowRatioSteps,
+        onValueChange = { onOptionsChanged(options.copy(internalBridgeFlowRatio = it)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.top_surface_flow_ratio),
+        valueText = String.format(Locale.ROOT, "%.2f", options.topSurfaceFlowRatio),
+        value = options.topSurfaceFlowRatio,
+        range = 0.5f..maximumFlowRatio,
+        steps = flowRatioSteps,
+        onValueChange = { onOptionsChanged(options.copy(topSurfaceFlowRatio = it)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.bottom_surface_flow_ratio),
+        valueText = String.format(Locale.ROOT, "%.2f", options.bottomSurfaceFlowRatio),
+        value = options.bottomSurfaceFlowRatio,
+        range = 0.5f..maximumFlowRatio,
+        steps = flowRatioSteps,
+        onValueChange = { onOptionsChanged(options.copy(bottomSurfaceFlowRatio = it)) },
     )
     SettingsGroupTitle(stringResource(R.string.feature_acceleration))
     SettingSlider(
@@ -775,7 +869,15 @@ private fun SlicingSettingsSheet(
             value = options.supportSpeed,
             range = 10f..maximumFeatureSpeed,
             steps = featureSpeedSteps,
-            onValueChange = { onOptionsChanged(options.copy(supportSpeed = (it / 10f).roundToInt() * 10f)) },
+            onValueChange = { onOptionsChanged(options.copy(supportSpeed = (it / 5f).roundToInt() * 5f)) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.support_interface_speed),
+            valueText = stringResource(R.string.print_speed_value, options.supportInterfaceSpeed),
+            value = options.supportInterfaceSpeed,
+            range = 10f..maximumFeatureSpeed,
+            steps = featureSpeedSteps,
+            onValueChange = { onOptionsChanged(options.copy(supportInterfaceSpeed = (it / 5f).roundToInt() * 5f)) },
         )
         SettingSlider(
             label = stringResource(R.string.support_line_width),
@@ -798,6 +900,66 @@ private fun SlicingSettingsSheet(
             range = 10f..80f,
             steps = 69,
             onValueChange = { onOptionsChanged(options.copy(supportAngle = it.roundToInt().toFloat())) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.support_top_interface_layers),
+            valueText = options.supportInterfaceTopLayers.toString(),
+            value = options.supportInterfaceTopLayers.toFloat(),
+            range = 0f..20f,
+            steps = 19,
+            onValueChange = { onOptionsChanged(options.copy(supportInterfaceTopLayers = it.roundToInt())) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.support_bottom_interface_layers),
+            valueText = if (options.supportInterfaceBottomLayers < 0) {
+                stringResource(R.string.same_as_top)
+            } else {
+                options.supportInterfaceBottomLayers.toString()
+            },
+            value = options.supportInterfaceBottomLayers.toFloat(),
+            range = -1f..20f,
+            steps = 20,
+            onValueChange = { onOptionsChanged(options.copy(supportInterfaceBottomLayers = it.roundToInt())) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.support_interface_spacing),
+            valueText = stringResource(R.string.millimeters_value_precise, options.supportInterfaceSpacing),
+            value = options.supportInterfaceSpacing,
+            range = 0f..max(2f, options.supportInterfaceSpacing),
+            steps = (max(2f, options.supportInterfaceSpacing) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
+            onValueChange = { onOptionsChanged(options.copy(supportInterfaceSpacing = (it / 0.05f).roundToInt() * 0.05f)) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.support_bottom_interface_spacing),
+            valueText = stringResource(R.string.millimeters_value_precise, options.supportBottomInterfaceSpacing),
+            value = options.supportBottomInterfaceSpacing,
+            range = 0f..max(2f, options.supportBottomInterfaceSpacing),
+            steps = (max(2f, options.supportBottomInterfaceSpacing) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
+            onValueChange = { onOptionsChanged(options.copy(supportBottomInterfaceSpacing = (it / 0.05f).roundToInt() * 0.05f)) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.support_top_z_distance),
+            valueText = stringResource(R.string.millimeters_value_precise, options.supportTopZDistance),
+            value = options.supportTopZDistance,
+            range = 0f..max(2f, options.supportTopZDistance),
+            steps = (max(2f, options.supportTopZDistance) / 0.02f).roundToInt().coerceAtLeast(2) - 1,
+            onValueChange = { onOptionsChanged(options.copy(supportTopZDistance = (it / 0.02f).roundToInt() * 0.02f)) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.support_bottom_z_distance),
+            valueText = stringResource(R.string.millimeters_value_precise, options.supportBottomZDistance),
+            value = options.supportBottomZDistance,
+            range = 0f..max(2f, options.supportBottomZDistance),
+            steps = (max(2f, options.supportBottomZDistance) / 0.02f).roundToInt().coerceAtLeast(2) - 1,
+            onValueChange = { onOptionsChanged(options.copy(supportBottomZDistance = (it / 0.02f).roundToInt() * 0.02f)) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.support_object_xy_distance),
+            valueText = stringResource(R.string.millimeters_value_precise, options.supportObjectXYDistance),
+            value = options.supportObjectXYDistance,
+            range = 0f..max(5f, options.supportObjectXYDistance),
+            steps = (max(5f, options.supportObjectXYDistance) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
+            onValueChange = { onOptionsChanged(options.copy(supportObjectXYDistance = (it / 0.05f).roundToInt() * 0.05f)) },
         )
     }
     SettingsGroupTitle(stringResource(R.string.bed_adhesion))

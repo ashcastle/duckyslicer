@@ -55,6 +55,24 @@ class NativeEngineInstrumentedTest {
                     internalSolidInfillSpeed = 165f,
                     topSurfaceSpeed = 95f,
                     supportSpeed = 80f,
+                    bridgeSpeed = 42f,
+                    gapInfillSpeed = 132f,
+                    firstLayerInfillSpeed = 62f,
+                    supportInterfaceSpeed = 53f,
+                    bridgeFlowRatio = 0.91f,
+                    internalBridgeFlowRatio = 0.96f,
+                    topSurfaceFlowRatio = 0.97f,
+                    bottomSurfaceFlowRatio = 0.98f,
+                    topShellThickness = 0.8f,
+                    bottomShellThickness = 0.7f,
+                    supportInterfaceTopLayers = 4,
+                    supportInterfaceBottomLayers = 2,
+                    supportInterfaceSpacing = 0.24f,
+                    supportBottomInterfaceSpacing = 0.28f,
+                    supportTopZDistance = 0.18f,
+                    supportBottomZDistance = 0.22f,
+                    supportObjectXYDistance = 0.4f,
+                    initialLayerLineWidth = 0.74f,
                     defaultAcceleration = 4_200f,
                     outerWallAcceleration = 2_100f,
                     innerWallAcceleration = 3_800f,
@@ -108,6 +126,15 @@ class NativeEngineInstrumentedTest {
             assertEquals(165f, restoredDocument.sliceOptions?.internalSolidInfillSpeed)
             assertEquals(95f, restoredDocument.sliceOptions?.topSurfaceSpeed)
             assertEquals(80f, restoredDocument.sliceOptions?.supportSpeed)
+            assertEquals(42f, restoredDocument.sliceOptions?.bridgeSpeed)
+            assertEquals(132f, restoredDocument.sliceOptions?.gapInfillSpeed)
+            assertEquals(62f, restoredDocument.sliceOptions?.firstLayerInfillSpeed)
+            assertEquals(53f, restoredDocument.sliceOptions?.supportInterfaceSpeed)
+            assertEquals(0.91f, restoredDocument.sliceOptions?.bridgeFlowRatio)
+            assertEquals(0.8f, restoredDocument.sliceOptions?.topShellThickness)
+            assertEquals(4, restoredDocument.sliceOptions?.supportInterfaceTopLayers)
+            assertEquals(0.24f, restoredDocument.sliceOptions?.supportInterfaceSpacing)
+            assertEquals(0.74f, restoredDocument.sliceOptions?.initialLayerLineWidth)
             assertEquals(4_200f, restoredDocument.sliceOptions?.defaultAcceleration)
             assertEquals(2_100f, restoredDocument.sliceOptions?.outerWallAcceleration)
             assertEquals(3_800f, restoredDocument.sliceOptions?.innerWallAcceleration)
@@ -154,6 +181,24 @@ class NativeEngineInstrumentedTest {
                 internalSolidInfillSpeed = 170f,
                 topSurfaceSpeed = 100f,
                 supportSpeed = 85f,
+                bridgeSpeed = 44f,
+                gapInfillSpeed = 134f,
+                firstLayerInfillSpeed = 64f,
+                supportInterfaceSpeed = 54f,
+                bridgeFlowRatio = 0.92f,
+                internalBridgeFlowRatio = 0.95f,
+                topSurfaceFlowRatio = 0.97f,
+                bottomSurfaceFlowRatio = 0.98f,
+                topShellThickness = 0.85f,
+                bottomShellThickness = 0.75f,
+                supportInterfaceTopLayers = 4,
+                supportInterfaceBottomLayers = 2,
+                supportInterfaceSpacing = 0.25f,
+                supportBottomInterfaceSpacing = 0.3f,
+                supportTopZDistance = 0.18f,
+                supportBottomZDistance = 0.22f,
+                supportObjectXYDistance = 0.4f,
+                initialLayerLineWidth = 0.73f,
                 defaultAcceleration = 4_000f,
                 outerWallAcceleration = 2_000f,
                 innerWallAcceleration = 3_500f,
@@ -202,6 +247,15 @@ class NativeEngineInstrumentedTest {
         assertEquals(170f, restored.slicing.last().internalSolidInfillSpeed)
         assertEquals(100f, restored.slicing.last().topSurfaceSpeed)
         assertEquals(85f, restored.slicing.last().supportSpeed)
+        assertEquals(44f, restored.slicing.last().bridgeSpeed)
+        assertEquals(134f, restored.slicing.last().gapInfillSpeed)
+        assertEquals(64f, restored.slicing.last().firstLayerInfillSpeed)
+        assertEquals(54f, restored.slicing.last().supportInterfaceSpeed)
+        assertEquals(0.92f, restored.slicing.last().bridgeFlowRatio)
+        assertEquals(0.85f, restored.slicing.last().topShellThickness)
+        assertEquals(4, restored.slicing.last().supportInterfaceTopLayers)
+        assertEquals(0.25f, restored.slicing.last().supportInterfaceSpacing)
+        assertEquals(0.73f, restored.slicing.last().initialLayerLineWidth)
         assertEquals(4_000f, restored.slicing.last().defaultAcceleration)
         assertEquals(2_000f, restored.slicing.last().outerWallAcceleration)
         assertEquals(3_500f, restored.slicing.last().innerWallAcceleration)
@@ -220,7 +274,7 @@ class NativeEngineInstrumentedTest {
         assertEquals(7f, restored.printers.last().maxJerkX)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
-        assertEquals(6, JSONObject(file.readText()).getInt("schemaVersion"))
+        assertEquals(7, JSONObject(file.readText()).getInt("schemaVersion"))
         assertTrue("Saved profiles must stay in app-private storage", file.canonicalPath.startsWith(context.cacheDir.canonicalPath))
         file.delete()
         directory.delete()
@@ -249,7 +303,7 @@ class NativeEngineInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val catalog = OrcaProfileCatalog(context).load()
 
-        assertEquals(4, catalog.schemaVersion)
+        assertEquals(5, catalog.schemaVersion)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include Orca filament presets", catalog.filaments.size > 3_000)
@@ -261,6 +315,12 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.topSurfaceLineWidth != it.internalSolidInfillLineWidth })
         assertTrue(catalog.slicing.any { it.printSpeed != it.innerWallSpeed })
         assertTrue(catalog.slicing.any { it.sparseInfillSpeed != it.internalSolidInfillSpeed })
+        assertTrue(catalog.slicing.any { it.bridgeSpeed != 50f })
+        assertTrue(catalog.slicing.any { it.firstLayerSpeed != it.firstLayerInfillSpeed })
+        assertTrue(catalog.slicing.any { it.supportSpeed != it.supportInterfaceSpeed })
+        assertTrue(catalog.slicing.any { it.bridgeFlowRatio != 1f })
+        assertTrue(catalog.slicing.any { it.topShellThickness > 0f })
+        assertTrue(catalog.slicing.any { it.supportInterfaceSpacing == 0f })
         assertTrue(catalog.slicing.map { it.wallGenerator }.toSet().containsAll(listOf("arachne", "classic")))
         assertTrue(catalog.slicing.map { it.wallSequence }.toSet().containsAll(listOf("inner-outer", "outer-inner")))
         assertTrue(catalog.printers.mapNotNull { it.brand }.containsAll(listOf("Creality", "Prusa", "Anycubic")))
@@ -340,6 +400,24 @@ class NativeEngineInstrumentedTest {
                 internalSolidInfillSpeed = 166f,
                 topSurfaceSpeed = 99f,
                 supportSpeed = 77f,
+                bridgeSpeed = 43f,
+                gapInfillSpeed = 137f,
+                firstLayerInfillSpeed = 63f,
+                supportInterfaceSpeed = 57f,
+                bridgeFlowRatio = 0.91f,
+                internalBridgeFlowRatio = 0.96f,
+                topSurfaceFlowRatio = 0.97f,
+                bottomSurfaceFlowRatio = 0.98f,
+                topShellThickness = 0.83f,
+                bottomShellThickness = 0.74f,
+                supportInterfaceTopLayers = 4,
+                supportInterfaceBottomLayers = 2,
+                supportInterfaceSpacing = 0.23f,
+                supportBottomInterfaceSpacing = 0.27f,
+                supportTopZDistance = 0.18f,
+                supportBottomZDistance = 0.22f,
+                supportObjectXYDistance = 0.41f,
+                initialLayerLineWidth = 0.73f,
                 defaultAcceleration = 4_567f,
                 outerWallAcceleration = 2_345f,
                 innerWallAcceleration = 3_456f,
@@ -375,9 +453,14 @@ class NativeEngineInstrumentedTest {
         assertTrue("First layer height must reach G-code", gcode.contains("; first_layer_height = 0.350"))
         assertTrue("Top shell layers must reach G-code", gcode.contains("; top_shell_layers = 6"))
         assertTrue("Bottom shell layers must reach G-code", gcode.contains("; bottom_shell_layers = 5"))
+        assertTrue("Top shell thickness must reach G-code", gcode.contains("; top_shell_thickness = 0.83"))
+        assertTrue("Bottom shell thickness must reach G-code", gcode.contains("; bottom_shell_thickness = 0.74"))
         assertTrue("Infill pattern must reach G-code", gcode.contains("; sparse_infill_pattern = grid"))
         assertTrue("Travel speed must reach G-code", gcode.contains("; travel_speed = 420"))
         assertTrue("First layer speed must reach G-code", gcode.contains("; initial_layer_speed = 35"))
+        assertTrue("Initial-layer solid speed must reach Orca", gcode.contains("; initial_layer_infill_speed = 63"))
+        assertTrue("Bridge speed must reach Orca", gcode.contains("; bridge_speed = 43"))
+        assertTrue("Gap-infill speed must reach Orca", gcode.contains("; gap_infill_speed = 137"))
         assertTrue("Retraction length must reach G-code", gcode.contains("; retraction_length = 1.1"))
         assertTrue("Skirt loops must reach G-code", gcode.contains("; skirt_loops = 2"))
         assertTrue("Wall count must reach Orca", gcode.contains("; wall_loops = 3"))
@@ -387,11 +470,24 @@ class NativeEngineInstrumentedTest {
         assertTrue("Sparse-infill width must remain independent", gcode.contains("; sparse_infill_line_width = 0.71"))
         assertTrue("Internal-solid width must remain independent", gcode.contains("; internal_solid_infill_line_width = 0.66"))
         assertTrue("Support width must remain independent", gcode.contains("; support_line_width = 0.55"))
+        assertTrue("Initial-layer width must remain independent", gcode.contains("; initial_layer_line_width = 0.73"))
         assertTrue("Inner-wall speed must reach Orca", gcode.contains("; inner_wall_speed = 177"))
         assertTrue("Sparse-infill speed must reach Orca", gcode.contains("; sparse_infill_speed = 188"))
         assertTrue("Internal-solid speed must reach Orca", gcode.contains("; internal_solid_infill_speed = 166"))
         assertTrue("Top-surface speed must reach Orca", gcode.contains("; top_surface_speed = 99"))
         assertTrue("Support speed must reach Orca", gcode.contains("; support_speed = 77"))
+        assertTrue("Support-interface speed must reach Orca", gcode.contains("; support_interface_speed = 57"))
+        assertTrue("Bridge flow must reach Orca", gcode.contains("; bridge_flow = 0.91"))
+        assertTrue("Internal bridge flow must reach Orca", gcode.contains("; internal_bridge_flow = 0.96"))
+        assertTrue("Top surface flow must reach Orca", gcode.contains("; top_solid_infill_flow_ratio = 0.97"))
+        assertTrue("Bottom surface flow must reach Orca", gcode.contains("; bottom_solid_infill_flow_ratio = 0.98"))
+        assertTrue("Top support interface layers must reach Orca", gcode.contains("; support_interface_top_layers = 4"))
+        assertTrue("Bottom support interface layers must reach Orca", gcode.contains("; support_interface_bottom_layers = 2"))
+        assertTrue("Top support interface spacing must reach Orca", gcode.contains("; support_interface_spacing = 0.23"))
+        assertTrue("Bottom support interface spacing must reach Orca", gcode.contains("; support_bottom_interface_spacing = 0.27"))
+        assertTrue("Support top Z distance must reach Orca", gcode.contains("; support_top_z_distance = 0.18"))
+        assertTrue("Support bottom Z distance must reach Orca", gcode.contains("; support_bottom_z_distance = 0.22"))
+        assertTrue("Support XY distance must reach Orca", gcode.contains("; support_object_xy_distance = 0.41"))
         assertTrue("Default acceleration must reach Orca", gcode.contains("; default_acceleration = 4567"))
         assertTrue("Outer-wall acceleration must reach Orca", gcode.contains("; outer_wall_acceleration = 2345"))
         assertTrue("Inner-wall acceleration must reach Orca", gcode.contains("; inner_wall_acceleration = 3456"))
@@ -540,6 +636,17 @@ class NativeEngineInstrumentedTest {
                     "internal_solid_infill_speed" to "50",
                     "top_surface_speed" to "30",
                     "support_speed" to "40",
+                    "bridge_speed" to "25",
+                    "gap_infill_speed" to "30",
+                    "initial_layer_infill_speed" to "35",
+                    "support_interface_speed" to "80",
+                    "bridge_flow" to "0.95",
+                    "initial_layer_line_width" to "0.42",
+                    "top_shell_thickness" to "0.8",
+                    "support_interface_top_layers" to "3",
+                    "support_interface_bottom_layers" to "-1",
+                    "support_interface_spacing" to "0.2",
+                    "support_top_z_distance" to "0.15",
                     "top_surface_line_width" to "0.4",
                     "internal_solid_infill_line_width" to "0.45",
                     "support_line_width" to "0.38",
@@ -557,6 +664,16 @@ class NativeEngineInstrumentedTest {
                     "internal_solid_infill_speed" to "200",
                     "top_surface_speed" to "100",
                     "support_speed" to "150",
+                    "bridge_speed" to "25",
+                    "gap_infill_speed" to "120",
+                    "initial_layer_infill_speed" to "80",
+                    "support_interface_speed" to "80",
+                    "initial_layer_line_width" to "0.48",
+                    "top_shell_thickness" to "0.8",
+                    "support_interface_top_layers" to "2",
+                    "support_interface_bottom_layers" to "2",
+                    "support_top_z_distance" to "0.08",
+                    "support_bottom_z_distance" to "0.08",
                     "default_acceleration" to "4000",
                     "outer_wall_acceleration" to "3000",
                     "inner_wall_acceleration" to "4000",
@@ -580,6 +697,16 @@ class NativeEngineInstrumentedTest {
                     "internal_solid_infill_speed" to "240",
                     "top_surface_speed" to "120",
                     "support_speed" to "150",
+                    "bridge_speed" to "50",
+                    "gap_infill_speed" to "200",
+                    "initial_layer_infill_speed" to "60",
+                    "support_interface_speed" to "80",
+                    "bridge_flow" to "0.9",
+                    "initial_layer_line_width" to "0.5",
+                    "top_shell_thickness" to "1",
+                    "bottom_shell_thickness" to "0.6",
+                    "support_interface_top_layers" to "2",
+                    "support_interface_bottom_layers" to "2",
                     "default_acceleration" to "10000",
                     "outer_wall_acceleration" to "5000",
                     "inner_wall_acceleration" to "10000",
