@@ -34,6 +34,7 @@ cloud service, or network permission.
 - Working move, rotate, scale, center, reset, and remove controls for imported models
 - Snapmaker U1 profiles for 0.2, 0.4, 0.6, and 0.8 mm nozzles
 - Eight built-in material profiles and twelve matching slicing profiles
+- Searchable printer and filament selectors with collapsible brand and personal-profile groups
 - Editable settings and named user profiles saved entirely in app-private storage
 - Bottom navigation on phones and a space-saving vertical rail on tablets
 - English defaults with Korean device-language localization

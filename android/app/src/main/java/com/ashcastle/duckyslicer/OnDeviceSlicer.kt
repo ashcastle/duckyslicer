@@ -21,12 +21,13 @@ data class PrinterProfile(
     val maxPrintHeight: Float,
     val nozzleDiameter: Float,
     val builtIn: Boolean = false,
+    val brand: String? = null,
 ) {
     companion object {
-        val U1_02 = PrinterProfile("snapmaker-u1-02", "U1 · 0.2 mm", 270f, 270f, 270f, 0.2f, true)
-        val U1_04 = PrinterProfile("snapmaker-u1-04", "U1 · 0.4 mm", 270f, 270f, 270f, 0.4f, true)
-        val U1_06 = PrinterProfile("snapmaker-u1-06", "U1 · 0.6 mm", 270f, 270f, 270f, 0.6f, true)
-        val U1_08 = PrinterProfile("snapmaker-u1-08", "U1 · 0.8 mm", 270f, 270f, 270f, 0.8f, true)
+        val U1_02 = PrinterProfile("snapmaker-u1-02", "U1 · 0.2 mm", 270f, 270f, 270f, 0.2f, true, "Snapmaker")
+        val U1_04 = PrinterProfile("snapmaker-u1-04", "U1 · 0.4 mm", 270f, 270f, 270f, 0.4f, true, "Snapmaker")
+        val U1_06 = PrinterProfile("snapmaker-u1-06", "U1 · 0.6 mm", 270f, 270f, 270f, 0.6f, true, "Snapmaker")
+        val U1_08 = PrinterProfile("snapmaker-u1-08", "U1 · 0.8 mm", 270f, 270f, 270f, 0.8f, true, "Snapmaker")
         val builtIns = listOf(U1_02, U1_04, U1_06, U1_08)
     }
 }
@@ -42,40 +43,41 @@ data class FilamentProfile(
     val flowRatio: Float,
     val maxVolumetricSpeed: Float,
     val builtIn: Boolean = false,
+    val brand: String? = null,
 ) {
     companion object {
         // Curated from the included Snapmaker U1 filament catalog.
         val PLA = FilamentProfile(
             "snapmaker-u1-pla", "Snapmaker PLA", "PLA",
-            220, 220, 60, 60, 0.98f, 14f, true,
+            220, 220, 60, 60, 0.98f, 14f, true, "Snapmaker",
         )
         val PETG = FilamentProfile(
             "snapmaker-u1-petg", "Snapmaker PETG", "PETG",
-            245, 250, 70, 70, 0.95f, 10f, true,
+            245, 250, 70, 70, 0.95f, 10f, true, "Snapmaker",
         )
         val ABS = FilamentProfile(
             "snapmaker-u1-abs", "Snapmaker ABS", "ABS",
-            260, 260, 110, 105, 0.95f, 8f, true,
+            260, 260, 110, 105, 0.95f, 8f, true, "Snapmaker",
         )
         val ASA = FilamentProfile(
             "snapmaker-u1-asa", "Snapmaker ASA", "ASA",
-            255, 255, 110, 100, 0.94f, 8f, true,
+            255, 255, 110, 100, 0.94f, 8f, true, "Snapmaker",
         )
         val PLA_CF = FilamentProfile(
             "snapmaker-u1-pla-cf", "Snapmaker PLA-CF", "PLA-CF",
-            230, 230, 55, 55, 0.98f, 15f, true,
+            230, 230, 55, 55, 0.98f, 15f, true, "Snapmaker",
         )
         val PETG_CF = FilamentProfile(
             "snapmaker-u1-petg-cf", "Snapmaker PETG-CF", "PETG-CF",
-            245, 250, 70, 70, 0.95f, 6.4f, true,
+            245, 250, 70, 70, 0.95f, 6.4f, true, "Snapmaker",
         )
         val TPU_95A = FilamentProfile(
             "snapmaker-u1-tpu-95a", "Snapmaker TPU 95A", "TPU",
-            240, 240, 35, 35, 1.0f, 15f, true,
+            240, 240, 35, 35, 1.0f, 15f, true, "Snapmaker",
         )
         val PA_CF = FilamentProfile(
             "snapmaker-u1-pa-cf", "Snapmaker PA-CF", "PA-CF",
-            250, 255, 100, 95, 0.96f, 8f, true,
+            250, 255, 100, 95, 0.96f, 8f, true, "Snapmaker",
         )
         val builtIns = listOf(PLA, PETG, ABS, ASA, PLA_CF, PETG_CF, TPU_95A, PA_CF)
     }

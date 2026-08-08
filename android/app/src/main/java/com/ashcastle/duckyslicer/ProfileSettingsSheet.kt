@@ -11,6 +11,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -19,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -35,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import java.util.Locale
 
 private enum class ProfileSettingsKind {
     PRINTER,
@@ -148,10 +152,15 @@ private fun PrinterSettingsSheet(
     onSave: (String) -> Unit,
     onDismiss: () -> Unit,
 ) = SettingsSheet(title = stringResource(R.string.printer_profile), onDismiss = onDismiss) {
-    ProfileChoices(
+    SearchableGroupedProfileChoices(
         entries = profiles,
         selected = options.printerProfile,
         label = { profileLabel(it) },
+        brand = { it.brand },
+        builtIn = { it.builtIn },
+        searchTerms = {
+            listOf(it.name, it.brand.orEmpty(), it.nozzleDiameter.toString(), "nozzle")
+        },
         onSelected = { onOptionsChanged(options.selectPrinter(it)) },
     )
     Text(
@@ -174,10 +183,15 @@ private fun FilamentSettingsSheet(
     onSave: (String) -> Unit,
     onDismiss: () -> Unit,
 ) = SettingsSheet(title = stringResource(R.string.filament_profile), onDismiss = onDismiss) {
-    ProfileChoices(
+    SearchableGroupedProfileChoices(
         entries = profiles,
         selected = options.filamentProfile,
         label = { profileLabel(it) },
+        brand = { it.brand },
+        builtIn = { it.builtIn },
+        searchTerms = {
+            listOf(it.name, it.brand.orEmpty(), it.nativeName)
+        },
         onSelected = { onOptionsChanged(options.selectFilament(it)) },
     )
     SettingSlider(
@@ -357,6 +371,120 @@ private fun <T> ProfileChoices(
             ) {
                 RadioButton(selected = entry == selected, onClick = { onSelected(entry) })
                 Text(label(entry), maxLines = 1)
+            }
+        }
+    }
+}
+
+private data class ProfileChoiceGroup<T>(
+    val key: String,
+    val title: String,
+    val entries: List<T>,
+)
+
+@Composable
+private fun <T> SearchableGroupedProfileChoices(
+    entries: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    brand: (T) -> String?,
+    builtIn: (T) -> Boolean,
+    searchTerms: (T) -> List<String>,
+    onSelected: (T) -> Unit,
+) {
+    val myProfiles = stringResource(R.string.my_profiles)
+    val otherProfiles = stringResource(R.string.other_profiles)
+    val myProfilesKey = "user-profiles"
+    var query by remember { mutableStateOf("") }
+    val selectedGroupKey = if (builtIn(selected)) {
+        "brand:${brand(selected).orEmpty()}"
+    } else {
+        myProfilesKey
+    }
+    var expandedGroups by remember(entries) { mutableStateOf(setOf(selectedGroupKey)) }
+    val normalizedQuery = query.trim().lowercase(Locale.ROOT)
+    val matchingEntries = if (normalizedQuery.isBlank()) {
+        entries
+    } else {
+        entries.filter { entry ->
+            searchTerms(entry).any { value -> value.lowercase(Locale.ROOT).contains(normalizedQuery) }
+        }
+    }
+    val groups = matchingEntries
+        .groupBy { entry ->
+            if (builtIn(entry)) "brand:${brand(entry).orEmpty()}" else myProfilesKey
+        }
+        .map { (key, groupEntries) ->
+            val title = if (key == myProfilesKey) {
+                myProfiles
+            } else {
+                brand(groupEntries.first()).orEmpty().ifBlank { otherProfiles }
+            }
+            ProfileChoiceGroup(key, title, groupEntries)
+        }
+        .sortedWith(compareBy({ it.key != myProfilesKey }, { it.title.lowercase(Locale.ROOT) }))
+
+    OutlinedTextField(
+        value = query,
+        onValueChange = { query = it },
+        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+        label = { Text(stringResource(R.string.search_profiles)) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+
+    if (groups.isEmpty()) {
+        Text(
+            stringResource(R.string.no_profiles_found),
+            color = Color(0xFFC8C9C2),
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+    } else {
+        groups.forEach { group ->
+            val expanded = normalizedQuery.isNotBlank() || group.key in expandedGroups
+            Column(Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            expandedGroups = if (expanded) {
+                                expandedGroups - group.key
+                            } else {
+                                expandedGroups + group.key
+                            }
+                        }
+                        .padding(vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        if (expanded) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
+                        contentDescription = null,
+                    )
+                    Text(
+                        "${group.title} · ${group.entries.size}",
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
+                }
+                if (expanded) {
+                    group.entries.forEach { entry ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelected(entry) }
+                                .padding(start = 18.dp, top = 1.dp, bottom = 1.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = entry == selected,
+                                onClick = { onSelected(entry) },
+                                colors = RadioButtonDefaults.colors(selectedColor = Color(0xFFF6C945)),
+                            )
+                            Text(label(entry), maxLines = 1)
+                        }
+                    }
+                }
+                HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
             }
         }
     }
