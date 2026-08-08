@@ -55,11 +55,15 @@ __pycache__/
 .ai/
 .ai-notes/
 .agents/
+**/AGENTS.md
+**/AGENTS.override.md
+**/CLAUDE.md
 .aider*
 .continue/
 .cursor/
 .windsurf/
 .zed/
+.claude/
 .claude.local/
 AGENTS.local.md
 CLAUDE.local.md
@@ -145,7 +149,6 @@ artifacts/
 *.dSYM/
 
 # Reviewed Android slicer runtime bootstrap (source/provenance in THIRD_PARTY_NOTICES.md)
-!android/app/src/main/jniLibs/arm64-v8a/libc++_shared.so
 !android/app/src/main/jniLibs/arm64-v8a/libprusaslicer-jni.so
 
 # Local diagnostics and operating-system metadata

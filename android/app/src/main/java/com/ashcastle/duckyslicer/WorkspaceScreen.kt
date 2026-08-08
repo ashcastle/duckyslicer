@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Devices
@@ -38,19 +40,27 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +75,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,10 +87,31 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 private val WorkspaceYellow = Color(0xFFF6C945)
 private val WorkspaceBlack = Color(0xFF202124)
 private val WorkspacePanel = Color(0xEE2A2A27)
+
+private data class ToolpathStyle(
+    val code: Int,
+    val label: Int,
+    val color: Color,
+    val widthDp: Float,
+)
+
+private val ToolpathStyles = listOf(
+    ToolpathStyle(0, R.string.toolpath_outer_wall, Color(0xFFFFCF40), 2.3f),
+    ToolpathStyle(1, R.string.toolpath_inner_wall, Color(0xFF44D7FF), 1.9f),
+    ToolpathStyle(2, R.string.toolpath_infill, Color(0xFF668BFF), 1.35f),
+    ToolpathStyle(3, R.string.toolpath_solid, Color(0xFFE879F9), 1.65f),
+    ToolpathStyle(4, R.string.toolpath_support, Color(0xFF5EE6A8), 1.45f),
+    ToolpathStyle(5, R.string.toolpath_bridge, Color(0xFFFF6B6B), 2.1f),
+    ToolpathStyle(6, R.string.toolpath_adhesion, Color(0xFFFF9F43), 1.8f),
+    ToolpathStyle(7, R.string.toolpath_other, Color(0xFFE7E7E2), 1.2f),
+)
+
+private val ToolpathDrawOrder = listOf(7, 2, 3, 4, 6, 1, 0, 5)
 
 enum class WorkspaceTab {
     SLICE,
@@ -93,6 +125,7 @@ enum class WorkspaceTab {
 fun WorkspaceScreen(
     selectedTab: WorkspaceTab,
     model: ModelInfo?,
+    modelTransform: ModelTransform,
     sliceOptions: SliceOptions,
     profileCatalog: ProfileCatalog,
     sliceOutcome: SliceOutcome?,
@@ -105,6 +138,8 @@ fun WorkspaceScreen(
     notice: String?,
     onTabSelected: (WorkspaceTab) -> Unit,
     onChoose: () -> Unit,
+    onModelTransformChanged: (ModelTransform) -> Unit,
+    onRemoveModel: () -> Unit,
     onSlice: () -> Unit,
     onSave: () -> Unit,
     onSliceOptionsChanged: (SliceOptions) -> Unit,
@@ -115,6 +150,8 @@ fun WorkspaceScreen(
 ) = BoxWithConstraints {
     val tabletLayout = maxWidth >= 600.dp
     val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
+    var toolpathOpacity by remember { mutableFloatStateOf(0.92f) }
+    var showModelTools by remember { mutableStateOf(false) }
     Scaffold(
         containerColor = Color(0xFF191A18),
         bottomBar = {
@@ -126,9 +163,11 @@ fun WorkspaceScreen(
             Box(modifier = Modifier.weight(1f).fillMaxSize()) {
                 BedScene(
                     model = model,
+                    modelTransform = modelTransform,
                     preview = if (selectedTab == WorkspaceTab.PREVIEW) layerPreview else null,
                     bedSizeX = sliceOptions.bedSizeX,
                     bedSizeY = sliceOptions.bedSizeY,
+                    toolpathOpacity = toolpathOpacity,
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -144,13 +183,32 @@ fun WorkspaceScreen(
                     .padding(16.dp),
             )
 
+            if (model != null && selectedTab == WorkspaceTab.SLICE) {
+                Button(
+                    onClick = { showModelTools = true },
+                    enabled = !importing && !slicing && !previewLoading,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Black.copy(alpha = 0.68f),
+                        contentColor = Color(0xFFF4F4EE),
+                    ),
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 16.dp),
+                ) {
+                    Text(stringResource(R.string.edit_model))
+                }
+            }
+
             Surface(
                 color = Color.Black.copy(alpha = 0.62f),
                 contentColor = Color(0xFFF4F4EE),
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(16.dp)
+                    .padding(
+                        top = if (model != null && selectedTab == WorkspaceTab.SLICE) 72.dp else 16.dp,
+                        end = 16.dp,
+                    )
                     .widthIn(max = 280.dp),
             ) {
                 Text(
@@ -186,6 +244,8 @@ fun WorkspaceScreen(
                     preview = layerPreview,
                     loading = previewLoading,
                     error = error,
+                    toolpathOpacity = toolpathOpacity,
+                    onToolpathOpacityChanged = { toolpathOpacity = it },
                     onLayerRangeSelected = onLayerRangeSelected,
                     onGoToSlice = { onTabSelected(WorkspaceTab.SLICE) },
                     modifier = Modifier.align(panelAlignment),
@@ -203,15 +263,145 @@ fun WorkspaceScreen(
                     modifier = Modifier.align(panelAlignment),
                 )
 
-                WorkspaceTab.SETTINGS -> SimpleSheet(
-                    title = stringResource(R.string.settings),
-                    body = stringResource(R.string.settings_message),
-                    modifier = Modifier.align(panelAlignment),
-                )
+                WorkspaceTab.SETTINGS -> SettingsSheet(modifier = Modifier.align(panelAlignment))
+            }
+        }
+    }
+    }
+    if (showModelTools && model != null) {
+        ModelTransformSheet(
+            transform = modelTransform,
+            bedSizeX = sliceOptions.bedSizeX,
+            bedSizeY = sliceOptions.bedSizeY,
+            onTransformChanged = onModelTransformChanged,
+            onRemoveModel = {
+                showModelTools = false
+                onRemoveModel()
+            },
+            onDismiss = { showModelTools = false },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ModelTransformSheet(
+    transform: ModelTransform,
+    bedSizeX: Float,
+    bedSizeY: Float,
+    onTransformChanged: (ModelTransform) -> Unit,
+    onRemoveModel: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF282925),
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(stringResource(R.string.model_placement), style = MaterialTheme.typography.titleLarge)
+            TransformSlider(
+                label = stringResource(R.string.move_x),
+                valueText = stringResource(R.string.millimeters_value, transform.offsetXmm),
+                value = transform.offsetXmm,
+                range = -bedSizeX / 2f..bedSizeX / 2f,
+                onValueChange = { onTransformChanged(transform.copy(offsetXmm = it)) },
+            )
+            TransformSlider(
+                label = stringResource(R.string.move_y),
+                valueText = stringResource(R.string.millimeters_value, transform.offsetYmm),
+                value = transform.offsetYmm,
+                range = -bedSizeY / 2f..bedSizeY / 2f,
+                onValueChange = { onTransformChanged(transform.copy(offsetYmm = it)) },
+            )
+            TransformSlider(
+                label = stringResource(R.string.rotate_x),
+                valueText = stringResource(R.string.degrees_value, transform.rotationXdeg),
+                value = transform.rotationXdeg,
+                range = -180f..180f,
+                onValueChange = { onTransformChanged(transform.copy(rotationXdeg = it)) },
+            )
+            TransformSlider(
+                label = stringResource(R.string.rotate_y),
+                valueText = stringResource(R.string.degrees_value, transform.rotationYdeg),
+                value = transform.rotationYdeg,
+                range = -180f..180f,
+                onValueChange = { onTransformChanged(transform.copy(rotationYdeg = it)) },
+            )
+            TransformSlider(
+                label = stringResource(R.string.rotate_z),
+                valueText = stringResource(R.string.degrees_value, transform.rotationZdeg),
+                value = transform.rotationZdeg,
+                range = -180f..180f,
+                onValueChange = { onTransformChanged(transform.copy(rotationZdeg = it)) },
+            )
+            TransformSlider(
+                label = stringResource(R.string.scale),
+                valueText = stringResource(R.string.percent_value, (transform.scale * 100).roundToInt()),
+                value = transform.scale,
+                range = 0.25f..3f,
+                onValueChange = { onTransformChanged(transform.copy(scale = it)) },
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextButton(
+                    onClick = {
+                        onTransformChanged(transform.copy(offsetXmm = 0f, offsetYmm = 0f))
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.center_model))
+                }
+                TextButton(
+                    onClick = {
+                        val nextRotation = ((transform.rotationZdeg + 90f + 180f) % 360f) - 180f
+                        onTransformChanged(transform.copy(rotationZdeg = nextRotation))
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.rotate_90))
+                }
+                TextButton(
+                    onClick = { onTransformChanged(ModelTransform()) },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.reset))
+                }
+            }
+            TextButton(onClick = onRemoveModel, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.remove_model), color = Color(0xFFFF8A80))
             }
         }
     }
 }
+
+@Composable
+private fun TransformSlider(
+    label: String,
+    valueText: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    onValueChange: (Float) -> Unit,
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, fontWeight = FontWeight.SemiBold)
+        Text(valueText, color = Color(0xFFC8C9C2))
+    }
+    Slider(
+        value = value,
+        onValueChange = onValueChange,
+        valueRange = range,
+        colors = duckySliderColors(),
+    )
 }
 
 @Composable
@@ -275,6 +465,13 @@ private fun WorkspaceNavigation(
                 onClick = { onSelected(tab) },
                 icon = { Icon(icon, contentDescription = null) },
                 label = { Text(stringResource(label), maxLines = 1) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = WorkspaceBlack,
+                    selectedTextColor = WorkspaceYellow,
+                    indicatorColor = WorkspaceYellow,
+                    unselectedIconColor = Color(0xFFD0D1CB),
+                    unselectedTextColor = Color(0xFFD0D1CB),
+                ),
             )
         }
     }
@@ -293,6 +490,13 @@ private fun WorkspaceNavigationRail(
                 onClick = { onSelected(tab) },
                 icon = { Icon(icon, contentDescription = null) },
                 label = { Text(stringResource(label), maxLines = 1) },
+                colors = NavigationRailItemDefaults.colors(
+                    selectedIconColor = WorkspaceBlack,
+                    selectedTextColor = WorkspaceYellow,
+                    indicatorColor = WorkspaceYellow,
+                    unselectedIconColor = Color(0xFFD0D1CB),
+                    unselectedTextColor = Color(0xFFD0D1CB),
+                ),
             )
         }
     }
@@ -309,41 +513,63 @@ private fun workspaceNavigationItems() = listOf(
 @Composable
 private fun BedScene(
     model: ModelInfo?,
+    modelTransform: ModelTransform,
     preview: GcodeLayerPreview?,
     bedSizeX: Float,
     bedSizeY: Float,
+    toolpathOpacity: Float,
     modifier: Modifier = Modifier,
 ) {
     var yaw by remember { mutableFloatStateOf(-45f) }
     var pitch by remember { mutableFloatStateOf(55f) }
     var zoom by remember { mutableFloatStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
+    var interactionActive by remember { mutableStateOf(false) }
+    var refinedPreview by remember { mutableStateOf(true) }
+    val previewPaths = remember(preview) { Array(ToolpathStyles.size) { Path() } }
+    val meshPath = remember(model) { Path() }
+    val movingPreviewPlan = remember(preview) { preview?.buildRenderPlan(segmentBudget = 450) }
+    val refinedPreviewPlan = remember(preview) { preview?.buildRenderPlan(segmentBudget = 4_000) }
+
+    LaunchedEffect(interactionActive) {
+        if (interactionActive) {
+            refinedPreview = false
+        } else {
+            delay(650)
+            refinedPreview = true
+        }
+    }
 
     Canvas(
         modifier.pointerInput(Unit) {
             awaitEachGesture {
                 awaitFirstDown(requireUnconsumed = false)
-                var event: PointerEvent
-                do {
-                    event = awaitPointerEvent()
-                    val pressed = event.changes.filter { it.pressed }
-                    when {
-                        pressed.size == 1 -> {
-                            val change = pressed.first()
-                            val delta = change.position - change.previousPosition
-                            yaw += delta.x * 0.32f
-                            pitch = (pitch - delta.y * 0.26f).coerceIn(22f, 88f)
-                        }
+                interactionActive = true
+                try {
+                    var event: PointerEvent
+                    do {
+                        event = awaitPointerEvent()
+                        val pressed = event.changes.filter { it.pressed }
+                        when {
+                            pressed.size == 1 -> {
+                                val change = pressed.first()
+                                val delta = change.position - change.previousPosition
+                                yaw += delta.x * 0.32f
+                                pitch = (pitch - delta.y * 0.26f).coerceIn(22f, 88f)
+                            }
 
-                        pressed.size >= 2 -> {
-                            pan += event.calculatePan()
-                            zoom = (zoom * event.calculateZoom()).coerceIn(0.45f, 4.5f)
+                            pressed.size >= 2 -> {
+                                pan += event.calculatePan()
+                                zoom = (zoom * event.calculateZoom()).coerceIn(0.45f, 4.5f)
+                            }
                         }
-                    }
-                    event.changes.forEach { change ->
-                        if (change.positionChanged()) change.consume()
-                    }
-                } while (event.changes.any { it.pressed })
+                        event.changes.forEach { change ->
+                            if (change.positionChanged()) change.consume()
+                        }
+                    } while (event.changes.any { it.pressed })
+                } finally {
+                    interactionActive = false
+                }
             }
         },
     ) {
@@ -371,71 +597,107 @@ private fun BedScene(
             lineTo(project(0f, bedSizeY).x, project(0f, bedSizeY).y)
             close()
         }
-        drawPath(bed, color = Color(0xFF343732))
+        drawPath(
+            bed,
+            color = if (preview == null) Color(0xFF343732) else Color(0xFF2D302D).copy(alpha = 0.7f),
+        )
 
         val gridStep = if (max(bedSizeX, bedSizeY) <= 230f) 20f else 30f
         var gridX = 0f
         while (gridX <= bedSizeX) {
-            drawLine(Color(0xFF555950), project(gridX, 0f), project(gridX, bedSizeY), 1.dp.toPx())
+            drawLine(
+                if (preview == null) Color(0xFF555950) else Color(0xFF70746B).copy(alpha = 0.45f),
+                project(gridX, 0f),
+                project(gridX, bedSizeY),
+                1.dp.toPx(),
+            )
             gridX += gridStep
         }
         var gridY = 0f
         while (gridY <= bedSizeY) {
-            drawLine(Color(0xFF555950), project(0f, gridY), project(bedSizeX, gridY), 1.dp.toPx())
+            drawLine(
+                if (preview == null) Color(0xFF555950) else Color(0xFF70746B).copy(alpha = 0.45f),
+                project(0f, gridY),
+                project(bedSizeX, gridY),
+                1.dp.toPx(),
+            )
             gridY += gridStep
         }
-        drawPath(bed, color = WorkspaceYellow.copy(alpha = 0.75f), style = Stroke(2.dp.toPx()))
+        drawPath(
+            bed,
+            color = if (preview == null) WorkspaceYellow.copy(alpha = 0.75f) else Color(0xFF9A9D94),
+            style = Stroke(2.dp.toPx()),
+        )
 
         if (preview != null) {
-            val path = Path()
-            var segmentIndex = 0
-            while (segmentIndex + 4 < preview.segments.size) {
-                val start = project(
-                    preview.segments[segmentIndex],
-                    preview.segments[segmentIndex + 1],
-                    preview.segments[segmentIndex + 4],
-                )
+            previewPaths.forEach(Path::reset)
+            val renderPlan = if (interactionActive || !refinedPreview) {
+                movingPreviewPlan
+            } else {
+                refinedPreviewPlan
+            }
+            renderPlan?.segmentOffsets?.forEachIndexed { selectedIndex, segmentIndex ->
+                val role = preview.segments[segmentIndex + 5].roundToInt()
+                    .coerceIn(0, ToolpathStyles.lastIndex)
+                val startX = preview.segments[segmentIndex]
+                val startY = preview.segments[segmentIndex + 1]
+                val z = preview.segments[segmentIndex + 4]
                 val end = project(
                     preview.segments[segmentIndex + 2],
                     preview.segments[segmentIndex + 3],
-                    preview.segments[segmentIndex + 4],
+                    z,
                 )
-                path.moveTo(start.x, start.y)
-                path.lineTo(end.x, end.y)
-                segmentIndex += 5
+                if (renderPlan.connectsToPrevious[selectedIndex]) {
+                    previewPaths[role].lineTo(end.x, end.y)
+                } else {
+                    val start = project(startX, startY, z)
+                    previewPaths[role].moveTo(start.x, start.y)
+                    previewPaths[role].lineTo(end.x, end.y)
+                }
             }
-            drawPath(
-                path = path,
-                color = WorkspaceYellow,
-                style = Stroke(width = 1.8.dp.toPx()),
-            )
+            ToolpathDrawOrder.forEach { role ->
+                val style = ToolpathStyles[role]
+                drawPath(
+                    path = previewPaths[role],
+                    color = style.color.copy(alpha = toolpathOpacity),
+                    style = Stroke(width = style.widthDp.dp.toPx()),
+                )
+            }
         } else if (model != null) {
-            val minX = model.minMm[0].toFloat()
-            val minY = model.minMm[1].toFloat()
-            val minZ = model.minMm[2].toFloat()
-            val maxX = model.maxMm[0].toFloat()
-            val maxY = model.maxMm[1].toFloat()
-            val outsideBed = minX < -2f || minY < -2f || maxX > bedSizeX + 2f || maxY > bedSizeY + 2f
-            val offsetX = if (outsideBed) bedSizeX / 2f - (minX + maxX) / 2f else 0f
-            val offsetY = if (outsideBed) bedSizeY / 2f - (minY + maxY) / 2f else 0f
-            val meshPath = Path()
+            val minimumRotatedZ = modelTransform.minimumRotatedZ(model)
+            meshPath.reset()
             var triangleIndex = 0
             while (triangleIndex + 8 < model.previewTriangles.size) {
-                val a = project(
-                    model.previewTriangles[triangleIndex] + offsetX,
-                    model.previewTriangles[triangleIndex + 1] + offsetY,
-                    model.previewTriangles[triangleIndex + 2] - minZ,
+                val aPosition = modelTransform.placeVertex(
+                    model.previewTriangles[triangleIndex],
+                    model.previewTriangles[triangleIndex + 1],
+                    model.previewTriangles[triangleIndex + 2],
+                    model,
+                    bedSizeX,
+                    bedSizeY,
+                    minimumRotatedZ,
                 )
-                val b = project(
-                    model.previewTriangles[triangleIndex + 3] + offsetX,
-                    model.previewTriangles[triangleIndex + 4] + offsetY,
-                    model.previewTriangles[triangleIndex + 5] - minZ,
+                val bPosition = modelTransform.placeVertex(
+                    model.previewTriangles[triangleIndex + 3],
+                    model.previewTriangles[triangleIndex + 4],
+                    model.previewTriangles[triangleIndex + 5],
+                    model,
+                    bedSizeX,
+                    bedSizeY,
+                    minimumRotatedZ,
                 )
-                val c = project(
-                    model.previewTriangles[triangleIndex + 6] + offsetX,
-                    model.previewTriangles[triangleIndex + 7] + offsetY,
-                    model.previewTriangles[triangleIndex + 8] - minZ,
+                val cPosition = modelTransform.placeVertex(
+                    model.previewTriangles[triangleIndex + 6],
+                    model.previewTriangles[triangleIndex + 7],
+                    model.previewTriangles[triangleIndex + 8],
+                    model,
+                    bedSizeX,
+                    bedSizeY,
+                    minimumRotatedZ,
                 )
+                val a = project(aPosition[0], aPosition[1], aPosition[2])
+                val b = project(bPosition[0], bPosition[1], bPosition[2])
+                val c = project(cPosition[0], cPosition[1], cPosition[2])
                 meshPath.moveTo(a.x, a.y)
                 meshPath.lineTo(b.x, b.y)
                 meshPath.lineTo(c.x, c.y)
@@ -516,6 +778,8 @@ private fun PreviewSheet(
     preview: GcodeLayerPreview?,
     loading: Boolean,
     error: String?,
+    toolpathOpacity: Float,
+    onToolpathOpacityChanged: (Float) -> Unit,
     onLayerRangeSelected: (Int, Int) -> Unit,
     onGoToSlice: () -> Unit,
     modifier: Modifier = Modifier,
@@ -572,6 +836,41 @@ private fun PreviewSheet(
                     steps = 0,
                 )
             }
+            Text(
+                stringResource(R.string.toolpath_opacity, (toolpathOpacity * 100).roundToInt()),
+                fontWeight = FontWeight.SemiBold,
+            )
+            Slider(
+                value = toolpathOpacity,
+                onValueChange = onToolpathOpacityChanged,
+                valueRange = 0.3f..1f,
+                colors = duckySliderColors(),
+            )
+            ToolpathStyles.chunked(2).forEach { rowStyles ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    rowStyles.forEach { style ->
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(width = 18.dp, height = 6.dp),
+                                color = style.color,
+                                shape = RoundedCornerShape(50),
+                            ) {}
+                            Spacer(Modifier.width(7.dp))
+                            Text(
+                                stringResource(style.label),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color(0xFFE2E3DD),
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -597,6 +896,30 @@ private fun SimpleSheet(title: String, body: String, modifier: Modifier = Modifi
     WorkspaceCard(modifier) {
         Text(title, fontWeight = FontWeight.Bold)
         Text(body, color = Color(0xFFC8C9C2))
+    }
+}
+
+@Composable
+private fun SettingsSheet(modifier: Modifier = Modifier) {
+    WorkspaceCard(modifier) {
+        Icon(
+            painter = painterResource(R.drawable.ic_ducky),
+            contentDescription = null,
+            tint = Color.Unspecified,
+            modifier = Modifier.size(72.dp).align(Alignment.CenterHorizontally),
+        )
+        Text(
+            stringResource(R.string.app_name),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        )
+        Text(
+            stringResource(R.string.offline_app_summary),
+            color = Color(0xFFC8C9C2),
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        )
+        Text(stringResource(R.string.settings_message), color = Color(0xFFC8C9C2))
     }
 }
 
@@ -628,4 +951,13 @@ private fun WorkspaceCard(
 private fun primaryButtonColors() = ButtonDefaults.buttonColors(
     containerColor = WorkspaceYellow,
     contentColor = WorkspaceBlack,
+)
+
+@Composable
+internal fun duckySliderColors() = SliderDefaults.colors(
+    thumbColor = WorkspaceYellow,
+    activeTrackColor = WorkspaceYellow,
+    inactiveTrackColor = Color(0xFF555950),
+    activeTickColor = Color.Transparent,
+    inactiveTickColor = Color.Transparent,
 )

@@ -9,5 +9,7 @@ internal object NativeEngine {
 
     external fun inspectStl(path: String): String
 
+    external fun transformStl(inputPath: String, outputPath: String, transformJson: String): String
+
     external fun previewGcodeRange(path: String, startLayer: Int, endLayer: Int): String
 }

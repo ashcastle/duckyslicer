@@ -239,6 +239,8 @@ private fun SlicingSettingsSheet(
     onSave: (String) -> Unit,
     onDismiss: () -> Unit,
 ) = SettingsSheet(title = stringResource(R.string.slicing_profile), onDismiss = onDismiss) {
+    val maximumLayerHeight = (options.nozzleDiameter * 0.7f).coerceAtLeast(0.14f)
+    val layerHeightSteps = ((maximumLayerHeight - 0.04f) / 0.01f).roundToInt().coerceAtLeast(2) - 1
     ProfileChoices(
         entries = profiles,
         selected = options.quality,
@@ -249,8 +251,8 @@ private fun SlicingSettingsSheet(
         label = stringResource(R.string.layer_height),
         valueText = stringResource(R.string.millimeters_value_precise, options.layerHeight),
         value = options.layerHeight,
-        range = 0.08f..0.40f,
-        steps = 31,
+        range = 0.04f..maximumLayerHeight,
+        steps = layerHeightSteps,
         onValueChange = { onOptionsChanged(options.copy(layerHeight = it)) },
     )
     SettingSlider(
@@ -402,6 +404,7 @@ private fun SettingSlider(
             onValueChange = onValueChange,
             valueRange = range,
             steps = steps,
+            colors = duckySliderColors(),
         )
     }
 }
