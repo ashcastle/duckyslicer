@@ -3,8 +3,6 @@
     <style name="Theme.DuckySlicer" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:statusBarColor">#191A18</item>
-        <item name="android:navigationBarColor">#242522</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
 </resources>

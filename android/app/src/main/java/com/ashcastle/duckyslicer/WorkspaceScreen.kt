@@ -37,15 +37,14 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -69,6 +68,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -77,7 +77,6 @@ import java.util.Locale
 private val WorkspaceYellow = Color(0xFFF6C945)
 private val WorkspaceBlack = Color(0xFF202124)
 private val WorkspacePanel = Color(0xEE2A2A27)
-private const val BED_SIZE_MM = 270f
 
 enum class WorkspaceTab {
     SLICE,
@@ -105,7 +104,7 @@ fun WorkspaceScreen(
     onSlice: () -> Unit,
     onSave: () -> Unit,
     onSliceOptionsChanged: (SliceOptions) -> Unit,
-    onLayerSelected: (Int) -> Unit,
+    onLayerRangeSelected: (Int, Int) -> Unit,
 ) {
     Scaffold(
         containerColor = Color(0xFF191A18),
@@ -121,11 +120,15 @@ fun WorkspaceScreen(
             BedScene(
                 model = model,
                 preview = if (selectedTab == WorkspaceTab.PREVIEW) layerPreview else null,
+                bedSizeX = sliceOptions.bedSizeX,
+                bedSizeY = sliceOptions.bedSizeY,
                 modifier = Modifier.fillMaxSize(),
             )
 
             WorkspaceMenu(
                 importing = importing,
+                slicing = slicing,
+                previewLoading = previewLoading,
                 canExport = sliceOutcome != null,
                 onImport = onChoose,
                 onExport = onSave,
@@ -156,6 +159,8 @@ fun WorkspaceScreen(
                 WorkspaceTab.SLICE -> SliceSheet(
                     model = model,
                     options = sliceOptions,
+                    importing = importing,
+                    previewLoading = previewLoading,
                     slicing = slicing,
                     progress = sliceProgress,
                     error = error,
@@ -170,7 +175,7 @@ fun WorkspaceScreen(
                     preview = layerPreview,
                     loading = previewLoading,
                     error = error,
-                    onLayerSelected = onLayerSelected,
+                    onLayerRangeSelected = onLayerRangeSelected,
                     onGoToSlice = { onTabSelected(WorkspaceTab.SLICE) },
                     modifier = Modifier.align(Alignment.BottomCenter),
                 )
@@ -200,6 +205,8 @@ fun WorkspaceScreen(
 @Composable
 private fun WorkspaceMenu(
     importing: Boolean,
+    slicing: Boolean,
+    previewLoading: Boolean,
     canExport: Boolean,
     onImport: () -> Unit,
     onExport: () -> Unit,
@@ -225,7 +232,7 @@ private fun WorkspaceMenu(
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.import_model)) },
                 leadingIcon = { Icon(Icons.Default.FileOpen, null) },
-                enabled = !importing,
+                enabled = !importing && !slicing && !previewLoading,
                 onClick = {
                     expanded = false
                     onImport()
@@ -272,6 +279,8 @@ private fun WorkspaceNavigation(
 private fun BedScene(
     model: ModelInfo?,
     preview: GcodeLayerPreview?,
+    bedSizeX: Float,
+    bedSizeY: Float,
     modifier: Modifier = Modifier,
 ) {
     var yaw by remember { mutableFloatStateOf(-45f) }
@@ -309,12 +318,12 @@ private fun BedScene(
     ) {
         val yawRadians = yaw / 180f * PI.toFloat()
         val pitchRadians = pitch / 180f * PI.toFloat()
-        val sceneScale = min(size.width * 0.64f, size.height * 0.72f) / BED_SIZE_MM * zoom
+        val sceneScale = min(size.width * 0.64f, size.height * 0.72f) / max(bedSizeX, bedSizeY) * zoom
         val sceneCenter = Offset(size.width / 2f + pan.x, size.height * 0.48f + pan.y)
 
         fun project(x: Float, y: Float, z: Float = 0f): Offset {
-            val dx = x - BED_SIZE_MM / 2f
-            val dy = y - BED_SIZE_MM / 2f
+            val dx = x - bedSizeX / 2f
+            val dy = y - bedSizeY / 2f
             val rotatedX = dx * cos(yawRadians) - dy * sin(yawRadians)
             val rotatedY = dx * sin(yawRadians) + dy * cos(yawRadians)
             val screenY = rotatedY * sin(pitchRadians) - z * cos(pitchRadians)
@@ -326,37 +335,43 @@ private fun BedScene(
 
         val bed = Path().apply {
             moveTo(project(0f, 0f).x, project(0f, 0f).y)
-            lineTo(project(BED_SIZE_MM, 0f).x, project(BED_SIZE_MM, 0f).y)
-            lineTo(project(BED_SIZE_MM, BED_SIZE_MM).x, project(BED_SIZE_MM, BED_SIZE_MM).y)
-            lineTo(project(0f, BED_SIZE_MM).x, project(0f, BED_SIZE_MM).y)
+            lineTo(project(bedSizeX, 0f).x, project(bedSizeX, 0f).y)
+            lineTo(project(bedSizeX, bedSizeY).x, project(bedSizeX, bedSizeY).y)
+            lineTo(project(0f, bedSizeY).x, project(0f, bedSizeY).y)
             close()
         }
         drawPath(bed, color = Color(0xFF343732))
 
-        for (mm in 0..270 step 30) {
-            val value = mm.toFloat()
-            drawLine(Color(0xFF555950), project(value, 0f), project(value, BED_SIZE_MM), 1.dp.toPx())
-            drawLine(Color(0xFF555950), project(0f, value), project(BED_SIZE_MM, value), 1.dp.toPx())
+        val gridStep = if (max(bedSizeX, bedSizeY) <= 230f) 20f else 30f
+        var gridX = 0f
+        while (gridX <= bedSizeX) {
+            drawLine(Color(0xFF555950), project(gridX, 0f), project(gridX, bedSizeY), 1.dp.toPx())
+            gridX += gridStep
+        }
+        var gridY = 0f
+        while (gridY <= bedSizeY) {
+            drawLine(Color(0xFF555950), project(0f, gridY), project(bedSizeX, gridY), 1.dp.toPx())
+            gridY += gridStep
         }
         drawPath(bed, color = WorkspaceYellow.copy(alpha = 0.75f), style = Stroke(2.dp.toPx()))
 
         if (preview != null) {
             val path = Path()
             var segmentIndex = 0
-            while (segmentIndex + 3 < preview.segments.size) {
+            while (segmentIndex + 4 < preview.segments.size) {
                 val start = project(
                     preview.segments[segmentIndex],
                     preview.segments[segmentIndex + 1],
-                    preview.zMm,
+                    preview.segments[segmentIndex + 4],
                 )
                 val end = project(
                     preview.segments[segmentIndex + 2],
                     preview.segments[segmentIndex + 3],
-                    preview.zMm,
+                    preview.segments[segmentIndex + 4],
                 )
                 path.moveTo(start.x, start.y)
                 path.lineTo(end.x, end.y)
-                segmentIndex += 4
+                segmentIndex += 5
             }
             drawPath(
                 path = path,
@@ -369,9 +384,9 @@ private fun BedScene(
             val minZ = model.minMm[2].toFloat()
             val maxX = model.maxMm[0].toFloat()
             val maxY = model.maxMm[1].toFloat()
-            val outsideBed = minX < -2f || minY < -2f || maxX > BED_SIZE_MM + 2f || maxY > BED_SIZE_MM + 2f
-            val offsetX = if (outsideBed) BED_SIZE_MM / 2f - (minX + maxX) / 2f else 0f
-            val offsetY = if (outsideBed) BED_SIZE_MM / 2f - (minY + maxY) / 2f else 0f
+            val outsideBed = minX < -2f || minY < -2f || maxX > bedSizeX + 2f || maxY > bedSizeY + 2f
+            val offsetX = if (outsideBed) bedSizeX / 2f - (minX + maxX) / 2f else 0f
+            val offsetY = if (outsideBed) bedSizeY / 2f - (minY + maxY) / 2f else 0f
             val meshPath = Path()
             var triangleIndex = 0
             while (triangleIndex + 8 < model.previewTriangles.size) {
@@ -406,6 +421,8 @@ private fun BedScene(
 private fun SliceSheet(
     model: ModelInfo?,
     options: SliceOptions,
+    importing: Boolean,
+    previewLoading: Boolean,
     slicing: Boolean,
     progress: Int,
     error: String?,
@@ -415,30 +432,11 @@ private fun SliceSheet(
     modifier: Modifier = Modifier,
 ) {
     WorkspaceCard(modifier) {
-        Text(stringResource(R.string.profile_management), fontWeight = FontWeight.Bold)
-        Text(
-            stringResource(R.string.profile_summary),
-            color = Color(0xFFC8C9C2),
-            style = MaterialTheme.typography.bodyMedium,
+        ProfileSettings(
+            options = options,
+            enabled = !slicing && !importing && !previewLoading,
+            onOptionsChanged = onOptionsChanged,
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            QualityProfile.entries.forEach { profile ->
-                val label = when (profile) {
-                    QualityProfile.DRAFT -> R.string.profile_draft
-                    QualityProfile.STANDARD -> R.string.profile_standard
-                    QualityProfile.FINE -> R.string.profile_fine
-                }
-                FilterChip(
-                    selected = options.quality == profile,
-                    onClick = { onOptionsChanged(options.copy(quality = profile)) },
-                    label = { Text(stringResource(label), maxLines = 1) },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
         if (model != null) {
             Text(
                 model.dimensions.joinToString(" × ") { String.format(Locale.getDefault(), "%.1f", it) } + " mm",
@@ -461,7 +459,7 @@ private fun SliceSheet(
         if (model != null) {
             Button(
                 onClick = onSlice,
-                enabled = !slicing,
+                enabled = !slicing && !importing && !previewLoading,
                 modifier = Modifier.fillMaxWidth(),
                 colors = primaryButtonColors(),
             ) {
@@ -479,7 +477,7 @@ private fun PreviewSheet(
     preview: GcodeLayerPreview?,
     loading: Boolean,
     error: String?,
-    onLayerSelected: (Int) -> Unit,
+    onLayerRangeSelected: (Int, Int) -> Unit,
     onGoToSlice: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -500,23 +498,36 @@ private fun PreviewSheet(
         }
         if (error != null) Text(error, color = Color(0xFFFF8A80))
         if (preview != null) {
-            var selectedLayer by remember(preview.layer, preview.layerCount) {
-                mutableFloatStateOf(preview.layer.toFloat())
+            var selectedRange by remember(preview.startLayer, preview.endLayer, preview.layerCount) {
+                mutableStateOf(preview.startLayer.toFloat()..preview.endLayer.toFloat())
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
-                    stringResource(R.string.layer_position, preview.layer + 1, preview.layerCount),
+                    stringResource(
+                        R.string.layer_range,
+                        preview.startLayer + 1,
+                        preview.endLayer + 1,
+                        preview.layerCount,
+                    ),
                     fontWeight = FontWeight.Bold,
                 )
-                Text(String.format("Z %.2f mm", preview.zMm), color = Color(0xFFC8C9C2))
+                Text(
+                    stringResource(R.string.z_range, preview.minZMm, preview.maxZMm),
+                    color = Color(0xFFC8C9C2),
+                )
             }
             if (preview.layerCount > 1) {
-                Slider(
-                    value = selectedLayer,
-                    onValueChange = { selectedLayer = it },
-                    onValueChangeFinished = { onLayerSelected(selectedLayer.roundToInt()) },
+                RangeSlider(
+                    value = selectedRange,
+                    onValueChange = { selectedRange = it },
+                    onValueChangeFinished = {
+                        onLayerRangeSelected(
+                            selectedRange.start.roundToInt(),
+                            selectedRange.endInclusive.roundToInt(),
+                        )
+                    },
                     valueRange = 0f..(preview.layerCount - 1).toFloat(),
-                    steps = (preview.layerCount - 2).coerceAtLeast(0),
+                    steps = 0,
                 )
             }
         }
@@ -575,10 +586,4 @@ private fun WorkspaceCard(
 private fun primaryButtonColors() = ButtonDefaults.buttonColors(
     containerColor = WorkspaceYellow,
     contentColor = WorkspaceBlack,
-)
-
-@Composable
-private fun neutralButtonColors() = ButtonDefaults.buttonColors(
-    containerColor = Color(0xFF464842),
-    contentColor = Color(0xFFF4F4EE),
 )

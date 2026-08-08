@@ -9,5 +9,5 @@ internal object NativeEngine {
 
     external fun inspectStl(path: String): String
 
-    external fun previewGcode(path: String, layer: Int): String
+    external fun previewGcodeRange(path: String, startLayer: Int, endLayer: Int): String
 }

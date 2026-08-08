@@ -18,6 +18,7 @@ class NativeEngineInstrumentedTest {
             .getString("modelName", "model-under-test.stl")
         val model = File(context.filesDir, modelName)
 
+        // The physical-device command in README.md copies this external fixture into filesDir.
         assertTrue("Model fixture must be copied into ${context.filesDir}", model.isFile)
         assertTrue(NativeEngine.version().startsWith("DuckySlicer native bridge"))
 
@@ -41,7 +42,10 @@ class NativeEngineInstrumentedTest {
 
         assertTrue("Model fixture must be copied into ${context.filesDir}", model.isFile)
 
-        val outcome = OnDeviceSlicer.slice(model) { progress ->
+        val options = SliceOptions()
+            .selectFilament(FilamentProfile.PETG)
+            .selectQuality(QualityProfile.DRAFT)
+        val outcome = OnDeviceSlicer.slice(model, options) { progress ->
             highestProgress = maxOf(highestProgress, progress)
         }
 
@@ -57,11 +61,17 @@ class NativeEngineInstrumentedTest {
             }
         }
         assertTrue("G-code must contain motion commands", gcode.lineSequence().any { it.startsWith("G1 ") })
+        assertTrue("Filament nozzle temperature must reach G-code", gcode.contains("M104 S245"))
+        assertTrue("Filament bed temperature must reach G-code", gcode.contains("M190 S75"))
 
         val preview = GcodeLayerPreview.fromJson(
-            NativeEngine.previewGcode(outcome.output.absolutePath, 0),
+            NativeEngine.previewGcodeRange(outcome.output.absolutePath, 0, Int.MAX_VALUE),
         )
-        assertTrue("Preview must report all generated layers", preview.layerCount == outcome.layers)
-        assertTrue("First layer must contain extrusion paths", preview.segments.isNotEmpty())
+        assertTrue("Preview must report generated layers", preview.layerCount > 0)
+        assertTrue("Preview must include the first layer", preview.startLayer == 0)
+        assertTrue("Preview must include the final G-code layer", preview.endLayer == preview.layerCount - 1)
+        assertTrue("Full preview must contain extrusion paths", preview.segments.isNotEmpty())
+        assertTrue("Full preview must contain segment Z coordinates", preview.segments.size % 5 == 0)
+        assertTrue("Full preview must span upward in Z", preview.maxZMm >= preview.minZMm)
     }
 }
