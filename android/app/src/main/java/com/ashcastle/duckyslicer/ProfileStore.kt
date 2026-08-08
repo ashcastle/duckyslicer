@@ -119,6 +119,13 @@ class ProfileStore private constructor(
             supportAngle = options.supportAngle,
             skirtLoops = options.skirtLoops,
             skirtDistance = options.skirtDistance,
+            outerWallLineWidth = options.outerWallLineWidth,
+            innerWallLineWidth = options.innerWallLineWidth,
+            wallSequence = options.wallSequence,
+            detectThinWalls = options.detectThinWalls,
+            detectOverhangWalls = options.detectOverhangWalls,
+            onlyOneWallOnTop = options.onlyOneWallOnTop,
+            preciseOuterWalls = options.preciseOuterWalls,
         )
         require(ProfileValidation.slicing(profile)) { "Slicing profile contains unsafe values" }
         append("slicing", profile.toJson())
@@ -158,7 +165,7 @@ class ProfileStore private constructor(
         ?: throw IllegalArgumentException("Profile name is required")
 
     private companion object {
-        const val USER_PROFILE_SCHEMA_VERSION = 2
+        const val USER_PROFILE_SCHEMA_VERSION = 3
     }
 }
 
@@ -201,6 +208,13 @@ private fun QualityProfile.toJson() = JSONObject()
     .put("firstLayerSpeed", firstLayerSpeed).put("supportType", supportType)
     .put("supportAngle", supportAngle).put("skirtLoops", skirtLoops)
     .put("skirtDistance", skirtDistance)
+    .put("outerWallLineWidth", outerWallLineWidth)
+    .put("innerWallLineWidth", innerWallLineWidth)
+    .put("wallSequence", wallSequence)
+    .put("detectThinWalls", detectThinWalls)
+    .put("detectOverhangWalls", detectOverhangWalls)
+    .put("onlyOneWallOnTop", onlyOneWallOnTop)
+    .put("preciseOuterWalls", preciseOuterWalls)
 
 private fun JSONArray?.toPrinterProfiles() = objects().mapNotNull { value ->
     runCatching {
@@ -270,6 +284,13 @@ private fun JSONArray?.toQualityProfiles() = objects().mapNotNull { value ->
             supportAngle = value.optDouble("supportAngle", 45.0).toFloat(),
             skirtLoops = value.optInt("skirtLoops", 0),
             skirtDistance = value.optDouble("skirtDistance", 6.0).toFloat(),
+            outerWallLineWidth = value.optDouble("outerWallLineWidth", 0.0).toFloat(),
+            innerWallLineWidth = value.optDouble("innerWallLineWidth", 0.0).toFloat(),
+            wallSequence = value.optString("wallSequence", "inner-outer"),
+            detectThinWalls = value.optBoolean("detectThinWalls"),
+            detectOverhangWalls = value.optBoolean("detectOverhangWalls", true),
+            onlyOneWallOnTop = value.optBoolean("onlyOneWallOnTop"),
+            preciseOuterWalls = value.optBoolean("preciseOuterWalls", true),
         )
     }.getOrNull()
 }

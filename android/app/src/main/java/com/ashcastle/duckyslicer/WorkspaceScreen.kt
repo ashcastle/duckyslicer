@@ -116,14 +116,15 @@ private val ToolpathStyles = listOf(
     ToolpathStyle(0, R.string.toolpath_outer_wall, Color(0xFFFFCF40), 0.80f),
     ToolpathStyle(1, R.string.toolpath_inner_wall, Color(0xFF44D7FF), 0.72f),
     ToolpathStyle(2, R.string.toolpath_infill, Color(0xFF668BFF), 0.58f),
-    ToolpathStyle(3, R.string.toolpath_solid, Color(0xFFE879F9), 0.65f),
-    ToolpathStyle(4, R.string.toolpath_support, Color(0xFF5EE6A8), 0.60f),
-    ToolpathStyle(5, R.string.toolpath_bridge, Color(0xFFFF6B6B), 0.78f),
-    ToolpathStyle(6, R.string.toolpath_adhesion, Color(0xFFFF9F43), 0.70f),
-    ToolpathStyle(7, R.string.toolpath_other, Color(0xFFE7E7E2), 0.55f),
+    ToolpathStyle(3, R.string.toolpath_surface, Color(0xFFFF62D0), 0.68f),
+    ToolpathStyle(4, R.string.toolpath_internal_solid, Color(0xFFA78BFA), 0.62f),
+    ToolpathStyle(5, R.string.toolpath_support, Color(0xFF5EE6A8), 0.60f),
+    ToolpathStyle(6, R.string.toolpath_bridge, Color(0xFFFF6B6B), 0.78f),
+    ToolpathStyle(7, R.string.toolpath_adhesion, Color(0xFFFF9F43), 0.70f),
+    ToolpathStyle(8, R.string.toolpath_other, Color(0xFFE7E7E2), 0.55f),
 )
 
-private val ToolpathDrawOrder = listOf(7, 2, 3, 4, 6, 1, 0, 5)
+private val ToolpathDrawOrder = listOf(8, 2, 4, 3, 5, 7, 1, 0, 6)
 
 enum class WorkspaceTab {
     SLICE,

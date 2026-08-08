@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 
 
@@ -181,6 +181,21 @@ def first_present(raw: dict[str, Any], names: list[str], default: Any) -> Any:
     return next((raw[name] for name in names if name in raw), default)
 
 
+def line_width_mm(value: Any, nozzle: float) -> float:
+    candidate = str(scalar(value, "0")).strip()
+    if candidate.endswith("%"):
+        return nozzle * number(candidate, 0) / 100
+    return number(candidate, 0)
+
+
+def wall_sequence(value: Any) -> str:
+    return {
+        "inner wall/outer wall": "inner-outer",
+        "outer wall/inner wall": "outer-inner",
+        "inner-outer-inner wall": "inner-outer-inner",
+    }.get(str(scalar(value, "inner wall/outer wall")), "inner-outer")
+
+
 def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     name = str(raw["name"])
     filament_type = str(scalar(raw.get("filament_type"), "")).strip()
@@ -246,6 +261,18 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     density_source = str(scalar(raw.get("sparse_infill_density"), "15%"))
     density_value = number(density_source, 15)
     density = density_value / 100 if density_source.endswith("%") or density_value > 1 else density_value
+    general_line_width = raw.get("line_width", 0)
+    general_line_width_mm = line_width_mm(general_line_width, nozzle)
+    outer_wall_line_width = (
+        line_width_mm(raw.get("outer_wall_line_width"), nozzle)
+        or general_line_width_mm
+        or nozzle * 1.05
+    )
+    inner_wall_line_width = (
+        line_width_mm(raw.get("inner_wall_line_width"), nozzle)
+        or general_line_width_mm
+        or nozzle * 1.125
+    )
     profile = {
         "id": stable_id("process", brand, name),
         "name": name,
@@ -267,12 +294,21 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "supportAngle": number(raw.get("support_threshold_angle"), 45),
         "skirtLoops": integer(raw.get("skirt_loops"), 0),
         "skirtDistance": number(raw.get("skirt_distance"), 6),
+        "outerWallLineWidth": outer_wall_line_width,
+        "innerWallLineWidth": inner_wall_line_width,
+        "wallSequence": wall_sequence(raw.get("wall_sequence")),
+        "detectThinWalls": boolean(raw.get("detect_thin_wall")),
+        "detectOverhangWalls": boolean(raw.get("detect_overhang_wall"), True),
+        "onlyOneWallOnTop": boolean(raw.get("only_one_wall_top")),
+        "preciseOuterWalls": boolean(raw.get("precise_outer_wall"), True),
         "compatiblePrinters": compatible,
     }
     if not (
         0 <= profile["fillDensity"] <= 1
         and 1 <= profile["printSpeed"] <= 2_000
         and 1 <= profile["travelSpeed"] <= 2_000
+        and 0.1 <= profile["outerWallLineWidth"] <= 3
+        and 0.1 <= profile["innerWallLineWidth"] <= 3
     ):
         raise ValueError("unsafe process limits")
     return profile

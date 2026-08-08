@@ -69,12 +69,13 @@ enum ToolpathRole {
     OuterWall = 0,
     InnerWall = 1,
     Infill = 2,
-    Solid = 3,
-    Support = 4,
-    Bridge = 5,
-    Adhesion = 6,
+    Surface = 3,
+    InternalSolid = 4,
+    Support = 5,
+    Bridge = 6,
+    Adhesion = 7,
     #[default]
-    Other = 7,
+    Other = 8,
 }
 
 impl ToolpathRole {
@@ -93,11 +94,10 @@ impl ToolpathRole {
             || normalized.contains("raft")
         {
             Self::Adhesion
-        } else if normalized.contains("solid")
-            || normalized.contains("top surface")
-            || normalized.contains("bottom surface")
-        {
-            Self::Solid
+        } else if normalized.contains("top surface") || normalized.contains("bottom surface") {
+            Self::Surface
+        } else if normalized.contains("solid") {
+            Self::InternalSolid
         } else if normalized.contains("infill") {
             Self::Infill
         } else {
@@ -591,7 +591,15 @@ mod tests {
         );
         assert_eq!(
             ToolpathRole::from_label("Bottom surface"),
-            ToolpathRole::Solid
+            ToolpathRole::Surface
+        );
+        assert_eq!(
+            ToolpathRole::from_label("Internal solid infill"),
+            ToolpathRole::InternalSolid
+        );
+        assert_ne!(
+            ToolpathRole::from_label("Top surface"),
+            ToolpathRole::from_label("Internal solid infill")
         );
         assert_eq!(
             ToolpathRole::from_label("Support interface"),
@@ -616,7 +624,7 @@ mod tests {
             std::thread::current().name().unwrap_or("test")
         ));
         let mut file = File::create(&path).expect("create fixture");
-        writeln!(file, "M83\n;LAYER_CHANGE\n;Z:0.2\n;TYPE:Outer wall\nG1 X10 Y10\nG1 X20 Y10 E1\n;LAYER_CHANGE\n;Z:0.4\n;TYPE:Internal solid infill\nG1 X20 Y20 E1")
+        writeln!(file, "M83\n;LAYER_CHANGE\n;Z:0.2\n;TYPE:Outer wall\nG1 X10 Y10\nG1 X20 Y10 E1\n;LAYER_CHANGE\n;Z:0.4\n;TYPE:Internal solid infill\nG1 X20 Y20 E1\n;TYPE:Top surface\nG1 X10 Y20 E1")
             .expect("write fixture");
         drop(file);
 
@@ -634,7 +642,8 @@ mod tests {
             preview.segments,
             vec![
                 [10.0, 10.0, 20.0, 10.0, 0.2, 0.0],
-                [20.0, 10.0, 20.0, 20.0, 0.4, 3.0],
+                [20.0, 10.0, 20.0, 20.0, 0.4, 4.0],
+                [20.0, 20.0, 10.0, 20.0, 0.4, 3.0],
             ]
         );
         assert_eq!(clamped.start_layer, 1);

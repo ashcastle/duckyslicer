@@ -311,13 +311,15 @@ internal object ToolpathMeshBuilder {
         floatArrayOf(1f, 0.812f, 0.251f),
         floatArrayOf(0.267f, 0.843f, 1f),
         floatArrayOf(0.4f, 0.545f, 1f),
-        floatArrayOf(0.91f, 0.475f, 0.976f),
+        floatArrayOf(1f, 0.384f, 0.816f),
+        floatArrayOf(0.655f, 0.545f, 0.98f),
         floatArrayOf(0.369f, 0.902f, 0.659f),
         floatArrayOf(1f, 0.42f, 0.42f),
         floatArrayOf(1f, 0.624f, 0.263f),
         floatArrayOf(0.906f, 0.906f, 0.886f),
     )
-    private val roleWidths = floatArrayOf(0.52f, 0.46f, 0.40f, 0.44f, 0.42f, 0.52f, 0.48f, 0.36f)
+    private val roleWidths =
+        floatArrayOf(0.52f, 0.46f, 0.40f, 0.46f, 0.42f, 0.42f, 0.52f, 0.48f, 0.36f)
 
     fun build(scene: ToolpathScene): FloatBuffer {
         val budget = when (scene.detail) {

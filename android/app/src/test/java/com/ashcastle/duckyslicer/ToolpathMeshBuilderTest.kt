@@ -44,7 +44,7 @@ class ToolpathMeshBuilderTest {
                 10f, 10f, 20f, 10f, 0.2f, 0f,
                 10f, 12f, 20f, 12f, 0.4f, 1f,
             ),
-            roleSegmentCounts = intArrayOf(1, 1, 0, 0, 0, 0, 0, 0),
+            roleSegmentCounts = intArrayOf(1, 1, 0, 0, 0, 0, 0, 0, 0),
         )
         val buffer = ToolpathMeshBuilder.build(
             ToolpathScene(preview, 100f, 100f, 1f, 0.8f, PreviewDetail.BALANCED),

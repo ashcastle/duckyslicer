@@ -47,10 +47,27 @@ index 963808df..5e450310 100644
  else()
      target_link_libraries(libslic3r PRIVATE
 diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
-index 116a4a85..68a4e8ae 100644
+index 116a4a85..68d012ad 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -98,6 +98,22 @@ struct SliceConfig {
+@@ -68,6 +68,16 @@ struct SliceConfig {
+     float skirt_distance = 6.0f;
+     float brim_width = 0.0f;
+ 
++    // Orca wall semantics. Keep exterior and interior paths independently
++    // configurable instead of reducing a process profile to wall count alone.
++    float outer_wall_line_width = 0.42f;
++    float inner_wall_line_width = 0.45f;
++    std::string wall_sequence = "inner-outer";
++    bool detect_thin_walls = false;
++    bool detect_overhang_walls = true;
++    bool only_one_wall_on_top = false;
++    bool precise_outer_walls = true;
++
+     // Printer bed (Snapmaker U1: 270x270x270mm)
+     float bed_size_x = 270.0f;
+     float bed_size_y = 270.0f;
+@@ -98,6 +108,22 @@ struct SliceConfig {
      // template expressions at G-code generation time.
      std::string machine_start_gcode;
      std::string machine_end_gcode;
@@ -74,10 +91,24 @@ index 116a4a85..68a4e8ae 100644
      // F91 (2026-05-25): per-extruder filament tuning sourced from the user's filament
      // library on the Kotlin side at slice time. Empty vector = "user has not set this
 diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
-index d93efb7d..850dad98 100644
+index d93efb7d..e189d9bf 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -137,6 +137,22 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -114,6 +114,13 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.skirt_loops = getInt("skirtLoops");
+     config.skirt_distance = getFloat("skirtDistance");
+     config.brim_width = getFloat("brimWidth");
++    config.outer_wall_line_width = getFloat("outerWallLineWidth");
++    config.inner_wall_line_width = getFloat("innerWallLineWidth");
++    config.wall_sequence = getString("wallSequence");
++    config.detect_thin_walls = getBool("detectThinWalls");
++    config.detect_overhang_walls = getBool("detectOverhangWalls");
++    config.only_one_wall_on_top = getBool("onlyOneWallOnTop");
++    config.precise_outer_walls = getBool("preciseOuterWalls");
+ 
+     config.bed_size_x = getFloat("bedSizeX");
+     config.bed_size_y = getFloat("bedSizeY");
+@@ -137,6 +144,22 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
      config.machine_start_gcode = getString("machineStartGcode");
      config.machine_end_gcode = getString("machineEndGcode");
@@ -100,7 +131,21 @@ index d93efb7d..850dad98 100644
  
      // F91: per-extruder filament tuning from the user's filament library.
      config.filament_flow_ratios = getFloatArray("filamentFlowRatios");
-@@ -271,6 +287,22 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -252,6 +275,13 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setInt("skirtLoops", config.skirt_loops);
+     setFloat("skirtDistance", config.skirt_distance);
+     setFloat("brimWidth", config.brim_width);
++    setFloat("outerWallLineWidth", config.outer_wall_line_width);
++    setFloat("innerWallLineWidth", config.inner_wall_line_width);
++    setString("wallSequence", config.wall_sequence);
++    setBool("detectThinWalls", config.detect_thin_walls);
++    setBool("detectOverhangWalls", config.detect_overhang_walls);
++    setBool("onlyOneWallOnTop", config.only_one_wall_on_top);
++    setBool("preciseOuterWalls", config.precise_outer_walls);
+     setFloat("bedSizeX", config.bed_size_x);
+     setFloat("bedSizeY", config.bed_size_y);
+     setFloat("maxPrintHeight", config.max_print_height);
+@@ -271,6 +301,22 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setFloat("wipeTowerWidth", config.wipe_tower_width);
      setString("machineStartGcode", config.machine_start_gcode);
      setString("machineEndGcode", config.machine_end_gcode);
@@ -124,7 +169,7 @@ index d93efb7d..850dad98 100644
      env->DeleteLocalRef(cls);
      return obj;
 diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
-index 8d61c9cf..803a0188 100644
+index 8d61c9cf..28b61f35 100644
 --- a/app/src/main/cpp/src/sapil_print.cpp
 +++ b/app/src/main/cpp/src/sapil_print.cpp
 @@ -220,47 +220,65 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
@@ -240,3 +285,38 @@ index 8d61c9cf..803a0188 100644
  
      // Deretraction speed — OrcaSlicer defaults to 0 (= same as retraction speed).
      // Snapmaker profile uses 35 mm/s for smoother prime-after-retract.
+@@ -480,9 +496,13 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     // the literal 0, not the auto-resolved value, causing Flow::rounded_rectangle_extrusion_spacing()
+     // to throw FlowErrorNegativeSpacing on multi-color models.
+     double nd = config.nozzle_diameter;
++    const double outer_wall_width = config.outer_wall_line_width > 0.0f
++        ? config.outer_wall_line_width : nd * 1.05;
++    const double inner_wall_width = config.inner_wall_line_width > 0.0f
++        ? config.inner_wall_line_width : nd * 1.125;
+     dpc.set_key_value("line_width",              new Slic3r::ConfigOptionFloatOrPercent(nd * 1.125, false));
+-    dpc.set_key_value("outer_wall_line_width",   new Slic3r::ConfigOptionFloatOrPercent(nd * 1.05,  false));
+-    dpc.set_key_value("inner_wall_line_width",   new Slic3r::ConfigOptionFloatOrPercent(nd * 1.125, false));
++    dpc.set_key_value("outer_wall_line_width",   new Slic3r::ConfigOptionFloatOrPercent(outer_wall_width, false));
++    dpc.set_key_value("inner_wall_line_width",   new Slic3r::ConfigOptionFloatOrPercent(inner_wall_width, false));
+     dpc.set_key_value("top_surface_line_width",  new Slic3r::ConfigOptionFloatOrPercent(nd * 1.05,  false));
+     dpc.set_key_value("sparse_infill_line_width",new Slic3r::ConfigOptionFloatOrPercent(nd * 1.125, false));
+     dpc.set_key_value("initial_layer_line_width",new Slic3r::ConfigOptionFloatOrPercent(nd * 1.25,  false));
+@@ -494,6 +514,18 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     // issue; until it's fixed upstream we must not let the user reach the classic path.
+     dpc.set_key_value("wall_generator", new Slic3r::ConfigOptionEnum<Slic3r::PerimeterGeneratorType>(Slic3r::PerimeterGeneratorType::Arachne));
+ 
++    Slic3r::WallSequence wall_sequence = Slic3r::WallSequence::InnerOuter;
++    if (config.wall_sequence == "outer-inner") {
++        wall_sequence = Slic3r::WallSequence::OuterInner;
++    } else if (config.wall_sequence == "inner-outer-inner") {
++        wall_sequence = Slic3r::WallSequence::InnerOuterInner;
++    }
++    dpc.set_key_value("wall_sequence", new Slic3r::ConfigOptionEnum<Slic3r::WallSequence>(wall_sequence));
++    dpc.set_key_value("detect_thin_wall", new Slic3r::ConfigOptionBool(config.detect_thin_walls));
++    dpc.set_key_value("detect_overhang_wall", new Slic3r::ConfigOptionBool(config.detect_overhang_walls));
++    dpc.set_key_value("only_one_wall_top", new Slic3r::ConfigOptionBool(config.only_one_wall_on_top));
++    dpc.set_key_value("precise_outer_wall", new Slic3r::ConfigOptionBool(config.precise_outer_walls));
++
+     // F87 (2026-05-25): gate seam_position + reduce_infill_retraction on
+     // !has_embedded_profile so an imported process profile or user SlicingOverride
+     // can win. `buildProfileOverrides` already writes the resolved values into the
