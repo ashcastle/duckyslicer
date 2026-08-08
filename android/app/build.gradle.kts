@@ -19,7 +19,7 @@ val orcaProfileRoot = repositoryRoot.resolve(
     "build/native-slicer/source/app/src/main/cpp/orcaslicer/resources/profiles",
 )
 val profileCatalogGenerator = repositoryRoot.resolve("tools/generate_profile_catalog.py")
-val generatedProfileCatalog = generatedProfileAssets.map { it.file("profile_catalog_v12.json") }
+val generatedProfileCatalog = generatedProfileAssets.map { it.file("profile_catalog_v12.bin") }
 val ndkSharedRuntime = nativeNdkDirectory.map { ndk ->
     val prebuiltRoot = ndk.asFile.resolve("toolchains/llvm/prebuilt")
     val candidates = prebuiltRoot.listFiles()
@@ -87,7 +87,7 @@ val generateOrcaProfileCatalog = tasks.register<Exec>("generateOrcaProfileCatalo
         expected.parentFile.listFiles()?.none { candidate ->
             candidate != expected &&
                 candidate.name.startsWith("profile_catalog_v") &&
-                candidate.extension == "json"
+                candidate.extension in setOf("json", "bin")
         } ?: true
     }
     doFirst {
@@ -95,7 +95,7 @@ val generateOrcaProfileCatalog = tasks.register<Exec>("generateOrcaProfileCatalo
         expected.parentFile.listFiles()?.filter { candidate ->
             candidate != expected &&
                 candidate.name.startsWith("profile_catalog_v") &&
-                candidate.extension == "json"
+                candidate.extension in setOf("json", "bin")
         }?.forEach { obsolete ->
             check(obsolete.delete()) { "Could not remove obsolete profile catalog: $obsolete" }
         }

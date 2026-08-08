@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import re
+import struct
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -22,6 +23,13 @@ INFILL_PATTERNS = {
     "lateral-lattice", "crosshatch", "tpmsd", "tpmsfk", "gyroid",
     "concentric", "hilbertcurve", "archimedeanchords", "octagramspiral",
 }
+
+BINARY_MAGIC = b"DUCKYPC1"
+BINARY_STRING = 1
+BINARY_FLOAT = 2
+BINARY_INT = 3
+BINARY_BOOL = 4
+BINARY_STRING_LIST = 5
 
 
 def scalar(value: Any, default: Any = None) -> Any:
@@ -739,6 +747,95 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     return profile
 
 
+def binary_kind(value: Any) -> int:
+    if isinstance(value, bool):
+        return BINARY_BOOL
+    if isinstance(value, int):
+        return BINARY_INT
+    if isinstance(value, float):
+        return BINARY_FLOAT
+    if isinstance(value, str):
+        return BINARY_STRING
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return BINARY_STRING_LIST
+    raise ValueError(f"unsupported binary catalog value: {type(value).__name__}")
+
+
+def infer_binary_kind(records: list[dict[str, Any]], field: str) -> int:
+    kinds = {binary_kind(record[field]) for record in records}
+    if kinds <= {BINARY_INT, BINARY_FLOAT}:
+        return BINARY_FLOAT if BINARY_FLOAT in kinds else BINARY_INT
+    if len(kinds) == 1:
+        return kinds.pop()
+    raise ValueError(f"binary catalog field changed type: {field}")
+
+
+def write_binary_string(output: Any, value: str) -> None:
+    encoded = value.encode("utf-8")
+    output.write(struct.pack(">I", len(encoded)))
+    output.write(encoded)
+
+
+def write_binary_value(output: Any, kind: int, value: Any) -> None:
+    if kind == BINARY_STRING:
+        write_binary_string(output, value)
+    elif kind == BINARY_FLOAT:
+        output.write(struct.pack(">f", value))
+    elif kind == BINARY_INT:
+        output.write(struct.pack(">i", value))
+    elif kind == BINARY_BOOL:
+        output.write(b"\x01" if value else b"\x00")
+    elif kind == BINARY_STRING_LIST:
+        output.write(struct.pack(">I", len(value)))
+        for item in value:
+            write_binary_string(output, item)
+    else:
+        raise ValueError(f"unsupported binary catalog kind: {kind}")
+
+
+def write_binary_section(output: Any, records: list[dict[str, Any]]) -> None:
+    if not records:
+        output.write(struct.pack(">II", 0, 0))
+        return
+    fields = list(records[0])
+    kinds = [infer_binary_kind(records, field) for field in fields]
+    expected_fields = set(fields)
+    for record in records:
+        if list(record) != fields:
+            raise ValueError("binary catalog field order changed within a section")
+        if set(record) != expected_fields:
+            raise ValueError("binary catalog record has inconsistent fields")
+        for field, kind in zip(fields, kinds):
+            actual_kind = binary_kind(record[field])
+            if actual_kind != kind and not (
+                kind == BINARY_FLOAT and actual_kind == BINARY_INT
+            ):
+                raise ValueError(f"binary catalog field changed type: {field}")
+
+    output.write(struct.pack(">I", len(fields)))
+    for field, kind in zip(fields, kinds):
+        write_binary_string(output, field)
+        output.write(bytes([kind]))
+    output.write(struct.pack(">I", len(records)))
+    for record in records:
+        for field, kind in zip(fields, kinds):
+            write_binary_value(output, kind, record[field])
+
+
+def write_binary_catalog(output_path: Path, catalog: dict[str, Any]) -> None:
+    temporary = output_path.with_suffix(output_path.suffix + ".tmp")
+    with temporary.open("wb") as output:
+        output.write(BINARY_MAGIC)
+        output.write(struct.pack(">I", catalog["schemaVersion"]))
+        write_binary_string(output, catalog["sourceRevision"])
+        output.write(struct.pack(">I", sum(catalog["rejected"].values())))
+        write_binary_section(output, catalog["printers"])
+        write_binary_section(output, catalog["filaments"])
+        write_binary_section(output, catalog["slicing"])
+        output.flush()
+    temporary.replace(output_path)
+
+
 def main() -> None:
     if len(sys.argv) != 4:
         raise SystemExit("usage: generate_profile_catalog.py PROFILE_ROOT OUTPUT SOURCE_REVISION")
@@ -790,9 +887,12 @@ def main() -> None:
         "slicing": processes,
     }
     output.parent.mkdir(parents=True, exist_ok=True)
-    temporary = output.with_suffix(output.suffix + ".tmp")
-    temporary.write_text(json.dumps(catalog, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    temporary.replace(output)
+    if output.suffix == ".bin":
+        write_binary_catalog(output, catalog)
+    else:
+        temporary = output.with_suffix(output.suffix + ".tmp")
+        temporary.write_text(json.dumps(catalog, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        temporary.replace(output)
     print(
         f"Generated {output}: {len(printers)} printers, {len(filaments)} filaments, "
         f"{len(processes)} processes, {sum(rejected.values())} rejected"
