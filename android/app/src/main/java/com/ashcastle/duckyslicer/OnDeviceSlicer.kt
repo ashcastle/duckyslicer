@@ -30,9 +30,8 @@ object OnDeviceSlicer {
         require(model.isFile) { "모델 파일을 찾을 수 없습니다" }
 
         val runtime = NativeLibrary(onProgress)
-        check(runtime.loadModel(model.absolutePath)) { "모델을 준비하지 못했습니다" }
-
         return try {
+            check(runtime.loadModel(model.absolutePath)) { "모델을 준비하지 못했습니다" }
             val config = SliceConfig(layerHeight = options.quality.layerHeightMm)
             val result = requireNotNull(runtime.slice(config)) { "출력 데이터를 만들지 못했습니다" }
             check(result.success) {

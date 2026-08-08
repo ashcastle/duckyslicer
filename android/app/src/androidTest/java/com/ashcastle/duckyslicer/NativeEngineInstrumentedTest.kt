@@ -19,7 +19,7 @@ class NativeEngineInstrumentedTest {
         val model = File(context.filesDir, modelName)
 
         assertTrue("Model fixture must be copied into ${context.filesDir}", model.isFile)
-        assertTrue(NativeEngine.version().startsWith("OrcaSlicer 2.4.2"))
+        assertTrue(NativeEngine.version().startsWith("DuckySlicer native bridge"))
 
         val result = JSONObject(NativeEngine.inspectStl(model.absolutePath))
         assertTrue(result.optString("error"), result.optBoolean("ok"))
