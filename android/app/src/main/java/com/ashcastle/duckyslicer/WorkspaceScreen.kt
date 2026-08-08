@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.RotateRight
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Devices
@@ -82,7 +82,6 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -137,6 +136,15 @@ fun WorkspaceScreen(
     modelTransform: ModelTransform,
     sliceOptions: SliceOptions,
     profileCatalog: ProfileCatalog,
+    appSettings: AppSettings,
+    remoteDevices: List<RemoteDeviceProfile>,
+    selectedRemoteDeviceId: String?,
+    remoteStatus: RemoteDeviceStatus?,
+    remoteUpload: RemoteUpload?,
+    remoteBusy: Boolean,
+    remoteUploadProgress: Int?,
+    remoteMessage: String?,
+    remoteMessageIsError: Boolean,
     sliceOutcome: SliceOutcome?,
     layerPreview: GcodeLayerPreview?,
     importing: Boolean,
@@ -156,11 +164,20 @@ fun WorkspaceScreen(
     onSaveFilamentProfile: (String) -> Unit,
     onSaveSlicingProfile: (String) -> Unit,
     onLayerRangeSelected: (Int, Int) -> Unit,
+    onAppSettingsChanged: (AppSettings) -> Unit,
+    onRemoteDeviceSelected: (String) -> Unit,
+    onRemoteDeviceSaved: (RemoteDeviceDraft) -> Unit,
+    onRemoteDeviceDeleted: (String) -> Unit,
+    onRemoteRefresh: () -> Unit,
+    onRemoteUpload: () -> Unit,
+    onRemoteStart: () -> Unit,
+    onRemotePause: () -> Unit,
+    onRemoteResume: () -> Unit,
+    onRemoteCancel: () -> Unit,
 ) = BoxWithConstraints {
     val tabletLayout = maxWidth >= 600.dp
     val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
-    var toolpathOpacity by remember { mutableFloatStateOf(0.92f) }
-    var toolpathDepthContrast by remember { mutableFloatStateOf(0.78f) }
+    val panelMaxHeight = (maxHeight - if (tabletLayout) 24.dp else 94.dp).coerceAtLeast(320.dp)
     var showModelTools by remember { mutableStateOf(false) }
     var objectSelected by remember(model?.localPath) { mutableStateOf(false) }
     Scaffold(
@@ -178,8 +195,9 @@ fun WorkspaceScreen(
                     preview = if (selectedTab == WorkspaceTab.PREVIEW) layerPreview else null,
                     bedSizeX = sliceOptions.bedSizeX,
                     bedSizeY = sliceOptions.bedSizeY,
-                    toolpathOpacity = toolpathOpacity,
-                    toolpathDepthContrast = toolpathDepthContrast,
+                    toolpathOpacity = appSettings.toolpathOpacity,
+                    toolpathDepthContrast = appSettings.toolpathDepthContrast,
+                    previewDetail = appSettings.previewDetail,
                     objectSelected = objectSelected,
                     objectManipulationEnabled = selectedTab == WorkspaceTab.SLICE &&
                         !importing && !slicing && !previewLoading,
@@ -250,7 +268,7 @@ fun WorkspaceScreen(
                     onSavePrinter = onSavePrinterProfile,
                     onSaveFilament = onSaveFilamentProfile,
                     onSaveSlicing = onSaveSlicingProfile,
-                    modifier = Modifier.align(panelAlignment),
+                    modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
                 )
 
                 WorkspaceTab.PREVIEW -> PreviewSheet(
@@ -258,28 +276,53 @@ fun WorkspaceScreen(
                     preview = layerPreview,
                     loading = previewLoading,
                     error = error,
-                    toolpathOpacity = toolpathOpacity,
-                    onToolpathOpacityChanged = { toolpathOpacity = it },
-                    toolpathDepthContrast = toolpathDepthContrast,
-                    onToolpathDepthContrastChanged = { toolpathDepthContrast = it },
+                    toolpathOpacity = appSettings.toolpathOpacity,
+                    onToolpathOpacityChanged = {
+                        onAppSettingsChanged(appSettings.copy(toolpathOpacity = it))
+                    },
+                    toolpathDepthContrast = appSettings.toolpathDepthContrast,
+                    onToolpathDepthContrastChanged = {
+                        onAppSettingsChanged(appSettings.copy(toolpathDepthContrast = it))
+                    },
                     onLayerRangeSelected = onLayerRangeSelected,
                     onGoToSlice = { onTabSelected(WorkspaceTab.SLICE) },
-                    modifier = Modifier.align(panelAlignment),
+                    modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
                 )
 
-                WorkspaceTab.DEVICE -> SimpleSheet(
-                    title = stringResource(R.string.device_profiles),
-                    body = stringResource(R.string.device_message),
-                    modifier = Modifier.align(panelAlignment),
+                WorkspaceTab.DEVICE -> DeviceSheet(
+                    profiles = remoteDevices,
+                    selectedProfileId = selectedRemoteDeviceId,
+                    status = remoteStatus,
+                    upload = remoteUpload,
+                    gcodeAvailable = sliceOutcome != null,
+                    busy = remoteBusy,
+                    uploadProgress = remoteUploadProgress,
+                    message = remoteMessage,
+                    isError = remoteMessageIsError,
+                    confirmBeforePrint = appSettings.confirmBeforeRemotePrint,
+                    onSelect = onRemoteDeviceSelected,
+                    onSave = onRemoteDeviceSaved,
+                    onDelete = onRemoteDeviceDeleted,
+                    onRefresh = onRemoteRefresh,
+                    onUpload = onRemoteUpload,
+                    onStart = onRemoteStart,
+                    onPause = onRemotePause,
+                    onResume = onRemoteResume,
+                    onCancel = onRemoteCancel,
+                    modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
                 )
 
                 WorkspaceTab.PROJECT -> ProjectSheet(
                     model = model,
                     outcome = sliceOutcome,
-                    modifier = Modifier.align(panelAlignment),
+                    modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
                 )
 
-                WorkspaceTab.SETTINGS -> SettingsSheet(modifier = Modifier.align(panelAlignment))
+                WorkspaceTab.SETTINGS -> AppSettingsSheet(
+                    settings = appSettings,
+                    onSettingsChanged = onAppSettingsChanged,
+                    modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
+                )
             }
         }
     }
@@ -535,6 +578,7 @@ private fun BedScene(
     bedSizeY: Float,
     toolpathOpacity: Float,
     toolpathDepthContrast: Float,
+    previewDetail: PreviewDetail,
     objectSelected: Boolean,
     objectManipulationEnabled: Boolean,
     onObjectSelectedChanged: (Boolean) -> Unit,
@@ -555,8 +599,24 @@ private fun BedScene(
         Array(PreviewDepthBands) { Array(ToolpathStyles.size) { Path() } }
     }
     val meshPath = remember(model) { Path() }
-    val movingPreviewPlan = remember(preview) { preview?.buildRenderPlan(segmentBudget = 450) }
-    val refinedPreviewPlan = remember(preview) { preview?.buildRenderPlan(segmentBudget = 4_000) }
+    val movingPreviewPlan = remember(preview, previewDetail) {
+        preview?.buildRenderPlan(
+            segmentBudget = when (previewDetail) {
+                PreviewDetail.PERFORMANCE -> 250
+                PreviewDetail.BALANCED -> 450
+                PreviewDetail.DETAIL -> 700
+            },
+        )
+    }
+    val refinedPreviewPlan = remember(preview, previewDetail) {
+        preview?.buildRenderPlan(
+            segmentBudget = when (previewDetail) {
+                PreviewDetail.PERFORMANCE -> 2_000
+                PreviewDetail.BALANCED -> 4_000
+                PreviewDetail.DETAIL -> 8_000
+            },
+        )
+    }
 
     LaunchedEffect(interactionActive) {
         if (interactionActive) {
@@ -1048,38 +1108,6 @@ private fun ProjectSheet(
             if (outcome == null) stringResource(R.string.no_gcode) else stringResource(R.string.gcode_ready),
             color = if (outcome == null) Color(0xFFC8C9C2) else WorkspaceYellow,
         )
-    }
-}
-
-@Composable
-private fun SimpleSheet(title: String, body: String, modifier: Modifier = Modifier) {
-    WorkspaceCard(modifier) {
-        Text(title, fontWeight = FontWeight.Bold)
-        Text(body, color = Color(0xFFC8C9C2))
-    }
-}
-
-@Composable
-private fun SettingsSheet(modifier: Modifier = Modifier) {
-    WorkspaceCard(modifier) {
-        Icon(
-            painter = painterResource(R.drawable.ic_ducky),
-            contentDescription = null,
-            tint = Color.Unspecified,
-            modifier = Modifier.size(72.dp).align(Alignment.CenterHorizontally),
-        )
-        Text(
-            stringResource(R.string.app_name),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        )
-        Text(
-            stringResource(R.string.offline_app_summary),
-            color = Color(0xFFC8C9C2),
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        )
-        Text(stringResource(R.string.settings_message), color = Color(0xFFC8C9C2))
     }
 }
 

@@ -5,22 +5,24 @@
 <h1 align="center">DuckySlicer</h1>
 
 <p align="center">
-  <strong>Slice on your Android device. Keep the whole workflow offline.</strong>
+  <strong>Slice on your Android device. Connect to a printer only when you choose.</strong>
 </p>
 
 <p align="center">
   <img alt="Android 8+" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&amp;logoColor=white">
   <img alt="ARM64" src="https://img.shields.io/badge/APK-arm64--v8a-F6C945">
-  <img alt="Offline" src="https://img.shields.io/badge/network-not%20required-202124">
+  <img alt="Offline first" src="https://img.shields.io/badge/workflow-offline--first-202124">
   <img alt="Rust" src="https://img.shields.io/badge/native%20boundary-Rust-DEA584?logo=rust&amp;logoColor=black">
   <img alt="License AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue">
 </p>
 
 DuckySlicer is an Android-first 3D-print slicer. It imports STL models, slices them
 on-device, previews real G-code layers, and exports G-code without an account,
-cloud service, or network permission.
+cloud service, or printer connection. Optional direct connections can send a
+finished G-code file to OctoPrint or Klipper/Moonraker.
 
-> DuckySlicer is an early MVP, not yet a production release. If you want to follow
+> DuckySlicer is a pre-release project under active production hardening. If you
+> want to follow
 > its progress, a ⭐ on the repository is always appreciated.
 
 ## What is working
@@ -28,23 +30,27 @@ cloud service, or network permission.
 - Fully offline STL import, on-device slicing, preview, and G-code export
 - A full-screen print bed that keeps the model and G-code at their real millimetre scale
 - One-finger orbit and two-finger pan/zoom for the whole scene
+- Tap an object to select it, then drag it directly across the bed
 - Full-layer preview by default, with a two-handle slider for choosing a visible layer range
 - Outlined role colors plus adjustable height shading for walls, infill, solid surfaces, support, bridges, and bed adhesion
 - Adaptive preview detail that stays lighter while the camera is moving and refines after release
 - Working move, rotate, scale, center, reset, and remove controls for imported models
 - Snapmaker U1 profiles for 0.2, 0.4, 0.6, and 0.8 mm nozzles
-- Eight built-in material profiles and twelve matching slicing profiles
+- Sixteen built-in material profiles and twelve matching slicing profiles
 - Searchable printer and filament selectors with collapsible brand and personal-profile groups
 - Editable settings and named user profiles saved entirely in app-private storage
 - Bottom navigation on phones and a space-saving vertical rail on tablets
 - English defaults with Korean device-language localization
 - A distinct DuckySlicer identity built around the duck mark, yellow accents, and charcoal surfaces
-- No Bambu network plug-in and no `INTERNET` permission in the MVP
+- Optional OctoPrint and Klipper/Moonraker status, upload, start, pause, resume, and cancel controls
+- Printer access keys encrypted with Android Keystore; unencrypted connections limited to local addresses
+- No account, cloud dependency, analytics SDK, or Bambu network plug-in
 - 16 KB page-size-compatible ARM64 native libraries for current Android devices
 
-The physical-device test uses a real 82 MB STL and verifies Rust mesh inspection,
+The device test suite uses a real 82 MB STL and verifies Rust mesh inspection,
 native slicing, non-empty G-code, all generated layers, and extrusion paths with
-real Z coordinates.
+real Z coordinates. Local simulated OctoPrint and Moonraker endpoints also verify
+authentication, status parsing, uploads, explicit print start, and encrypted key storage.
 
 ## Mobile workflow
 
@@ -52,15 +58,18 @@ real Z coordinates.
 | --- | --- |
 | **Slice** | Choose built-in or saved printer, filament, and slicing profiles; edit, save, and slice |
 | **Preview** | Inspect all layers or narrow the visible range with two slider handles |
-| **Device** | Reserved for a future optional device workflow; unavailable in the offline MVP |
+| **Device** | Save OctoPrint or Klipper connections, check status, send G-code, and control an active print |
 | **Project** | See the active model and local G-code state |
-| **Settings** | App preferences, including device-language behavior |
+| **Settings** | Preview load, visual contrast, screen behavior, connection timeout, print confirmation, and language behavior |
 | **Top-left menu** | Import a model or export completed G-code |
 
 ## Architecture
 
 ```text
 Jetpack Compose mobile UI
+        │
+        ├── Direct printer client: OctoPrint and Moonraker HTTP APIs,
+        │                          Android Keystore credentials
         │
         ├── Rust JNI: input validation, streaming STL transforms,
         │             G-code role/range parsing, preview data
@@ -118,7 +127,7 @@ adb shell am instrument -w -r \
 
 ## Languages
 
-The MVP ships English and Korean resources. Future translations will stay within
+The current app ships English and Korean resources. Future translations will stay within
 the inherited language set and reuse established slicing terms.
 
 ## License and provenance

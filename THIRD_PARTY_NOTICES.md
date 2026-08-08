@@ -2,7 +2,7 @@
 
 ## Android OrcaSlicer runtime bootstrap
 
-The MVP currently includes an Android ARM64 OrcaSlicer runtime bootstrap derived from
+The current Android ARM64 build includes a slicer runtime bootstrap derived from
 [`taylormadearmy/u1-slicer-for-android`](https://github.com/taylormadearmy/u1-slicer-for-android),
 which is distributed under the GNU Affero General Public License v3.0.
 

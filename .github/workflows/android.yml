@@ -45,9 +45,9 @@ jobs:
           cargo test --locked
           cargo clippy --locked -- -D warnings
 
-      - name: Build and lint APK
+      - name: Build, test, and lint APK
         working-directory: android
-        run: ./gradlew :app:assembleDebug :app:lintDebug
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug
 
       - uses: actions/upload-artifact@v7
         with:
