@@ -41,6 +41,11 @@ cargo clippy --locked -- -D warnings
 cd ../../android
 ./gradlew :app:testDebugUnitTest :app:assembleDebug \
   :app:assembleDebugAndroidTest :app:lintDebug
+
+cd ..
+python3 -m unittest tools.test_verify_apk
+python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
+python3 tools/verify_workflows.py
 ```
 
 With an ARM64 Android device or emulator connected:
@@ -54,6 +59,10 @@ Preview changes should be checked with outer walls, inner walls, sparse infill,
 solid surfaces, support, bridges, multiple layer heights, and a dense model. The
 default depth renderer and the low-power compatibility renderer must both remain
 usable.
+
+Workflow changes must keep third-party Actions pinned to full commit hashes. A
+tagged release must preserve the build → ARM64 device test → publish dependency;
+publishing an APK before device tests finish is not an accepted fallback.
 
 ## Pull requests
 
