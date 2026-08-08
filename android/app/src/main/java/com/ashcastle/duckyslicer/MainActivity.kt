@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import java.util.UUID
 
 private val DuckyColors = darkColorScheme(
     primary = Color(0xFFF6C945),
@@ -119,7 +120,7 @@ private fun DuckySlicerScreen() {
     val remoteCommandError = stringResource(R.string.device_command_error)
     val remoteSaveError = stringResource(R.string.device_save_error)
 
-    var model by remember { mutableStateOf<ModelInfo?>(null) }
+    var projectHistory by remember { mutableStateOf(ProjectHistoryState()) }
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var importing by remember { mutableStateOf(false) }
@@ -130,7 +131,10 @@ private fun DuckySlicerScreen() {
     var layerPreview by remember { mutableStateOf<GcodeLayerPreview?>(null) }
     var previewLoading by remember { mutableStateOf(false) }
     var sliceOptions by remember { mutableStateOf(SliceOptions()) }
-    var modelTransform by remember { mutableStateOf(ModelTransform()) }
+    val projectObjects = projectHistory.current.objects
+    val selectedProjectObject = projectHistory.current.selectedObject
+    val model = selectedProjectObject?.model ?: projectObjects.firstOrNull()?.model
+    val modelTransform = selectedProjectObject?.transform ?: ModelTransform()
     val profileStore = remember(context.applicationContext) { ProfileStore(context.applicationContext) }
     var profileCatalog by remember { mutableStateOf(ProfileCatalog()) }
     val appSettingsStore = remember(context.applicationContext) {
@@ -182,9 +186,10 @@ private fun DuckySlicerScreen() {
         }
     }
 
-    fun applyModelTransform(transform: ModelTransform) {
-        if (transform != modelTransform) {
-            modelTransform = transform
+    fun applyModelTransform(transform: ModelTransform, recordHistory: Boolean = true) {
+        val nextHistory = projectHistory.updateSelectedTransform(transform, recordHistory)
+        if (nextHistory != projectHistory) {
+            projectHistory = nextHistory
             sliceOutcome = null
             layerPreview = null
             sliceProgress = 0
@@ -201,8 +206,22 @@ private fun DuckySlicerScreen() {
             scope.launch {
                 runCatching { importAndInspect(context, uri) }
                     .onSuccess {
-                        model = it
-                        modelTransform = ModelTransform()
+                        val objectIndex = projectObjects.size
+                        val distance = ((objectIndex + 1) / 2) * 24f
+                        val initialTransform = ModelTransform(
+                            offsetXmm = when {
+                                objectIndex == 0 -> 0f
+                                objectIndex % 2 == 1 -> distance
+                                else -> -distance
+                            },
+                        )
+                        projectHistory = projectHistory.add(
+                            ProjectObject(
+                                id = UUID.randomUUID().toString(),
+                                model = it,
+                                transform = initialTransform,
+                            ),
+                        )
                         sliceOutcome = null
                         layerPreview = null
                         sliceProgress = 0
@@ -262,8 +281,8 @@ private fun DuckySlicerScreen() {
     }
 
     val startSlice = {
-        val selected = model
-        if (selected != null && !slicing && !importing && !previewLoading) {
+        val objects = projectObjects
+        if (objects.isNotEmpty() && !slicing && !importing && !previewLoading) {
             slicing = true
             sliceProgress = 0
             sliceOutcome = null
@@ -274,7 +293,7 @@ private fun DuckySlicerScreen() {
             scope.launch {
                 runCatching {
                     withContext(Dispatchers.IO) {
-                        OnDeviceSlicer.slice(File(selected.localPath), sliceOptions, modelTransform) { progress ->
+                        OnDeviceSlicer.slice(objects, sliceOptions) { progress ->
                             scope.launch { sliceProgress = progress }
                         }
                     }
@@ -312,9 +331,13 @@ private fun DuckySlicerScreen() {
 
     val saveGcode = {
         val completed = sliceOutcome
-        val selected = model
+        val selected = selectedProjectObject?.model ?: projectObjects.firstOrNull()?.model
         if (completed != null && selected != null) {
-            val baseName = selected.fileName.substringBeforeLast('.').ifBlank { "model" }
+            val baseName = if (projectObjects.size > 1) {
+                "project"
+            } else {
+                selected.fileName.substringBeforeLast('.').ifBlank { "model" }
+            }
             savePicker.launch("$baseName.gcode")
         }
     }
@@ -366,8 +389,8 @@ private fun DuckySlicerScreen() {
 
     WorkspaceScreen(
         selectedTab = selectedTab,
-        model = model,
-        modelTransform = modelTransform,
+        projectObjects = projectObjects,
+        selectedObjectId = projectHistory.current.selectedObjectId,
         sliceOptions = sliceOptions,
         profileCatalog = profileCatalog,
         appSettings = appSettings,
@@ -394,10 +417,44 @@ private fun DuckySlicerScreen() {
             }
         },
         onChoose = { filePicker.launch(arrayOf("model/stl", "application/sla", "*/*")) },
-        onModelTransformChanged = ::applyModelTransform,
+        canUndo = projectHistory.canUndo,
+        canRedo = projectHistory.canRedo,
+        onObjectSelected = { objectId -> projectHistory = projectHistory.select(objectId) },
+        onModelTransformChanged = { transform -> applyModelTransform(transform) },
+        onModelTransformPreview = { transform -> applyModelTransform(transform, recordHistory = false) },
+        onModelTransformCommitted = { previous ->
+            projectHistory = projectHistory.commitSelectedTransform(previous)
+        },
+        onUndo = {
+            if (projectHistory.canUndo) {
+                projectHistory = projectHistory.undo()
+                sliceOutcome = null
+                layerPreview = null
+                remoteUpload = null
+            }
+        },
+        onRedo = {
+            if (projectHistory.canRedo) {
+                projectHistory = projectHistory.redo()
+                sliceOutcome = null
+                layerPreview = null
+                remoteUpload = null
+            }
+        },
+        onDuplicate = {
+            projectHistory = projectHistory.duplicateSelected(UUID.randomUUID().toString())
+            sliceOutcome = null
+            layerPreview = null
+            remoteUpload = null
+        },
+        onArrange = {
+            projectHistory = projectHistory.arrange(sliceOptions.bedSizeX, sliceOptions.bedSizeY)
+            sliceOutcome = null
+            layerPreview = null
+            remoteUpload = null
+        },
         onRemoveModel = {
-            model = null
-            modelTransform = ModelTransform()
+            projectHistory = projectHistory.removeSelected()
             sliceOutcome = null
             layerPreview = null
             remoteUpload = null
@@ -621,7 +678,10 @@ private suspend fun importAndInspect(context: Context, uri: Uri): ModelInfo = wi
         ?.takeIf { it.endsWith(".stl", ignoreCase = true) }
         ?: "model.stl"
     val safeName = displayName.replace(Regex("[^A-Za-z0-9가-힣._-]"), "_")
-    val destination = File(File(context.cacheDir, "models").apply { mkdirs() }, safeName)
+    val destination = File(
+        File(context.cacheDir, "models").apply { mkdirs() },
+        "${UUID.randomUUID()}-$safeName",
+    )
 
     context.contentResolver.openInputStream(uri).use { input ->
         requireNotNull(input) { "model_unreadable" }

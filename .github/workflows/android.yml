@@ -15,9 +15,13 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
+    env:
+      DUCKYSLICER_NATIVE_JOBS: "4"
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - uses: actions/setup-java@v5
         with:
@@ -37,6 +41,13 @@ jobs:
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --version 4.1.2 --locked
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            build/native-slicer/dependency-sources
+            build/native-slicer/build
+          key: android-native-${{ runner.os }}-${{ hashFiles('native/slicer-runtime/versions.env', 'native/slicer-runtime/runtime.patch') }}
 
       - name: Check Rust
         working-directory: rust/duckyslicer-jni

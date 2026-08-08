@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="object_count">%1$d objects</string>
+    <string name="undo">Undo</string>
+    <string name="redo">Redo</string>
+    <string name="duplicate_object">Duplicate object</string>
+    <string name="arrange_objects">Arrange objects</string>
     <string name="app_name">DuckySlicer</string>
     <string name="workspace_title">Prepare</string>
     <string name="workspace_subtitle">Choose a model and get it ready to print.</string>
@@ -211,4 +216,12 @@
     <string name="connection_timeout">Wait up to %1$d seconds</string>
     <string name="connection_security_summary">Access keys are protected on this device. Unencrypted connections are limited to local addresses.</string>
     <string name="language_settings">Language</string>
+    <string name="build_height">Build height</string>
+    <string name="printer_firmware">Printer firmware</string>
+    <string name="motion_limits">Motion limits</string>
+    <string name="maximum_x_speed">Maximum X speed</string>
+    <string name="maximum_y_speed">Maximum Y speed</string>
+    <string name="maximum_print_acceleration">Maximum print acceleration</string>
+    <string name="maximum_travel_acceleration">Maximum travel acceleration</string>
+    <string name="acceleration_value">%1$.0f mm/s²</string>
 </resources>

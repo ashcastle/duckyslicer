@@ -2,6 +2,7 @@ package com.ashcastle.duckyslicer
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.u1.slicer.NativeLibrary
 import org.json.JSONObject
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
@@ -11,6 +12,20 @@ import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class NativeEngineInstrumentedTest {
+    private fun fixtureModel(): File {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val requestedName = InstrumentationRegistry.getArguments().getString("modelName")
+        val modelName = requestedName ?: "20mmbox-LF.stl"
+        val destination = File(context.filesDir, modelName)
+        if (destination.isFile) return destination
+
+        instrumentation.context.assets.open(modelName).use { input ->
+            destination.outputStream().use(input::copyTo)
+        }
+        return destination
+    }
+
     @Test
     fun userProfilesRoundTripInPrivateStorage() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -31,6 +46,11 @@ class NativeEngineInstrumentedTest {
                 fanMinSpeed = 40,
                 pressureAdvanceEnabled = true,
                 pressureAdvance = 0.035f,
+                gcodeFlavor = "marlin2",
+                maxSpeedX = 320f,
+                maxAccelerationX = 4_200f,
+                maxAccelerationTravel = 5_000f,
+                maxJerkX = 7f,
             )
 
         val printer = store.savePrinter("Workshop U1", edited)
@@ -52,8 +72,14 @@ class NativeEngineInstrumentedTest {
         assertEquals(40, restored.filaments.last().fanMinSpeed)
         assertTrue(restored.filaments.last().pressureAdvanceEnabled)
         assertEquals(0.035f, restored.filaments.last().pressureAdvance)
+        assertEquals("marlin2", restored.printers.last().gcodeFlavor)
+        assertEquals(320f, restored.printers.last().maxSpeedX)
+        assertEquals(4_200f, restored.printers.last().maxAccelerationX)
+        assertEquals(5_000f, restored.printers.last().maxAccelerationTravel)
+        assertEquals(7f, restored.printers.last().maxJerkX)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
+        assertEquals(2, JSONObject(file.readText()).getInt("schemaVersion"))
         assertTrue("Saved profiles must stay in app-private storage", file.canonicalPath.startsWith(context.cacheDir.canonicalPath))
         file.delete()
         directory.delete()
@@ -66,7 +92,8 @@ class NativeEngineInstrumentedTest {
             PrinterProfile.builtIns.filter { it.brand == "Snapmaker" }.map { it.nozzleDiameter },
         )
         assertTrue(FilamentProfile.builtIns.map { it.nativeName }.containsAll(listOf("PLA", "PETG", "ABS", "ASA", "PLA-CF", "PETG-CF", "TPU", "PA-CF")))
-        assertEquals(setOf("Snapmaker"), PrinterProfile.builtIns.mapNotNull { it.brand }.toSet())
+        assertEquals(setOf("Custom", "Snapmaker"), PrinterProfile.builtIns.mapNotNull { it.brand }.toSet())
+        assertTrue(PrinterProfile.builtIns.contains(PrinterProfile.CUSTOM_CARTESIAN))
         assertTrue(
             FilamentProfile.builtIns.mapNotNull { it.brand }.containsAll(
                 listOf("Generic", "Snapmaker", "Prusa", "Creality", "Anycubic", "Elegoo"),
@@ -74,6 +101,22 @@ class NativeEngineInstrumentedTest {
         )
         assertEquals(QualityProfile.STANDARD_02, QualityProfile.standardFor(0.2f))
         assertEquals(QualityProfile.STANDARD_08, QualityProfile.standardFor(0.8f))
+    }
+
+    @Test
+    fun bundledOrcaCatalogIsVersionedValidatedAndBroad() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val catalog = OrcaProfileCatalog(context).load()
+
+        assertEquals(1, catalog.schemaVersion)
+        assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
+        assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
+        assertTrue("The catalog must include Orca filament presets", catalog.filaments.size > 3_000)
+        assertTrue("The catalog must include Orca slicing presets", catalog.slicing.size > 2_000)
+        assertTrue(catalog.printers.all(ProfileValidation::printer))
+        assertTrue(catalog.filaments.all(ProfileValidation::filament))
+        assertTrue(catalog.slicing.all(ProfileValidation::slicing))
+        assertTrue(catalog.printers.mapNotNull { it.brand }.containsAll(listOf("Creality", "Prusa", "Anycubic")))
     }
 
     @Test
@@ -103,14 +146,9 @@ class NativeEngineInstrumentedTest {
 
     @Test
     fun attachedStlLoadsThroughRustAndCppBridge() {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val context = instrumentation.targetContext
-        val modelName = InstrumentationRegistry.getArguments()
-            .getString("modelName", "model-under-test.stl")
-        val model = File(context.filesDir, modelName)
+        val model = fixtureModel()
 
-        // The physical-device command in README.md copies this external fixture into filesDir.
-        assertTrue("Model fixture must be copied into ${context.filesDir}", model.isFile)
+        assertTrue("Bundled model fixture must be available", model.isFile)
         assertTrue(NativeEngine.version().startsWith("DuckySlicer native bridge"))
 
         val result = JSONObject(NativeEngine.inspectStl(model.absolutePath))
@@ -124,14 +162,10 @@ class NativeEngineInstrumentedTest {
 
     @Test
     fun attachedStlProducesGcodeOnDevice() {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val context = instrumentation.targetContext
-        val modelName = InstrumentationRegistry.getArguments()
-            .getString("modelName", "model-under-test.stl")
-        val model = File(context.filesDir, modelName)
+        val model = fixtureModel()
         var highestProgress = 0
 
-        assertTrue("Model fixture must be copied into ${context.filesDir}", model.isFile)
+        assertTrue("Bundled model fixture must be available", model.isFile)
 
         val options = SliceOptions()
             .selectPrinter(PrinterProfile.U1_06)
@@ -157,6 +191,8 @@ class NativeEngineInstrumentedTest {
         assertTrue("G-code must be a non-trivial file", outcome.output.length() > 1_000L)
         val gcode = outcome.output.readText()
         assertTrue("G-code must contain motion commands", gcode.lineSequence().any { it.startsWith("G1 ") })
+        assertTrue("Orca must emit distinct inner-wall regions", gcode.contains(";TYPE:Inner wall"))
+        assertTrue("Orca must emit distinct outer-wall regions", gcode.contains(";TYPE:Outer wall"))
         assertTrue("Printer nozzle must reach G-code", gcode.contains("; nozzle_diameter = 0.6"))
         assertTrue("Filament type must reach G-code", gcode.contains("; filament_type = PETG"))
         assertTrue("First layer nozzle temperature must reach G-code", gcode.contains("M104 S250"))
@@ -184,8 +220,77 @@ class NativeEngineInstrumentedTest {
         assertEquals(0, preview.segments.size % GcodeLayerPreview.SEGMENT_STRIDE)
         assertTrue("Segment Z coordinates must be positive", preview.segments[4] > 0f)
         assertTrue("Outer-wall paths must be classified", preview.roleSegmentCounts[0] > 0)
+        assertTrue("Inner-wall paths must be classified", preview.roleSegmentCounts[1] > 0)
         assertTrue("Preview must report a positive first layer Z", preview.minZMm > 0f)
         assertTrue("Multi-layer preview must span upward in Z", preview.maxZMm > preview.minZMm)
+    }
+
+    @Test
+    fun multipleObjectsReachTheOrcaProjectAndSliceTogether() {
+        val modelFile = fixtureModel()
+        val model = ModelInfo.fromJson(
+            NativeEngine.inspectStl(modelFile.absolutePath),
+            modelFile.absolutePath,
+        )
+        val runtime = NativeLibrary()
+        try {
+            assertTrue(runtime.loadModel(modelFile.absolutePath))
+            assertTrue(runtime.addModel(modelFile.absolutePath))
+            assertEquals(
+                "Orca must expose one XYZ bounding box per loaded object",
+                6,
+                runtime.getObjectBoundingBoxes().size,
+            )
+        } finally {
+            runtime.clearModel()
+        }
+
+        val outcome = OnDeviceSlicer.slice(
+            listOf(
+                ProjectObject("left", model, ModelTransform(offsetXmm = -18f)),
+                ProjectObject("right", model, ModelTransform(offsetXmm = 18f)),
+            ),
+            SliceOptions().selectQuality(QualityProfile.DRAFT),
+        )
+
+        assertTrue("A multi-object project must produce G-code", outcome.output.length() > 1_000L)
+        assertTrue("Both objects must contribute layers", outcome.layers > 0)
+        val gcode = outcome.output.readText()
+        assertTrue(gcode.contains(";TYPE:Outer wall"))
+        assertTrue(gcode.contains(";TYPE:Inner wall"))
+    }
+
+    @Test
+    fun customPrinterGeometryAndMotionReachOrca() {
+        val model = fixtureModel()
+        val customPrinter = PrinterProfile.CUSTOM_CARTESIAN.copy(
+            bedSizeX = 180f,
+            bedSizeY = 190f,
+            maxPrintHeight = 180f,
+            gcodeFlavor = "marlin2",
+            maxSpeedX = 240f,
+            maxSpeedY = 250f,
+            maxAccelerationX = 4_200f,
+            maxAccelerationY = 4_300f,
+            maxAccelerationExtruding = 3_100f,
+            maxAccelerationTravel = 4_000f,
+        )
+        val options = SliceOptions()
+            .selectPrinter(customPrinter)
+            .selectFilament(FilamentProfile.GENERIC_PLA)
+            .selectQuality(QualityProfile.STANDARD)
+        val outcome = OnDeviceSlicer.slice(model, options)
+        val gcode = outcome.output.readText()
+        val printableArea = gcode.lineSequence().firstOrNull { it.startsWith("; printable_area =") }.orEmpty()
+
+        assertTrue("Custom bed width must reach Orca", printableArea.contains("180"))
+        assertTrue("Custom bed depth must reach Orca", printableArea.contains("190"))
+        assertTrue("Custom height must reach Orca", gcode.contains("; printable_height = 180"))
+        assertTrue("Custom X speed must reach Orca", gcode.contains("; machine_max_speed_x = 240,240"))
+        assertTrue("Custom Y speed must reach Orca", gcode.contains("; machine_max_speed_y = 250,250"))
+        assertTrue("Custom X acceleration must reach Orca", gcode.contains("; machine_max_acceleration_x = 4200,4200"))
+        assertTrue("Custom Y acceleration must reach Orca", gcode.contains("; machine_max_acceleration_y = 4300,4300"))
+        assertTrue("Custom G-code flavor must reach Orca", gcode.contains("; gcode_flavor = marlin2"))
     }
 
 }

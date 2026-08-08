@@ -24,13 +24,54 @@ data class PrinterProfile(
     val brand: String? = null,
     val machineStartGcode: String = "",
     val machineEndGcode: String = "",
+    val gcodeFlavor: String = "marlin",
+    val maxSpeedX: Float = 500f,
+    val maxSpeedY: Float = 500f,
+    val maxSpeedZ: Float = 20f,
+    val maxSpeedE: Float = 30f,
+    val maxAccelerationX: Float = 20_000f,
+    val maxAccelerationY: Float = 20_000f,
+    val maxAccelerationZ: Float = 500f,
+    val maxAccelerationE: Float = 5_000f,
+    val maxAccelerationExtruding: Float = 20_000f,
+    val maxAccelerationRetracting: Float = 5_000f,
+    val maxAccelerationTravel: Float = 20_000f,
+    val maxJerkX: Float = 9f,
+    val maxJerkY: Float = 9f,
+    val maxJerkZ: Float = 3f,
+    val maxJerkE: Float = 2.5f,
 ) {
     companion object {
         val U1_02 = PrinterProfile("snapmaker-u1-02", "U1 · 0.2 mm", 270f, 270f, 270f, 0.2f, true, "Snapmaker")
         val U1_04 = PrinterProfile("snapmaker-u1-04", "U1 · 0.4 mm", 270f, 270f, 270f, 0.4f, true, "Snapmaker")
         val U1_06 = PrinterProfile("snapmaker-u1-06", "U1 · 0.6 mm", 270f, 270f, 270f, 0.6f, true, "Snapmaker")
         val U1_08 = PrinterProfile("snapmaker-u1-08", "U1 · 0.8 mm", 270f, 270f, 270f, 0.8f, true, "Snapmaker")
-        val builtIns = listOf(U1_02, U1_04, U1_06, U1_08)
+        val CUSTOM_CARTESIAN = PrinterProfile(
+            id = "custom-cartesian-04",
+            name = "Custom Cartesian · 0.4 mm",
+            bedSizeX = 220f,
+            bedSizeY = 220f,
+            maxPrintHeight = 250f,
+            nozzleDiameter = 0.4f,
+            builtIn = true,
+            brand = "Custom",
+            maxSpeedX = 300f,
+            maxSpeedY = 300f,
+            maxSpeedZ = 15f,
+            maxSpeedE = 25f,
+            maxAccelerationX = 3_000f,
+            maxAccelerationY = 3_000f,
+            maxAccelerationZ = 200f,
+            maxAccelerationE = 2_000f,
+            maxAccelerationExtruding = 3_000f,
+            maxAccelerationRetracting = 2_000f,
+            maxAccelerationTravel = 3_000f,
+            maxJerkX = 8f,
+            maxJerkY = 8f,
+            maxJerkZ = 0.4f,
+            maxJerkE = 5f,
+        )
+        val builtIns = listOf(U1_02, U1_04, U1_06, U1_08, CUSTOM_CARTESIAN)
     }
 }
 
@@ -57,6 +98,7 @@ data class FilamentProfile(
     val fullFanSpeedLayer: Int = 3,
     val pressureAdvanceEnabled: Boolean = false,
     val pressureAdvance: Float = 0f,
+    val compatiblePrinters: List<String> = emptyList(),
 ) {
     companion object {
         // Curated from the included Snapmaker U1 filament catalog.
@@ -157,6 +199,8 @@ data class QualityProfile(
     val supportAngle: Float = 45f,
     val skirtLoops: Int = 0,
     val skirtDistance: Float = 6f,
+    val brand: String? = null,
+    val compatiblePrinters: List<String> = emptyList(),
 ) {
     companion object {
         // Curated from the included Snapmaker U1 process catalog.
@@ -228,6 +272,9 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
+    val schemaVersion: Int = 1,
+    val sourceRevision: String = "ducky-fallback",
+    val rejectedCount: Int = 0,
 )
 
 data class SliceOptions(
@@ -272,6 +319,22 @@ data class SliceOptions(
     val skirtLoops: Int = quality.skirtLoops,
     val skirtDistance: Float = quality.skirtDistance,
     val brimWidth: Float = quality.brimWidth,
+    val gcodeFlavor: String = printerProfile.gcodeFlavor,
+    val maxSpeedX: Float = printerProfile.maxSpeedX,
+    val maxSpeedY: Float = printerProfile.maxSpeedY,
+    val maxSpeedZ: Float = printerProfile.maxSpeedZ,
+    val maxSpeedE: Float = printerProfile.maxSpeedE,
+    val maxAccelerationX: Float = printerProfile.maxAccelerationX,
+    val maxAccelerationY: Float = printerProfile.maxAccelerationY,
+    val maxAccelerationZ: Float = printerProfile.maxAccelerationZ,
+    val maxAccelerationE: Float = printerProfile.maxAccelerationE,
+    val maxAccelerationExtruding: Float = printerProfile.maxAccelerationExtruding,
+    val maxAccelerationRetracting: Float = printerProfile.maxAccelerationRetracting,
+    val maxAccelerationTravel: Float = printerProfile.maxAccelerationTravel,
+    val maxJerkX: Float = printerProfile.maxJerkX,
+    val maxJerkY: Float = printerProfile.maxJerkY,
+    val maxJerkZ: Float = printerProfile.maxJerkZ,
+    val maxJerkE: Float = printerProfile.maxJerkE,
 ) {
     fun selectPrinter(profile: PrinterProfile): SliceOptions {
         val nozzleMatches = abs(quality.nozzleDiameter - profile.nozzleDiameter) < 0.05f
@@ -281,6 +344,22 @@ data class SliceOptions(
             bedSizeY = profile.bedSizeY,
             maxPrintHeight = profile.maxPrintHeight,
             nozzleDiameter = profile.nozzleDiameter,
+            gcodeFlavor = profile.gcodeFlavor,
+            maxSpeedX = profile.maxSpeedX,
+            maxSpeedY = profile.maxSpeedY,
+            maxSpeedZ = profile.maxSpeedZ,
+            maxSpeedE = profile.maxSpeedE,
+            maxAccelerationX = profile.maxAccelerationX,
+            maxAccelerationY = profile.maxAccelerationY,
+            maxAccelerationZ = profile.maxAccelerationZ,
+            maxAccelerationE = profile.maxAccelerationE,
+            maxAccelerationExtruding = profile.maxAccelerationExtruding,
+            maxAccelerationRetracting = profile.maxAccelerationRetracting,
+            maxAccelerationTravel = profile.maxAccelerationTravel,
+            maxJerkX = profile.maxJerkX,
+            maxJerkY = profile.maxJerkY,
+            maxJerkZ = profile.maxJerkZ,
+            maxJerkE = profile.maxJerkE,
         )
         return if (nozzleMatches) {
             updated
@@ -364,6 +443,22 @@ data class SliceOptions(
         extruderRetractSpeed = floatArrayOf(retractSpeed),
         machineStartGcode = printerProfile.machineStartGcode,
         machineEndGcode = printerProfile.machineEndGcode,
+        gcodeFlavor = gcodeFlavor,
+        machineMaxSpeedX = maxSpeedX,
+        machineMaxSpeedY = maxSpeedY,
+        machineMaxSpeedZ = maxSpeedZ,
+        machineMaxSpeedE = maxSpeedE,
+        machineMaxAccelerationX = maxAccelerationX,
+        machineMaxAccelerationY = maxAccelerationY,
+        machineMaxAccelerationZ = maxAccelerationZ,
+        machineMaxAccelerationE = maxAccelerationE,
+        machineMaxAccelerationExtruding = maxAccelerationExtruding,
+        machineMaxAccelerationRetracting = maxAccelerationRetracting,
+        machineMaxAccelerationTravel = maxAccelerationTravel,
+        machineMaxJerkX = maxJerkX,
+        machineMaxJerkY = maxJerkY,
+        machineMaxJerkZ = maxJerkZ,
+        machineMaxJerkE = maxJerkE,
         filamentFlowRatios = floatArrayOf(flowRatio),
         filamentMaxVolumetricSpeeds = floatArrayOf(maxVolumetricSpeed),
         filamentFanMinSpeeds = intArrayOf(fanMinSpeed),
@@ -386,21 +481,53 @@ object OnDeviceSlicer {
         options: SliceOptions = SliceOptions(),
         modelTransform: ModelTransform = ModelTransform(),
         onProgress: (Int) -> Unit = {},
-    ): SliceOutcome {
-        require(model.isFile) { "Model file is unavailable" }
+    ): SliceOutcome = slice(
+        listOf(
+            ProjectObject(
+                id = model.absolutePath,
+                model = ModelInfo.fromJson(NativeEngine.inspectStl(model.absolutePath), model.absolutePath),
+                transform = modelTransform,
+            ),
+        ),
+        options,
+        onProgress,
+    )
 
-        val transformedModel = File.createTempFile("slice-input-", ".stl", model.parentFile)
+    fun slice(
+        objects: List<ProjectObject>,
+        options: SliceOptions = SliceOptions(),
+        onProgress: (Int) -> Unit = {},
+    ): SliceOutcome {
+        require(objects.isNotEmpty()) { "Project has no objects" }
+        require(objects.all { File(it.model.localPath).isFile }) { "Model file is unavailable" }
+
+        val transformedModels = objects.mapIndexed { index, projectObject ->
+            File.createTempFile(
+                "slice-input-$index-",
+                ".stl",
+                File(projectObject.model.localPath).parentFile,
+            )
+        }
         val runtime = NativeLibrary(onProgress)
         return try {
-            val transformed = JSONObject(
-                NativeEngine.transformStl(
-                    model.absolutePath,
-                    transformedModel.absolutePath,
-                    modelTransform.toJson(options.bedSizeX, options.bedSizeY),
-                ),
-            )
-            check(transformed.optBoolean("ok")) { "Model transform failed" }
-            check(runtime.loadModel(transformedModel.absolutePath)) { "Model could not be prepared" }
+            objects.zip(transformedModels).forEach { (projectObject, transformedModel) ->
+                val transformed = JSONObject(
+                    NativeEngine.transformStl(
+                        projectObject.model.localPath,
+                        transformedModel.absolutePath,
+                        projectObject.transform.toJson(options.bedSizeX, options.bedSizeY),
+                    ),
+                )
+                check(transformed.optBoolean("ok")) { "Model transform failed" }
+            }
+            check(runtime.loadModel(transformedModels.first().absolutePath)) {
+                "Model could not be prepared"
+            }
+            transformedModels.drop(1).forEach { transformedModel ->
+                check(runtime.addModel(transformedModel.absolutePath)) {
+                    "Additional model could not be prepared"
+                }
+            }
             val result = requireNotNull(runtime.slice(options.toNativeConfig())) {
                 "Slicer returned no output"
             }
@@ -417,7 +544,7 @@ object OnDeviceSlicer {
             )
         } finally {
             runtime.clearModel()
-            transformedModel.delete()
+            transformedModels.forEach(File::delete)
         }
     }
 }

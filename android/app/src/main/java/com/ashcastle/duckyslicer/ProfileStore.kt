@@ -7,17 +7,31 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 
-/** Stores user-created profile snapshots in app-private storage. */
-class ProfileStore(private val file: File) {
-    constructor(context: Context) : this(File(context.filesDir, "profiles/user_profiles.json"))
+/** Stores schema-versioned user profiles in app-private storage. */
+class ProfileStore private constructor(
+    private val file: File,
+    private val systemCatalogProvider: () -> ProfileCatalog,
+) {
+    constructor(file: File) : this(file, { ProfileCatalog() })
+    constructor(context: Context) : this(
+        File(context.filesDir, "profiles/user_profiles.json"),
+        { OrcaProfileCatalog(context.applicationContext).load() },
+    )
 
     @Synchronized
     fun load(): ProfileCatalog {
         val root = readRoot()
+        val system = systemCatalogProvider()
         return ProfileCatalog(
-            printers = PrinterProfile.builtIns + root.optJSONArray("printers").toPrinterProfiles(),
-            filaments = FilamentProfile.builtIns + root.optJSONArray("filaments").toFilamentProfiles(),
-            slicing = QualityProfile.builtIns + root.optJSONArray("slicing").toQualityProfiles(),
+            printers = (system.printers + root.optJSONArray("printers").toPrinterProfiles())
+                .filter(ProfileValidation::printer).distinctBy(PrinterProfile::id),
+            filaments = (system.filaments + root.optJSONArray("filaments").toFilamentProfiles())
+                .filter(ProfileValidation::filament).distinctBy(FilamentProfile::id),
+            slicing = (system.slicing + root.optJSONArray("slicing").toQualityProfiles())
+                .filter(ProfileValidation::slicing).distinctBy(QualityProfile::id),
+            schemaVersion = system.schemaVersion,
+            sourceRevision = system.sourceRevision,
+            rejectedCount = system.rejectedCount,
         )
     }
 
@@ -32,7 +46,24 @@ class ProfileStore(private val file: File) {
             nozzleDiameter = options.nozzleDiameter,
             machineStartGcode = options.printerProfile.machineStartGcode,
             machineEndGcode = options.printerProfile.machineEndGcode,
+            gcodeFlavor = options.gcodeFlavor,
+            maxSpeedX = options.maxSpeedX,
+            maxSpeedY = options.maxSpeedY,
+            maxSpeedZ = options.maxSpeedZ,
+            maxSpeedE = options.maxSpeedE,
+            maxAccelerationX = options.maxAccelerationX,
+            maxAccelerationY = options.maxAccelerationY,
+            maxAccelerationZ = options.maxAccelerationZ,
+            maxAccelerationE = options.maxAccelerationE,
+            maxAccelerationExtruding = options.maxAccelerationExtruding,
+            maxAccelerationRetracting = options.maxAccelerationRetracting,
+            maxAccelerationTravel = options.maxAccelerationTravel,
+            maxJerkX = options.maxJerkX,
+            maxJerkY = options.maxJerkY,
+            maxJerkZ = options.maxJerkZ,
+            maxJerkE = options.maxJerkE,
         )
+        require(ProfileValidation.printer(profile)) { "Printer profile contains unsafe values" }
         append("printers", profile.toJson())
         return profile
     }
@@ -61,6 +92,7 @@ class ProfileStore(private val file: File) {
             pressureAdvanceEnabled = options.pressureAdvanceEnabled,
             pressureAdvance = options.pressureAdvance,
         )
+        require(ProfileValidation.filament(profile)) { "Filament profile contains unsafe values" }
         append("filaments", profile.toJson())
         return profile
     }
@@ -88,19 +120,22 @@ class ProfileStore(private val file: File) {
             skirtLoops = options.skirtLoops,
             skirtDistance = options.skirtDistance,
         )
+        require(ProfileValidation.slicing(profile)) { "Slicing profile contains unsafe values" }
         append("slicing", profile.toJson())
         return profile
     }
 
     private fun append(key: String, value: JSONObject) {
         val root = readRoot()
+        root.put("schemaVersion", USER_PROFILE_SCHEMA_VERSION)
         val values = root.optJSONArray(key) ?: JSONArray().also { root.put(key, it) }
         values.put(value)
         writeRoot(root)
     }
 
     private fun readRoot(): JSONObject = runCatching {
-        if (file.isFile) JSONObject(file.readText()) else JSONObject()
+        val root = if (file.isFile) JSONObject(file.readText()) else JSONObject()
+        if (root.optInt("schemaVersion", 1) > USER_PROFILE_SCHEMA_VERSION) JSONObject() else root
     }.getOrDefault(JSONObject())
 
     private fun writeRoot(root: JSONObject) {
@@ -121,6 +156,10 @@ class ProfileStore(private val file: File) {
 
     private fun requireName(name: String) = name.trim().takeIf { it.isNotEmpty() }
         ?: throw IllegalArgumentException("Profile name is required")
+
+    private companion object {
+        const val USER_PROFILE_SCHEMA_VERSION = 2
+    }
 }
 
 private fun PrinterProfile.toJson() = JSONObject()
@@ -128,6 +167,16 @@ private fun PrinterProfile.toJson() = JSONObject()
     .put("bedSizeX", bedSizeX).put("bedSizeY", bedSizeY)
     .put("maxPrintHeight", maxPrintHeight).put("nozzleDiameter", nozzleDiameter)
     .put("machineStartGcode", machineStartGcode).put("machineEndGcode", machineEndGcode)
+    .put("gcodeFlavor", gcodeFlavor)
+    .put("maxSpeedX", maxSpeedX).put("maxSpeedY", maxSpeedY)
+    .put("maxSpeedZ", maxSpeedZ).put("maxSpeedE", maxSpeedE)
+    .put("maxAccelerationX", maxAccelerationX).put("maxAccelerationY", maxAccelerationY)
+    .put("maxAccelerationZ", maxAccelerationZ).put("maxAccelerationE", maxAccelerationE)
+    .put("maxAccelerationExtruding", maxAccelerationExtruding)
+    .put("maxAccelerationRetracting", maxAccelerationRetracting)
+    .put("maxAccelerationTravel", maxAccelerationTravel)
+    .put("maxJerkX", maxJerkX).put("maxJerkY", maxJerkY)
+    .put("maxJerkZ", maxJerkZ).put("maxJerkE", maxJerkE)
 
 private fun FilamentProfile.toJson() = JSONObject()
     .put("id", id).put("name", name).put("nativeName", nativeName)
@@ -161,6 +210,22 @@ private fun JSONArray?.toPrinterProfiles() = objects().mapNotNull { value ->
             value.getDouble("maxPrintHeight").toFloat(), value.getDouble("nozzleDiameter").toFloat(),
             machineStartGcode = value.optString("machineStartGcode"),
             machineEndGcode = value.optString("machineEndGcode"),
+            gcodeFlavor = value.optString("gcodeFlavor", "marlin"),
+            maxSpeedX = value.optDouble("maxSpeedX", 500.0).toFloat(),
+            maxSpeedY = value.optDouble("maxSpeedY", 500.0).toFloat(),
+            maxSpeedZ = value.optDouble("maxSpeedZ", 20.0).toFloat(),
+            maxSpeedE = value.optDouble("maxSpeedE", 30.0).toFloat(),
+            maxAccelerationX = value.optDouble("maxAccelerationX", 20_000.0).toFloat(),
+            maxAccelerationY = value.optDouble("maxAccelerationY", 20_000.0).toFloat(),
+            maxAccelerationZ = value.optDouble("maxAccelerationZ", 500.0).toFloat(),
+            maxAccelerationE = value.optDouble("maxAccelerationE", 5_000.0).toFloat(),
+            maxAccelerationExtruding = value.optDouble("maxAccelerationExtruding", 20_000.0).toFloat(),
+            maxAccelerationRetracting = value.optDouble("maxAccelerationRetracting", 5_000.0).toFloat(),
+            maxAccelerationTravel = value.optDouble("maxAccelerationTravel", 20_000.0).toFloat(),
+            maxJerkX = value.optDouble("maxJerkX", 9.0).toFloat(),
+            maxJerkY = value.optDouble("maxJerkY", 9.0).toFloat(),
+            maxJerkZ = value.optDouble("maxJerkZ", 3.0).toFloat(),
+            maxJerkE = value.optDouble("maxJerkE", 2.5).toFloat(),
         )
     }.getOrNull()
 }
