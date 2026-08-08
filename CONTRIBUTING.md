@@ -16,6 +16,9 @@ avoid introducing an account or cloud requirement.
 - Treat imported STL and G-code as untrusted. Avoid unbounded line reads or unchecked
   coordinate arithmetic, preserve atomic outputs, and add both host corpus coverage
   and a JNI recovery assertion for new parser failure modes.
+- Keep `NativeLibrary` construction inside the non-exported `:slicer` service. The
+  inherited C++ runtime must never load into the application process; changes to this
+  boundary require the worker-termination ARM64 regression to remain green.
 - Keep user-facing copy plain and non-technical. `Slice`, `G-code`, printer,
   filament, and process terminology may follow established slicer language.
 
@@ -48,10 +51,11 @@ cd ../../android
   :app:assembleDebugAndroidTest :app:lintDebug
 
 cd ..
-python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety
+python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation
 python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
 python3 tools/verify_gradle_supply_chain.py
 python3 tools/verify_native_safety.py
+python3 tools/verify_android_isolation.py
 python3 tools/verify_workflows.py
 ```
 

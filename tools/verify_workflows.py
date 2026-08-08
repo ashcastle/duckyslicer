@@ -65,6 +65,9 @@ def main() -> None:
         "Rust JNI failure containment is verified": (
             "python3 tools/verify_native_safety.py"
         ),
+        "Orca runtime process isolation is verified": (
+            "python3 tools/verify_android_isolation.py"
+        ),
     }
     for description, marker in required_android_gates.items():
         if marker not in android_source:
@@ -97,6 +100,9 @@ def main() -> None:
         ),
         "Rust JNI failure containment is verified": (
             "python3 tools/verify_native_safety.py"
+        ),
+        "Orca runtime process isolation is verified": (
+            "python3 tools/verify_android_isolation.py"
         ),
     }
     for description, marker in required_release_gates.items():
