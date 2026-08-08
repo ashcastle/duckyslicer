@@ -188,6 +188,8 @@ class NativeEngineInstrumentedTest {
                 gapInfillSpeed = 134f,
                 firstLayerInfillSpeed = 64f,
                 supportInterfaceSpeed = 54f,
+                internalBridgeSpeed = 164f,
+                internalBridgeSpeedPercent = true,
                 overhangSpeedEnabled = false,
                 overhangSpeed1 = 76f,
                 overhangSpeed1Percent = true,
@@ -195,6 +197,11 @@ class NativeEngineInstrumentedTest {
                 internalBridgeFlowRatio = 0.95f,
                 topSurfaceFlowRatio = 0.97f,
                 bottomSurfaceFlowRatio = 0.98f,
+                bridgeDensity = 88f,
+                internalBridgeDensity = 74f,
+                bridgeNoSupport = true,
+                thickBridges = true,
+                thickInternalBridges = false,
                 topShellThickness = 0.85f,
                 bottomShellThickness = 0.75f,
                 supportInterfaceTopLayers = 4,
@@ -207,6 +214,12 @@ class NativeEngineInstrumentedTest {
                 supportBasePattern = "rectilinear-grid",
                 supportInterfacePattern = "rectilinear_interlaced",
                 supportStyle = "snug",
+                infillFirst = true,
+                infillWallOverlap = 18f,
+                topBottomInfillWallOverlap = 32f,
+                infillCombination = true,
+                infillCombinationMaxLayerHeight = 0.38f,
+                infillCombinationMaxLayerHeightPercent = false,
                 initialLayerLineWidth = 0.73f,
                 seamPosition = "nearest",
                 ironingType = "top",
@@ -220,6 +233,12 @@ class NativeEngineInstrumentedTest {
                 topSurfaceAcceleration = 1_200f,
                 travelAcceleration = 4_500f,
                 firstLayerAcceleration = 600f,
+                bridgeAcceleration = 48f,
+                bridgeAccelerationPercent = true,
+                sparseInfillAcceleration = 4_322f,
+                sparseInfillAccelerationPercent = false,
+                internalSolidInfillAcceleration = 84f,
+                internalSolidInfillAccelerationPercent = true,
                 wallGenerator = "classic",
                 wallSequence = "outer-inner",
                 detectThinWalls = true,
@@ -260,6 +279,25 @@ class NativeEngineInstrumentedTest {
         assertEquals(12f, restored.slicing.last().ironingFlow)
         assertEquals(0.16f, restored.slicing.last().ironingSpacing)
         assertEquals(26f, restored.slicing.last().ironingSpeed)
+        assertEquals(164f, restored.slicing.last().internalBridgeSpeed)
+        assertTrue(restored.slicing.last().internalBridgeSpeedPercent)
+        assertTrue(restored.slicing.last().infillFirst)
+        assertEquals(18f, restored.slicing.last().infillWallOverlap)
+        assertEquals(32f, restored.slicing.last().topBottomInfillWallOverlap)
+        assertTrue(restored.slicing.last().infillCombination)
+        assertEquals(0.38f, restored.slicing.last().infillCombinationMaxLayerHeight)
+        assertEquals(false, restored.slicing.last().infillCombinationMaxLayerHeightPercent)
+        assertEquals(88f, restored.slicing.last().bridgeDensity)
+        assertEquals(74f, restored.slicing.last().internalBridgeDensity)
+        assertTrue(restored.slicing.last().bridgeNoSupport)
+        assertTrue(restored.slicing.last().thickBridges)
+        assertEquals(false, restored.slicing.last().thickInternalBridges)
+        assertEquals(48f, restored.slicing.last().bridgeAcceleration)
+        assertTrue(restored.slicing.last().bridgeAccelerationPercent)
+        assertEquals(4_322f, restored.slicing.last().sparseInfillAcceleration)
+        assertEquals(false, restored.slicing.last().sparseInfillAccelerationPercent)
+        assertEquals(84f, restored.slicing.last().internalSolidInfillAcceleration)
+        assertTrue(restored.slicing.last().internalSolidInfillAccelerationPercent)
         assertEquals(7, restored.slicing.last().topSolidLayers)
         assertEquals(420f, restored.slicing.last().travelSpeed)
         assertEquals(1.2f, restored.filaments.last().retractLength)
@@ -304,7 +342,7 @@ class NativeEngineInstrumentedTest {
         assertEquals(7f, restored.printers.last().maxJerkX)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
-        assertEquals(8, JSONObject(file.readText()).getInt("schemaVersion"))
+        assertEquals(9, JSONObject(file.readText()).getInt("schemaVersion"))
         assertTrue("Saved profiles must stay in app-private storage", file.canonicalPath.startsWith(context.cacheDir.canonicalPath))
         file.delete()
         directory.delete()
@@ -333,7 +371,7 @@ class NativeEngineInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val catalog = OrcaProfileCatalog(context).load()
 
-        assertEquals(6, catalog.schemaVersion)
+        assertEquals(7, catalog.schemaVersion)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include Orca filament presets", catalog.filaments.size > 3_000)
@@ -356,6 +394,21 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.seamPosition == "nearest" })
         assertTrue(catalog.slicing.any { it.ironingType == "top" })
         assertTrue(catalog.slicing.any { it.supportBasePattern == "rectilinear-grid" })
+        assertTrue(catalog.slicing.any { it.infillFirst })
+        assertTrue(catalog.slicing.any { it.wallSequence == "outer-inner" })
+        assertTrue(catalog.slicing.any { it.infillCombination })
+        assertTrue(catalog.slicing.any { it.internalBridgeSpeedPercent })
+        assertTrue(catalog.slicing.any { !it.bridgeAccelerationPercent })
+        val legacyInfillFirst = requireNotNull(
+            catalog.slicing.find { it.id == "orca-process-118b0a2ab38fdffaa3d4" },
+        )
+        assertTrue(legacyInfillFirst.infillFirst)
+        assertEquals("inner-outer", legacyInfillFirst.wallSequence)
+        assertEquals(30f, legacyInfillFirst.infillWallOverlap)
+        val legacyOuterFirst = requireNotNull(
+            catalog.slicing.find { it.id == "orca-process-358f3384a4aa741baeb8" },
+        )
+        assertEquals("outer-inner", legacyOuterFirst.wallSequence)
         assertTrue(catalog.slicing.map { it.wallGenerator }.toSet().containsAll(listOf("arachne", "classic")))
         assertTrue(catalog.slicing.map { it.wallSequence }.toSet().containsAll(listOf("inner-outer", "outer-inner")))
         assertTrue(catalog.printers.mapNotNull { it.brand }.containsAll(listOf("Creality", "Prusa", "Anycubic")))
@@ -442,6 +495,8 @@ class NativeEngineInstrumentedTest {
                 gapInfillSpeed = 137f,
                 firstLayerInfillSpeed = 63f,
                 supportInterfaceSpeed = 57f,
+                internalBridgeSpeed = 163f,
+                internalBridgeSpeedPercent = true,
                 overhangSpeedEnabled = true,
                 overhangSpeed1 = 81f,
                 overhangSpeed1Percent = true,
@@ -455,6 +510,11 @@ class NativeEngineInstrumentedTest {
                 internalBridgeFlowRatio = 0.96f,
                 topSurfaceFlowRatio = 0.97f,
                 bottomSurfaceFlowRatio = 0.98f,
+                bridgeDensity = 87f,
+                internalBridgeDensity = 73f,
+                bridgeNoSupport = true,
+                thickBridges = true,
+                thickInternalBridges = false,
                 topShellThickness = 0.83f,
                 bottomShellThickness = 0.74f,
                 supportInterfaceTopLayers = 4,
@@ -467,6 +527,12 @@ class NativeEngineInstrumentedTest {
                 supportBasePattern = "rectilinear-grid",
                 supportInterfacePattern = "rectilinear_interlaced",
                 supportStyle = "snug",
+                infillFirst = true,
+                infillWallOverlap = 19f,
+                topBottomInfillWallOverlap = 31f,
+                infillCombination = true,
+                infillCombinationMaxLayerHeight = 0.48f,
+                infillCombinationMaxLayerHeightPercent = false,
                 initialLayerLineWidth = 0.73f,
                 seamPosition = "nearest",
                 ironingType = "top",
@@ -480,6 +546,12 @@ class NativeEngineInstrumentedTest {
                 topSurfaceAcceleration = 1_234f,
                 travelAcceleration = 5_678f,
                 firstLayerAcceleration = 678f,
+                bridgeAcceleration = 47f,
+                bridgeAccelerationPercent = true,
+                sparseInfillAcceleration = 4_321f,
+                sparseInfillAccelerationPercent = false,
+                internalSolidInfillAcceleration = 83f,
+                internalSolidInfillAccelerationPercent = true,
                 wallGenerator = "arachne",
                 wallSequence = "outer-inner",
                 detectThinWalls = true,
@@ -519,6 +591,7 @@ class NativeEngineInstrumentedTest {
         assertTrue("First layer speed must reach G-code", gcode.contains("; initial_layer_speed = 35"))
         assertTrue("Initial-layer solid speed must reach Orca", gcode.contains("; initial_layer_infill_speed = 63"))
         assertTrue("Bridge speed must reach Orca", gcode.contains("; bridge_speed = 43"))
+        assertTrue("Internal bridge speed must preserve percent units", gcode.contains("; internal_bridge_speed = 163%"))
         assertTrue("Gap-infill speed must reach Orca", gcode.contains("; gap_infill_speed = 137"))
         assertTrue("Retraction length must reach G-code", gcode.contains("; retraction_length = 1.1"))
         assertTrue("Skirt loops must reach G-code", gcode.contains("; skirt_loops = 2"))
@@ -540,6 +613,11 @@ class NativeEngineInstrumentedTest {
         assertTrue("Internal bridge flow must reach Orca", gcode.contains("; internal_bridge_flow = 0.96"))
         assertTrue("Top surface flow must reach Orca", gcode.contains("; top_solid_infill_flow_ratio = 0.97"))
         assertTrue("Bottom surface flow must reach Orca", gcode.contains("; bottom_solid_infill_flow_ratio = 0.98"))
+        assertTrue("External bridge density must reach Orca", gcode.contains("; bridge_density = 87%"))
+        assertTrue("Internal bridge density must reach Orca", gcode.contains("; internal_bridge_density = 73%"))
+        assertTrue("Bridge support policy must reach Orca", gcode.contains("; bridge_no_support = 1"))
+        assertTrue("External bridge thickness must reach Orca", gcode.contains("; thick_bridges = 1"))
+        assertTrue("Internal bridge thickness must reach Orca", gcode.contains("; thick_internal_bridges = 0"))
         assertTrue("Top support interface layers must reach Orca", gcode.contains("; support_interface_top_layers = 4"))
         assertTrue("Bottom support interface layers must reach Orca", gcode.contains("; support_interface_bottom_layers = 2"))
         assertTrue("Top support interface spacing must reach Orca", gcode.contains("; support_interface_spacing = 0.23"))
@@ -560,12 +638,20 @@ class NativeEngineInstrumentedTest {
         assertTrue("Overhang stage 2 must preserve absolute units", gcode.contains("; overhang_2_4_speed = 52"))
         assertTrue("Overhang stage 3 must preserve percent units", gcode.contains("; overhang_3_4_speed = 33%"))
         assertTrue("Overhang stage 4 must preserve absolute units", gcode.contains("; overhang_4_4_speed = 21"))
+        assertTrue("Infill-first order must reach Orca", gcode.contains("; is_infill_first = 1"))
+        assertTrue("Sparse infill overlap must reach Orca", gcode.contains("; infill_wall_overlap = 19%"))
+        assertTrue("Solid surface overlap must reach Orca", gcode.contains("; top_bottom_infill_wall_overlap = 31%"))
+        assertTrue("Combined infill must reach Orca", gcode.contains("; infill_combination = 1"))
+        assertTrue("Combined infill height must preserve absolute units", gcode.contains("; infill_combination_max_layer_height = 0.48"))
         assertTrue("Default acceleration must reach Orca", gcode.contains("; default_acceleration = 4567"))
         assertTrue("Outer-wall acceleration must reach Orca", gcode.contains("; outer_wall_acceleration = 2345"))
         assertTrue("Inner-wall acceleration must reach Orca", gcode.contains("; inner_wall_acceleration = 3456"))
         assertTrue("Top-surface acceleration must reach Orca", gcode.contains("; top_surface_acceleration = 1234"))
         assertTrue("Travel acceleration must reach Orca", gcode.contains("; travel_acceleration = 5678"))
         assertTrue("First-layer acceleration must reach Orca", gcode.contains("; initial_layer_acceleration = 678"))
+        assertTrue("Bridge acceleration must preserve percent units", gcode.contains("; bridge_acceleration = 47%"))
+        assertTrue("Sparse infill acceleration must preserve absolute units", gcode.contains("; sparse_infill_acceleration = 4321"))
+        assertTrue("Internal solid acceleration must preserve percent units", gcode.contains("; internal_solid_infill_acceleration = 83%"))
         assertTrue("Arachne selection must reach Orca", gcode.contains("; wall_generator = arachne"))
         assertTrue("Wall order must reach Orca", gcode.contains("; wall_sequence = outer wall/inner wall"))
         assertTrue("Thin-wall detection must reach Orca", gcode.contains("; detect_thin_wall = 1"))
@@ -733,6 +819,15 @@ class NativeEngineInstrumentedTest {
                     "overhang_2_4_speed" to "20",
                     "support_base_pattern" to "rectilinear",
                     "support_style" to "grid",
+                    "is_infill_first" to "0",
+                    "infill_wall_overlap" to "25%",
+                    "top_bottom_infill_wall_overlap" to "25%",
+                    "internal_bridge_speed" to "150%",
+                    "bridge_acceleration" to "50%",
+                    "sparse_infill_acceleration" to "100%",
+                    "internal_solid_infill_acceleration" to "100%",
+                    "infill_combination" to "0",
+                    "thick_internal_bridges" to "1",
                 ),
             ),
             Contract(
@@ -773,6 +868,11 @@ class NativeEngineInstrumentedTest {
                     "ironing_spacing" to "0.15",
                     "overhang_2_4_speed" to "50",
                     "support_interface_pattern" to "auto",
+                    "is_infill_first" to "0",
+                    "infill_wall_overlap" to "25%",
+                    "internal_bridge_speed" to "50",
+                    "bridge_density" to "100%",
+                    "infill_combination_max_layer_height" to "100%",
                 ),
             ),
             Contract(
@@ -813,6 +913,11 @@ class NativeEngineInstrumentedTest {
                     "ironing_speed" to "30",
                     "overhang_3_4_speed" to "40",
                     "support_style" to "default",
+                    "is_infill_first" to "0",
+                    "infill_wall_overlap" to "15%",
+                    "internal_bridge_speed" to "150%",
+                    "internal_bridge_density" to "100%",
+                    "bridge_no_support" to "0",
                 ),
             ),
         )

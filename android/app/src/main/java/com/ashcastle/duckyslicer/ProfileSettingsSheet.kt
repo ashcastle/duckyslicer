@@ -709,6 +709,48 @@ private fun SlicingSettingsSheet(
         label = { fillPatternLabel(it) },
         onSelected = { onOptionsChanged(options.copy(internalSolidInfillPattern = it)) },
     )
+    SettingsSwitch(
+        label = stringResource(R.string.infill_first),
+        checked = options.infillFirst,
+        onCheckedChange = { onOptionsChanged(options.copy(infillFirst = it)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.infill_wall_overlap),
+        valueText = stringResource(R.string.percent_value, options.infillWallOverlap.roundToInt()),
+        value = options.infillWallOverlap,
+        range = 0f..100f,
+        steps = 99,
+        onValueChange = { onOptionsChanged(options.copy(infillWallOverlap = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.solid_infill_wall_overlap),
+        valueText = stringResource(R.string.percent_value, options.topBottomInfillWallOverlap.roundToInt()),
+        value = options.topBottomInfillWallOverlap,
+        range = 0f..100f,
+        steps = 99,
+        onValueChange = { onOptionsChanged(options.copy(topBottomInfillWallOverlap = it.roundToInt().toFloat())) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.combine_infill_layers),
+        checked = options.infillCombination,
+        onCheckedChange = { onOptionsChanged(options.copy(infillCombination = it)) },
+    )
+    if (options.infillCombination) {
+        LengthOrPercentSetting(
+            label = stringResource(R.string.combined_infill_max_height),
+            value = options.infillCombinationMaxLayerHeight,
+            percent = options.infillCombinationMaxLayerHeightPercent,
+            onValueChange = { onOptionsChanged(options.copy(infillCombinationMaxLayerHeight = it)) },
+            onPercentChange = { selectedPercent, adjustedValue ->
+                onOptionsChanged(
+                    options.copy(
+                        infillCombinationMaxLayerHeight = adjustedValue,
+                        infillCombinationMaxLayerHeightPercent = selectedPercent,
+                    ),
+                )
+            },
+        )
+    }
     SettingSlider(
         label = stringResource(R.string.sparse_infill_width),
         valueText = stringResource(R.string.millimeters_value_precise, options.sparseInfillLineWidth),
@@ -798,6 +840,22 @@ private fun SlicingSettingsSheet(
         steps = featureSpeedSteps,
         onValueChange = { onOptionsChanged(options.copy(bridgeSpeed = (it / 5f).roundToInt() * 5f)) },
     )
+    OverhangSpeedSetting(
+        label = stringResource(R.string.internal_bridge_speed),
+        value = options.internalBridgeSpeed,
+        percent = options.internalBridgeSpeedPercent,
+        maximumAbsolute = maximumFeatureSpeed,
+        maximumPercent = 300f,
+        onValueChange = { onOptionsChanged(options.copy(internalBridgeSpeed = it)) },
+        onPercentChange = { selectedPercent, adjustedValue ->
+            onOptionsChanged(
+                options.copy(
+                    internalBridgeSpeed = adjustedValue,
+                    internalBridgeSpeedPercent = selectedPercent,
+                ),
+            )
+        },
+    )
     SettingSlider(
         label = stringResource(R.string.gap_infill_speed),
         valueText = stringResource(R.string.print_speed_value, options.gapInfillSpeed),
@@ -818,7 +876,9 @@ private fun SlicingSettingsSheet(
             percent = options.overhangSpeed1Percent,
             maximumAbsolute = maximumFeatureSpeed,
             onValueChange = { onOptionsChanged(options.copy(overhangSpeed1 = it)) },
-            onPercentChange = { onOptionsChanged(options.copy(overhangSpeed1Percent = it)) },
+            onPercentChange = { selectedPercent, adjustedValue ->
+                onOptionsChanged(options.copy(overhangSpeed1 = adjustedValue, overhangSpeed1Percent = selectedPercent))
+            },
         )
         OverhangSpeedSetting(
             label = stringResource(R.string.overhang_speed_2),
@@ -826,7 +886,9 @@ private fun SlicingSettingsSheet(
             percent = options.overhangSpeed2Percent,
             maximumAbsolute = maximumFeatureSpeed,
             onValueChange = { onOptionsChanged(options.copy(overhangSpeed2 = it)) },
-            onPercentChange = { onOptionsChanged(options.copy(overhangSpeed2Percent = it)) },
+            onPercentChange = { selectedPercent, adjustedValue ->
+                onOptionsChanged(options.copy(overhangSpeed2 = adjustedValue, overhangSpeed2Percent = selectedPercent))
+            },
         )
         OverhangSpeedSetting(
             label = stringResource(R.string.overhang_speed_3),
@@ -834,7 +896,9 @@ private fun SlicingSettingsSheet(
             percent = options.overhangSpeed3Percent,
             maximumAbsolute = maximumFeatureSpeed,
             onValueChange = { onOptionsChanged(options.copy(overhangSpeed3 = it)) },
-            onPercentChange = { onOptionsChanged(options.copy(overhangSpeed3Percent = it)) },
+            onPercentChange = { selectedPercent, adjustedValue ->
+                onOptionsChanged(options.copy(overhangSpeed3 = adjustedValue, overhangSpeed3Percent = selectedPercent))
+            },
         )
         OverhangSpeedSetting(
             label = stringResource(R.string.overhang_speed_4),
@@ -842,9 +906,43 @@ private fun SlicingSettingsSheet(
             percent = options.overhangSpeed4Percent,
             maximumAbsolute = maximumFeatureSpeed,
             onValueChange = { onOptionsChanged(options.copy(overhangSpeed4 = it)) },
-            onPercentChange = { onOptionsChanged(options.copy(overhangSpeed4Percent = it)) },
+            onPercentChange = { selectedPercent, adjustedValue ->
+                onOptionsChanged(options.copy(overhangSpeed4 = adjustedValue, overhangSpeed4Percent = selectedPercent))
+            },
         )
     }
+    SettingsGroupTitle(stringResource(R.string.bridges))
+    SettingSlider(
+        label = stringResource(R.string.external_bridge_density),
+        valueText = stringResource(R.string.percent_value, options.bridgeDensity.roundToInt()),
+        value = options.bridgeDensity,
+        range = 10f..100f,
+        steps = 89,
+        onValueChange = { onOptionsChanged(options.copy(bridgeDensity = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.internal_bridge_density),
+        valueText = stringResource(R.string.percent_value, options.internalBridgeDensity.roundToInt()),
+        value = options.internalBridgeDensity,
+        range = 10f..100f,
+        steps = 89,
+        onValueChange = { onOptionsChanged(options.copy(internalBridgeDensity = it.roundToInt().toFloat())) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.do_not_support_bridges),
+        checked = options.bridgeNoSupport,
+        onCheckedChange = { onOptionsChanged(options.copy(bridgeNoSupport = it)) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.thick_external_bridges),
+        checked = options.thickBridges,
+        onCheckedChange = { onOptionsChanged(options.copy(thickBridges = it)) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.thick_internal_bridges),
+        checked = options.thickInternalBridges,
+        onCheckedChange = { onOptionsChanged(options.copy(thickInternalBridges = it)) },
+    )
     SettingsGroupTitle(stringResource(R.string.ironing))
     CompactChoices(
         entries = listOf("no ironing", "top", "topmost", "solid"),
@@ -966,6 +1064,46 @@ private fun SlicingSettingsSheet(
         range = 0f..maximumFeatureAcceleration,
         steps = featureAccelerationSteps,
         onValueChange = { onOptionsChanged(options.copy(firstLayerAcceleration = (it / 100f).roundToInt() * 100f)) },
+    )
+    AccelerationOrPercentSetting(
+        label = stringResource(R.string.bridge_acceleration),
+        value = options.bridgeAcceleration,
+        percent = options.bridgeAccelerationPercent,
+        maximumAbsolute = maximumFeatureAcceleration,
+        onValueChange = { onOptionsChanged(options.copy(bridgeAcceleration = it)) },
+        onPercentChange = { selectedPercent, adjustedValue ->
+            onOptionsChanged(options.copy(bridgeAcceleration = adjustedValue, bridgeAccelerationPercent = selectedPercent))
+        },
+    )
+    AccelerationOrPercentSetting(
+        label = stringResource(R.string.sparse_infill_acceleration),
+        value = options.sparseInfillAcceleration,
+        percent = options.sparseInfillAccelerationPercent,
+        maximumAbsolute = maximumFeatureAcceleration,
+        onValueChange = { onOptionsChanged(options.copy(sparseInfillAcceleration = it)) },
+        onPercentChange = { selectedPercent, adjustedValue ->
+            onOptionsChanged(
+                options.copy(
+                    sparseInfillAcceleration = adjustedValue,
+                    sparseInfillAccelerationPercent = selectedPercent,
+                ),
+            )
+        },
+    )
+    AccelerationOrPercentSetting(
+        label = stringResource(R.string.internal_solid_acceleration),
+        value = options.internalSolidInfillAcceleration,
+        percent = options.internalSolidInfillAccelerationPercent,
+        maximumAbsolute = maximumFeatureAcceleration,
+        onValueChange = { onOptionsChanged(options.copy(internalSolidInfillAcceleration = it)) },
+        onPercentChange = { selectedPercent, adjustedValue ->
+            onOptionsChanged(
+                options.copy(
+                    internalSolidInfillAcceleration = adjustedValue,
+                    internalSolidInfillAccelerationPercent = selectedPercent,
+                ),
+            )
+        },
     )
     SettingsGroupTitle(stringResource(R.string.supports))
     SettingsSwitch(
@@ -1146,21 +1284,25 @@ private fun OverhangSpeedSetting(
     value: Float,
     percent: Boolean,
     maximumAbsolute: Float,
+    maximumPercent: Float = 100f,
     onValueChange: (Float) -> Unit,
-    onPercentChange: (Boolean) -> Unit,
+    onPercentChange: (Boolean, Float) -> Unit,
 ) {
     Text(label, fontWeight = FontWeight.SemiBold)
     CompactChoices(
         entries = listOf(false, true),
         selected = percent,
         label = { if (it) "%" else "mm/s" },
-        onSelected = onPercentChange,
+        onSelected = { selectedPercent ->
+            val newMaximum = if (selectedPercent) maximumPercent else maximumAbsolute
+            onPercentChange(selectedPercent, value.coerceAtMost(newMaximum))
+        },
     )
-    val maximum = if (percent) 100f else maximumAbsolute
+    val maximum = if (percent) maximumPercent else maximumAbsolute
     SettingSlider(
         label = label,
         valueText = if (percent) {
-            stringResource(R.string.percent_value, value.coerceAtMost(100f).roundToInt())
+            stringResource(R.string.percent_value, value.coerceAtMost(maximumPercent).roundToInt())
         } else {
             stringResource(R.string.print_speed_value, value)
         },
@@ -1168,6 +1310,75 @@ private fun OverhangSpeedSetting(
         range = 0f..maximum,
         steps = maximum.roundToInt().coerceAtLeast(2) - 1,
         onValueChange = onValueChange,
+    )
+}
+
+@Composable
+private fun AccelerationOrPercentSetting(
+    label: String,
+    value: Float,
+    percent: Boolean,
+    maximumAbsolute: Float,
+    onValueChange: (Float) -> Unit,
+    onPercentChange: (Boolean, Float) -> Unit,
+) {
+    Text(label, fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf(false, true),
+        selected = percent,
+        label = { if (it) "%" else "mm/s²" },
+        onSelected = { selectedPercent ->
+            val newMaximum = if (selectedPercent) 300f else maximumAbsolute
+            onPercentChange(selectedPercent, value.coerceAtMost(newMaximum))
+        },
+    )
+    val maximum = if (percent) 300f else maximumAbsolute
+    SettingSlider(
+        label = label,
+        valueText = if (percent) {
+            stringResource(R.string.percent_value, value.coerceAtMost(maximum).roundToInt())
+        } else {
+            stringResource(R.string.acceleration_value, value)
+        },
+        value = value.coerceIn(0f, maximum),
+        range = 0f..maximum,
+        steps = if (percent) 299 else (maximum / 100f).roundToInt().coerceAtLeast(2) - 1,
+        onValueChange = {
+            onValueChange(if (percent) it.roundToInt().toFloat() else (it / 100f).roundToInt() * 100f)
+        },
+    )
+}
+
+@Composable
+private fun LengthOrPercentSetting(
+    label: String,
+    value: Float,
+    percent: Boolean,
+    onValueChange: (Float) -> Unit,
+    onPercentChange: (Boolean, Float) -> Unit,
+) {
+    Text(label, fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf(false, true),
+        selected = percent,
+        label = { if (it) "%" else "mm" },
+        onSelected = { selectedPercent ->
+            val newMaximum = if (selectedPercent) 100f else 2f
+            onPercentChange(selectedPercent, value.coerceAtMost(newMaximum))
+        },
+    )
+    val maximum = if (percent) 100f else 2f
+    SettingSlider(
+        label = label,
+        valueText = if (percent) {
+            stringResource(R.string.percent_value, value.coerceAtMost(100f).roundToInt())
+        } else {
+            stringResource(R.string.millimeters_value_precise, value)
+        },
+        value = value.coerceIn(0f, maximum),
+        range = 0f..maximum,
+        steps = if (percent) 99 else 199,
+        onValueChange = { onValueChange(if (percent) it.roundToInt().toFloat() else it) },
     )
 }
 

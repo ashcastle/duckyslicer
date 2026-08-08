@@ -117,6 +117,8 @@ class ProfileStore private constructor(
             gapInfillSpeed = options.gapInfillSpeed,
             firstLayerInfillSpeed = options.firstLayerInfillSpeed,
             supportInterfaceSpeed = options.supportInterfaceSpeed,
+            internalBridgeSpeed = options.internalBridgeSpeed,
+            internalBridgeSpeedPercent = options.internalBridgeSpeedPercent,
             overhangSpeedEnabled = options.overhangSpeedEnabled,
             overhangSpeed1 = options.overhangSpeed1,
             overhangSpeed1Percent = options.overhangSpeed1Percent,
@@ -130,12 +132,23 @@ class ProfileStore private constructor(
             internalBridgeFlowRatio = options.internalBridgeFlowRatio,
             topSurfaceFlowRatio = options.topSurfaceFlowRatio,
             bottomSurfaceFlowRatio = options.bottomSurfaceFlowRatio,
+            bridgeDensity = options.bridgeDensity,
+            internalBridgeDensity = options.internalBridgeDensity,
+            bridgeNoSupport = options.bridgeNoSupport,
+            thickBridges = options.thickBridges,
+            thickInternalBridges = options.thickInternalBridges,
             defaultAcceleration = options.defaultAcceleration,
             outerWallAcceleration = options.outerWallAcceleration,
             innerWallAcceleration = options.innerWallAcceleration,
             topSurfaceAcceleration = options.topSurfaceAcceleration,
             travelAcceleration = options.travelAcceleration,
             firstLayerAcceleration = options.firstLayerAcceleration,
+            bridgeAcceleration = options.bridgeAcceleration,
+            bridgeAccelerationPercent = options.bridgeAccelerationPercent,
+            sparseInfillAcceleration = options.sparseInfillAcceleration,
+            sparseInfillAccelerationPercent = options.sparseInfillAccelerationPercent,
+            internalSolidInfillAcceleration = options.internalSolidInfillAcceleration,
+            internalSolidInfillAccelerationPercent = options.internalSolidInfillAccelerationPercent,
             supportEnabled = options.supportEnabled,
             brimWidth = options.brimWidth,
             topSolidLayers = options.topSolidLayers,
@@ -146,6 +159,12 @@ class ProfileStore private constructor(
             topSurfacePattern = options.topSurfacePattern,
             bottomSurfacePattern = options.bottomSurfacePattern,
             internalSolidInfillPattern = options.internalSolidInfillPattern,
+            infillFirst = options.infillFirst,
+            infillWallOverlap = options.infillWallOverlap,
+            topBottomInfillWallOverlap = options.topBottomInfillWallOverlap,
+            infillCombination = options.infillCombination,
+            infillCombinationMaxLayerHeight = options.infillCombinationMaxLayerHeight,
+            infillCombinationMaxLayerHeightPercent = options.infillCombinationMaxLayerHeightPercent,
             travelSpeed = options.travelSpeed,
             firstLayerSpeed = options.firstLayerSpeed,
             supportType = options.supportType,
@@ -220,7 +239,7 @@ class ProfileStore private constructor(
         ?: throw IllegalArgumentException("Profile name is required")
 
     private companion object {
-        const val USER_PROFILE_SCHEMA_VERSION = 8
+        const val USER_PROFILE_SCHEMA_VERSION = 9
     }
 }
 
@@ -271,6 +290,8 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("gapInfillSpeed", gapInfillSpeed)
     .put("firstLayerInfillSpeed", firstLayerInfillSpeed)
     .put("supportInterfaceSpeed", supportInterfaceSpeed)
+    .put("internalBridgeSpeed", internalBridgeSpeed)
+    .put("internalBridgeSpeedPercent", internalBridgeSpeedPercent)
     .put("overhangSpeedEnabled", overhangSpeedEnabled)
     .put("overhangSpeed1", overhangSpeed1).put("overhangSpeed1Percent", overhangSpeed1Percent)
     .put("overhangSpeed2", overhangSpeed2).put("overhangSpeed2Percent", overhangSpeed2Percent)
@@ -280,12 +301,23 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("internalBridgeFlowRatio", internalBridgeFlowRatio)
     .put("topSurfaceFlowRatio", topSurfaceFlowRatio)
     .put("bottomSurfaceFlowRatio", bottomSurfaceFlowRatio)
+    .put("bridgeDensity", bridgeDensity)
+    .put("internalBridgeDensity", internalBridgeDensity)
+    .put("bridgeNoSupport", bridgeNoSupport)
+    .put("thickBridges", thickBridges)
+    .put("thickInternalBridges", thickInternalBridges)
     .put("defaultAcceleration", defaultAcceleration)
     .put("outerWallAcceleration", outerWallAcceleration)
     .put("innerWallAcceleration", innerWallAcceleration)
     .put("topSurfaceAcceleration", topSurfaceAcceleration)
     .put("travelAcceleration", travelAcceleration)
     .put("firstLayerAcceleration", firstLayerAcceleration)
+    .put("bridgeAcceleration", bridgeAcceleration)
+    .put("bridgeAccelerationPercent", bridgeAccelerationPercent)
+    .put("sparseInfillAcceleration", sparseInfillAcceleration)
+    .put("sparseInfillAccelerationPercent", sparseInfillAccelerationPercent)
+    .put("internalSolidInfillAcceleration", internalSolidInfillAcceleration)
+    .put("internalSolidInfillAccelerationPercent", internalSolidInfillAccelerationPercent)
     .put("supportEnabled", supportEnabled).put("brimWidth", brimWidth)
     .put("topSolidLayers", topSolidLayers).put("bottomSolidLayers", bottomSolidLayers)
     .put("topShellThickness", topShellThickness).put("bottomShellThickness", bottomShellThickness)
@@ -293,6 +325,12 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("topSurfacePattern", topSurfacePattern)
     .put("bottomSurfacePattern", bottomSurfacePattern)
     .put("internalSolidInfillPattern", internalSolidInfillPattern)
+    .put("infillFirst", infillFirst)
+    .put("infillWallOverlap", infillWallOverlap)
+    .put("topBottomInfillWallOverlap", topBottomInfillWallOverlap)
+    .put("infillCombination", infillCombination)
+    .put("infillCombinationMaxLayerHeight", infillCombinationMaxLayerHeight)
+    .put("infillCombinationMaxLayerHeightPercent", infillCombinationMaxLayerHeightPercent)
     .put("travelSpeed", travelSpeed)
     .put("firstLayerSpeed", firstLayerSpeed).put("supportType", supportType)
     .put("supportAngle", supportAngle).put("skirtLoops", skirtLoops)
@@ -396,6 +434,8 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         gapInfillSpeed = optDouble("gapInfillSpeed", 0.0).toFloat(),
         firstLayerInfillSpeed = optDouble("firstLayerInfillSpeed", 0.0).toFloat(),
         supportInterfaceSpeed = optDouble("supportInterfaceSpeed", 0.0).toFloat(),
+        internalBridgeSpeed = optDouble("internalBridgeSpeed", 150.0).toFloat(),
+        internalBridgeSpeedPercent = optBoolean("internalBridgeSpeedPercent", true),
         overhangSpeedEnabled = optBoolean("overhangSpeedEnabled", true),
         overhangSpeed1 = optDouble("overhangSpeed1", 55.0).toFloat(),
         overhangSpeed1Percent = optBoolean("overhangSpeed1Percent"),
@@ -409,12 +449,23 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         internalBridgeFlowRatio = optDouble("internalBridgeFlowRatio", 1.0).toFloat(),
         topSurfaceFlowRatio = optDouble("topSurfaceFlowRatio", 1.0).toFloat(),
         bottomSurfaceFlowRatio = optDouble("bottomSurfaceFlowRatio", 1.0).toFloat(),
+        bridgeDensity = optDouble("bridgeDensity", 100.0).toFloat(),
+        internalBridgeDensity = optDouble("internalBridgeDensity", 100.0).toFloat(),
+        bridgeNoSupport = optBoolean("bridgeNoSupport"),
+        thickBridges = optBoolean("thickBridges"),
+        thickInternalBridges = optBoolean("thickInternalBridges", true),
         defaultAcceleration = optDouble("defaultAcceleration", 0.0).toFloat(),
         outerWallAcceleration = optDouble("outerWallAcceleration", 0.0).toFloat(),
         innerWallAcceleration = optDouble("innerWallAcceleration", 0.0).toFloat(),
         topSurfaceAcceleration = optDouble("topSurfaceAcceleration", 0.0).toFloat(),
         travelAcceleration = optDouble("travelAcceleration", 0.0).toFloat(),
         firstLayerAcceleration = optDouble("firstLayerAcceleration", 0.0).toFloat(),
+        bridgeAcceleration = optDouble("bridgeAcceleration", 50.0).toFloat(),
+        bridgeAccelerationPercent = optBoolean("bridgeAccelerationPercent", true),
+        sparseInfillAcceleration = optDouble("sparseInfillAcceleration", 100.0).toFloat(),
+        sparseInfillAccelerationPercent = optBoolean("sparseInfillAccelerationPercent", true),
+        internalSolidInfillAcceleration = optDouble("internalSolidInfillAcceleration", 100.0).toFloat(),
+        internalSolidInfillAccelerationPercent = optBoolean("internalSolidInfillAccelerationPercent", true),
         optBoolean("supportEnabled"),
         optDouble("brimWidth", 0.0).toFloat(),
         builtIn = optBoolean("builtIn"),
@@ -426,6 +477,12 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         topSurfacePattern = optString("topSurfacePattern", "monotonicline"),
         bottomSurfacePattern = optString("bottomSurfacePattern", "monotonic"),
         internalSolidInfillPattern = optString("internalSolidInfillPattern", "monotonic"),
+        infillFirst = optBoolean("infillFirst"),
+        infillWallOverlap = optDouble("infillWallOverlap", 15.0).toFloat(),
+        topBottomInfillWallOverlap = optDouble("topBottomInfillWallOverlap", 25.0).toFloat(),
+        infillCombination = optBoolean("infillCombination"),
+        infillCombinationMaxLayerHeight = optDouble("infillCombinationMaxLayerHeight", 100.0).toFloat(),
+        infillCombinationMaxLayerHeightPercent = optBoolean("infillCombinationMaxLayerHeightPercent", true),
         travelSpeed = optDouble("travelSpeed", 500.0).toFloat(),
         firstLayerSpeed = optDouble("firstLayerSpeed", 50.0).toFloat(),
         supportType = optString("supportType", "normal"),

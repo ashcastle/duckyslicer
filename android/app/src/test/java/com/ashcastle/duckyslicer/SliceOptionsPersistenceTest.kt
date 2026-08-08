@@ -36,6 +36,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(133f, restored.gapInfillSpeed)
         assertEquals(61f, restored.firstLayerInfillSpeed)
         assertEquals(52f, restored.supportInterfaceSpeed)
+        assertEquals(163f, restored.internalBridgeSpeed)
+        assertEquals(true, restored.internalBridgeSpeedPercent)
         assertEquals(false, restored.overhangSpeedEnabled)
         assertEquals(81f, restored.overhangSpeed1)
         assertEquals(true, restored.overhangSpeed1Percent)
@@ -52,6 +54,17 @@ class SliceOptionsPersistenceTest {
         assertEquals("rectilinear-grid", restored.supportBasePattern)
         assertEquals("rectilinear_interlaced", restored.supportInterfacePattern)
         assertEquals("snug", restored.supportStyle)
+        assertEquals(true, restored.infillFirst)
+        assertEquals(19f, restored.infillWallOverlap)
+        assertEquals(31f, restored.topBottomInfillWallOverlap)
+        assertEquals(true, restored.infillCombination)
+        assertEquals(0.36f, restored.infillCombinationMaxLayerHeight)
+        assertEquals(false, restored.infillCombinationMaxLayerHeightPercent)
+        assertEquals(87f, restored.bridgeDensity)
+        assertEquals(73f, restored.internalBridgeDensity)
+        assertEquals(true, restored.bridgeNoSupport)
+        assertEquals(true, restored.thickBridges)
+        assertEquals(false, restored.thickInternalBridges)
         assertEquals(0.91f, restored.bridgeFlowRatio)
         assertEquals(0.96f, restored.internalBridgeFlowRatio)
         assertEquals(0.97f, restored.topSurfaceFlowRatio)
@@ -72,6 +85,12 @@ class SliceOptionsPersistenceTest {
         assertEquals(1_200f, restored.topSurfaceAcceleration)
         assertEquals(5_000f, restored.travelAcceleration)
         assertEquals(600f, restored.firstLayerAcceleration)
+        assertEquals(47f, restored.bridgeAcceleration)
+        assertEquals(true, restored.bridgeAccelerationPercent)
+        assertEquals(4_321f, restored.sparseInfillAcceleration)
+        assertEquals(false, restored.sparseInfillAccelerationPercent)
+        assertEquals(83f, restored.internalSolidInfillAcceleration)
+        assertEquals(true, restored.internalSolidInfillAccelerationPercent)
         assertEquals("classic", restored.wallGenerator)
         assertEquals("outer-inner", restored.wallSequence)
         assertEquals("klipper", restored.gcodeFlavor)
@@ -157,6 +176,8 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         gapInfillSpeed = 133f,
         firstLayerInfillSpeed = 61f,
         supportInterfaceSpeed = 52f,
+        internalBridgeSpeed = 163f,
+        internalBridgeSpeedPercent = true,
         overhangSpeedEnabled = false,
         overhangSpeed1 = 81f,
         overhangSpeed1Percent = true,
@@ -170,6 +191,11 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         internalBridgeFlowRatio = 0.96f,
         topSurfaceFlowRatio = 0.97f,
         bottomSurfaceFlowRatio = 0.98f,
+        bridgeDensity = 87f,
+        internalBridgeDensity = 73f,
+        bridgeNoSupport = true,
+        thickBridges = true,
+        thickInternalBridges = false,
         topShellThickness = 0.8f,
         bottomShellThickness = 0.7f,
         supportInterfaceTopLayers = 4,
@@ -182,6 +208,12 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         supportBasePattern = "rectilinear-grid",
         supportInterfacePattern = "rectilinear_interlaced",
         supportStyle = "snug",
+        infillFirst = true,
+        infillWallOverlap = 19f,
+        topBottomInfillWallOverlap = 31f,
+        infillCombination = true,
+        infillCombinationMaxLayerHeight = 0.36f,
+        infillCombinationMaxLayerHeightPercent = false,
         initialLayerLineWidth = 0.74f,
         seamPosition = "nearest",
         ironingType = "top",
@@ -195,6 +227,12 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         topSurfaceAcceleration = 1_200f,
         travelAcceleration = 5_000f,
         firstLayerAcceleration = 600f,
+        bridgeAcceleration = 47f,
+        bridgeAccelerationPercent = true,
+        sparseInfillAcceleration = 4_321f,
+        sparseInfillAccelerationPercent = false,
+        internalSolidInfillAcceleration = 83f,
+        internalSolidInfillAccelerationPercent = true,
         wallGenerator = "classic",
         wallSequence = "outer-inner",
         detectThinWalls = true,
