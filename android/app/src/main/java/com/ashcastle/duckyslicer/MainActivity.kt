@@ -101,6 +101,7 @@ private fun DuckySlicerScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val modelReadError = stringResource(R.string.model_read_error)
+    val modelTooLargeError = stringResource(R.string.model_too_large_error)
     val sliceError = stringResource(R.string.slice_error)
     val saveError = stringResource(R.string.save_error)
     val savedNotice = stringResource(R.string.gcode_saved)
@@ -228,7 +229,9 @@ private fun DuckySlicerScreen() {
                         remoteUpload = null
                         selectedTab = WorkspaceTab.SLICE
                     }
-                    .onFailure { error = modelReadError }
+                    .onFailure { failure ->
+                        error = if (failure is ModelTooLargeException) modelTooLargeError else modelReadError
+                    }
                 importing = false
             }
         }
@@ -673,21 +676,47 @@ private fun DuckySlicerScreen() {
 }
 
 private suspend fun importAndInspect(context: Context, uri: Uri): ModelInfo = withContext(Dispatchers.IO) {
-    val displayName = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-        ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+    val metadata = runCatching {
+        context.contentResolver.query(
+            uri,
+            arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (!cursor.moveToFirst()) return@use null
+            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+            val name = nameIndex.takeIf { it >= 0 && !cursor.isNull(it) }?.let(cursor::getString)
+            val size = sizeIndex.takeIf { it >= 0 && !cursor.isNull(it) }?.let(cursor::getLong)
+            name to size
+        }
+    }.getOrNull()
+    val displayName = metadata?.first
+        ?.take(200)
         ?.takeIf { it.endsWith(".stl", ignoreCase = true) }
         ?: "model.stl"
-    val safeName = displayName.replace(Regex("[^A-Za-z0-9가-힣._-]"), "_")
+    val reportedSize = metadata?.second?.takeIf { it >= 0 }
+    if (reportedSize != null && reportedSize > MAX_MODEL_IMPORT_BYTES) {
+        throw ModelTooLargeException()
+    }
+    val safeName = displayName
+        .replace(Regex("[^A-Za-z0-9가-힣._-]"), "_")
+        .takeLast(160)
     val destination = File(
-        File(context.cacheDir, "models").apply { mkdirs() },
+        File(context.cacheDir, "models").apply { check(isDirectory || mkdirs()) },
         "${UUID.randomUUID()}-$safeName",
     )
 
-    context.contentResolver.openInputStream(uri).use { input ->
-        requireNotNull(input) { "model_unreadable" }
-        destination.outputStream().use { output -> input.copyTo(output) }
+    try {
+        context.contentResolver.openInputStream(uri).use { input ->
+            requireNotNull(input) { "model_unreadable" }
+            destination.outputStream().use { output -> copyModelWithLimit(input, output) }
+        }
+        ModelInfo.fromJson(NativeEngine.inspectStl(destination.absolutePath), destination.absolutePath)
+            .copy(fileName = displayName)
+    } catch (failure: Throwable) {
+        destination.delete()
+        throw failure
     }
-
-    ModelInfo.fromJson(NativeEngine.inspectStl(destination.absolutePath), destination.absolutePath)
-        .copy(fileName = displayName)
 }

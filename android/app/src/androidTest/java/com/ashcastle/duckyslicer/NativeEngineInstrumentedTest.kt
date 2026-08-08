@@ -325,4 +325,37 @@ class NativeEngineInstrumentedTest {
         assertTrue("Custom G-code flavor must reach Orca", gcode.contains("; gcode_flavor = marlin2"))
     }
 
+    @Test
+    fun marlinAndKlipperFirmwareContractsReachOrca() {
+        val model = fixtureModel()
+        for (flavor in listOf("marlin", "marlin2", "klipper")) {
+            val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(
+                id = "contract-$flavor",
+                name = "Contract $flavor",
+                gcodeFlavor = flavor,
+                maxAccelerationExtruding = 3_000f,
+                maxAccelerationTravel = 4_000f,
+            )
+            val outcome = OnDeviceSlicer.slice(
+                model,
+                SliceOptions()
+                    .selectPrinter(printer)
+                    .selectFilament(FilamentProfile.GENERIC_PLA)
+                    .selectQuality(QualityProfile.DRAFT),
+            )
+            val gcode = outcome.output.readText()
+
+            assertTrue("$flavor metadata must reach Orca", gcode.contains("; gcode_flavor = $flavor"))
+            assertTrue("$flavor output must contain extrusion", gcode.contains(";TYPE:Outer wall"))
+            if (flavor == "klipper") {
+                assertTrue(
+                    "Klipper must use its native acceleration command",
+                    gcode.contains("SET_VELOCITY_LIMIT ACCEL="),
+                )
+            } else {
+                assertTrue("Marlin must use M204 acceleration", gcode.lineSequence().any { it.startsWith("M204 ") })
+            }
+        }
+    }
+
 }

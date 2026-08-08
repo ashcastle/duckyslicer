@@ -84,6 +84,14 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
+          name: duckyslicer-device-test-apks
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        with:
           name: duckyslicer-debug-sbom
           path: android/app/build/outputs/duckyslicer-debug.cdx.json
           if-no-files-found: error
@@ -96,3 +104,75 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/dependency-review-action@v4
+
+  device-tests:
+    needs: verify
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: android-actions/setup-android@v4
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: duckyslicer-device-test-apks
+          path: apks
+
+      - name: Install ARM64 emulator image
+        run: |
+          sdkmanager \
+            "platform-tools" \
+            "emulator" \
+            "platforms;android-35" \
+            "system-images;android-35;google_apis;arm64-v8a"
+          echo no | avdmanager create avd \
+            --force \
+            --name duckyslicer-arm64 \
+            --package "system-images;android-35;google_apis;arm64-v8a" \
+            --device pixel_6
+
+      - name: Start ARM64 emulator
+        run: |
+          nohup "$ANDROID_HOME/emulator/emulator" \
+            -avd duckyslicer-arm64 \
+            -no-window \
+            -no-audio \
+            -no-boot-anim \
+            -no-snapshot \
+            -gpu swiftshader_indirect \
+            -accel on \
+            > "$RUNNER_TEMP/duckyslicer-emulator.log" 2>&1 &
+          adb wait-for-device
+          booted=false
+          for attempt in {1..180}; do
+            if adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' | grep -q '^1$'; then
+              booted=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$booted" != true ]; then
+            cat "$RUNNER_TEMP/duckyslicer-emulator.log"
+            exit 1
+          fi
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+
+      - name: Run on-device slicing tests
+        run: |
+          adb install -r apks/debug/app-debug.apk
+          adb install -r apks/androidTest/debug/app-debug-androidTest.apk
+          adb shell am instrument -w -r \
+            com.ashcastle.duckyslicer.test/androidx.test.runner.AndroidJUnitRunner \
+            | tee "$RUNNER_TEMP/duckyslicer-device-tests.txt"
+          grep -q '^OK (' "$RUNNER_TEMP/duckyslicer-device-tests.txt"
+
+      - name: Upload emulator log on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: duckyslicer-arm64-emulator-log
+          path: |
+            ${{ runner.temp }}/duckyslicer-emulator.log
+            ${{ runner.temp }}/duckyslicer-device-tests.txt
+          if-no-files-found: ignore
