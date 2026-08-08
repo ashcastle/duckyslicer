@@ -13,11 +13,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -33,6 +34,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private enum class ProfileSettingsKind {
@@ -44,8 +46,12 @@ private enum class ProfileSettingsKind {
 @Composable
 internal fun ProfileSettings(
     options: SliceOptions,
+    catalog: ProfileCatalog,
     enabled: Boolean,
     onOptionsChanged: (SliceOptions) -> Unit,
+    onSavePrinter: (String) -> Unit,
+    onSaveFilament: (String) -> Unit,
+    onSaveSlicing: (String) -> Unit,
 ) {
     var editing by remember { mutableStateOf<ProfileSettingsKind?>(null) }
 
@@ -54,6 +60,7 @@ internal fun ProfileSettings(
         title = stringResource(R.string.printer_profile),
         summary = stringResource(
             R.string.printer_profile_summary,
+            profileLabel(options.printerProfile),
             options.bedSizeX.roundToInt(),
             options.bedSizeY.roundToInt(),
             options.nozzleDiameter,
@@ -66,7 +73,7 @@ internal fun ProfileSettings(
         title = stringResource(R.string.filament_profile),
         summary = stringResource(
             R.string.filament_profile_summary,
-            filamentLabel(options.filamentProfile),
+            profileLabel(options.filamentProfile),
             options.nozzleTemp,
             options.bedTemp,
         ),
@@ -78,7 +85,7 @@ internal fun ProfileSettings(
         title = stringResource(R.string.slicing_profile),
         summary = stringResource(
             R.string.slicing_profile_summary,
-            qualityLabel(options.quality),
+            profileLabel(options.quality),
             options.layerHeight,
             (options.fillDensity * 100f).roundToInt(),
         ),
@@ -89,19 +96,25 @@ internal fun ProfileSettings(
     when (editing) {
         ProfileSettingsKind.PRINTER -> PrinterSettingsSheet(
             options = options,
+            profiles = catalog.printers,
             onOptionsChanged = onOptionsChanged,
+            onSave = onSavePrinter,
             onDismiss = { editing = null },
         )
 
         ProfileSettingsKind.FILAMENT -> FilamentSettingsSheet(
             options = options,
+            profiles = catalog.filaments,
             onOptionsChanged = onOptionsChanged,
+            onSave = onSaveFilament,
             onDismiss = { editing = null },
         )
 
         ProfileSettingsKind.SLICING -> SlicingSettingsSheet(
             options = options,
+            profiles = catalog.slicing.filter { abs(it.nozzleDiameter - options.nozzleDiameter) < 0.05f },
             onOptionsChanged = onOptionsChanged,
+            onSave = onSaveSlicing,
             onDismiss = { editing = null },
         )
 
@@ -129,38 +142,25 @@ private fun ProfileRow(title: String, summary: String, enabled: Boolean, onClick
 @Composable
 private fun PrinterSettingsSheet(
     options: SliceOptions,
+    profiles: List<PrinterProfile>,
     onOptionsChanged: (SliceOptions) -> Unit,
+    onSave: (String) -> Unit,
     onDismiss: () -> Unit,
 ) = SettingsSheet(title = stringResource(R.string.printer_profile), onDismiss = onDismiss) {
-    ProfileChips(
-        entries = PrinterProfile.entries,
+    ProfileChoices(
+        entries = profiles,
         selected = options.printerProfile,
-        label = { printerLabel(it) },
+        label = { profileLabel(it) },
         onSelected = { onOptionsChanged(options.selectPrinter(it)) },
     )
-    SettingSlider(
-        label = stringResource(R.string.bed_width),
-        valueText = stringResource(R.string.millimeters_value, options.bedSizeX),
-        value = options.bedSizeX,
-        range = 180f..400f,
-        steps = 43,
-        onValueChange = { onOptionsChanged(options.copy(bedSizeX = (it / 5f).roundToInt() * 5f)) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.bed_depth),
-        valueText = stringResource(R.string.millimeters_value, options.bedSizeY),
-        value = options.bedSizeY,
-        range = 180f..400f,
-        steps = 43,
-        onValueChange = { onOptionsChanged(options.copy(bedSizeY = (it / 5f).roundToInt() * 5f)) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.max_print_height),
-        valueText = stringResource(R.string.millimeters_value, options.maxPrintHeight),
-        value = options.maxPrintHeight,
-        range = 150f..500f,
-        steps = 34,
-        onValueChange = { onOptionsChanged(options.copy(maxPrintHeight = (it / 10f).roundToInt() * 10f)) },
+    Text(
+        stringResource(
+            R.string.build_volume_summary,
+            options.bedSizeX.roundToInt(),
+            options.bedSizeY.roundToInt(),
+            options.maxPrintHeight.roundToInt(),
+        ),
+        color = Color(0xFFC8C9C2),
     )
     SettingSlider(
         label = stringResource(R.string.nozzle_diameter),
@@ -170,18 +170,21 @@ private fun PrinterSettingsSheet(
         steps = 7,
         onValueChange = { onOptionsChanged(options.copy(nozzleDiameter = (it * 10f).roundToInt() / 10f)) },
     )
+    SaveProfileField(onSave = onSave, onDismiss = onDismiss)
 }
 
 @Composable
 private fun FilamentSettingsSheet(
     options: SliceOptions,
+    profiles: List<FilamentProfile>,
     onOptionsChanged: (SliceOptions) -> Unit,
+    onSave: (String) -> Unit,
     onDismiss: () -> Unit,
 ) = SettingsSheet(title = stringResource(R.string.filament_profile), onDismiss = onDismiss) {
-    ProfileChips(
-        entries = FilamentProfile.entries,
+    ProfileChoices(
+        entries = profiles,
         selected = options.filamentProfile,
-        label = { filamentLabel(it) },
+        label = { profileLabel(it) },
         onSelected = { onOptionsChanged(options.selectFilament(it)) },
     )
     SettingSlider(
@@ -193,12 +196,28 @@ private fun FilamentSettingsSheet(
         onValueChange = { onOptionsChanged(options.copy(nozzleTemp = it.roundToInt())) },
     )
     SettingSlider(
+        label = stringResource(R.string.first_layer_nozzle_temperature),
+        valueText = stringResource(R.string.celsius_value, options.firstLayerNozzleTemp),
+        value = options.firstLayerNozzleTemp.toFloat(),
+        range = 170f..300f,
+        steps = 129,
+        onValueChange = { onOptionsChanged(options.copy(firstLayerNozzleTemp = it.roundToInt())) },
+    )
+    SettingSlider(
         label = stringResource(R.string.bed_temperature),
         valueText = stringResource(R.string.celsius_value, options.bedTemp),
         value = options.bedTemp.toFloat(),
         range = 0f..120f,
         steps = 119,
         onValueChange = { onOptionsChanged(options.copy(bedTemp = it.roundToInt())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.first_layer_bed_temperature),
+        valueText = stringResource(R.string.celsius_value, options.firstLayerBedTemp),
+        value = options.firstLayerBedTemp.toFloat(),
+        range = 0f..120f,
+        steps = 119,
+        onValueChange = { onOptionsChanged(options.copy(firstLayerBedTemp = it.roundToInt())) },
     )
     SettingSlider(
         label = stringResource(R.string.flow_ratio),
@@ -216,18 +235,21 @@ private fun FilamentSettingsSheet(
         steps = 35,
         onValueChange = { onOptionsChanged(options.copy(maxVolumetricSpeed = it.roundToInt().toFloat())) },
     )
+    SaveProfileField(onSave = onSave, onDismiss = onDismiss)
 }
 
 @Composable
 private fun SlicingSettingsSheet(
     options: SliceOptions,
+    profiles: List<QualityProfile>,
     onOptionsChanged: (SliceOptions) -> Unit,
+    onSave: (String) -> Unit,
     onDismiss: () -> Unit,
 ) = SettingsSheet(title = stringResource(R.string.slicing_profile), onDismiss = onDismiss) {
-    ProfileChips(
-        entries = QualityProfile.entries,
+    ProfileChoices(
+        entries = profiles,
         selected = options.quality,
-        label = { qualityLabel(it) },
+        label = { profileLabel(it) },
         onSelected = { onOptionsChanged(options.selectQuality(it)) },
     )
     SettingSlider(
@@ -289,6 +311,7 @@ private fun SlicingSettingsSheet(
         steps = 19,
         onValueChange = { onOptionsChanged(options.copy(brimWidth = it.roundToInt().toFloat())) },
     )
+    SaveProfileField(onSave = onSave, onDismiss = onDismiss)
 }
 
 @Composable
@@ -322,21 +345,48 @@ private fun SettingsSheet(
 }
 
 @Composable
-private fun <T> ProfileChips(
+private fun <T> ProfileChoices(
     entries: List<T>,
     selected: T,
     label: @Composable (T) -> String,
     onSelected: (T) -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         entries.forEach { entry ->
-            FilterChip(
-                selected = entry == selected,
-                onClick = { onSelected(entry) },
-                label = { Text(label(entry), maxLines = 1) },
-                modifier = Modifier.weight(1f),
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelected(entry) }
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = entry == selected, onClick = { onSelected(entry) })
+                Text(label(entry), maxLines = 1)
+            }
         }
+    }
+}
+
+@Composable
+private fun SaveProfileField(onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+    OutlinedTextField(
+        value = name,
+        onValueChange = { name = it },
+        label = { Text(stringResource(R.string.profile_name)) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Button(
+        onClick = {
+            onSave(name.trim())
+            onDismiss()
+        },
+        enabled = name.isNotBlank(),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(stringResource(R.string.save_as_new_profile))
     }
 }
 
@@ -364,21 +414,27 @@ private fun SettingSlider(
 }
 
 @Composable
-private fun printerLabel(profile: PrinterProfile) = when (profile) {
-    PrinterProfile.STANDARD_270 -> stringResource(R.string.printer_270)
-    PrinterProfile.COMPACT_220 -> stringResource(R.string.printer_220)
+private fun profileLabel(profile: PrinterProfile) = when (profile.id) {
+    PrinterProfile.U1_04.id -> stringResource(R.string.printer_u1_04)
+    PrinterProfile.U1_06.id -> stringResource(R.string.printer_u1_06)
+    else -> profile.name
 }
 
 @Composable
-private fun filamentLabel(profile: FilamentProfile) = when (profile) {
-    FilamentProfile.PLA -> stringResource(R.string.filament_pla)
-    FilamentProfile.PETG -> stringResource(R.string.filament_petg)
-    FilamentProfile.ABS -> stringResource(R.string.filament_abs)
+private fun profileLabel(profile: FilamentProfile) = when (profile.id) {
+    FilamentProfile.PLA.id -> stringResource(R.string.filament_snapmaker_pla)
+    FilamentProfile.PETG.id -> stringResource(R.string.filament_snapmaker_petg)
+    FilamentProfile.ABS.id -> stringResource(R.string.filament_snapmaker_abs)
+    else -> profile.name
 }
 
 @Composable
-private fun qualityLabel(profile: QualityProfile) = when (profile) {
-    QualityProfile.DRAFT -> stringResource(R.string.quality_draft)
-    QualityProfile.STANDARD -> stringResource(R.string.quality_standard)
-    QualityProfile.FINE -> stringResource(R.string.quality_fine)
+private fun profileLabel(profile: QualityProfile) = when (profile.id) {
+    QualityProfile.DRAFT.id -> stringResource(R.string.quality_draft)
+    QualityProfile.STANDARD.id -> stringResource(R.string.quality_standard)
+    QualityProfile.FINE.id -> stringResource(R.string.quality_fine)
+    QualityProfile.DRAFT_06.id -> stringResource(R.string.quality_draft_06)
+    QualityProfile.STANDARD_06.id -> stringResource(R.string.quality_standard_06)
+    QualityProfile.FINE_06.id -> stringResource(R.string.quality_fine_06)
+    else -> profile.name
 }

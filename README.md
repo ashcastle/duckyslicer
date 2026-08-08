@@ -26,8 +26,9 @@ account, cloud service, or network permission.
 - A full-screen print bed that keeps the model and G-code at their real millimetre scale
 - One-finger orbit and two-finger pan/zoom for the whole scene
 - Full-layer preview by default, with a two-handle slider for choosing a visible layer range
-- Printer, filament, and slicing profiles with editable essential settings
-- Bottom navigation for Slice, Preview, Device, Project, and Settings
+- Curated Snapmaker U1 printer, filament, and slicing defaults from OrcaSlicer
+- Editable settings and named user profiles saved entirely in app-private storage
+- Bottom navigation on phones and a space-saving vertical rail on tablets
 - English defaults with Korean device-language localization
 - Yellow and charcoal mobile UI with minimal in-app branding
 - No Bambu network plug-in and no `INTERNET` permission in the MVP
@@ -40,7 +41,7 @@ real Z coordinates.
 
 | Area | Purpose |
 | --- | --- |
-| **Slice** | Choose printer, filament, and slicing profiles; open detailed settings; start slicing |
+| **Slice** | Choose built-in or saved printer, filament, and slicing profiles; edit, save, and slice |
 | **Preview** | Inspect all layers or narrow the visible range with two slider handles |
 | **Device** | Reserved for a future optional device workflow; unavailable in the offline MVP |
 | **Project** | See the active model and local G-code state |
