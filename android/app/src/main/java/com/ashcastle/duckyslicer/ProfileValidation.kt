@@ -64,7 +64,17 @@ internal object ProfileValidation {
                 profile.internalSolidInfillSpeed,
                 profile.topSurfaceSpeed,
                 profile.supportSpeed,
+                profile.bridgeSpeed,
+                profile.gapInfillSpeed,
+                profile.firstLayerInfillSpeed,
+                profile.supportInterfaceSpeed,
             ).all { it in 0f..2_000f } &&
+            listOf(
+                profile.bridgeFlowRatio,
+                profile.internalBridgeFlowRatio,
+                profile.topSurfaceFlowRatio,
+                profile.bottomSurfaceFlowRatio,
+            ).all { it in 0.1f..2f } &&
             listOf(
                 profile.defaultAcceleration,
                 profile.outerWallAcceleration,
@@ -81,14 +91,24 @@ internal object ProfileValidation {
                 profile.sparseInfillLineWidth,
                 profile.internalSolidInfillLineWidth,
                 profile.supportLineWidth,
+                profile.initialLayerLineWidth,
             ).all { it in 0f..3f } &&
             profile.wallGenerator in setOf("arachne", "classic") &&
             profile.wallSequence in setOf("inner-outer", "outer-inner", "inner-outer-inner") &&
             profile.topSolidLayers in 0..100 &&
             profile.bottomSolidLayers in 0..100 &&
+            profile.topShellThickness in 0f..100f &&
+            profile.bottomShellThickness in 0f..100f &&
             profile.fillPattern.isSafeLabel() &&
             profile.supportType in setOf("normal", "tree") &&
             profile.supportAngle in 0f..90f &&
+            profile.supportInterfaceTopLayers in 0..20 &&
+            profile.supportInterfaceBottomLayers in -1..20 &&
+            profile.supportInterfaceSpacing in 0f..20f &&
+            profile.supportBottomInterfaceSpacing in 0f..20f &&
+            profile.supportTopZDistance in 0f..20f &&
+            profile.supportBottomZDistance in 0f..20f &&
+            profile.supportObjectXYDistance in 0f..20f &&
             profile.skirtLoops in 0..100 &&
             profile.skirtDistance in 0f..1_000f &&
             profile.brimWidth in 0f..1_000f &&

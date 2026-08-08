@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.JsonReader
 import java.io.InputStreamReader
 
-private const val CATALOG_ASSET = "profile_catalog_v4.json"
+private const val CATALOG_ASSET = "profile_catalog_v5.json"
 
 class OrcaProfileCatalog(private val context: Context) {
     fun load(): ProfileCatalog = runCatching {
@@ -40,7 +40,7 @@ class OrcaProfileCatalog(private val context: Context) {
             }
         }
         reader.endObject()
-        check(schemaVersion == 4) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 5) { "Unsupported profile catalog schema" }
         return ProfileCatalog(
             printers = (PrinterProfile.builtIns + printers).distinctBy(PrinterProfile::id),
             filaments = (FilamentProfile.builtIns + filaments).distinctBy(FilamentProfile::id),
@@ -166,6 +166,14 @@ class OrcaProfileCatalog(private val context: Context) {
                 "internalSolidInfillSpeed" -> profile = profile.copy(internalSolidInfillSpeed = reader.nextFloat())
                 "topSurfaceSpeed" -> profile = profile.copy(topSurfaceSpeed = reader.nextFloat())
                 "supportSpeed" -> profile = profile.copy(supportSpeed = reader.nextFloat())
+                "bridgeSpeed" -> profile = profile.copy(bridgeSpeed = reader.nextFloat())
+                "gapInfillSpeed" -> profile = profile.copy(gapInfillSpeed = reader.nextFloat())
+                "firstLayerInfillSpeed" -> profile = profile.copy(firstLayerInfillSpeed = reader.nextFloat())
+                "supportInterfaceSpeed" -> profile = profile.copy(supportInterfaceSpeed = reader.nextFloat())
+                "bridgeFlowRatio" -> profile = profile.copy(bridgeFlowRatio = reader.nextFloat())
+                "internalBridgeFlowRatio" -> profile = profile.copy(internalBridgeFlowRatio = reader.nextFloat())
+                "topSurfaceFlowRatio" -> profile = profile.copy(topSurfaceFlowRatio = reader.nextFloat())
+                "bottomSurfaceFlowRatio" -> profile = profile.copy(bottomSurfaceFlowRatio = reader.nextFloat())
                 "defaultAcceleration" -> profile = profile.copy(defaultAcceleration = reader.nextFloat())
                 "outerWallAcceleration" -> profile = profile.copy(outerWallAcceleration = reader.nextFloat())
                 "innerWallAcceleration" -> profile = profile.copy(innerWallAcceleration = reader.nextFloat())
@@ -177,11 +185,20 @@ class OrcaProfileCatalog(private val context: Context) {
                 "brimWidth" -> profile = profile.copy(brimWidth = reader.nextFloat())
                 "topSolidLayers" -> profile = profile.copy(topSolidLayers = reader.nextInt())
                 "bottomSolidLayers" -> profile = profile.copy(bottomSolidLayers = reader.nextInt())
+                "topShellThickness" -> profile = profile.copy(topShellThickness = reader.nextFloat())
+                "bottomShellThickness" -> profile = profile.copy(bottomShellThickness = reader.nextFloat())
                 "fillPattern" -> profile = profile.copy(fillPattern = reader.nextString())
                 "travelSpeed" -> profile = profile.copy(travelSpeed = reader.nextFloat())
                 "firstLayerSpeed" -> profile = profile.copy(firstLayerSpeed = reader.nextFloat())
                 "supportType" -> profile = profile.copy(supportType = reader.nextString())
                 "supportAngle" -> profile = profile.copy(supportAngle = reader.nextFloat())
+                "supportInterfaceTopLayers" -> profile = profile.copy(supportInterfaceTopLayers = reader.nextInt())
+                "supportInterfaceBottomLayers" -> profile = profile.copy(supportInterfaceBottomLayers = reader.nextInt())
+                "supportInterfaceSpacing" -> profile = profile.copy(supportInterfaceSpacing = reader.nextFloat())
+                "supportBottomInterfaceSpacing" -> profile = profile.copy(supportBottomInterfaceSpacing = reader.nextFloat())
+                "supportTopZDistance" -> profile = profile.copy(supportTopZDistance = reader.nextFloat())
+                "supportBottomZDistance" -> profile = profile.copy(supportBottomZDistance = reader.nextFloat())
+                "supportObjectXYDistance" -> profile = profile.copy(supportObjectXYDistance = reader.nextFloat())
                 "skirtLoops" -> profile = profile.copy(skirtLoops = reader.nextInt())
                 "skirtDistance" -> profile = profile.copy(skirtDistance = reader.nextFloat())
                 "outerWallLineWidth" -> profile = profile.copy(outerWallLineWidth = reader.nextFloat())
@@ -190,6 +207,7 @@ class OrcaProfileCatalog(private val context: Context) {
                 "sparseInfillLineWidth" -> profile = profile.copy(sparseInfillLineWidth = reader.nextFloat())
                 "internalSolidInfillLineWidth" -> profile = profile.copy(internalSolidInfillLineWidth = reader.nextFloat())
                 "supportLineWidth" -> profile = profile.copy(supportLineWidth = reader.nextFloat())
+                "initialLayerLineWidth" -> profile = profile.copy(initialLayerLineWidth = reader.nextFloat())
                 "wallGenerator" -> profile = profile.copy(wallGenerator = reader.nextString())
                 "wallSequence" -> profile = profile.copy(wallSequence = reader.nextString())
                 "detectThinWalls" -> profile = profile.copy(detectThinWalls = reader.nextBoolean())

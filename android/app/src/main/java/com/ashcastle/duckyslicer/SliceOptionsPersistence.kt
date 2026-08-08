@@ -55,6 +55,14 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         internalSolidInfillSpeed = internalSolidInfillSpeed,
         topSurfaceSpeed = topSurfaceSpeed,
         supportSpeed = supportSpeed,
+        bridgeSpeed = bridgeSpeed,
+        gapInfillSpeed = gapInfillSpeed,
+        firstLayerInfillSpeed = firstLayerInfillSpeed,
+        supportInterfaceSpeed = supportInterfaceSpeed,
+        bridgeFlowRatio = bridgeFlowRatio,
+        internalBridgeFlowRatio = internalBridgeFlowRatio,
+        topSurfaceFlowRatio = topSurfaceFlowRatio,
+        bottomSurfaceFlowRatio = bottomSurfaceFlowRatio,
         defaultAcceleration = defaultAcceleration,
         outerWallAcceleration = outerWallAcceleration,
         innerWallAcceleration = innerWallAcceleration,
@@ -66,11 +74,20 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         brimWidth = brimWidth,
         topSolidLayers = topSolidLayers,
         bottomSolidLayers = bottomSolidLayers,
+        topShellThickness = topShellThickness,
+        bottomShellThickness = bottomShellThickness,
         fillPattern = fillPattern,
         travelSpeed = travelSpeed,
         firstLayerSpeed = firstLayerSpeed,
         supportType = supportType,
         supportAngle = supportAngle,
+        supportInterfaceTopLayers = supportInterfaceTopLayers,
+        supportInterfaceBottomLayers = supportInterfaceBottomLayers,
+        supportInterfaceSpacing = supportInterfaceSpacing,
+        supportBottomInterfaceSpacing = supportBottomInterfaceSpacing,
+        supportTopZDistance = supportTopZDistance,
+        supportBottomZDistance = supportBottomZDistance,
+        supportObjectXYDistance = supportObjectXYDistance,
         skirtLoops = skirtLoops,
         skirtDistance = skirtDistance,
         outerWallLineWidth = outerWallLineWidth,
@@ -79,6 +96,7 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         sparseInfillLineWidth = sparseInfillLineWidth,
         internalSolidInfillLineWidth = internalSolidInfillLineWidth,
         supportLineWidth = supportLineWidth,
+        initialLayerLineWidth = initialLayerLineWidth,
         wallGenerator = wallGenerator,
         wallSequence = wallSequence,
         detectThinWalls = detectThinWalls,
@@ -122,7 +140,7 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 3
+private const val SLICE_OPTIONS_FORMAT_VERSION = 4
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f

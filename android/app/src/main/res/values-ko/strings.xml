@@ -123,6 +123,7 @@
     <string name="sparse_infill_width">희소 인필 선폭</string>
     <string name="internal_solid_infill_width">내부 솔리드 선폭</string>
     <string name="support_line_width">서포트 선폭</string>
+    <string name="initial_layer_line_width">첫 레이어 선폭</string>
     <string name="wall_generator">벽 생성 방식</string>
     <string name="wall_generator_arachne">아라크네</string>
     <string name="wall_generator_classic">클래식</string>
@@ -133,6 +134,8 @@
     <string name="quality">품질</string>
     <string name="top_shell_layers">상단 솔리드 레이어</string>
     <string name="bottom_shell_layers">하단 솔리드 레이어</string>
+    <string name="top_shell_thickness">최소 상단 두께</string>
+    <string name="bottom_shell_thickness">최소 하단 두께</string>
     <string name="infill">인필</string>
     <string name="infill_gyroid">자이로이드</string>
     <string name="infill_grid">그리드</string>
@@ -146,6 +149,15 @@
     <string name="internal_solid_infill_speed">내부 솔리드 속도</string>
     <string name="top_surface_speed">상단 표면 속도</string>
     <string name="support_speed">서포트 속도</string>
+    <string name="bridge_speed">브리지 속도</string>
+    <string name="gap_infill_speed">갭 인필 속도</string>
+    <string name="first_layer_infill_speed">첫 레이어 솔리드 속도</string>
+    <string name="support_interface_speed">서포트 인터페이스 속도</string>
+    <string name="feature_flow_ratio">기능별 유량</string>
+    <string name="bridge_flow_ratio">브리지 유량</string>
+    <string name="internal_bridge_flow_ratio">내부 브리지 유량</string>
+    <string name="top_surface_flow_ratio">상단 표면 유량</string>
+    <string name="bottom_surface_flow_ratio">하단 표면 유량</string>
     <string name="travel_speed">이동 속도</string>
     <string name="first_layer_speed">첫 레이어 속도</string>
     <string name="feature_acceleration">가속도</string>
@@ -160,6 +172,14 @@
     <string name="normal_support">일반</string>
     <string name="tree_support">트리</string>
     <string name="support_threshold_angle">임계 각도</string>
+    <string name="support_top_interface_layers">상단 인터페이스 레이어</string>
+    <string name="support_bottom_interface_layers">하단 인터페이스 레이어</string>
+    <string name="same_as_top">상단과 동일</string>
+    <string name="support_interface_spacing">상단 인터페이스 간격</string>
+    <string name="support_bottom_interface_spacing">하단 인터페이스 간격</string>
+    <string name="support_top_z_distance">상단 Z 간격</string>
+    <string name="support_bottom_z_distance">하단 Z 간격</string>
+    <string name="support_object_xy_distance">오브젝트 XY 간격</string>
     <string name="bed_adhesion">베드 접착</string>
     <string name="skirt_loops">스커트 루프</string>
     <string name="skirt_distance">스커트 거리</string>

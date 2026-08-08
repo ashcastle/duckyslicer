@@ -113,6 +113,14 @@ class ProfileStore private constructor(
             internalSolidInfillSpeed = options.internalSolidInfillSpeed,
             topSurfaceSpeed = options.topSurfaceSpeed,
             supportSpeed = options.supportSpeed,
+            bridgeSpeed = options.bridgeSpeed,
+            gapInfillSpeed = options.gapInfillSpeed,
+            firstLayerInfillSpeed = options.firstLayerInfillSpeed,
+            supportInterfaceSpeed = options.supportInterfaceSpeed,
+            bridgeFlowRatio = options.bridgeFlowRatio,
+            internalBridgeFlowRatio = options.internalBridgeFlowRatio,
+            topSurfaceFlowRatio = options.topSurfaceFlowRatio,
+            bottomSurfaceFlowRatio = options.bottomSurfaceFlowRatio,
             defaultAcceleration = options.defaultAcceleration,
             outerWallAcceleration = options.outerWallAcceleration,
             innerWallAcceleration = options.innerWallAcceleration,
@@ -123,11 +131,20 @@ class ProfileStore private constructor(
             brimWidth = options.brimWidth,
             topSolidLayers = options.topSolidLayers,
             bottomSolidLayers = options.bottomSolidLayers,
+            topShellThickness = options.topShellThickness,
+            bottomShellThickness = options.bottomShellThickness,
             fillPattern = options.fillPattern,
             travelSpeed = options.travelSpeed,
             firstLayerSpeed = options.firstLayerSpeed,
             supportType = options.supportType,
             supportAngle = options.supportAngle,
+            supportInterfaceTopLayers = options.supportInterfaceTopLayers,
+            supportInterfaceBottomLayers = options.supportInterfaceBottomLayers,
+            supportInterfaceSpacing = options.supportInterfaceSpacing,
+            supportBottomInterfaceSpacing = options.supportBottomInterfaceSpacing,
+            supportTopZDistance = options.supportTopZDistance,
+            supportBottomZDistance = options.supportBottomZDistance,
+            supportObjectXYDistance = options.supportObjectXYDistance,
             skirtLoops = options.skirtLoops,
             skirtDistance = options.skirtDistance,
             outerWallLineWidth = options.outerWallLineWidth,
@@ -136,6 +153,7 @@ class ProfileStore private constructor(
             sparseInfillLineWidth = options.sparseInfillLineWidth,
             internalSolidInfillLineWidth = options.internalSolidInfillLineWidth,
             supportLineWidth = options.supportLineWidth,
+            initialLayerLineWidth = options.initialLayerLineWidth,
             wallGenerator = options.wallGenerator,
             wallSequence = options.wallSequence,
             detectThinWalls = options.detectThinWalls,
@@ -181,7 +199,7 @@ class ProfileStore private constructor(
         ?: throw IllegalArgumentException("Profile name is required")
 
     private companion object {
-        const val USER_PROFILE_SCHEMA_VERSION = 6
+        const val USER_PROFILE_SCHEMA_VERSION = 7
     }
 }
 
@@ -228,6 +246,14 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("internalSolidInfillSpeed", internalSolidInfillSpeed)
     .put("topSurfaceSpeed", topSurfaceSpeed)
     .put("supportSpeed", supportSpeed)
+    .put("bridgeSpeed", bridgeSpeed)
+    .put("gapInfillSpeed", gapInfillSpeed)
+    .put("firstLayerInfillSpeed", firstLayerInfillSpeed)
+    .put("supportInterfaceSpeed", supportInterfaceSpeed)
+    .put("bridgeFlowRatio", bridgeFlowRatio)
+    .put("internalBridgeFlowRatio", internalBridgeFlowRatio)
+    .put("topSurfaceFlowRatio", topSurfaceFlowRatio)
+    .put("bottomSurfaceFlowRatio", bottomSurfaceFlowRatio)
     .put("defaultAcceleration", defaultAcceleration)
     .put("outerWallAcceleration", outerWallAcceleration)
     .put("innerWallAcceleration", innerWallAcceleration)
@@ -236,9 +262,17 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("firstLayerAcceleration", firstLayerAcceleration)
     .put("supportEnabled", supportEnabled).put("brimWidth", brimWidth)
     .put("topSolidLayers", topSolidLayers).put("bottomSolidLayers", bottomSolidLayers)
+    .put("topShellThickness", topShellThickness).put("bottomShellThickness", bottomShellThickness)
     .put("fillPattern", fillPattern).put("travelSpeed", travelSpeed)
     .put("firstLayerSpeed", firstLayerSpeed).put("supportType", supportType)
     .put("supportAngle", supportAngle).put("skirtLoops", skirtLoops)
+    .put("supportInterfaceTopLayers", supportInterfaceTopLayers)
+    .put("supportInterfaceBottomLayers", supportInterfaceBottomLayers)
+    .put("supportInterfaceSpacing", supportInterfaceSpacing)
+    .put("supportBottomInterfaceSpacing", supportBottomInterfaceSpacing)
+    .put("supportTopZDistance", supportTopZDistance)
+    .put("supportBottomZDistance", supportBottomZDistance)
+    .put("supportObjectXYDistance", supportObjectXYDistance)
     .put("skirtDistance", skirtDistance)
     .put("outerWallLineWidth", outerWallLineWidth)
     .put("innerWallLineWidth", innerWallLineWidth)
@@ -246,6 +280,7 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("sparseInfillLineWidth", sparseInfillLineWidth)
     .put("internalSolidInfillLineWidth", internalSolidInfillLineWidth)
     .put("supportLineWidth", supportLineWidth)
+    .put("initialLayerLineWidth", initialLayerLineWidth)
     .put("wallGenerator", wallGenerator)
     .put("wallSequence", wallSequence)
     .put("detectThinWalls", detectThinWalls)
@@ -318,6 +353,14 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         internalSolidInfillSpeed = optDouble("internalSolidInfillSpeed", 0.0).toFloat(),
         topSurfaceSpeed = optDouble("topSurfaceSpeed", 0.0).toFloat(),
         supportSpeed = optDouble("supportSpeed", 0.0).toFloat(),
+        bridgeSpeed = optDouble("bridgeSpeed", 0.0).toFloat(),
+        gapInfillSpeed = optDouble("gapInfillSpeed", 0.0).toFloat(),
+        firstLayerInfillSpeed = optDouble("firstLayerInfillSpeed", 0.0).toFloat(),
+        supportInterfaceSpeed = optDouble("supportInterfaceSpeed", 0.0).toFloat(),
+        bridgeFlowRatio = optDouble("bridgeFlowRatio", 1.0).toFloat(),
+        internalBridgeFlowRatio = optDouble("internalBridgeFlowRatio", 1.0).toFloat(),
+        topSurfaceFlowRatio = optDouble("topSurfaceFlowRatio", 1.0).toFloat(),
+        bottomSurfaceFlowRatio = optDouble("bottomSurfaceFlowRatio", 1.0).toFloat(),
         defaultAcceleration = optDouble("defaultAcceleration", 0.0).toFloat(),
         outerWallAcceleration = optDouble("outerWallAcceleration", 0.0).toFloat(),
         innerWallAcceleration = optDouble("innerWallAcceleration", 0.0).toFloat(),
@@ -329,11 +372,20 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         builtIn = optBoolean("builtIn"),
         topSolidLayers = optInt("topSolidLayers", 5),
         bottomSolidLayers = optInt("bottomSolidLayers", 4),
+        topShellThickness = optDouble("topShellThickness", 0.0).toFloat(),
+        bottomShellThickness = optDouble("bottomShellThickness", 0.0).toFloat(),
         fillPattern = optString("fillPattern", "gyroid"),
         travelSpeed = optDouble("travelSpeed", 500.0).toFloat(),
         firstLayerSpeed = optDouble("firstLayerSpeed", 50.0).toFloat(),
         supportType = optString("supportType", "normal"),
         supportAngle = optDouble("supportAngle", 45.0).toFloat(),
+        supportInterfaceTopLayers = optInt("supportInterfaceTopLayers", 3),
+        supportInterfaceBottomLayers = optInt("supportInterfaceBottomLayers", 0),
+        supportInterfaceSpacing = optDouble("supportInterfaceSpacing", 0.5).toFloat(),
+        supportBottomInterfaceSpacing = optDouble("supportBottomInterfaceSpacing", 0.5).toFloat(),
+        supportTopZDistance = optDouble("supportTopZDistance", 0.2).toFloat(),
+        supportBottomZDistance = optDouble("supportBottomZDistance", 0.2).toFloat(),
+        supportObjectXYDistance = optDouble("supportObjectXYDistance", 0.35).toFloat(),
         skirtLoops = optInt("skirtLoops", 0),
         skirtDistance = optDouble("skirtDistance", 6.0).toFloat(),
         outerWallLineWidth = optDouble("outerWallLineWidth", 0.0).toFloat(),
@@ -342,6 +394,7 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         sparseInfillLineWidth = optDouble("sparseInfillLineWidth", 0.0).toFloat(),
         internalSolidInfillLineWidth = optDouble("internalSolidInfillLineWidth", 0.0).toFloat(),
         supportLineWidth = optDouble("supportLineWidth", 0.0).toFloat(),
+        initialLayerLineWidth = optDouble("initialLayerLineWidth", 0.0).toFloat(),
         wallGenerator = optString("wallGenerator", "arachne"),
         wallSequence = optString("wallSequence", "inner-outer"),
         detectThinWalls = optBoolean("detectThinWalls"),

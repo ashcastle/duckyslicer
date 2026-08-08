@@ -32,6 +32,24 @@ class SliceOptionsPersistenceTest {
         assertEquals(165f, restored.internalSolidInfillSpeed)
         assertEquals(95f, restored.topSurfaceSpeed)
         assertEquals(85f, restored.supportSpeed)
+        assertEquals(43f, restored.bridgeSpeed)
+        assertEquals(133f, restored.gapInfillSpeed)
+        assertEquals(61f, restored.firstLayerInfillSpeed)
+        assertEquals(52f, restored.supportInterfaceSpeed)
+        assertEquals(0.91f, restored.bridgeFlowRatio)
+        assertEquals(0.96f, restored.internalBridgeFlowRatio)
+        assertEquals(0.97f, restored.topSurfaceFlowRatio)
+        assertEquals(0.98f, restored.bottomSurfaceFlowRatio)
+        assertEquals(0.8f, restored.topShellThickness)
+        assertEquals(0.7f, restored.bottomShellThickness)
+        assertEquals(4, restored.supportInterfaceTopLayers)
+        assertEquals(2, restored.supportInterfaceBottomLayers)
+        assertEquals(0.24f, restored.supportInterfaceSpacing)
+        assertEquals(0.28f, restored.supportBottomInterfaceSpacing)
+        assertEquals(0.18f, restored.supportTopZDistance)
+        assertEquals(0.22f, restored.supportBottomZDistance)
+        assertEquals(0.4f, restored.supportObjectXYDistance)
+        assertEquals(0.74f, restored.initialLayerLineWidth)
         assertEquals(4_000f, restored.defaultAcceleration)
         assertEquals(2_000f, restored.outerWallAcceleration)
         assertEquals(3_500f, restored.innerWallAcceleration)
@@ -116,6 +134,24 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         internalSolidInfillSpeed = 165f,
         topSurfaceSpeed = 95f,
         supportSpeed = 85f,
+        bridgeSpeed = 43f,
+        gapInfillSpeed = 133f,
+        firstLayerInfillSpeed = 61f,
+        supportInterfaceSpeed = 52f,
+        bridgeFlowRatio = 0.91f,
+        internalBridgeFlowRatio = 0.96f,
+        topSurfaceFlowRatio = 0.97f,
+        bottomSurfaceFlowRatio = 0.98f,
+        topShellThickness = 0.8f,
+        bottomShellThickness = 0.7f,
+        supportInterfaceTopLayers = 4,
+        supportInterfaceBottomLayers = 2,
+        supportInterfaceSpacing = 0.24f,
+        supportBottomInterfaceSpacing = 0.28f,
+        supportTopZDistance = 0.18f,
+        supportBottomZDistance = 0.22f,
+        supportObjectXYDistance = 0.4f,
+        initialLayerLineWidth = 0.74f,
         defaultAcceleration = 4_000f,
         outerWallAcceleration = 2_000f,
         innerWallAcceleration = 3_500f,
