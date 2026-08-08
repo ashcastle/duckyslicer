@@ -117,35 +117,46 @@ struct ErrorResponse<'a> {
 }
 
 fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
-    let file = File::open(path)?;
-    let mesh = stl_io::read_stl(&mut BufReader::new(file))
+    const PREVIEW_TRIANGLE_LIMIT: usize = 3_500;
+    let mut file = BufReader::new(File::open(path)?);
+    let triangles = stl_io::create_stl_reader(&mut file)
         .map_err(|error| EngineError::Parse(error.to_string()))?;
+    let mut triangle_count = 0usize;
+    let mut min = [f32::INFINITY; 3];
+    let mut max = [f32::NEG_INFINITY; 3];
+    let mut preview_triangles = Vec::with_capacity(PREVIEW_TRIANGLE_LIMIT);
+    let mut preview_stride = 1usize;
 
-    let first = mesh.vertices.first().ok_or(EngineError::Empty)?;
-    let mut min = [first[0], first[1], first[2]];
-    let mut max = min;
-
-    for vertex in &mesh.vertices[1..] {
-        for axis in 0..3 {
-            min[axis] = min[axis].min(vertex[axis]);
-            max[axis] = max[axis].max(vertex[axis]);
+    for triangle in triangles {
+        let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
+        let vertices = triangle.vertices.map(|vertex| vertex.0);
+        if vertices.iter().flatten().any(|value| !value.is_finite()) {
+            return Err(EngineError::Parse(
+                "STL contains a non-finite coordinate".to_owned(),
+            ));
+        }
+        let ordinal = triangle_count;
+        triangle_count = triangle_count
+            .checked_add(1)
+            .ok_or_else(|| EngineError::Parse("STL contains too many triangles".to_owned()))?;
+        for vertex in vertices {
+            for axis in 0..3 {
+                min[axis] = min[axis].min(vertex[axis]);
+                max[axis] = max[axis].max(vertex[axis]);
+            }
+        }
+        if ordinal.is_multiple_of(preview_stride) {
+            let [a, b, c] = vertices;
+            preview_triangles.push([a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]]);
+        }
+        if preview_triangles.len() > PREVIEW_TRIANGLE_LIMIT {
+            preview_triangles = preview_triangles.into_iter().step_by(2).collect();
+            preview_stride = preview_stride.saturating_mul(2);
         }
     }
-
-    const PREVIEW_TRIANGLE_LIMIT: usize = 3_500;
-    let sample_step = mesh.faces.len().div_ceil(PREVIEW_TRIANGLE_LIMIT).max(1);
-    let preview_triangles = mesh
-        .faces
-        .iter()
-        .step_by(sample_step)
-        .take(PREVIEW_TRIANGLE_LIMIT)
-        .map(|face| {
-            let a = mesh.vertices[face.vertices[0]];
-            let b = mesh.vertices[face.vertices[1]];
-            let c = mesh.vertices[face.vertices[2]];
-            [a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]]
-        })
-        .collect();
+    if triangle_count == 0 {
+        return Err(EngineError::Empty);
+    }
 
     Ok(StlInspection {
         ok: true,
@@ -154,7 +165,7 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
             .and_then(|name| name.to_str())
             .unwrap_or("model.stl")
             .to_owned(),
-        triangles: mesh.faces.len(),
+        triangles: triangle_count,
         dimensions_mm: [max[0] - min[0], max[1] - min[1], max[2] - min[2]],
         min_mm: min,
         max_mm: max,
@@ -263,10 +274,16 @@ fn transform_stl(
     let mut max = [f32::NEG_INFINITY; 3];
     for triangle in first_pass {
         let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
+        let vertices = triangle.vertices.map(|vertex| vertex.0);
+        if vertices.iter().flatten().any(|value| !value.is_finite()) {
+            return Err(EngineError::Parse(
+                "STL contains a non-finite coordinate".to_owned(),
+            ));
+        }
         triangle_count = triangle_count
             .checked_add(1)
             .ok_or_else(|| EngineError::Parse("STL contains too many triangles".to_owned()))?;
-        for vertex in triangle.vertices {
+        for vertex in vertices {
             for axis in 0..3 {
                 min[axis] = min[axis].min(vertex[axis]);
                 max[axis] = max[axis].max(vertex[axis]);
@@ -584,6 +601,51 @@ mod tests {
     }
 
     #[test]
+    fn stl_inspection_streams_large_meshes_into_a_bounded_preview() {
+        let path = std::env::temp_dir().join(format!(
+            "duckyslicer-large-inspection-{}.stl",
+            std::process::id(),
+        ));
+        let mut file = File::create(&path).expect("create large STL fixture");
+        writeln!(file, "solid large").expect("write header");
+        for triangle in 0..8_001 {
+            let x = triangle as f32 * 0.01;
+            writeln!(
+                file,
+                "facet normal 0 0 1\nouter loop\nvertex {x} 0 0\nvertex {x} 1 0\nvertex {x} 0 1\nendloop\nendfacet"
+            )
+            .expect("write triangle");
+        }
+        writeln!(file, "endsolid large").expect("write footer");
+        drop(file);
+
+        let inspection = inspect_stl(path.to_str().expect("utf8 path")).expect("inspect STL");
+        std::fs::remove_file(path).expect("remove fixture");
+
+        assert_eq!(inspection.triangles, 8_001);
+        assert!(!inspection.preview_triangles.is_empty());
+        assert!(inspection.preview_triangles.len() <= 3_500);
+        assert!(inspection.dimensions_mm[0] > 79.0);
+    }
+
+    #[test]
+    fn stl_inspection_rejects_non_finite_coordinates() {
+        let path = std::env::temp_dir().join(format!(
+            "duckyslicer-invalid-inspection-{}.stl",
+            std::process::id(),
+        ));
+        let mut file = File::create(&path).expect("create invalid STL fixture");
+        writeln!(file, "solid invalid\nfacet normal 0 0 1\nouter loop\nvertex NaN 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid invalid")
+            .expect("write fixture");
+        drop(file);
+
+        let result = inspect_stl(path.to_str().expect("utf8 path"));
+        std::fs::remove_file(path).expect("remove fixture");
+
+        assert!(matches!(result, Err(EngineError::Parse(_))));
+    }
+
+    #[test]
     fn toolpath_roles_cover_surface_support_and_adhesion_labels() {
         assert_eq!(
             ToolpathRole::from_label("Outer wall"),
@@ -689,5 +751,38 @@ mod tests {
         assert!((inspection.min_mm[0] - 101.0).abs() < 0.001);
         assert!((inspection.max_mm[1] - 99.0).abs() < 0.001);
         assert_eq!(inspection.min_mm[2], 0.0);
+    }
+
+    #[test]
+    fn stl_transform_rejects_non_finite_coordinates() {
+        let input_path = std::env::temp_dir().join(format!(
+            "duckyslicer-invalid-transform-input-{}.stl",
+            std::process::id(),
+        ));
+        let output_path = std::env::temp_dir().join(format!(
+            "duckyslicer-invalid-transform-output-{}.stl",
+            std::process::id(),
+        ));
+        let mut file = File::create(&input_path).expect("create fixture");
+        writeln!(file, "solid invalid\nfacet normal 0 0 1\nouter loop\nvertex NaN 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid invalid")
+            .expect("write fixture");
+        drop(file);
+
+        let result = transform_stl(
+            input_path.to_str().expect("utf8 path"),
+            output_path.to_str().expect("utf8 path"),
+            &StlTransform {
+                bed_center_mm: [100.0, 100.0],
+                offset_mm: [0.0, 0.0],
+                rotation_deg: [0.0, 0.0, 0.0],
+                scale: 1.0,
+            },
+        );
+
+        std::fs::remove_file(input_path).expect("remove fixture");
+        if output_path.exists() {
+            std::fs::remove_file(output_path).expect("remove unexpected output");
+        }
+        assert!(matches!(result, Err(EngineError::Parse(_))));
     }
 }

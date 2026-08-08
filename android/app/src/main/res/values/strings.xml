@@ -21,6 +21,7 @@
     <string name="dimensions">Size</string>
     <string name="gesture_hint">Drag with one finger to turn. Use two fingers to move or zoom.</string>
     <string name="model_read_error">Couldn’t open this model.</string>
+    <string name="model_too_large_error">This model is too large for this device.</string>
     <string name="slice_error">Couldn’t slice this model.</string>
     <string name="save_error">Couldn’t save G-code.</string>
     <string name="gcode_saved">G-code saved.</string>

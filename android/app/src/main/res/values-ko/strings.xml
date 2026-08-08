@@ -21,6 +21,7 @@
     <string name="dimensions">크기</string>
     <string name="gesture_hint">한 손가락으로 돌리고 두 손가락으로 이동·확대하세요.</string>
     <string name="model_read_error">이 모델을 열지 못했습니다.</string>
+    <string name="model_too_large_error">이 기기에서 열기에는 모델이 너무 큽니다.</string>
     <string name="slice_error">이 모델을 슬라이스하지 못했습니다.</string>
     <string name="save_error">G-code를 저장하지 못했습니다.</string>
     <string name="gcode_saved">G-code를 저장했습니다.</string>
