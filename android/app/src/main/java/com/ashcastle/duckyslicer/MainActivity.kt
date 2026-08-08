@@ -107,6 +107,7 @@ private fun DuckySlicerScreen() {
     val savedNotice = stringResource(R.string.gcode_saved)
     val profileSavedNotice = stringResource(R.string.profile_saved)
     val profileSaveError = stringResource(R.string.profile_save_error)
+    val projectSaveError = stringResource(R.string.project_save_error)
     val previewError = stringResource(R.string.preview_error)
     val remoteSavedNotice = stringResource(R.string.device_saved)
     val remoteDeletedNotice = stringResource(R.string.device_deleted)
@@ -122,6 +123,7 @@ private fun DuckySlicerScreen() {
     val remoteSaveError = stringResource(R.string.device_save_error)
 
     var projectHistory by remember { mutableStateOf(ProjectHistoryState()) }
+    var projectRestored by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var importing by remember { mutableStateOf(false) }
@@ -137,6 +139,7 @@ private fun DuckySlicerScreen() {
     val model = selectedProjectObject?.model ?: projectObjects.firstOrNull()?.model
     val modelTransform = selectedProjectObject?.transform ?: ModelTransform()
     val profileStore = remember(context.applicationContext) { ProfileStore(context.applicationContext) }
+    val projectStore = remember(context.applicationContext) { ProjectStore(context.applicationContext) }
     var profileCatalog by remember { mutableStateOf(ProfileCatalog()) }
     val appSettingsStore = remember(context.applicationContext) {
         AppSettingsStore(context.applicationContext)
@@ -156,6 +159,21 @@ private fun DuckySlicerScreen() {
 
     LaunchedEffect(profileStore) {
         profileCatalog = withContext(Dispatchers.IO) { profileStore.load() }
+    }
+    LaunchedEffect(projectStore) {
+        val restored = withContext(Dispatchers.IO) { projectStore.load() }
+        projectHistory = ProjectHistoryState(current = restored)
+        projectRestored = true
+    }
+    LaunchedEffect(projectHistory.current, projectRestored) {
+        if (!projectRestored) return@LaunchedEffect
+        delay(400)
+        runCatching {
+            withContext(Dispatchers.IO) { projectStore.save(projectHistory.current) }
+        }.onFailure {
+            error = projectSaveError
+            notice = null
+        }
     }
     LaunchedEffect(remoteDeviceStore) {
         remoteDevices = withContext(Dispatchers.IO) { remoteDeviceStore.load() }
@@ -200,12 +218,12 @@ private fun DuckySlicerScreen() {
     }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null && !slicing && !previewLoading) {
+        if (uri != null && projectRestored && !slicing && !previewLoading) {
             importing = true
             error = null
             notice = null
             scope.launch {
-                runCatching { importAndInspect(context, uri) }
+                runCatching { importAndInspect(context, uri, projectStore) }
                     .onSuccess {
                         val objectIndex = projectObjects.size
                         val distance = ((objectIndex + 1) / 2) * 24f
@@ -407,7 +425,7 @@ private fun DuckySlicerScreen() {
         remoteMessageIsError = remoteMessageIsError,
         sliceOutcome = sliceOutcome,
         layerPreview = layerPreview,
-        importing = importing,
+        importing = importing || !projectRestored,
         slicing = slicing,
         sliceProgress = sliceProgress,
         previewLoading = previewLoading,
@@ -675,7 +693,11 @@ private fun DuckySlicerScreen() {
     )
 }
 
-private suspend fun importAndInspect(context: Context, uri: Uri): ModelInfo = withContext(Dispatchers.IO) {
+private suspend fun importAndInspect(
+    context: Context,
+    uri: Uri,
+    projectStore: ProjectStore,
+): ModelInfo = withContext(Dispatchers.IO) {
     val metadata = runCatching {
         context.contentResolver.query(
             uri,
@@ -700,13 +722,7 @@ private suspend fun importAndInspect(context: Context, uri: Uri): ModelInfo = wi
     if (reportedSize != null && reportedSize > MAX_MODEL_IMPORT_BYTES) {
         throw ModelTooLargeException()
     }
-    val safeName = displayName
-        .replace(Regex("[^A-Za-z0-9가-힣._-]"), "_")
-        .takeLast(160)
-    val destination = File(
-        File(context.cacheDir, "models").apply { check(isDirectory || mkdirs()) },
-        "${UUID.randomUUID()}-$safeName",
-    )
+    val destination = projectStore.createModelDestination(displayName)
 
     try {
         context.contentResolver.openInputStream(uri).use { input ->

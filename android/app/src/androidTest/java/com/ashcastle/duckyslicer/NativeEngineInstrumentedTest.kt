@@ -27,6 +27,49 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun projectSurvivesStoreRecreationAndNativeReinspection() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = File(context.cacheDir, "project-store-${System.nanoTime()}")
+        val inspector: (File) -> ModelInfo = { model ->
+            ModelInfo.fromJson(NativeEngine.inspectStl(model.absolutePath), model.absolutePath)
+        }
+        try {
+            val firstStore = ProjectStore(root, inspector)
+            val destination = firstStore.createModelDestination("restored duck.stl")
+            fixtureModel().copyTo(destination)
+            firstStore.save(
+                ProjectSnapshot(
+                    objects = listOf(
+                        ProjectObject(
+                            id = "restored-object",
+                            model = inspector(destination).copy(fileName = "restored duck.stl"),
+                            transform = ModelTransform(
+                                offsetXmm = 18f,
+                                offsetYmm = -11f,
+                                rotationZdeg = 30f,
+                                scale = 1.4f,
+                            ),
+                        ),
+                    ),
+                    selectedObjectId = "restored-object",
+                ),
+            )
+
+            val restored = ProjectStore(root, inspector).load()
+
+            assertEquals("restored-object", restored.selectedObjectId)
+            assertEquals("restored duck.stl", restored.selectedObject!!.model.fileName)
+            assertEquals(18f, restored.selectedObject!!.transform.offsetXmm)
+            assertEquals(-11f, restored.selectedObject!!.transform.offsetYmm)
+            assertEquals(30f, restored.selectedObject!!.transform.rotationZdeg)
+            assertEquals(1.4f, restored.selectedObject!!.transform.scale)
+            assertTrue(restored.selectedObject!!.model.previewTriangles.isNotEmpty())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun userProfilesRoundTripInPrivateStorage() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val directory = File(context.cacheDir, "profile-store-test").apply { mkdirs() }
