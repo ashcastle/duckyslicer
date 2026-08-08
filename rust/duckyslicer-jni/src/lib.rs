@@ -88,9 +88,15 @@ impl ToolpathRole {
             Self::Bridge
         } else if normalized.contains("support") {
             Self::Support
-        } else if normalized.contains("skirt") || normalized.contains("brim") {
+        } else if normalized.contains("skirt")
+            || normalized.contains("brim")
+            || normalized.contains("raft")
+        {
             Self::Adhesion
-        } else if normalized.contains("solid") || normalized.contains("top surface") {
+        } else if normalized.contains("solid")
+            || normalized.contains("top surface")
+            || normalized.contains("bottom surface")
+        {
             Self::Solid
         } else if normalized.contains("infill") {
             Self::Infill
@@ -573,6 +579,27 @@ mod tests {
     fn missing_stl_is_reported_without_panicking() {
         let result = inspect_stl("/definitely/missing/duckyslicer.stl");
         assert!(matches!(result, Err(EngineError::Open(_))));
+    }
+
+    #[test]
+    fn toolpath_roles_cover_surface_support_and_adhesion_labels() {
+        assert_eq!(
+            ToolpathRole::from_label("Outer wall"),
+            ToolpathRole::OuterWall
+        );
+        assert_eq!(
+            ToolpathRole::from_label("Bottom surface"),
+            ToolpathRole::Solid
+        );
+        assert_eq!(
+            ToolpathRole::from_label("Support interface"),
+            ToolpathRole::Support
+        );
+        assert_eq!(
+            ToolpathRole::from_label("Overhang wall"),
+            ToolpathRole::Bridge
+        );
+        assert_eq!(ToolpathRole::from_label("Raft"), ToolpathRole::Adhesion);
     }
 
     #[test]

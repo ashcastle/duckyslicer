@@ -72,6 +72,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
@@ -92,6 +93,7 @@ import kotlinx.coroutines.delay
 private val WorkspaceYellow = Color(0xFFF6C945)
 private val WorkspaceBlack = Color(0xFF202124)
 private val WorkspacePanel = Color(0xEE2A2A27)
+private const val PreviewDepthBands = 12
 
 private data class ToolpathStyle(
     val code: Int,
@@ -101,14 +103,14 @@ private data class ToolpathStyle(
 )
 
 private val ToolpathStyles = listOf(
-    ToolpathStyle(0, R.string.toolpath_outer_wall, Color(0xFFFFCF40), 2.3f),
-    ToolpathStyle(1, R.string.toolpath_inner_wall, Color(0xFF44D7FF), 1.9f),
-    ToolpathStyle(2, R.string.toolpath_infill, Color(0xFF668BFF), 1.35f),
-    ToolpathStyle(3, R.string.toolpath_solid, Color(0xFFE879F9), 1.65f),
-    ToolpathStyle(4, R.string.toolpath_support, Color(0xFF5EE6A8), 1.45f),
-    ToolpathStyle(5, R.string.toolpath_bridge, Color(0xFFFF6B6B), 2.1f),
-    ToolpathStyle(6, R.string.toolpath_adhesion, Color(0xFFFF9F43), 1.8f),
-    ToolpathStyle(7, R.string.toolpath_other, Color(0xFFE7E7E2), 1.2f),
+    ToolpathStyle(0, R.string.toolpath_outer_wall, Color(0xFFFFCF40), 0.80f),
+    ToolpathStyle(1, R.string.toolpath_inner_wall, Color(0xFF44D7FF), 0.72f),
+    ToolpathStyle(2, R.string.toolpath_infill, Color(0xFF668BFF), 0.58f),
+    ToolpathStyle(3, R.string.toolpath_solid, Color(0xFFE879F9), 0.65f),
+    ToolpathStyle(4, R.string.toolpath_support, Color(0xFF5EE6A8), 0.60f),
+    ToolpathStyle(5, R.string.toolpath_bridge, Color(0xFFFF6B6B), 0.78f),
+    ToolpathStyle(6, R.string.toolpath_adhesion, Color(0xFFFF9F43), 0.70f),
+    ToolpathStyle(7, R.string.toolpath_other, Color(0xFFE7E7E2), 0.55f),
 )
 
 private val ToolpathDrawOrder = listOf(7, 2, 3, 4, 6, 1, 0, 5)
@@ -151,6 +153,7 @@ fun WorkspaceScreen(
     val tabletLayout = maxWidth >= 600.dp
     val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
     var toolpathOpacity by remember { mutableFloatStateOf(0.92f) }
+    var toolpathDepthContrast by remember { mutableFloatStateOf(0.78f) }
     var showModelTools by remember { mutableStateOf(false) }
     Scaffold(
         containerColor = Color(0xFF191A18),
@@ -168,6 +171,7 @@ fun WorkspaceScreen(
                     bedSizeX = sliceOptions.bedSizeX,
                     bedSizeY = sliceOptions.bedSizeY,
                     toolpathOpacity = toolpathOpacity,
+                    toolpathDepthContrast = toolpathDepthContrast,
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -246,6 +250,8 @@ fun WorkspaceScreen(
                     error = error,
                     toolpathOpacity = toolpathOpacity,
                     onToolpathOpacityChanged = { toolpathOpacity = it },
+                    toolpathDepthContrast = toolpathDepthContrast,
+                    onToolpathDepthContrastChanged = { toolpathDepthContrast = it },
                     onLayerRangeSelected = onLayerRangeSelected,
                     onGoToSlice = { onTabSelected(WorkspaceTab.SLICE) },
                     modifier = Modifier.align(panelAlignment),
@@ -518,6 +524,7 @@ private fun BedScene(
     bedSizeX: Float,
     bedSizeY: Float,
     toolpathOpacity: Float,
+    toolpathDepthContrast: Float,
     modifier: Modifier = Modifier,
 ) {
     var yaw by remember { mutableFloatStateOf(-45f) }
@@ -526,7 +533,9 @@ private fun BedScene(
     var pan by remember { mutableStateOf(Offset.Zero) }
     var interactionActive by remember { mutableStateOf(false) }
     var refinedPreview by remember { mutableStateOf(true) }
-    val previewPaths = remember(preview) { Array(ToolpathStyles.size) { Path() } }
+    val previewPaths = remember(preview) {
+        Array(PreviewDepthBands) { Array(ToolpathStyles.size) { Path() } }
+    }
     val meshPath = remember(model) { Path() }
     val movingPreviewPlan = remember(preview) { preview?.buildRenderPlan(segmentBudget = 450) }
     val refinedPreviewPlan = remember(preview) { preview?.buildRenderPlan(segmentBudget = 4_000) }
@@ -630,38 +639,58 @@ private fun BedScene(
         )
 
         if (preview != null) {
-            previewPaths.forEach(Path::reset)
+            previewPaths.forEach { bandPaths -> bandPaths.forEach(Path::reset) }
             val renderPlan = if (interactionActive || !refinedPreview) {
                 movingPreviewPlan
             } else {
                 refinedPreviewPlan
             }
+            val zSpan = (preview.maxZMm - preview.minZMm).coerceAtLeast(0.001f)
             renderPlan?.segmentOffsets?.forEachIndexed { selectedIndex, segmentIndex ->
                 val role = preview.segments[segmentIndex + 5].roundToInt()
                     .coerceIn(0, ToolpathStyles.lastIndex)
                 val startX = preview.segments[segmentIndex]
                 val startY = preview.segments[segmentIndex + 1]
                 val z = preview.segments[segmentIndex + 4]
+                val normalizedHeight = ((z - preview.minZMm) / zSpan).coerceIn(0f, 1f)
+                val depthBand = (normalizedHeight * (PreviewDepthBands - 1))
+                    .roundToInt()
+                    .coerceIn(0, PreviewDepthBands - 1)
+                val rolePath = previewPaths[depthBand][role]
                 val end = project(
                     preview.segments[segmentIndex + 2],
                     preview.segments[segmentIndex + 3],
                     z,
                 )
                 if (renderPlan.connectsToPrevious[selectedIndex]) {
-                    previewPaths[role].lineTo(end.x, end.y)
+                    rolePath.lineTo(end.x, end.y)
                 } else {
                     val start = project(startX, startY, z)
-                    previewPaths[role].moveTo(start.x, start.y)
-                    previewPaths[role].lineTo(end.x, end.y)
+                    rolePath.moveTo(start.x, start.y)
+                    rolePath.lineTo(end.x, end.y)
                 }
             }
-            ToolpathDrawOrder.forEach { role ->
-                val style = ToolpathStyles[role]
-                drawPath(
-                    path = previewPaths[role],
-                    color = style.color.copy(alpha = toolpathOpacity),
-                    style = Stroke(width = style.widthDp.dp.toPx()),
-                )
+            previewPaths.forEachIndexed { depthBand, bandPaths ->
+                val normalizedHeight = depthBand.toFloat() / (PreviewDepthBands - 1)
+                ToolpathDrawOrder.forEach { role ->
+                    val style = ToolpathStyles[role]
+                    val coreWidth = style.widthDp.dp.toPx()
+                    val shadeAmount = toolpathDepthContrast * (1f - normalizedHeight) * 0.72f
+                    val highlightAmount = toolpathDepthContrast * normalizedHeight * 0.08f
+                    val shadedColor = lerp(style.color, Color(0xFF10120F), shadeAmount)
+                    val visibleColor = lerp(shadedColor, Color.White, highlightAmount)
+                    val heightAlpha = 1f - toolpathDepthContrast * (1f - normalizedHeight) * 0.36f
+                    drawPath(
+                        path = bandPaths[role],
+                        color = Color.Black.copy(alpha = toolpathOpacity * 0.82f),
+                        style = Stroke(width = coreWidth + 0.5.dp.toPx()),
+                    )
+                    drawPath(
+                        path = bandPaths[role],
+                        color = visibleColor.copy(alpha = toolpathOpacity * heightAlpha),
+                        style = Stroke(width = coreWidth),
+                    )
+                }
             }
         } else if (model != null) {
             val minimumRotatedZ = modelTransform.minimumRotatedZ(model)
@@ -780,6 +809,8 @@ private fun PreviewSheet(
     error: String?,
     toolpathOpacity: Float,
     onToolpathOpacityChanged: (Float) -> Unit,
+    toolpathDepthContrast: Float,
+    onToolpathDepthContrastChanged: (Float) -> Unit,
     onLayerRangeSelected: (Int, Int) -> Unit,
     onGoToSlice: () -> Unit,
     modifier: Modifier = Modifier,
@@ -836,16 +867,40 @@ private fun PreviewSheet(
                     steps = 0,
                 )
             }
-            Text(
-                stringResource(R.string.toolpath_opacity, (toolpathOpacity * 100).roundToInt()),
-                fontWeight = FontWeight.SemiBold,
-            )
-            Slider(
-                value = toolpathOpacity,
-                onValueChange = onToolpathOpacityChanged,
-                valueRange = 0.3f..1f,
-                colors = duckySliderColors(),
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.toolpath_opacity, (toolpathOpacity * 100).roundToInt()),
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Slider(
+                        value = toolpathOpacity,
+                        onValueChange = onToolpathOpacityChanged,
+                        valueRange = 0.3f..1f,
+                        colors = duckySliderColors(),
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        stringResource(
+                            R.string.toolpath_depth_contrast,
+                            (toolpathDepthContrast * 100).roundToInt(),
+                        ),
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Slider(
+                        value = toolpathDepthContrast,
+                        onValueChange = onToolpathDepthContrastChanged,
+                        valueRange = 0f..1f,
+                        colors = duckySliderColors(),
+                    )
+                }
+            }
             ToolpathStyles.chunked(2).forEach { rowStyles ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
