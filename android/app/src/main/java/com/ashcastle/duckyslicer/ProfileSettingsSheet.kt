@@ -237,11 +237,12 @@ private fun PrinterSettingsSheet(
     )
     SettingsGroupTitle(stringResource(R.string.printer_firmware))
     CompactChoices(
-        entries = listOf("marlin", "marlin2"),
+        entries = listOf("marlin", "marlin2", "klipper"),
         selected = options.gcodeFlavor,
         label = {
             when (it) {
                 "marlin2" -> "Marlin 2"
+                "klipper" -> "Klipper"
                 else -> "Marlin"
             }
         },
@@ -505,6 +506,57 @@ private fun SlicingSettingsSheet(
         range = 1f..6f,
         steps = 4,
         onValueChange = { onOptionsChanged(options.copy(perimeters = it.roundToInt())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.outer_wall_width),
+        valueText = stringResource(R.string.millimeters_value_precise, options.outerWallLineWidth),
+        value = options.outerWallLineWidth,
+        range = (options.nozzleDiameter * 0.75f)..(options.nozzleDiameter * 2f),
+        steps = 49,
+        onValueChange = { onOptionsChanged(options.copy(outerWallLineWidth = it)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.inner_wall_width),
+        valueText = stringResource(R.string.millimeters_value_precise, options.innerWallLineWidth),
+        value = options.innerWallLineWidth,
+        range = (options.nozzleDiameter * 0.75f)..(options.nozzleDiameter * 2f),
+        steps = 49,
+        onValueChange = { onOptionsChanged(options.copy(innerWallLineWidth = it)) },
+    )
+    Text(stringResource(R.string.wall_order), fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf("inner-outer", "outer-inner", "inner-outer-inner"),
+        selected = options.wallSequence,
+        label = {
+            stringResource(
+                when (it) {
+                    "outer-inner" -> R.string.wall_order_outer_inner
+                    "inner-outer-inner" -> R.string.wall_order_inner_outer_inner
+                    else -> R.string.wall_order_inner_outer
+                },
+            )
+        },
+        onSelected = { onOptionsChanged(options.copy(wallSequence = it)) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.detect_thin_walls),
+        checked = options.detectThinWalls,
+        onCheckedChange = { onOptionsChanged(options.copy(detectThinWalls = it)) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.detect_overhang_walls),
+        checked = options.detectOverhangWalls,
+        onCheckedChange = { onOptionsChanged(options.copy(detectOverhangWalls = it)) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.one_wall_on_top),
+        checked = options.onlyOneWallOnTop,
+        onCheckedChange = { onOptionsChanged(options.copy(onlyOneWallOnTop = it)) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.precise_outer_walls),
+        checked = options.preciseOuterWalls,
+        onCheckedChange = { onOptionsChanged(options.copy(preciseOuterWalls = it)) },
     )
     SettingSlider(
         label = stringResource(R.string.top_shell_layers),

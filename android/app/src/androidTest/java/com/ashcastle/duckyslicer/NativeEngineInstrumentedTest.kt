@@ -46,6 +46,12 @@ class NativeEngineInstrumentedTest {
                 fanMinSpeed = 40,
                 pressureAdvanceEnabled = true,
                 pressureAdvance = 0.035f,
+                outerWallLineWidth = 0.64f,
+                innerWallLineWidth = 0.68f,
+                wallSequence = "outer-inner",
+                detectThinWalls = true,
+                onlyOneWallOnTop = false,
+                preciseOuterWalls = true,
                 gcodeFlavor = "marlin2",
                 maxSpeedX = 320f,
                 maxAccelerationX = 4_200f,
@@ -72,6 +78,12 @@ class NativeEngineInstrumentedTest {
         assertEquals(40, restored.filaments.last().fanMinSpeed)
         assertTrue(restored.filaments.last().pressureAdvanceEnabled)
         assertEquals(0.035f, restored.filaments.last().pressureAdvance)
+        assertEquals(0.64f, restored.slicing.last().outerWallLineWidth)
+        assertEquals(0.68f, restored.slicing.last().innerWallLineWidth)
+        assertEquals("outer-inner", restored.slicing.last().wallSequence)
+        assertTrue(restored.slicing.last().detectThinWalls)
+        assertEquals(false, restored.slicing.last().onlyOneWallOnTop)
+        assertTrue(restored.slicing.last().preciseOuterWalls)
         assertEquals("marlin2", restored.printers.last().gcodeFlavor)
         assertEquals(320f, restored.printers.last().maxSpeedX)
         assertEquals(4_200f, restored.printers.last().maxAccelerationX)
@@ -79,7 +91,7 @@ class NativeEngineInstrumentedTest {
         assertEquals(7f, restored.printers.last().maxJerkX)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
-        assertEquals(2, JSONObject(file.readText()).getInt("schemaVersion"))
+        assertEquals(3, JSONObject(file.readText()).getInt("schemaVersion"))
         assertTrue("Saved profiles must stay in app-private storage", file.canonicalPath.startsWith(context.cacheDir.canonicalPath))
         file.delete()
         directory.delete()
@@ -108,7 +120,7 @@ class NativeEngineInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val catalog = OrcaProfileCatalog(context).load()
 
-        assertEquals(1, catalog.schemaVersion)
+        assertEquals(2, catalog.schemaVersion)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include Orca filament presets", catalog.filaments.size > 3_000)
@@ -116,6 +128,8 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.printers.all(ProfileValidation::printer))
         assertTrue(catalog.filaments.all(ProfileValidation::filament))
         assertTrue(catalog.slicing.all(ProfileValidation::slicing))
+        assertTrue(catalog.slicing.any { it.outerWallLineWidth != it.innerWallLineWidth })
+        assertTrue(catalog.slicing.map { it.wallSequence }.toSet().containsAll(listOf("inner-outer", "outer-inner")))
         assertTrue(catalog.printers.mapNotNull { it.brand }.containsAll(listOf("Creality", "Prusa", "Anycubic")))
     }
 
@@ -181,6 +195,14 @@ class NativeEngineInstrumentedTest {
                 retractSpeed = 38f,
                 skirtLoops = 2,
                 skirtDistance = 7f,
+                perimeters = 3,
+                outerWallLineWidth = 0.62f,
+                innerWallLineWidth = 0.68f,
+                wallSequence = "outer-inner",
+                detectThinWalls = true,
+                detectOverhangWalls = false,
+                onlyOneWallOnTop = false,
+                preciseOuterWalls = true,
             )
         val outcome = OnDeviceSlicer.slice(model, options) { progress ->
             highestProgress = maxOf(highestProgress, progress)
@@ -209,6 +231,14 @@ class NativeEngineInstrumentedTest {
         assertTrue("First layer speed must reach G-code", gcode.contains("; initial_layer_speed = 35"))
         assertTrue("Retraction length must reach G-code", gcode.contains("; retraction_length = 1.1"))
         assertTrue("Skirt loops must reach G-code", gcode.contains("; skirt_loops = 2"))
+        assertTrue("Wall count must reach Orca", gcode.contains("; wall_loops = 3"))
+        assertTrue("Outer-wall width must remain independent", gcode.contains("; outer_wall_line_width = 0.62"))
+        assertTrue("Inner-wall width must remain independent", gcode.contains("; inner_wall_line_width = 0.68"))
+        assertTrue("Wall order must reach Orca", gcode.contains("; wall_sequence = outer wall/inner wall"))
+        assertTrue("Thin-wall detection must reach Orca", gcode.contains("; detect_thin_wall = 1"))
+        assertTrue("Overhang-wall detection must reach Orca", gcode.contains("; detect_overhang_wall = 0"))
+        assertTrue("Top-surface wall rule must reach Orca", gcode.contains("; only_one_wall_top = 0"))
+        assertTrue("Outer-wall precision must reach Orca", gcode.contains("; precise_outer_wall = 1"))
 
         val preview = GcodeLayerPreview.fromJson(
             NativeEngine.previewGcodeRange(outcome.output.absolutePath, 0, Int.MAX_VALUE),
@@ -221,6 +251,8 @@ class NativeEngineInstrumentedTest {
         assertTrue("Segment Z coordinates must be positive", preview.segments[4] > 0f)
         assertTrue("Outer-wall paths must be classified", preview.roleSegmentCounts[0] > 0)
         assertTrue("Inner-wall paths must be classified", preview.roleSegmentCounts[1] > 0)
+        assertTrue("Visible top/bottom surfaces must be classified", preview.roleSegmentCounts[3] > 0)
+        assertTrue("Internal solid infill must stay separate", preview.roleSegmentCounts[4] > 0)
         assertTrue("Preview must report a positive first layer Z", preview.minZMm > 0f)
         assertTrue("Multi-layer preview must span upward in Z", preview.maxZMm > preview.minZMm)
     }

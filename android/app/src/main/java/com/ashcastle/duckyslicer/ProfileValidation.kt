@@ -43,5 +43,8 @@ internal object ProfileValidation {
             profile.perimeters in 0..20 &&
             profile.fillDensity in 0f..1f &&
             profile.printSpeed in 1f..2_000f &&
-            profile.travelSpeed in 1f..2_000f
+            profile.travelSpeed in 1f..2_000f &&
+            profile.outerWallLineWidth in 0f..3f &&
+            profile.innerWallLineWidth in 0f..3f &&
+            profile.wallSequence in setOf("inner-outer", "outer-inner", "inner-outer-inner")
 }

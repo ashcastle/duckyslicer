@@ -199,6 +199,13 @@ data class QualityProfile(
     val supportAngle: Float = 45f,
     val skirtLoops: Int = 0,
     val skirtDistance: Float = 6f,
+    val outerWallLineWidth: Float = 0f,
+    val innerWallLineWidth: Float = 0f,
+    val wallSequence: String = "inner-outer",
+    val detectThinWalls: Boolean = false,
+    val detectOverhangWalls: Boolean = true,
+    val onlyOneWallOnTop: Boolean = false,
+    val preciseOuterWalls: Boolean = true,
     val brand: String? = null,
     val compatiblePrinters: List<String> = emptyList(),
 ) {
@@ -272,7 +279,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 1,
+    val schemaVersion: Int = 2,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -319,6 +326,15 @@ data class SliceOptions(
     val skirtLoops: Int = quality.skirtLoops,
     val skirtDistance: Float = quality.skirtDistance,
     val brimWidth: Float = quality.brimWidth,
+    val outerWallLineWidth: Float = quality.outerWallLineWidth.takeIf { it > 0f }
+        ?: nozzleDiameter * 1.05f,
+    val innerWallLineWidth: Float = quality.innerWallLineWidth.takeIf { it > 0f }
+        ?: nozzleDiameter * 1.125f,
+    val wallSequence: String = quality.wallSequence,
+    val detectThinWalls: Boolean = quality.detectThinWalls,
+    val detectOverhangWalls: Boolean = quality.detectOverhangWalls,
+    val onlyOneWallOnTop: Boolean = quality.onlyOneWallOnTop,
+    val preciseOuterWalls: Boolean = quality.preciseOuterWalls,
     val gcodeFlavor: String = printerProfile.gcodeFlavor,
     val maxSpeedX: Float = printerProfile.maxSpeedX,
     val maxSpeedY: Float = printerProfile.maxSpeedY,
@@ -407,6 +423,15 @@ data class SliceOptions(
         skirtLoops = profile.skirtLoops,
         skirtDistance = profile.skirtDistance,
         brimWidth = profile.brimWidth,
+        outerWallLineWidth = profile.outerWallLineWidth.takeIf { it > 0f }
+            ?: nozzleDiameter * 1.05f,
+        innerWallLineWidth = profile.innerWallLineWidth.takeIf { it > 0f }
+            ?: nozzleDiameter * 1.125f,
+        wallSequence = profile.wallSequence,
+        detectThinWalls = profile.detectThinWalls,
+        detectOverhangWalls = profile.detectOverhangWalls,
+        onlyOneWallOnTop = profile.onlyOneWallOnTop,
+        preciseOuterWalls = profile.preciseOuterWalls,
     )
 
     fun toNativeConfig() = SliceConfig(
@@ -430,6 +455,13 @@ data class SliceOptions(
         skirtLoops = skirtLoops,
         skirtDistance = skirtDistance,
         brimWidth = brimWidth,
+        outerWallLineWidth = outerWallLineWidth,
+        innerWallLineWidth = innerWallLineWidth,
+        wallSequence = wallSequence,
+        detectThinWalls = detectThinWalls,
+        detectOverhangWalls = detectOverhangWalls,
+        onlyOneWallOnTop = onlyOneWallOnTop,
+        preciseOuterWalls = preciseOuterWalls,
         bedSizeX = bedSizeX,
         bedSizeY = bedSizeY,
         maxPrintHeight = maxPrintHeight,

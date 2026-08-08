@@ -112,6 +112,16 @@
     <string name="layer_height">레이어 높이</string>
     <string name="first_layer_height">첫 레이어 높이</string>
     <string name="walls">벽</string>
+    <string name="wall_order">벽 출력 순서</string>
+    <string name="wall_order_inner_outer">내벽 → 외벽</string>
+    <string name="wall_order_outer_inner">외벽 → 내벽</string>
+    <string name="wall_order_inner_outer_inner">내벽 → 외벽 → 내벽</string>
+    <string name="outer_wall_width">외벽 선폭</string>
+    <string name="inner_wall_width">내벽 선폭</string>
+    <string name="detect_thin_walls">얇은 벽 채우기</string>
+    <string name="detect_overhang_walls">오버행 벽 감지</string>
+    <string name="one_wall_on_top">상단 면 한 줄 벽</string>
+    <string name="precise_outer_walls">정밀 외벽</string>
     <string name="quality">품질</string>
     <string name="top_shell_layers">상단 솔리드 레이어</string>
     <string name="bottom_shell_layers">하단 솔리드 레이어</string>
@@ -149,7 +159,8 @@
     <string name="toolpath_outer_wall">외벽</string>
     <string name="toolpath_inner_wall">내벽</string>
     <string name="toolpath_infill">인필</string>
-    <string name="toolpath_solid">솔리드 면</string>
+    <string name="toolpath_surface">상단·하단 면</string>
+    <string name="toolpath_internal_solid">내부 솔리드</string>
     <string name="toolpath_support">서포트</string>
     <string name="toolpath_bridge">브리지</string>
     <string name="toolpath_adhesion">베드 접착</string>

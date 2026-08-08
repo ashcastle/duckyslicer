@@ -112,6 +112,16 @@
     <string name="layer_height">Layer height</string>
     <string name="first_layer_height">First layer height</string>
     <string name="walls">Walls</string>
+    <string name="wall_order">Wall order</string>
+    <string name="wall_order_inner_outer">Inner → outer</string>
+    <string name="wall_order_outer_inner">Outer → inner</string>
+    <string name="wall_order_inner_outer_inner">Inner → outer → inner</string>
+    <string name="outer_wall_width">Outer wall width</string>
+    <string name="inner_wall_width">Inner wall width</string>
+    <string name="detect_thin_walls">Fill thin walls</string>
+    <string name="detect_overhang_walls">Detect overhang walls</string>
+    <string name="one_wall_on_top">One wall on top surfaces</string>
+    <string name="precise_outer_walls">Precise outer walls</string>
     <string name="quality">Quality</string>
     <string name="top_shell_layers">Top shell layers</string>
     <string name="bottom_shell_layers">Bottom shell layers</string>
@@ -149,7 +159,8 @@
     <string name="toolpath_outer_wall">Outer wall</string>
     <string name="toolpath_inner_wall">Inner wall</string>
     <string name="toolpath_infill">Infill</string>
-    <string name="toolpath_solid">Solid surface</string>
+    <string name="toolpath_surface">Top &amp; bottom surface</string>
+    <string name="toolpath_internal_solid">Internal solid</string>
     <string name="toolpath_support">Support</string>
     <string name="toolpath_bridge">Bridge</string>
     <string name="toolpath_adhesion">Bed adhesion</string>
