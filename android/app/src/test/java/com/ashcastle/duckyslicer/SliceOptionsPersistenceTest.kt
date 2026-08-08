@@ -23,6 +23,7 @@ class SliceOptionsPersistenceTest {
         assertEquals(248, restored.nozzleTemp)
         assertEquals(0.64f, restored.outerWallLineWidth)
         assertEquals(0.68f, restored.innerWallLineWidth)
+        assertEquals("classic", restored.wallGenerator)
         assertEquals("outer-inner", restored.wallSequence)
         assertEquals("klipper", restored.gcodeFlavor)
         assertEquals(4_600f, restored.maxAccelerationTravel)
@@ -91,6 +92,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         brimWidth = 5f,
         outerWallLineWidth = 0.64f,
         innerWallLineWidth = 0.68f,
+        wallGenerator = "classic",
         wallSequence = "outer-inner",
         detectThinWalls = true,
         detectOverhangWalls = false,

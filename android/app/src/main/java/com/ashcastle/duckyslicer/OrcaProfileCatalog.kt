@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.JsonReader
 import java.io.InputStreamReader
 
-private const val CATALOG_ASSET = "profile_catalog_v2.json"
+private const val CATALOG_ASSET = "profile_catalog_v3.json"
 
 class OrcaProfileCatalog(private val context: Context) {
     fun load(): ProfileCatalog = runCatching {
@@ -40,7 +40,7 @@ class OrcaProfileCatalog(private val context: Context) {
             }
         }
         reader.endObject()
-        check(schemaVersion == 2) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 3) { "Unsupported profile catalog schema" }
         return ProfileCatalog(
             printers = (PrinterProfile.builtIns + printers).distinctBy(PrinterProfile::id),
             filaments = (FilamentProfile.builtIns + filaments).distinctBy(FilamentProfile::id),
@@ -175,6 +175,7 @@ class OrcaProfileCatalog(private val context: Context) {
                 "skirtDistance" -> profile = profile.copy(skirtDistance = reader.nextFloat())
                 "outerWallLineWidth" -> profile = profile.copy(outerWallLineWidth = reader.nextFloat())
                 "innerWallLineWidth" -> profile = profile.copy(innerWallLineWidth = reader.nextFloat())
+                "wallGenerator" -> profile = profile.copy(wallGenerator = reader.nextString())
                 "wallSequence" -> profile = profile.copy(wallSequence = reader.nextString())
                 "detectThinWalls" -> profile = profile.copy(detectThinWalls = reader.nextBoolean())
                 "detectOverhangWalls" -> profile = profile.copy(detectOverhangWalls = reader.nextBoolean())

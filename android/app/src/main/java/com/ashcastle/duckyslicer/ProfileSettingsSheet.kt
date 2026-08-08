@@ -523,6 +523,18 @@ private fun SlicingSettingsSheet(
         steps = 49,
         onValueChange = { onOptionsChanged(options.copy(innerWallLineWidth = it)) },
     )
+    Text(stringResource(R.string.wall_generator), fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf("arachne", "classic"),
+        selected = options.wallGenerator,
+        label = {
+            stringResource(
+                if (it == "classic") R.string.wall_generator_classic
+                else R.string.wall_generator_arachne,
+            )
+        },
+        onSelected = { onOptionsChanged(options.copy(wallGenerator = it)) },
+    )
     Text(stringResource(R.string.wall_order), fontWeight = FontWeight.SemiBold)
     CompactChoices(
         entries = listOf("inner-outer", "outer-inner", "inner-outer-inner"),

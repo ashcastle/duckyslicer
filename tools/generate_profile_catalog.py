@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 
 
@@ -196,6 +196,11 @@ def wall_sequence(value: Any) -> str:
     }.get(str(scalar(value, "inner wall/outer wall")), "inner-outer")
 
 
+def wall_generator(value: Any) -> str:
+    candidate = str(scalar(value, "arachne")).strip().lower()
+    return candidate if candidate in {"arachne", "classic"} else "arachne"
+
+
 def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     name = str(raw["name"])
     filament_type = str(scalar(raw.get("filament_type"), "")).strip()
@@ -296,6 +301,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "skirtDistance": number(raw.get("skirt_distance"), 6),
         "outerWallLineWidth": outer_wall_line_width,
         "innerWallLineWidth": inner_wall_line_width,
+        "wallGenerator": wall_generator(raw.get("wall_generator")),
         "wallSequence": wall_sequence(raw.get("wall_sequence")),
         "detectThinWalls": boolean(raw.get("detect_thin_wall")),
         "detectOverhangWalls": boolean(raw.get("detect_overhang_wall"), True),

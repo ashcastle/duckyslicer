@@ -29,6 +29,7 @@ data class SliceConfig(
     @JvmField var brimWidth: Float = 0f,
     @JvmField var outerWallLineWidth: Float = 0.42f,
     @JvmField var innerWallLineWidth: Float = 0.45f,
+    @JvmField var wallGenerator: String = "arachne",
     @JvmField var wallSequence: String = "inner-outer",
     @JvmField var detectThinWalls: Boolean = false,
     @JvmField var detectOverhangWalls: Boolean = true,
