@@ -1,6 +1,5 @@
 package com.ashcastle.duckyslicer
 
-import com.u1.slicer.NativeLibrary
 import com.u1.slicer.data.SliceConfig
 import java.io.File
 import kotlin.math.abs
@@ -1114,7 +1113,6 @@ object OnDeviceSlicer {
                 File(projectObject.model.localPath).parentFile,
             )
         }
-        val runtime = NativeLibrary(onProgress)
         return try {
             objects.zip(transformedModels).forEach { (projectObject, transformedModel) ->
                 val transformed = JSONObject(
@@ -1126,30 +1124,8 @@ object OnDeviceSlicer {
                 )
                 check(transformed.optBoolean("ok")) { "Model transform failed" }
             }
-            check(runtime.loadModel(transformedModels.first().absolutePath)) {
-                "Model could not be prepared"
-            }
-            transformedModels.drop(1).forEach { transformedModel ->
-                check(runtime.addModel(transformedModel.absolutePath)) {
-                    "Additional model could not be prepared"
-                }
-            }
-            val result = requireNotNull(runtime.slice(options.toNativeConfig())) {
-                "Slicer returned no output"
-            }
-            check(result.success) {
-                if (result.cancelled) "Slicing was cancelled" else "Slicer could not produce output"
-            }
-            val output = File(result.gcodePath)
-            check(output.isFile && output.length() > 0L) { "G-code output is unavailable" }
-            SliceOutcome(
-                output = output,
-                layers = result.totalLayers,
-                estimatedSeconds = result.estimatedTimeSeconds,
-                filamentGrams = result.estimatedFilamentGrams,
-            )
+            SlicerProcessClient.slice(transformedModels, options, onProgress)
         } finally {
-            runtime.clearModel()
             transformedModels.forEach(File::delete)
         }
     }

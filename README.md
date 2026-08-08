@@ -58,6 +58,8 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - Printer access keys encrypted with Android Keystore; unencrypted connections limited to local addresses
 - No account, cloud dependency, analytics SDK, or Bambu network plug-in
 - Fail-closed STL and G-code handling with bounded text lines, finite coordinate checks, atomic transformed-model writes, and recoverable Rust-failure containment at the JNI boundary
+- A non-exported, restartable Android worker process for the inherited Orca C++ runtime, so a native signal ends the slice instead of the app
+- Distinct, synchronized G-code artifacts for successful slices instead of one shared output file being overwritten
 - 16 KB page-size-compatible ARM64 native libraries for current Android devices
 - Immutable GitHub Action pins and checksum-verified, version-locked Gradle artifacts;
   releases publish only after the full ARM64 device suite passes
@@ -89,11 +91,12 @@ Jetpack Compose mobile UI
         ├── Direct printer client: OctoPrint and Moonraker HTTP APIs,
         │                          Android Keystore credentials
         │
-        ├── Rust JNI: input validation, streaming STL transforms,
-        │             G-code role/range parsing, preview data
+        ├── Rust JNI in the app process: input validation, streaming STL transforms,
+        │                               G-code role/range parsing, preview data
         │
-        └── Native slicer runtime: model loading, slicing,
-                                   G-code generation
+        └── Private Binder worker process (:slicer)
+                    └── Native Orca runtime: model loading, slicing,
+                                             G-code generation
 ```
 
 New DuckySlicer-owned native code should prefer Rust. Inherited slicing algorithms

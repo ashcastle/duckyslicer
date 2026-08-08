@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
+        android:name=".DuckySlicerApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -13,6 +14,10 @@
         android:usesCleartextTraffic="true"
         android:supportsRtl="true"
         android:theme="@style/Theme.DuckySlicer">
+        <service
+            android:name=".SlicerProcessService"
+            android:exported="false"
+            android:process=":slicer" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

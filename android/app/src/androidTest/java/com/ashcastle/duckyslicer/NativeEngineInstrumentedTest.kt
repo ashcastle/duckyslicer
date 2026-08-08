@@ -4,10 +4,10 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.u1.slicer.NativeLibrary
 import org.json.JSONObject
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -799,6 +799,38 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val appPid = android.os.Process.myPid()
+        val firstOutcome = OnDeviceSlicer.slice(
+            fixtureModel(),
+            SliceOptions().selectQuality(QualityProfile.DRAFT),
+        )
+        val firstWorkerPid = SlicerProcessClient.lastWorkerPid()
+        assertNotEquals("Orca must run outside the application process", appPid, firstWorkerPid)
+
+        val terminatedWorkerPid = SlicerProcessClient.terminateWorkerForTest(context)
+
+        assertEquals("Application process must survive worker termination", appPid, android.os.Process.myPid())
+        assertNotEquals("Only the worker process may be terminated", appPid, terminatedWorkerPid)
+
+        val recoveredOutcome = OnDeviceSlicer.slice(
+            fixtureModel(),
+            SliceOptions().selectQuality(QualityProfile.DRAFT),
+        )
+        val restartedWorkerPid = SlicerProcessClient.lastWorkerPid()
+        assertTrue("Slicer worker must restart with a new process", restartedWorkerPid > 0)
+        assertNotEquals("Restarted worker must not reuse the terminated process", terminatedWorkerPid, restartedWorkerPid)
+        assertTrue("Worker restart must produce G-code", recoveredOutcome.output.length() > 1_000L)
+        assertTrue("Previous G-code must survive another slice", firstOutcome.output.isFile)
+        assertNotEquals(
+            "Each slice must retain a distinct G-code artifact",
+            firstOutcome.output.canonicalPath,
+            recoveredOutcome.output.canonicalPath,
+        )
+    }
+
+    @Test
     fun attachedStlProducesGcodeOnDevice() {
         val model = fixtureModel()
         var highestProgress = 0
@@ -1261,19 +1293,6 @@ class NativeEngineInstrumentedTest {
             NativeEngine.inspectStl(modelFile.absolutePath),
             modelFile.absolutePath,
         )
-        val runtime = NativeLibrary()
-        try {
-            assertTrue(runtime.loadModel(modelFile.absolutePath))
-            assertTrue(runtime.addModel(modelFile.absolutePath))
-            assertEquals(
-                "Orca must expose one XYZ bounding box per loaded object",
-                6,
-                runtime.getObjectBoundingBoxes().size,
-            )
-        } finally {
-            runtime.clearModel()
-        }
-
         val outcome = OnDeviceSlicer.slice(
             listOf(
                 ProjectObject("left", model, ModelTransform(offsetXmm = -18f)),
