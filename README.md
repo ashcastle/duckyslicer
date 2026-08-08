@@ -45,6 +45,7 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - Legacy and current Orca wall/infill order, infill-to-wall bonding, combined infill, bridge density/thickness, and feature-relative speed and acceleration units preserved end to end
 - Orca dimensional compensation, vertical-shell policy, gap-fill targeting, infill direction/anchoring, and unsupported-bridge limits preserved in bundled and saved profiles
 - Orca wall-crossing avoidance, infill retraction, small-perimeter tuning, seam/wipe behavior, wall direction, and toolpath resolution preserved end to end
+- Orca partial-top-surface thresholds, outer/inner bridge directions and filtering, bridge reinforcement, overhang reversal, counterbore bridging, and alternating extra walls preserved end to end
 - Searchable printer, filament, and slicing selectors with collapsible brand and personal-profile groups
 - Printer compatibility filtering, validated profile inheritance, and unsafe-entry rejection during the build
 - Editable settings and schema-versioned named user profiles saved entirely in app-private storage

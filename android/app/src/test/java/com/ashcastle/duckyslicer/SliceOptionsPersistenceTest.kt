@@ -76,9 +76,13 @@ class SliceOptionsPersistenceTest {
         assertEquals(true, restored.reduceInfillRetraction)
         assertEquals(87f, restored.bridgeDensity)
         assertEquals(73f, restored.internalBridgeDensity)
+        assertEquals(17f, restored.bridgeAngle)
+        assertEquals(103f, restored.internalBridgeAngle)
         assertEquals(true, restored.bridgeNoSupport)
         assertEquals(true, restored.thickBridges)
         assertEquals(false, restored.thickInternalBridges)
+        assertEquals("apply_to_all", restored.extraBridgeLayer)
+        assertEquals("limited", restored.internalBridgeFilter)
         assertEquals(0.91f, restored.bridgeFlowRatio)
         assertEquals(0.96f, restored.internalBridgeFlowRatio)
         assertEquals(0.97f, restored.topSurfaceFlowRatio)
@@ -123,6 +127,14 @@ class SliceOptionsPersistenceTest {
         assertEquals(false, restored.wipeSpeedPercent)
         assertEquals(true, restored.onlyOneWallFirstLayer)
         assertEquals(true, restored.extraPerimetersOnOverhangs)
+        assertEquals(275f, restored.minWidthTopSurface)
+        assertEquals(true, restored.minWidthTopSurfacePercent)
+        assertEquals(true, restored.overhangReverse)
+        assertEquals(true, restored.overhangReverseInternalOnly)
+        assertEquals(0.8f, restored.overhangReverseThreshold)
+        assertEquals(false, restored.overhangReverseThresholdPercent)
+        assertEquals("partiallybridge", restored.counterboreHoleBridging)
+        assertEquals(true, restored.alternateExtraWall)
         assertEquals("ensure_moderate", restored.ensureVerticalShellThickness)
         assertEquals(false, restored.detectNarrowInternalSolidInfill)
         assertEquals(0.11f, restored.xyHoleCompensation)
@@ -230,9 +242,13 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         bottomSurfaceFlowRatio = 0.98f,
         bridgeDensity = 87f,
         internalBridgeDensity = 73f,
+        bridgeAngle = 17f,
+        internalBridgeAngle = 103f,
         bridgeNoSupport = true,
         thickBridges = true,
         thickInternalBridges = false,
+        extraBridgeLayer = "apply_to_all",
+        internalBridgeFilter = "limited",
         topShellThickness = 0.8f,
         bottomShellThickness = 0.7f,
         supportInterfaceTopLayers = 4,
@@ -303,8 +319,16 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         detectThinWalls = true,
         detectOverhangWalls = false,
         onlyOneWallOnTop = true,
+        minWidthTopSurface = 275f,
+        minWidthTopSurfacePercent = true,
         onlyOneWallFirstLayer = true,
         extraPerimetersOnOverhangs = true,
+        overhangReverse = true,
+        overhangReverseInternalOnly = true,
+        overhangReverseThreshold = 0.8f,
+        overhangReverseThresholdPercent = false,
+        counterboreHoleBridging = "partiallybridge",
+        alternateExtraWall = true,
         ensureVerticalShellThickness = "ensure_moderate",
         detectNarrowInternalSolidInfill = false,
         xyHoleCompensation = 0.11f,

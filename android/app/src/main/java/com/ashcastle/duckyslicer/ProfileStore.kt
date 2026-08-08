@@ -134,9 +134,13 @@ class ProfileStore private constructor(
             bottomSurfaceFlowRatio = options.bottomSurfaceFlowRatio,
             bridgeDensity = options.bridgeDensity,
             internalBridgeDensity = options.internalBridgeDensity,
+            bridgeAngle = options.bridgeAngle,
+            internalBridgeAngle = options.internalBridgeAngle,
             bridgeNoSupport = options.bridgeNoSupport,
             thickBridges = options.thickBridges,
             thickInternalBridges = options.thickInternalBridges,
+            extraBridgeLayer = options.extraBridgeLayer,
+            internalBridgeFilter = options.internalBridgeFilter,
             defaultAcceleration = options.defaultAcceleration,
             outerWallAcceleration = options.outerWallAcceleration,
             innerWallAcceleration = options.innerWallAcceleration,
@@ -227,8 +231,16 @@ class ProfileStore private constructor(
             detectThinWalls = options.detectThinWalls,
             detectOverhangWalls = options.detectOverhangWalls,
             onlyOneWallOnTop = options.onlyOneWallOnTop,
+            minWidthTopSurface = options.minWidthTopSurface,
+            minWidthTopSurfacePercent = options.minWidthTopSurfacePercent,
             onlyOneWallFirstLayer = options.onlyOneWallFirstLayer,
             extraPerimetersOnOverhangs = options.extraPerimetersOnOverhangs,
+            overhangReverse = options.overhangReverse,
+            overhangReverseInternalOnly = options.overhangReverseInternalOnly,
+            overhangReverseThreshold = options.overhangReverseThreshold,
+            overhangReverseThresholdPercent = options.overhangReverseThresholdPercent,
+            counterboreHoleBridging = options.counterboreHoleBridging,
+            alternateExtraWall = options.alternateExtraWall,
             ensureVerticalShellThickness = options.ensureVerticalShellThickness,
             detectNarrowInternalSolidInfill = options.detectNarrowInternalSolidInfill,
             xyHoleCompensation = options.xyHoleCompensation,
@@ -276,7 +288,7 @@ class ProfileStore private constructor(
         ?: throw IllegalArgumentException("Profile name is required")
 
     private companion object {
-        const val USER_PROFILE_SCHEMA_VERSION = 11
+        const val USER_PROFILE_SCHEMA_VERSION = 12
     }
 }
 
@@ -340,9 +352,13 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("bottomSurfaceFlowRatio", bottomSurfaceFlowRatio)
     .put("bridgeDensity", bridgeDensity)
     .put("internalBridgeDensity", internalBridgeDensity)
+    .put("bridgeAngle", bridgeAngle)
+    .put("internalBridgeAngle", internalBridgeAngle)
     .put("bridgeNoSupport", bridgeNoSupport)
     .put("thickBridges", thickBridges)
     .put("thickInternalBridges", thickInternalBridges)
+    .put("extraBridgeLayer", extraBridgeLayer)
+    .put("internalBridgeFilter", internalBridgeFilter)
     .put("defaultAcceleration", defaultAcceleration)
     .put("outerWallAcceleration", outerWallAcceleration)
     .put("innerWallAcceleration", innerWallAcceleration)
@@ -428,8 +444,16 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("detectThinWalls", detectThinWalls)
     .put("detectOverhangWalls", detectOverhangWalls)
     .put("onlyOneWallOnTop", onlyOneWallOnTop)
+    .put("minWidthTopSurface", minWidthTopSurface)
+    .put("minWidthTopSurfacePercent", minWidthTopSurfacePercent)
     .put("onlyOneWallFirstLayer", onlyOneWallFirstLayer)
     .put("extraPerimetersOnOverhangs", extraPerimetersOnOverhangs)
+    .put("overhangReverse", overhangReverse)
+    .put("overhangReverseInternalOnly", overhangReverseInternalOnly)
+    .put("overhangReverseThreshold", overhangReverseThreshold)
+    .put("overhangReverseThresholdPercent", overhangReverseThresholdPercent)
+    .put("counterboreHoleBridging", counterboreHoleBridging)
+    .put("alternateExtraWall", alternateExtraWall)
     .put("ensureVerticalShellThickness", ensureVerticalShellThickness)
     .put("detectNarrowInternalSolidInfill", detectNarrowInternalSolidInfill)
     .put("xyHoleCompensation", xyHoleCompensation)
@@ -525,9 +549,13 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         bottomSurfaceFlowRatio = optDouble("bottomSurfaceFlowRatio", 1.0).toFloat(),
         bridgeDensity = optDouble("bridgeDensity", 100.0).toFloat(),
         internalBridgeDensity = optDouble("internalBridgeDensity", 100.0).toFloat(),
+        bridgeAngle = optDouble("bridgeAngle", 0.0).toFloat(),
+        internalBridgeAngle = optDouble("internalBridgeAngle", 0.0).toFloat(),
         bridgeNoSupport = optBoolean("bridgeNoSupport"),
         thickBridges = optBoolean("thickBridges"),
         thickInternalBridges = optBoolean("thickInternalBridges", true),
+        extraBridgeLayer = optString("extraBridgeLayer", "disabled"),
+        internalBridgeFilter = optString("internalBridgeFilter", "disabled"),
         defaultAcceleration = optDouble("defaultAcceleration", 0.0).toFloat(),
         outerWallAcceleration = optDouble("outerWallAcceleration", 0.0).toFloat(),
         innerWallAcceleration = optDouble("innerWallAcceleration", 0.0).toFloat(),
@@ -619,8 +647,16 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         detectThinWalls = optBoolean("detectThinWalls"),
         detectOverhangWalls = optBoolean("detectOverhangWalls", true),
         onlyOneWallOnTop = optBoolean("onlyOneWallOnTop"),
+        minWidthTopSurface = optDouble("minWidthTopSurface", 300.0).toFloat(),
+        minWidthTopSurfacePercent = optBoolean("minWidthTopSurfacePercent", true),
         onlyOneWallFirstLayer = optBoolean("onlyOneWallFirstLayer"),
         extraPerimetersOnOverhangs = optBoolean("extraPerimetersOnOverhangs"),
+        overhangReverse = optBoolean("overhangReverse"),
+        overhangReverseInternalOnly = optBoolean("overhangReverseInternalOnly"),
+        overhangReverseThreshold = optDouble("overhangReverseThreshold", 50.0).toFloat(),
+        overhangReverseThresholdPercent = optBoolean("overhangReverseThresholdPercent", true),
+        counterboreHoleBridging = optString("counterboreHoleBridging", "none"),
+        alternateExtraWall = optBoolean("alternateExtraWall"),
         ensureVerticalShellThickness = optString("ensureVerticalShellThickness", "ensure_all"),
         detectNarrowInternalSolidInfill = optBoolean("detectNarrowInternalSolidInfill", true),
         xyHoleCompensation = optDouble("xyHoleCompensation", 0.0).toFloat(),

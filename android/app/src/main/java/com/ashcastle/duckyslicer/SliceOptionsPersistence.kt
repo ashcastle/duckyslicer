@@ -76,9 +76,13 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         bottomSurfaceFlowRatio = bottomSurfaceFlowRatio,
         bridgeDensity = bridgeDensity,
         internalBridgeDensity = internalBridgeDensity,
+        bridgeAngle = bridgeAngle,
+        internalBridgeAngle = internalBridgeAngle,
         bridgeNoSupport = bridgeNoSupport,
         thickBridges = thickBridges,
         thickInternalBridges = thickInternalBridges,
+        extraBridgeLayer = extraBridgeLayer,
+        internalBridgeFilter = internalBridgeFilter,
         defaultAcceleration = defaultAcceleration,
         outerWallAcceleration = outerWallAcceleration,
         innerWallAcceleration = innerWallAcceleration,
@@ -170,8 +174,16 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         detectThinWalls = detectThinWalls,
         detectOverhangWalls = detectOverhangWalls,
         onlyOneWallOnTop = onlyOneWallOnTop,
+        minWidthTopSurface = minWidthTopSurface,
+        minWidthTopSurfacePercent = minWidthTopSurfacePercent,
         onlyOneWallFirstLayer = onlyOneWallFirstLayer,
         extraPerimetersOnOverhangs = extraPerimetersOnOverhangs,
+        overhangReverse = overhangReverse,
+        overhangReverseInternalOnly = overhangReverseInternalOnly,
+        overhangReverseThreshold = overhangReverseThreshold,
+        overhangReverseThresholdPercent = overhangReverseThresholdPercent,
+        counterboreHoleBridging = counterboreHoleBridging,
+        alternateExtraWall = alternateExtraWall,
         ensureVerticalShellThickness = ensureVerticalShellThickness,
         detectNarrowInternalSolidInfill = detectNarrowInternalSolidInfill,
         xyHoleCompensation = xyHoleCompensation,
@@ -217,7 +229,7 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 8
+private const val SLICE_OPTIONS_FORMAT_VERSION = 9
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f

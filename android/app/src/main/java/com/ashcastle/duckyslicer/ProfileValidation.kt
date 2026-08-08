@@ -96,6 +96,12 @@ internal object ProfileValidation {
             ) &&
             profile.bridgeDensity in 10f..100f &&
             profile.internalBridgeDensity in 10f..100f &&
+            profile.bridgeAngle in 0f..360f &&
+            profile.internalBridgeAngle in 0f..360f &&
+            profile.extraBridgeLayer in setOf(
+                "disabled", "external_bridge_only", "internal_bridge_only", "apply_to_all",
+            ) &&
+            profile.internalBridgeFilter in setOf("disabled", "limited", "nofilter") &&
             profile.travelSpeed in 1f..2_000f &&
             profile.maxTravelDetourDistance in 0f..1_000f &&
             optionalFeatureSpeedIsValid(profile.smallPerimeterSpeed, profile.smallPerimeterSpeedPercent) &&
@@ -115,6 +121,9 @@ internal object ProfileValidation {
             profile.wallGenerator in setOf("arachne", "classic") &&
             profile.wallSequence in setOf("inner-outer", "outer-inner", "inner-outer-inner") &&
             profile.wallDirection in setOf("auto", "ccw", "cw") &&
+            profile.minWidthTopSurface in 0f..1_500f &&
+            profile.overhangReverseThreshold in 0f..2_000f &&
+            profile.counterboreHoleBridging in setOf("none", "partiallybridge", "sacrificiallayer") &&
             profile.topSolidLayers in 0..100 &&
             profile.bottomSolidLayers in 0..100 &&
             profile.topShellThickness in 0f..100f &&

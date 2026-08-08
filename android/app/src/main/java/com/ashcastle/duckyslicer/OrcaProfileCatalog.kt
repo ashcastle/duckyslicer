@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.JsonReader
 import java.io.InputStreamReader
 
-private const val CATALOG_ASSET = "profile_catalog_v9.json"
+private const val CATALOG_ASSET = "profile_catalog_v10.json"
 
 class OrcaProfileCatalog(private val context: Context) {
     fun load(): ProfileCatalog = runCatching {
@@ -40,7 +40,7 @@ class OrcaProfileCatalog(private val context: Context) {
             }
         }
         reader.endObject()
-        check(schemaVersion == 9) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 10) { "Unsupported profile catalog schema" }
         return ProfileCatalog(
             printers = (PrinterProfile.builtIns + printers).distinctBy(PrinterProfile::id),
             filaments = (FilamentProfile.builtIns + filaments).distinctBy(FilamentProfile::id),
@@ -187,9 +187,13 @@ class OrcaProfileCatalog(private val context: Context) {
                 "bottomSurfaceFlowRatio" -> profile = profile.copy(bottomSurfaceFlowRatio = reader.nextFloat())
                 "bridgeDensity" -> profile = profile.copy(bridgeDensity = reader.nextFloat())
                 "internalBridgeDensity" -> profile = profile.copy(internalBridgeDensity = reader.nextFloat())
+                "bridgeAngle" -> profile = profile.copy(bridgeAngle = reader.nextFloat())
+                "internalBridgeAngle" -> profile = profile.copy(internalBridgeAngle = reader.nextFloat())
                 "bridgeNoSupport" -> profile = profile.copy(bridgeNoSupport = reader.nextBoolean())
                 "thickBridges" -> profile = profile.copy(thickBridges = reader.nextBoolean())
                 "thickInternalBridges" -> profile = profile.copy(thickInternalBridges = reader.nextBoolean())
+                "extraBridgeLayer" -> profile = profile.copy(extraBridgeLayer = reader.nextString())
+                "internalBridgeFilter" -> profile = profile.copy(internalBridgeFilter = reader.nextString())
                 "defaultAcceleration" -> profile = profile.copy(defaultAcceleration = reader.nextFloat())
                 "outerWallAcceleration" -> profile = profile.copy(outerWallAcceleration = reader.nextFloat())
                 "innerWallAcceleration" -> profile = profile.copy(innerWallAcceleration = reader.nextFloat())
@@ -281,8 +285,16 @@ class OrcaProfileCatalog(private val context: Context) {
                 "detectThinWalls" -> profile = profile.copy(detectThinWalls = reader.nextBoolean())
                 "detectOverhangWalls" -> profile = profile.copy(detectOverhangWalls = reader.nextBoolean())
                 "onlyOneWallOnTop" -> profile = profile.copy(onlyOneWallOnTop = reader.nextBoolean())
+                "minWidthTopSurface" -> profile = profile.copy(minWidthTopSurface = reader.nextFloat())
+                "minWidthTopSurfacePercent" -> profile = profile.copy(minWidthTopSurfacePercent = reader.nextBoolean())
                 "onlyOneWallFirstLayer" -> profile = profile.copy(onlyOneWallFirstLayer = reader.nextBoolean())
                 "extraPerimetersOnOverhangs" -> profile = profile.copy(extraPerimetersOnOverhangs = reader.nextBoolean())
+                "overhangReverse" -> profile = profile.copy(overhangReverse = reader.nextBoolean())
+                "overhangReverseInternalOnly" -> profile = profile.copy(overhangReverseInternalOnly = reader.nextBoolean())
+                "overhangReverseThreshold" -> profile = profile.copy(overhangReverseThreshold = reader.nextFloat())
+                "overhangReverseThresholdPercent" -> profile = profile.copy(overhangReverseThresholdPercent = reader.nextBoolean())
+                "counterboreHoleBridging" -> profile = profile.copy(counterboreHoleBridging = reader.nextString())
+                "alternateExtraWall" -> profile = profile.copy(alternateExtraWall = reader.nextBoolean())
                 "ensureVerticalShellThickness" -> profile = profile.copy(ensureVerticalShellThickness = reader.nextString())
                 "detectNarrowInternalSolidInfill" -> profile = profile.copy(detectNarrowInternalSolidInfill = reader.nextBoolean())
                 "xyHoleCompensation" -> profile = profile.copy(xyHoleCompensation = reader.nextFloat())

@@ -12,7 +12,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
     "monotonic", "monotonicline", "rectilinear", "alignedrectilinear",
@@ -371,6 +371,12 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     internal_bridge_speed, internal_bridge_speed_percent = float_or_percent(
         raw.get("internal_bridge_speed"), "150%"
     )
+    min_width_top_surface, min_width_top_surface_percent = float_or_percent(
+        raw.get("min_width_top_surface"), "300%"
+    )
+    overhang_reverse_threshold, overhang_reverse_threshold_percent = float_or_percent(
+        raw.get("overhang_reverse_threshold"), "50%"
+    )
     bridge_acceleration, bridge_acceleration_percent = float_or_percent(
         raw.get("bridge_acceleration"), "50%"
     )
@@ -434,9 +440,21 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "bottomSurfaceFlowRatio": number(raw.get("bottom_solid_infill_flow_ratio"), 1),
         "bridgeDensity": number(raw.get("bridge_density"), 100),
         "internalBridgeDensity": number(raw.get("internal_bridge_density"), 100),
+        "bridgeAngle": number(raw.get("bridge_angle"), 0),
+        "internalBridgeAngle": number(raw.get("internal_bridge_angle"), 0),
         "bridgeNoSupport": boolean(raw.get("bridge_no_support")),
         "thickBridges": boolean(raw.get("thick_bridges")),
         "thickInternalBridges": boolean(raw.get("thick_internal_bridges"), True),
+        "extraBridgeLayer": enum_value(
+            raw.get("enable_extra_bridge_layer"),
+            {"disabled", "external_bridge_only", "internal_bridge_only", "apply_to_all"},
+            "disabled",
+        ),
+        "internalBridgeFilter": enum_value(
+            raw.get("dont_filter_internal_bridges"),
+            {"disabled", "limited", "nofilter"},
+            "disabled",
+        ),
         "defaultAcceleration": number(raw.get("default_acceleration"), 0),
         "outerWallAcceleration": number(raw.get("outer_wall_acceleration"), 0),
         "innerWallAcceleration": number(raw.get("inner_wall_acceleration"), 0),
@@ -546,8 +564,20 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "detectThinWalls": boolean(raw.get("detect_thin_wall")),
         "detectOverhangWalls": boolean(raw.get("detect_overhang_wall"), True),
         "onlyOneWallOnTop": boolean(raw.get("only_one_wall_top")),
+        "minWidthTopSurface": min_width_top_surface,
+        "minWidthTopSurfacePercent": min_width_top_surface_percent,
         "onlyOneWallFirstLayer": boolean(raw.get("only_one_wall_first_layer")),
         "extraPerimetersOnOverhangs": boolean(raw.get("extra_perimeters_on_overhangs")),
+        "overhangReverse": boolean(raw.get("overhang_reverse")),
+        "overhangReverseInternalOnly": boolean(raw.get("overhang_reverse_internal_only")),
+        "overhangReverseThreshold": overhang_reverse_threshold,
+        "overhangReverseThresholdPercent": overhang_reverse_threshold_percent,
+        "counterboreHoleBridging": enum_value(
+            raw.get("counterbore_hole_bridging"),
+            {"none", "partiallybridge", "sacrificiallayer"},
+            "none",
+        ),
+        "alternateExtraWall": boolean(raw.get("alternate_extra_wall")),
         "ensureVerticalShellThickness": vertical_shell_mode(raw.get("ensure_vertical_shell_thickness")),
         "detectNarrowInternalSolidInfill": boolean(raw.get("detect_narrow_internal_solid_infill"), True),
         "xyHoleCompensation": number(raw.get("xy_hole_compensation"), 0),
@@ -609,6 +639,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         )
         and 10 <= profile["bridgeDensity"] <= 100
         and 10 <= profile["internalBridgeDensity"] <= 100
+        and 0 <= profile["bridgeAngle"] <= 360
+        and 0 <= profile["internalBridgeAngle"] <= 360
         and 0 <= profile["infillWallOverlap"] <= 100
         and 0 <= profile["topBottomInfillWallOverlap"] <= 100
         and 0 <= profile["infillCombinationMaxLayerHeight"] <= (
@@ -624,6 +656,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0 <= profile["smallPerimeterThreshold"] <= 1_000_000
         and 0.001 <= profile["resolution"] <= 100
         and 0 <= profile["seamGap"] <= 1_000
+        and 0 <= profile["minWidthTopSurface"] <= 1_500
+        and 0 <= profile["overhangReverseThreshold"] <= 2_000
         and 0 <= profile["wipeSpeed"] <= (
             1_000 if profile["wipeSpeedPercent"] else 2_000
         )
