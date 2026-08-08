@@ -5,6 +5,7 @@ import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -14,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -25,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -103,6 +106,18 @@ private fun DuckySlicerScreen() {
     val profileSavedNotice = stringResource(R.string.profile_saved)
     val profileSaveError = stringResource(R.string.profile_save_error)
     val previewError = stringResource(R.string.preview_error)
+    val remoteSavedNotice = stringResource(R.string.device_saved)
+    val remoteDeletedNotice = stringResource(R.string.device_deleted)
+    val remoteConnectedNotice = stringResource(R.string.device_connected)
+    val remoteUploadNotice = stringResource(R.string.gcode_sent)
+    val remoteStartedNotice = stringResource(R.string.print_started)
+    val remotePausedNotice = stringResource(R.string.print_paused)
+    val remoteResumedNotice = stringResource(R.string.print_resumed)
+    val remoteCanceledNotice = stringResource(R.string.print_canceled)
+    val remoteConnectionError = stringResource(R.string.device_connection_error)
+    val remoteUnauthorizedError = stringResource(R.string.device_access_denied)
+    val remoteCommandError = stringResource(R.string.device_command_error)
+    val remoteSaveError = stringResource(R.string.device_save_error)
 
     var model by remember { mutableStateOf<ModelInfo?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -118,9 +133,42 @@ private fun DuckySlicerScreen() {
     var modelTransform by remember { mutableStateOf(ModelTransform()) }
     val profileStore = remember(context.applicationContext) { ProfileStore(context.applicationContext) }
     var profileCatalog by remember { mutableStateOf(ProfileCatalog()) }
+    val appSettingsStore = remember(context.applicationContext) {
+        AppSettingsStore(context.applicationContext)
+    }
+    var appSettings by remember { mutableStateOf(appSettingsStore.load()) }
+    val remoteDeviceStore = remember(context.applicationContext) {
+        RemoteDeviceStore(context.applicationContext)
+    }
+    var remoteDevices by remember { mutableStateOf<List<RemoteDeviceProfile>>(emptyList()) }
+    var selectedRemoteDeviceId by remember { mutableStateOf<String?>(null) }
+    var remoteStatus by remember { mutableStateOf<RemoteDeviceStatus?>(null) }
+    var remoteUpload by remember { mutableStateOf<RemoteUpload?>(null) }
+    var remoteBusy by remember { mutableStateOf(false) }
+    var remoteUploadProgress by remember { mutableStateOf<Int?>(null) }
+    var remoteMessage by remember { mutableStateOf<String?>(null) }
+    var remoteMessageIsError by remember { mutableStateOf(false) }
 
     LaunchedEffect(profileStore) {
         profileCatalog = withContext(Dispatchers.IO) { profileStore.load() }
+    }
+    LaunchedEffect(remoteDeviceStore) {
+        remoteDevices = withContext(Dispatchers.IO) { remoteDeviceStore.load() }
+        selectedRemoteDeviceId = selectedRemoteDeviceId
+            ?.takeIf { selected -> remoteDevices.any { it.id == selected } }
+            ?: remoteDevices.firstOrNull()?.id
+    }
+    LaunchedEffect(appSettings) {
+        delay(350)
+        withContext(Dispatchers.IO) { appSettingsStore.save(appSettings) }
+    }
+
+    val keepScreenAwake = appSettings.keepScreenAwakeWhileWorking &&
+        (importing || slicing || previewLoading || remoteBusy)
+    DisposableEffect(keepScreenAwake) {
+        val window = (context as? MainActivity)?.window
+        if (keepScreenAwake) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
 
     fun applyOptions(options: SliceOptions) {
@@ -128,6 +176,7 @@ private fun DuckySlicerScreen() {
             sliceOptions = options
             sliceOutcome = null
             layerPreview = null
+            remoteUpload = null
             sliceProgress = 0
             notice = null
         }
@@ -140,6 +189,7 @@ private fun DuckySlicerScreen() {
             layerPreview = null
             sliceProgress = 0
             notice = null
+            remoteUpload = null
         }
     }
 
@@ -156,6 +206,7 @@ private fun DuckySlicerScreen() {
                         sliceOutcome = null
                         layerPreview = null
                         sliceProgress = 0
+                        remoteUpload = null
                         selectedTab = WorkspaceTab.SLICE
                     }
                     .onFailure { error = modelReadError }
@@ -217,6 +268,7 @@ private fun DuckySlicerScreen() {
             sliceProgress = 0
             sliceOutcome = null
             layerPreview = null
+            remoteUpload = null
             error = null
             notice = null
             scope.launch {
@@ -228,6 +280,7 @@ private fun DuckySlicerScreen() {
                     }
                 }.onSuccess { outcome ->
                     sliceOutcome = outcome
+                    remoteUpload = null
                     sliceProgress = 100
                     selectedTab = WorkspaceTab.PREVIEW
                     previewLoading = true
@@ -266,12 +319,66 @@ private fun DuckySlicerScreen() {
         }
     }
 
+    fun selectedRemoteDevice(): RemoteDeviceProfile? =
+        remoteDevices.firstOrNull { it.id == selectedRemoteDeviceId }
+
+    fun runRemoteCommand(
+        successMessage: String,
+        resultingState: String,
+        operation: (RemoteDeviceClient, RemoteDeviceProfile, String) -> Unit,
+    ) {
+        val profile = selectedRemoteDevice() ?: return
+        if (remoteBusy) return
+        val settingsSnapshot = appSettings
+        remoteBusy = true
+        remoteUploadProgress = null
+        remoteMessage = null
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val credential = remoteDeviceStore.credential(profile.id)
+                    operation(
+                        RemoteDeviceClient(settingsSnapshot.connectionTimeoutSeconds * 1_000),
+                        profile,
+                        credential,
+                    )
+                }
+            }.onSuccess {
+                remoteStatus = (remoteStatus ?: RemoteDeviceStatus(resultingState)).copy(
+                    state = resultingState,
+                    fileName = remoteStatus?.fileName ?: remoteUpload?.displayName,
+                )
+                remoteMessage = successMessage
+                remoteMessageIsError = false
+            }.onFailure { failure ->
+                remoteMessage = if (failure is RemoteDeviceException && failure.statusCode in setOf(401, 403)) {
+                    remoteUnauthorizedError
+                } else if (failure is RemoteDeviceException) {
+                    remoteCommandError
+                } else {
+                    remoteConnectionError
+                }
+                remoteMessageIsError = true
+            }
+            remoteBusy = false
+        }
+    }
+
     WorkspaceScreen(
         selectedTab = selectedTab,
         model = model,
         modelTransform = modelTransform,
         sliceOptions = sliceOptions,
         profileCatalog = profileCatalog,
+        appSettings = appSettings,
+        remoteDevices = remoteDevices,
+        selectedRemoteDeviceId = selectedRemoteDeviceId,
+        remoteStatus = remoteStatus,
+        remoteUpload = remoteUpload,
+        remoteBusy = remoteBusy,
+        remoteUploadProgress = remoteUploadProgress,
+        remoteMessage = remoteMessage,
+        remoteMessageIsError = remoteMessageIsError,
         sliceOutcome = sliceOutcome,
         layerPreview = layerPreview,
         importing = importing,
@@ -293,6 +400,7 @@ private fun DuckySlicerScreen() {
             modelTransform = ModelTransform()
             sliceOutcome = null
             layerPreview = null
+            remoteUpload = null
             sliceProgress = 0
             notice = null
             error = null
@@ -359,6 +467,151 @@ private fun DuckySlicerScreen() {
             }
         },
         onLayerRangeSelected = loadPreviewRange,
+        onAppSettingsChanged = { next ->
+            appSettings = next
+        },
+        onRemoteDeviceSelected = { id ->
+            selectedRemoteDeviceId = id
+            remoteStatus = null
+            remoteUpload = remoteUpload?.takeIf { it.profileId == id }
+            remoteMessage = null
+        },
+        onRemoteDeviceSaved = { draft ->
+            if (!remoteBusy) {
+                remoteBusy = true
+                remoteMessage = null
+                scope.launch {
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            val saved = remoteDeviceStore.save(draft)
+                            saved to remoteDeviceStore.load()
+                        }
+                    }.onSuccess { (saved, profiles) ->
+                        remoteDevices = profiles
+                        selectedRemoteDeviceId = saved.id
+                        remoteStatus = null
+                        remoteUpload = null
+                        remoteMessage = remoteSavedNotice
+                        remoteMessageIsError = false
+                    }.onFailure {
+                        remoteMessage = remoteSaveError
+                        remoteMessageIsError = true
+                    }
+                    remoteBusy = false
+                }
+            }
+        },
+        onRemoteDeviceDeleted = { id ->
+            if (!remoteBusy) {
+                remoteBusy = true
+                scope.launch {
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            remoteDeviceStore.delete(id)
+                            remoteDeviceStore.load()
+                        }
+                    }.onSuccess { profiles ->
+                        remoteDevices = profiles
+                        if (selectedRemoteDeviceId == id) {
+                            selectedRemoteDeviceId = profiles.firstOrNull()?.id
+                            remoteStatus = null
+                            remoteUpload = null
+                        }
+                        remoteMessage = remoteDeletedNotice
+                        remoteMessageIsError = false
+                    }.onFailure {
+                        remoteMessage = remoteSaveError
+                        remoteMessageIsError = true
+                    }
+                    remoteBusy = false
+                }
+            }
+        },
+        onRemoteRefresh = {
+            val profile = selectedRemoteDevice()
+            if (profile != null && !remoteBusy) {
+                remoteBusy = true
+                remoteUploadProgress = null
+                remoteMessage = null
+                val settingsSnapshot = appSettings
+                scope.launch {
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            RemoteDeviceClient(settingsSnapshot.connectionTimeoutSeconds * 1_000).status(
+                                profile,
+                                remoteDeviceStore.credential(profile.id),
+                            )
+                        }
+                    }.onSuccess { status ->
+                        remoteStatus = status
+                        remoteMessage = remoteConnectedNotice
+                        remoteMessageIsError = false
+                    }.onFailure { failure ->
+                        remoteStatus = null
+                        remoteMessage = if (
+                            failure is RemoteDeviceException && failure.statusCode in setOf(401, 403)
+                        ) remoteUnauthorizedError else remoteConnectionError
+                        remoteMessageIsError = true
+                    }
+                    remoteBusy = false
+                }
+            }
+        },
+        onRemoteUpload = {
+            val profile = selectedRemoteDevice()
+            val output = sliceOutcome?.output
+            if (profile != null && output != null && !remoteBusy) {
+                remoteBusy = true
+                remoteUploadProgress = 0
+                remoteMessage = null
+                val settingsSnapshot = appSettings
+                scope.launch {
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            RemoteDeviceClient(settingsSnapshot.connectionTimeoutSeconds * 1_000).upload(
+                                profile,
+                                remoteDeviceStore.credential(profile.id),
+                                output,
+                            ) { progress -> scope.launch { remoteUploadProgress = progress } }
+                        }
+                    }.onSuccess { uploaded ->
+                        remoteUpload = uploaded
+                        remoteMessage = remoteUploadNotice
+                        remoteMessageIsError = false
+                    }.onFailure { failure ->
+                        remoteMessage = if (
+                            failure is RemoteDeviceException && failure.statusCode in setOf(401, 403)
+                        ) remoteUnauthorizedError else remoteConnectionError
+                        remoteMessageIsError = true
+                    }
+                    remoteUploadProgress = null
+                    remoteBusy = false
+                }
+            }
+        },
+        onRemoteStart = {
+            val upload = remoteUpload
+            if (upload != null) {
+                runRemoteCommand(remoteStartedNotice, "printing") { client, profile, credential ->
+                    client.start(profile, credential, upload)
+                }
+            }
+        },
+        onRemotePause = {
+            runRemoteCommand(remotePausedNotice, "paused") { client, profile, credential ->
+                client.pause(profile, credential)
+            }
+        },
+        onRemoteResume = {
+            runRemoteCommand(remoteResumedNotice, "printing") { client, profile, credential ->
+                client.resume(profile, credential)
+            }
+        },
+        onRemoteCancel = {
+            runRemoteCommand(remoteCanceledNotice, "canceled") { client, profile, credential ->
+                client.cancel(profile, credential)
+            }
+        },
     )
 }
 
