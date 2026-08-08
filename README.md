@@ -58,7 +58,8 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - Printer access keys encrypted with Android Keystore; unencrypted connections limited to local addresses
 - No account, cloud dependency, analytics SDK, or Bambu network plug-in
 - 16 KB page-size-compatible ARM64 native libraries for current Android devices
-- Immutable GitHub Action pins and a release gate that publishes only after the full ARM64 device suite passes
+- Immutable GitHub Action pins and checksum-verified, version-locked Gradle artifacts;
+  releases publish only after the full ARM64 device suite passes
 
 The device test suite uses a repository geometry fixture and verifies Rust mesh
 inspection, native slicing, non-empty G-code, all generated layers, extrusion paths
@@ -100,6 +101,8 @@ engine, and every native dependency are pinned to reviewed revisions; the APK bu
 rebuilds the runtime from source and verifies ARM64 identity, 16 KB ELF alignment,
 and its dynamic-library allowlist before packaging it. Tagged releases repeat those
 checks on the complete APK and are published only after release-candidate device tests.
+The Gradle wrapper distribution, Maven metadata, plug-ins, and library artifacts are
+also locked to reviewed versions and SHA-256 checksums.
 
 ## Build the APK
 
@@ -116,7 +119,7 @@ Requirements:
 ```shell
 git submodule update --init --recursive
 cd android
-./gradlew assembleDebug
+./gradlew --dependency-verification=strict assembleDebug
 ```
 
 The first build compiles the pinned headless slicer engine and its native dependencies
