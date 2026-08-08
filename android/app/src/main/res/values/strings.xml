@@ -131,6 +131,12 @@
     <string name="wall_generator">Wall generator</string>
     <string name="wall_generator_arachne">Arachne</string>
     <string name="wall_generator_classic">Classic</string>
+    <string name="wall_transition_length">Wall transition length</string>
+    <string name="wall_transition_filter">Wall transition filter</string>
+    <string name="wall_transition_angle">Wall transition angle</string>
+    <string name="wall_distribution_count">Wall distribution count</string>
+    <string name="minimum_feature_size">Minimum feature size</string>
+    <string name="minimum_wall_length">Minimum wall length</string>
     <string name="detect_thin_walls">Fill thin walls</string>
     <string name="detect_overhang_walls">Detect overhang walls</string>
     <string name="one_wall_on_top">One wall on top surfaces</string>
@@ -377,4 +383,22 @@
     <string name="counterbore_none">No bridge</string>
     <string name="counterbore_partial">Partial bridge</string>
     <string name="counterbore_sacrificial">Sacrificial layer</string>
+    <string name="brim_type">Brim</string>
+    <string name="brim_auto">Automatic</string>
+    <string name="brim_ears">Corners only</string>
+    <string name="brim_outer">Outside</string>
+    <string name="brim_inner">Inside</string>
+    <string name="brim_both">Inside and outside</string>
+    <string name="brim_none">Off</string>
+    <string name="brim_object_gap">Brim gap</string>
+    <string name="skirt_height">Skirt height</string>
+    <string name="skirt_speed">Skirt speed</string>
+    <string name="minimum_skirt_length">Minimum skirt extrusion</string>
+    <string name="draft_shield">Full-height draft shield</string>
+    <string name="raft">Raft</string>
+    <string name="raft_layers">Raft layers</string>
+    <string name="raft_contact_distance">Object gap</string>
+    <string name="raft_expansion">Raft expansion</string>
+    <string name="raft_first_layer_density">First-layer density</string>
+    <string name="raft_first_layer_expansion">First-layer expansion</string>
 </resources>

@@ -131,6 +131,12 @@
     <string name="wall_generator">벽 생성 방식</string>
     <string name="wall_generator_arachne">아라크네</string>
     <string name="wall_generator_classic">클래식</string>
+    <string name="wall_transition_length">벽 전환 길이</string>
+    <string name="wall_transition_filter">벽 전환 필터</string>
+    <string name="wall_transition_angle">벽 전환 각도</string>
+    <string name="wall_distribution_count">벽 폭 분배 개수</string>
+    <string name="minimum_feature_size">최소 형상 크기</string>
+    <string name="minimum_wall_length">최소 벽 길이</string>
     <string name="detect_thin_walls">얇은 벽 채우기</string>
     <string name="detect_overhang_walls">오버행 벽 감지</string>
     <string name="one_wall_on_top">상단 면 한 줄 벽</string>
@@ -377,4 +383,22 @@
     <string name="counterbore_none">브리지 없음</string>
     <string name="counterbore_partial">부분 브리지</string>
     <string name="counterbore_sacrificial">희생 레이어</string>
+    <string name="brim_type">브림</string>
+    <string name="brim_auto">자동</string>
+    <string name="brim_ears">모서리만</string>
+    <string name="brim_outer">바깥쪽</string>
+    <string name="brim_inner">안쪽</string>
+    <string name="brim_both">안쪽과 바깥쪽</string>
+    <string name="brim_none">사용 안 함</string>
+    <string name="brim_object_gap">브림 간격</string>
+    <string name="skirt_height">스커트 높이</string>
+    <string name="skirt_speed">스커트 속도</string>
+    <string name="minimum_skirt_length">최소 스커트 압출 길이</string>
+    <string name="draft_shield">전체 높이 드래프트 실드</string>
+    <string name="raft">래프트</string>
+    <string name="raft_layers">래프트 레이어</string>
+    <string name="raft_contact_distance">오브젝트 간격</string>
+    <string name="raft_expansion">래프트 확장</string>
+    <string name="raft_first_layer_density">첫 레이어 밀도</string>
+    <string name="raft_first_layer_expansion">첫 레이어 확장</string>
 </resources>

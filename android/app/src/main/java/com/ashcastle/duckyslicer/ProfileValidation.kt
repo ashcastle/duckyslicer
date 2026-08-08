@@ -119,6 +119,12 @@ internal object ProfileValidation {
                 profile.initialLayerLineWidth,
             ).all { it in 0f..3f } &&
             profile.wallGenerator in setOf("arachne", "classic") &&
+            profile.wallTransitionLength in 0f..10_000f &&
+            profile.wallTransitionFilterDeviation in 0f..10_000f &&
+            profile.wallTransitionAngle in 1f..59f &&
+            profile.wallDistributionCount in 1..100 &&
+            profile.minimumFeatureSize in 0f..10_000f &&
+            profile.minimumWallLengthFactor in 0f..100f &&
             profile.wallSequence in setOf("inner-outer", "outer-inner", "inner-outer-inner") &&
             profile.wallDirection in setOf("auto", "ccw", "cw") &&
             profile.minWidthTopSurface in 0f..1_500f &&
@@ -157,6 +163,15 @@ internal object ProfileValidation {
             profile.supportBasePattern in SUPPORT_BASE_PATTERNS &&
             profile.supportInterfacePattern in SUPPORT_INTERFACE_PATTERNS &&
             profile.supportStyle in SUPPORT_STYLES &&
+            profile.brimType in setOf(
+                "auto_brim", "brim_ears", "outer_only", "inner_only", "outer_and_inner", "no_brim",
+            ) &&
+            profile.brimObjectGap in 0f..20f &&
+            profile.raftLayers in 0..100 &&
+            profile.raftContactDistance in 0f..20f &&
+            profile.raftExpansion in 0f..1_000f &&
+            profile.raftFirstLayerDensity in 10f..100f &&
+            profile.raftFirstLayerExpansion in 0f..1_000f &&
             profile.seamPosition in SEAM_POSITIONS &&
             profile.ironingType in IRONING_TYPES &&
             profile.ironingPattern in INFILL_PATTERNS &&
@@ -173,6 +188,10 @@ internal object ProfileValidation {
             profile.maxBridgeLength in 0f..1_000_000f &&
             profile.skirtLoops in 0..100 &&
             profile.skirtDistance in 0f..1_000f &&
+            profile.skirtHeight in 0..10_000 &&
+            profile.skirtSpeed in 0f..2_000f &&
+            profile.minimumSkirtLength in 0f..1_000_000f &&
+            profile.draftShield in setOf("disabled", "enabled") &&
             profile.brimWidth in 0f..1_000f &&
             profile.compatiblePrinters.isSafeCompatibilityList()
 

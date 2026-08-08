@@ -294,6 +294,12 @@ class NativeEngineInstrumentedTest {
                 internalSolidInfillAcceleration = 84f,
                 internalSolidInfillAccelerationPercent = true,
                 wallGenerator = "classic",
+                wallTransitionLength = 140f,
+                wallTransitionFilterDeviation = 32f,
+                wallTransitionAngle = 23f,
+                wallDistributionCount = 3,
+                minimumFeatureSize = 21f,
+                minimumWallLengthFactor = 0.8f,
                 wallSequence = "outer-inner",
                 wallDirection = "cw",
                 detectThinWalls = true,
@@ -316,6 +322,20 @@ class NativeEngineInstrumentedTest {
                 elephantFootCompensationLayers = 4,
                 maxBridgeLength = 27f,
                 preciseOuterWalls = true,
+                skirtLoops = 3,
+                skirtDistance = 7.5f,
+                skirtHeight = 4,
+                skirtSpeed = 58f,
+                minimumSkirtLength = 13f,
+                draftShield = "enabled",
+                brimType = "outer_and_inner",
+                brimWidth = 6.5f,
+                brimObjectGap = 0.16f,
+                raftLayers = 3,
+                raftContactDistance = 0.14f,
+                raftExpansion = 2.6f,
+                raftFirstLayerDensity = 87f,
+                raftFirstLayerExpansion = 3.6f,
                 gcodeFlavor = "marlin2",
                 maxSpeedX = 320f,
                 maxAccelerationX = 4_200f,
@@ -421,6 +441,12 @@ class NativeEngineInstrumentedTest {
         assertEquals(4_500f, restored.slicing.last().travelAcceleration)
         assertEquals(600f, restored.slicing.last().firstLayerAcceleration)
         assertEquals("classic", restored.slicing.last().wallGenerator)
+        assertEquals(140f, restored.slicing.last().wallTransitionLength)
+        assertEquals(32f, restored.slicing.last().wallTransitionFilterDeviation)
+        assertEquals(23f, restored.slicing.last().wallTransitionAngle)
+        assertEquals(3, restored.slicing.last().wallDistributionCount)
+        assertEquals(21f, restored.slicing.last().minimumFeatureSize)
+        assertEquals(0.8f, restored.slicing.last().minimumWallLengthFactor)
         assertEquals("outer-inner", restored.slicing.last().wallSequence)
         assertEquals("cw", restored.slicing.last().wallDirection)
         assertEquals(78f, restored.slicing.last().smallPerimeterSpeed)
@@ -456,6 +482,20 @@ class NativeEngineInstrumentedTest {
         assertEquals(4, restored.slicing.last().elephantFootCompensationLayers)
         assertEquals(27f, restored.slicing.last().maxBridgeLength)
         assertTrue(restored.slicing.last().preciseOuterWalls)
+        assertEquals(3, restored.slicing.last().skirtLoops)
+        assertEquals(7.5f, restored.slicing.last().skirtDistance)
+        assertEquals(4, restored.slicing.last().skirtHeight)
+        assertEquals(58f, restored.slicing.last().skirtSpeed)
+        assertEquals(13f, restored.slicing.last().minimumSkirtLength)
+        assertEquals("enabled", restored.slicing.last().draftShield)
+        assertEquals("outer_and_inner", restored.slicing.last().brimType)
+        assertEquals(6.5f, restored.slicing.last().brimWidth)
+        assertEquals(0.16f, restored.slicing.last().brimObjectGap)
+        assertEquals(3, restored.slicing.last().raftLayers)
+        assertEquals(0.14f, restored.slicing.last().raftContactDistance)
+        assertEquals(2.6f, restored.slicing.last().raftExpansion)
+        assertEquals(87f, restored.slicing.last().raftFirstLayerDensity)
+        assertEquals(3.6f, restored.slicing.last().raftFirstLayerExpansion)
         assertEquals("marlin2", restored.printers.last().gcodeFlavor)
         assertEquals(320f, restored.printers.last().maxSpeedX)
         assertEquals(4_200f, restored.printers.last().maxAccelerationX)
@@ -463,7 +503,7 @@ class NativeEngineInstrumentedTest {
         assertEquals(7f, restored.printers.last().maxJerkX)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
-        assertEquals(12, JSONObject(file.readText()).getInt("schemaVersion"))
+        assertEquals(14, JSONObject(file.readText()).getInt("schemaVersion"))
         assertTrue("Saved profiles must stay in app-private storage", file.canonicalPath.startsWith(context.cacheDir.canonicalPath))
         file.delete()
         directory.delete()
@@ -492,7 +532,7 @@ class NativeEngineInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val catalog = OrcaProfileCatalog(context).load()
 
-        assertEquals(10, catalog.schemaVersion)
+        assertEquals(12, catalog.schemaVersion)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include Orca filament presets", catalog.filaments.size > 3_000)
@@ -538,6 +578,12 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.overhangReverse })
         assertTrue(catalog.slicing.any { it.minWidthTopSurface != 300f })
         assertTrue(catalog.slicing.any { it.internalBridgeFilter == "limited" })
+        assertTrue(catalog.slicing.any { it.brimType == "no_brim" })
+        assertTrue(catalog.slicing.any { it.brimType == "outer_only" })
+        assertTrue(catalog.slicing.any { it.brimObjectGap == 0.1f })
+        assertTrue(catalog.slicing.any { it.skirtHeight > 1 })
+        assertTrue(catalog.slicing.any { it.minimumSkirtLength > 0f })
+        assertTrue(catalog.slicing.any { it.raftFirstLayerExpansion > 2f })
         val legacyDecimalComma = requireNotNull(
             catalog.slicing.find { it.name == "0.05mm Detail @MK3.5" },
         )
@@ -565,6 +611,18 @@ class NativeEngineInstrumentedTest {
             catalog.slicing.find { it.id == "orca-process-358f3384a4aa741baeb8" },
         )
         assertEquals("outer-inner", legacyOuterFirst.wallSequence)
+        val distributedArachneWalls = requireNotNull(
+            catalog.slicing.find { it.id == "orca-process-ba41bc56a960ec4bf47d" },
+        )
+        assertEquals(2, distributedArachneWalls.wallDistributionCount)
+        val wideArachneTransition = requireNotNull(
+            catalog.slicing.find { it.id == "orca-process-1ad5b7e0535fb26f335c" },
+        )
+        assertEquals(59f, wideArachneTransition.wallTransitionAngle)
+        val narrowFeatureProfile = requireNotNull(
+            catalog.slicing.find { it.id == "orca-process-118b0a2ab38fdffaa3d4" },
+        )
+        assertEquals(20f, narrowFeatureProfile.minimumFeatureSize)
         assertTrue(catalog.slicing.map { it.wallGenerator }.toSet().containsAll(listOf("arachne", "classic")))
         assertTrue(catalog.slicing.map { it.wallSequence }.toSet().containsAll(listOf("inner-outer", "outer-inner")))
         assertTrue(catalog.printers.mapNotNull { it.brand }.containsAll(listOf("Creality", "Prusa", "Anycubic")))
@@ -635,6 +693,18 @@ class NativeEngineInstrumentedTest {
                 retractSpeed = 38f,
                 skirtLoops = 2,
                 skirtDistance = 7f,
+                skirtHeight = 3,
+                skirtSpeed = 59f,
+                minimumSkirtLength = 14f,
+                draftShield = "enabled",
+                brimType = "outer_and_inner",
+                brimWidth = 6f,
+                brimObjectGap = 0.17f,
+                raftLayers = 2,
+                raftContactDistance = 0.16f,
+                raftExpansion = 2.7f,
+                raftFirstLayerDensity = 88f,
+                raftFirstLayerExpansion = 3.7f,
                 perimeters = 3,
                 outerWallLineWidth = 0.62f,
                 innerWallLineWidth = 0.68f,
@@ -740,6 +810,12 @@ class NativeEngineInstrumentedTest {
                 internalSolidInfillAcceleration = 83f,
                 internalSolidInfillAccelerationPercent = true,
                 wallGenerator = "arachne",
+                wallTransitionLength = 137f,
+                wallTransitionFilterDeviation = 33f,
+                wallTransitionAngle = 26f,
+                wallDistributionCount = 4,
+                minimumFeatureSize = 19f,
+                minimumWallLengthFactor = 0.85f,
                 wallSequence = "outer-inner",
                 wallDirection = "cw",
                 detectThinWalls = true,
@@ -800,6 +876,19 @@ class NativeEngineInstrumentedTest {
         assertTrue("Gap-infill speed must reach Orca", gcode.contains("; gap_infill_speed = 137"))
         assertTrue("Retraction length must reach G-code", gcode.contains("; retraction_length = 1.1"))
         assertTrue("Skirt loops must reach G-code", gcode.contains("; skirt_loops = 2"))
+        assertTrue("Skirt distance must reach Orca", gcode.contains("; skirt_distance = 7"))
+        assertTrue("Skirt height must reach Orca", gcode.contains("; skirt_height = 3"))
+        assertTrue("Skirt speed must reach Orca", gcode.contains("; skirt_speed = 59"))
+        assertTrue("Minimum skirt extrusion must reach Orca", gcode.contains("; min_skirt_length = 14"))
+        assertTrue("Draft shield mode must reach Orca", gcode.contains("; draft_shield = enabled"))
+        assertTrue("Brim topology must reach Orca", gcode.contains("; brim_type = outer_and_inner"))
+        assertTrue("Brim width must reach Orca", gcode.contains("; brim_width = 6"))
+        assertTrue("Brim gap must reach Orca", gcode.contains("; brim_object_gap = 0.17"))
+        assertTrue("Raft layer count must reach Orca", gcode.contains("; raft_layers = 2"))
+        assertTrue("Raft contact distance must reach Orca", gcode.contains("; raft_contact_distance = 0.16"))
+        assertTrue("Raft expansion must reach Orca", gcode.contains("; raft_expansion = 2.7"))
+        assertTrue("Raft density must reach Orca", gcode.contains("; raft_first_layer_density = 88%"))
+        assertTrue("First raft expansion must reach Orca", gcode.contains("; raft_first_layer_expansion = 3.7"))
         assertTrue("Wall count must reach Orca", gcode.contains("; wall_loops = 3"))
         assertTrue("Outer-wall width must remain independent", gcode.contains("; outer_wall_line_width = 0.62"))
         assertTrue("Inner-wall width must remain independent", gcode.contains("; inner_wall_line_width = 0.68"))
@@ -873,6 +962,12 @@ class NativeEngineInstrumentedTest {
         assertTrue("Sparse infill acceleration must preserve absolute units", gcode.contains("; sparse_infill_acceleration = 4321"))
         assertTrue("Internal solid acceleration must preserve percent units", gcode.contains("; internal_solid_infill_acceleration = 83%"))
         assertTrue("Arachne selection must reach Orca", gcode.contains("; wall_generator = arachne"))
+        assertTrue("Arachne transition length must reach Orca", gcode.contains("; wall_transition_length = 137%"))
+        assertTrue("Arachne transition filter must reach Orca", gcode.contains("; wall_transition_filter_deviation = 33%"))
+        assertTrue("Arachne transition angle must reach Orca", gcode.contains("; wall_transition_angle = 26"))
+        assertTrue("Arachne wall distribution must reach Orca", gcode.contains("; wall_distribution_count = 4"))
+        assertTrue("Arachne minimum feature size must reach Orca", gcode.contains("; min_feature_size = 19%"))
+        assertTrue("Arachne minimum wall length must reach Orca", gcode.contains("; min_length_factor = 0.85"))
         assertTrue("Wall order must reach Orca", gcode.contains("; wall_sequence = outer wall/inner wall"))
         assertTrue("Wall direction must reach Orca", gcode.contains("; wall_direction = cw"))
         assertTrue("Small-perimeter speed must preserve percent units", gcode.contains("; small_perimeter_speed = 69%"))

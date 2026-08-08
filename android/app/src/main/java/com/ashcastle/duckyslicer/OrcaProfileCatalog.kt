@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.JsonReader
 import java.io.InputStreamReader
 
-private const val CATALOG_ASSET = "profile_catalog_v10.json"
+private const val CATALOG_ASSET = "profile_catalog_v12.json"
 
 class OrcaProfileCatalog(private val context: Context) {
     fun load(): ProfileCatalog = runCatching {
@@ -40,7 +40,7 @@ class OrcaProfileCatalog(private val context: Context) {
             }
         }
         reader.endObject()
-        check(schemaVersion == 10) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 12) { "Unsupported profile catalog schema" }
         return ProfileCatalog(
             printers = (PrinterProfile.builtIns + printers).distinctBy(PrinterProfile::id),
             filaments = (FilamentProfile.builtIns + filaments).distinctBy(FilamentProfile::id),
@@ -208,7 +208,9 @@ class OrcaProfileCatalog(private val context: Context) {
                 "internalSolidInfillAccelerationPercent" -> profile = profile.copy(internalSolidInfillAccelerationPercent = reader.nextBoolean())
                 "nozzleDiameter" -> profile = profile.copy(nozzleDiameter = reader.nextFloat())
                 "supportEnabled" -> profile = profile.copy(supportEnabled = reader.nextBoolean())
+                "brimType" -> profile = profile.copy(brimType = reader.nextString())
                 "brimWidth" -> profile = profile.copy(brimWidth = reader.nextFloat())
+                "brimObjectGap" -> profile = profile.copy(brimObjectGap = reader.nextFloat())
                 "topSolidLayers" -> profile = profile.copy(topSolidLayers = reader.nextInt())
                 "bottomSolidLayers" -> profile = profile.copy(bottomSolidLayers = reader.nextInt())
                 "topShellThickness" -> profile = profile.copy(topShellThickness = reader.nextFloat())
@@ -253,6 +255,15 @@ class OrcaProfileCatalog(private val context: Context) {
                 "supportStyle" -> profile = profile.copy(supportStyle = reader.nextString())
                 "skirtLoops" -> profile = profile.copy(skirtLoops = reader.nextInt())
                 "skirtDistance" -> profile = profile.copy(skirtDistance = reader.nextFloat())
+                "skirtHeight" -> profile = profile.copy(skirtHeight = reader.nextInt())
+                "skirtSpeed" -> profile = profile.copy(skirtSpeed = reader.nextFloat())
+                "minimumSkirtLength" -> profile = profile.copy(minimumSkirtLength = reader.nextFloat())
+                "draftShield" -> profile = profile.copy(draftShield = reader.nextString())
+                "raftLayers" -> profile = profile.copy(raftLayers = reader.nextInt())
+                "raftContactDistance" -> profile = profile.copy(raftContactDistance = reader.nextFloat())
+                "raftExpansion" -> profile = profile.copy(raftExpansion = reader.nextFloat())
+                "raftFirstLayerDensity" -> profile = profile.copy(raftFirstLayerDensity = reader.nextFloat())
+                "raftFirstLayerExpansion" -> profile = profile.copy(raftFirstLayerExpansion = reader.nextFloat())
                 "outerWallLineWidth" -> profile = profile.copy(outerWallLineWidth = reader.nextFloat())
                 "innerWallLineWidth" -> profile = profile.copy(innerWallLineWidth = reader.nextFloat())
                 "topSurfaceLineWidth" -> profile = profile.copy(topSurfaceLineWidth = reader.nextFloat())
@@ -280,6 +291,12 @@ class OrcaProfileCatalog(private val context: Context) {
                 "ironingSpacing" -> profile = profile.copy(ironingSpacing = reader.nextFloat())
                 "ironingSpeed" -> profile = profile.copy(ironingSpeed = reader.nextFloat())
                 "wallGenerator" -> profile = profile.copy(wallGenerator = reader.nextString())
+                "wallTransitionLength" -> profile = profile.copy(wallTransitionLength = reader.nextFloat())
+                "wallTransitionFilterDeviation" -> profile = profile.copy(wallTransitionFilterDeviation = reader.nextFloat())
+                "wallTransitionAngle" -> profile = profile.copy(wallTransitionAngle = reader.nextFloat())
+                "wallDistributionCount" -> profile = profile.copy(wallDistributionCount = reader.nextInt())
+                "minimumFeatureSize" -> profile = profile.copy(minimumFeatureSize = reader.nextFloat())
+                "minimumWallLengthFactor" -> profile = profile.copy(minimumWallLengthFactor = reader.nextFloat())
                 "wallSequence" -> profile = profile.copy(wallSequence = reader.nextString())
                 "wallDirection" -> profile = profile.copy(wallDirection = reader.nextString())
                 "detectThinWalls" -> profile = profile.copy(detectThinWalls = reader.nextBoolean())
