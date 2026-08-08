@@ -222,9 +222,13 @@ class NativeEngineInstrumentedTest {
                 bottomSurfaceFlowRatio = 0.98f,
                 bridgeDensity = 88f,
                 internalBridgeDensity = 74f,
+                bridgeAngle = 18f,
+                internalBridgeAngle = 104f,
                 bridgeNoSupport = true,
                 thickBridges = true,
                 thickInternalBridges = false,
+                extraBridgeLayer = "external_bridge_only",
+                internalBridgeFilter = "limited",
                 topShellThickness = 0.85f,
                 bottomShellThickness = 0.75f,
                 supportInterfaceTopLayers = 4,
@@ -294,8 +298,16 @@ class NativeEngineInstrumentedTest {
                 wallDirection = "cw",
                 detectThinWalls = true,
                 onlyOneWallOnTop = false,
+                minWidthTopSurface = 290f,
+                minWidthTopSurfacePercent = true,
                 onlyOneWallFirstLayer = true,
                 extraPerimetersOnOverhangs = true,
+                overhangReverse = true,
+                overhangReverseInternalOnly = true,
+                overhangReverseThreshold = 0.9f,
+                overhangReverseThresholdPercent = false,
+                counterboreHoleBridging = "partiallybridge",
+                alternateExtraWall = true,
                 ensureVerticalShellThickness = "ensure_critical_only",
                 detectNarrowInternalSolidInfill = false,
                 xyHoleCompensation = 0.12f,
@@ -363,9 +375,13 @@ class NativeEngineInstrumentedTest {
         assertTrue(restored.slicing.last().reduceInfillRetraction)
         assertEquals(88f, restored.slicing.last().bridgeDensity)
         assertEquals(74f, restored.slicing.last().internalBridgeDensity)
+        assertEquals(18f, restored.slicing.last().bridgeAngle)
+        assertEquals(104f, restored.slicing.last().internalBridgeAngle)
         assertTrue(restored.slicing.last().bridgeNoSupport)
         assertTrue(restored.slicing.last().thickBridges)
         assertEquals(false, restored.slicing.last().thickInternalBridges)
+        assertEquals("external_bridge_only", restored.slicing.last().extraBridgeLayer)
+        assertEquals("limited", restored.slicing.last().internalBridgeFilter)
         assertEquals(48f, restored.slicing.last().bridgeAcceleration)
         assertTrue(restored.slicing.last().bridgeAccelerationPercent)
         assertEquals(4_322f, restored.slicing.last().sparseInfillAcceleration)
@@ -424,6 +440,14 @@ class NativeEngineInstrumentedTest {
         assertEquals(false, restored.slicing.last().onlyOneWallOnTop)
         assertTrue(restored.slicing.last().onlyOneWallFirstLayer)
         assertTrue(restored.slicing.last().extraPerimetersOnOverhangs)
+        assertEquals(290f, restored.slicing.last().minWidthTopSurface)
+        assertTrue(restored.slicing.last().minWidthTopSurfacePercent)
+        assertTrue(restored.slicing.last().overhangReverse)
+        assertTrue(restored.slicing.last().overhangReverseInternalOnly)
+        assertEquals(0.9f, restored.slicing.last().overhangReverseThreshold)
+        assertEquals(false, restored.slicing.last().overhangReverseThresholdPercent)
+        assertEquals("partiallybridge", restored.slicing.last().counterboreHoleBridging)
+        assertTrue(restored.slicing.last().alternateExtraWall)
         assertEquals("ensure_critical_only", restored.slicing.last().ensureVerticalShellThickness)
         assertEquals(false, restored.slicing.last().detectNarrowInternalSolidInfill)
         assertEquals(0.12f, restored.slicing.last().xyHoleCompensation)
@@ -439,7 +463,7 @@ class NativeEngineInstrumentedTest {
         assertEquals(7f, restored.printers.last().maxJerkX)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
-        assertEquals(11, JSONObject(file.readText()).getInt("schemaVersion"))
+        assertEquals(12, JSONObject(file.readText()).getInt("schemaVersion"))
         assertTrue("Saved profiles must stay in app-private storage", file.canonicalPath.startsWith(context.cacheDir.canonicalPath))
         file.delete()
         directory.delete()
@@ -468,7 +492,7 @@ class NativeEngineInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val catalog = OrcaProfileCatalog(context).load()
 
-        assertEquals(9, catalog.schemaVersion)
+        assertEquals(10, catalog.schemaVersion)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include Orca filament presets", catalog.filaments.size > 3_000)
@@ -511,6 +535,9 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.wipeOnLoops })
         assertTrue(catalog.slicing.any { !it.roleBasedWipeSpeed })
         assertTrue(catalog.slicing.any { it.resolution == 0.012f })
+        assertTrue(catalog.slicing.any { it.overhangReverse })
+        assertTrue(catalog.slicing.any { it.minWidthTopSurface != 300f })
+        assertTrue(catalog.slicing.any { it.internalBridgeFilter == "limited" })
         val legacyDecimalComma = requireNotNull(
             catalog.slicing.find { it.name == "0.05mm Detail @MK3.5" },
         )
@@ -522,6 +549,18 @@ class NativeEngineInstrumentedTest {
         assertTrue(legacyInfillFirst.infillFirst)
         assertEquals("inner-outer", legacyInfillFirst.wallSequence)
         assertEquals(30f, legacyInfillFirst.infillWallOverlap)
+        assertEquals("limited", legacyInfillFirst.internalBridgeFilter)
+        val reversedOverhang = requireNotNull(
+            catalog.slicing.find { it.id == "orca-process-c664cf6dd495de940c1b" },
+        )
+        assertTrue(reversedOverhang.overhangReverse)
+        assertEquals(50f, reversedOverhang.overhangReverseThreshold)
+        assertTrue(reversedOverhang.overhangReverseThresholdPercent)
+        val narrowTopThreshold = requireNotNull(
+            catalog.slicing.find { it.id == "orca-process-24fb182645fb0995da8d" },
+        )
+        assertEquals(100f, narrowTopThreshold.minWidthTopSurface)
+        assertTrue(narrowTopThreshold.minWidthTopSurfacePercent)
         val legacyOuterFirst = requireNotNull(
             catalog.slicing.find { it.id == "orca-process-358f3384a4aa741baeb8" },
         )
@@ -629,9 +668,13 @@ class NativeEngineInstrumentedTest {
                 bottomSurfaceFlowRatio = 0.98f,
                 bridgeDensity = 87f,
                 internalBridgeDensity = 73f,
+                bridgeAngle = 19f,
+                internalBridgeAngle = 107f,
                 bridgeNoSupport = true,
                 thickBridges = true,
                 thickInternalBridges = false,
+                extraBridgeLayer = "apply_to_all",
+                internalBridgeFilter = "nofilter",
                 topShellThickness = 0.83f,
                 bottomShellThickness = 0.74f,
                 supportInterfaceTopLayers = 4,
@@ -702,8 +745,16 @@ class NativeEngineInstrumentedTest {
                 detectThinWalls = true,
                 detectOverhangWalls = false,
                 onlyOneWallOnTop = false,
+                minWidthTopSurface = 285f,
+                minWidthTopSurfacePercent = true,
                 onlyOneWallFirstLayer = true,
                 extraPerimetersOnOverhangs = true,
+                overhangReverse = true,
+                overhangReverseInternalOnly = true,
+                overhangReverseThreshold = 0.75f,
+                overhangReverseThresholdPercent = false,
+                counterboreHoleBridging = "sacrificiallayer",
+                alternateExtraWall = true,
                 ensureVerticalShellThickness = "ensure_moderate",
                 detectNarrowInternalSolidInfill = false,
                 xyHoleCompensation = 0.11f,
@@ -772,6 +823,10 @@ class NativeEngineInstrumentedTest {
         assertTrue("Bridge support policy must reach Orca", gcode.contains("; bridge_no_support = 1"))
         assertTrue("External bridge thickness must reach Orca", gcode.contains("; thick_bridges = 1"))
         assertTrue("Internal bridge thickness must reach Orca", gcode.contains("; thick_internal_bridges = 0"))
+        assertTrue("External bridge direction must reach Orca", gcode.contains("; bridge_angle = 19"))
+        assertTrue("Internal bridge direction must reach Orca", gcode.contains("; internal_bridge_angle = 107"))
+        assertTrue("Extra bridge layers must reach Orca", gcode.contains("; enable_extra_bridge_layer = apply_to_all"))
+        assertTrue("Internal bridge filtering must reach Orca", gcode.contains("; dont_filter_internal_bridges = nofilter"))
         assertTrue("Top support interface layers must reach Orca", gcode.contains("; support_interface_top_layers = 4"))
         assertTrue("Bottom support interface layers must reach Orca", gcode.contains("; support_interface_bottom_layers = 2"))
         assertTrue("Top support interface spacing must reach Orca", gcode.contains("; support_interface_spacing = 0.23"))
@@ -833,8 +888,14 @@ class NativeEngineInstrumentedTest {
         assertTrue("Thin-wall detection must reach Orca", gcode.contains("; detect_thin_wall = 1"))
         assertTrue("Overhang-wall detection must reach Orca", gcode.contains("; detect_overhang_wall = 0"))
         assertTrue("Top-surface wall rule must reach Orca", gcode.contains("; only_one_wall_top = 0"))
+        assertTrue("Partial top-surface threshold must preserve percent units", gcode.contains("; min_width_top_surface = 285%"))
         assertTrue("First-layer wall rule must reach Orca", gcode.contains("; only_one_wall_first_layer = 1"))
         assertTrue("Overhang extra-wall policy must reach Orca", gcode.contains("; extra_perimeters_on_overhangs = 1"))
+        assertTrue("Overhang direction reversal must reach Orca", gcode.contains("; overhang_reverse = 1"))
+        assertTrue("Internal-only reversal must reach Orca", gcode.contains("; overhang_reverse_internal_only = 1"))
+        assertTrue("Overhang reversal threshold must preserve absolute units", gcode.contains("; overhang_reverse_threshold = 0.75"))
+        assertTrue("Counterbore bridge mode must reach Orca", gcode.contains("; counterbore_hole_bridging = sacrificiallayer"))
+        assertTrue("Alternating extra wall must reach Orca", gcode.contains("; alternate_extra_wall = 1"))
         assertTrue("Vertical shell mode must reach Orca", gcode.contains("; ensure_vertical_shell_thickness = ensure_moderate"))
         assertTrue("Narrow internal-solid policy must reach Orca", gcode.contains("; detect_narrow_internal_solid_infill = 0"))
         assertTrue("Hole compensation must reach Orca", gcode.contains("; xy_hole_compensation = 0.11"))

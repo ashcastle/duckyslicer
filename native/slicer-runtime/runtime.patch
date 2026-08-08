@@ -47,10 +47,10 @@ index 963808df..2f2043a3 100644
  else()
      target_link_libraries(libslic3r PRIVATE
 diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
-index 116a4a85..32964d8c 100644
+index 116a4a85..a09c5b33 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -40,14 +40,84 @@ struct SliceConfig {
+@@ -40,14 +40,88 @@ struct SliceConfig {
      int perimeters = 2;
      int top_solid_layers = 5;
      int bottom_solid_layers = 4;
@@ -114,9 +114,13 @@ index 116a4a85..32964d8c 100644
 +    float bottom_surface_flow_ratio = 1.0f;
 +    float bridge_density = 100.0f;
 +    float internal_bridge_density = 100.0f;
++    float bridge_angle = 0.0f;
++    float internal_bridge_angle = 0.0f;
 +    bool bridge_no_support = false;
 +    bool thick_bridges = false;
 +    bool thick_internal_bridges = true;
++    std::string extra_bridge_layer = "disabled";
++    std::string internal_bridge_filter = "disabled";
 +
 +    // Feature acceleration (mm/s²). Zero keeps Orca's inheritance behavior.
 +    float default_acceleration = 0.0f;
@@ -135,7 +139,7 @@ index 116a4a85..32964d8c 100644
      // Temperature
      int nozzle_temp = 210;
      int bed_temp = 60;
-@@ -60,6 +130,16 @@ struct SliceConfig {
+@@ -60,6 +134,16 @@ struct SliceConfig {
      bool support_enabled = false;
      std::string support_type = "normal"; // "normal", "tree"
      float support_angle = 45.0f;
@@ -152,7 +156,7 @@ index 116a4a85..32964d8c 100644
      int support_filament = 0;            // 1-based Orca filament index; 0 = default
      int support_interface_filament = 0;  // 1-based Orca filament index; 0 = default
  
-@@ -68,6 +148,51 @@ struct SliceConfig {
+@@ -68,6 +152,59 @@ struct SliceConfig {
      float skirt_distance = 6.0f;
      float brim_width = 0.0f;
  
@@ -190,8 +194,16 @@ index 116a4a85..32964d8c 100644
 +    bool detect_thin_walls = false;
 +    bool detect_overhang_walls = true;
 +    bool only_one_wall_on_top = false;
++    float min_width_top_surface = 300.0f;
++    bool min_width_top_surface_percent = true;
 +    bool only_one_wall_first_layer = false;
 +    bool extra_perimeters_on_overhangs = false;
++    bool overhang_reverse = false;
++    bool overhang_reverse_internal_only = false;
++    float overhang_reverse_threshold = 50.0f;
++    bool overhang_reverse_threshold_percent = true;
++    std::string counterbore_hole_bridging = "none";
++    bool alternate_extra_wall = false;
 +    std::string ensure_vertical_shell_thickness = "ensure_all";
 +    bool detect_narrow_internal_solid_infill = true;
 +    float xy_hole_compensation = 0.0f;
@@ -204,7 +216,7 @@ index 116a4a85..32964d8c 100644
      // Printer bed (Snapmaker U1: 270x270x270mm)
      float bed_size_x = 270.0f;
      float bed_size_y = 270.0f;
-@@ -98,6 +223,22 @@ struct SliceConfig {
+@@ -98,6 +235,22 @@ struct SliceConfig {
      // template expressions at G-code generation time.
      std::string machine_start_gcode;
      std::string machine_end_gcode;
@@ -315,10 +327,10 @@ index 51a2f8fb..f5cdd410 100644
  } } // namespace Feature::FuzzySkin
  
 diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
-index d93efb7d..0e520a7c 100644
+index d93efb7d..92fb9dab 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -92,10 +92,76 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -92,10 +92,80 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.perimeters = getInt("perimeters");
      config.top_solid_layers = getInt("topSolidLayers");
      config.bottom_solid_layers = getInt("bottomSolidLayers");
@@ -377,9 +389,13 @@ index d93efb7d..0e520a7c 100644
 +    config.bottom_surface_flow_ratio = getFloat("bottomSurfaceFlowRatio");
 +    config.bridge_density = getFloat("bridgeDensity");
 +    config.internal_bridge_density = getFloat("internalBridgeDensity");
++    config.bridge_angle = getFloat("bridgeAngle");
++    config.internal_bridge_angle = getFloat("internalBridgeAngle");
 +    config.bridge_no_support = getBool("bridgeNoSupport");
 +    config.thick_bridges = getBool("thickBridges");
 +    config.thick_internal_bridges = getBool("thickInternalBridges");
++    config.extra_bridge_layer = getString("extraBridgeLayer");
++    config.internal_bridge_filter = getString("internalBridgeFilter");
 +    config.default_acceleration = getFloat("defaultAcceleration");
 +    config.outer_wall_acceleration = getFloat("outerWallAcceleration");
 +    config.inner_wall_acceleration = getFloat("innerWallAcceleration");
@@ -395,7 +411,7 @@ index d93efb7d..0e520a7c 100644
      config.travel_speed = getFloat("travelSpeed");
      config.first_layer_speed = getFloat("firstLayerSpeed");
  
-@@ -108,12 +174,64 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -108,12 +178,72 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.support_enabled = getBool("supportEnabled");
      config.support_type = getString("supportType");
      config.support_angle = getFloat("supportAngle");
@@ -447,8 +463,16 @@ index d93efb7d..0e520a7c 100644
 +    config.detect_thin_walls = getBool("detectThinWalls");
 +    config.detect_overhang_walls = getBool("detectOverhangWalls");
 +    config.only_one_wall_on_top = getBool("onlyOneWallOnTop");
++    config.min_width_top_surface = getFloat("minWidthTopSurface");
++    config.min_width_top_surface_percent = getBool("minWidthTopSurfacePercent");
 +    config.only_one_wall_first_layer = getBool("onlyOneWallFirstLayer");
 +    config.extra_perimeters_on_overhangs = getBool("extraPerimetersOnOverhangs");
++    config.overhang_reverse = getBool("overhangReverse");
++    config.overhang_reverse_internal_only = getBool("overhangReverseInternalOnly");
++    config.overhang_reverse_threshold = getFloat("overhangReverseThreshold");
++    config.overhang_reverse_threshold_percent = getBool("overhangReverseThresholdPercent");
++    config.counterbore_hole_bridging = getString("counterboreHoleBridging");
++    config.alternate_extra_wall = getBool("alternateExtraWall");
 +    config.ensure_vertical_shell_thickness = getString("ensureVerticalShellThickness");
 +    config.detect_narrow_internal_solid_infill = getBool("detectNarrowInternalSolidInfill");
 +    config.xy_hole_compensation = getFloat("xyHoleCompensation");
@@ -460,7 +484,7 @@ index d93efb7d..0e520a7c 100644
  
      config.bed_size_x = getFloat("bedSizeX");
      config.bed_size_y = getFloat("bedSizeY");
-@@ -137,6 +255,22 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -137,6 +267,22 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
      config.machine_start_gcode = getString("machineStartGcode");
      config.machine_end_gcode = getString("machineEndGcode");
@@ -483,7 +507,7 @@ index d93efb7d..0e520a7c 100644
  
      // F91: per-extruder filament tuning from the user's filament library.
      config.filament_flow_ratios = getFloatArray("filamentFlowRatios");
-@@ -235,9 +369,75 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -235,9 +381,79 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setInt("perimeters", config.perimeters);
      setInt("topSolidLayers", config.top_solid_layers);
      setInt("bottomSolidLayers", config.bottom_solid_layers);
@@ -541,9 +565,13 @@ index d93efb7d..0e520a7c 100644
 +    setFloat("bottomSurfaceFlowRatio", config.bottom_surface_flow_ratio);
 +    setFloat("bridgeDensity", config.bridge_density);
 +    setFloat("internalBridgeDensity", config.internal_bridge_density);
++    setFloat("bridgeAngle", config.bridge_angle);
++    setFloat("internalBridgeAngle", config.internal_bridge_angle);
 +    setBool("bridgeNoSupport", config.bridge_no_support);
 +    setBool("thickBridges", config.thick_bridges);
 +    setBool("thickInternalBridges", config.thick_internal_bridges);
++    setString("extraBridgeLayer", config.extra_bridge_layer);
++    setString("internalBridgeFilter", config.internal_bridge_filter);
 +    setFloat("defaultAcceleration", config.default_acceleration);
 +    setFloat("outerWallAcceleration", config.outer_wall_acceleration);
 +    setFloat("innerWallAcceleration", config.inner_wall_acceleration);
@@ -559,7 +587,7 @@ index d93efb7d..0e520a7c 100644
      setFloat("travelSpeed", config.travel_speed);
      setFloat("firstLayerSpeed", config.first_layer_speed);
      setInt("nozzleTemp", config.nozzle_temp);
-@@ -247,11 +447,63 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -247,11 +463,71 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setBool("supportEnabled", config.support_enabled);
      setString("supportType", config.support_type);
      setFloat("supportAngle", config.support_angle);
@@ -610,8 +638,16 @@ index d93efb7d..0e520a7c 100644
 +    setBool("detectThinWalls", config.detect_thin_walls);
 +    setBool("detectOverhangWalls", config.detect_overhang_walls);
 +    setBool("onlyOneWallOnTop", config.only_one_wall_on_top);
++    setFloat("minWidthTopSurface", config.min_width_top_surface);
++    setBool("minWidthTopSurfacePercent", config.min_width_top_surface_percent);
 +    setBool("onlyOneWallFirstLayer", config.only_one_wall_first_layer);
 +    setBool("extraPerimetersOnOverhangs", config.extra_perimeters_on_overhangs);
++    setBool("overhangReverse", config.overhang_reverse);
++    setBool("overhangReverseInternalOnly", config.overhang_reverse_internal_only);
++    setFloat("overhangReverseThreshold", config.overhang_reverse_threshold);
++    setBool("overhangReverseThresholdPercent", config.overhang_reverse_threshold_percent);
++    setString("counterboreHoleBridging", config.counterbore_hole_bridging);
++    setBool("alternateExtraWall", config.alternate_extra_wall);
 +    setString("ensureVerticalShellThickness", config.ensure_vertical_shell_thickness);
 +    setBool("detectNarrowInternalSolidInfill", config.detect_narrow_internal_solid_infill);
 +    setFloat("xyHoleCompensation", config.xy_hole_compensation);
@@ -623,7 +659,7 @@ index d93efb7d..0e520a7c 100644
      setFloat("bedSizeX", config.bed_size_x);
      setFloat("bedSizeY", config.bed_size_y);
      setFloat("maxPrintHeight", config.max_print_height);
-@@ -271,6 +523,22 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -271,6 +547,22 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setFloat("wipeTowerWidth", config.wipe_tower_width);
      setString("machineStartGcode", config.machine_start_gcode);
      setString("machineEndGcode", config.machine_end_gcode);
@@ -647,10 +683,10 @@ index d93efb7d..0e520a7c 100644
      env->DeleteLocalRef(cls);
      return obj;
 diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
-index 8d61c9cf..25ee6bee 100644
+index 8d61c9cf..35a15eb9 100644
 --- a/app/src/main/cpp/src/sapil_print.cpp
 +++ b/app/src/main/cpp/src/sapil_print.cpp
-@@ -183,84 +183,144 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -183,84 +183,148 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
      dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
      dpc.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(config.bottom_solid_layers));
@@ -743,9 +779,13 @@ index 8d61c9cf..25ee6bee 100644
 +    dpc.set_key_value("bottom_solid_infill_flow_ratio", new Slic3r::ConfigOptionFloat(config.bottom_surface_flow_ratio));
 +    dpc.set_key_value("bridge_density",             new Slic3r::ConfigOptionPercent(config.bridge_density));
 +    dpc.set_key_value("internal_bridge_density",    new Slic3r::ConfigOptionPercent(config.internal_bridge_density));
++    dpc.set_key_value("bridge_angle",               new Slic3r::ConfigOptionFloat(config.bridge_angle));
++    dpc.set_key_value("internal_bridge_angle",      new Slic3r::ConfigOptionFloat(config.internal_bridge_angle));
 +    dpc.set_key_value("bridge_no_support",          new Slic3r::ConfigOptionBool(config.bridge_no_support));
 +    dpc.set_key_value("thick_bridges",              new Slic3r::ConfigOptionBool(config.thick_bridges));
 +    dpc.set_key_value("thick_internal_bridges",     new Slic3r::ConfigOptionBool(config.thick_internal_bridges));
++    dpc.set_deserialize_strict("enable_extra_bridge_layer", config.extra_bridge_layer);
++    dpc.set_deserialize_strict("dont_filter_internal_bridges", config.internal_bridge_filter);
 +
 +    // Use the active printer profile geometry. Keep U1 dimensions only as a
 +    // defensive fallback for callers using an older Java contract.
@@ -859,7 +899,7 @@ index 8d61c9cf..25ee6bee 100644
  
      // Multi-extruder setup
      int n_ext = std::max(1, config.extruder_count);
-@@ -461,11 +521,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -461,11 +525,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      applyPerExtFloats("slow_down_layer_time",    config.filament_slow_down_layer_times, 4.0);
      applyPerExtFloats("slow_down_min_speed",     config.filament_slow_down_min_speeds, 20.0);
  
@@ -874,7 +914,7 @@ index 8d61c9cf..25ee6bee 100644
  
      // Deretraction speed — OrcaSlicer defaults to 0 (= same as retraction speed).
      // Snapmaker profile uses 35 mm/s for smoother prime-after-retract.
-@@ -480,32 +538,73 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -480,32 +542,81 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      // the literal 0, not the auto-resolved value, causing Flow::rounded_rectangle_extrusion_spacing()
      // to throw FlowErrorNegativeSpacing on multi-color models.
      double nd = config.nozzle_diameter;
@@ -946,8 +986,16 @@ index 8d61c9cf..25ee6bee 100644
 +    dpc.set_key_value("detect_thin_wall", new Slic3r::ConfigOptionBool(config.detect_thin_walls));
 +    dpc.set_key_value("detect_overhang_wall", new Slic3r::ConfigOptionBool(config.detect_overhang_walls));
 +    dpc.set_key_value("only_one_wall_top", new Slic3r::ConfigOptionBool(config.only_one_wall_on_top));
++    dpc.set_key_value("min_width_top_surface", new Slic3r::ConfigOptionFloatOrPercent(
++        config.min_width_top_surface, config.min_width_top_surface_percent));
 +    dpc.set_key_value("only_one_wall_first_layer", new Slic3r::ConfigOptionBool(config.only_one_wall_first_layer));
 +    dpc.set_key_value("extra_perimeters_on_overhangs", new Slic3r::ConfigOptionBool(config.extra_perimeters_on_overhangs));
++    dpc.set_key_value("overhang_reverse", new Slic3r::ConfigOptionBool(config.overhang_reverse));
++    dpc.set_key_value("overhang_reverse_internal_only", new Slic3r::ConfigOptionBool(config.overhang_reverse_internal_only));
++    dpc.set_key_value("overhang_reverse_threshold", new Slic3r::ConfigOptionFloatOrPercent(
++        config.overhang_reverse_threshold, config.overhang_reverse_threshold_percent));
++    dpc.set_deserialize_strict("counterbore_hole_bridging", config.counterbore_hole_bridging);
++    dpc.set_key_value("alternate_extra_wall", new Slic3r::ConfigOptionBool(config.alternate_extra_wall));
 +    dpc.set_deserialize_strict("ensure_vertical_shell_thickness", config.ensure_vertical_shell_thickness);
 +    dpc.set_key_value("detect_narrow_internal_solid_infill", new Slic3r::ConfigOptionBool(config.detect_narrow_internal_solid_infill));
 +    dpc.set_key_value("xy_hole_compensation", new Slic3r::ConfigOptionFloat(config.xy_hole_compensation));
@@ -972,7 +1020,7 @@ index 8d61c9cf..25ee6bee 100644
      // F91 (2026-05-25) — SliceConfig user overrides for the per-filament tuning keys
      // that applyConfigToPrusa doesn't otherwise touch. When the user sets a value via the
      // Filament Library, populate dpc here so the slicer picks it up. When unset, the
-@@ -568,19 +667,27 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -568,19 +679,27 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          dpc.set_key_value("filament_cost", new Slic3r::ConfigOptionFloats(std::move(v)));
      }
  

@@ -699,6 +699,32 @@ private fun SlicingSettingsSheet(
         checked = options.onlyOneWallOnTop,
         onCheckedChange = { onOptionsChanged(options.copy(onlyOneWallOnTop = it)) },
     )
+    if (options.onlyOneWallOnTop) {
+        LengthOrPercentSetting(
+            label = stringResource(R.string.one_wall_threshold),
+            value = options.minWidthTopSurface,
+            percent = options.minWidthTopSurfacePercent,
+            maximumAbsolute = if (options.minWidthTopSurfacePercent) {
+                15f
+            } else {
+                max(15f, options.minWidthTopSurface)
+            },
+            maximumPercent = if (options.minWidthTopSurfacePercent) {
+                max(1_500f, options.minWidthTopSurface)
+            } else {
+                1_500f
+            },
+            onValueChange = { onOptionsChanged(options.copy(minWidthTopSurface = it)) },
+            onPercentChange = { selectedPercent, adjustedValue ->
+                onOptionsChanged(
+                    options.copy(
+                        minWidthTopSurface = adjustedValue,
+                        minWidthTopSurfacePercent = selectedPercent,
+                    ),
+                )
+            },
+        )
+    }
     SettingsSwitch(
         label = stringResource(R.string.one_wall_on_first_layer),
         checked = options.onlyOneWallFirstLayer,
@@ -708,6 +734,47 @@ private fun SlicingSettingsSheet(
         label = stringResource(R.string.extra_perimeters_on_overhangs),
         checked = options.extraPerimetersOnOverhangs,
         onCheckedChange = { onOptionsChanged(options.copy(extraPerimetersOnOverhangs = it)) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.overhang_reversal),
+        checked = options.overhangReverse,
+        onCheckedChange = { onOptionsChanged(options.copy(overhangReverse = it)) },
+    )
+    if (options.overhangReverse) {
+        SettingsSwitch(
+            label = stringResource(R.string.reverse_internal_only),
+            checked = options.overhangReverseInternalOnly,
+            onCheckedChange = { onOptionsChanged(options.copy(overhangReverseInternalOnly = it)) },
+        )
+        LengthOrPercentSetting(
+            label = stringResource(R.string.reverse_threshold),
+            value = options.overhangReverseThreshold,
+            percent = options.overhangReverseThresholdPercent,
+            maximumAbsolute = if (options.overhangReverseThresholdPercent) {
+                20f
+            } else {
+                max(20f, options.overhangReverseThreshold)
+            },
+            maximumPercent = if (options.overhangReverseThresholdPercent) {
+                max(2_000f, options.overhangReverseThreshold)
+            } else {
+                2_000f
+            },
+            onValueChange = { onOptionsChanged(options.copy(overhangReverseThreshold = it)) },
+            onPercentChange = { selectedPercent, adjustedValue ->
+                onOptionsChanged(
+                    options.copy(
+                        overhangReverseThreshold = adjustedValue,
+                        overhangReverseThresholdPercent = selectedPercent,
+                    ),
+                )
+            },
+        )
+    }
+    SettingsSwitch(
+        label = stringResource(R.string.alternate_extra_wall),
+        checked = options.alternateExtraWall,
+        onCheckedChange = { onOptionsChanged(options.copy(alternateExtraWall = it)) },
     )
     SettingsSwitch(
         label = stringResource(R.string.precise_outer_walls),
@@ -1199,6 +1266,68 @@ private fun SlicingSettingsSheet(
         range = 10f..100f,
         steps = 89,
         onValueChange = { onOptionsChanged(options.copy(internalBridgeDensity = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.external_bridge_angle),
+        valueText = stringResource(R.string.angle_value, options.bridgeAngle),
+        value = options.bridgeAngle,
+        range = 0f..360f,
+        steps = 359,
+        onValueChange = { onOptionsChanged(options.copy(bridgeAngle = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.internal_bridge_angle),
+        valueText = stringResource(R.string.angle_value, options.internalBridgeAngle),
+        value = options.internalBridgeAngle,
+        range = 0f..360f,
+        steps = 359,
+        onValueChange = { onOptionsChanged(options.copy(internalBridgeAngle = it.roundToInt().toFloat())) },
+    )
+    Text(stringResource(R.string.extra_bridge_layers), fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf("disabled", "external_bridge_only", "internal_bridge_only", "apply_to_all"),
+        selected = options.extraBridgeLayer,
+        label = {
+            stringResource(
+                when (it) {
+                    "external_bridge_only" -> R.string.extra_bridge_external
+                    "internal_bridge_only" -> R.string.extra_bridge_internal
+                    "apply_to_all" -> R.string.extra_bridge_all
+                    else -> R.string.extra_bridge_disabled
+                },
+            )
+        },
+        onSelected = { onOptionsChanged(options.copy(extraBridgeLayer = it)) },
+    )
+    Text(stringResource(R.string.internal_bridge_filter), fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf("disabled", "limited", "nofilter"),
+        selected = options.internalBridgeFilter,
+        label = {
+            stringResource(
+                when (it) {
+                    "limited" -> R.string.bridge_filter_limited
+                    "nofilter" -> R.string.bridge_filter_none
+                    else -> R.string.bridge_filter_default
+                },
+            )
+        },
+        onSelected = { onOptionsChanged(options.copy(internalBridgeFilter = it)) },
+    )
+    Text(stringResource(R.string.counterbore_bridging), fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf("none", "partiallybridge", "sacrificiallayer"),
+        selected = options.counterboreHoleBridging,
+        label = {
+            stringResource(
+                when (it) {
+                    "partiallybridge" -> R.string.counterbore_partial
+                    "sacrificiallayer" -> R.string.counterbore_sacrificial
+                    else -> R.string.counterbore_none
+                },
+            )
+        },
+        onSelected = { onOptionsChanged(options.copy(counterboreHoleBridging = it)) },
     )
     SettingsSwitch(
         label = stringResource(R.string.do_not_support_bridges),

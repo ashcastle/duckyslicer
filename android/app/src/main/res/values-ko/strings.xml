@@ -356,4 +356,25 @@
     <string name="maximum_print_acceleration">최대 출력 가속도</string>
     <string name="maximum_travel_acceleration">최대 이동 가속도</string>
     <string name="acceleration_value">%1$.0f mm/s²</string>
+    <string name="one_wall_threshold">상단 한 줄 외벽 기준</string>
+    <string name="overhang_reversal">오버행 방향 번갈아 출력</string>
+    <string name="reverse_internal_only">내벽에만 적용</string>
+    <string name="reverse_threshold">오버행 반전 기준</string>
+    <string name="alternate_extra_wall">교대 레이어에 외벽 추가</string>
+    <string name="external_bridge_angle">외부 브리지 방향</string>
+    <string name="internal_bridge_angle">내부 브리지 방향</string>
+    <string name="angle_value">%1$.0f°</string>
+    <string name="extra_bridge_layers">브리지 레이어 추가</string>
+    <string name="extra_bridge_disabled">사용 안 함</string>
+    <string name="extra_bridge_external">외부 브리지</string>
+    <string name="extra_bridge_internal">내부 브리지</string>
+    <string name="extra_bridge_all">모든 브리지</string>
+    <string name="internal_bridge_filter">작은 내부 브리지</string>
+    <string name="bridge_filter_default">필터링</string>
+    <string name="bridge_filter_limited">제한적으로 유지</string>
+    <string name="bridge_filter_none">모두 유지</string>
+    <string name="counterbore_bridging">카운터보어 홀</string>
+    <string name="counterbore_none">브리지 없음</string>
+    <string name="counterbore_partial">부분 브리지</string>
+    <string name="counterbore_sacrificial">희생 레이어</string>
 </resources>

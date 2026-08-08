@@ -356,4 +356,25 @@
     <string name="maximum_print_acceleration">Maximum print acceleration</string>
     <string name="maximum_travel_acceleration">Maximum travel acceleration</string>
     <string name="acceleration_value">%1$.0f mm/s²</string>
+    <string name="one_wall_threshold">One-wall top threshold</string>
+    <string name="overhang_reversal">Alternate overhang direction</string>
+    <string name="reverse_internal_only">Inner walls only</string>
+    <string name="reverse_threshold">Overhang reversal threshold</string>
+    <string name="alternate_extra_wall">Extra wall on alternating layers</string>
+    <string name="external_bridge_angle">Outer bridge direction</string>
+    <string name="internal_bridge_angle">Inner bridge direction</string>
+    <string name="angle_value">%1$.0f°</string>
+    <string name="extra_bridge_layers">Extra bridge layer</string>
+    <string name="extra_bridge_disabled">Off</string>
+    <string name="extra_bridge_external">Outer bridges</string>
+    <string name="extra_bridge_internal">Inner bridges</string>
+    <string name="extra_bridge_all">All bridges</string>
+    <string name="internal_bridge_filter">Small inner bridges</string>
+    <string name="bridge_filter_default">Filter</string>
+    <string name="bridge_filter_limited">Limited filtering</string>
+    <string name="bridge_filter_none">Keep all</string>
+    <string name="counterbore_bridging">Counterbore holes</string>
+    <string name="counterbore_none">No bridge</string>
+    <string name="counterbore_partial">Partial bridge</string>
+    <string name="counterbore_sacrificial">Sacrificial layer</string>
 </resources>
