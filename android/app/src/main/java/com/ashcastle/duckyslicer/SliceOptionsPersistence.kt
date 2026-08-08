@@ -59,6 +59,8 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         gapInfillSpeed = gapInfillSpeed,
         firstLayerInfillSpeed = firstLayerInfillSpeed,
         supportInterfaceSpeed = supportInterfaceSpeed,
+        internalBridgeSpeed = internalBridgeSpeed,
+        internalBridgeSpeedPercent = internalBridgeSpeedPercent,
         overhangSpeedEnabled = overhangSpeedEnabled,
         overhangSpeed1 = overhangSpeed1,
         overhangSpeed1Percent = overhangSpeed1Percent,
@@ -72,12 +74,23 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         internalBridgeFlowRatio = internalBridgeFlowRatio,
         topSurfaceFlowRatio = topSurfaceFlowRatio,
         bottomSurfaceFlowRatio = bottomSurfaceFlowRatio,
+        bridgeDensity = bridgeDensity,
+        internalBridgeDensity = internalBridgeDensity,
+        bridgeNoSupport = bridgeNoSupport,
+        thickBridges = thickBridges,
+        thickInternalBridges = thickInternalBridges,
         defaultAcceleration = defaultAcceleration,
         outerWallAcceleration = outerWallAcceleration,
         innerWallAcceleration = innerWallAcceleration,
         topSurfaceAcceleration = topSurfaceAcceleration,
         travelAcceleration = travelAcceleration,
         firstLayerAcceleration = firstLayerAcceleration,
+        bridgeAcceleration = bridgeAcceleration,
+        bridgeAccelerationPercent = bridgeAccelerationPercent,
+        sparseInfillAcceleration = sparseInfillAcceleration,
+        sparseInfillAccelerationPercent = sparseInfillAccelerationPercent,
+        internalSolidInfillAcceleration = internalSolidInfillAcceleration,
+        internalSolidInfillAccelerationPercent = internalSolidInfillAccelerationPercent,
         nozzleDiameter = nozzleDiameter,
         supportEnabled = supportEnabled,
         brimWidth = brimWidth,
@@ -89,6 +102,12 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         topSurfacePattern = topSurfacePattern,
         bottomSurfacePattern = bottomSurfacePattern,
         internalSolidInfillPattern = internalSolidInfillPattern,
+        infillFirst = infillFirst,
+        infillWallOverlap = infillWallOverlap,
+        topBottomInfillWallOverlap = topBottomInfillWallOverlap,
+        infillCombination = infillCombination,
+        infillCombinationMaxLayerHeight = infillCombinationMaxLayerHeight,
+        infillCombinationMaxLayerHeightPercent = infillCombinationMaxLayerHeightPercent,
         travelSpeed = travelSpeed,
         firstLayerSpeed = firstLayerSpeed,
         supportType = supportType,
@@ -161,7 +180,7 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 5
+private const val SLICE_OPTIONS_FORMAT_VERSION = 6
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f

@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
     "monotonic", "monotonicline", "rectilinear", "alignedrectilinear",
@@ -231,6 +231,11 @@ def wall_sequence(value: Any) -> str:
         "inner wall/outer wall": "inner-outer",
         "outer wall/inner wall": "outer-inner",
         "inner-outer-inner wall": "inner-outer-inner",
+        "inner wall/outer wall/infill": "inner-outer",
+        "infill/inner wall/outer wall": "inner-outer",
+        "outer wall/inner wall/infill": "outer-inner",
+        "infill/outer wall/inner wall": "outer-inner",
+        "inner-outer-inner wall/infill": "inner-outer-inner",
     }.get(str(scalar(value, "inner wall/outer wall")), "inner-outer")
 
 
@@ -348,6 +353,23 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     overhang_2_speed, overhang_2_percent = float_or_percent(raw.get("overhang_2_4_speed"), 0)
     overhang_3_speed, overhang_3_percent = float_or_percent(raw.get("overhang_3_4_speed"), 0)
     overhang_4_speed, overhang_4_percent = float_or_percent(raw.get("overhang_4_4_speed"), 0)
+    internal_bridge_speed, internal_bridge_speed_percent = float_or_percent(
+        raw.get("internal_bridge_speed"), "150%"
+    )
+    bridge_acceleration, bridge_acceleration_percent = float_or_percent(
+        raw.get("bridge_acceleration"), "50%"
+    )
+    sparse_infill_acceleration, sparse_infill_acceleration_percent = float_or_percent(
+        raw.get("sparse_infill_acceleration"), "100%"
+    )
+    internal_solid_infill_acceleration, internal_solid_infill_acceleration_percent = float_or_percent(
+        raw.get("internal_solid_infill_acceleration"), "100%"
+    )
+    infill_combination_height, infill_combination_height_percent = float_or_percent(
+        raw.get("infill_combination_max_layer_height"), "100%"
+    )
+    legacy_wall_order = str(scalar(raw.get("wall_infill_order"), ""))
+    resolved_wall_order = raw.get("wall_sequence", legacy_wall_order)
     profile = {
         "id": stable_id("process", brand, name),
         "name": name,
@@ -366,6 +388,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "gapInfillSpeed": number(raw.get("gap_infill_speed"), outer_wall_speed * 1.25),
         "firstLayerInfillSpeed": number(raw.get("initial_layer_infill_speed"), 60),
         "supportInterfaceSpeed": absolute_number(raw.get("support_interface_speed"), 80),
+        "internalBridgeSpeed": internal_bridge_speed,
+        "internalBridgeSpeedPercent": internal_bridge_speed_percent,
         "overhangSpeedEnabled": boolean(raw.get("enable_overhang_speed"), True),
         "overhangSpeed1": overhang_1_speed,
         "overhangSpeed1Percent": overhang_1_percent,
@@ -379,12 +403,23 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "internalBridgeFlowRatio": number(raw.get("internal_bridge_flow"), 1),
         "topSurfaceFlowRatio": number(raw.get("top_solid_infill_flow_ratio"), 1),
         "bottomSurfaceFlowRatio": number(raw.get("bottom_solid_infill_flow_ratio"), 1),
+        "bridgeDensity": number(raw.get("bridge_density"), 100),
+        "internalBridgeDensity": number(raw.get("internal_bridge_density"), 100),
+        "bridgeNoSupport": boolean(raw.get("bridge_no_support")),
+        "thickBridges": boolean(raw.get("thick_bridges")),
+        "thickInternalBridges": boolean(raw.get("thick_internal_bridges"), True),
         "defaultAcceleration": number(raw.get("default_acceleration"), 0),
         "outerWallAcceleration": number(raw.get("outer_wall_acceleration"), 0),
         "innerWallAcceleration": number(raw.get("inner_wall_acceleration"), 0),
         "topSurfaceAcceleration": number(raw.get("top_surface_acceleration"), 0),
         "travelAcceleration": number(raw.get("travel_acceleration"), 0),
         "firstLayerAcceleration": number(raw.get("initial_layer_acceleration"), 0),
+        "bridgeAcceleration": bridge_acceleration,
+        "bridgeAccelerationPercent": bridge_acceleration_percent,
+        "sparseInfillAcceleration": sparse_infill_acceleration,
+        "sparseInfillAccelerationPercent": sparse_infill_acceleration_percent,
+        "internalSolidInfillAcceleration": internal_solid_infill_acceleration,
+        "internalSolidInfillAccelerationPercent": internal_solid_infill_acceleration_percent,
         "nozzleDiameter": nozzle,
         "supportEnabled": boolean(raw.get("enable_support")),
         "brimWidth": 0 if raw.get("brim_type") == "no_brim" else number(raw.get("brim_width"), 0),
@@ -396,6 +431,12 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "topSurfacePattern": infill_pattern(raw.get("top_surface_pattern"), "monotonicline"),
         "bottomSurfacePattern": infill_pattern(raw.get("bottom_surface_pattern"), "monotonic"),
         "internalSolidInfillPattern": infill_pattern(raw.get("internal_solid_infill_pattern"), "monotonic"),
+        "infillFirst": boolean(raw.get("is_infill_first"), legacy_wall_order.startswith("infill/")),
+        "infillWallOverlap": number(raw.get("infill_wall_overlap"), 15),
+        "topBottomInfillWallOverlap": number(raw.get("top_bottom_infill_wall_overlap"), 25),
+        "infillCombination": boolean(raw.get("infill_combination")),
+        "infillCombinationMaxLayerHeight": infill_combination_height,
+        "infillCombinationMaxLayerHeightPercent": infill_combination_height_percent,
         "travelSpeed": number(raw.get("travel_speed"), 300),
         "firstLayerSpeed": first_layer_speed,
         "supportType": "tree" if "tree" in support_type else "normal",
@@ -442,7 +483,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "ironingSpacing": number(raw.get("ironing_spacing"), 0.1),
         "ironingSpeed": number(raw.get("ironing_speed"), 20),
         "wallGenerator": wall_generator(raw.get("wall_generator")),
-        "wallSequence": wall_sequence(raw.get("wall_sequence")),
+        "wallSequence": wall_sequence(resolved_wall_order),
         "detectThinWalls": boolean(raw.get("detect_thin_wall")),
         "detectOverhangWalls": boolean(raw.get("detect_overhang_wall"), True),
         "onlyOneWallOnTop": boolean(raw.get("only_one_wall_top")),
@@ -465,6 +506,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
                 "firstLayerInfillSpeed",
                 "supportInterfaceSpeed",
             ]
+        )
+        and 1 <= profile["internalBridgeSpeed"] <= (
+            1_000 if profile["internalBridgeSpeedPercent"] else 2_000
         )
         and 1 <= profile["travelSpeed"] <= 2_000
         and all(
@@ -490,6 +534,17 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
                 "travelAcceleration",
                 "firstLayerAcceleration",
             ]
+        )
+        and all(
+            0 <= profile[key] <= (1_000 if profile[f"{key}Percent"] else 100_000)
+            for key in ["bridgeAcceleration", "sparseInfillAcceleration", "internalSolidInfillAcceleration"]
+        )
+        and 10 <= profile["bridgeDensity"] <= 100
+        and 10 <= profile["internalBridgeDensity"] <= 100
+        and 0 <= profile["infillWallOverlap"] <= 100
+        and 0 <= profile["topBottomInfillWallOverlap"] <= 100
+        and 0 <= profile["infillCombinationMaxLayerHeight"] <= (
+            1_000 if profile["infillCombinationMaxLayerHeightPercent"] else 10
         )
         and all(
             0.1 <= profile[key] <= 3

@@ -69,6 +69,7 @@ internal object ProfileValidation {
                 profile.firstLayerInfillSpeed,
                 profile.supportInterfaceSpeed,
             ).all { it in 0f..2_000f } &&
+            featureSpeedIsValid(profile.internalBridgeSpeed, profile.internalBridgeSpeedPercent) &&
             overhangSpeedIsValid(profile.overhangSpeed1, profile.overhangSpeed1Percent) &&
             overhangSpeedIsValid(profile.overhangSpeed2, profile.overhangSpeed2Percent) &&
             overhangSpeedIsValid(profile.overhangSpeed3, profile.overhangSpeed3Percent) &&
@@ -87,6 +88,14 @@ internal object ProfileValidation {
                 profile.travelAcceleration,
                 profile.firstLayerAcceleration,
             ).all { it in 0f..100_000f } &&
+            featureAccelerationIsValid(profile.bridgeAcceleration, profile.bridgeAccelerationPercent) &&
+            featureAccelerationIsValid(profile.sparseInfillAcceleration, profile.sparseInfillAccelerationPercent) &&
+            featureAccelerationIsValid(
+                profile.internalSolidInfillAcceleration,
+                profile.internalSolidInfillAccelerationPercent,
+            ) &&
+            profile.bridgeDensity in 10f..100f &&
+            profile.internalBridgeDensity in 10f..100f &&
             profile.travelSpeed in 1f..2_000f &&
             listOf(
                 profile.outerWallLineWidth,
@@ -107,6 +116,12 @@ internal object ProfileValidation {
             profile.topSurfacePattern in INFILL_PATTERNS &&
             profile.bottomSurfacePattern in INFILL_PATTERNS &&
             profile.internalSolidInfillPattern in INFILL_PATTERNS &&
+            profile.infillWallOverlap in 0f..100f &&
+            profile.topBottomInfillWallOverlap in 0f..100f &&
+            combinationHeightIsValid(
+                profile.infillCombinationMaxLayerHeight,
+                profile.infillCombinationMaxLayerHeightPercent,
+            ) &&
             profile.supportType in setOf("normal", "tree") &&
             profile.supportAngle in 0f..90f &&
             profile.supportInterfaceTopLayers in 0..20 &&
@@ -139,6 +154,15 @@ internal object ProfileValidation {
 
     private fun overhangSpeedIsValid(value: Float, percent: Boolean): Boolean =
         value in 0f..(if (percent) 100f else 2_000f)
+
+    private fun featureSpeedIsValid(value: Float, percent: Boolean): Boolean =
+        value in 1f..(if (percent) 1_000f else 2_000f)
+
+    private fun featureAccelerationIsValid(value: Float, percent: Boolean): Boolean =
+        value in 0f..(if (percent) 1_000f else 100_000f)
+
+    private fun combinationHeightIsValid(value: Float, percent: Boolean): Boolean =
+        value in 0f..(if (percent) 1_000f else 10f)
 
     private val INFILL_PATTERNS = setOf(
         "monotonic", "monotonicline", "rectilinear", "alignedrectilinear", "zigzag",

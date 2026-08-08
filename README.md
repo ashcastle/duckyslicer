@@ -42,6 +42,7 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - Orca process fidelity for independent outer/inner walls, sparse infill, internal solid, top surface, and support speeds and line widths, plus feature accelerations
 - Orca bridge, gap-fill, first-layer solid, shell-thickness, feature-flow, and support-interface settings preserved through profiles, projects, and on-device G-code
 - Orca sparse, top, bottom, and internal-solid patterns preserved independently—including crosshatch—along with seam, ironing, overhang-unit, and support-pattern semantics
+- Legacy and current Orca wall/infill order, infill-to-wall bonding, combined infill, bridge density/thickness, and feature-relative speed and acceleration units preserved end to end
 - Searchable printer, filament, and slicing selectors with collapsible brand and personal-profile groups
 - Printer compatibility filtering, validated profile inheritance, and unsafe-entry rejection during the build
 - Editable settings and schema-versioned named user profiles saved entirely in app-private storage
