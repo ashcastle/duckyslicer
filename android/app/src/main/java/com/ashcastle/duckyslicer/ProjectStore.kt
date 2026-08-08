@@ -34,23 +34,27 @@ internal class ProjectStore(
     }
 
     @Synchronized
-    fun load(): ProjectSnapshot {
+    fun load(): ProjectSnapshot = loadProject().snapshot
+
+    @Synchronized
+    fun loadProject(): StoredProjectDocument {
         val hadMetadata = projectFile.exists() || backupFile.exists()
         val primary = readSnapshot(projectFile)
         if (primary != null) {
             pruneUnreferencedModels(primary.declaredModels)
-            return primary.snapshot
+            return primary.document
         }
         val backup = readSnapshot(backupFile)
-        if (backup != null) return backup.snapshot
+        if (backup != null) return backup.document
         if (!hadMetadata) pruneUnreferencedModels(ProjectSnapshot())
-        return ProjectSnapshot()
+        return StoredProjectDocument()
     }
 
     private fun readSnapshot(source: File): StoredProject? {
         if (!source.isFile || source.length() !in 1..MAX_PROJECT_BYTES) return null
         val root = runCatching { JSONObject(source.readText()) }.getOrNull() ?: return null
-        if (root.optInt("schemaVersion", 0) != SCHEMA_VERSION) return null
+        val schemaVersion = root.optInt("schemaVersion", 0)
+        if (schemaVersion !in MIN_SUPPORTED_SCHEMA_VERSION..SCHEMA_VERSION) return null
         val values = root.optJSONArray("objects") ?: JSONArray()
         if (values.length() > MAX_PROJECT_OBJECTS) return null
         val objects = ArrayList<ProjectObject>(values.length())
@@ -68,17 +72,24 @@ internal class ProjectStore(
         }
         val requestedSelection = root.optString("selectedObjectId").takeIf(String::isNotBlank)
         return StoredProject(
-            snapshot = ProjectSnapshot(
-                objects = objects,
-                selectedObjectId = requestedSelection?.takeIf(objectIds::contains)
-                    ?: objects.lastOrNull()?.id,
+            document = StoredProjectDocument(
+                snapshot = ProjectSnapshot(
+                    objects = objects,
+                    selectedObjectId = requestedSelection?.takeIf(objectIds::contains)
+                        ?: objects.lastOrNull()?.id,
+                ),
+                sliceOptions = if (schemaVersion >= 2) {
+                    root.optJSONObject("sliceOptions")?.toProjectSliceOptionsOrNull()
+                } else {
+                    null
+                },
             ),
             declaredModels = declaredModels,
         )
     }
 
     @Synchronized
-    fun save(snapshot: ProjectSnapshot) {
+    fun save(snapshot: ProjectSnapshot, sliceOptions: SliceOptions? = null) {
         require(snapshot.objects.size <= MAX_PROJECT_OBJECTS) { "Project has too many objects" }
         require(snapshot.objects.map(ProjectObject::id).toSet().size == snapshot.objects.size) {
             "Project contains duplicate object ids"
@@ -96,6 +107,7 @@ internal class ProjectStore(
             .put("schemaVersion", SCHEMA_VERSION)
             .put("selectedObjectId", snapshot.selectedObjectId ?: JSONObject.NULL)
             .put("objects", objects)
+        if (sliceOptions != null) root.put("sliceOptions", sliceOptions.toProjectJson())
         val bytes = root.toString().toByteArray(Charsets.UTF_8)
         require(bytes.size <= MAX_PROJECT_BYTES) { "Project metadata is too large" }
 
@@ -213,7 +225,8 @@ internal class ProjectStore(
         takeIf { it.isFinite() && it in minimum..maximum } ?: error("Invalid model transform")
 
     private companion object {
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
+        const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODELS_DIRECTORY = "models"
         const val PROJECT_FILE = "current_project.json"
@@ -229,7 +242,12 @@ internal class ProjectStore(
     }
 
     private data class StoredProject(
-        val snapshot: ProjectSnapshot,
+        val document: StoredProjectDocument,
         val declaredModels: Set<File>,
     )
 }
+
+internal data class StoredProjectDocument(
+    val snapshot: ProjectSnapshot = ProjectSnapshot(),
+    val sliceOptions: SliceOptions? = null,
+)

@@ -37,6 +37,19 @@ class NativeEngineInstrumentedTest {
             val firstStore = ProjectStore(root, inspector)
             val destination = firstStore.createModelDestination("restored duck.stl")
             fixtureModel().copyTo(destination)
+            val savedOptions = SliceOptions()
+                .selectPrinter(PrinterProfile.U1_06)
+                .selectFilament(FilamentProfile.PETG)
+                .selectQuality(QualityProfile.FINE_06)
+                .copy(
+                    nozzleTemp = 247,
+                    fillDensity = 0.23f,
+                    outerWallLineWidth = 0.63f,
+                    innerWallLineWidth = 0.69f,
+                    wallSequence = "outer-inner",
+                    gcodeFlavor = "klipper",
+                    maxAccelerationTravel = 4_700f,
+                )
             firstStore.save(
                 ProjectSnapshot(
                     objects = listOf(
@@ -53,9 +66,11 @@ class NativeEngineInstrumentedTest {
                     ),
                     selectedObjectId = "restored-object",
                 ),
+                savedOptions,
             )
 
-            val restored = ProjectStore(root, inspector).load()
+            val restoredDocument = ProjectStore(root, inspector).loadProject()
+            val restored = restoredDocument.snapshot
 
             assertEquals("restored-object", restored.selectedObjectId)
             assertEquals("restored duck.stl", restored.selectedObject!!.model.fileName)
@@ -64,6 +79,13 @@ class NativeEngineInstrumentedTest {
             assertEquals(30f, restored.selectedObject!!.transform.rotationZdeg)
             assertEquals(1.4f, restored.selectedObject!!.transform.scale)
             assertTrue(restored.selectedObject!!.model.previewTriangles.isNotEmpty())
+            assertEquals(247, restoredDocument.sliceOptions?.nozzleTemp)
+            assertEquals(0.23f, restoredDocument.sliceOptions?.fillDensity)
+            assertEquals(0.63f, restoredDocument.sliceOptions?.outerWallLineWidth)
+            assertEquals(0.69f, restoredDocument.sliceOptions?.innerWallLineWidth)
+            assertEquals("outer-inner", restoredDocument.sliceOptions?.wallSequence)
+            assertEquals("klipper", restoredDocument.sliceOptions?.gcodeFlavor)
+            assertEquals(4_700f, restoredDocument.sliceOptions?.maxAccelerationTravel)
         } finally {
             root.deleteRecursively()
         }
@@ -134,7 +156,7 @@ class NativeEngineInstrumentedTest {
         assertEquals(7f, restored.printers.last().maxJerkX)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
-        assertEquals(3, JSONObject(file.readText()).getInt("schemaVersion"))
+        assertEquals(4, JSONObject(file.readText()).getInt("schemaVersion"))
         assertTrue("Saved profiles must stay in app-private storage", file.canonicalPath.startsWith(context.cacheDir.canonicalPath))
         file.delete()
         directory.delete()

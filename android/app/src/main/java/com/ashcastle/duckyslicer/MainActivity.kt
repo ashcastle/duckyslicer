@@ -161,15 +161,18 @@ private fun DuckySlicerScreen() {
         profileCatalog = withContext(Dispatchers.IO) { profileStore.load() }
     }
     LaunchedEffect(projectStore) {
-        val restored = withContext(Dispatchers.IO) { projectStore.load() }
-        projectHistory = ProjectHistoryState(current = restored)
+        val restored = withContext(Dispatchers.IO) { projectStore.loadProject() }
+        projectHistory = ProjectHistoryState(current = restored.snapshot)
+        restored.sliceOptions?.let { sliceOptions = it }
         projectRestored = true
     }
-    LaunchedEffect(projectHistory.current, projectRestored) {
+    LaunchedEffect(projectHistory.current, sliceOptions, projectRestored) {
         if (!projectRestored) return@LaunchedEffect
         delay(400)
         runCatching {
-            withContext(Dispatchers.IO) { projectStore.save(projectHistory.current) }
+            withContext(Dispatchers.IO) {
+                projectStore.save(projectHistory.current, sliceOptions)
+            }
         }.onFailure {
             error = projectSaveError
             notice = null

@@ -64,6 +64,35 @@ class ProjectStoreTest {
     }
 
     @Test
+    fun schemaTwoRestoresEffectiveSliceSettingsAndSchemaOneRemainsReadable() = withStore { root, store ->
+        val modelFile = store.createModelDestination("settings.stl").apply { writeText("solid part") }
+        val snapshot = ProjectSnapshot(
+            listOf(ProjectObject("settings", inspectedModel(modelFile))),
+            "settings",
+        )
+        val options = restoredSettingsFixture()
+        store.save(snapshot, options)
+
+        val restored = ProjectStore(root, ::inspectedModel).loadProject()
+
+        assertEquals(2, JSONObject(File(root, "current_project.json").readText()).getInt("schemaVersion"))
+        assertEquals(snapshot.selectedObjectId, restored.snapshot.selectedObjectId)
+        assertEquals(snapshot.objects.single().id, restored.snapshot.objects.single().id)
+        assertEquals(snapshot.objects.single().transform, restored.snapshot.objects.single().transform)
+        assertEquals(
+            options.toProjectJson().toString(),
+            restored.sliceOptions?.toProjectJson()?.toString(),
+        )
+
+        val current = JSONObject(File(root, "current_project.json").readText())
+        current.put("schemaVersion", 1).remove("sliceOptions")
+        File(root, "current_project.json").writeText(current.toString())
+        val migrated = ProjectStore(root, ::inspectedModel).loadProject()
+        assertEquals("settings", migrated.snapshot.selectedObjectId)
+        assertEquals(null, migrated.sliceOptions)
+    }
+
+    @Test
     fun pathTraversalAndOutsideModelsAreRejected() = withStore { root, store ->
         val outside = File(root.parentFile, "outside-${root.name}.stl").apply { writeText("solid outside") }
         val transform = JSONObject()
