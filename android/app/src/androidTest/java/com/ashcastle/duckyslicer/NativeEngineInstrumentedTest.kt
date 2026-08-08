@@ -36,6 +36,8 @@ class NativeEngineInstrumentedTest {
         assertEquals(253, restored.filaments.last().firstLayerNozzleTemp)
         assertEquals(0.22f, restored.slicing.last().fillDensity)
         assertTrue(restored.slicing.last().supportEnabled)
+        assertEquals(null, restored.printers.last().brand)
+        assertEquals(null, restored.filaments.last().brand)
         assertTrue("Saved profiles must stay in app-private storage", file.canonicalPath.startsWith(context.cacheDir.canonicalPath))
         file.delete()
         directory.delete()
@@ -45,6 +47,8 @@ class NativeEngineInstrumentedTest {
     fun builtInCatalogCoversAllU1NozzlesAndCommonMaterials() {
         assertEquals(listOf(0.2f, 0.4f, 0.6f, 0.8f), PrinterProfile.builtIns.map { it.nozzleDiameter })
         assertTrue(FilamentProfile.builtIns.map { it.nativeName }.containsAll(listOf("PLA", "PETG", "ABS", "ASA", "PLA-CF", "PETG-CF", "TPU", "PA-CF")))
+        assertEquals(setOf("Snapmaker"), PrinterProfile.builtIns.mapNotNull { it.brand }.toSet())
+        assertEquals(setOf("Snapmaker"), FilamentProfile.builtIns.mapNotNull { it.brand }.toSet())
         assertEquals(QualityProfile.STANDARD_02, QualityProfile.standardFor(0.2f))
         assertEquals(QualityProfile.STANDARD_08, QualityProfile.standardFor(0.8f))
     }

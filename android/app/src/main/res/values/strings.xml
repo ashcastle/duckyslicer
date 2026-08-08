@@ -112,6 +112,10 @@
     <string name="toolpath_adhesion">Bed adhesion</string>
     <string name="toolpath_other">Other</string>
     <string name="profile_name">Profile name</string>
+    <string name="search_profiles">Search profiles</string>
+    <string name="my_profiles">My profiles</string>
+    <string name="other_profiles">Other</string>
+    <string name="no_profiles_found">No matching profiles</string>
     <string name="save_as_new_profile">Save as new profile</string>
     <string name="profile_saved">Profile saved.</string>
     <string name="profile_save_error">Couldn’t save this profile.</string>
