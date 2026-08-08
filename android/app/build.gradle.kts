@@ -19,7 +19,7 @@ val orcaProfileRoot = repositoryRoot.resolve(
     "build/native-slicer/source/app/src/main/cpp/orcaslicer/resources/profiles",
 )
 val profileCatalogGenerator = repositoryRoot.resolve("tools/generate_profile_catalog.py")
-val generatedProfileCatalog = generatedProfileAssets.map { it.file("profile_catalog_v7.json") }
+val generatedProfileCatalog = generatedProfileAssets.map { it.file("profile_catalog_v8.json") }
 val ndkSharedRuntime = nativeNdkDirectory.map { ndk ->
     val prebuiltRoot = ndk.asFile.resolve("toolchains/llvm/prebuilt")
     val candidates = prebuiltRoot.listFiles()
@@ -79,7 +79,7 @@ val generateOrcaProfileCatalog = tasks.register<Exec>("generateOrcaProfileCatalo
     )
     inputs.file(profileCatalogGenerator)
     inputs.dir(orcaProfileRoot)
-    inputs.property("profileSchemaVersion", 7)
+    inputs.property("profileSchemaVersion", 8)
     inputs.property("orcaRevision", "2c8a5385bc53cbc16211b4dd36ef9963ee185f4a")
     outputs.file(generatedProfileCatalog)
     outputs.upToDateWhen {

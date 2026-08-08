@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.JsonReader
 import java.io.InputStreamReader
 
-private const val CATALOG_ASSET = "profile_catalog_v7.json"
+private const val CATALOG_ASSET = "profile_catalog_v8.json"
 
 class OrcaProfileCatalog(private val context: Context) {
     fun load(): ProfileCatalog = runCatching {
@@ -40,7 +40,7 @@ class OrcaProfileCatalog(private val context: Context) {
             }
         }
         reader.endObject()
-        check(schemaVersion == 7) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 8) { "Unsupported profile catalog schema" }
         return ProfileCatalog(
             printers = (PrinterProfile.builtIns + printers).distinctBy(PrinterProfile::id),
             filaments = (FilamentProfile.builtIns + filaments).distinctBy(FilamentProfile::id),
@@ -219,6 +219,16 @@ class OrcaProfileCatalog(private val context: Context) {
                 "infillCombination" -> profile = profile.copy(infillCombination = reader.nextBoolean())
                 "infillCombinationMaxLayerHeight" -> profile = profile.copy(infillCombinationMaxLayerHeight = reader.nextFloat())
                 "infillCombinationMaxLayerHeightPercent" -> profile = profile.copy(infillCombinationMaxLayerHeightPercent = reader.nextBoolean())
+                "infillDirection" -> profile = profile.copy(infillDirection = reader.nextFloat())
+                "solidInfillDirection" -> profile = profile.copy(solidInfillDirection = reader.nextFloat())
+                "alignInfillDirectionToModel" -> profile = profile.copy(alignInfillDirectionToModel = reader.nextBoolean())
+                "minimumSparseInfillArea" -> profile = profile.copy(minimumSparseInfillArea = reader.nextFloat())
+                "infillAnchor" -> profile = profile.copy(infillAnchor = reader.nextFloat())
+                "infillAnchorPercent" -> profile = profile.copy(infillAnchorPercent = reader.nextBoolean())
+                "infillAnchorMax" -> profile = profile.copy(infillAnchorMax = reader.nextFloat())
+                "infillAnchorMaxPercent" -> profile = profile.copy(infillAnchorMaxPercent = reader.nextBoolean())
+                "gapFillTarget" -> profile = profile.copy(gapFillTarget = reader.nextString())
+                "filterOutGapFill" -> profile = profile.copy(filterOutGapFill = reader.nextFloat())
                 "travelSpeed" -> profile = profile.copy(travelSpeed = reader.nextFloat())
                 "firstLayerSpeed" -> profile = profile.copy(firstLayerSpeed = reader.nextFloat())
                 "supportType" -> profile = profile.copy(supportType = reader.nextString())
@@ -253,6 +263,15 @@ class OrcaProfileCatalog(private val context: Context) {
                 "detectThinWalls" -> profile = profile.copy(detectThinWalls = reader.nextBoolean())
                 "detectOverhangWalls" -> profile = profile.copy(detectOverhangWalls = reader.nextBoolean())
                 "onlyOneWallOnTop" -> profile = profile.copy(onlyOneWallOnTop = reader.nextBoolean())
+                "onlyOneWallFirstLayer" -> profile = profile.copy(onlyOneWallFirstLayer = reader.nextBoolean())
+                "extraPerimetersOnOverhangs" -> profile = profile.copy(extraPerimetersOnOverhangs = reader.nextBoolean())
+                "ensureVerticalShellThickness" -> profile = profile.copy(ensureVerticalShellThickness = reader.nextString())
+                "detectNarrowInternalSolidInfill" -> profile = profile.copy(detectNarrowInternalSolidInfill = reader.nextBoolean())
+                "xyHoleCompensation" -> profile = profile.copy(xyHoleCompensation = reader.nextFloat())
+                "xyContourCompensation" -> profile = profile.copy(xyContourCompensation = reader.nextFloat())
+                "elephantFootCompensation" -> profile = profile.copy(elephantFootCompensation = reader.nextFloat())
+                "elephantFootCompensationLayers" -> profile = profile.copy(elephantFootCompensationLayers = reader.nextInt())
+                "maxBridgeLength" -> profile = profile.copy(maxBridgeLength = reader.nextFloat())
                 "preciseOuterWalls" -> profile = profile.copy(preciseOuterWalls = reader.nextBoolean())
                 "compatiblePrinters" -> compatiblePrinters = reader.readStringList()
                 else -> reader.skipValue()

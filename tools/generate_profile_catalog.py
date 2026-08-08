@@ -6,12 +6,13 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
     "monotonic", "monotonicline", "rectilinear", "alignedrectilinear",
@@ -209,9 +210,15 @@ def absolute_number(value: Any, default: float) -> float:
     return default if candidate.endswith("%") else number(candidate, default)
 
 
-def float_or_percent(value: Any, default: float) -> tuple[float, bool]:
+def float_or_percent(value: Any, default: Any) -> tuple[float, bool]:
     candidate = str(scalar(value, default)).strip()
-    return number(candidate, default), candidate.endswith("%")
+    match = re.match(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", candidate)
+    if match is not None:
+        parsed = float(match.group(0))
+        if math.isfinite(parsed):
+            return parsed, candidate.endswith("%")
+    fallback = str(scalar(default, 0)).strip()
+    return number(fallback, 0), fallback.endswith("%")
 
 
 def infill_pattern(value: Any, default: str) -> str:
@@ -242,6 +249,14 @@ def wall_sequence(value: Any) -> str:
 def wall_generator(value: Any) -> str:
     candidate = str(scalar(value, "arachne")).strip().lower()
     return candidate if candidate in {"arachne", "classic"} else "arachne"
+
+
+def vertical_shell_mode(value: Any) -> str:
+    candidate = str(scalar(value, "ensure_all")).strip().lower()
+    candidate = {"1": "ensure_all", "0": "ensure_moderate"}.get(candidate, candidate)
+    return candidate if candidate in {
+        "none", "ensure_critical_only", "ensure_moderate", "ensure_all"
+    } else "ensure_all"
 
 
 def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
@@ -368,6 +383,12 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     infill_combination_height, infill_combination_height_percent = float_or_percent(
         raw.get("infill_combination_max_layer_height"), "100%"
     )
+    infill_anchor, infill_anchor_percent = float_or_percent(
+        first_present(raw, ["infill_anchor", "sparse_infill_anchor"], "400%"), "400%"
+    )
+    infill_anchor_max, infill_anchor_max_percent = float_or_percent(
+        first_present(raw, ["infill_anchor_max", "sparse_infill_anchor_max"], 20), 20
+    )
     legacy_wall_order = str(scalar(raw.get("wall_infill_order"), ""))
     resolved_wall_order = raw.get("wall_sequence", legacy_wall_order)
     profile = {
@@ -437,6 +458,18 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "infillCombination": boolean(raw.get("infill_combination")),
         "infillCombinationMaxLayerHeight": infill_combination_height,
         "infillCombinationMaxLayerHeightPercent": infill_combination_height_percent,
+        "infillDirection": number(raw.get("infill_direction"), 45),
+        "solidInfillDirection": number(raw.get("solid_infill_direction"), 45),
+        "alignInfillDirectionToModel": boolean(raw.get("align_infill_direction_to_model")),
+        "minimumSparseInfillArea": number(raw.get("minimum_sparse_infill_area"), 15),
+        "infillAnchor": infill_anchor,
+        "infillAnchorPercent": infill_anchor_percent,
+        "infillAnchorMax": infill_anchor_max,
+        "infillAnchorMaxPercent": infill_anchor_max_percent,
+        "gapFillTarget": enum_value(
+            raw.get("gap_fill_target"), {"everywhere", "topbottom", "nowhere"}, "nowhere"
+        ),
+        "filterOutGapFill": number(raw.get("filter_out_gap_fill"), 0),
         "travelSpeed": number(raw.get("travel_speed"), 300),
         "firstLayerSpeed": first_layer_speed,
         "supportType": "tree" if "tree" in support_type else "normal",
@@ -487,6 +520,15 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "detectThinWalls": boolean(raw.get("detect_thin_wall")),
         "detectOverhangWalls": boolean(raw.get("detect_overhang_wall"), True),
         "onlyOneWallOnTop": boolean(raw.get("only_one_wall_top")),
+        "onlyOneWallFirstLayer": boolean(raw.get("only_one_wall_first_layer")),
+        "extraPerimetersOnOverhangs": boolean(raw.get("extra_perimeters_on_overhangs")),
+        "ensureVerticalShellThickness": vertical_shell_mode(raw.get("ensure_vertical_shell_thickness")),
+        "detectNarrowInternalSolidInfill": boolean(raw.get("detect_narrow_internal_solid_infill"), True),
+        "xyHoleCompensation": number(raw.get("xy_hole_compensation"), 0),
+        "xyContourCompensation": number(raw.get("xy_contour_compensation"), 0),
+        "elephantFootCompensation": number(raw.get("elefant_foot_compensation"), 0),
+        "elephantFootCompensationLayers": integer(raw.get("elefant_foot_compensation_layers"), 1),
+        "maxBridgeLength": number(raw.get("max_bridge_length"), 10),
         "preciseOuterWalls": boolean(raw.get("precise_outer_wall"), True),
         "compatiblePrinters": compatible,
     }
@@ -546,6 +588,17 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0 <= profile["infillCombinationMaxLayerHeight"] <= (
             1_000 if profile["infillCombinationMaxLayerHeightPercent"] else 10
         )
+        and all(0 <= profile[key] <= 360 for key in ["infillDirection", "solidInfillDirection"])
+        and 0 <= profile["minimumSparseInfillArea"] <= 1_000_000
+        and 0 <= profile["filterOutGapFill"] <= 1_000_000
+        and all(
+            0 <= profile[key] <= 1_000
+            for key in ["infillAnchor", "infillAnchorMax"]
+        )
+        and all(abs(profile[key]) <= 2 for key in ["xyHoleCompensation", "xyContourCompensation"])
+        and 0 <= profile["elephantFootCompensation"] <= 2
+        and 1 <= profile["elephantFootCompensationLayers"] <= 100
+        and 0 <= profile["maxBridgeLength"] <= 1_000_000
         and all(
             0.1 <= profile[key] <= 3
             for key in [

@@ -47,10 +47,10 @@ index 963808df..2f2043a3 100644
  else()
      target_link_libraries(libslic3r PRIVATE
 diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
-index 116a4a85..a2fc065c 100644
+index 116a4a85..cdd541f9 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -40,14 +40,70 @@ struct SliceConfig {
+@@ -40,14 +40,80 @@ struct SliceConfig {
      int perimeters = 2;
      int top_solid_layers = 5;
      int bottom_solid_layers = 4;
@@ -67,6 +67,16 @@ index 116a4a85..a2fc065c 100644
 +    bool infill_combination = false;
 +    float infill_combination_max_layer_height = 100.0f;
 +    bool infill_combination_max_layer_height_percent = true;
++    float infill_direction = 45.0f;
++    float solid_infill_direction = 45.0f;
++    bool align_infill_direction_to_model = false;
++    float minimum_sparse_infill_area = 15.0f;
++    float infill_anchor = 400.0f;
++    bool infill_anchor_percent = true;
++    float infill_anchor_max = 20.0f;
++    bool infill_anchor_max_percent = false;
++    std::string gap_fill_target = "nowhere";
++    float filter_out_gap_fill = 0.0f;
  
      // Speed settings (mm/s)
      float print_speed = 60.0f;
@@ -121,7 +131,7 @@ index 116a4a85..a2fc065c 100644
      // Temperature
      int nozzle_temp = 210;
      int bed_temp = 60;
-@@ -60,6 +116,16 @@ struct SliceConfig {
+@@ -60,6 +126,16 @@ struct SliceConfig {
      bool support_enabled = false;
      std::string support_type = "normal"; // "normal", "tree"
      float support_angle = 45.0f;
@@ -138,7 +148,7 @@ index 116a4a85..a2fc065c 100644
      int support_filament = 0;            // 1-based Orca filament index; 0 = default
      int support_interface_filament = 0;  // 1-based Orca filament index; 0 = default
  
-@@ -68,6 +134,28 @@ struct SliceConfig {
+@@ -68,6 +144,37 @@ struct SliceConfig {
      float skirt_distance = 6.0f;
      float brim_width = 0.0f;
  
@@ -162,12 +172,21 @@ index 116a4a85..a2fc065c 100644
 +    bool detect_thin_walls = false;
 +    bool detect_overhang_walls = true;
 +    bool only_one_wall_on_top = false;
++    bool only_one_wall_first_layer = false;
++    bool extra_perimeters_on_overhangs = false;
++    std::string ensure_vertical_shell_thickness = "ensure_all";
++    bool detect_narrow_internal_solid_infill = true;
++    float xy_hole_compensation = 0.0f;
++    float xy_contour_compensation = 0.0f;
++    float elephant_foot_compensation = 0.0f;
++    int elephant_foot_compensation_layers = 1;
++    float max_bridge_length = 10.0f;
 +    bool precise_outer_walls = true;
 +
      // Printer bed (Snapmaker U1: 270x270x270mm)
      float bed_size_x = 270.0f;
      float bed_size_y = 270.0f;
-@@ -98,6 +186,22 @@ struct SliceConfig {
+@@ -98,6 +205,22 @@ struct SliceConfig {
      // template expressions at G-code generation time.
      std::string machine_start_gcode;
      std::string machine_end_gcode;
@@ -190,6 +209,64 @@ index 116a4a85..a2fc065c 100644
  
      // F91 (2026-05-25): per-extruder filament tuning sourced from the user's filament
      // library on the Kotlin side at slice time. Empty vector = "user has not set this
+Submodule app/src/main/cpp/orcaslicer contains modified content
+diff --git a/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp b/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp
+index 4e0ddd0f3f..4e8e2b2ef3 100644
+--- a/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp
++++ b/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp
+@@ -103,12 +103,14 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
+     // loops is an arrayref of ::Loop objects
+     // turn each one into an ExtrusionLoop object
+     ExtrusionEntityCollection   coll;
++    std::vector<size_t>         loop_entity_indices;
+     
+     // Detect steep overhangs
+     bool overhangs_reverse = perimeter_generator.config->overhang_reverse &&
+                              perimeter_generator.layer_id % 2 == 1; // Only calculate overhang degree on even (from GUI POV) layers
+ 
+-    for (const PerimeterGeneratorLoop &loop : loops) {
++    for (size_t loop_idx = 0; loop_idx < loops.size(); ++loop_idx) {
++        const PerimeterGeneratorLoop &loop = loops[loop_idx];
+         bool is_external = loop.is_external();
+         bool is_small_width = loop.is_smaller_width_perimeter;
+         
+@@ -224,6 +226,7 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
+         }
+ 
+         coll.append(ExtrusionLoop(std::move(paths), loop_role));
++        loop_entity_indices.push_back(loop_idx);
+     }
+     
+     // Append thin walls to the nearest-neighbor search (only for first iteration)
+@@ -233,20 +236,20 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
+     }
+     
+     // Traverse children and build the final collection.
+-	Point zero_point(0, 0);
+-	std::vector<std::pair<size_t, bool>> chain = chain_extrusion_entities(coll.entities, &zero_point);
++    Point zero_point(0, 0);
++    std::vector<std::pair<size_t, bool>> chain = chain_extrusion_entities(coll.entities, &zero_point);
+     ExtrusionEntityCollection out;
+     for (const std::pair<size_t, bool> &idx : chain) {
+-		assert(coll.entities[idx.first] != nullptr);
+-        if (idx.first >= loops.size()) {
++        assert(coll.entities[idx.first] != nullptr);
++        if (idx.first >= loop_entity_indices.size()) {
+             // This is a thin wall.
+-			out.entities.reserve(out.entities.size() + 1);
++            out.entities.reserve(out.entities.size() + 1);
+             out.entities.emplace_back(coll.entities[idx.first]);
+-			coll.entities[idx.first] = nullptr;
++            coll.entities[idx.first] = nullptr;
+             if (idx.second)
+-				out.entities.back()->reverse();
++                out.entities.back()->reverse();
+         } else {
+-            const PerimeterGeneratorLoop &loop = loops[idx.first];
++            const PerimeterGeneratorLoop &loop = loops[loop_entity_indices[idx.first]];
+             assert(thin_walls.empty());
+             ExtrusionEntityCollection children = traverse_loops(perimeter_generator, loop.children, thin_walls, steep_overhang_contour, steep_overhang_hole);
+             out.entities.reserve(out.entities.size() + children.entities.size() + 1);
 diff --git a/app/src/main/cpp/src/orca_stubs.cpp b/app/src/main/cpp/src/orca_stubs.cpp
 index 51a2f8fb..f5cdd410 100644
 --- a/app/src/main/cpp/src/orca_stubs.cpp
@@ -220,10 +297,10 @@ index 51a2f8fb..f5cdd410 100644
  } } // namespace Feature::FuzzySkin
  
 diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
-index d93efb7d..ac6f7fd9 100644
+index d93efb7d..54233450 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -92,10 +92,62 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -92,10 +92,72 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.perimeters = getInt("perimeters");
      config.top_solid_layers = getInt("topSolidLayers");
      config.bottom_solid_layers = getInt("bottomSolidLayers");
@@ -240,6 +317,16 @@ index d93efb7d..ac6f7fd9 100644
 +    config.infill_combination = getBool("infillCombination");
 +    config.infill_combination_max_layer_height = getFloat("infillCombinationMaxLayerHeight");
 +    config.infill_combination_max_layer_height_percent = getBool("infillCombinationMaxLayerHeightPercent");
++    config.infill_direction = getFloat("infillDirection");
++    config.solid_infill_direction = getFloat("solidInfillDirection");
++    config.align_infill_direction_to_model = getBool("alignInfillDirectionToModel");
++    config.minimum_sparse_infill_area = getFloat("minimumSparseInfillArea");
++    config.infill_anchor = getFloat("infillAnchor");
++    config.infill_anchor_percent = getBool("infillAnchorPercent");
++    config.infill_anchor_max = getFloat("infillAnchorMax");
++    config.infill_anchor_max_percent = getBool("infillAnchorMaxPercent");
++    config.gap_fill_target = getString("gapFillTarget");
++    config.filter_out_gap_fill = getFloat("filterOutGapFill");
  
      config.print_speed = getFloat("printSpeed");
 +    config.inner_wall_speed = getFloat("innerWallSpeed");
@@ -286,7 +373,7 @@ index d93efb7d..ac6f7fd9 100644
      config.travel_speed = getFloat("travelSpeed");
      config.first_layer_speed = getFloat("firstLayerSpeed");
  
-@@ -108,12 +160,41 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -108,12 +170,50 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.support_enabled = getBool("supportEnabled");
      config.support_type = getString("supportType");
      config.support_angle = getFloat("supportAngle");
@@ -324,11 +411,20 @@ index d93efb7d..ac6f7fd9 100644
 +    config.detect_thin_walls = getBool("detectThinWalls");
 +    config.detect_overhang_walls = getBool("detectOverhangWalls");
 +    config.only_one_wall_on_top = getBool("onlyOneWallOnTop");
++    config.only_one_wall_first_layer = getBool("onlyOneWallFirstLayer");
++    config.extra_perimeters_on_overhangs = getBool("extraPerimetersOnOverhangs");
++    config.ensure_vertical_shell_thickness = getString("ensureVerticalShellThickness");
++    config.detect_narrow_internal_solid_infill = getBool("detectNarrowInternalSolidInfill");
++    config.xy_hole_compensation = getFloat("xyHoleCompensation");
++    config.xy_contour_compensation = getFloat("xyContourCompensation");
++    config.elephant_foot_compensation = getFloat("elephantFootCompensation");
++    config.elephant_foot_compensation_layers = getInt("elephantFootCompensationLayers");
++    config.max_bridge_length = getFloat("maxBridgeLength");
 +    config.precise_outer_walls = getBool("preciseOuterWalls");
  
      config.bed_size_x = getFloat("bedSizeX");
      config.bed_size_y = getFloat("bedSizeY");
-@@ -137,6 +218,22 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -137,6 +237,22 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
      config.machine_start_gcode = getString("machineStartGcode");
      config.machine_end_gcode = getString("machineEndGcode");
@@ -351,7 +447,7 @@ index d93efb7d..ac6f7fd9 100644
  
      // F91: per-extruder filament tuning from the user's filament library.
      config.filament_flow_ratios = getFloatArray("filamentFlowRatios");
-@@ -235,9 +332,61 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -235,9 +351,71 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setInt("perimeters", config.perimeters);
      setInt("topSolidLayers", config.top_solid_layers);
      setInt("bottomSolidLayers", config.bottom_solid_layers);
@@ -368,6 +464,16 @@ index d93efb7d..ac6f7fd9 100644
 +    setBool("infillCombination", config.infill_combination);
 +    setFloat("infillCombinationMaxLayerHeight", config.infill_combination_max_layer_height);
 +    setBool("infillCombinationMaxLayerHeightPercent", config.infill_combination_max_layer_height_percent);
++    setFloat("infillDirection", config.infill_direction);
++    setFloat("solidInfillDirection", config.solid_infill_direction);
++    setBool("alignInfillDirectionToModel", config.align_infill_direction_to_model);
++    setFloat("minimumSparseInfillArea", config.minimum_sparse_infill_area);
++    setFloat("infillAnchor", config.infill_anchor);
++    setBool("infillAnchorPercent", config.infill_anchor_percent);
++    setFloat("infillAnchorMax", config.infill_anchor_max);
++    setBool("infillAnchorMaxPercent", config.infill_anchor_max_percent);
++    setString("gapFillTarget", config.gap_fill_target);
++    setFloat("filterOutGapFill", config.filter_out_gap_fill);
      setFloat("printSpeed", config.print_speed);
 +    setFloat("innerWallSpeed", config.inner_wall_speed);
 +    setFloat("sparseInfillSpeed", config.sparse_infill_speed);
@@ -413,7 +519,7 @@ index d93efb7d..ac6f7fd9 100644
      setFloat("travelSpeed", config.travel_speed);
      setFloat("firstLayerSpeed", config.first_layer_speed);
      setInt("nozzleTemp", config.nozzle_temp);
-@@ -247,11 +396,40 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -247,11 +425,49 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setBool("supportEnabled", config.support_enabled);
      setString("supportType", config.support_type);
      setFloat("supportAngle", config.support_angle);
@@ -450,11 +556,20 @@ index d93efb7d..ac6f7fd9 100644
 +    setBool("detectThinWalls", config.detect_thin_walls);
 +    setBool("detectOverhangWalls", config.detect_overhang_walls);
 +    setBool("onlyOneWallOnTop", config.only_one_wall_on_top);
++    setBool("onlyOneWallFirstLayer", config.only_one_wall_first_layer);
++    setBool("extraPerimetersOnOverhangs", config.extra_perimeters_on_overhangs);
++    setString("ensureVerticalShellThickness", config.ensure_vertical_shell_thickness);
++    setBool("detectNarrowInternalSolidInfill", config.detect_narrow_internal_solid_infill);
++    setFloat("xyHoleCompensation", config.xy_hole_compensation);
++    setFloat("xyContourCompensation", config.xy_contour_compensation);
++    setFloat("elephantFootCompensation", config.elephant_foot_compensation);
++    setInt("elephantFootCompensationLayers", config.elephant_foot_compensation_layers);
++    setFloat("maxBridgeLength", config.max_bridge_length);
 +    setBool("preciseOuterWalls", config.precise_outer_walls);
      setFloat("bedSizeX", config.bed_size_x);
      setFloat("bedSizeY", config.bed_size_y);
      setFloat("maxPrintHeight", config.max_print_height);
-@@ -271,6 +449,22 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -271,6 +487,22 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setFloat("wipeTowerWidth", config.wipe_tower_width);
      setString("machineStartGcode", config.machine_start_gcode);
      setString("machineEndGcode", config.machine_end_gcode);
@@ -478,10 +593,10 @@ index d93efb7d..ac6f7fd9 100644
      env->DeleteLocalRef(cls);
      return obj;
 diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
-index 8d61c9cf..866a71a1 100644
+index 8d61c9cf..90db1b41 100644
 --- a/app/src/main/cpp/src/sapil_print.cpp
 +++ b/app/src/main/cpp/src/sapil_print.cpp
-@@ -183,84 +183,130 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -183,84 +183,140 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
      dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
      dpc.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(config.bottom_solid_layers));
@@ -521,6 +636,16 @@ index 8d61c9cf..866a71a1 100644
 +    dpc.set_key_value("infill_combination_max_layer_height", new Slic3r::ConfigOptionFloatOrPercent(
 +        config.infill_combination_max_layer_height,
 +        config.infill_combination_max_layer_height_percent));
++    dpc.set_key_value("infill_direction", new Slic3r::ConfigOptionFloat(config.infill_direction));
++    dpc.set_key_value("solid_infill_direction", new Slic3r::ConfigOptionFloat(config.solid_infill_direction));
++    dpc.set_key_value("align_infill_direction_to_model", new Slic3r::ConfigOptionBool(config.align_infill_direction_to_model));
++    dpc.set_key_value("minimum_sparse_infill_area", new Slic3r::ConfigOptionFloat(config.minimum_sparse_infill_area));
++    dpc.set_key_value("infill_anchor", new Slic3r::ConfigOptionFloatOrPercent(
++        config.infill_anchor, config.infill_anchor_percent));
++    dpc.set_key_value("infill_anchor_max", new Slic3r::ConfigOptionFloatOrPercent(
++        config.infill_anchor_max, config.infill_anchor_max_percent));
++    dpc.set_deserialize_strict("gap_fill_target", config.gap_fill_target);
++    dpc.set_key_value("filter_out_gap_fill", new Slic3r::ConfigOptionFloat(config.filter_out_gap_fill));
  
      // Speed (OrcaSlicer keys).
      // outer_wall_speed is the primary speed control — set from the user's "print speed" setting.
@@ -676,7 +801,7 @@ index 8d61c9cf..866a71a1 100644
  
      // Multi-extruder setup
      int n_ext = std::max(1, config.extruder_count);
-@@ -461,11 +507,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -461,11 +517,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      applyPerExtFloats("slow_down_layer_time",    config.filament_slow_down_layer_times, 4.0);
      applyPerExtFloats("slow_down_min_speed",     config.filament_slow_down_min_speeds, 20.0);
  
@@ -691,7 +816,7 @@ index 8d61c9cf..866a71a1 100644
  
      // Deretraction speed — OrcaSlicer defaults to 0 (= same as retraction speed).
      // Snapmaker profile uses 35 mm/s for smoother prime-after-retract.
-@@ -480,29 +524,53 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -480,29 +534,62 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      // the literal 0, not the auto-resolved value, causing Flow::rounded_rectangle_extrusion_spacing()
      // to throw FlowErrorNegativeSpacing on multi-color models.
      double nd = config.nozzle_diameter;
@@ -750,6 +875,15 @@ index 8d61c9cf..866a71a1 100644
 +    dpc.set_key_value("detect_thin_wall", new Slic3r::ConfigOptionBool(config.detect_thin_walls));
 +    dpc.set_key_value("detect_overhang_wall", new Slic3r::ConfigOptionBool(config.detect_overhang_walls));
 +    dpc.set_key_value("only_one_wall_top", new Slic3r::ConfigOptionBool(config.only_one_wall_on_top));
++    dpc.set_key_value("only_one_wall_first_layer", new Slic3r::ConfigOptionBool(config.only_one_wall_first_layer));
++    dpc.set_key_value("extra_perimeters_on_overhangs", new Slic3r::ConfigOptionBool(config.extra_perimeters_on_overhangs));
++    dpc.set_deserialize_strict("ensure_vertical_shell_thickness", config.ensure_vertical_shell_thickness);
++    dpc.set_key_value("detect_narrow_internal_solid_infill", new Slic3r::ConfigOptionBool(config.detect_narrow_internal_solid_infill));
++    dpc.set_key_value("xy_hole_compensation", new Slic3r::ConfigOptionFloat(config.xy_hole_compensation));
++    dpc.set_key_value("xy_contour_compensation", new Slic3r::ConfigOptionFloat(config.xy_contour_compensation));
++    dpc.set_key_value("elefant_foot_compensation", new Slic3r::ConfigOptionFloat(config.elephant_foot_compensation));
++    dpc.set_key_value("elefant_foot_compensation_layers", new Slic3r::ConfigOptionInt(config.elephant_foot_compensation_layers));
++    dpc.set_key_value("max_bridge_length", new Slic3r::ConfigOptionFloat(config.max_bridge_length));
 +    dpc.set_key_value("precise_outer_wall", new Slic3r::ConfigOptionBool(config.precise_outer_walls));
 +
 +    dpc.set_deserialize_strict("seam_position", config.seam_position);
@@ -766,7 +900,7 @@ index 8d61c9cf..866a71a1 100644
          dpc.set_key_value("reduce_infill_retraction", new Slic3r::ConfigOptionBool(false));
      }
  
-@@ -568,19 +636,27 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -568,19 +655,27 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          dpc.set_key_value("filament_cost", new Slic3r::ConfigOptionFloats(std::move(v)));
      }
  
@@ -807,60 +941,3 @@ index 8d61c9cf..866a71a1 100644
  
      // Idle extruder standby temperature — prevents idle nozzles from staying at full print temp.
      // Snapmaker profiles embed ooze_prevention=0 and standby_temperature_delta=-5, which leaves
-diff --git a/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp b/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp
-index 4e0ddd0f3f..4e8e2b2ef3 100644
---- a/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp
-+++ b/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp
-@@ -103,12 +103,14 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
-     // loops is an arrayref of ::Loop objects
-     // turn each one into an ExtrusionLoop object
-     ExtrusionEntityCollection   coll;
-+    std::vector<size_t>         loop_entity_indices;
-     
-     // Detect steep overhangs
-     bool overhangs_reverse = perimeter_generator.config->overhang_reverse &&
-                              perimeter_generator.layer_id % 2 == 1; // Only calculate overhang degree on even (from GUI POV) layers
- 
--    for (const PerimeterGeneratorLoop &loop : loops) {
-+    for (size_t loop_idx = 0; loop_idx < loops.size(); ++loop_idx) {
-+        const PerimeterGeneratorLoop &loop = loops[loop_idx];
-         bool is_external = loop.is_external();
-         bool is_small_width = loop.is_smaller_width_perimeter;
-         
-@@ -224,6 +226,7 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
-         }
- 
-         coll.append(ExtrusionLoop(std::move(paths), loop_role));
-+        loop_entity_indices.push_back(loop_idx);
-     }
-     
-     // Append thin walls to the nearest-neighbor search (only for first iteration)
-@@ -233,20 +236,20 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
-     }
-     
-     // Traverse children and build the final collection.
--	Point zero_point(0, 0);
--	std::vector<std::pair<size_t, bool>> chain = chain_extrusion_entities(coll.entities, &zero_point);
-+    Point zero_point(0, 0);
-+    std::vector<std::pair<size_t, bool>> chain = chain_extrusion_entities(coll.entities, &zero_point);
-     ExtrusionEntityCollection out;
-     for (const std::pair<size_t, bool> &idx : chain) {
--		assert(coll.entities[idx.first] != nullptr);
--        if (idx.first >= loops.size()) {
-+        assert(coll.entities[idx.first] != nullptr);
-+        if (idx.first >= loop_entity_indices.size()) {
-             // This is a thin wall.
--			out.entities.reserve(out.entities.size() + 1);
-+            out.entities.reserve(out.entities.size() + 1);
-             out.entities.emplace_back(coll.entities[idx.first]);
--			coll.entities[idx.first] = nullptr;
-+            coll.entities[idx.first] = nullptr;
-             if (idx.second)
--				out.entities.back()->reverse();
-+                out.entities.back()->reverse();
-         } else {
--            const PerimeterGeneratorLoop &loop = loops[idx.first];
-+            const PerimeterGeneratorLoop &loop = loops[loop_entity_indices[idx.first]];
-             assert(thin_walls.empty());
-             ExtrusionEntityCollection children = traverse_loops(perimeter_generator, loop.children, thin_walls, steep_overhang_contour, steep_overhang_hole);
-             out.entities.reserve(out.entities.size() + children.entities.size() + 1);
