@@ -59,6 +59,15 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         gapInfillSpeed = gapInfillSpeed,
         firstLayerInfillSpeed = firstLayerInfillSpeed,
         supportInterfaceSpeed = supportInterfaceSpeed,
+        overhangSpeedEnabled = overhangSpeedEnabled,
+        overhangSpeed1 = overhangSpeed1,
+        overhangSpeed1Percent = overhangSpeed1Percent,
+        overhangSpeed2 = overhangSpeed2,
+        overhangSpeed2Percent = overhangSpeed2Percent,
+        overhangSpeed3 = overhangSpeed3,
+        overhangSpeed3Percent = overhangSpeed3Percent,
+        overhangSpeed4 = overhangSpeed4,
+        overhangSpeed4Percent = overhangSpeed4Percent,
         bridgeFlowRatio = bridgeFlowRatio,
         internalBridgeFlowRatio = internalBridgeFlowRatio,
         topSurfaceFlowRatio = topSurfaceFlowRatio,
@@ -77,6 +86,9 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         topShellThickness = topShellThickness,
         bottomShellThickness = bottomShellThickness,
         fillPattern = fillPattern,
+        topSurfacePattern = topSurfacePattern,
+        bottomSurfacePattern = bottomSurfacePattern,
+        internalSolidInfillPattern = internalSolidInfillPattern,
         travelSpeed = travelSpeed,
         firstLayerSpeed = firstLayerSpeed,
         supportType = supportType,
@@ -88,6 +100,9 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         supportTopZDistance = supportTopZDistance,
         supportBottomZDistance = supportBottomZDistance,
         supportObjectXYDistance = supportObjectXYDistance,
+        supportBasePattern = supportBasePattern,
+        supportInterfacePattern = supportInterfacePattern,
+        supportStyle = supportStyle,
         skirtLoops = skirtLoops,
         skirtDistance = skirtDistance,
         outerWallLineWidth = outerWallLineWidth,
@@ -97,6 +112,12 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         internalSolidInfillLineWidth = internalSolidInfillLineWidth,
         supportLineWidth = supportLineWidth,
         initialLayerLineWidth = initialLayerLineWidth,
+        seamPosition = seamPosition,
+        ironingType = ironingType,
+        ironingPattern = ironingPattern,
+        ironingFlow = ironingFlow,
+        ironingSpacing = ironingSpacing,
+        ironingSpeed = ironingSpeed,
         wallGenerator = wallGenerator,
         wallSequence = wallSequence,
         detectThinWalls = detectThinWalls,
@@ -140,7 +161,7 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 4
+private const val SLICE_OPTIONS_FORMAT_VERSION = 5
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f

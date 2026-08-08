@@ -163,7 +163,10 @@ class NativeEngineInstrumentedTest {
             .selectQuality(QualityProfile.FINE_06)
             .copy(fillDensity = 0.22f, supportEnabled = true)
             .copy(
-                fillPattern = "grid",
+                fillPattern = "crosshatch",
+                topSurfacePattern = "monotonic",
+                bottomSurfacePattern = "concentric",
+                internalSolidInfillPattern = "rectilinear",
                 topSolidLayers = 7,
                 travelSpeed = 420f,
                 retractLength = 1.2f,
@@ -185,6 +188,9 @@ class NativeEngineInstrumentedTest {
                 gapInfillSpeed = 134f,
                 firstLayerInfillSpeed = 64f,
                 supportInterfaceSpeed = 54f,
+                overhangSpeedEnabled = false,
+                overhangSpeed1 = 76f,
+                overhangSpeed1Percent = true,
                 bridgeFlowRatio = 0.92f,
                 internalBridgeFlowRatio = 0.95f,
                 topSurfaceFlowRatio = 0.97f,
@@ -198,7 +204,16 @@ class NativeEngineInstrumentedTest {
                 supportTopZDistance = 0.18f,
                 supportBottomZDistance = 0.22f,
                 supportObjectXYDistance = 0.4f,
+                supportBasePattern = "rectilinear-grid",
+                supportInterfacePattern = "rectilinear_interlaced",
+                supportStyle = "snug",
                 initialLayerLineWidth = 0.73f,
+                seamPosition = "nearest",
+                ironingType = "top",
+                ironingPattern = "concentric",
+                ironingFlow = 12f,
+                ironingSpacing = 0.16f,
+                ironingSpeed = 26f,
                 defaultAcceleration = 4_000f,
                 outerWallAcceleration = 2_000f,
                 innerWallAcceleration = 3_500f,
@@ -229,7 +244,22 @@ class NativeEngineInstrumentedTest {
         assertEquals(253, restored.filaments.last().firstLayerNozzleTemp)
         assertEquals(0.22f, restored.slicing.last().fillDensity)
         assertTrue(restored.slicing.last().supportEnabled)
-        assertEquals("grid", restored.slicing.last().fillPattern)
+        assertEquals("crosshatch", restored.slicing.last().fillPattern)
+        assertEquals("monotonic", restored.slicing.last().topSurfacePattern)
+        assertEquals("concentric", restored.slicing.last().bottomSurfacePattern)
+        assertEquals("rectilinear", restored.slicing.last().internalSolidInfillPattern)
+        assertEquals(false, restored.slicing.last().overhangSpeedEnabled)
+        assertEquals(76f, restored.slicing.last().overhangSpeed1)
+        assertTrue(restored.slicing.last().overhangSpeed1Percent)
+        assertEquals("rectilinear-grid", restored.slicing.last().supportBasePattern)
+        assertEquals("rectilinear_interlaced", restored.slicing.last().supportInterfacePattern)
+        assertEquals("snug", restored.slicing.last().supportStyle)
+        assertEquals("nearest", restored.slicing.last().seamPosition)
+        assertEquals("top", restored.slicing.last().ironingType)
+        assertEquals("concentric", restored.slicing.last().ironingPattern)
+        assertEquals(12f, restored.slicing.last().ironingFlow)
+        assertEquals(0.16f, restored.slicing.last().ironingSpacing)
+        assertEquals(26f, restored.slicing.last().ironingSpeed)
         assertEquals(7, restored.slicing.last().topSolidLayers)
         assertEquals(420f, restored.slicing.last().travelSpeed)
         assertEquals(1.2f, restored.filaments.last().retractLength)
@@ -274,7 +304,7 @@ class NativeEngineInstrumentedTest {
         assertEquals(7f, restored.printers.last().maxJerkX)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
-        assertEquals(7, JSONObject(file.readText()).getInt("schemaVersion"))
+        assertEquals(8, JSONObject(file.readText()).getInt("schemaVersion"))
         assertTrue("Saved profiles must stay in app-private storage", file.canonicalPath.startsWith(context.cacheDir.canonicalPath))
         file.delete()
         directory.delete()
@@ -303,7 +333,7 @@ class NativeEngineInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val catalog = OrcaProfileCatalog(context).load()
 
-        assertEquals(5, catalog.schemaVersion)
+        assertEquals(6, catalog.schemaVersion)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include Orca filament presets", catalog.filaments.size > 3_000)
@@ -321,6 +351,11 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.bridgeFlowRatio != 1f })
         assertTrue(catalog.slicing.any { it.topShellThickness > 0f })
         assertTrue(catalog.slicing.any { it.supportInterfaceSpacing == 0f })
+        assertTrue(catalog.slicing.any { it.fillPattern == "crosshatch" })
+        assertTrue(catalog.slicing.any { it.overhangSpeed1Percent })
+        assertTrue(catalog.slicing.any { it.seamPosition == "nearest" })
+        assertTrue(catalog.slicing.any { it.ironingType == "top" })
+        assertTrue(catalog.slicing.any { it.supportBasePattern == "rectilinear-grid" })
         assertTrue(catalog.slicing.map { it.wallGenerator }.toSet().containsAll(listOf("arachne", "classic")))
         assertTrue(catalog.slicing.map { it.wallSequence }.toSet().containsAll(listOf("inner-outer", "outer-inner")))
         assertTrue(catalog.printers.mapNotNull { it.brand }.containsAll(listOf("Creality", "Prusa", "Anycubic")))
@@ -381,7 +416,10 @@ class NativeEngineInstrumentedTest {
             .copy(
                 topSolidLayers = 6,
                 bottomSolidLayers = 5,
-                fillPattern = "grid",
+                fillPattern = "crosshatch",
+                topSurfacePattern = "monotonic",
+                bottomSurfacePattern = "concentric",
+                internalSolidInfillPattern = "rectilinear",
                 travelSpeed = 420f,
                 firstLayerSpeed = 35f,
                 retractLength = 1.1f,
@@ -404,6 +442,15 @@ class NativeEngineInstrumentedTest {
                 gapInfillSpeed = 137f,
                 firstLayerInfillSpeed = 63f,
                 supportInterfaceSpeed = 57f,
+                overhangSpeedEnabled = true,
+                overhangSpeed1 = 81f,
+                overhangSpeed1Percent = true,
+                overhangSpeed2 = 52f,
+                overhangSpeed2Percent = false,
+                overhangSpeed3 = 33f,
+                overhangSpeed3Percent = true,
+                overhangSpeed4 = 21f,
+                overhangSpeed4Percent = false,
                 bridgeFlowRatio = 0.91f,
                 internalBridgeFlowRatio = 0.96f,
                 topSurfaceFlowRatio = 0.97f,
@@ -417,7 +464,16 @@ class NativeEngineInstrumentedTest {
                 supportTopZDistance = 0.18f,
                 supportBottomZDistance = 0.22f,
                 supportObjectXYDistance = 0.41f,
+                supportBasePattern = "rectilinear-grid",
+                supportInterfacePattern = "rectilinear_interlaced",
+                supportStyle = "snug",
                 initialLayerLineWidth = 0.73f,
+                seamPosition = "nearest",
+                ironingType = "top",
+                ironingPattern = "concentric",
+                ironingFlow = 13f,
+                ironingSpacing = 0.17f,
+                ironingSpeed = 27f,
                 defaultAcceleration = 4_567f,
                 outerWallAcceleration = 2_345f,
                 innerWallAcceleration = 3_456f,
@@ -455,7 +511,10 @@ class NativeEngineInstrumentedTest {
         assertTrue("Bottom shell layers must reach G-code", gcode.contains("; bottom_shell_layers = 5"))
         assertTrue("Top shell thickness must reach G-code", gcode.contains("; top_shell_thickness = 0.83"))
         assertTrue("Bottom shell thickness must reach G-code", gcode.contains("; bottom_shell_thickness = 0.74"))
-        assertTrue("Infill pattern must reach G-code", gcode.contains("; sparse_infill_pattern = grid"))
+        assertTrue("Sparse pattern must preserve Orca crosshatch", gcode.contains("; sparse_infill_pattern = crosshatch"))
+        assertTrue("Top surface pattern must remain distinct", gcode.contains("; top_surface_pattern = monotonic"))
+        assertTrue("Bottom surface pattern must remain distinct", gcode.contains("; bottom_surface_pattern = concentric"))
+        assertTrue("Internal solid pattern must remain distinct", gcode.contains("; internal_solid_infill_pattern = rectilinear"))
         assertTrue("Travel speed must reach G-code", gcode.contains("; travel_speed = 420"))
         assertTrue("First layer speed must reach G-code", gcode.contains("; initial_layer_speed = 35"))
         assertTrue("Initial-layer solid speed must reach Orca", gcode.contains("; initial_layer_infill_speed = 63"))
@@ -488,6 +547,19 @@ class NativeEngineInstrumentedTest {
         assertTrue("Support top Z distance must reach Orca", gcode.contains("; support_top_z_distance = 0.18"))
         assertTrue("Support bottom Z distance must reach Orca", gcode.contains("; support_bottom_z_distance = 0.22"))
         assertTrue("Support XY distance must reach Orca", gcode.contains("; support_object_xy_distance = 0.41"))
+        assertTrue("Support base pattern must reach Orca", gcode.contains("; support_base_pattern = rectilinear-grid"))
+        assertTrue("Support interface pattern must reach Orca", gcode.contains("; support_interface_pattern = rectilinear_interlaced"))
+        assertTrue("Support style must reach Orca", gcode.contains("; support_style = snug"))
+        assertTrue("Seam position must reach Orca", gcode.contains("; seam_position = nearest"))
+        assertTrue("Ironing type must reach Orca", gcode.contains("; ironing_type = top"))
+        assertTrue("Ironing pattern must reach Orca", gcode.contains("; ironing_pattern = concentric"))
+        assertTrue("Ironing flow must reach Orca", gcode.contains("; ironing_flow = 13%"))
+        assertTrue("Ironing spacing must reach Orca", gcode.contains("; ironing_spacing = 0.17"))
+        assertTrue("Ironing speed must reach Orca", gcode.contains("; ironing_speed = 27"))
+        assertTrue("Overhang stage 1 must preserve percent units", gcode.contains("; overhang_1_4_speed = 81%"))
+        assertTrue("Overhang stage 2 must preserve absolute units", gcode.contains("; overhang_2_4_speed = 52"))
+        assertTrue("Overhang stage 3 must preserve percent units", gcode.contains("; overhang_3_4_speed = 33%"))
+        assertTrue("Overhang stage 4 must preserve absolute units", gcode.contains("; overhang_4_4_speed = 21"))
         assertTrue("Default acceleration must reach Orca", gcode.contains("; default_acceleration = 4567"))
         assertTrue("Outer-wall acceleration must reach Orca", gcode.contains("; outer_wall_acceleration = 2345"))
         assertTrue("Inner-wall acceleration must reach Orca", gcode.contains("; inner_wall_acceleration = 3456"))
@@ -651,6 +723,16 @@ class NativeEngineInstrumentedTest {
                     "internal_solid_infill_line_width" to "0.45",
                     "support_line_width" to "0.38",
                     "wall_generator" to "arachne",
+                    "sparse_infill_pattern" to "crosshatch",
+                    "top_surface_pattern" to "monotonicline",
+                    "bottom_surface_pattern" to "monotonic",
+                    "internal_solid_infill_pattern" to "monotonic",
+                    "seam_position" to "aligned",
+                    "ironing_type" to "no ironing",
+                    "ironing_flow" to "15%",
+                    "overhang_2_4_speed" to "20",
+                    "support_base_pattern" to "rectilinear",
+                    "support_style" to "grid",
                 ),
             ),
             Contract(
@@ -684,6 +766,13 @@ class NativeEngineInstrumentedTest {
                     "internal_solid_infill_line_width" to "0.48",
                     "support_line_width" to "0.384",
                     "wall_generator" to "arachne",
+                    "sparse_infill_pattern" to "crosshatch",
+                    "top_surface_pattern" to "monotonicline",
+                    "bottom_surface_pattern" to "monotonic",
+                    "internal_solid_infill_pattern" to "monotonic",
+                    "ironing_spacing" to "0.15",
+                    "overhang_2_4_speed" to "50",
+                    "support_interface_pattern" to "auto",
                 ),
             ),
             Contract(
@@ -717,6 +806,13 @@ class NativeEngineInstrumentedTest {
                     "internal_solid_infill_line_width" to "0.42",
                     "support_line_width" to "0.4",
                     "wall_generator" to "classic",
+                    "sparse_infill_pattern" to "crosshatch",
+                    "top_surface_pattern" to "monotonicline",
+                    "bottom_surface_pattern" to "monotonic",
+                    "internal_solid_infill_pattern" to "monotonic",
+                    "ironing_speed" to "30",
+                    "overhang_3_4_speed" to "40",
+                    "support_style" to "default",
                 ),
             ),
         )

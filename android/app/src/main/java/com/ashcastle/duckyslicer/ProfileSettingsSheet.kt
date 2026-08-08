@@ -618,6 +618,13 @@ private fun SlicingSettingsSheet(
         },
         onSelected = { onOptionsChanged(options.copy(wallSequence = it)) },
     )
+    Text(stringResource(R.string.seam_position), fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf("aligned", "nearest", "back", "random"),
+        selected = options.seamPosition,
+        label = { enumLabel(it) },
+        onSelected = { onOptionsChanged(options.copy(seamPosition = it)) },
+    )
     SettingsSwitch(
         label = stringResource(R.string.detect_thin_walls),
         checked = options.detectThinWalls,
@@ -671,11 +678,36 @@ private fun SlicingSettingsSheet(
         onValueChange = { onOptionsChanged(options.copy(bottomShellThickness = (it / 0.05f).roundToInt() * 0.05f)) },
     )
     SettingsGroupTitle(stringResource(R.string.infill))
+    Text(stringResource(R.string.sparse_infill_pattern), fontWeight = FontWeight.SemiBold)
     CompactChoices(
-        entries = listOf("gyroid", "grid", "honeycomb", "rectilinear", "alignedrectilinear"),
+        entries = listOf(
+            "crosshatch", "grid", "rectilinear", "gyroid", "cubic",
+            "alignedrectilinear", "triangles", "lightning",
+        ),
         selected = options.fillPattern,
         label = { fillPatternLabel(it) },
         onSelected = { onOptionsChanged(options.copy(fillPattern = it)) },
+    )
+    Text(stringResource(R.string.top_surface_pattern), fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf("monotonicline", "monotonic", "rectilinear", "concentric"),
+        selected = options.topSurfacePattern,
+        label = { fillPatternLabel(it) },
+        onSelected = { onOptionsChanged(options.copy(topSurfacePattern = it)) },
+    )
+    Text(stringResource(R.string.bottom_surface_pattern), fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf("monotonic", "monotonicline", "rectilinear", "concentric"),
+        selected = options.bottomSurfacePattern,
+        label = { fillPatternLabel(it) },
+        onSelected = { onOptionsChanged(options.copy(bottomSurfacePattern = it)) },
+    )
+    Text(stringResource(R.string.internal_solid_pattern), fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf("monotonic", "monotonicline", "rectilinear", "grid"),
+        selected = options.internalSolidInfillPattern,
+        label = { fillPatternLabel(it) },
+        onSelected = { onOptionsChanged(options.copy(internalSolidInfillPattern = it)) },
     )
     SettingSlider(
         label = stringResource(R.string.sparse_infill_width),
@@ -774,6 +806,85 @@ private fun SlicingSettingsSheet(
         steps = featureSpeedSteps,
         onValueChange = { onOptionsChanged(options.copy(gapInfillSpeed = (it / 5f).roundToInt() * 5f)) },
     )
+    SettingsSwitch(
+        label = stringResource(R.string.overhang_speed),
+        checked = options.overhangSpeedEnabled,
+        onCheckedChange = { onOptionsChanged(options.copy(overhangSpeedEnabled = it)) },
+    )
+    if (options.overhangSpeedEnabled) {
+        OverhangSpeedSetting(
+            label = stringResource(R.string.overhang_speed_1),
+            value = options.overhangSpeed1,
+            percent = options.overhangSpeed1Percent,
+            maximumAbsolute = maximumFeatureSpeed,
+            onValueChange = { onOptionsChanged(options.copy(overhangSpeed1 = it)) },
+            onPercentChange = { onOptionsChanged(options.copy(overhangSpeed1Percent = it)) },
+        )
+        OverhangSpeedSetting(
+            label = stringResource(R.string.overhang_speed_2),
+            value = options.overhangSpeed2,
+            percent = options.overhangSpeed2Percent,
+            maximumAbsolute = maximumFeatureSpeed,
+            onValueChange = { onOptionsChanged(options.copy(overhangSpeed2 = it)) },
+            onPercentChange = { onOptionsChanged(options.copy(overhangSpeed2Percent = it)) },
+        )
+        OverhangSpeedSetting(
+            label = stringResource(R.string.overhang_speed_3),
+            value = options.overhangSpeed3,
+            percent = options.overhangSpeed3Percent,
+            maximumAbsolute = maximumFeatureSpeed,
+            onValueChange = { onOptionsChanged(options.copy(overhangSpeed3 = it)) },
+            onPercentChange = { onOptionsChanged(options.copy(overhangSpeed3Percent = it)) },
+        )
+        OverhangSpeedSetting(
+            label = stringResource(R.string.overhang_speed_4),
+            value = options.overhangSpeed4,
+            percent = options.overhangSpeed4Percent,
+            maximumAbsolute = maximumFeatureSpeed,
+            onValueChange = { onOptionsChanged(options.copy(overhangSpeed4 = it)) },
+            onPercentChange = { onOptionsChanged(options.copy(overhangSpeed4Percent = it)) },
+        )
+    }
+    SettingsGroupTitle(stringResource(R.string.ironing))
+    CompactChoices(
+        entries = listOf("no ironing", "top", "topmost", "solid"),
+        selected = options.ironingType,
+        label = { enumLabel(it) },
+        onSelected = { onOptionsChanged(options.copy(ironingType = it)) },
+    )
+    if (options.ironingType != "no ironing") {
+        Text(stringResource(R.string.ironing_pattern), fontWeight = FontWeight.SemiBold)
+        CompactChoices(
+            entries = listOf("rectilinear", "concentric"),
+            selected = options.ironingPattern,
+            label = { fillPatternLabel(it) },
+            onSelected = { onOptionsChanged(options.copy(ironingPattern = it)) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.ironing_flow),
+            valueText = stringResource(R.string.percent_value, options.ironingFlow.roundToInt()),
+            value = options.ironingFlow,
+            range = 0f..100f,
+            steps = 99,
+            onValueChange = { onOptionsChanged(options.copy(ironingFlow = it.roundToInt().toFloat())) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.ironing_spacing),
+            valueText = stringResource(R.string.millimeters_value_precise, options.ironingSpacing),
+            value = options.ironingSpacing,
+            range = 0.05f..0.5f,
+            steps = 44,
+            onValueChange = { onOptionsChanged(options.copy(ironingSpacing = it)) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.ironing_speed),
+            valueText = stringResource(R.string.print_speed_value, options.ironingSpeed),
+            value = options.ironingSpeed,
+            range = 1f..maximumFeatureSpeed,
+            steps = maximumFeatureSpeed.roundToInt().coerceAtLeast(2) - 2,
+            onValueChange = { onOptionsChanged(options.copy(ironingSpeed = it.roundToInt().toFloat())) },
+        )
+    }
     SettingsGroupTitle(stringResource(R.string.feature_flow_ratio))
     SettingSlider(
         label = stringResource(R.string.bridge_flow_ratio),
@@ -893,6 +1004,27 @@ private fun SlicingSettingsSheet(
             label = { if (it == "tree") stringResource(R.string.tree_support) else stringResource(R.string.normal_support) },
             onSelected = { onOptionsChanged(options.copy(supportType = it)) },
         )
+        Text(stringResource(R.string.support_style), fontWeight = FontWeight.SemiBold)
+        CompactChoices(
+            entries = listOf("default", "grid", "snug", "organic", "tree_hybrid", "tree_slim"),
+            selected = options.supportStyle,
+            label = { enumLabel(it) },
+            onSelected = { onOptionsChanged(options.copy(supportStyle = it)) },
+        )
+        Text(stringResource(R.string.support_base_pattern), fontWeight = FontWeight.SemiBold)
+        CompactChoices(
+            entries = listOf("default", "rectilinear", "rectilinear-grid", "lightning", "hollow"),
+            selected = options.supportBasePattern,
+            label = { enumLabel(it) },
+            onSelected = { onOptionsChanged(options.copy(supportBasePattern = it)) },
+        )
+        Text(stringResource(R.string.support_interface_pattern), fontWeight = FontWeight.SemiBold)
+        CompactChoices(
+            entries = listOf("auto", "rectilinear", "rectilinear_interlaced", "concentric", "grid"),
+            selected = options.supportInterfacePattern,
+            label = { enumLabel(it) },
+            onSelected = { onOptionsChanged(options.copy(supportInterfacePattern = it)) },
+        )
         SettingSlider(
             label = stringResource(R.string.support_threshold_angle),
             valueText = stringResource(R.string.degrees_value, options.supportAngle),
@@ -1009,6 +1141,37 @@ private fun SettingsSwitch(label: String, checked: Boolean, onCheckedChange: (Bo
 }
 
 @Composable
+private fun OverhangSpeedSetting(
+    label: String,
+    value: Float,
+    percent: Boolean,
+    maximumAbsolute: Float,
+    onValueChange: (Float) -> Unit,
+    onPercentChange: (Boolean) -> Unit,
+) {
+    Text(label, fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf(false, true),
+        selected = percent,
+        label = { if (it) "%" else "mm/s" },
+        onSelected = onPercentChange,
+    )
+    val maximum = if (percent) 100f else maximumAbsolute
+    SettingSlider(
+        label = label,
+        valueText = if (percent) {
+            stringResource(R.string.percent_value, value.coerceAtMost(100f).roundToInt())
+        } else {
+            stringResource(R.string.print_speed_value, value)
+        },
+        value = value.coerceIn(0f, maximum),
+        range = 0f..maximum,
+        steps = maximum.roundToInt().coerceAtLeast(2) - 1,
+        onValueChange = onValueChange,
+    )
+}
+
+@Composable
 private fun <T> CompactChoices(
     entries: List<T>,
     selected: T,
@@ -1034,8 +1197,14 @@ private fun fillPatternLabel(value: String): String = when (value) {
     "honeycomb" -> stringResource(R.string.infill_honeycomb)
     "rectilinear" -> stringResource(R.string.infill_rectilinear)
     "alignedrectilinear" -> stringResource(R.string.infill_aligned_rectilinear)
-    else -> stringResource(R.string.infill_gyroid)
+    "gyroid" -> stringResource(R.string.infill_gyroid)
+    else -> enumLabel(value)
 }
+
+private fun enumLabel(value: String): String = value
+    .replace('_', ' ')
+    .replace('-', ' ')
+    .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
