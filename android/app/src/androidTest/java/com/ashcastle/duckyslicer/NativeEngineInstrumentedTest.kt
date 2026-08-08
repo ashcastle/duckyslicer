@@ -12,6 +12,29 @@ import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class NativeEngineInstrumentedTest {
+    private data class ToolpathBounds(val minX: Float, val minY: Float, val maxX: Float, val maxY: Float)
+
+    private fun outerWallBounds(gcode: File): ToolpathBounds {
+        val preview = GcodeLayerPreview.fromJson(
+            NativeEngine.previewGcodeRange(gcode.absolutePath, 0, Int.MAX_VALUE),
+        )
+        var minX = Float.POSITIVE_INFINITY
+        var minY = Float.POSITIVE_INFINITY
+        var maxX = Float.NEGATIVE_INFINITY
+        var maxY = Float.NEGATIVE_INFINITY
+        preview.segments.indices.step(GcodeLayerPreview.SEGMENT_STRIDE).forEach { offset ->
+            if (preview.segments[offset + 5].toInt() != 0) return@forEach
+            minX = minOf(minX, preview.segments[offset], preview.segments[offset + 2])
+            minY = minOf(minY, preview.segments[offset + 1], preview.segments[offset + 3])
+            maxX = maxOf(maxX, preview.segments[offset], preview.segments[offset + 2])
+            maxY = maxOf(maxY, preview.segments[offset + 1], preview.segments[offset + 3])
+        }
+        check(minX.isFinite() && minY.isFinite() && maxX.isFinite() && maxY.isFinite()) {
+            "No outer-wall extrusion coordinates"
+        }
+        return ToolpathBounds(minX, minY, maxX, maxY)
+    }
+
     private fun fixtureModel(): File {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -220,6 +243,16 @@ class NativeEngineInstrumentedTest {
                 infillCombination = true,
                 infillCombinationMaxLayerHeight = 0.38f,
                 infillCombinationMaxLayerHeightPercent = false,
+                infillDirection = 36f,
+                solidInfillDirection = 124f,
+                alignInfillDirectionToModel = true,
+                minimumSparseInfillArea = 41f,
+                infillAnchor = 322f,
+                infillAnchorPercent = true,
+                infillAnchorMax = 18f,
+                infillAnchorMaxPercent = false,
+                gapFillTarget = "topbottom",
+                filterOutGapFill = 0.8f,
                 initialLayerLineWidth = 0.73f,
                 seamPosition = "nearest",
                 ironingType = "top",
@@ -243,6 +276,15 @@ class NativeEngineInstrumentedTest {
                 wallSequence = "outer-inner",
                 detectThinWalls = true,
                 onlyOneWallOnTop = false,
+                onlyOneWallFirstLayer = true,
+                extraPerimetersOnOverhangs = true,
+                ensureVerticalShellThickness = "ensure_critical_only",
+                detectNarrowInternalSolidInfill = false,
+                xyHoleCompensation = 0.12f,
+                xyContourCompensation = -0.08f,
+                elephantFootCompensation = 0.24f,
+                elephantFootCompensationLayers = 4,
+                maxBridgeLength = 27f,
                 preciseOuterWalls = true,
                 gcodeFlavor = "marlin2",
                 maxSpeedX = 320f,
@@ -287,6 +329,16 @@ class NativeEngineInstrumentedTest {
         assertTrue(restored.slicing.last().infillCombination)
         assertEquals(0.38f, restored.slicing.last().infillCombinationMaxLayerHeight)
         assertEquals(false, restored.slicing.last().infillCombinationMaxLayerHeightPercent)
+        assertEquals(36f, restored.slicing.last().infillDirection)
+        assertEquals(124f, restored.slicing.last().solidInfillDirection)
+        assertTrue(restored.slicing.last().alignInfillDirectionToModel)
+        assertEquals(41f, restored.slicing.last().minimumSparseInfillArea)
+        assertEquals(322f, restored.slicing.last().infillAnchor)
+        assertTrue(restored.slicing.last().infillAnchorPercent)
+        assertEquals(18f, restored.slicing.last().infillAnchorMax)
+        assertEquals(false, restored.slicing.last().infillAnchorMaxPercent)
+        assertEquals("topbottom", restored.slicing.last().gapFillTarget)
+        assertEquals(0.8f, restored.slicing.last().filterOutGapFill)
         assertEquals(88f, restored.slicing.last().bridgeDensity)
         assertEquals(74f, restored.slicing.last().internalBridgeDensity)
         assertTrue(restored.slicing.last().bridgeNoSupport)
@@ -334,6 +386,15 @@ class NativeEngineInstrumentedTest {
         assertEquals("outer-inner", restored.slicing.last().wallSequence)
         assertTrue(restored.slicing.last().detectThinWalls)
         assertEquals(false, restored.slicing.last().onlyOneWallOnTop)
+        assertTrue(restored.slicing.last().onlyOneWallFirstLayer)
+        assertTrue(restored.slicing.last().extraPerimetersOnOverhangs)
+        assertEquals("ensure_critical_only", restored.slicing.last().ensureVerticalShellThickness)
+        assertEquals(false, restored.slicing.last().detectNarrowInternalSolidInfill)
+        assertEquals(0.12f, restored.slicing.last().xyHoleCompensation)
+        assertEquals(-0.08f, restored.slicing.last().xyContourCompensation)
+        assertEquals(0.24f, restored.slicing.last().elephantFootCompensation)
+        assertEquals(4, restored.slicing.last().elephantFootCompensationLayers)
+        assertEquals(27f, restored.slicing.last().maxBridgeLength)
         assertTrue(restored.slicing.last().preciseOuterWalls)
         assertEquals("marlin2", restored.printers.last().gcodeFlavor)
         assertEquals(320f, restored.printers.last().maxSpeedX)
@@ -342,7 +403,7 @@ class NativeEngineInstrumentedTest {
         assertEquals(7f, restored.printers.last().maxJerkX)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
-        assertEquals(9, JSONObject(file.readText()).getInt("schemaVersion"))
+        assertEquals(10, JSONObject(file.readText()).getInt("schemaVersion"))
         assertTrue("Saved profiles must stay in app-private storage", file.canonicalPath.startsWith(context.cacheDir.canonicalPath))
         file.delete()
         directory.delete()
@@ -371,7 +432,7 @@ class NativeEngineInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val catalog = OrcaProfileCatalog(context).load()
 
-        assertEquals(7, catalog.schemaVersion)
+        assertEquals(8, catalog.schemaVersion)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include Orca filament presets", catalog.filaments.size > 3_000)
@@ -399,6 +460,18 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.infillCombination })
         assertTrue(catalog.slicing.any { it.internalBridgeSpeedPercent })
         assertTrue(catalog.slicing.any { !it.bridgeAccelerationPercent })
+        assertTrue(catalog.slicing.any { it.elephantFootCompensation > 0f })
+        assertTrue(catalog.slicing.any { it.xyHoleCompensation != 0f })
+        assertTrue(catalog.slicing.any { it.gapFillTarget == "everywhere" })
+        assertTrue(catalog.slicing.any { it.gapFillTarget == "topbottom" })
+        assertTrue(catalog.slicing.any { it.filterOutGapFill > 0f })
+        assertTrue(catalog.slicing.any { it.minimumSparseInfillArea != 15f })
+        assertTrue(catalog.slicing.any { it.maxBridgeLength != 10f })
+        val legacyDecimalComma = requireNotNull(
+            catalog.slicing.find { it.name == "0.05mm Detail @MK3.5" },
+        )
+        assertEquals(2f, legacyDecimalComma.infillAnchor)
+        assertEquals(false, legacyDecimalComma.infillAnchorPercent)
         val legacyInfillFirst = requireNotNull(
             catalog.slicing.find { it.id == "orca-process-118b0a2ab38fdffaa3d4" },
         )
@@ -533,6 +606,16 @@ class NativeEngineInstrumentedTest {
                 infillCombination = true,
                 infillCombinationMaxLayerHeight = 0.48f,
                 infillCombinationMaxLayerHeightPercent = false,
+                infillDirection = 37f,
+                solidInfillDirection = 123f,
+                alignInfillDirectionToModel = true,
+                minimumSparseInfillArea = 42f,
+                infillAnchor = 321f,
+                infillAnchorPercent = true,
+                infillAnchorMax = 17.5f,
+                infillAnchorMaxPercent = false,
+                gapFillTarget = "everywhere",
+                filterOutGapFill = 0.9f,
                 initialLayerLineWidth = 0.73f,
                 seamPosition = "nearest",
                 ironingType = "top",
@@ -557,6 +640,15 @@ class NativeEngineInstrumentedTest {
                 detectThinWalls = true,
                 detectOverhangWalls = false,
                 onlyOneWallOnTop = false,
+                onlyOneWallFirstLayer = true,
+                extraPerimetersOnOverhangs = true,
+                ensureVerticalShellThickness = "ensure_moderate",
+                detectNarrowInternalSolidInfill = false,
+                xyHoleCompensation = 0.11f,
+                xyContourCompensation = -0.07f,
+                elephantFootCompensation = 0.23f,
+                elephantFootCompensationLayers = 3,
+                maxBridgeLength = 26f,
                 preciseOuterWalls = true,
             )
         val outcome = OnDeviceSlicer.slice(model, options) { progress ->
@@ -643,6 +735,14 @@ class NativeEngineInstrumentedTest {
         assertTrue("Solid surface overlap must reach Orca", gcode.contains("; top_bottom_infill_wall_overlap = 31%"))
         assertTrue("Combined infill must reach Orca", gcode.contains("; infill_combination = 1"))
         assertTrue("Combined infill height must preserve absolute units", gcode.contains("; infill_combination_max_layer_height = 0.48"))
+        assertTrue("Sparse infill direction must reach Orca", gcode.contains("; infill_direction = 37"))
+        assertTrue("Solid infill direction must reach Orca", gcode.contains("; solid_infill_direction = 123"))
+        assertTrue("Model-relative infill must reach Orca", gcode.contains("; align_infill_direction_to_model = 1"))
+        assertTrue("Sparse-area threshold must reach Orca", gcode.contains("; minimum_sparse_infill_area = 42"))
+        assertTrue("Infill anchor must preserve percent units", gcode.contains("; infill_anchor = 321%"))
+        assertTrue("Maximum infill anchor must preserve absolute units", gcode.contains("; infill_anchor_max = 17.5"))
+        assertTrue("Gap-fill surface policy must reach Orca", gcode.contains("; gap_fill_target = everywhere"))
+        assertTrue("Tiny-gap filter must reach Orca", gcode.contains("; filter_out_gap_fill = 0.9"))
         assertTrue("Default acceleration must reach Orca", gcode.contains("; default_acceleration = 4567"))
         assertTrue("Outer-wall acceleration must reach Orca", gcode.contains("; outer_wall_acceleration = 2345"))
         assertTrue("Inner-wall acceleration must reach Orca", gcode.contains("; inner_wall_acceleration = 3456"))
@@ -657,6 +757,15 @@ class NativeEngineInstrumentedTest {
         assertTrue("Thin-wall detection must reach Orca", gcode.contains("; detect_thin_wall = 1"))
         assertTrue("Overhang-wall detection must reach Orca", gcode.contains("; detect_overhang_wall = 0"))
         assertTrue("Top-surface wall rule must reach Orca", gcode.contains("; only_one_wall_top = 0"))
+        assertTrue("First-layer wall rule must reach Orca", gcode.contains("; only_one_wall_first_layer = 1"))
+        assertTrue("Overhang extra-wall policy must reach Orca", gcode.contains("; extra_perimeters_on_overhangs = 1"))
+        assertTrue("Vertical shell mode must reach Orca", gcode.contains("; ensure_vertical_shell_thickness = ensure_moderate"))
+        assertTrue("Narrow internal-solid policy must reach Orca", gcode.contains("; detect_narrow_internal_solid_infill = 0"))
+        assertTrue("Hole compensation must reach Orca", gcode.contains("; xy_hole_compensation = 0.11"))
+        assertTrue("Contour compensation must reach Orca", gcode.contains("; xy_contour_compensation = -0.07"))
+        assertTrue("Elephant-foot compensation must reach Orca", gcode.contains("; elefant_foot_compensation = 0.23"))
+        assertTrue("Elephant-foot layer count must reach Orca", gcode.contains("; elefant_foot_compensation_layers = 3"))
+        assertTrue("Unsupported bridge limit must reach Orca", gcode.contains("; max_bridge_length = 26"))
         assertTrue("Outer-wall precision must reach Orca", gcode.contains("; precise_outer_wall = 1"))
 
         val preview = GcodeLayerPreview.fromJson(
@@ -701,6 +810,34 @@ class NativeEngineInstrumentedTest {
         assertTrue("Classic must generate outer walls", gcode.contains(";TYPE:Outer wall"))
         assertTrue("Classic must generate inner walls", gcode.contains(";TYPE:Inner wall"))
         assertTrue("Classic G-code must contain extrusion", gcode.lineSequence().any { it.startsWith("G1 ") && it.contains(" E") })
+    }
+
+    @Test
+    fun contourCompensationChangesGeneratedOuterWallGeometry() {
+        val model = fixtureModel()
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.CUSTOM_CARTESIAN)
+            .selectFilament(FilamentProfile.GENERIC_PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                skirtLoops = 0,
+                brimWidth = 0f,
+                elephantFootCompensation = 0f,
+                xyContourCompensation = 0f,
+            )
+        val original = outerWallBounds(OnDeviceSlicer.slice(model, base).output)
+        val expanded = outerWallBounds(
+            OnDeviceSlicer.slice(model, base.copy(xyContourCompensation = 0.4f)).output,
+        )
+
+        assertTrue(
+            "Positive contour compensation must expand generated X geometry",
+            expanded.maxX - expanded.minX > original.maxX - original.minX + 0.4f,
+        )
+        assertTrue(
+            "Positive contour compensation must expand generated Y geometry",
+            expanded.maxY - expanded.minY > original.maxY - original.minY + 0.4f,
+        )
     }
 
     @Test
@@ -828,6 +965,11 @@ class NativeEngineInstrumentedTest {
                     "internal_solid_infill_acceleration" to "100%",
                     "infill_combination" to "0",
                     "thick_internal_bridges" to "1",
+                    "minimum_sparse_infill_area" to "10",
+                    "infill_anchor" to "400%",
+                    "gap_fill_target" to "nowhere",
+                    "elefant_foot_compensation" to "0.1",
+                    "ensure_vertical_shell_thickness" to "ensure_all",
                 ),
             ),
             Contract(
@@ -873,6 +1015,11 @@ class NativeEngineInstrumentedTest {
                     "internal_bridge_speed" to "50",
                     "bridge_density" to "100%",
                     "infill_combination_max_layer_height" to "100%",
+                    "infill_direction" to "45",
+                    "solid_infill_direction" to "45",
+                    "infill_anchor_max" to "20",
+                    "gap_fill_target" to "nowhere",
+                    "detect_narrow_internal_solid_infill" to "1",
                 ),
             ),
             Contract(
@@ -918,6 +1065,10 @@ class NativeEngineInstrumentedTest {
                     "internal_bridge_speed" to "150%",
                     "internal_bridge_density" to "100%",
                     "bridge_no_support" to "0",
+                    "gap_fill_target" to "topbottom",
+                    "ensure_vertical_shell_thickness" to "ensure_moderate",
+                    "elefant_foot_compensation" to "0.15",
+                    "max_bridge_length" to "10",
                 ),
             ),
         )

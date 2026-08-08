@@ -641,9 +641,40 @@ private fun SlicingSettingsSheet(
         onCheckedChange = { onOptionsChanged(options.copy(onlyOneWallOnTop = it)) },
     )
     SettingsSwitch(
+        label = stringResource(R.string.one_wall_on_first_layer),
+        checked = options.onlyOneWallFirstLayer,
+        onCheckedChange = { onOptionsChanged(options.copy(onlyOneWallFirstLayer = it)) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.extra_perimeters_on_overhangs),
+        checked = options.extraPerimetersOnOverhangs,
+        onCheckedChange = { onOptionsChanged(options.copy(extraPerimetersOnOverhangs = it)) },
+    )
+    SettingsSwitch(
         label = stringResource(R.string.precise_outer_walls),
         checked = options.preciseOuterWalls,
         onCheckedChange = { onOptionsChanged(options.copy(preciseOuterWalls = it)) },
+    )
+    Text(stringResource(R.string.ensure_vertical_shell_thickness), fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf("none", "ensure_critical_only", "ensure_moderate", "ensure_all"),
+        selected = options.ensureVerticalShellThickness,
+        label = {
+            stringResource(
+                when (it) {
+                    "none" -> R.string.vertical_shell_none
+                    "ensure_critical_only" -> R.string.vertical_shell_critical
+                    "ensure_moderate" -> R.string.vertical_shell_moderate
+                    else -> R.string.vertical_shell_all
+                },
+            )
+        },
+        onSelected = { onOptionsChanged(options.copy(ensureVerticalShellThickness = it)) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.detect_narrow_internal_solid_infill),
+        checked = options.detectNarrowInternalSolidInfill,
+        onCheckedChange = { onOptionsChanged(options.copy(detectNarrowInternalSolidInfill = it)) },
     )
     SettingSlider(
         label = stringResource(R.string.top_shell_layers),
@@ -677,6 +708,41 @@ private fun SlicingSettingsSheet(
         steps = (max(5f, options.bottomShellThickness) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
         onValueChange = { onOptionsChanged(options.copy(bottomShellThickness = (it / 0.05f).roundToInt() * 0.05f)) },
     )
+    SettingsGroupTitle(stringResource(R.string.dimensional_accuracy))
+    SettingSlider(
+        label = stringResource(R.string.xy_hole_compensation),
+        valueText = stringResource(R.string.millimeters_value_precise, options.xyHoleCompensation),
+        value = options.xyHoleCompensation,
+        range = -2f..2f,
+        steps = 399,
+        onValueChange = { onOptionsChanged(options.copy(xyHoleCompensation = (it * 100f).roundToInt() / 100f)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.xy_contour_compensation),
+        valueText = stringResource(R.string.millimeters_value_precise, options.xyContourCompensation),
+        value = options.xyContourCompensation,
+        range = -2f..2f,
+        steps = 399,
+        onValueChange = { onOptionsChanged(options.copy(xyContourCompensation = (it * 100f).roundToInt() / 100f)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.elephant_foot_compensation),
+        valueText = stringResource(R.string.millimeters_value_precise, options.elephantFootCompensation),
+        value = options.elephantFootCompensation,
+        range = 0f..max(1f, options.elephantFootCompensation),
+        steps = (max(1f, options.elephantFootCompensation) * 100f).roundToInt().coerceAtLeast(2) - 1,
+        onValueChange = { onOptionsChanged(options.copy(elephantFootCompensation = (it * 100f).roundToInt() / 100f)) },
+    )
+    if (options.elephantFootCompensation > 0f) {
+        SettingSlider(
+            label = stringResource(R.string.elephant_foot_layers),
+            valueText = options.elephantFootCompensationLayers.toString(),
+            value = options.elephantFootCompensationLayers.toFloat(),
+            range = 1f..max(10f, options.elephantFootCompensationLayers.toFloat()),
+            steps = max(10, options.elephantFootCompensationLayers) - 2,
+            onValueChange = { onOptionsChanged(options.copy(elephantFootCompensationLayers = it.roundToInt())) },
+        )
+    }
     SettingsGroupTitle(stringResource(R.string.infill))
     Text(stringResource(R.string.sparse_infill_pattern), fontWeight = FontWeight.SemiBold)
     CompactChoices(
@@ -751,6 +817,80 @@ private fun SlicingSettingsSheet(
             },
         )
     }
+    SettingSlider(
+        label = stringResource(R.string.sparse_infill_direction),
+        valueText = stringResource(R.string.degrees_value, options.infillDirection),
+        value = options.infillDirection,
+        range = 0f..360f,
+        steps = 359,
+        onValueChange = { onOptionsChanged(options.copy(infillDirection = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.solid_infill_direction),
+        valueText = stringResource(R.string.degrees_value, options.solidInfillDirection),
+        value = options.solidInfillDirection,
+        range = 0f..360f,
+        steps = 359,
+        onValueChange = { onOptionsChanged(options.copy(solidInfillDirection = it.roundToInt().toFloat())) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.align_infill_to_model),
+        checked = options.alignInfillDirectionToModel,
+        onCheckedChange = { onOptionsChanged(options.copy(alignInfillDirectionToModel = it)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.minimum_sparse_infill_area),
+        valueText = stringResource(R.string.square_millimeters_value, options.minimumSparseInfillArea),
+        value = options.minimumSparseInfillArea,
+        range = 0f..max(100f, options.minimumSparseInfillArea),
+        steps = max(100f, options.minimumSparseInfillArea).roundToInt().coerceAtLeast(2) - 1,
+        onValueChange = { onOptionsChanged(options.copy(minimumSparseInfillArea = it.roundToInt().toFloat())) },
+    )
+    Text(stringResource(R.string.gap_fill_target), fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf("everywhere", "topbottom", "nowhere"),
+        selected = options.gapFillTarget,
+        label = {
+            stringResource(
+                when (it) {
+                    "everywhere" -> R.string.gap_fill_everywhere
+                    "topbottom" -> R.string.gap_fill_top_bottom
+                    else -> R.string.gap_fill_nowhere
+                },
+            )
+        },
+        onSelected = { onOptionsChanged(options.copy(gapFillTarget = it)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.filter_tiny_gaps),
+        valueText = stringResource(R.string.millimeters_value_precise, options.filterOutGapFill),
+        value = options.filterOutGapFill,
+        range = 0f..max(10f, options.filterOutGapFill),
+        steps = (max(10f, options.filterOutGapFill) * 10f).roundToInt().coerceIn(2, 10_000) - 1,
+        onValueChange = { onOptionsChanged(options.copy(filterOutGapFill = (it * 10f).roundToInt() / 10f)) },
+    )
+    LengthOrPercentSetting(
+        label = stringResource(R.string.infill_anchor),
+        value = options.infillAnchor,
+        percent = options.infillAnchorPercent,
+        maximumAbsolute = 1_000f,
+        maximumPercent = 1_000f,
+        onValueChange = { onOptionsChanged(options.copy(infillAnchor = it)) },
+        onPercentChange = { selectedPercent, adjustedValue ->
+            onOptionsChanged(options.copy(infillAnchor = adjustedValue, infillAnchorPercent = selectedPercent))
+        },
+    )
+    LengthOrPercentSetting(
+        label = stringResource(R.string.infill_anchor_max),
+        value = options.infillAnchorMax,
+        percent = options.infillAnchorMaxPercent,
+        maximumAbsolute = 1_000f,
+        maximumPercent = 1_000f,
+        onValueChange = { onOptionsChanged(options.copy(infillAnchorMax = it)) },
+        onPercentChange = { selectedPercent, adjustedValue ->
+            onOptionsChanged(options.copy(infillAnchorMax = adjustedValue, infillAnchorMaxPercent = selectedPercent))
+        },
+    )
     SettingSlider(
         label = stringResource(R.string.sparse_infill_width),
         valueText = stringResource(R.string.millimeters_value_precise, options.sparseInfillLineWidth),
@@ -912,6 +1052,14 @@ private fun SlicingSettingsSheet(
         )
     }
     SettingsGroupTitle(stringResource(R.string.bridges))
+    SettingSlider(
+        label = stringResource(R.string.maximum_unsupported_bridge_length),
+        valueText = stringResource(R.string.millimeters_value, options.maxBridgeLength),
+        value = options.maxBridgeLength,
+        range = 0f..max(100f, options.maxBridgeLength),
+        steps = max(100f, options.maxBridgeLength).roundToInt().coerceAtLeast(2) - 1,
+        onValueChange = { onOptionsChanged(options.copy(maxBridgeLength = it.roundToInt().toFloat())) },
+    )
     SettingSlider(
         label = stringResource(R.string.external_bridge_density),
         valueText = stringResource(R.string.percent_value, options.bridgeDensity.roundToInt()),
@@ -1354,6 +1502,8 @@ private fun LengthOrPercentSetting(
     label: String,
     value: Float,
     percent: Boolean,
+    maximumAbsolute: Float = 2f,
+    maximumPercent: Float = 100f,
     onValueChange: (Float) -> Unit,
     onPercentChange: (Boolean, Float) -> Unit,
 ) {
@@ -1363,11 +1513,11 @@ private fun LengthOrPercentSetting(
         selected = percent,
         label = { if (it) "%" else "mm" },
         onSelected = { selectedPercent ->
-            val newMaximum = if (selectedPercent) 100f else 2f
+            val newMaximum = if (selectedPercent) maximumPercent else maximumAbsolute
             onPercentChange(selectedPercent, value.coerceAtMost(newMaximum))
         },
     )
-    val maximum = if (percent) 100f else 2f
+    val maximum = if (percent) maximumPercent else maximumAbsolute
     SettingSlider(
         label = label,
         valueText = if (percent) {

@@ -60,6 +60,16 @@ class SliceOptionsPersistenceTest {
         assertEquals(true, restored.infillCombination)
         assertEquals(0.36f, restored.infillCombinationMaxLayerHeight)
         assertEquals(false, restored.infillCombinationMaxLayerHeightPercent)
+        assertEquals(37f, restored.infillDirection)
+        assertEquals(123f, restored.solidInfillDirection)
+        assertEquals(true, restored.alignInfillDirectionToModel)
+        assertEquals(42f, restored.minimumSparseInfillArea)
+        assertEquals(321f, restored.infillAnchor)
+        assertEquals(true, restored.infillAnchorPercent)
+        assertEquals(17.5f, restored.infillAnchorMax)
+        assertEquals(false, restored.infillAnchorMaxPercent)
+        assertEquals("everywhere", restored.gapFillTarget)
+        assertEquals(0.9f, restored.filterOutGapFill)
         assertEquals(87f, restored.bridgeDensity)
         assertEquals(73f, restored.internalBridgeDensity)
         assertEquals(true, restored.bridgeNoSupport)
@@ -93,6 +103,15 @@ class SliceOptionsPersistenceTest {
         assertEquals(true, restored.internalSolidInfillAccelerationPercent)
         assertEquals("classic", restored.wallGenerator)
         assertEquals("outer-inner", restored.wallSequence)
+        assertEquals(true, restored.onlyOneWallFirstLayer)
+        assertEquals(true, restored.extraPerimetersOnOverhangs)
+        assertEquals("ensure_moderate", restored.ensureVerticalShellThickness)
+        assertEquals(false, restored.detectNarrowInternalSolidInfill)
+        assertEquals(0.11f, restored.xyHoleCompensation)
+        assertEquals(-0.07f, restored.xyContourCompensation)
+        assertEquals(0.23f, restored.elephantFootCompensation)
+        assertEquals(3, restored.elephantFootCompensationLayers)
+        assertEquals(26f, restored.maxBridgeLength)
         assertEquals("klipper", restored.gcodeFlavor)
         assertEquals(4_600f, restored.maxAccelerationTravel)
     }
@@ -214,6 +233,16 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         infillCombination = true,
         infillCombinationMaxLayerHeight = 0.36f,
         infillCombinationMaxLayerHeightPercent = false,
+        infillDirection = 37f,
+        solidInfillDirection = 123f,
+        alignInfillDirectionToModel = true,
+        minimumSparseInfillArea = 42f,
+        infillAnchor = 321f,
+        infillAnchorPercent = true,
+        infillAnchorMax = 17.5f,
+        infillAnchorMaxPercent = false,
+        gapFillTarget = "everywhere",
+        filterOutGapFill = 0.9f,
         initialLayerLineWidth = 0.74f,
         seamPosition = "nearest",
         ironingType = "top",
@@ -238,6 +267,15 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         detectThinWalls = true,
         detectOverhangWalls = false,
         onlyOneWallOnTop = true,
+        onlyOneWallFirstLayer = true,
+        extraPerimetersOnOverhangs = true,
+        ensureVerticalShellThickness = "ensure_moderate",
+        detectNarrowInternalSolidInfill = false,
+        xyHoleCompensation = 0.11f,
+        xyContourCompensation = -0.07f,
+        elephantFootCompensation = 0.23f,
+        elephantFootCompensationLayers = 3,
+        maxBridgeLength = 26f,
         preciseOuterWalls = true,
         gcodeFlavor = "klipper",
         maxSpeedX = 330f,

@@ -165,6 +165,16 @@ class ProfileStore private constructor(
             infillCombination = options.infillCombination,
             infillCombinationMaxLayerHeight = options.infillCombinationMaxLayerHeight,
             infillCombinationMaxLayerHeightPercent = options.infillCombinationMaxLayerHeightPercent,
+            infillDirection = options.infillDirection,
+            solidInfillDirection = options.solidInfillDirection,
+            alignInfillDirectionToModel = options.alignInfillDirectionToModel,
+            minimumSparseInfillArea = options.minimumSparseInfillArea,
+            infillAnchor = options.infillAnchor,
+            infillAnchorPercent = options.infillAnchorPercent,
+            infillAnchorMax = options.infillAnchorMax,
+            infillAnchorMaxPercent = options.infillAnchorMaxPercent,
+            gapFillTarget = options.gapFillTarget,
+            filterOutGapFill = options.filterOutGapFill,
             travelSpeed = options.travelSpeed,
             firstLayerSpeed = options.firstLayerSpeed,
             supportType = options.supportType,
@@ -199,6 +209,15 @@ class ProfileStore private constructor(
             detectThinWalls = options.detectThinWalls,
             detectOverhangWalls = options.detectOverhangWalls,
             onlyOneWallOnTop = options.onlyOneWallOnTop,
+            onlyOneWallFirstLayer = options.onlyOneWallFirstLayer,
+            extraPerimetersOnOverhangs = options.extraPerimetersOnOverhangs,
+            ensureVerticalShellThickness = options.ensureVerticalShellThickness,
+            detectNarrowInternalSolidInfill = options.detectNarrowInternalSolidInfill,
+            xyHoleCompensation = options.xyHoleCompensation,
+            xyContourCompensation = options.xyContourCompensation,
+            elephantFootCompensation = options.elephantFootCompensation,
+            elephantFootCompensationLayers = options.elephantFootCompensationLayers,
+            maxBridgeLength = options.maxBridgeLength,
             preciseOuterWalls = options.preciseOuterWalls,
         )
         require(ProfileValidation.slicing(profile)) { "Slicing profile contains unsafe values" }
@@ -239,7 +258,7 @@ class ProfileStore private constructor(
         ?: throw IllegalArgumentException("Profile name is required")
 
     private companion object {
-        const val USER_PROFILE_SCHEMA_VERSION = 9
+        const val USER_PROFILE_SCHEMA_VERSION = 10
     }
 }
 
@@ -331,6 +350,16 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("infillCombination", infillCombination)
     .put("infillCombinationMaxLayerHeight", infillCombinationMaxLayerHeight)
     .put("infillCombinationMaxLayerHeightPercent", infillCombinationMaxLayerHeightPercent)
+    .put("infillDirection", infillDirection)
+    .put("solidInfillDirection", solidInfillDirection)
+    .put("alignInfillDirectionToModel", alignInfillDirectionToModel)
+    .put("minimumSparseInfillArea", minimumSparseInfillArea)
+    .put("infillAnchor", infillAnchor)
+    .put("infillAnchorPercent", infillAnchorPercent)
+    .put("infillAnchorMax", infillAnchorMax)
+    .put("infillAnchorMaxPercent", infillAnchorMaxPercent)
+    .put("gapFillTarget", gapFillTarget)
+    .put("filterOutGapFill", filterOutGapFill)
     .put("travelSpeed", travelSpeed)
     .put("firstLayerSpeed", firstLayerSpeed).put("supportType", supportType)
     .put("supportAngle", supportAngle).put("skirtLoops", skirtLoops)
@@ -363,6 +392,15 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("detectThinWalls", detectThinWalls)
     .put("detectOverhangWalls", detectOverhangWalls)
     .put("onlyOneWallOnTop", onlyOneWallOnTop)
+    .put("onlyOneWallFirstLayer", onlyOneWallFirstLayer)
+    .put("extraPerimetersOnOverhangs", extraPerimetersOnOverhangs)
+    .put("ensureVerticalShellThickness", ensureVerticalShellThickness)
+    .put("detectNarrowInternalSolidInfill", detectNarrowInternalSolidInfill)
+    .put("xyHoleCompensation", xyHoleCompensation)
+    .put("xyContourCompensation", xyContourCompensation)
+    .put("elephantFootCompensation", elephantFootCompensation)
+    .put("elephantFootCompensationLayers", elephantFootCompensationLayers)
+    .put("maxBridgeLength", maxBridgeLength)
     .put("preciseOuterWalls", preciseOuterWalls)
     .put("builtIn", builtIn)
     .put("brand", brand ?: JSONObject.NULL)
@@ -483,6 +521,16 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         infillCombination = optBoolean("infillCombination"),
         infillCombinationMaxLayerHeight = optDouble("infillCombinationMaxLayerHeight", 100.0).toFloat(),
         infillCombinationMaxLayerHeightPercent = optBoolean("infillCombinationMaxLayerHeightPercent", true),
+        infillDirection = optDouble("infillDirection", 45.0).toFloat(),
+        solidInfillDirection = optDouble("solidInfillDirection", 45.0).toFloat(),
+        alignInfillDirectionToModel = optBoolean("alignInfillDirectionToModel"),
+        minimumSparseInfillArea = optDouble("minimumSparseInfillArea", 15.0).toFloat(),
+        infillAnchor = optDouble("infillAnchor", 400.0).toFloat(),
+        infillAnchorPercent = optBoolean("infillAnchorPercent", true),
+        infillAnchorMax = optDouble("infillAnchorMax", 20.0).toFloat(),
+        infillAnchorMaxPercent = optBoolean("infillAnchorMaxPercent"),
+        gapFillTarget = optString("gapFillTarget", "nowhere"),
+        filterOutGapFill = optDouble("filterOutGapFill", 0.0).toFloat(),
         travelSpeed = optDouble("travelSpeed", 500.0).toFloat(),
         firstLayerSpeed = optDouble("firstLayerSpeed", 50.0).toFloat(),
         supportType = optString("supportType", "normal"),
@@ -517,6 +565,15 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         detectThinWalls = optBoolean("detectThinWalls"),
         detectOverhangWalls = optBoolean("detectOverhangWalls", true),
         onlyOneWallOnTop = optBoolean("onlyOneWallOnTop"),
+        onlyOneWallFirstLayer = optBoolean("onlyOneWallFirstLayer"),
+        extraPerimetersOnOverhangs = optBoolean("extraPerimetersOnOverhangs"),
+        ensureVerticalShellThickness = optString("ensureVerticalShellThickness", "ensure_all"),
+        detectNarrowInternalSolidInfill = optBoolean("detectNarrowInternalSolidInfill", true),
+        xyHoleCompensation = optDouble("xyHoleCompensation", 0.0).toFloat(),
+        xyContourCompensation = optDouble("xyContourCompensation", 0.0).toFloat(),
+        elephantFootCompensation = optDouble("elephantFootCompensation", 0.0).toFloat(),
+        elephantFootCompensationLayers = optInt("elephantFootCompensationLayers", 1),
+        maxBridgeLength = optDouble("maxBridgeLength", 10.0).toFloat(),
         preciseOuterWalls = optBoolean("preciseOuterWalls", true),
         brand = optionalString("brand"),
         compatiblePrinters = stringList("compatiblePrinters"),

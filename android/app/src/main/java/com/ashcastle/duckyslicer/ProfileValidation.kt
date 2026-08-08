@@ -122,6 +122,13 @@ internal object ProfileValidation {
                 profile.infillCombinationMaxLayerHeight,
                 profile.infillCombinationMaxLayerHeightPercent,
             ) &&
+            profile.infillDirection in 0f..360f &&
+            profile.solidInfillDirection in 0f..360f &&
+            profile.minimumSparseInfillArea in 0f..1_000_000f &&
+            profile.infillAnchor in 0f..1_000f &&
+            profile.infillAnchorMax in 0f..1_000f &&
+            profile.gapFillTarget in setOf("everywhere", "topbottom", "nowhere") &&
+            profile.filterOutGapFill in 0f..1_000_000f &&
             profile.supportType in setOf("normal", "tree") &&
             profile.supportAngle in 0f..90f &&
             profile.supportInterfaceTopLayers in 0..20 &&
@@ -140,6 +147,14 @@ internal object ProfileValidation {
             profile.ironingFlow in 0f..100f &&
             profile.ironingSpacing in 0f..1f &&
             profile.ironingSpeed in 0f..2_000f &&
+            profile.ensureVerticalShellThickness in setOf(
+                "none", "ensure_critical_only", "ensure_moderate", "ensure_all",
+            ) &&
+            profile.xyHoleCompensation in -2f..2f &&
+            profile.xyContourCompensation in -2f..2f &&
+            profile.elephantFootCompensation in 0f..2f &&
+            profile.elephantFootCompensationLayers in 1..100 &&
+            profile.maxBridgeLength in 0f..1_000_000f &&
             profile.skirtLoops in 0..100 &&
             profile.skirtDistance in 0f..1_000f &&
             profile.brimWidth in 0f..1_000f &&

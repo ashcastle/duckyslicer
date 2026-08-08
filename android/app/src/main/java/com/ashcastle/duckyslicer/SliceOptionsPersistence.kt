@@ -108,6 +108,16 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         infillCombination = infillCombination,
         infillCombinationMaxLayerHeight = infillCombinationMaxLayerHeight,
         infillCombinationMaxLayerHeightPercent = infillCombinationMaxLayerHeightPercent,
+        infillDirection = infillDirection,
+        solidInfillDirection = solidInfillDirection,
+        alignInfillDirectionToModel = alignInfillDirectionToModel,
+        minimumSparseInfillArea = minimumSparseInfillArea,
+        infillAnchor = infillAnchor,
+        infillAnchorPercent = infillAnchorPercent,
+        infillAnchorMax = infillAnchorMax,
+        infillAnchorMaxPercent = infillAnchorMaxPercent,
+        gapFillTarget = gapFillTarget,
+        filterOutGapFill = filterOutGapFill,
         travelSpeed = travelSpeed,
         firstLayerSpeed = firstLayerSpeed,
         supportType = supportType,
@@ -142,6 +152,15 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         detectThinWalls = detectThinWalls,
         detectOverhangWalls = detectOverhangWalls,
         onlyOneWallOnTop = onlyOneWallOnTop,
+        onlyOneWallFirstLayer = onlyOneWallFirstLayer,
+        extraPerimetersOnOverhangs = extraPerimetersOnOverhangs,
+        ensureVerticalShellThickness = ensureVerticalShellThickness,
+        detectNarrowInternalSolidInfill = detectNarrowInternalSolidInfill,
+        xyHoleCompensation = xyHoleCompensation,
+        xyContourCompensation = xyContourCompensation,
+        elephantFootCompensation = elephantFootCompensation,
+        elephantFootCompensationLayers = elephantFootCompensationLayers,
+        maxBridgeLength = maxBridgeLength,
         preciseOuterWalls = preciseOuterWalls,
     )
     require(ProfileValidation.printer(printer)) { "Invalid project printer settings" }
@@ -180,7 +199,7 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 6
+private const val SLICE_OPTIONS_FORMAT_VERSION = 7
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f
