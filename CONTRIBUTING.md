@@ -39,6 +39,7 @@ pull request:
 cd rust/duckyslicer-jni
 cargo fmt --check
 cargo test --locked
+cargo test --release --locked
 cargo clippy --locked -- -D warnings
 
 cd ../../android
@@ -47,9 +48,10 @@ cd ../../android
   :app:assembleDebugAndroidTest :app:lintDebug
 
 cd ..
-python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain
+python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety
 python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
 python3 tools/verify_gradle_supply_chain.py
+python3 tools/verify_native_safety.py
 python3 tools/verify_workflows.py
 ```
 

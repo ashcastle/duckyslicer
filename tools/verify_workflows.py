@@ -62,6 +62,9 @@ def main() -> None:
         "Gradle trust data is structurally verified": (
             "python3 tools/verify_gradle_supply_chain.py"
         ),
+        "Rust JNI failure containment is verified": (
+            "python3 tools/verify_native_safety.py"
+        ),
     }
     for description, marker in required_android_gates.items():
         if marker not in android_source:
@@ -91,6 +94,9 @@ def main() -> None:
         ),
         "Gradle trust data is structurally verified": (
             "python3 tools/verify_gradle_supply_chain.py"
+        ),
+        "Rust JNI failure containment is verified": (
+            "python3 tools/verify_native_safety.py"
         ),
     }
     for description, marker in required_release_gates.items():

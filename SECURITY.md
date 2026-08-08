@@ -58,6 +58,11 @@ or transformation code. That boundary accepts regular files, applies the same
 non-finite or extreme coordinates, and writes transformed STL through a temporary
 file before an atomic replacement. The host corpus and ARM64 device suite exercise
 these rejection paths and verify that JNI remains usable after an invalid input.
+Every exported Rust JNI operation also contains any unwind-capable Rust panic
+before it can cross the FFI boundary and converts it to a generic failure response.
+This containment does not recover allocation failure, native signals, undefined
+behavior, or faults inside the inherited C++ runtime; reports that reach any of
+those process-level failure modes remain in scope.
 
 Never include printer credentials, signing keys, personal models, or generated
 G-code containing private paths or identifiers in a report.
