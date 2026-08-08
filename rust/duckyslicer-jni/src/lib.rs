@@ -1,9 +1,10 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 use std::ffi::{CStr, c_char};
-use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Write};
-use std::path::Path;
+use std::fs::{File, OpenOptions};
+use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use jni::JNIEnv;
 use jni::objects::{JClass, JString};
@@ -14,6 +15,12 @@ use thiserror::Error;
 unsafe extern "C" {
     fn duckyslicer_core_version() -> *const c_char;
 }
+
+const MAX_MODEL_IMPORT_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_TEXT_LINE_BYTES: usize = 64 * 1024;
+const MAX_STL_COORDINATE_ABS_MM: f32 = 1_000_000.0;
+const MAX_GCODE_COORDINATE_ABS_MM: f32 = 1_000_000.0;
+static TEMP_OUTPUT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Error)]
 enum EngineError {
@@ -116,9 +123,153 @@ struct ErrorResponse<'a> {
     error: &'a str,
 }
 
+trait ReadSeek: Read + Seek {}
+
+impl<T: Read + Seek> ReadSeek for T {}
+
+struct LineBoundedReader<R> {
+    inner: R,
+    bytes_since_newline: usize,
+}
+
+impl<R> LineBoundedReader<R> {
+    fn new(inner: R) -> Self {
+        Self {
+            inner,
+            bytes_since_newline: 0,
+        }
+    }
+}
+
+impl<R: Read> Read for LineBoundedReader<R> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let count = self.inner.read(buffer)?;
+        for byte in &buffer[..count] {
+            if *byte == b'\n' {
+                self.bytes_since_newline = 0;
+            } else {
+                self.bytes_since_newline = self
+                    .bytes_since_newline
+                    .checked_add(1)
+                    .ok_or_else(|| std::io::Error::other("text line length overflow"))?;
+                if self.bytes_since_newline > MAX_TEXT_LINE_BYTES {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "text line exceeds the supported limit",
+                    ));
+                }
+            }
+        }
+        Ok(count)
+    }
+}
+
+impl<R: Seek> Seek for LineBoundedReader<R> {
+    fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        let offset = self.inner.seek(position)?;
+        self.bytes_since_newline = 0;
+        Ok(offset)
+    }
+}
+
+fn open_regular_file(path: &str) -> Result<File, EngineError> {
+    let file = File::open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(EngineError::Parse(
+            "Input must be a regular file".to_owned(),
+        ));
+    }
+    Ok(file)
+}
+
+fn open_stl_input(path: &str) -> Result<Box<dyn ReadSeek>, EngineError> {
+    let mut file = open_regular_file(path)?;
+    let size = file.metadata()?.len();
+    if size == 0 {
+        return Err(EngineError::Empty);
+    }
+    if size > MAX_MODEL_IMPORT_BYTES {
+        return Err(EngineError::Parse(
+            "STL exceeds the supported import size".to_owned(),
+        ));
+    }
+    let mut prefix = [0u8; 6];
+    let prefix_length = file.read(&mut prefix)?;
+    file.seek(SeekFrom::Start(0))?;
+    if prefix_length == prefix.len() && prefix == *b"solid " {
+        Ok(Box::new(LineBoundedReader::new(file)))
+    } else {
+        Ok(Box::new(file))
+    }
+}
+
+fn validate_triangle(triangle: &stl_io::Triangle) -> Result<(), EngineError> {
+    let invalid_normal = triangle
+        .normal
+        .0
+        .iter()
+        .any(|value| !value.is_finite() || value.abs() > MAX_STL_COORDINATE_ABS_MM);
+    let invalid_vertex = triangle
+        .vertices
+        .iter()
+        .flat_map(|vertex| vertex.0)
+        .any(|value| !value.is_finite() || value.abs() > MAX_STL_COORDINATE_ABS_MM);
+    if invalid_normal || invalid_vertex {
+        return Err(EngineError::Parse(
+            "STL contains an invalid or out-of-range coordinate".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+struct TemporaryOutput {
+    path: PathBuf,
+    committed: bool,
+}
+
+impl Drop for TemporaryOutput {
+    fn drop(&mut self) {
+        if !self.committed {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+}
+
+fn create_temporary_output(output_path: &Path) -> Result<(File, TemporaryOutput), EngineError> {
+    let parent = output_path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = output_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("model.stl");
+    for _ in 0..128 {
+        let sequence = TEMP_OUTPUT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = parent.join(format!(
+            ".{file_name}.{}.{}.tmp",
+            std::process::id(),
+            sequence
+        ));
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(file) => {
+                return Ok((
+                    file,
+                    TemporaryOutput {
+                        path,
+                        committed: false,
+                    },
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Err(EngineError::Parse(
+        "Unable to reserve a temporary STL output".to_owned(),
+    ))
+}
+
 fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
     const PREVIEW_TRIANGLE_LIMIT: usize = 3_500;
-    let mut file = BufReader::new(File::open(path)?);
+    let mut file = open_stl_input(path)?;
     let triangles = stl_io::create_stl_reader(&mut file)
         .map_err(|error| EngineError::Parse(error.to_string()))?;
     let mut triangle_count = 0usize;
@@ -129,12 +280,8 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
 
     for triangle in triangles {
         let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
+        validate_triangle(&triangle)?;
         let vertices = triangle.vertices.map(|vertex| vertex.0);
-        if vertices.iter().flatten().any(|value| !value.is_finite()) {
-            return Err(EngineError::Parse(
-                "STL contains a non-finite coordinate".to_owned(),
-            ));
-        }
         let ordinal = triangle_count;
         triangle_count = triangle_count
             .checked_add(1)
@@ -249,6 +396,18 @@ fn transform_stl(
     output_path: &str,
     transform: &StlTransform,
 ) -> Result<(), EngineError> {
+    let input = Path::new(input_path);
+    let output = Path::new(output_path);
+    if input == output
+        || std::fs::canonicalize(input)
+            .ok()
+            .zip(std::fs::canonicalize(output).ok())
+            .is_some_and(|(input, output)| input == output)
+    {
+        return Err(EngineError::Parse(
+            "Input and output STL paths must be different".to_owned(),
+        ));
+    }
     if !transform.scale.is_finite() || !(0.05..=10.0).contains(&transform.scale) {
         return Err(EngineError::Parse(
             "Scale must be between 5% and 1000%".to_owned(),
@@ -259,14 +418,14 @@ fn transform_stl(
         .iter()
         .chain(transform.offset_mm.iter())
         .chain(transform.rotation_deg.iter())
-        .any(|value| !value.is_finite())
+        .any(|value| !value.is_finite() || value.abs() > MAX_STL_COORDINATE_ABS_MM)
     {
         return Err(EngineError::Parse(
             "Transform contains an invalid value".to_owned(),
         ));
     }
 
-    let mut first_pass_file = BufReader::new(File::open(input_path)?);
+    let mut first_pass_file = open_stl_input(input_path)?;
     let first_pass = stl_io::create_stl_reader(&mut first_pass_file)
         .map_err(|error| EngineError::Parse(error.to_string()))?;
     let mut triangle_count = 0u32;
@@ -274,12 +433,8 @@ fn transform_stl(
     let mut max = [f32::NEG_INFINITY; 3];
     for triangle in first_pass {
         let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
+        validate_triangle(&triangle)?;
         let vertices = triangle.vertices.map(|vertex| vertex.0);
-        if vertices.iter().flatten().any(|value| !value.is_finite()) {
-            return Err(EngineError::Parse(
-                "STL contains a non-finite coordinate".to_owned(),
-            ));
-        }
         triangle_count = triangle_count
             .checked_add(1)
             .ok_or_else(|| EngineError::Parse("STL contains too many triangles".to_owned()))?;
@@ -299,12 +454,13 @@ fn transform_stl(
         (min[1] + max[1]) / 2.0,
         (min[2] + max[2]) / 2.0,
     ];
-    let mut minimum_pass_file = BufReader::new(File::open(input_path)?);
+    let mut minimum_pass_file = open_stl_input(input_path)?;
     let minimum_pass = stl_io::create_stl_reader(&mut minimum_pass_file)
         .map_err(|error| EngineError::Parse(error.to_string()))?;
     let mut transformed_min_z = f32::INFINITY;
     for triangle in minimum_pass {
         let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
+        validate_triangle(&triangle)?;
         for vertex in triangle.vertices {
             let local = [
                 (vertex[0] - source_center[0]) * transform.scale,
@@ -316,18 +472,32 @@ fn transform_stl(
         }
     }
 
-    let mut output_pass_file = BufReader::new(File::open(input_path)?);
+    if !transformed_min_z.is_finite() {
+        return Err(EngineError::Parse(
+            "STL transform produced an invalid coordinate".to_owned(),
+        ));
+    }
+
+    let mut output_pass_file = open_stl_input(input_path)?;
     let output_pass = stl_io::create_stl_reader(&mut output_pass_file)
         .map_err(|error| EngineError::Parse(error.to_string()))?;
-    let output_file = File::create(output_path)?;
+    let (output_file, mut temporary) = create_temporary_output(output)?;
     let mut writer = BufWriter::new(output_file);
     writer.write_all(&[0u8; 80])?;
     writer.write_all(&triangle_count.to_le_bytes())?;
     for triangle in output_pass {
         let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
+        validate_triangle(&triangle)?;
         let vertices = triangle.vertices.map(|vertex| {
             transformed_vertex(vertex.0, source_center, transformed_min_z, transform)
         });
+        if vertices.iter().flatten().any(|value| {
+            !value.is_finite() || value.abs() > MAX_STL_COORDINATE_ABS_MM * transform.scale.max(1.0)
+        }) {
+            return Err(EngineError::Parse(
+                "STL transform produced an invalid or out-of-range coordinate".to_owned(),
+            ));
+        }
         for value in triangle_normal(vertices) {
             write_f32(&mut writer, value)?;
         }
@@ -340,6 +510,9 @@ fn transform_stl(
     }
     writer.flush()?;
     writer.get_ref().sync_all()?;
+    drop(writer);
+    std::fs::rename(&temporary.path, output)?;
+    temporary.committed = true;
     Ok(())
 }
 
@@ -348,6 +521,7 @@ fn parse_axis(line: &str, axis: char) -> Option<f32> {
         .find(|token| token.starts_with(axis))
         .and_then(|token| token.get(1..))
         .and_then(|value| value.parse().ok())
+        .filter(|value: &f32| value.is_finite())
 }
 
 fn preview_gcode(
@@ -357,7 +531,7 @@ fn preview_gcode(
 ) -> Result<GcodeLayerPreview, EngineError> {
     let start_layer = requested_start_layer.min(requested_end_layer);
     let end_layer = requested_start_layer.max(requested_end_layer);
-    let reader = BufReader::new(File::open(path)?);
+    let mut reader = BufReader::new(open_regular_file(path)?);
     let mut current_layer: Option<usize> = None;
     let mut layer_count = 0usize;
     let mut layer_z = 0.0f32;
@@ -371,18 +545,41 @@ fn preview_gcode(
     let mut segments = Vec::new();
     let mut segment_stride = 1usize;
     let mut seen_segments = 0usize;
+    let mut line_buffer = Vec::with_capacity(256);
 
-    for line in reader.lines() {
-        let line = line?;
+    loop {
+        line_buffer.clear();
+        let bytes_read = (&mut reader)
+            .take((MAX_TEXT_LINE_BYTES + 1) as u64)
+            .read_until(b'\n', &mut line_buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        if line_buffer.len() > MAX_TEXT_LINE_BYTES {
+            return Err(EngineError::Parse(
+                "G-code line exceeds the supported limit".to_owned(),
+            ));
+        }
+        let line = std::str::from_utf8(&line_buffer)
+            .map_err(|_| EngineError::Parse("G-code contains invalid UTF-8".to_owned()))?;
         let trimmed = line.trim();
         if trimmed == ";LAYER_CHANGE" {
-            let next = current_layer.map_or(0, |layer| layer + 1);
+            let next = current_layer
+                .map(|layer| layer.checked_add(1))
+                .unwrap_or(Some(0))
+                .ok_or_else(|| EngineError::Parse("G-code has too many layers".to_owned()))?;
             current_layer = Some(next);
-            layer_count = layer_count.max(next + 1);
+            layer_count = layer_count.max(
+                next.checked_add(1)
+                    .ok_or_else(|| EngineError::Parse("G-code has too many layers".to_owned()))?,
+            );
             continue;
         }
         if let Some(value) = trimmed.strip_prefix(";Z:") {
-            if let Ok(parsed) = value.parse::<f32>() {
+            if let Ok(parsed) = value.parse::<f32>()
+                && parsed.is_finite()
+                && parsed.abs() <= MAX_GCODE_COORDINATE_ABS_MM
+            {
                 layer_z = parsed;
                 if current_layer.is_some_and(|layer| (start_layer..=end_layer).contains(&layer)) {
                     min_requested_z =
@@ -417,8 +614,12 @@ fn preview_gcode(
             continue;
         }
 
-        let next_x = parse_axis(command, 'X').unwrap_or(x);
-        let next_y = parse_axis(command, 'Y').unwrap_or(y);
+        let next_x = parse_axis(command, 'X')
+            .filter(|value| value.abs() <= MAX_GCODE_COORDINATE_ABS_MM)
+            .unwrap_or(x);
+        let next_y = parse_axis(command, 'Y')
+            .filter(|value| value.abs() <= MAX_GCODE_COORDINATE_ABS_MM)
+            .unwrap_or(y);
         let next_e = parse_axis(command, 'E');
         let extruding = next_e.is_some_and(|value| {
             if relative_extrusion {
@@ -431,7 +632,9 @@ fn preview_gcode(
         let in_requested_range =
             current_layer.is_some_and(|layer| (start_layer..=end_layer).contains(&layer));
         if in_requested_range && extruding && (next_x != x || next_y != y) {
-            seen_segments += 1;
+            seen_segments = seen_segments.checked_add(1).ok_or_else(|| {
+                EngineError::Parse("G-code contains too many extrusion segments".to_owned())
+            })?;
             if seen_segments.is_multiple_of(segment_stride) {
                 segments.push([x, y, next_x, next_y, layer_z, toolpath_role.code()]);
             }
@@ -447,11 +650,17 @@ fn preview_gcode(
         x = next_x;
         y = next_y;
         if let Some(next_e) = next_e {
-            e = if relative_extrusion {
+            let updated = if relative_extrusion {
                 e + next_e
             } else {
                 next_e
             };
+            if !updated.is_finite() {
+                return Err(EngineError::Parse(
+                    "G-code extrusion position is out of range".to_owned(),
+                ));
+            }
+            e = updated;
         }
     }
 
@@ -646,6 +855,41 @@ mod tests {
     }
 
     #[test]
+    fn stl_inspection_rejects_extreme_finite_coordinates() {
+        let path = std::env::temp_dir().join(format!(
+            "duckyslicer-extreme-inspection-{}.stl",
+            std::process::id(),
+        ));
+        let mut file = File::create(&path).expect("create extreme STL fixture");
+        writeln!(file, "solid extreme\nfacet normal 0 0 1\nouter loop\nvertex 3e38 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid extreme")
+            .expect("write fixture");
+        drop(file);
+
+        let result = inspect_stl(path.to_str().expect("utf8 path"));
+        std::fs::remove_file(path).expect("remove fixture");
+
+        assert!(matches!(result, Err(EngineError::Parse(_))));
+    }
+
+    #[test]
+    fn ascii_stl_rejects_an_oversized_single_line() {
+        let path = std::env::temp_dir().join(format!(
+            "duckyslicer-long-line-inspection-{}.stl",
+            std::process::id(),
+        ));
+        let mut file = File::create(&path).expect("create long-line STL fixture");
+        file.write_all(b"solid ").expect("write STL prefix");
+        file.write_all(&vec![b'x'; MAX_TEXT_LINE_BYTES + 1])
+            .expect("write oversized STL line");
+        drop(file);
+
+        let result = inspect_stl(path.to_str().expect("utf8 path"));
+        std::fs::remove_file(path).expect("remove fixture");
+
+        assert!(matches!(result, Err(EngineError::Parse(_))));
+    }
+
+    #[test]
     fn toolpath_roles_cover_surface_support_and_adhesion_labels() {
         assert_eq!(
             ToolpathRole::from_label("Outer wall"),
@@ -710,6 +954,66 @@ mod tests {
         );
         assert_eq!(clamped.start_layer, 1);
         assert_eq!(clamped.end_layer, 1);
+    }
+
+    #[test]
+    fn gcode_preview_rejects_an_oversized_single_line() {
+        let path = std::env::temp_dir().join(format!(
+            "duckyslicer-long-line-preview-{}.gcode",
+            std::process::id(),
+        ));
+        let mut file = File::create(&path).expect("create long-line G-code fixture");
+        file.write_all(&vec![b';'; MAX_TEXT_LINE_BYTES + 1])
+            .expect("write oversized G-code line");
+        drop(file);
+
+        let result = preview_gcode(path.to_str().expect("utf8 path"), 0, 1);
+        std::fs::remove_file(path).expect("remove fixture");
+
+        assert!(
+            matches!(result, Err(EngineError::Parse(message)) if message.contains("line exceeds"))
+        );
+    }
+
+    #[test]
+    fn gcode_preview_ignores_non_finite_motion_coordinates() {
+        let path = std::env::temp_dir().join(format!(
+            "duckyslicer-non-finite-preview-{}.gcode",
+            std::process::id(),
+        ));
+        let mut file = File::create(&path).expect("create non-finite G-code fixture");
+        writeln!(
+            file,
+            "M83\n;LAYER_CHANGE\n;Z:NaN\nG1 XNaN Yinf E1\nG1 X10 Y10 E1"
+        )
+        .expect("write fixture");
+        drop(file);
+
+        let preview = preview_gcode(path.to_str().expect("utf8 path"), 0, 0)
+            .expect("parse bounded coordinates");
+        std::fs::remove_file(path).expect("remove fixture");
+
+        assert_eq!(preview.min_z_mm, 0.0);
+        assert_eq!(preview.max_z_mm, 0.0);
+        assert_eq!(preview.segments, vec![[0.0, 0.0, 10.0, 10.0, 0.0, 8.0]]);
+    }
+
+    #[test]
+    fn gcode_preview_rejects_relative_extrusion_overflow() {
+        let path = std::env::temp_dir().join(format!(
+            "duckyslicer-extrusion-overflow-{}.gcode",
+            std::process::id(),
+        ));
+        let mut file = File::create(&path).expect("create overflow G-code fixture");
+        writeln!(file, "M83\n;LAYER_CHANGE\nG1 X1 E3e38\nG1 X2 E3e38").expect("write fixture");
+        drop(file);
+
+        let result = preview_gcode(path.to_str().expect("utf8 path"), 0, 0);
+        std::fs::remove_file(path).expect("remove fixture");
+
+        assert!(
+            matches!(result, Err(EngineError::Parse(message)) if message.contains("out of range"))
+        );
     }
 
     #[test]
@@ -784,5 +1088,32 @@ mod tests {
             std::fs::remove_file(output_path).expect("remove unexpected output");
         }
         assert!(matches!(result, Err(EngineError::Parse(_))));
+    }
+
+    #[test]
+    fn stl_transform_rejects_same_input_and_output_without_modifying_source() {
+        let path = std::env::temp_dir().join(format!(
+            "duckyslicer-same-path-transform-{}.stl",
+            std::process::id(),
+        ));
+        let source = b"solid model\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid model\n";
+        std::fs::write(&path, source).expect("write same-path fixture");
+
+        let path_text = path.to_str().expect("utf8 path");
+        let result = transform_stl(
+            path_text,
+            path_text,
+            &StlTransform {
+                bed_center_mm: [100.0, 100.0],
+                offset_mm: [0.0, 0.0],
+                rotation_deg: [0.0, 0.0, 0.0],
+                scale: 1.0,
+            },
+        );
+        let after = std::fs::read(&path).expect("read preserved source");
+        std::fs::remove_file(path).expect("remove fixture");
+
+        assert!(matches!(result, Err(EngineError::Parse(_))));
+        assert_eq!(after, source);
     }
 }
