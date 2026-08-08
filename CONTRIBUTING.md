@@ -13,6 +13,9 @@ avoid introducing an account or cloud requirement.
 - Prefer Rust for new native safety boundaries and parsers. Changes to the
   inherited C++ slicing engine should be narrowly scoped and covered by a
   regression test.
+- Treat imported STL and G-code as untrusted. Avoid unbounded line reads or unchecked
+  coordinate arithmetic, preserve atomic outputs, and add both host corpus coverage
+  and a JNI recovery assertion for new parser failure modes.
 - Keep user-facing copy plain and non-technical. `Slice`, `G-code`, printer,
   filament, and process terminology may follow established slicer language.
 

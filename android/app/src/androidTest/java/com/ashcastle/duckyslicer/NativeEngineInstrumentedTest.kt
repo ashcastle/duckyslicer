@@ -737,6 +737,68 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun malformedInputsFailClosedWithoutKillingJniProcess() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = File(context.cacheDir, "malformed-native-inputs-${System.nanoTime()}")
+        assertTrue("Malformed-input fixture directory must be created", root.mkdirs())
+
+        try {
+            val oversizedGcode = File(root, "oversized-line.gcode")
+            oversizedGcode.writeText("G1 X${"1".repeat(65_537)}\n;LAYER_CHANGE\n;Z:0.2\n")
+            val gcodeResult = JSONObject(
+                NativeEngine.previewGcodeRange(oversizedGcode.absolutePath, 0, Int.MAX_VALUE),
+            )
+            assertTrue("Oversized G-code lines must be rejected", !gcodeResult.optBoolean("ok"))
+            assertTrue(
+                "G-code rejection must identify the bounded line",
+                gcodeResult.optString("error").contains("line exceeds"),
+            )
+
+            val extremeStl = File(root, "extreme-coordinate.stl")
+            extremeStl.writeText(
+                """
+                solid extreme
+                  facet normal 0 0 1
+                    outer loop
+                      vertex 3e38 0 0
+                      vertex 0 1 0
+                      vertex 0 0 1
+                    endloop
+                  endfacet
+                endsolid extreme
+                """.trimIndent(),
+            )
+            val stlResult = JSONObject(NativeEngine.inspectStl(extremeStl.absolutePath))
+            assertTrue("Out-of-range STL coordinates must be rejected", !stlResult.optBoolean("ok"))
+            assertTrue(
+                "STL rejection must identify the coordinate",
+                stlResult.optString("error").contains("coordinate"),
+            )
+
+            val samePath = File(root, "same-path.stl")
+            fixtureModel().copyTo(samePath)
+            val originalBytes = samePath.readBytes()
+            val transformResult = JSONObject(
+                NativeEngine.transformStl(
+                    samePath.absolutePath,
+                    samePath.absolutePath,
+                    """{"bedCenterMm":[128,128],"offsetMm":[0,0],"rotationDeg":[0,0,0],"scale":1}""",
+                ),
+            )
+            assertTrue("In-place STL transforms must be rejected", !transformResult.optBoolean("ok"))
+            assertTrue("Rejected transforms must preserve the source", originalBytes.contentEquals(samePath.readBytes()))
+
+            val recoveryResult = JSONObject(NativeEngine.inspectStl(fixtureModel().absolutePath))
+            assertTrue(
+                "JNI must remain usable after malformed inputs: ${recoveryResult.optString("error")}",
+                recoveryResult.optBoolean("ok"),
+            )
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun attachedStlProducesGcodeOnDevice() {
         val model = fixtureModel()
         var highestProgress = 0

@@ -57,12 +57,13 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - Optional OctoPrint and Klipper/Moonraker status, upload, start, pause, resume, and cancel controls
 - Printer access keys encrypted with Android Keystore; unencrypted connections limited to local addresses
 - No account, cloud dependency, analytics SDK, or Bambu network plug-in
+- Fail-closed STL and G-code handling with bounded text lines, finite coordinate checks, and atomic transformed-model writes at the Rust/JNI boundary
 - 16 KB page-size-compatible ARM64 native libraries for current Android devices
 - Immutable GitHub Action pins and checksum-verified, version-locked Gradle artifacts;
   releases publish only after the full ARM64 device suite passes
 
 The device test suite uses a repository geometry fixture and verifies Rust mesh
-inspection, native slicing, non-empty G-code, all generated layers, extrusion paths
+inspection, malformed-input recovery, native slicing, non-empty G-code, all generated layers, extrusion paths
 with real Z coordinates, hollow-solid cavity preservation, project recovery through native reinspection, and semantic
 G-code contracts for real Creality/Marlin, Prusa/Marlin 2, and Anycubic/Klipper
 profiles. Local

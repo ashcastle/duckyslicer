@@ -52,5 +52,12 @@ host; unencrypted HTTP profiles are restricted to loopback, link-local, private,
 carrier-grade NAT, and `.local` addresses. Remote printing always requires a
 separate user action after upload, with confirmation enabled by default.
 
+Untrusted STL and G-code cross a Rust validation boundary before reaching preview
+or transformation code. That boundary accepts regular files, applies the same
+512 MiB STL limit as Android import, bounds individual text lines, rejects
+non-finite or extreme coordinates, and writes transformed STL through a temporary
+file before an atomic replacement. The host corpus and ARM64 device suite exercise
+these rejection paths and verify that JNI remains usable after an invalid input.
+
 Never include printer credentials, signing keys, personal models, or generated
 G-code containing private paths or identifiers in a report.
