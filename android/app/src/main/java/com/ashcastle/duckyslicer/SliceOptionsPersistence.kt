@@ -64,6 +64,7 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         skirtDistance = skirtDistance,
         outerWallLineWidth = outerWallLineWidth,
         innerWallLineWidth = innerWallLineWidth,
+        wallGenerator = wallGenerator,
         wallSequence = wallSequence,
         detectThinWalls = detectThinWalls,
         detectOverhangWalls = detectOverhangWalls,
@@ -85,7 +86,7 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
 }
 
 internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatching {
-    require(getInt("formatVersion") == SLICE_OPTIONS_FORMAT_VERSION) {
+    require(getInt("formatVersion") in MIN_SLICE_OPTIONS_FORMAT_VERSION..SLICE_OPTIONS_FORMAT_VERSION) {
         "Unsupported slice settings"
     }
     val printer = requireNotNull(getJSONObject("printer").toPrinterProfileOrNull())
@@ -106,6 +107,7 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 1
+private const val SLICE_OPTIONS_FORMAT_VERSION = 2
+private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f

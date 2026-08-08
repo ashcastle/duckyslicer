@@ -50,7 +50,7 @@ diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
 index 116a4a85..68d012ad 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -68,6 +68,16 @@ struct SliceConfig {
+@@ -68,6 +68,17 @@ struct SliceConfig {
      float skirt_distance = 6.0f;
      float brim_width = 0.0f;
  
@@ -58,6 +58,7 @@ index 116a4a85..68d012ad 100644
 +    // configurable instead of reducing a process profile to wall count alone.
 +    float outer_wall_line_width = 0.42f;
 +    float inner_wall_line_width = 0.45f;
++    std::string wall_generator = "arachne";
 +    std::string wall_sequence = "inner-outer";
 +    bool detect_thin_walls = false;
 +    bool detect_overhang_walls = true;
@@ -67,7 +68,7 @@ index 116a4a85..68d012ad 100644
      // Printer bed (Snapmaker U1: 270x270x270mm)
      float bed_size_x = 270.0f;
      float bed_size_y = 270.0f;
-@@ -98,6 +108,22 @@ struct SliceConfig {
+@@ -98,6 +109,22 @@ struct SliceConfig {
      // template expressions at G-code generation time.
      std::string machine_start_gcode;
      std::string machine_end_gcode;
@@ -94,12 +95,13 @@ diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_
 index d93efb7d..e189d9bf 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -114,6 +114,13 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -114,6 +114,14 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.skirt_loops = getInt("skirtLoops");
      config.skirt_distance = getFloat("skirtDistance");
      config.brim_width = getFloat("brimWidth");
 +    config.outer_wall_line_width = getFloat("outerWallLineWidth");
 +    config.inner_wall_line_width = getFloat("innerWallLineWidth");
++    config.wall_generator = getString("wallGenerator");
 +    config.wall_sequence = getString("wallSequence");
 +    config.detect_thin_walls = getBool("detectThinWalls");
 +    config.detect_overhang_walls = getBool("detectOverhangWalls");
@@ -108,7 +110,7 @@ index d93efb7d..e189d9bf 100644
  
      config.bed_size_x = getFloat("bedSizeX");
      config.bed_size_y = getFloat("bedSizeY");
-@@ -137,6 +144,22 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -137,6 +145,22 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
      config.machine_start_gcode = getString("machineStartGcode");
      config.machine_end_gcode = getString("machineEndGcode");
@@ -131,12 +133,13 @@ index d93efb7d..e189d9bf 100644
  
      // F91: per-extruder filament tuning from the user's filament library.
      config.filament_flow_ratios = getFloatArray("filamentFlowRatios");
-@@ -252,6 +275,13 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -252,6 +276,14 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setInt("skirtLoops", config.skirt_loops);
      setFloat("skirtDistance", config.skirt_distance);
      setFloat("brimWidth", config.brim_width);
 +    setFloat("outerWallLineWidth", config.outer_wall_line_width);
 +    setFloat("innerWallLineWidth", config.inner_wall_line_width);
++    setString("wallGenerator", config.wall_generator);
 +    setString("wallSequence", config.wall_sequence);
 +    setBool("detectThinWalls", config.detect_thin_walls);
 +    setBool("detectOverhangWalls", config.detect_overhang_walls);
@@ -145,7 +148,7 @@ index d93efb7d..e189d9bf 100644
      setFloat("bedSizeX", config.bed_size_x);
      setFloat("bedSizeY", config.bed_size_y);
      setFloat("maxPrintHeight", config.max_print_height);
-@@ -271,6 +301,22 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -271,6 +303,22 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setFloat("wipeTowerWidth", config.wipe_tower_width);
      setString("machineStartGcode", config.machine_start_gcode);
      setString("machineEndGcode", config.machine_end_gcode);
@@ -301,9 +304,18 @@ index 8d61c9cf..28b61f35 100644
      dpc.set_key_value("top_surface_line_width",  new Slic3r::ConfigOptionFloatOrPercent(nd * 1.05,  false));
      dpc.set_key_value("sparse_infill_line_width",new Slic3r::ConfigOptionFloatOrPercent(nd * 1.125, false));
      dpc.set_key_value("initial_layer_line_width",new Slic3r::ConfigOptionFloatOrPercent(nd * 1.25,  false));
-@@ -494,6 +514,18 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
-     // issue; until it's fixed upstream we must not let the user reach the classic path.
-     dpc.set_key_value("wall_generator", new Slic3r::ConfigOptionEnum<Slic3r::PerimeterGeneratorType>(Slic3r::PerimeterGeneratorType::Arachne));
+@@ -489,12 +509,22 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+ 
+-    // Wall generator: keep clamped to Arachne for everyone.
+-    // OrcaSlicer 2.2.4's classic perimeter generator crashes (SIGSEGV in
+-    // PerimeterGenerator::process_classic / MultiPoint dtor) on the U1 process config
+-    // — surfaced 2026-05-25 when F87 first un-gated this key. Pre-existing OrcaSlicer
+-    // issue; until it's fixed upstream we must not let the user reach the classic path.
+-    dpc.set_key_value("wall_generator", new Slic3r::ConfigOptionEnum<Slic3r::PerimeterGeneratorType>(Slic3r::PerimeterGeneratorType::Arachne));
++    const Slic3r::PerimeterGeneratorType wall_generator = config.wall_generator == "classic"
++        ? Slic3r::PerimeterGeneratorType::Classic
++        : Slic3r::PerimeterGeneratorType::Arachne;
++    dpc.set_key_value("wall_generator", new Slic3r::ConfigOptionEnum<Slic3r::PerimeterGeneratorType>(wall_generator));
  
 +    Slic3r::WallSequence wall_sequence = Slic3r::WallSequence::InnerOuter;
 +    if (config.wall_sequence == "outer-inner") {
@@ -320,3 +332,89 @@ index 8d61c9cf..28b61f35 100644
      // F87 (2026-05-25): gate seam_position + reduce_infill_retraction on
      // !has_embedded_profile so an imported process profile or user SlicingOverride
      // can win. `buildProfileOverrides` already writes the resolved values into the
+     // embed map for Snapmaker-authored embeds.
+diff --git a/app/src/main/cpp/src/orca_stubs.cpp b/app/src/main/cpp/src/orca_stubs.cpp
+index 51a2f8fb..f5cdd410 100644
+--- a/app/src/main/cpp/src/orca_stubs.cpp
++++ b/app/src/main/cpp/src/orca_stubs.cpp
+@@ -5,6 +5,7 @@
+ // Include path has extern/libslic3r_android first, so "Format/STEP.hpp" picks
+ // up our stub before the real OCCT-dependent header.
+ #include "Format/STEP.hpp"
++#include "Polygon.hpp"
+ #include <string>
+ #include <vector>
+ #include <functional>
+@@ -12,7 +13,6 @@
+ namespace Slic3r {
+ class PerimeterGenerator;
+ namespace Arachne { struct ExtrusionLine; }
+-class Polygon;
+ 
+ // STEP — excluded (needs OCCT). Implement Step class methods declared in stub header.
+ Step::Step(std::string, ImportStepProgressFn, StepIsUtf8Fn) {}
+@@ -28,7 +28,7 @@ bool load_step(const char*, Model*, bool&,
+ // FuzzySkin — excluded (needs libnoise)
+ namespace Feature { namespace FuzzySkin {
+ void apply_fuzzy_skin(Arachne::ExtrusionLine*, const PerimeterGenerator&, bool) {}
+-void apply_fuzzy_skin(const Polygon&, const PerimeterGenerator&, unsigned long, bool) {}
++Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator&, size_t, bool) { return polygon; }
+ void group_region_by_fuzzify(PerimeterGenerator&) {}
+ } } // namespace Feature::FuzzySkin
+ 
+diff --git a/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp b/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp
+--- a/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp
++++ b/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp
+@@ -103,12 +103,14 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
+     // loops is an arrayref of ::Loop objects
+     // turn each one into an ExtrusionLoop object
+     ExtrusionEntityCollection   coll;
++    std::vector<size_t>         loop_entity_indices;
+     
+     // Detect steep overhangs
+     bool overhangs_reverse = perimeter_generator.config->overhang_reverse &&
+                              perimeter_generator.layer_id % 2 == 1; // Only calculate overhang degree on even (from GUI POV) layers
+ 
+-    for (const PerimeterGeneratorLoop &loop : loops) {
++    for (size_t loop_idx = 0; loop_idx < loops.size(); ++loop_idx) {
++        const PerimeterGeneratorLoop &loop = loops[loop_idx];
+         bool is_external = loop.is_external();
+         bool is_small_width = loop.is_smaller_width_perimeter;
+         
+@@ -224,6 +226,7 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
+         }
+ 
+         coll.append(ExtrusionLoop(std::move(paths), loop_role));
++        loop_entity_indices.push_back(loop_idx);
+     }
+     
+     // Append thin walls to the nearest-neighbor search (only for first iteration)
+@@ -233,20 +236,20 @@ static ExtrusionEntityCollection traverse_loops(const PerimeterGenerator &perime
+     }
+     
+     // Traverse children and build the final collection.
+-	Point zero_point(0, 0);
+-	std::vector<std::pair<size_t, bool>> chain = chain_extrusion_entities(coll.entities, &zero_point);
++    Point zero_point(0, 0);
++    std::vector<std::pair<size_t, bool>> chain = chain_extrusion_entities(coll.entities, &zero_point);
+     ExtrusionEntityCollection out;
+     for (const std::pair<size_t, bool> &idx : chain) {
+-		assert(coll.entities[idx.first] != nullptr);
+-        if (idx.first >= loops.size()) {
++        assert(coll.entities[idx.first] != nullptr);
++        if (idx.first >= loop_entity_indices.size()) {
+             // This is a thin wall.
+-			out.entities.reserve(out.entities.size() + 1);
++            out.entities.reserve(out.entities.size() + 1);
+             out.entities.emplace_back(coll.entities[idx.first]);
+-			coll.entities[idx.first] = nullptr;
++            coll.entities[idx.first] = nullptr;
+             if (idx.second)
+-				out.entities.back()->reverse();
++                out.entities.back()->reverse();
+         } else {
+-            const PerimeterGeneratorLoop &loop = loops[idx.first];
++            const PerimeterGeneratorLoop &loop = loops[loop_entity_indices[idx.first]];
+             assert(thin_walls.empty());
+             ExtrusionEntityCollection children = traverse_loops(perimeter_generator, loop.children, thin_walls, steep_overhang_contour, steep_overhang_hole);
+             out.entities.reserve(out.entities.size() + children.entities.size() + 1);

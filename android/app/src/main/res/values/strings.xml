@@ -119,6 +119,9 @@
     <string name="wall_order_inner_outer_inner">Inner → outer → inner</string>
     <string name="outer_wall_width">Outer wall width</string>
     <string name="inner_wall_width">Inner wall width</string>
+    <string name="wall_generator">Wall generator</string>
+    <string name="wall_generator_arachne">Arachne</string>
+    <string name="wall_generator_classic">Classic</string>
     <string name="detect_thin_walls">Fill thin walls</string>
     <string name="detect_overhang_walls">Detect overhang walls</string>
     <string name="one_wall_on_top">One wall on top surfaces</string>

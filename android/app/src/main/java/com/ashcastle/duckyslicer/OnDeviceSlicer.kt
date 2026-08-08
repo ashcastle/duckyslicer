@@ -201,6 +201,7 @@ data class QualityProfile(
     val skirtDistance: Float = 6f,
     val outerWallLineWidth: Float = 0f,
     val innerWallLineWidth: Float = 0f,
+    val wallGenerator: String = "arachne",
     val wallSequence: String = "inner-outer",
     val detectThinWalls: Boolean = false,
     val detectOverhangWalls: Boolean = true,
@@ -279,7 +280,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 2,
+    val schemaVersion: Int = 3,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -330,6 +331,7 @@ data class SliceOptions(
         ?: nozzleDiameter * 1.05f,
     val innerWallLineWidth: Float = quality.innerWallLineWidth.takeIf { it > 0f }
         ?: nozzleDiameter * 1.125f,
+    val wallGenerator: String = quality.wallGenerator,
     val wallSequence: String = quality.wallSequence,
     val detectThinWalls: Boolean = quality.detectThinWalls,
     val detectOverhangWalls: Boolean = quality.detectOverhangWalls,
@@ -427,6 +429,7 @@ data class SliceOptions(
             ?: nozzleDiameter * 1.05f,
         innerWallLineWidth = profile.innerWallLineWidth.takeIf { it > 0f }
             ?: nozzleDiameter * 1.125f,
+        wallGenerator = profile.wallGenerator,
         wallSequence = profile.wallSequence,
         detectThinWalls = profile.detectThinWalls,
         detectOverhangWalls = profile.detectOverhangWalls,
@@ -457,6 +460,7 @@ data class SliceOptions(
         brimWidth = brimWidth,
         outerWallLineWidth = outerWallLineWidth,
         innerWallLineWidth = innerWallLineWidth,
+        wallGenerator = wallGenerator,
         wallSequence = wallSequence,
         detectThinWalls = detectThinWalls,
         detectOverhangWalls = detectOverhangWalls,

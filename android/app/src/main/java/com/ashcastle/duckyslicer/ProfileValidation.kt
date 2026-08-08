@@ -61,6 +61,7 @@ internal object ProfileValidation {
             profile.travelSpeed in 1f..2_000f &&
             profile.outerWallLineWidth in 0f..3f &&
             profile.innerWallLineWidth in 0f..3f &&
+            profile.wallGenerator in setOf("arachne", "classic") &&
             profile.wallSequence in setOf("inner-outer", "outer-inner", "inner-outer-inner") &&
             profile.topSolidLayers in 0..100 &&
             profile.bottomSolidLayers in 0..100 &&

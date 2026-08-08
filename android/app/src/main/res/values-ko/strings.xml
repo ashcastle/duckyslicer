@@ -119,6 +119,9 @@
     <string name="wall_order_inner_outer_inner">내벽 → 외벽 → 내벽</string>
     <string name="outer_wall_width">외벽 선폭</string>
     <string name="inner_wall_width">내벽 선폭</string>
+    <string name="wall_generator">벽 생성 방식</string>
+    <string name="wall_generator_arachne">아라크네</string>
+    <string name="wall_generator_classic">클래식</string>
     <string name="detect_thin_walls">얇은 벽 채우기</string>
     <string name="detect_overhang_walls">오버행 벽 감지</string>
     <string name="one_wall_on_top">상단 면 한 줄 벽</string>

@@ -121,6 +121,7 @@ class ProfileStore private constructor(
             skirtDistance = options.skirtDistance,
             outerWallLineWidth = options.outerWallLineWidth,
             innerWallLineWidth = options.innerWallLineWidth,
+            wallGenerator = options.wallGenerator,
             wallSequence = options.wallSequence,
             detectThinWalls = options.detectThinWalls,
             detectOverhangWalls = options.detectOverhangWalls,
@@ -165,7 +166,7 @@ class ProfileStore private constructor(
         ?: throw IllegalArgumentException("Profile name is required")
 
     private companion object {
-        const val USER_PROFILE_SCHEMA_VERSION = 4
+        const val USER_PROFILE_SCHEMA_VERSION = 5
     }
 }
 
@@ -215,6 +216,7 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("skirtDistance", skirtDistance)
     .put("outerWallLineWidth", outerWallLineWidth)
     .put("innerWallLineWidth", innerWallLineWidth)
+    .put("wallGenerator", wallGenerator)
     .put("wallSequence", wallSequence)
     .put("detectThinWalls", detectThinWalls)
     .put("detectOverhangWalls", detectOverhangWalls)
@@ -295,6 +297,7 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         skirtDistance = optDouble("skirtDistance", 6.0).toFloat(),
         outerWallLineWidth = optDouble("outerWallLineWidth", 0.0).toFloat(),
         innerWallLineWidth = optDouble("innerWallLineWidth", 0.0).toFloat(),
+        wallGenerator = optString("wallGenerator", "arachne"),
         wallSequence = optString("wallSequence", "inner-outer"),
         detectThinWalls = optBoolean("detectThinWalls"),
         detectOverhangWalls = optBoolean("detectOverhangWalls", true),
