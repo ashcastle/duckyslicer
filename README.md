@@ -32,6 +32,7 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - One-finger orbit and two-finger pan/zoom for the whole scene
 - Tap an object to select it, then drag it directly across the bed
 - Import, select, duplicate, arrange, and slice multiple objects in one project, with undo and redo
+- Automatic app-private project recovery that keeps imported models, selection, and placement across process restarts
 - Full-layer preview by default, with a two-handle slider for choosing a visible layer range
 - Depth-tested extrusion beads with dark side faces, role-colored outlines, and adjustable height shading for outer walls, inner walls, infill, solid surfaces, support, bridges, and bed adhesion
 - Orca role preservation from generated G-code through the Rust parser, with regression tests that require distinct outer- and inner-wall paths
@@ -49,9 +50,10 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - No account, cloud dependency, analytics SDK, or Bambu network plug-in
 - 16 KB page-size-compatible ARM64 native libraries for current Android devices
 
-The device test suite uses a real 82 MB STL and verifies Rust mesh inspection,
-native slicing, non-empty G-code, all generated layers, and extrusion paths with
-real Z coordinates. Local simulated OctoPrint and Moonraker endpoints also verify
+The device test suite uses a repository geometry fixture and verifies Rust mesh
+inspection, native slicing, non-empty G-code, all generated layers, extrusion paths
+with real Z coordinates, and project recovery through native reinspection. Local
+simulated OctoPrint and Moonraker endpoints also verify
 authentication, status parsing, uploads, explicit print start, and encrypted key storage.
 
 ## Mobile workflow

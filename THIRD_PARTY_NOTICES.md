@@ -17,7 +17,7 @@ the reviewed Android adaptation is
   at `2c8a5385bc53cbc16211b4dd36ef9963ee185f4a` — GNU AGPL v3.0
 - Toolchain: Android NDK `28.2.13676358`, API 26, `arm64-v8a`
 - Verified stripped `libprusaslicer-jni.so` SHA-256:
-  `2939ae71411c82e2c68659c3c35ad882777a0d2fc7d1df522a00d4f0b02002a9`
+  `157e99364a4263e2947e726664c216802556aaff98399abd2ed000cd9afc1bdb`
 
 The APK also contains a compact, normalized profile catalog generated from the
 same pinned OrcaSlicer source tree. The generator resolves profile inheritance,
