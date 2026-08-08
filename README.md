@@ -33,8 +33,9 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - Tap an object to select it, then drag it directly across the bed
 - Import, select, duplicate, arrange, and slice multiple objects in one project, with undo and redo
 - Full-layer preview by default, with a two-handle slider for choosing a visible layer range
-- Outlined role colors plus adjustable height shading for walls, infill, solid surfaces, support, bridges, and bed adhesion
-- Adaptive preview detail that stays lighter while the camera is moving and refines after release
+- Depth-tested extrusion beads with dark side faces, role-colored outlines, and adjustable height shading for outer walls, inner walls, infill, solid surfaces, support, bridges, and bed adhesion
+- Orca role preservation from generated G-code through the Rust parser, with regression tests that require distinct outer- and inner-wall paths
+- Layer-aware preview detail that preserves complete representative perimeter loops instead of punching gaps through walls
 - Working move, rotate, scale, center, reset, duplicate, arrange, and remove controls
 - A pinned Orca-derived catalog with 785 printer variants, 3,306 filament presets, and 2,140 slicing processes
 - Searchable printer, filament, and slicing selectors with collapsible brand and personal-profile groups
@@ -94,6 +95,7 @@ Requirements:
 - Android NDK 28.2.13676358
 - Rust with the `aarch64-linux-android` target
 - `cargo-ndk`
+- Python 3.11 or newer for profile and SBOM generation
 - CMake, Ninja, Git, Curl, Tar, and Make
 
 ```shell
@@ -136,3 +138,7 @@ the inherited language set and reuse established slicing terms.
 DuckySlicer is distributed under the [GNU Affero General Public License v3](LICENSE).
 Inherited source lineage, binary provenance, and corresponding source locations are
 recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development and validation rules,
+[SECURITY.md](SECURITY.md) for private vulnerability reporting, and
+[docs/RELEASING.md](docs/RELEASING.md) for the signed release process.

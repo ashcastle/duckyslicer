@@ -1,0 +1,88 @@
+package com.ashcastle.duckyslicer
+
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class ToolpathMeshBuilderTest {
+    @Test
+    fun densePreviewKeepsCompleteRepresentativeLayers() {
+        val layerCount = 8
+        val segmentsPerLayer = 10
+        val segments = FloatArray(layerCount * segmentsPerLayer * GcodeLayerPreview.SEGMENT_STRIDE)
+        val roleCounts = IntArray(GcodeLayerPreview.ROLE_COUNT)
+        repeat(layerCount) { layer ->
+            repeat(segmentsPerLayer) { line ->
+                val segment = layer * segmentsPerLayer + line
+                val offset = segment * GcodeLayerPreview.SEGMENT_STRIDE
+                segments[offset] = line.toFloat()
+                segments[offset + 1] = layer.toFloat()
+                segments[offset + 2] = line + 1f
+                segments[offset + 3] = layer.toFloat()
+                segments[offset + 4] = 0.2f * (layer + 1)
+                segments[offset + 5] = (line % 2).toFloat()
+                roleCounts[line % 2] += 1
+            }
+        }
+        val preview = GcodeLayerPreview(0, 7, 8, 0.2f, 1.6f, segments, roleCounts)
+        val plan = preview.buildRenderPlan(20)
+        val selectedZ = plan.segmentOffsets.map { segments[it + 4] }
+
+        assertTrue("The first layer must stay intact", selectedZ.count { it == 0.2f } == 10)
+        assertTrue("The last layer must stay intact", selectedZ.count { it == 1.6f } == 10)
+        assertTrue("LOD must choose whole layers, not alternating path fragments", selectedZ.distinct().size == 2)
+    }
+
+    @Test
+    fun toolpathsBecomeOutlinedHeightSeparatedTriangles() {
+        val preview = GcodeLayerPreview(
+            startLayer = 0,
+            endLayer = 1,
+            layerCount = 2,
+            minZMm = 0.2f,
+            maxZMm = 0.4f,
+            segments = floatArrayOf(
+                10f, 10f, 20f, 10f, 0.2f, 0f,
+                10f, 12f, 20f, 12f, 0.4f, 1f,
+            ),
+            roleSegmentCounts = intArrayOf(1, 1, 0, 0, 0, 0, 0, 0),
+        )
+        val buffer = ToolpathMeshBuilder.build(
+            ToolpathScene(preview, 100f, 100f, 1f, 0.8f, PreviewDetail.BALANCED),
+        )
+        val values = FloatArray(buffer.remaining()).also(buffer::get)
+        val zValues = values.indices
+            .filter { it % 7 == 2 }
+            .map(values::get)
+
+        assertTrue("The mesh must include the bed below Z=0", zValues.any { it < 0f })
+        assertTrue("Each path must include a dark outline at its real layer", zValues.any { it == 0.2f })
+        assertTrue("Colored ribbons must sit above outlines without Z fighting", zValues.any { it > 0.4f })
+        assertTrue("Every draw vertex must contain XYZ and RGBA", values.size % 7 == 0)
+    }
+
+    @Test
+    fun balancedModeCapsDensePreviewGeometry() {
+        val segmentCount = 30_000
+        val segments = FloatArray(segmentCount * GcodeLayerPreview.SEGMENT_STRIDE)
+        val roleCounts = IntArray(GcodeLayerPreview.ROLE_COUNT)
+        repeat(segmentCount) { index ->
+            val offset = index * GcodeLayerPreview.SEGMENT_STRIDE
+            val role = index % GcodeLayerPreview.ROLE_COUNT
+            segments[offset] = (index % 200).toFloat()
+            segments[offset + 1] = (index / 200).toFloat()
+            segments[offset + 2] = segments[offset] + 0.4f
+            segments[offset + 3] = segments[offset + 1]
+            segments[offset + 4] = 0.2f + (index / 1_000) * 0.2f
+            segments[offset + 5] = role.toFloat()
+            roleCounts[role] += 1
+        }
+        val preview = GcodeLayerPreview(0, 29, 30, 0.2f, 6f, segments, roleCounts)
+        val buffer = ToolpathMeshBuilder.build(
+            ToolpathScene(preview, 220f, 220f, 0.92f, 0.78f, PreviewDetail.BALANCED),
+        )
+        val vertexCount = buffer.remaining() / 7
+
+        assertTrue("Balanced rendering must stay under its mobile geometry budget", vertexCount < 600_000)
+        assertTrue("Dense previews must still retain substantial visible detail", vertexCount > 400_000)
+    }
+}

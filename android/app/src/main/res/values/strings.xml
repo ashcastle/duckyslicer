@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="preview_renderer">Preview display</string>
+    <string name="preview_renderer_depth">Clear depth</string>
+    <string name="preview_renderer_compatibility">Save battery</string>
     <string name="object_count">%1$d objects</string>
     <string name="undo">Undo</string>
     <string name="redo">Redo</string>
