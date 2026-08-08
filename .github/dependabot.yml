@@ -15,4 +15,12 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
+  - package-ecosystem: "gradle"
+    directory: "/android"
+    schedule:
+      interval: "monthly"
+  - package-ecosystem: "cargo"
+    directory: "/rust/duckyslicer-jni"
+    schedule:
+      interval: "monthly"
   # no support for c/cpp

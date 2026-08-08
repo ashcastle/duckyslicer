@@ -418,7 +418,9 @@ fn preview_gcode(
             if seen_segments.is_multiple_of(segment_stride) {
                 segments.push([x, y, next_x, next_y, layer_z, toolpath_role.code()]);
             }
-            const SEGMENT_LIMIT: usize = 60_000;
+            // Keep common full-model previews intact so Android can reduce whole
+            // layers instead of punching visual gaps through perimeter loops.
+            const SEGMENT_LIMIT: usize = 120_000;
             if segments.len() > SEGMENT_LIMIT {
                 segments = segments.into_iter().step_by(2).collect();
                 segment_stride = segment_stride.saturating_mul(2);

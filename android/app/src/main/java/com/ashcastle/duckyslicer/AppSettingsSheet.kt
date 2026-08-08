@@ -47,6 +47,30 @@ internal fun AppSettingsSheet(
             Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge)
 
             Text(stringResource(R.string.preview_settings), fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.preview_renderer), color = Color(0xFFC8C9C2))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PreviewRenderingMode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = settings.previewRenderingMode == mode,
+                        onClick = { onSettingsChanged(settings.copy(previewRenderingMode = mode)) },
+                        label = {
+                            Text(
+                                stringResource(
+                                    if (mode == PreviewRenderingMode.DEPTH_TESTED) {
+                                        R.string.preview_renderer_depth
+                                    } else {
+                                        R.string.preview_renderer_compatibility
+                                    },
+                                ),
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFFF6C945),
+                            selectedLabelColor = Color(0xFF202124),
+                        ),
+                    )
+                }
+            }
             Text(stringResource(R.string.preview_detail), color = Color(0xFFC8C9C2))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PreviewDetail.entries.forEach { detail ->

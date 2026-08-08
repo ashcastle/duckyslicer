@@ -8,8 +8,14 @@ enum class PreviewDetail {
     DETAIL,
 }
 
+enum class PreviewRenderingMode {
+    DEPTH_TESTED,
+    COMPATIBILITY,
+}
+
 data class AppSettings(
     val previewDetail: PreviewDetail = PreviewDetail.BALANCED,
+    val previewRenderingMode: PreviewRenderingMode = PreviewRenderingMode.DEPTH_TESTED,
     val toolpathOpacity: Float = 0.92f,
     val toolpathDepthContrast: Float = 0.78f,
     val keepScreenAwakeWhileWorking: Boolean = true,
@@ -27,6 +33,12 @@ class AppSettingsStore(context: Context) {
                     ?: PreviewDetail.BALANCED.name,
             )
         }.getOrDefault(PreviewDetail.BALANCED),
+        previewRenderingMode = runCatching {
+            PreviewRenderingMode.valueOf(
+                preferences.getString("preview_rendering_mode", PreviewRenderingMode.DEPTH_TESTED.name)
+                    ?: PreviewRenderingMode.DEPTH_TESTED.name,
+            )
+        }.getOrDefault(PreviewRenderingMode.DEPTH_TESTED),
         toolpathOpacity = preferences.getFloat("toolpath_opacity", 0.92f).coerceIn(0.3f, 1f),
         toolpathDepthContrast = preferences.getFloat("toolpath_depth_contrast", 0.78f).coerceIn(0f, 1f),
         keepScreenAwakeWhileWorking = preferences.getBoolean("keep_screen_awake", true),
@@ -37,6 +49,7 @@ class AppSettingsStore(context: Context) {
     fun save(settings: AppSettings) {
         preferences.edit()
             .putString("preview_detail", settings.previewDetail.name)
+            .putString("preview_rendering_mode", settings.previewRenderingMode.name)
             .putFloat("toolpath_opacity", settings.toolpathOpacity.coerceIn(0.3f, 1f))
             .putFloat("toolpath_depth_contrast", settings.toolpathDepthContrast.coerceIn(0f, 1f))
             .putBoolean("keep_screen_awake", settings.keepScreenAwakeWhileWorking)

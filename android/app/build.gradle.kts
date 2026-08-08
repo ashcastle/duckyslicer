@@ -1,3 +1,4 @@
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.Sync
 
@@ -128,8 +129,8 @@ android {
         applicationId = "com.ashcastle.duckyslicer"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0-dev"
+        versionCode = providers.gradleProperty("duckyslicer.versionCode").orNull?.toInt() ?: 1
+        versionName = providers.gradleProperty("duckyslicer.versionName").orNull ?: "0.1.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
@@ -137,9 +138,37 @@ android {
         }
     }
 
+    val releaseKeystoreFile = providers.environmentVariable("DUCKYSLICER_KEYSTORE_FILE").orNull
+    val releaseStorePassword = providers.environmentVariable("DUCKYSLICER_STORE_PASSWORD").orNull
+    val releaseKeyAlias = providers.environmentVariable("DUCKYSLICER_KEY_ALIAS").orNull
+    val releaseKeyPassword = providers.environmentVariable("DUCKYSLICER_KEY_PASSWORD").orNull
+    val releaseSigningAvailable = listOf(
+        releaseKeystoreFile,
+        releaseStorePassword,
+        releaseKeyAlias,
+        releaseKeyPassword,
+    ).all { !it.isNullOrBlank() }
+
+    signingConfigs {
+        if (releaseSigningAvailable) {
+            create("release") {
+                storeFile = file(requireNotNull(releaseKeystoreFile))
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -183,6 +212,36 @@ tasks.configureEach {
         dependsOn(generateOrcaProfileCatalog)
     }
 }
+
+fun registerDependencyInventory(variant: String) {
+    val taskSuffix = variant.replaceFirstChar { it.uppercase() }
+    tasks.register("write${taskSuffix}DependencyInventory") {
+        group = "verification"
+        description = "Writes the resolved $variant runtime dependencies for the release SBOM."
+        val inventory = layout.buildDirectory.file("reports/dependencies/$variant.txt")
+        outputs.file(inventory)
+        doLast {
+            val coordinates = configurations
+                .getByName("${variant}RuntimeClasspath")
+                .incoming
+                .resolutionResult
+                .allComponents
+                .mapNotNull { component ->
+                    (component.id as? ModuleComponentIdentifier)?.let { id ->
+                        "${id.group}:${id.module}:${id.version}"
+                    }
+                }
+                .distinct()
+                .sorted()
+            val output = inventory.get().asFile
+            output.parentFile.mkdirs()
+            output.writeText(coordinates.joinToString(separator = "\n", postfix = "\n"))
+        }
+    }
+}
+
+registerDependencyInventory("debug")
+registerDependencyInventory("release")
 
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.06.01")

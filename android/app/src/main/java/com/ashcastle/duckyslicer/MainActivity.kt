@@ -689,4 +689,5 @@ private suspend fun importAndInspect(context: Context, uri: Uri): ModelInfo = wi
     }
 
     ModelInfo.fromJson(NativeEngine.inspectStl(destination.absolutePath), destination.absolutePath)
+        .copy(fileName = displayName)
 }

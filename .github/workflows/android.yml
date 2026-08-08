@@ -58,10 +58,41 @@ jobs:
 
       - name: Build, test, and lint APK
         working-directory: android
-        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug
+        run: |
+          ./gradlew :app:testDebugUnitTest :app:assembleDebug \
+            :app:assembleDebugAndroidTest :app:lintDebug \
+            :app:writeDebugDependencyInventory
+
+      - name: Verify 16 KB APK packaging
+        run: |
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 \
+            android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Generate CycloneDX SBOM
+        run: |
+          python3 tools/generate_sbom.py \
+            android/app/build/outputs/apk/debug/app-debug.apk \
+            android/app/build/outputs/duckyslicer-debug.cdx.json \
+            "${GITHUB_SHA}" \
+            android/app/build/reports/dependencies/debug.txt
 
       - uses: actions/upload-artifact@v7
         with:
           name: duckyslicer-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: duckyslicer-debug-sbom
+          path: android/app/build/outputs/duckyslicer-debug.cdx.json
+          if-no-files-found: error
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/dependency-review-action@v4

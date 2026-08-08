@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="preview_renderer">미리보기 표시</string>
+    <string name="preview_renderer_depth">입체 보기</string>
+    <string name="preview_renderer_compatibility">배터리 절약</string>
     <string name="object_count">오브젝트 %1$d개</string>
     <string name="undo">실행 취소</string>
     <string name="redo">다시 실행</string>

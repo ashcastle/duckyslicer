@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Devices
-import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Layers
@@ -86,6 +85,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -213,6 +213,7 @@ fun WorkspaceScreen(
                     toolpathOpacity = appSettings.toolpathOpacity,
                     toolpathDepthContrast = appSettings.toolpathDepthContrast,
                     previewDetail = appSettings.previewDetail,
+                    previewRenderingMode = appSettings.previewRenderingMode,
                     objectManipulationEnabled = selectedTab == WorkspaceTab.SLICE &&
                         !importing && !slicing && !previewLoading,
                     onObjectSelected = onObjectSelected,
@@ -248,7 +249,7 @@ fun WorkspaceScreen(
                     onRemove = {
                         onRemoveModel()
                     },
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
                 )
             }
 
@@ -259,7 +260,7 @@ fun WorkspaceScreen(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(
-                        top = if (model != null && selectedTab == WorkspaceTab.SLICE) 72.dp else 16.dp,
+                        top = 16.dp,
                         end = 16.dp,
                     )
                     .widthIn(max = 280.dp),
@@ -618,12 +619,31 @@ private fun BedScene(
     toolpathOpacity: Float,
     toolpathDepthContrast: Float,
     previewDetail: PreviewDetail,
+    previewRenderingMode: PreviewRenderingMode,
     objectManipulationEnabled: Boolean,
     onObjectSelected: (String?) -> Unit,
     onModelTransformPreview: (ModelTransform) -> Unit,
     onModelTransformCommitted: (ModelTransform) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val depthPreviewSupported = remember(context) { supportsDepthTestedPreview(context) }
+    if (
+        preview != null &&
+        previewRenderingMode == PreviewRenderingMode.DEPTH_TESTED &&
+        depthPreviewSupported
+    ) {
+        DepthTestedToolpathScene(
+            preview = preview,
+            bedSizeX = bedSizeX,
+            bedSizeY = bedSizeY,
+            opacity = toolpathOpacity,
+            depthContrast = toolpathDepthContrast,
+            detail = previewDetail,
+            modifier = modifier,
+        )
+        return
+    }
     var yaw by remember { mutableFloatStateOf(-45f) }
     var pitch by remember { mutableFloatStateOf(55f) }
     var zoom by remember { mutableFloatStateOf(1f) }
@@ -955,8 +975,6 @@ private fun ObjectToolRail(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Default.DragIndicator, contentDescription = null, tint = WorkspaceYellow)
-            Text(stringResource(R.string.drag_to_move), modifier = Modifier.padding(horizontal = 6.dp))
             IconButton(onClick = onUndo, enabled = canUndo) {
                 Icon(Icons.AutoMirrored.Filled.Undo, stringResource(R.string.undo))
             }
@@ -977,7 +995,9 @@ private fun ObjectToolRail(
             }) {
                 Icon(Icons.AutoMirrored.Filled.RotateRight, stringResource(R.string.rotate_90))
             }
-            TextButton(onClick = onMore) { Text(stringResource(R.string.more_settings)) }
+            IconButton(onClick = onMore) {
+                Icon(Icons.Default.Tune, stringResource(R.string.more_settings))
+            }
             IconButton(onClick = onRemove) {
                 Icon(Icons.Default.DeleteOutline, stringResource(R.string.remove_model), tint = Color(0xFFFF8A80))
             }
