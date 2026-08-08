@@ -1,5 +1,7 @@
 package com.ashcastle.duckyslicer
 
+import android.os.SystemClock
+import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.u1.slicer.NativeLibrary
@@ -530,9 +532,13 @@ class NativeEngineInstrumentedTest {
     @Test
     fun bundledOrcaCatalogIsVersionedValidatedAndBroad() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val loadStartedAt = SystemClock.elapsedRealtimeNanos()
         val catalog = OrcaProfileCatalog(context).load()
+        val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
+        Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
         assertEquals(12, catalog.schemaVersion)
+        assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include Orca filament presets", catalog.filaments.size > 3_000)
