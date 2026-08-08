@@ -3,6 +3,7 @@
 use std::ffi::{CStr, c_char};
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -20,6 +21,8 @@ const MAX_MODEL_IMPORT_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_TEXT_LINE_BYTES: usize = 64 * 1024;
 const MAX_STL_COORDINATE_ABS_MM: f32 = 1_000_000.0;
 const MAX_GCODE_COORDINATE_ABS_MM: f32 = 1_000_000.0;
+const INTERNAL_ERROR_JSON: &str =
+    "{\"ok\":false,\"error\":\"The file could not be processed safely\"}";
 static TEMP_OUTPUT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Error)]
@@ -682,19 +685,42 @@ fn make_java_string(env: &JNIEnv<'_>, value: &str) -> jstring {
         .unwrap_or(std::ptr::null_mut())
 }
 
+fn guarded_json<T, F>(operation: F) -> String
+where
+    T: Serialize,
+    F: FnOnce() -> Result<T, EngineError>,
+{
+    catch_unwind(AssertUnwindSafe(|| match operation() {
+        Ok(value) => serde_json::to_string(&value),
+        Err(error) => {
+            let message = error.to_string();
+            serde_json::to_string(&ErrorResponse {
+                ok: false,
+                error: &message,
+            })
+        }
+    }))
+    .ok()
+    .and_then(Result::ok)
+    .unwrap_or_else(|| INTERNAL_ERROR_JSON.to_owned())
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_version(
     env: JNIEnv<'_>,
     _class: JClass<'_>,
 ) -> jstring {
-    let pointer = unsafe { duckyslicer_core_version() };
-    let version = if pointer.is_null() {
-        "DuckySlicer native bridge unavailable"
-    } else {
-        unsafe { CStr::from_ptr(pointer) }
-            .to_str()
-            .unwrap_or("DuckySlicer native bridge")
-    };
+    let version = catch_unwind(AssertUnwindSafe(|| {
+        let pointer = unsafe { duckyslicer_core_version() };
+        if pointer.is_null() {
+            "DuckySlicer native bridge unavailable"
+        } else {
+            unsafe { CStr::from_ptr(pointer) }
+                .to_str()
+                .unwrap_or("DuckySlicer native bridge")
+        }
+    }))
+    .unwrap_or("DuckySlicer native bridge unavailable");
     make_java_string(&env, version)
 }
 
@@ -704,27 +730,13 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_inspectStl(
     _class: JClass<'_>,
     path: JString<'_>,
 ) -> jstring {
-    let path = match env.get_string(&path) {
-        Ok(path) => path.to_string_lossy().into_owned(),
-        Err(error) => {
-            let message = format!("Unable to read file path: {error}");
-            let response = serde_json::to_string(&ErrorResponse {
-                ok: false,
-                error: &message,
-            })
-            .unwrap_or_else(|_| "{\"ok\":false}".to_owned());
-            return make_java_string(&env, &response);
-        }
-    };
-
-    let response = match inspect_stl(&path) {
-        Ok(inspection) => serde_json::to_string(&inspection),
-        Err(error) => serde_json::to_string(&ErrorResponse {
-            ok: false,
-            error: &error.to_string(),
-        }),
-    }
-    .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"Serialization failed\"}".to_owned());
+    let response = guarded_json(|| {
+        let path = env
+            .get_string(&path)
+            .map(|path| path.to_string_lossy().into_owned())
+            .map_err(|error| EngineError::Parse(format!("Unable to read file path: {error}")))?;
+        inspect_stl(&path)
+    });
 
     make_java_string(&env, &response)
 }
@@ -737,28 +749,20 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_transformStl(
     output_path: JString<'_>,
     transform_json: JString<'_>,
 ) -> jstring {
-    let read_string = |env: &mut JNIEnv<'_>, value: &JString<'_>| {
-        env.get_string(value)
-            .map(|text| text.to_string_lossy().into_owned())
-            .map_err(|error| EngineError::Parse(error.to_string()))
-    };
-    let result = (|| {
+    let response = guarded_json(|| {
+        let read_string = |env: &mut JNIEnv<'_>, value: &JString<'_>| {
+            env.get_string(value)
+                .map(|text| text.to_string_lossy().into_owned())
+                .map_err(|error| EngineError::Parse(error.to_string()))
+        };
         let input_path = read_string(&mut env, &input_path)?;
         let output_path = read_string(&mut env, &output_path)?;
         let transform_json = read_string(&mut env, &transform_json)?;
         let transform: StlTransform = serde_json::from_str(&transform_json)
             .map_err(|error| EngineError::Parse(error.to_string()))?;
-        transform_stl(&input_path, &output_path, &transform)
-    })();
-
-    let response = match result {
-        Ok(()) => serde_json::to_string(&SuccessResponse { ok: true }),
-        Err(error) => serde_json::to_string(&ErrorResponse {
-            ok: false,
-            error: &error.to_string(),
-        }),
-    }
-    .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"Serialization failed\"}".to_owned());
+        transform_stl(&input_path, &output_path, &transform)?;
+        Ok(SuccessResponse { ok: true })
+    });
     make_java_string(&env, &response)
 }
 
@@ -770,31 +774,17 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeR
     start_layer: jint,
     end_layer: jint,
 ) -> jstring {
-    let path = match env.get_string(&path) {
-        Ok(path) => path.to_string_lossy().into_owned(),
-        Err(error) => {
-            let message = format!("invalid path: {error}");
-            let response = serde_json::to_string(&ErrorResponse {
-                ok: false,
-                error: &message,
-            })
-            .unwrap_or_else(|_| "{\"ok\":false}".to_owned());
-            return make_java_string(&env, &response);
-        }
-    };
-
-    let response = match preview_gcode(
-        &path,
-        start_layer.max(0) as usize,
-        end_layer.max(0) as usize,
-    ) {
-        Ok(preview) => serde_json::to_string(&preview),
-        Err(error) => serde_json::to_string(&ErrorResponse {
-            ok: false,
-            error: &error.to_string(),
-        }),
-    }
-    .unwrap_or_else(|_| "{\"ok\":false}".to_owned());
+    let response = guarded_json(|| {
+        let path = env
+            .get_string(&path)
+            .map(|path| path.to_string_lossy().into_owned())
+            .map_err(|error| EngineError::Parse(format!("Unable to read file path: {error}")))?;
+        preview_gcode(
+            &path,
+            start_layer.max(0) as usize,
+            end_layer.max(0) as usize,
+        )
+    });
     make_java_string(&env, &response)
 }
 
@@ -807,6 +797,12 @@ mod tests {
     fn missing_stl_is_reported_without_panicking() {
         let result = inspect_stl("/definitely/missing/duckyslicer.stl");
         assert!(matches!(result, Err(EngineError::Open(_))));
+    }
+
+    #[test]
+    fn json_boundary_converts_unexpected_panics_to_a_safe_error() {
+        let response = guarded_json::<SuccessResponse, _>(|| panic!("simulated parser defect"));
+        assert_eq!(response, INTERNAL_ERROR_JSON);
     }
 
     #[test]

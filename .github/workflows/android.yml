@@ -46,6 +46,7 @@ jobs:
         run: |
           python3 tools/verify_workflows.py
           python3 tools/verify_gradle_supply_chain.py
+          python3 tools/verify_native_safety.py
 
       - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
@@ -59,6 +60,7 @@ jobs:
         run: |
           cargo fmt --check
           cargo test --locked
+          cargo test --release --locked
           cargo clippy --locked -- -D warnings
 
       - name: Build, test, and lint APK
@@ -73,7 +75,7 @@ jobs:
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 \
             android/app/build/outputs/apk/debug/app-debug.apk
-          python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain
+          python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety
           python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Generate CycloneDX SBOM
