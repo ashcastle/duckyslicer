@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.JsonReader
 import java.io.InputStreamReader
 
-private const val CATALOG_ASSET = "profile_catalog_v8.json"
+private const val CATALOG_ASSET = "profile_catalog_v9.json"
 
 class OrcaProfileCatalog(private val context: Context) {
     fun load(): ProfileCatalog = runCatching {
@@ -40,7 +40,7 @@ class OrcaProfileCatalog(private val context: Context) {
             }
         }
         reader.endObject()
-        check(schemaVersion == 8) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 9) { "Unsupported profile catalog schema" }
         return ProfileCatalog(
             printers = (PrinterProfile.builtIns + printers).distinctBy(PrinterProfile::id),
             filaments = (FilamentProfile.builtIns + filaments).distinctBy(FilamentProfile::id),
@@ -229,6 +229,10 @@ class OrcaProfileCatalog(private val context: Context) {
                 "infillAnchorMaxPercent" -> profile = profile.copy(infillAnchorMaxPercent = reader.nextBoolean())
                 "gapFillTarget" -> profile = profile.copy(gapFillTarget = reader.nextString())
                 "filterOutGapFill" -> profile = profile.copy(filterOutGapFill = reader.nextFloat())
+                "reduceCrossingWall" -> profile = profile.copy(reduceCrossingWall = reader.nextBoolean())
+                "maxTravelDetourDistance" -> profile = profile.copy(maxTravelDetourDistance = reader.nextFloat())
+                "maxTravelDetourDistancePercent" -> profile = profile.copy(maxTravelDetourDistancePercent = reader.nextBoolean())
+                "reduceInfillRetraction" -> profile = profile.copy(reduceInfillRetraction = reader.nextBoolean())
                 "travelSpeed" -> profile = profile.copy(travelSpeed = reader.nextFloat())
                 "firstLayerSpeed" -> profile = profile.copy(firstLayerSpeed = reader.nextFloat())
                 "supportType" -> profile = profile.copy(supportType = reader.nextString())
@@ -252,7 +256,20 @@ class OrcaProfileCatalog(private val context: Context) {
                 "internalSolidInfillLineWidth" -> profile = profile.copy(internalSolidInfillLineWidth = reader.nextFloat())
                 "supportLineWidth" -> profile = profile.copy(supportLineWidth = reader.nextFloat())
                 "initialLayerLineWidth" -> profile = profile.copy(initialLayerLineWidth = reader.nextFloat())
+                "smallPerimeterSpeed" -> profile = profile.copy(smallPerimeterSpeed = reader.nextFloat())
+                "smallPerimeterSpeedPercent" -> profile = profile.copy(smallPerimeterSpeedPercent = reader.nextBoolean())
+                "smallPerimeterThreshold" -> profile = profile.copy(smallPerimeterThreshold = reader.nextFloat())
+                "slowdownForCurledPerimeters" -> profile = profile.copy(slowdownForCurledPerimeters = reader.nextBoolean())
+                "resolution" -> profile = profile.copy(resolution = reader.nextFloat())
                 "seamPosition" -> profile = profile.copy(seamPosition = reader.nextString())
+                "staggeredInnerSeams" -> profile = profile.copy(staggeredInnerSeams = reader.nextBoolean())
+                "seamGap" -> profile = profile.copy(seamGap = reader.nextFloat())
+                "seamGapPercent" -> profile = profile.copy(seamGapPercent = reader.nextBoolean())
+                "wipeBeforeExternalLoop" -> profile = profile.copy(wipeBeforeExternalLoop = reader.nextBoolean())
+                "wipeOnLoops" -> profile = profile.copy(wipeOnLoops = reader.nextBoolean())
+                "roleBasedWipeSpeed" -> profile = profile.copy(roleBasedWipeSpeed = reader.nextBoolean())
+                "wipeSpeed" -> profile = profile.copy(wipeSpeed = reader.nextFloat())
+                "wipeSpeedPercent" -> profile = profile.copy(wipeSpeedPercent = reader.nextBoolean())
                 "ironingType" -> profile = profile.copy(ironingType = reader.nextString())
                 "ironingPattern" -> profile = profile.copy(ironingPattern = reader.nextString())
                 "ironingFlow" -> profile = profile.copy(ironingFlow = reader.nextFloat())
@@ -260,6 +277,7 @@ class OrcaProfileCatalog(private val context: Context) {
                 "ironingSpeed" -> profile = profile.copy(ironingSpeed = reader.nextFloat())
                 "wallGenerator" -> profile = profile.copy(wallGenerator = reader.nextString())
                 "wallSequence" -> profile = profile.copy(wallSequence = reader.nextString())
+                "wallDirection" -> profile = profile.copy(wallDirection = reader.nextString())
                 "detectThinWalls" -> profile = profile.copy(detectThinWalls = reader.nextBoolean())
                 "detectOverhangWalls" -> profile = profile.copy(detectOverhangWalls = reader.nextBoolean())
                 "onlyOneWallOnTop" -> profile = profile.copy(onlyOneWallOnTop = reader.nextBoolean())

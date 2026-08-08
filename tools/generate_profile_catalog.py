@@ -12,7 +12,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
     "monotonic", "monotonicline", "rectilinear", "alignedrectilinear",
@@ -389,6 +389,14 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     infill_anchor_max, infill_anchor_max_percent = float_or_percent(
         first_present(raw, ["infill_anchor_max", "sparse_infill_anchor_max"], 20), 20
     )
+    max_travel_detour_distance, max_travel_detour_distance_percent = float_or_percent(
+        raw.get("max_travel_detour_distance"), 0
+    )
+    small_perimeter_speed, small_perimeter_speed_percent = float_or_percent(
+        raw.get("small_perimeter_speed"), "50%"
+    )
+    seam_gap, seam_gap_percent = float_or_percent(raw.get("seam_gap"), "10%")
+    wipe_speed, wipe_speed_percent = float_or_percent(raw.get("wipe_speed"), "80%")
     legacy_wall_order = str(scalar(raw.get("wall_infill_order"), ""))
     resolved_wall_order = raw.get("wall_sequence", legacy_wall_order)
     profile = {
@@ -470,6 +478,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
             raw.get("gap_fill_target"), {"everywhere", "topbottom", "nowhere"}, "nowhere"
         ),
         "filterOutGapFill": number(raw.get("filter_out_gap_fill"), 0),
+        "reduceCrossingWall": boolean(raw.get("reduce_crossing_wall")),
+        "maxTravelDetourDistance": max_travel_detour_distance,
+        "maxTravelDetourDistancePercent": max_travel_detour_distance_percent,
+        "reduceInfillRetraction": boolean(raw.get("reduce_infill_retraction")),
         "travelSpeed": number(raw.get("travel_speed"), 300),
         "firstLayerSpeed": first_layer_speed,
         "supportType": "tree" if "tree" in support_type else "normal",
@@ -505,9 +517,22 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "internalSolidInfillLineWidth": internal_solid_infill_line_width,
         "supportLineWidth": support_line_width,
         "initialLayerLineWidth": initial_layer_line_width,
+        "smallPerimeterSpeed": small_perimeter_speed,
+        "smallPerimeterSpeedPercent": small_perimeter_speed_percent,
+        "smallPerimeterThreshold": number(raw.get("small_perimeter_threshold"), 0),
+        "slowdownForCurledPerimeters": boolean(raw.get("slowdown_for_curled_perimeters"), True),
+        "resolution": max(number(raw.get("resolution"), 0.01), 0.001),
         "seamPosition": enum_value(
             raw.get("seam_position"), {"nearest", "aligned", "aligned_back", "back", "random"}, "aligned"
         ),
+        "staggeredInnerSeams": boolean(raw.get("staggered_inner_seams")),
+        "seamGap": seam_gap,
+        "seamGapPercent": seam_gap_percent,
+        "wipeBeforeExternalLoop": boolean(raw.get("wipe_before_external_loop")),
+        "wipeOnLoops": boolean(raw.get("wipe_on_loops")),
+        "roleBasedWipeSpeed": boolean(raw.get("role_based_wipe_speed"), True),
+        "wipeSpeed": wipe_speed,
+        "wipeSpeedPercent": wipe_speed_percent,
         "ironingType": enum_value(
             raw.get("ironing_type"), {"no ironing", "top", "topmost", "solid"}, "no ironing"
         ),
@@ -517,6 +542,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "ironingSpeed": number(raw.get("ironing_speed"), 20),
         "wallGenerator": wall_generator(raw.get("wall_generator")),
         "wallSequence": wall_sequence(resolved_wall_order),
+        "wallDirection": enum_value(raw.get("wall_direction"), {"auto", "ccw", "cw"}, "auto"),
         "detectThinWalls": boolean(raw.get("detect_thin_wall")),
         "detectOverhangWalls": boolean(raw.get("detect_overhang_wall"), True),
         "onlyOneWallOnTop": boolean(raw.get("only_one_wall_top")),
@@ -591,6 +617,16 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and all(0 <= profile[key] <= 360 for key in ["infillDirection", "solidInfillDirection"])
         and 0 <= profile["minimumSparseInfillArea"] <= 1_000_000
         and 0 <= profile["filterOutGapFill"] <= 1_000_000
+        and 0 <= profile["maxTravelDetourDistance"] <= 1_000
+        and 0 <= profile["smallPerimeterSpeed"] <= (
+            1_000 if profile["smallPerimeterSpeedPercent"] else 2_000
+        )
+        and 0 <= profile["smallPerimeterThreshold"] <= 1_000_000
+        and 0.001 <= profile["resolution"] <= 100
+        and 0 <= profile["seamGap"] <= 1_000
+        and 0 <= profile["wipeSpeed"] <= (
+            1_000 if profile["wipeSpeedPercent"] else 2_000
+        )
         and all(
             0 <= profile[key] <= 1_000
             for key in ["infillAnchor", "infillAnchorMax"]

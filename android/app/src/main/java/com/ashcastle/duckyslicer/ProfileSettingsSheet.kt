@@ -618,6 +618,21 @@ private fun SlicingSettingsSheet(
         },
         onSelected = { onOptionsChanged(options.copy(wallSequence = it)) },
     )
+    Text(stringResource(R.string.wall_direction), fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf("auto", "ccw", "cw"),
+        selected = options.wallDirection,
+        label = {
+            stringResource(
+                when (it) {
+                    "ccw" -> R.string.wall_direction_counter_clockwise
+                    "cw" -> R.string.wall_direction_clockwise
+                    else -> R.string.wall_direction_auto
+                },
+            )
+        },
+        onSelected = { onOptionsChanged(options.copy(wallDirection = it)) },
+    )
     Text(stringResource(R.string.seam_position), fontWeight = FontWeight.SemiBold)
     CompactChoices(
         entries = listOf("aligned", "nearest", "back", "random"),
@@ -625,6 +640,50 @@ private fun SlicingSettingsSheet(
         label = { enumLabel(it) },
         onSelected = { onOptionsChanged(options.copy(seamPosition = it)) },
     )
+    SettingsSwitch(
+        label = stringResource(R.string.staggered_inner_seams),
+        checked = options.staggeredInnerSeams,
+        onCheckedChange = { onOptionsChanged(options.copy(staggeredInnerSeams = it)) },
+    )
+    LengthOrPercentSetting(
+        label = stringResource(R.string.seam_gap),
+        value = options.seamGap,
+        percent = options.seamGapPercent,
+        maximumAbsolute = 10f,
+        maximumPercent = 100f,
+        onValueChange = { onOptionsChanged(options.copy(seamGap = it)) },
+        onPercentChange = { selectedPercent, adjustedValue ->
+            onOptionsChanged(options.copy(seamGap = adjustedValue, seamGapPercent = selectedPercent))
+        },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.wipe_before_external_loop),
+        checked = options.wipeBeforeExternalLoop,
+        onCheckedChange = { onOptionsChanged(options.copy(wipeBeforeExternalLoop = it)) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.wipe_on_loops),
+        checked = options.wipeOnLoops,
+        onCheckedChange = { onOptionsChanged(options.copy(wipeOnLoops = it)) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.role_based_wipe_speed),
+        checked = options.roleBasedWipeSpeed,
+        onCheckedChange = { onOptionsChanged(options.copy(roleBasedWipeSpeed = it)) },
+    )
+    if (!options.roleBasedWipeSpeed) {
+        OverhangSpeedSetting(
+            label = stringResource(R.string.wipe_speed),
+            value = options.wipeSpeed,
+            percent = options.wipeSpeedPercent,
+            maximumAbsolute = 700f,
+            maximumPercent = 300f,
+            onValueChange = { onOptionsChanged(options.copy(wipeSpeed = it)) },
+            onPercentChange = { selectedPercent, adjustedValue ->
+                onOptionsChanged(options.copy(wipeSpeed = adjustedValue, wipeSpeedPercent = selectedPercent))
+            },
+        )
+    }
     SettingsSwitch(
         label = stringResource(R.string.detect_thin_walls),
         checked = options.detectThinWalls,
@@ -654,6 +713,14 @@ private fun SlicingSettingsSheet(
         label = stringResource(R.string.precise_outer_walls),
         checked = options.preciseOuterWalls,
         onCheckedChange = { onOptionsChanged(options.copy(preciseOuterWalls = it)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.path_resolution),
+        valueText = stringResource(R.string.millimeters_value_fine, options.resolution),
+        value = options.resolution,
+        range = 0.001f..max(0.1f, options.resolution),
+        steps = ((max(0.1f, options.resolution) - 0.001f) / 0.001f).roundToInt().coerceAtLeast(2) - 1,
+        onValueChange = { onOptionsChanged(options.copy(resolution = (it * 1_000f).roundToInt() / 1_000f)) },
     )
     Text(stringResource(R.string.ensure_vertical_shell_thickness), fontWeight = FontWeight.SemiBold)
     CompactChoices(
@@ -948,6 +1015,30 @@ private fun SlicingSettingsSheet(
         steps = featureSpeedSteps,
         onValueChange = { onOptionsChanged(options.copy(topSurfaceSpeed = (it / 5f).roundToInt() * 5f)) },
     )
+    OverhangSpeedSetting(
+        label = stringResource(R.string.small_perimeter_speed),
+        value = options.smallPerimeterSpeed,
+        percent = options.smallPerimeterSpeedPercent,
+        maximumAbsolute = maximumFeatureSpeed,
+        maximumPercent = 300f,
+        onValueChange = { onOptionsChanged(options.copy(smallPerimeterSpeed = it)) },
+        onPercentChange = { selectedPercent, adjustedValue ->
+            onOptionsChanged(
+                options.copy(
+                    smallPerimeterSpeed = adjustedValue,
+                    smallPerimeterSpeedPercent = selectedPercent,
+                ),
+            )
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.small_perimeter_threshold),
+        valueText = stringResource(R.string.millimeters_value_precise, options.smallPerimeterThreshold),
+        value = options.smallPerimeterThreshold,
+        range = 0f..max(20f, options.smallPerimeterThreshold),
+        steps = (max(20f, options.smallPerimeterThreshold) * 2f).roundToInt().coerceAtLeast(2) - 1,
+        onValueChange = { onOptionsChanged(options.copy(smallPerimeterThreshold = (it * 2f).roundToInt() / 2f)) },
+    )
     SettingSlider(
         label = stringResource(R.string.travel_speed),
         valueText = stringResource(R.string.print_speed_value, options.travelSpeed),
@@ -955,6 +1046,34 @@ private fun SlicingSettingsSheet(
         range = 10f..max(700f, options.travelSpeed),
         steps = ((max(700f, options.travelSpeed) - 10f) / 5f).roundToInt().coerceAtLeast(2) - 1,
         onValueChange = { onOptionsChanged(options.copy(travelSpeed = (it / 5f).roundToInt() * 5f)) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.avoid_crossing_walls),
+        checked = options.reduceCrossingWall,
+        onCheckedChange = { onOptionsChanged(options.copy(reduceCrossingWall = it)) },
+    )
+    if (options.reduceCrossingWall) {
+        LengthOrPercentSetting(
+            label = stringResource(R.string.maximum_travel_detour),
+            value = options.maxTravelDetourDistance,
+            percent = options.maxTravelDetourDistancePercent,
+            maximumAbsolute = 1_000f,
+            maximumPercent = 1_000f,
+            onValueChange = { onOptionsChanged(options.copy(maxTravelDetourDistance = it)) },
+            onPercentChange = { selectedPercent, adjustedValue ->
+                onOptionsChanged(
+                    options.copy(
+                        maxTravelDetourDistance = adjustedValue,
+                        maxTravelDetourDistancePercent = selectedPercent,
+                    ),
+                )
+            },
+        )
+    }
+    SettingsSwitch(
+        label = stringResource(R.string.reduce_infill_retraction),
+        checked = options.reduceInfillRetraction,
+        onCheckedChange = { onOptionsChanged(options.copy(reduceInfillRetraction = it)) },
     )
     SettingSlider(
         label = stringResource(R.string.first_layer_speed),
@@ -1008,6 +1127,11 @@ private fun SlicingSettingsSheet(
         label = stringResource(R.string.overhang_speed),
         checked = options.overhangSpeedEnabled,
         onCheckedChange = { onOptionsChanged(options.copy(overhangSpeedEnabled = it)) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.slowdown_for_curled_perimeters),
+        checked = options.slowdownForCurledPerimeters,
+        onCheckedChange = { onOptionsChanged(options.copy(slowdownForCurledPerimeters = it)) },
     )
     if (options.overhangSpeedEnabled) {
         OverhangSpeedSetting(
@@ -1521,13 +1645,13 @@ private fun LengthOrPercentSetting(
     SettingSlider(
         label = label,
         valueText = if (percent) {
-            stringResource(R.string.percent_value, value.coerceAtMost(100f).roundToInt())
+            stringResource(R.string.percent_value, value.coerceAtMost(maximumPercent).roundToInt())
         } else {
             stringResource(R.string.millimeters_value_precise, value)
         },
         value = value.coerceIn(0f, maximum),
         range = 0f..maximum,
-        steps = if (percent) 99 else 199,
+        steps = if (percent) maximumPercent.roundToInt().coerceIn(2, 1_000) - 1 else 199,
         onValueChange = { onValueChange(if (percent) it.roundToInt().toFloat() else it) },
     )
 }

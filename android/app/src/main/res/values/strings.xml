@@ -117,6 +117,10 @@
     <string name="wall_order_inner_outer">Inner → outer</string>
     <string name="wall_order_outer_inner">Outer → inner</string>
     <string name="wall_order_inner_outer_inner">Inner → outer → inner</string>
+    <string name="wall_direction">Wall direction</string>
+    <string name="wall_direction_auto">Auto</string>
+    <string name="wall_direction_counter_clockwise">Counterclockwise</string>
+    <string name="wall_direction_clockwise">Clockwise</string>
     <string name="outer_wall_width">Outer wall width</string>
     <string name="inner_wall_width">Inner wall width</string>
     <string name="top_surface_width">Top surface width</string>
@@ -172,7 +176,13 @@
     <string name="top_surface_flow_ratio">Top surface flow</string>
     <string name="bottom_surface_flow_ratio">Bottom surface flow</string>
     <string name="travel_speed">Travel speed</string>
+    <string name="avoid_crossing_walls">Avoid crossing walls</string>
+    <string name="maximum_travel_detour">Maximum travel detour</string>
+    <string name="reduce_infill_retraction">Reduce infill retraction</string>
     <string name="first_layer_speed">First layer speed</string>
+    <string name="small_perimeter_speed">Small perimeter speed</string>
+    <string name="small_perimeter_threshold">Small perimeter threshold</string>
+    <string name="slowdown_for_curled_perimeters">Slow down for curled perimeters</string>
     <string name="feature_acceleration">Acceleration</string>
     <string name="default_acceleration">Normal print acceleration</string>
     <string name="outer_wall_acceleration">Outer wall acceleration</string>
@@ -214,6 +224,13 @@
     <string name="sparse_infill_acceleration">Sparse infill acceleration</string>
     <string name="internal_solid_acceleration">Internal solid acceleration</string>
     <string name="seam_position">Seam position</string>
+    <string name="staggered_inner_seams">Stagger inner seams</string>
+    <string name="seam_gap">Seam gap</string>
+    <string name="wipe_before_external_loop">Wipe before outer wall</string>
+    <string name="wipe_on_loops">Wipe on loops</string>
+    <string name="role_based_wipe_speed">Use toolpath speed for wiping</string>
+    <string name="wipe_speed">Wipe speed</string>
+    <string name="path_resolution">Toolpath resolution</string>
     <string name="overhang_speed">Slow down overhangs</string>
     <string name="overhang_speed_1">Slight overhang</string>
     <string name="overhang_speed_2">Moderate overhang</string>
@@ -245,6 +262,7 @@
     <string name="brim_width">Brim width</string>
     <string name="millimeters_value">%1$.0f mm</string>
     <string name="millimeters_value_precise">%1$.2f mm</string>
+    <string name="millimeters_value_fine">%1$.3f mm</string>
     <string name="flow_ratio_value">%1$.2f</string>
     <string name="volumetric_speed_value">%1$.0f mm³/s</string>
     <string name="print_speed_value">%1$.0f mm/s</string>

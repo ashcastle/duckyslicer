@@ -175,6 +175,10 @@ class ProfileStore private constructor(
             infillAnchorMaxPercent = options.infillAnchorMaxPercent,
             gapFillTarget = options.gapFillTarget,
             filterOutGapFill = options.filterOutGapFill,
+            reduceCrossingWall = options.reduceCrossingWall,
+            maxTravelDetourDistance = options.maxTravelDetourDistance,
+            maxTravelDetourDistancePercent = options.maxTravelDetourDistancePercent,
+            reduceInfillRetraction = options.reduceInfillRetraction,
             travelSpeed = options.travelSpeed,
             firstLayerSpeed = options.firstLayerSpeed,
             supportType = options.supportType,
@@ -198,7 +202,20 @@ class ProfileStore private constructor(
             internalSolidInfillLineWidth = options.internalSolidInfillLineWidth,
             supportLineWidth = options.supportLineWidth,
             initialLayerLineWidth = options.initialLayerLineWidth,
+            smallPerimeterSpeed = options.smallPerimeterSpeed,
+            smallPerimeterSpeedPercent = options.smallPerimeterSpeedPercent,
+            smallPerimeterThreshold = options.smallPerimeterThreshold,
+            slowdownForCurledPerimeters = options.slowdownForCurledPerimeters,
+            resolution = options.resolution,
             seamPosition = options.seamPosition,
+            staggeredInnerSeams = options.staggeredInnerSeams,
+            seamGap = options.seamGap,
+            seamGapPercent = options.seamGapPercent,
+            wipeBeforeExternalLoop = options.wipeBeforeExternalLoop,
+            wipeOnLoops = options.wipeOnLoops,
+            roleBasedWipeSpeed = options.roleBasedWipeSpeed,
+            wipeSpeed = options.wipeSpeed,
+            wipeSpeedPercent = options.wipeSpeedPercent,
             ironingType = options.ironingType,
             ironingPattern = options.ironingPattern,
             ironingFlow = options.ironingFlow,
@@ -206,6 +223,7 @@ class ProfileStore private constructor(
             ironingSpeed = options.ironingSpeed,
             wallGenerator = options.wallGenerator,
             wallSequence = options.wallSequence,
+            wallDirection = options.wallDirection,
             detectThinWalls = options.detectThinWalls,
             detectOverhangWalls = options.detectOverhangWalls,
             onlyOneWallOnTop = options.onlyOneWallOnTop,
@@ -258,7 +276,7 @@ class ProfileStore private constructor(
         ?: throw IllegalArgumentException("Profile name is required")
 
     private companion object {
-        const val USER_PROFILE_SCHEMA_VERSION = 10
+        const val USER_PROFILE_SCHEMA_VERSION = 11
     }
 }
 
@@ -360,6 +378,10 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("infillAnchorMaxPercent", infillAnchorMaxPercent)
     .put("gapFillTarget", gapFillTarget)
     .put("filterOutGapFill", filterOutGapFill)
+    .put("reduceCrossingWall", reduceCrossingWall)
+    .put("maxTravelDetourDistance", maxTravelDetourDistance)
+    .put("maxTravelDetourDistancePercent", maxTravelDetourDistancePercent)
+    .put("reduceInfillRetraction", reduceInfillRetraction)
     .put("travelSpeed", travelSpeed)
     .put("firstLayerSpeed", firstLayerSpeed).put("supportType", supportType)
     .put("supportAngle", supportAngle).put("skirtLoops", skirtLoops)
@@ -381,7 +403,20 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("internalSolidInfillLineWidth", internalSolidInfillLineWidth)
     .put("supportLineWidth", supportLineWidth)
     .put("initialLayerLineWidth", initialLayerLineWidth)
+    .put("smallPerimeterSpeed", smallPerimeterSpeed)
+    .put("smallPerimeterSpeedPercent", smallPerimeterSpeedPercent)
+    .put("smallPerimeterThreshold", smallPerimeterThreshold)
+    .put("slowdownForCurledPerimeters", slowdownForCurledPerimeters)
+    .put("resolution", resolution)
     .put("seamPosition", seamPosition)
+    .put("staggeredInnerSeams", staggeredInnerSeams)
+    .put("seamGap", seamGap)
+    .put("seamGapPercent", seamGapPercent)
+    .put("wipeBeforeExternalLoop", wipeBeforeExternalLoop)
+    .put("wipeOnLoops", wipeOnLoops)
+    .put("roleBasedWipeSpeed", roleBasedWipeSpeed)
+    .put("wipeSpeed", wipeSpeed)
+    .put("wipeSpeedPercent", wipeSpeedPercent)
     .put("ironingType", ironingType)
     .put("ironingPattern", ironingPattern)
     .put("ironingFlow", ironingFlow)
@@ -389,6 +424,7 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("ironingSpeed", ironingSpeed)
     .put("wallGenerator", wallGenerator)
     .put("wallSequence", wallSequence)
+    .put("wallDirection", wallDirection)
     .put("detectThinWalls", detectThinWalls)
     .put("detectOverhangWalls", detectOverhangWalls)
     .put("onlyOneWallOnTop", onlyOneWallOnTop)
@@ -531,6 +567,10 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         infillAnchorMaxPercent = optBoolean("infillAnchorMaxPercent"),
         gapFillTarget = optString("gapFillTarget", "nowhere"),
         filterOutGapFill = optDouble("filterOutGapFill", 0.0).toFloat(),
+        reduceCrossingWall = optBoolean("reduceCrossingWall"),
+        maxTravelDetourDistance = optDouble("maxTravelDetourDistance", 0.0).toFloat(),
+        maxTravelDetourDistancePercent = optBoolean("maxTravelDetourDistancePercent"),
+        reduceInfillRetraction = optBoolean("reduceInfillRetraction"),
         travelSpeed = optDouble("travelSpeed", 500.0).toFloat(),
         firstLayerSpeed = optDouble("firstLayerSpeed", 50.0).toFloat(),
         supportType = optString("supportType", "normal"),
@@ -554,7 +594,20 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         internalSolidInfillLineWidth = optDouble("internalSolidInfillLineWidth", 0.0).toFloat(),
         supportLineWidth = optDouble("supportLineWidth", 0.0).toFloat(),
         initialLayerLineWidth = optDouble("initialLayerLineWidth", 0.0).toFloat(),
+        smallPerimeterSpeed = optDouble("smallPerimeterSpeed", 50.0).toFloat(),
+        smallPerimeterSpeedPercent = optBoolean("smallPerimeterSpeedPercent", true),
+        smallPerimeterThreshold = optDouble("smallPerimeterThreshold", 0.0).toFloat(),
+        slowdownForCurledPerimeters = optBoolean("slowdownForCurledPerimeters", true),
+        resolution = optDouble("resolution", 0.01).toFloat(),
         seamPosition = optString("seamPosition", "aligned"),
+        staggeredInnerSeams = optBoolean("staggeredInnerSeams"),
+        seamGap = optDouble("seamGap", 10.0).toFloat(),
+        seamGapPercent = optBoolean("seamGapPercent", true),
+        wipeBeforeExternalLoop = optBoolean("wipeBeforeExternalLoop"),
+        wipeOnLoops = optBoolean("wipeOnLoops"),
+        roleBasedWipeSpeed = optBoolean("roleBasedWipeSpeed", true),
+        wipeSpeed = optDouble("wipeSpeed", 80.0).toFloat(),
+        wipeSpeedPercent = optBoolean("wipeSpeedPercent", true),
         ironingType = optString("ironingType", "no ironing"),
         ironingPattern = optString("ironingPattern", "rectilinear"),
         ironingFlow = optDouble("ironingFlow", 10.0).toFloat(),
@@ -562,6 +615,7 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         ironingSpeed = optDouble("ironingSpeed", 20.0).toFloat(),
         wallGenerator = optString("wallGenerator", "arachne"),
         wallSequence = optString("wallSequence", "inner-outer"),
+        wallDirection = optString("wallDirection", "auto"),
         detectThinWalls = optBoolean("detectThinWalls"),
         detectOverhangWalls = optBoolean("detectOverhangWalls", true),
         onlyOneWallOnTop = optBoolean("onlyOneWallOnTop"),
