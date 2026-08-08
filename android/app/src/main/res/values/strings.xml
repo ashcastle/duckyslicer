@@ -86,4 +86,5 @@
     <string name="profile_name">Profile name</string>
     <string name="save_as_new_profile">Save as new profile</string>
     <string name="profile_saved">Profile saved.</string>
+    <string name="profile_save_error">Couldn’t save this profile.</string>
 </resources>

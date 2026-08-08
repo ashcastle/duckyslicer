@@ -162,14 +162,6 @@ private fun PrinterSettingsSheet(
         ),
         color = Color(0xFFC8C9C2),
     )
-    SettingSlider(
-        label = stringResource(R.string.nozzle_diameter),
-        valueText = String.format(Locale.US, "%.1f mm", options.nozzleDiameter),
-        value = options.nozzleDiameter,
-        range = 0.2f..1.0f,
-        steps = 7,
-        onValueChange = { onOptionsChanged(options.copy(nozzleDiameter = (it * 10f).roundToInt() / 10f)) },
-    )
     SaveProfileField(onSave = onSave, onDismiss = onDismiss)
 }
 

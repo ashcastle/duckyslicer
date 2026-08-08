@@ -100,6 +100,7 @@ private fun DuckySlicerScreen() {
     val saveError = stringResource(R.string.save_error)
     val savedNotice = stringResource(R.string.gcode_saved)
     val profileSavedNotice = stringResource(R.string.profile_saved)
+    val profileSaveError = stringResource(R.string.profile_save_error)
     val previewError = stringResource(R.string.preview_error)
 
     var model by remember { mutableStateOf<ModelInfo?>(null) }
@@ -272,22 +273,43 @@ private fun DuckySlicerScreen() {
         onSave = saveGcode,
         onSliceOptionsChanged = ::applyOptions,
         onSavePrinterProfile = { name ->
-            val saved = profileStore.savePrinter(name, sliceOptions)
-            profileCatalog = profileStore.load()
-            applyOptions(sliceOptions.selectPrinter(saved))
-            notice = profileSavedNotice
+            runCatching { profileStore.savePrinter(name, sliceOptions) }
+                .onSuccess { saved ->
+                    profileCatalog = profileStore.load()
+                    applyOptions(sliceOptions.selectPrinter(saved))
+                    notice = profileSavedNotice
+                    error = null
+                }
+                .onFailure {
+                    error = profileSaveError
+                    notice = null
+                }
         },
         onSaveFilamentProfile = { name ->
-            val saved = profileStore.saveFilament(name, sliceOptions)
-            profileCatalog = profileStore.load()
-            applyOptions(sliceOptions.selectFilament(saved))
-            notice = profileSavedNotice
+            runCatching { profileStore.saveFilament(name, sliceOptions) }
+                .onSuccess { saved ->
+                    profileCatalog = profileStore.load()
+                    applyOptions(sliceOptions.selectFilament(saved))
+                    notice = profileSavedNotice
+                    error = null
+                }
+                .onFailure {
+                    error = profileSaveError
+                    notice = null
+                }
         },
         onSaveSlicingProfile = { name ->
-            val saved = profileStore.saveSlicing(name, sliceOptions)
-            profileCatalog = profileStore.load()
-            applyOptions(sliceOptions.selectQuality(saved))
-            notice = profileSavedNotice
+            runCatching { profileStore.saveSlicing(name, sliceOptions) }
+                .onSuccess { saved ->
+                    profileCatalog = profileStore.load()
+                    applyOptions(sliceOptions.selectQuality(saved))
+                    notice = profileSavedNotice
+                    error = null
+                }
+                .onFailure {
+                    error = profileSaveError
+                    notice = null
+                }
         },
         onLayerRangeSelected = loadPreviewRange,
     )
