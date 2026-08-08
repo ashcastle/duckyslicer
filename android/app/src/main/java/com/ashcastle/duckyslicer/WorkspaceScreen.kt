@@ -25,13 +25,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.RotateRight
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Settings
@@ -132,8 +136,8 @@ enum class WorkspaceTab {
 @Composable
 fun WorkspaceScreen(
     selectedTab: WorkspaceTab,
-    model: ModelInfo?,
-    modelTransform: ModelTransform,
+    projectObjects: List<ProjectObject>,
+    selectedObjectId: String?,
     sliceOptions: SliceOptions,
     profileCatalog: ProfileCatalog,
     appSettings: AppSettings,
@@ -153,9 +157,18 @@ fun WorkspaceScreen(
     previewLoading: Boolean,
     error: String?,
     notice: String?,
+    canUndo: Boolean,
+    canRedo: Boolean,
     onTabSelected: (WorkspaceTab) -> Unit,
     onChoose: () -> Unit,
+    onObjectSelected: (String?) -> Unit,
     onModelTransformChanged: (ModelTransform) -> Unit,
+    onModelTransformPreview: (ModelTransform) -> Unit,
+    onModelTransformCommitted: (ModelTransform) -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onDuplicate: () -> Unit,
+    onArrange: () -> Unit,
     onRemoveModel: () -> Unit,
     onSlice: () -> Unit,
     onSave: () -> Unit,
@@ -175,11 +188,13 @@ fun WorkspaceScreen(
     onRemoteResume: () -> Unit,
     onRemoteCancel: () -> Unit,
 ) = BoxWithConstraints {
+    val selectedObject = projectObjects.firstOrNull { it.id == selectedObjectId }
+    val model = selectedObject?.model ?: projectObjects.firstOrNull()?.model
+    val modelTransform = selectedObject?.transform ?: ModelTransform()
     val tabletLayout = maxWidth >= 600.dp
     val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
     val panelMaxHeight = (maxHeight - if (tabletLayout) 24.dp else 94.dp).coerceAtLeast(320.dp)
     var showModelTools by remember { mutableStateOf(false) }
-    var objectSelected by remember(model?.localPath) { mutableStateOf(false) }
     Scaffold(
         containerColor = Color(0xFF191A18),
         bottomBar = {
@@ -190,19 +205,19 @@ fun WorkspaceScreen(
             if (tabletLayout) WorkspaceNavigationRail(selectedTab = selectedTab, onSelected = onTabSelected)
             Box(modifier = Modifier.weight(1f).fillMaxSize()) {
                 BedScene(
-                    model = model,
-                    modelTransform = modelTransform,
+                    projectObjects = projectObjects,
+                    selectedObjectId = selectedObjectId,
                     preview = if (selectedTab == WorkspaceTab.PREVIEW) layerPreview else null,
                     bedSizeX = sliceOptions.bedSizeX,
                     bedSizeY = sliceOptions.bedSizeY,
                     toolpathOpacity = appSettings.toolpathOpacity,
                     toolpathDepthContrast = appSettings.toolpathDepthContrast,
                     previewDetail = appSettings.previewDetail,
-                    objectSelected = objectSelected,
                     objectManipulationEnabled = selectedTab == WorkspaceTab.SLICE &&
                         !importing && !slicing && !previewLoading,
-                    onObjectSelectedChanged = { objectSelected = it },
-                    onModelTransformChanged = onModelTransformChanged,
+                    onObjectSelected = onObjectSelected,
+                    onModelTransformPreview = onModelTransformPreview,
+                    onModelTransformCommitted = onModelTransformCommitted,
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -213,18 +228,24 @@ fun WorkspaceScreen(
                 canExport = sliceOutcome != null,
                 onImport = onChoose,
                 onExport = onSave,
+                canArrange = projectObjects.size > 1,
+                onArrange = onArrange,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(16.dp),
             )
 
-            if (model != null && selectedTab == WorkspaceTab.SLICE && objectSelected) {
+            if (selectedObject != null && selectedTab == WorkspaceTab.SLICE) {
                 ObjectToolRail(
                     transform = modelTransform,
                     onTransformChanged = onModelTransformChanged,
+                    canUndo = canUndo,
+                    canRedo = canRedo,
+                    onUndo = onUndo,
+                    onRedo = onRedo,
+                    onDuplicate = onDuplicate,
                     onMore = { showModelTools = true },
                     onRemove = {
-                        objectSelected = false
                         onRemoveModel()
                     },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp),
@@ -244,7 +265,12 @@ fun WorkspaceScreen(
                     .widthIn(max = 280.dp),
             ) {
                 Text(
-                    text = model?.fileName ?: stringResource(R.string.no_model),
+                    text = selectedObject?.model?.fileName
+                        ?: if (projectObjects.isEmpty()) {
+                            stringResource(R.string.no_model)
+                        } else {
+                            stringResource(R.string.object_count, projectObjects.size)
+                        },
                     modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -313,8 +339,10 @@ fun WorkspaceScreen(
                 )
 
                 WorkspaceTab.PROJECT -> ProjectSheet(
-                    model = model,
+                    objects = projectObjects,
+                    selectedObjectId = selectedObjectId,
                     outcome = sliceOutcome,
+                    onObjectSelected = onObjectSelected,
                     modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
                 )
 
@@ -327,7 +355,7 @@ fun WorkspaceScreen(
         }
     }
     }
-    if (showModelTools && model != null) {
+    if (showModelTools && selectedObject != null) {
         ModelTransformSheet(
             transform = modelTransform,
             bedSizeX = sliceOptions.bedSizeX,
@@ -469,8 +497,10 @@ private fun WorkspaceMenu(
     slicing: Boolean,
     previewLoading: Boolean,
     canExport: Boolean,
+    canArrange: Boolean,
     onImport: () -> Unit,
     onExport: () -> Unit,
+    onArrange: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -497,6 +527,15 @@ private fun WorkspaceMenu(
                 onClick = {
                     expanded = false
                     onImport()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.arrange_objects)) },
+                leadingIcon = { Icon(Icons.Default.GridView, null) },
+                enabled = canArrange && !slicing && !previewLoading,
+                onClick = {
+                    expanded = false
+                    onArrange()
                 },
             )
             DropdownMenuItem(
@@ -571,18 +610,18 @@ private fun workspaceNavigationItems() = listOf(
 
 @Composable
 private fun BedScene(
-    model: ModelInfo?,
-    modelTransform: ModelTransform,
+    projectObjects: List<ProjectObject>,
+    selectedObjectId: String?,
     preview: GcodeLayerPreview?,
     bedSizeX: Float,
     bedSizeY: Float,
     toolpathOpacity: Float,
     toolpathDepthContrast: Float,
     previewDetail: PreviewDetail,
-    objectSelected: Boolean,
     objectManipulationEnabled: Boolean,
-    onObjectSelectedChanged: (Boolean) -> Unit,
-    onModelTransformChanged: (ModelTransform) -> Unit,
+    onObjectSelected: (String?) -> Unit,
+    onModelTransformPreview: (ModelTransform) -> Unit,
+    onModelTransformCommitted: (ModelTransform) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var yaw by remember { mutableFloatStateOf(-45f) }
@@ -591,14 +630,15 @@ private fun BedScene(
     var pan by remember { mutableStateOf(Offset.Zero) }
     var interactionActive by remember { mutableStateOf(false) }
     var refinedPreview by remember { mutableStateOf(true) }
-    var modelScreenBounds by remember(model) { mutableStateOf<Rect?>(null) }
-    val currentTransform by rememberUpdatedState(modelTransform)
-    val currentSelectionCallback by rememberUpdatedState(onObjectSelectedChanged)
-    val currentTransformCallback by rememberUpdatedState(onModelTransformChanged)
+    val objectIds = projectObjects.map(ProjectObject::id)
+    var modelScreenBounds by remember(objectIds) { mutableStateOf<Map<String, Rect>>(emptyMap()) }
+    val currentObjects by rememberUpdatedState(projectObjects)
+    val currentSelectionCallback by rememberUpdatedState(onObjectSelected)
+    val currentTransformCallback by rememberUpdatedState(onModelTransformPreview)
+    val currentTransformCommitCallback by rememberUpdatedState(onModelTransformCommitted)
     val previewPaths = remember(preview) {
         Array(PreviewDepthBands) { Array(ToolpathStyles.size) { Path() } }
     }
-    val meshPath = remember(model) { Path() }
     val movingPreviewPlan = remember(preview, previewDetail) {
         preview?.buildRenderPlan(
             segmentBudget = when (previewDetail) {
@@ -628,13 +668,20 @@ private fun BedScene(
     }
 
     Canvas(
-        modifier.pointerInput(model, preview, objectManipulationEnabled) {
+        modifier.pointerInput(objectIds, preview, objectManipulationEnabled) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
-                val hitObject = objectManipulationEnabled && modelScreenBounds
-                    ?.inflate(14.dp.toPx())
-                    ?.contains(down.position) == true
-                if (hitObject) currentSelectionCallback(true)
+                val hitObjectId = if (objectManipulationEnabled) {
+                    modelScreenBounds.entries.toList().asReversed().firstOrNull { (_, bounds) ->
+                        bounds.inflate(14.dp.toPx()).contains(down.position)
+                    }?.key
+                } else {
+                    null
+                }
+                val dragStartTransform = currentObjects
+                    .firstOrNull { it.id == hitObjectId }
+                    ?.transform
+                if (hitObjectId != null) currentSelectionCallback(hitObjectId)
                 var movement = 0f
                 interactionActive = true
                 try {
@@ -647,7 +694,7 @@ private fun BedScene(
                                 val change = pressed.first()
                                 val delta = change.position - change.previousPosition
                                 movement += abs(delta.x) + abs(delta.y)
-                                if (hitObject) {
+                                if (hitObjectId != null) {
                                     val currentSceneScale = min(
                                         size.width * 0.64f,
                                         size.height * 0.72f,
@@ -659,7 +706,11 @@ private fun BedScene(
                                         (currentSceneScale * sin(pitchRadians)).coerceAtLeast(0.001f)
                                     val bedDeltaX = projectedX * cos(yawRadians) + projectedY * sin(yawRadians)
                                     val bedDeltaY = -projectedX * sin(yawRadians) + projectedY * cos(yawRadians)
-                                    val transform = currentTransform
+                                    val transform = currentObjects
+                                        .firstOrNull { it.id == hitObjectId }
+                                        ?.transform
+                                        ?: dragStartTransform
+                                        ?: ModelTransform()
                                     currentTransformCallback(
                                         transform.copy(
                                             offsetXmm = (transform.offsetXmm + bedDeltaX)
@@ -685,7 +736,11 @@ private fun BedScene(
                     } while (event.changes.any { it.pressed })
                 } finally {
                     interactionActive = false
-                    if (!hitObject && movement < 12f) currentSelectionCallback(false)
+                    if (hitObjectId != null && dragStartTransform != null && movement >= 1f) {
+                        currentTransformCommitCallback(dragStartTransform)
+                    } else if (hitObjectId == null && movement < 12f) {
+                        currentSelectionCallback(null)
+                    }
                 }
             }
         },
@@ -800,67 +855,79 @@ private fun BedScene(
                     )
                 }
             }
-        } else if (model != null) {
-            val minimumRotatedZ = modelTransform.minimumRotatedZ(model)
-            meshPath.reset()
-            var triangleIndex = 0
-            var minimumScreenX = Float.POSITIVE_INFINITY
-            var minimumScreenY = Float.POSITIVE_INFINITY
-            var maximumScreenX = Float.NEGATIVE_INFINITY
-            var maximumScreenY = Float.NEGATIVE_INFINITY
-            while (triangleIndex + 8 < model.previewTriangles.size) {
-                val aPosition = modelTransform.placeVertex(
-                    model.previewTriangles[triangleIndex],
-                    model.previewTriangles[triangleIndex + 1],
-                    model.previewTriangles[triangleIndex + 2],
-                    model,
-                    bedSizeX,
-                    bedSizeY,
-                    minimumRotatedZ,
-                )
-                val bPosition = modelTransform.placeVertex(
-                    model.previewTriangles[triangleIndex + 3],
-                    model.previewTriangles[triangleIndex + 4],
-                    model.previewTriangles[triangleIndex + 5],
-                    model,
-                    bedSizeX,
-                    bedSizeY,
-                    minimumRotatedZ,
-                )
-                val cPosition = modelTransform.placeVertex(
-                    model.previewTriangles[triangleIndex + 6],
-                    model.previewTriangles[triangleIndex + 7],
-                    model.previewTriangles[triangleIndex + 8],
-                    model,
-                    bedSizeX,
-                    bedSizeY,
-                    minimumRotatedZ,
-                )
-                val a = project(aPosition[0], aPosition[1], aPosition[2])
-                val b = project(bPosition[0], bPosition[1], bPosition[2])
-                val c = project(cPosition[0], cPosition[1], cPosition[2])
-                listOf(a, b, c).forEach { point ->
-                    minimumScreenX = min(minimumScreenX, point.x)
-                    minimumScreenY = min(minimumScreenY, point.y)
-                    maximumScreenX = max(maximumScreenX, point.x)
-                    maximumScreenY = max(maximumScreenY, point.y)
+        } else if (projectObjects.isNotEmpty()) {
+            val nextBounds = mutableMapOf<String, Rect>()
+            projectObjects.forEach { projectObject ->
+                val model = projectObject.model
+                val modelTransform = projectObject.transform
+                val objectSelected = projectObject.id == selectedObjectId
+                val minimumRotatedZ = modelTransform.minimumRotatedZ(model)
+                val meshPath = Path()
+                var triangleIndex = 0
+                var minimumScreenX = Float.POSITIVE_INFINITY
+                var minimumScreenY = Float.POSITIVE_INFINITY
+                var maximumScreenX = Float.NEGATIVE_INFINITY
+                var maximumScreenY = Float.NEGATIVE_INFINITY
+                while (triangleIndex + 8 < model.previewTriangles.size) {
+                    val aPosition = modelTransform.placeVertex(
+                        model.previewTriangles[triangleIndex],
+                        model.previewTriangles[triangleIndex + 1],
+                        model.previewTriangles[triangleIndex + 2],
+                        model,
+                        bedSizeX,
+                        bedSizeY,
+                        minimumRotatedZ,
+                    )
+                    val bPosition = modelTransform.placeVertex(
+                        model.previewTriangles[triangleIndex + 3],
+                        model.previewTriangles[triangleIndex + 4],
+                        model.previewTriangles[triangleIndex + 5],
+                        model,
+                        bedSizeX,
+                        bedSizeY,
+                        minimumRotatedZ,
+                    )
+                    val cPosition = modelTransform.placeVertex(
+                        model.previewTriangles[triangleIndex + 6],
+                        model.previewTriangles[triangleIndex + 7],
+                        model.previewTriangles[triangleIndex + 8],
+                        model,
+                        bedSizeX,
+                        bedSizeY,
+                        minimumRotatedZ,
+                    )
+                    val a = project(aPosition[0], aPosition[1], aPosition[2])
+                    val b = project(bPosition[0], bPosition[1], bPosition[2])
+                    val c = project(cPosition[0], cPosition[1], cPosition[2])
+                    listOf(a, b, c).forEach { point ->
+                        minimumScreenX = min(minimumScreenX, point.x)
+                        minimumScreenY = min(minimumScreenY, point.y)
+                        maximumScreenX = max(maximumScreenX, point.x)
+                        maximumScreenY = max(maximumScreenY, point.y)
+                    }
+                    meshPath.moveTo(a.x, a.y)
+                    meshPath.lineTo(b.x, b.y)
+                    meshPath.lineTo(c.x, c.y)
+                    meshPath.close()
+                    triangleIndex += 9
                 }
-                meshPath.moveTo(a.x, a.y)
-                meshPath.lineTo(b.x, b.y)
-                meshPath.lineTo(c.x, c.y)
-                meshPath.close()
-                triangleIndex += 9
+                if (minimumScreenX.isFinite()) {
+                    nextBounds[projectObject.id] = Rect(
+                        minimumScreenX,
+                        minimumScreenY,
+                        maximumScreenX,
+                        maximumScreenY,
+                    )
+                }
+                drawPath(meshPath, WorkspaceYellow.copy(alpha = if (objectSelected) 0.24f else 0.14f))
+                drawPath(
+                    meshPath,
+                    if (objectSelected) Color.White.copy(alpha = 0.92f)
+                    else WorkspaceYellow.copy(alpha = 0.52f),
+                    style = Stroke(if (objectSelected) 1.5.dp.toPx() else 0.7.dp.toPx()),
+                )
             }
-            if (minimumScreenX.isFinite()) {
-                val nextBounds = Rect(minimumScreenX, minimumScreenY, maximumScreenX, maximumScreenY)
-                if (modelScreenBounds != nextBounds) modelScreenBounds = nextBounds
-            }
-            drawPath(meshPath, WorkspaceYellow.copy(alpha = if (objectSelected) 0.24f else 0.14f))
-            drawPath(
-                meshPath,
-                if (objectSelected) Color.White.copy(alpha = 0.92f) else WorkspaceYellow.copy(alpha = 0.52f),
-                style = Stroke(if (objectSelected) 1.5.dp.toPx() else 0.7.dp.toPx()),
-            )
+            if (modelScreenBounds != nextBounds) modelScreenBounds = nextBounds
         }
     }
 }
@@ -869,6 +936,11 @@ private fun BedScene(
 private fun ObjectToolRail(
     transform: ModelTransform,
     onTransformChanged: (ModelTransform) -> Unit,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onDuplicate: () -> Unit,
     onMore: () -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
@@ -885,6 +957,15 @@ private fun ObjectToolRail(
         ) {
             Icon(Icons.Default.DragIndicator, contentDescription = null, tint = WorkspaceYellow)
             Text(stringResource(R.string.drag_to_move), modifier = Modifier.padding(horizontal = 6.dp))
+            IconButton(onClick = onUndo, enabled = canUndo) {
+                Icon(Icons.AutoMirrored.Filled.Undo, stringResource(R.string.undo))
+            }
+            IconButton(onClick = onRedo, enabled = canRedo) {
+                Icon(Icons.AutoMirrored.Filled.Redo, stringResource(R.string.redo))
+            }
+            IconButton(onClick = onDuplicate) {
+                Icon(Icons.Default.ContentCopy, stringResource(R.string.duplicate_object))
+            }
             IconButton(onClick = {
                 onTransformChanged(transform.copy(offsetXmm = 0f, offsetYmm = 0f))
             }) {
@@ -1097,13 +1178,36 @@ private fun PreviewSheet(
 
 @Composable
 private fun ProjectSheet(
-    model: ModelInfo?,
+    objects: List<ProjectObject>,
+    selectedObjectId: String?,
     outcome: SliceOutcome?,
+    onObjectSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     WorkspaceCard(modifier) {
         Text(stringResource(R.string.tab_project), fontWeight = FontWeight.Bold)
-        Text(model?.fileName ?: stringResource(R.string.no_model), color = Color(0xFFC8C9C2))
+        Text(
+            if (objects.isEmpty()) stringResource(R.string.no_model)
+            else stringResource(R.string.object_count, objects.size),
+            color = Color(0xFFC8C9C2),
+        )
+        objects.forEach { projectObject ->
+            val selected = projectObject.id == selectedObjectId
+            Surface(
+                onClick = { onObjectSelected(projectObject.id) },
+                color = if (selected) WorkspaceYellow.copy(alpha = 0.18f) else Color.Transparent,
+                contentColor = if (selected) WorkspaceYellow else Color(0xFFE2E3DD),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    projectObject.model.fileName,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
         Text(
             if (outcome == null) stringResource(R.string.no_gcode) else stringResource(R.string.gcode_ready),
             color = if (outcome == null) Color(0xFFC8C9C2) else WorkspaceYellow,

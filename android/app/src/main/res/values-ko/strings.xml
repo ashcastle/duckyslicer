@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="object_count">오브젝트 %1$d개</string>
+    <string name="undo">실행 취소</string>
+    <string name="redo">다시 실행</string>
+    <string name="duplicate_object">오브젝트 복제</string>
+    <string name="arrange_objects">오브젝트 정렬</string>
     <string name="app_name">DuckySlicer</string>
     <string name="workspace_title">준비</string>
     <string name="workspace_subtitle">모델을 불러와 출력 준비를 시작하세요.</string>
@@ -211,4 +216,12 @@
     <string name="connection_timeout">최대 %1$d초 기다리기</string>
     <string name="connection_security_summary">접속 키는 이 기기에서 보호됩니다. 암호화되지 않은 연결은 로컬 주소에서만 허용됩니다.</string>
     <string name="language_settings">언어</string>
+    <string name="build_height">출력 높이</string>
+    <string name="printer_firmware">프린터 펌웨어</string>
+    <string name="motion_limits">동작 한계</string>
+    <string name="maximum_x_speed">최대 X 속도</string>
+    <string name="maximum_y_speed">최대 Y 속도</string>
+    <string name="maximum_print_acceleration">최대 출력 가속도</string>
+    <string name="maximum_travel_acceleration">최대 이동 가속도</string>
+    <string name="acceleration_value">%1$.0f mm/s²</string>
 </resources>

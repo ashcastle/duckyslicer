@@ -31,14 +31,15 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - A full-screen print bed that keeps the model and G-code at their real millimetre scale
 - One-finger orbit and two-finger pan/zoom for the whole scene
 - Tap an object to select it, then drag it directly across the bed
+- Import, select, duplicate, arrange, and slice multiple objects in one project, with undo and redo
 - Full-layer preview by default, with a two-handle slider for choosing a visible layer range
 - Outlined role colors plus adjustable height shading for walls, infill, solid surfaces, support, bridges, and bed adhesion
 - Adaptive preview detail that stays lighter while the camera is moving and refines after release
-- Working move, rotate, scale, center, reset, and remove controls for imported models
-- Snapmaker U1 profiles for 0.2, 0.4, 0.6, and 0.8 mm nozzles
-- Sixteen built-in material profiles and twelve matching slicing profiles
-- Searchable printer and filament selectors with collapsible brand and personal-profile groups
-- Editable settings and named user profiles saved entirely in app-private storage
+- Working move, rotate, scale, center, reset, duplicate, arrange, and remove controls
+- A pinned Orca-derived catalog with 785 printer variants, 3,306 filament presets, and 2,140 slicing processes
+- Searchable printer, filament, and slicing selectors with collapsible brand and personal-profile groups
+- Printer compatibility filtering, validated profile inheritance, and unsafe-entry rejection during the build
+- Editable settings and schema-versioned named user profiles saved entirely in app-private storage
 - Bottom navigation on phones and a space-saving vertical rail on tablets
 - English defaults with Korean device-language localization
 - A distinct DuckySlicer identity built around the duck mark, yellow accents, and charcoal surfaces
@@ -59,9 +60,9 @@ authentication, status parsing, uploads, explicit print start, and encrypted key
 | **Slice** | Choose built-in or saved printer, filament, and slicing profiles; edit, save, and slice |
 | **Preview** | Inspect all layers or narrow the visible range with two slider handles |
 | **Device** | Save OctoPrint or Klipper connections, check status, send G-code, and control an active print |
-| **Project** | See the active model and local G-code state |
+| **Project** | Select any object in the current multi-object project and see local G-code state |
 | **Settings** | Preview load, visual contrast, screen behavior, connection timeout, print confirmation, and language behavior |
-| **Top-left menu** | Import a model or export completed G-code |
+| **Top-left menu** | Add a model, arrange the project, or export completed G-code |
 
 ## Architecture
 
@@ -79,8 +80,10 @@ Jetpack Compose mobile UI
 ```
 
 New DuckySlicer-owned native code should prefer Rust. Inherited slicing algorithms
-remain C++ while they are isolated behind a narrow boundary. Rebuilding the current
-native runtime reproducibly from the included source baseline remains follow-up work.
+remain C++ while they are isolated behind a narrow boundary. The inherited runtime,
+engine, and every native dependency are pinned to reviewed revisions; the APK build
+rebuilds the runtime from source and verifies ARM64 identity, 16 KB ELF alignment,
+and its dynamic-library allowlist before packaging it.
 
 ## Build the APK
 
@@ -91,11 +94,18 @@ Requirements:
 - Android NDK 28.2.13676358
 - Rust with the `aarch64-linux-android` target
 - `cargo-ndk`
+- CMake, Ninja, Git, Curl, Tar, and Make
 
 ```shell
+git submodule update --init --recursive
 cd android
 ./gradlew assembleDebug
 ```
+
+The first build compiles the pinned headless slicer engine and its native dependencies
+and can take a while. Later builds reuse `build/native-slicer`; set
+`DUCKYSLICER_NATIVE_JOBS` to choose a conservative parallel job count for your machine.
+The reviewed output is stripped to roughly APK-ready size before Gradle stages it.
 
 The debug APK is written to:
 
@@ -103,27 +113,18 @@ The debug APK is written to:
 android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## Run the physical-device slicing test
+## Run the device slicing tests
 
-The instrumentation fixture is intentionally not stored in Git. Build and install
-both APKs, then copy an STL into the debuggable app's `filesDir` before running the
-test:
+The test APK includes a small public-domain-style geometry fixture from the repository,
+so the complete on-device suite runs with one command:
 
 ```shell
 cd android
-./gradlew assembleDebug assembleDebugAndroidTest
-
-MODEL_FILE="/absolute/path/to/model.stl"
-
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-adb push "$MODEL_FILE" /data/local/tmp/model-under-test.stl
-adb shell run-as com.ashcastle.duckyslicer \
-  cp /data/local/tmp/model-under-test.stl files/model-under-test.stl
-adb shell am instrument -w -r \
-  -e modelName model-under-test.stl \
-  com.ashcastle.duckyslicer.test/androidx.test.runner.AndroidJUnitRunner
+./gradlew connectedDebugAndroidTest
 ```
+
+Pass `-Pandroid.testInstrumentationRunnerArguments.modelName=<asset-name>` to select
+another fixture bundled into the test APK.
 
 ## Languages
 

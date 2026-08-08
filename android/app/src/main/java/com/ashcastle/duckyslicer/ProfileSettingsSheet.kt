@@ -37,6 +37,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.roundToInt
 import java.util.Locale
 
@@ -100,6 +101,23 @@ internal fun ProfileSettings(
         ProfileSettingsKind.PRINTER -> PrinterSettingsSheet(
             options = options,
             profiles = catalog.printers,
+            onProfileSelected = { printer ->
+                var updated = options.selectPrinter(printer)
+                if (!updated.filamentProfile.compatiblePrinters.matchesPrinter(printer)) {
+                    catalog.filaments.firstOrNull { it.compatiblePrinters.matchesPrinter(printer) }
+                        ?.let { updated = updated.selectFilament(it) }
+                }
+                if (
+                    !updated.quality.compatiblePrinters.matchesPrinter(printer) ||
+                    abs(updated.quality.nozzleDiameter - printer.nozzleDiameter) >= 0.05f
+                ) {
+                    catalog.slicing.firstOrNull {
+                        it.compatiblePrinters.matchesPrinter(printer) &&
+                            abs(it.nozzleDiameter - printer.nozzleDiameter) < 0.05f
+                    }?.let { updated = updated.selectQuality(it) }
+                }
+                onOptionsChanged(updated)
+            },
             onOptionsChanged = onOptionsChanged,
             onSave = onSavePrinter,
             onDismiss = { editing = null },
@@ -107,7 +125,10 @@ internal fun ProfileSettings(
 
         ProfileSettingsKind.FILAMENT -> FilamentSettingsSheet(
             options = options,
-            profiles = catalog.filaments,
+            profiles = catalog.filaments.filter {
+                it == options.filamentProfile ||
+                    it.compatiblePrinters.matchesPrinter(options.printerProfile)
+            },
             onOptionsChanged = onOptionsChanged,
             onSave = onSaveFilament,
             onDismiss = { editing = null },
@@ -116,7 +137,11 @@ internal fun ProfileSettings(
         ProfileSettingsKind.SLICING -> SlicingSettingsSheet(
             options = options,
             profiles = catalog.slicing.filter {
-                it == options.quality || abs(it.nozzleDiameter - options.nozzleDiameter) < 0.05f
+                it == options.quality ||
+                    (
+                        abs(it.nozzleDiameter - options.nozzleDiameter) < 0.05f &&
+                            it.compatiblePrinters.matchesPrinter(options.printerProfile)
+                        )
             },
             onOptionsChanged = onOptionsChanged,
             onSave = onSaveSlicing,
@@ -148,6 +173,7 @@ private fun ProfileRow(title: String, summary: String, enabled: Boolean, onClick
 private fun PrinterSettingsSheet(
     options: SliceOptions,
     profiles: List<PrinterProfile>,
+    onProfileSelected: (PrinterProfile) -> Unit,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSave: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -161,7 +187,7 @@ private fun PrinterSettingsSheet(
         searchTerms = {
             listOf(it.name, it.brand.orEmpty(), it.nozzleDiameter.toString(), "nozzle")
         },
-        onSelected = { onOptionsChanged(options.selectPrinter(it)) },
+        onSelected = onProfileSelected,
     )
     Text(
         stringResource(
@@ -171,6 +197,106 @@ private fun PrinterSettingsSheet(
             options.maxPrintHeight.roundToInt(),
         ),
         color = Color(0xFFC8C9C2),
+    )
+    SettingsGroupTitle(stringResource(R.string.build_volume))
+    SettingSlider(
+        label = stringResource(R.string.bed_width),
+        valueText = stringResource(R.string.millimeters_value, options.bedSizeX),
+        value = options.bedSizeX,
+        range = 100f..500f,
+        steps = 399,
+        onValueChange = { onOptionsChanged(options.copy(bedSizeX = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.bed_depth),
+        valueText = stringResource(R.string.millimeters_value, options.bedSizeY),
+        value = options.bedSizeY,
+        range = 100f..500f,
+        steps = 399,
+        onValueChange = { onOptionsChanged(options.copy(bedSizeY = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.build_height),
+        valueText = stringResource(R.string.millimeters_value, options.maxPrintHeight),
+        value = options.maxPrintHeight,
+        range = 100f..600f,
+        steps = 499,
+        onValueChange = { onOptionsChanged(options.copy(maxPrintHeight = it.roundToInt().toFloat())) },
+    )
+    Text(stringResource(R.string.nozzle_diameter), fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf(0.2f, 0.4f, 0.6f, 0.8f),
+        selected = options.nozzleDiameter,
+        label = { stringResource(R.string.millimeters_value_precise, it) },
+        onSelected = {
+            onOptionsChanged(
+                options.copy(nozzleDiameter = it)
+                    .selectQuality(QualityProfile.standardFor(it)),
+            )
+        },
+    )
+    SettingsGroupTitle(stringResource(R.string.printer_firmware))
+    CompactChoices(
+        entries = listOf("marlin", "marlin2"),
+        selected = options.gcodeFlavor,
+        label = {
+            when (it) {
+                "marlin2" -> "Marlin 2"
+                else -> "Marlin"
+            }
+        },
+        onSelected = { onOptionsChanged(options.copy(gcodeFlavor = it)) },
+    )
+    SettingsGroupTitle(stringResource(R.string.motion_limits))
+    SettingSlider(
+        label = stringResource(R.string.maximum_x_speed),
+        valueText = stringResource(R.string.print_speed_value, options.maxSpeedX),
+        value = options.maxSpeedX,
+        range = 50f..700f,
+        steps = 649,
+        onValueChange = { onOptionsChanged(options.copy(maxSpeedX = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.maximum_y_speed),
+        valueText = stringResource(R.string.print_speed_value, options.maxSpeedY),
+        value = options.maxSpeedY,
+        range = 50f..700f,
+        steps = 649,
+        onValueChange = { onOptionsChanged(options.copy(maxSpeedY = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.maximum_print_acceleration),
+        valueText = stringResource(R.string.acceleration_value, options.maxAccelerationExtruding),
+        value = options.maxAccelerationExtruding,
+        range = 500f..30_000f,
+        steps = 117,
+        onValueChange = {
+            val value = (it / 250f).roundToInt() * 250f
+            onOptionsChanged(
+                options.copy(
+                    maxAccelerationExtruding = value,
+                    maxAccelerationX = max(options.maxAccelerationX, value),
+                    maxAccelerationY = max(options.maxAccelerationY, value),
+                ),
+            )
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.maximum_travel_acceleration),
+        valueText = stringResource(R.string.acceleration_value, options.maxAccelerationTravel),
+        value = options.maxAccelerationTravel,
+        range = 500f..30_000f,
+        steps = 117,
+        onValueChange = {
+            val value = (it / 250f).roundToInt() * 250f
+            onOptionsChanged(
+                options.copy(
+                    maxAccelerationTravel = value,
+                    maxAccelerationX = max(options.maxAccelerationX, value),
+                    maxAccelerationY = max(options.maxAccelerationY, value),
+                ),
+            )
+        },
     )
     SaveProfileField(onSave = onSave, onDismiss = onDismiss)
 }
@@ -344,10 +470,15 @@ private fun SlicingSettingsSheet(
 ) = SettingsSheet(title = stringResource(R.string.slicing_profile), onDismiss = onDismiss) {
     val maximumLayerHeight = (options.nozzleDiameter * 0.7f).coerceAtLeast(0.14f)
     val layerHeightSteps = ((maximumLayerHeight - 0.04f) / 0.01f).roundToInt().coerceAtLeast(2) - 1
-    ProfileChoices(
+    SearchableGroupedProfileChoices(
         entries = profiles,
         selected = options.quality,
         label = { profileLabel(it) },
+        brand = { it.brand },
+        builtIn = { it.builtIn },
+        searchTerms = {
+            listOf(it.name, it.brand.orEmpty(), it.layerHeightMm.toString())
+        },
         onSelected = { onOptionsChanged(options.selectQuality(it)) },
     )
     SettingsGroupTitle(stringResource(R.string.quality))
@@ -558,34 +689,14 @@ private fun SettingsSheet(
     }
 }
 
-@Composable
-private fun <T> ProfileChoices(
-    entries: List<T>,
-    selected: T,
-    label: @Composable (T) -> String,
-    onSelected: (T) -> Unit,
-) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        entries.forEach { entry ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSelected(entry) }
-                    .padding(vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RadioButton(selected = entry == selected, onClick = { onSelected(entry) })
-                Text(label(entry), maxLines = 1)
-            }
-        }
-    }
-}
-
 private data class ProfileChoiceGroup<T>(
     val key: String,
     val title: String,
     val entries: List<T>,
 )
+
+private fun List<String>.matchesPrinter(printer: PrinterProfile): Boolean =
+    isEmpty() || printer.name in this
 
 @Composable
 private fun <T> SearchableGroupedProfileChoices(

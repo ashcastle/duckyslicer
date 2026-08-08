@@ -600,6 +600,10 @@ mod tests {
             ToolpathRole::Bridge
         );
         assert_eq!(ToolpathRole::from_label("Raft"), ToolpathRole::Adhesion);
+        assert_ne!(
+            ToolpathRole::from_label("Outer wall"),
+            ToolpathRole::from_label("Inner wall")
+        );
     }
 
     #[test]

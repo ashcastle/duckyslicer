@@ -1,0 +1,86 @@
+package com.ashcastle.duckyslicer
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class ProjectStateTest {
+    private fun projectObject(id: String) = ProjectObject(
+        id = id,
+        model = ModelInfo(
+            fileName = "$id.stl",
+            triangles = 1,
+            dimensions = listOf(1.0, 1.0, 1.0),
+            localPath = "/tmp/$id.stl",
+            minMm = listOf(0.0, 0.0, 0.0),
+            maxMm = listOf(1.0, 1.0, 1.0),
+            previewTriangles = floatArrayOf(0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f),
+        ),
+    )
+
+    @Test
+    fun addRemoveUndoAndRedoKeepObjectSelectionDeterministic() {
+        val first = projectObject("first")
+        val second = projectObject("second")
+        var state = ProjectHistoryState().add(first).add(second)
+
+        assertEquals(listOf(first, second), state.current.objects)
+        assertEquals("second", state.current.selectedObjectId)
+
+        state = state.removeSelected()
+        assertEquals(listOf(first), state.current.objects)
+        assertEquals("first", state.current.selectedObjectId)
+        assertTrue(state.canUndo)
+
+        state = state.undo()
+        assertEquals(listOf(first, second), state.current.objects)
+        assertEquals("second", state.current.selectedObjectId)
+        assertTrue(state.canRedo)
+
+        state = state.redo()
+        assertEquals(listOf(first), state.current.objects)
+        assertFalse(state.canRedo)
+    }
+
+    @Test
+    fun dragUpdatesCoalesceIntoOneUndoEntry() {
+        var state = ProjectHistoryState().add(projectObject("part"))
+        val before = state.current.selectedObject!!.transform
+
+        state = state.updateSelectedTransform(before.copy(offsetXmm = 5f), recordHistory = false)
+        state = state.updateSelectedTransform(before.copy(offsetXmm = 12f), recordHistory = false)
+        state = state.commitSelectedTransform(before)
+
+        assertEquals(12f, state.current.selectedObject!!.transform.offsetXmm)
+        state = state.undo()
+        assertEquals(0f, state.current.selectedObject!!.transform.offsetXmm)
+        state = state.undo()
+        assertTrue(state.current.objects.isEmpty())
+    }
+
+    @Test
+    fun aNewEditClearsRedoHistory() {
+        var state = ProjectHistoryState().add(projectObject("part"))
+        state = state.updateSelectedTransform(ModelTransform(offsetXmm = 10f))
+        state = state.undo()
+        assertTrue(state.canRedo)
+
+        state = state.updateSelectedTransform(ModelTransform(offsetYmm = 8f))
+        assertFalse(state.canRedo)
+        assertEquals(8f, state.current.selectedObject!!.transform.offsetYmm)
+    }
+
+    @Test
+    fun duplicateAndArrangeAreSingleUndoableProjectEdits() {
+        var state = ProjectHistoryState().add(projectObject("part"))
+        state = state.duplicateSelected("copy")
+        assertEquals(2, state.current.objects.size)
+        assertEquals("copy", state.current.selectedObjectId)
+
+        state = state.arrange(100f, 100f)
+        assertTrue(state.current.objects.all { it.transform.offsetXmm < 0f })
+        state = state.undo()
+        assertEquals(12f, state.current.selectedObject!!.transform.offsetXmm)
+    }
+}

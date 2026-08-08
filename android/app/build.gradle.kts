@@ -9,7 +9,16 @@ plugins {
 val repositoryRoot = rootDir.parentFile
 val nativeNdkDirectory = androidComponents.sdkComponents.ndkDirectory
 val generatedNativeOutput = layout.buildDirectory.dir("generated/native-libs")
-val bootstrapRuntime = layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libprusaslicer-jni.so")
+val generatedProfileAssets = layout.buildDirectory.dir("generated/profile-assets")
+val slicerRuntimeBuilder = repositoryRoot.resolve("native/slicer-runtime/build.sh")
+val slicerRuntimeOutput = repositoryRoot.resolve(
+    "build/native-slicer/output/arm64-v8a/libprusaslicer-jni.so",
+)
+val orcaProfileRoot = repositoryRoot.resolve(
+    "build/native-slicer/source/app/src/main/cpp/orcaslicer/resources/profiles",
+)
+val profileCatalogGenerator = repositoryRoot.resolve("tools/generate_profile_catalog.py")
+val generatedProfileCatalog = generatedProfileAssets.map { it.file("profile_catalog_v1.json") }
 val ndkSharedRuntime = nativeNdkDirectory.map { ndk ->
     val prebuiltRoot = ndk.asFile.resolve("toolchains/llvm/prebuilt")
     val candidates = prebuiltRoot.listFiles()
@@ -29,12 +38,49 @@ val ndkSharedRuntime = nativeNdkDirectory.map { ndk ->
     )
 }
 
+val buildSlicerRuntime = tasks.register<Exec>("buildSlicerRuntime") {
+    group = "build"
+    description = "Builds the pinned slicer runtime from source for arm64-v8a."
+    workingDir(repositoryRoot)
+    doFirst {
+        environment("ANDROID_NDK_HOME", nativeNdkDirectory.get().asFile.absolutePath)
+    }
+    commandLine(slicerRuntimeBuilder.absolutePath)
+    inputs.file(slicerRuntimeBuilder)
+    inputs.file(repositoryRoot.resolve("native/slicer-runtime/versions.env"))
+    inputs.file(repositoryRoot.resolve("native/slicer-runtime/runtime.patch"))
+    inputs.dir(repositoryRoot.resolve("native/slicer-runtime/overlay"))
+    inputs.file(repositoryRoot.resolve(".gitmodules"))
+    inputs.property("androidNdkVersion", "28.2.13676358")
+    outputs.file(slicerRuntimeOutput)
+}
+
 val prepareNativeRuntime = tasks.register<Sync>("prepareNativeRuntime") {
     group = "build"
-    description = "Stages the slicer bootstrap with the pinned NDK's 16 KB-compatible C++ runtime."
+    description = "Stages source-built 16 KB-compatible native libraries."
+    dependsOn(buildSlicerRuntime)
     into(generatedNativeOutput.map { it.dir("arm64-v8a") })
-    from(bootstrapRuntime)
+    from(slicerRuntimeOutput)
     from(ndkSharedRuntime)
+}
+
+val generateOrcaProfileCatalog = tasks.register<Exec>("generateOrcaProfileCatalog") {
+    group = "build"
+    description = "Normalizes and validates the pinned OrcaSlicer profile catalog."
+    dependsOn(buildSlicerRuntime)
+    workingDir(repositoryRoot)
+    commandLine(
+        "python3",
+        profileCatalogGenerator.absolutePath,
+        orcaProfileRoot.absolutePath,
+        generatedProfileCatalog.get().asFile.absolutePath,
+        "2c8a5385bc53cbc16211b4dd36ef9963ee185f4a",
+    )
+    inputs.file(profileCatalogGenerator)
+    inputs.dir(orcaProfileRoot)
+    inputs.property("profileSchemaVersion", 1)
+    inputs.property("orcaRevision", "2c8a5385bc53cbc16211b4dd36ef9963ee185f4a")
+    outputs.file(generatedProfileCatalog)
 }
 
 val buildRustNative = tasks.register<Exec>("buildRustNative") {
@@ -115,6 +161,12 @@ android {
         clear()
         add(generatedNativeOutput.get().asFile.absolutePath)
     }
+    sourceSets.getByName("main").assets.directories.add(
+        generatedProfileAssets.get().asFile.absolutePath,
+    )
+    sourceSets.getByName("androidTest").assets.directories.add(
+        repositoryRoot.resolve("tests/data/test_stl/ASCII").absolutePath,
+    )
 
     packaging {
         jniLibs {
@@ -123,6 +175,12 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+}
+
+tasks.configureEach {
+    if (name.contains("assets", ignoreCase = true) || name.contains("lint", ignoreCase = true)) {
+        dependsOn(generateOrcaProfileCatalog)
     }
 }
 

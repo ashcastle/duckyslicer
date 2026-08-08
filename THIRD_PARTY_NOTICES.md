@@ -1,23 +1,53 @@
 # Third-party notices
 
-## Android OrcaSlicer runtime bootstrap
+## Source-built Android slicer runtime
 
-The current Android ARM64 build includes a slicer runtime bootstrap derived from
-[`taylormadearmy/u1-slicer-for-android`](https://github.com/taylormadearmy/u1-slicer-for-android),
-which is distributed under the GNU Affero General Public License v3.0.
+DuckySlicer's Android ARM64 slicer runtime is built from pinned source during
+the Android build. No precompiled slicer engine is stored in this repository.
+The complete input lock is
+[`native/slicer-runtime/versions.env`](native/slicer-runtime/versions.env), and
+the reviewed Android adaptation is
+[`native/slicer-runtime/runtime.patch`](native/slicer-runtime/runtime.patch).
 
-- Runtime lineage: Snapmaker Orca Android port; the included binary reports Snapmaker Orca 2.3.3 in generated G-code
-- Pinned Android source/build revision: [`6f64367361c4bd56bacc97a991874ce1f4b837b4`](https://github.com/taylormadearmy/u1-slicer-for-android/tree/6f64367361c4bd56bacc97a991874ce1f4b837b4)
-- Pinned OrcaSlicer engine submodule revision: [`2c8a5385bc53cbc16211b4dd36ef9963ee185f4a`](https://github.com/taylormadearmy/OrcaSlicer/tree/2c8a5385bc53cbc16211b4dd36ef9963ee185f4a)
-- Included bootstrap artifact: `libprusaslicer-jni.so`
-- Build-time C++ runtime: `libc++_shared.so` from the pinned Android NDK
-  `28.2.13676358`; it is staged during the Android build so the APK uses the NDK's
-  16 KB page-size-compatible binary
-- Corresponding Android build scripts: [`app/src/main/cpp`](https://github.com/taylormadearmy/u1-slicer-for-android/tree/6f64367361c4bd56bacc97a991874ce1f4b837b4/app/src/main/cpp) and [`app/build.gradle`](https://github.com/taylormadearmy/u1-slicer-for-android/blob/6f64367361c4bd56bacc97a991874ce1f4b837b4/app/build.gradle)
-- Shipped `libprusaslicer-jni.so` SHA-256: `e021818843b130c9faef507e2400c09dc5a2dc7b3848340f626f49d5fc0a8344`
-- Pinned NDK `libc++_shared.so` SHA-256: `ab4e6c71b96b851de45a8a9bd86369e7dbc2130a44b3b4520564be94847910f2`
+- Android runtime lineage:
+  [`taylormadearmy/u1-slicer-for-android`](https://github.com/taylormadearmy/u1-slicer-for-android)
+  at `6f64367361c4bd56bacc97a991874ce1f4b837b4` — GNU AGPL v3.0
+- OrcaSlicer engine:
+  [`taylormadearmy/OrcaSlicer`](https://github.com/taylormadearmy/OrcaSlicer)
+  at `2c8a5385bc53cbc16211b4dd36ef9963ee185f4a` — GNU AGPL v3.0
+- Toolchain: Android NDK `28.2.13676358`, API 26, `arm64-v8a`
+- Verified stripped `libprusaslicer-jni.so` SHA-256:
+  `2939ae71411c82e2c68659c3c35ad882777a0d2fc7d1df522a00d4f0b02002a9`
 
-These hashes and pinned revisions describe the Snapmaker Orca 2.3.3 runtime shipped
-in the current APK. The bootstrap remains isolated behind a compatibility seam;
-replacing it with a reproducible build from this repository's OrcaSlicer 2.4.2
-source baseline is a future milestone.
+The APK also contains a compact, normalized profile catalog generated from the
+same pinned OrcaSlicer source tree. The generator resolves profile inheritance,
+keeps source brand and compatibility metadata, and rejects values outside
+DuckySlicer's supported Android runtime bounds. The generated catalog is a
+derived part of the OrcaSlicer work and is distributed under the same AGPL terms.
+
+The runtime is linked with the following pinned libraries. Exact commit and
+archive checksums are kept in `versions.env`; the corresponding license texts
+remain in each fetched source tree.
+
+| Component | License |
+| --- | --- |
+| Eigen | MPL-2.0 and component-specific compatible licenses |
+| cereal | BSD-3-Clause |
+| nlohmann/json | MIT |
+| zlib | zlib License |
+| Expat | MIT |
+| Clipper2 | Boost Software License 1.0 |
+| oneTBB | Apache-2.0 |
+| Boost / Boost-for-Android | Boost Software License 1.0 |
+| Open CASCADE Technology | LGPL-2.1 with OCCT exception |
+| NLopt compiled library | LGPL-2.1-or-later |
+| libjpeg-turbo | IJG, BSD-3-Clause, and zlib licenses |
+| CGAL 5.6 headers | GPL-3.0-or-later, LGPL-3.0-or-later, and component-specific licenses |
+| GMP 6.3.0 | GPL-2.0-or-later or LGPL-3.0-or-later |
+| MPFR 4.2.1 | LGPL-3.0-or-later |
+
+This software is based in part on the work of the Independent JPEG Group.
+
+`libc++_shared.so` is staged from the same pinned NDK at build time. The build
+script validates that the produced ELF is AArch64, that every load segment is
+16 KB aligned, and that it has no unexpected dynamic-library dependency.

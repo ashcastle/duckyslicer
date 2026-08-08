@@ -1,0 +1,242 @@
+diff --git a/app/src/main/cpp/CMakeLists.txt b/app/src/main/cpp/CMakeLists.txt
+index 963808df..5e450310 100644
+--- a/app/src/main/cpp/CMakeLists.txt
++++ b/app/src/main/cpp/CMakeLists.txt
+@@ -486,16 +486,29 @@ endif()
+ 
+ # LibBGCode — stub (binary G-code not needed)
+ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/extern/libbgcode_stub/include)
+-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/extern/jpeg_stub/include)
+ add_library(bgcode_convert INTERFACE)
+ add_library(LibBGCode::bgcode_convert ALIAS bgcode_convert)
+ 
+-# NLopt — stub
+-add_library(NLopt INTERFACE)
++# Real optimization and JPEG implementations are required. Silent stubbed
++# output is not acceptable in a production slicer runtime.
++set(NLOPT_ROOT "${EXTERN_DIR}/nlopt")
++add_library(NLopt STATIC IMPORTED)
++set_target_properties(NLopt PROPERTIES
++    IMPORTED_LOCATION "${NLOPT_ROOT}/lib/libnlopt.a"
++    INTERFACE_INCLUDE_DIRECTORIES "${NLOPT_ROOT}/include"
++)
++
++set(JPEG_ROOT "${EXTERN_DIR}/jpeg")
++include_directories(BEFORE "${JPEG_ROOT}/include")
++add_library(jpeg STATIC IMPORTED)
++set_target_properties(jpeg PROPERTIES
++    IMPORTED_LOCATION "${JPEG_ROOT}/lib/libjpeg.a"
++    INTERFACE_INCLUDE_DIRECTORIES "${JPEG_ROOT}/include"
++)
+ 
+-# PNG/JPEG — stubs (not needed for headless slicing)
++# PNGReadWrite is excluded from the headless source list. The remaining PNG
++# include is unused and supplied by a declaration-free compatibility header.
+ add_library(png_stub INTERFACE)
+-add_library(jpeg_stub INTERFACE)
+ 
+ if(SLICER_BACKEND STREQUAL "orca")
+     # OpenCV — stub (image analysis features not needed on Android)
+@@ -1075,6 +1088,8 @@ if(SLICER_BACKEND STREQUAL "orca")
+         Clipper2
+         z
+         expat
++        NLopt
++        jpeg
+     )
+ else()
+     target_link_libraries(libslic3r PRIVATE
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+index 116a4a85..68a4e8ae 100644
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -98,6 +98,22 @@ struct SliceConfig {
+     // template expressions at G-code generation time.
+     std::string machine_start_gcode;
+     std::string machine_end_gcode;
++    std::string gcode_flavor = "marlin";
++    float machine_max_speed_x = 500.0f;
++    float machine_max_speed_y = 500.0f;
++    float machine_max_speed_z = 20.0f;
++    float machine_max_speed_e = 30.0f;
++    float machine_max_acceleration_x = 20000.0f;
++    float machine_max_acceleration_y = 20000.0f;
++    float machine_max_acceleration_z = 500.0f;
++    float machine_max_acceleration_e = 5000.0f;
++    float machine_max_acceleration_extruding = 20000.0f;
++    float machine_max_acceleration_retracting = 5000.0f;
++    float machine_max_acceleration_travel = 20000.0f;
++    float machine_max_jerk_x = 9.0f;
++    float machine_max_jerk_y = 9.0f;
++    float machine_max_jerk_z = 3.0f;
++    float machine_max_jerk_e = 2.5f;
+ 
+     // F91 (2026-05-25): per-extruder filament tuning sourced from the user's filament
+     // library on the Kotlin side at slice time. Empty vector = "user has not set this
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+index d93efb7d..850dad98 100644
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -137,6 +137,22 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
+     config.machine_start_gcode = getString("machineStartGcode");
+     config.machine_end_gcode = getString("machineEndGcode");
++    config.gcode_flavor = getString("gcodeFlavor");
++    config.machine_max_speed_x = getFloat("machineMaxSpeedX");
++    config.machine_max_speed_y = getFloat("machineMaxSpeedY");
++    config.machine_max_speed_z = getFloat("machineMaxSpeedZ");
++    config.machine_max_speed_e = getFloat("machineMaxSpeedE");
++    config.machine_max_acceleration_x = getFloat("machineMaxAccelerationX");
++    config.machine_max_acceleration_y = getFloat("machineMaxAccelerationY");
++    config.machine_max_acceleration_z = getFloat("machineMaxAccelerationZ");
++    config.machine_max_acceleration_e = getFloat("machineMaxAccelerationE");
++    config.machine_max_acceleration_extruding = getFloat("machineMaxAccelerationExtruding");
++    config.machine_max_acceleration_retracting = getFloat("machineMaxAccelerationRetracting");
++    config.machine_max_acceleration_travel = getFloat("machineMaxAccelerationTravel");
++    config.machine_max_jerk_x = getFloat("machineMaxJerkX");
++    config.machine_max_jerk_y = getFloat("machineMaxJerkY");
++    config.machine_max_jerk_z = getFloat("machineMaxJerkZ");
++    config.machine_max_jerk_e = getFloat("machineMaxJerkE");
+ 
+     // F91: per-extruder filament tuning from the user's filament library.
+     config.filament_flow_ratios = getFloatArray("filamentFlowRatios");
+@@ -271,6 +287,22 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setFloat("wipeTowerWidth", config.wipe_tower_width);
+     setString("machineStartGcode", config.machine_start_gcode);
+     setString("machineEndGcode", config.machine_end_gcode);
++    setString("gcodeFlavor", config.gcode_flavor);
++    setFloat("machineMaxSpeedX", config.machine_max_speed_x);
++    setFloat("machineMaxSpeedY", config.machine_max_speed_y);
++    setFloat("machineMaxSpeedZ", config.machine_max_speed_z);
++    setFloat("machineMaxSpeedE", config.machine_max_speed_e);
++    setFloat("machineMaxAccelerationX", config.machine_max_acceleration_x);
++    setFloat("machineMaxAccelerationY", config.machine_max_acceleration_y);
++    setFloat("machineMaxAccelerationZ", config.machine_max_acceleration_z);
++    setFloat("machineMaxAccelerationE", config.machine_max_acceleration_e);
++    setFloat("machineMaxAccelerationExtruding", config.machine_max_acceleration_extruding);
++    setFloat("machineMaxAccelerationRetracting", config.machine_max_acceleration_retracting);
++    setFloat("machineMaxAccelerationTravel", config.machine_max_acceleration_travel);
++    setFloat("machineMaxJerkX", config.machine_max_jerk_x);
++    setFloat("machineMaxJerkY", config.machine_max_jerk_y);
++    setFloat("machineMaxJerkZ", config.machine_max_jerk_z);
++    setFloat("machineMaxJerkE", config.machine_max_jerk_e);
+ 
+     env->DeleteLocalRef(cls);
+     return obj;
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+index 8d61c9cf..803a0188 100644
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -220,47 +220,65 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     dpc.set_key_value("initial_layer_speed",       new Slic3r::ConfigOptionFloat(config.first_layer_speed));
+     dpc.set_key_value("initial_layer_infill_speed",new Slic3r::ConfigOptionFloat(config.first_layer_speed * 2.1));
+ 
+-    // Snapmaker U1 bed geometry — OrcaSlicer defaults to 200×200mm (Bambu A1).
+-    // Must always be set so the slicer knows the actual printable area.
++    // Use the active printer profile geometry. Keep U1 dimensions only as a
++    // defensive fallback for callers using an older Java contract.
++    const double bed_size_x = config.bed_size_x > 0.0f ? config.bed_size_x : 270.0;
++    const double bed_size_y = config.bed_size_y > 0.0f ? config.bed_size_y : 270.0;
++    const double printable_height = config.max_print_height > 0.0f ? config.max_print_height : 270.0;
+     dpc.set_key_value("printable_area", new Slic3r::ConfigOptionPoints({
+-        {0, 0}, {270, 0}, {270, 270}, {0, 270}
++        {0, 0}, {bed_size_x, 0}, {bed_size_x, bed_size_y}, {0, bed_size_y}
+     }));
++    dpc.set_key_value("printable_height", new Slic3r::ConfigOptionFloat(printable_height));
+ 
+     // Bed plate type — OrcaSlicer defaults to btPC (Engineering Plate) whose temp keys
+     // are cool_plate_temp (35°C for PLA).  The Snapmaker U1 uses a textured PEI plate,
+     // so set btPEI so OrcaSlicer resolves bed temp from hot_plate_temp (60°C for PLA).
+     dpc.set_key_value("curr_bed_type", new Slic3r::ConfigOptionEnum<Slic3r::BedType>(Slic3r::btPEI));
+ 
+-    // Snapmaker U1 machine kinematic limits — fallback values used when no Snapmaker
+-    // profile is embedded (e.g. plain STL files).  For 3MF files these are overridden
+-    // by the values from the embedded profile in the is_snapmaker_profile block above.
+-    // Values match snapmaker_u1.json: {normal, silent} mode pairs.
+-    dpc.set_key_value("machine_max_speed_x",          new Slic3r::ConfigOptionFloats({500.0, 200.0}));
+-    dpc.set_key_value("machine_max_speed_y",          new Slic3r::ConfigOptionFloats({500.0, 200.0}));
+-    dpc.set_key_value("machine_max_speed_z",          new Slic3r::ConfigOptionFloats({20.0, 12.0}));
+-    dpc.set_key_value("machine_max_speed_e",          new Slic3r::ConfigOptionFloats({30.0, 25.0}));
+-    dpc.set_key_value("machine_max_acceleration_x",   new Slic3r::ConfigOptionFloats({20000.0, 20000.0}));
+-    dpc.set_key_value("machine_max_acceleration_y",   new Slic3r::ConfigOptionFloats({20000.0, 20000.0}));
+-    dpc.set_key_value("machine_max_acceleration_z",   new Slic3r::ConfigOptionFloats({500.0, 200.0}));
+-    dpc.set_key_value("machine_max_acceleration_e",   new Slic3r::ConfigOptionFloats({5000.0, 5000.0}));
+-    dpc.set_key_value("machine_max_jerk_x",           new Slic3r::ConfigOptionFloats({9.0, 9.0}));
+-    dpc.set_key_value("machine_max_jerk_y",           new Slic3r::ConfigOptionFloats({9.0, 9.0}));
+-    dpc.set_key_value("machine_max_jerk_z",           new Slic3r::ConfigOptionFloats({3.0, 0.4}));
+-    dpc.set_key_value("machine_max_jerk_e",           new Slic3r::ConfigOptionFloats({2.5, 2.5}));
+-    // M204 acceleration values — must match U1 profile for correct G-code and time estimation.
+-    // OrcaSlicer defaults (1500/1250 mm/s²) are 13× too low and inflate print time estimates.
+-    dpc.set_key_value("machine_max_acceleration_extruding",  new Slic3r::ConfigOptionFloats({20000.0, 20000.0}));
+-    dpc.set_key_value("machine_max_acceleration_retracting", new Slic3r::ConfigOptionFloats({5000.0, 5000.0}));
+-    dpc.set_key_value("machine_max_acceleration_travel",     new Slic3r::ConfigOptionFloats({20000.0, 20000.0}));
+-    // Per-feature accelerations from the standard process profile.
+-    // Without these OrcaSlicer uses FullPrintConfig::defaults() which are very low,
+-    // making every short move appear to be in the acceleration ramp → 5× time inflation.
+-    dpc.set_key_value("default_acceleration",          new Slic3r::ConfigOptionFloat(10000.0));
+-    dpc.set_key_value("outer_wall_acceleration",       new Slic3r::ConfigOptionFloat(5000.0));
++    // Machine limits come from the active printer profile. Store two equal modes
++    // because this mobile contract does not currently expose Orca's silent mode.
++    auto positive = [](float value, double fallback) {
++        return value > 0.0f ? static_cast<double>(value) : fallback;
++    };
++    auto machine_modes = [](double value) {
++        return new Slic3r::ConfigOptionFloats({value, value});
++    };
++    const double max_speed_x = positive(config.machine_max_speed_x, 500.0);
++    const double max_speed_y = positive(config.machine_max_speed_y, 500.0);
++    const double max_acceleration_x = positive(config.machine_max_acceleration_x, 20000.0);
++    const double max_acceleration_y = positive(config.machine_max_acceleration_y, 20000.0);
++    const double max_acceleration_extruding = positive(config.machine_max_acceleration_extruding, 20000.0);
++    const double max_acceleration_travel = positive(config.machine_max_acceleration_travel, 20000.0);
++    dpc.set_key_value("machine_max_speed_x", machine_modes(max_speed_x));
++    dpc.set_key_value("machine_max_speed_y", machine_modes(max_speed_y));
++    dpc.set_key_value("machine_max_speed_z", machine_modes(positive(config.machine_max_speed_z, 20.0)));
++    dpc.set_key_value("machine_max_speed_e", machine_modes(positive(config.machine_max_speed_e, 30.0)));
++    dpc.set_key_value("machine_max_acceleration_x", machine_modes(max_acceleration_x));
++    dpc.set_key_value("machine_max_acceleration_y", machine_modes(max_acceleration_y));
++    dpc.set_key_value("machine_max_acceleration_z", machine_modes(positive(config.machine_max_acceleration_z, 500.0)));
++    dpc.set_key_value("machine_max_acceleration_e", machine_modes(positive(config.machine_max_acceleration_e, 5000.0)));
++    dpc.set_key_value("machine_max_jerk_x", machine_modes(positive(config.machine_max_jerk_x, 9.0)));
++    dpc.set_key_value("machine_max_jerk_y", machine_modes(positive(config.machine_max_jerk_y, 9.0)));
++    dpc.set_key_value("machine_max_jerk_z", machine_modes(positive(config.machine_max_jerk_z, 3.0)));
++    dpc.set_key_value("machine_max_jerk_e", machine_modes(positive(config.machine_max_jerk_e, 2.5)));
++    dpc.set_key_value("machine_max_acceleration_extruding", machine_modes(max_acceleration_extruding));
++    dpc.set_key_value("machine_max_acceleration_retracting", machine_modes(positive(config.machine_max_acceleration_retracting, 5000.0)));
++    dpc.set_key_value("machine_max_acceleration_travel", machine_modes(max_acceleration_travel));
++
++    Slic3r::GCodeFlavor flavor = Slic3r::gcfMarlinLegacy;
++    if (config.gcode_flavor == "marlin2") flavor = Slic3r::gcfMarlinFirmware;
++    else if (config.gcode_flavor == "klipper") flavor = Slic3r::gcfKlipper;
++    dpc.set_key_value("gcode_flavor", new Slic3r::ConfigOptionEnum<Slic3r::GCodeFlavor>(flavor));
++
++    const double xy_machine_acceleration = std::min(max_acceleration_x, max_acceleration_y);
++    const double default_acceleration = std::min(max_acceleration_extruding, xy_machine_acceleration);
++    const double travel_acceleration = std::min(max_acceleration_travel, xy_machine_acceleration);
++    dpc.set_key_value("default_acceleration",          new Slic3r::ConfigOptionFloat(default_acceleration));
++    dpc.set_key_value("outer_wall_acceleration",       new Slic3r::ConfigOptionFloat(default_acceleration * 0.5));
+     dpc.set_key_value("inner_wall_acceleration",       new Slic3r::ConfigOptionFloat(0.0));
+-    dpc.set_key_value("top_surface_acceleration",      new Slic3r::ConfigOptionFloat(2000.0));
+-    dpc.set_key_value("travel_acceleration",           new Slic3r::ConfigOptionFloat(10000.0));
+-    dpc.set_key_value("initial_layer_acceleration",    new Slic3r::ConfigOptionFloat(500.0));
++    dpc.set_key_value("top_surface_acceleration",      new Slic3r::ConfigOptionFloat(default_acceleration * 0.2));
++    dpc.set_key_value("travel_acceleration",           new Slic3r::ConfigOptionFloat(travel_acceleration));
++    dpc.set_key_value("initial_layer_acceleration",    new Slic3r::ConfigOptionFloat(std::min(500.0, default_acceleration)));
+ 
+     // Multi-extruder setup
+     int n_ext = std::max(1, config.extruder_count);
+@@ -464,11 +482,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     applyPerExtFloats("slow_down_layer_time",    config.filament_slow_down_layer_times, 4.0);
+     applyPerExtFloats("slow_down_min_speed",     config.filament_slow_down_min_speeds, 20.0);
+ 
+-    // G-code dialect — NOT set as a fallback here because gcode_flavor=klipper suppresses
+-    // M104/M109 temp commands from the slicer body, relying on the start G-code template.
+-    // For raw STL files (no embedded profile), the Marlin default is correct.
+-    // When the Snapmaker profile IS embedded, gcode_flavor=klipper is applied from the
+-    // profile_keys[] whitelist in the is_snapmaker_profile block above.
++    // G-code flavor is set from the active printer profile above. A Klipper
++    // profile must provide a compatible start template because Orca delegates
++    // part of temperature setup to that template for this flavor.
+ 
+     // Deretraction speed — OrcaSlicer defaults to 0 (= same as retraction speed).
+     // Snapmaker profile uses 35 mm/s for smoother prime-after-retract.

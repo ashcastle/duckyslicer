@@ -19,6 +19,8 @@ class NativeLibrary(
 
     external fun getCoreVersion(): String
     external fun loadModel(path: String): Boolean
+    external fun addModel(path: String): Boolean
+    external fun getObjectBoundingBoxes(): FloatArray
     external fun clearModel()
     external fun getModelInfo(): ModelInfo?
     external fun slice(config: SliceConfig): SliceResult?
