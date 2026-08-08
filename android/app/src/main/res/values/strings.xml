@@ -79,6 +79,10 @@
     <string name="supports">Supports</string>
     <string name="brim_width">Brim width</string>
     <string name="millimeters_value">%1$.0f mm</string>
+    <string name="millimeters_value_precise">%1$.2f mm</string>
+    <string name="flow_ratio_value">%1$.2f</string>
+    <string name="volumetric_speed_value">%1$.0f mm³/s</string>
+    <string name="print_speed_value">%1$.0f mm/s</string>
     <string name="celsius_value">%1$d °C</string>
     <string name="percent_value">%1$d%%</string>
     <string name="layer_range">Layers %1$d–%2$d of %3$d</string>

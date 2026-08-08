@@ -33,7 +33,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -112,7 +111,9 @@ internal fun ProfileSettings(
 
         ProfileSettingsKind.SLICING -> SlicingSettingsSheet(
             options = options,
-            profiles = catalog.slicing.filter { abs(it.nozzleDiameter - options.nozzleDiameter) < 0.05f },
+            profiles = catalog.slicing.filter {
+                it == options.quality || abs(it.nozzleDiameter - options.nozzleDiameter) < 0.05f
+            },
             onOptionsChanged = onOptionsChanged,
             onSave = onSaveSlicing,
             onDismiss = { editing = null },
@@ -213,7 +214,7 @@ private fun FilamentSettingsSheet(
     )
     SettingSlider(
         label = stringResource(R.string.flow_ratio),
-        valueText = String.format(Locale.US, "%.2f", options.flowRatio),
+        valueText = stringResource(R.string.flow_ratio_value, options.flowRatio),
         value = options.flowRatio,
         range = 0.8f..1.2f,
         steps = 39,
@@ -221,7 +222,7 @@ private fun FilamentSettingsSheet(
     )
     SettingSlider(
         label = stringResource(R.string.max_volumetric_speed),
-        valueText = String.format(Locale.US, "%.0f mm³/s", options.maxVolumetricSpeed),
+        valueText = stringResource(R.string.volumetric_speed_value, options.maxVolumetricSpeed),
         value = options.maxVolumetricSpeed,
         range = 4f..40f,
         steps = 35,
@@ -246,7 +247,7 @@ private fun SlicingSettingsSheet(
     )
     SettingSlider(
         label = stringResource(R.string.layer_height),
-        valueText = String.format(Locale.US, "%.2f mm", options.layerHeight),
+        valueText = stringResource(R.string.millimeters_value_precise, options.layerHeight),
         value = options.layerHeight,
         range = 0.08f..0.40f,
         steps = 31,
@@ -254,7 +255,7 @@ private fun SlicingSettingsSheet(
     )
     SettingSlider(
         label = stringResource(R.string.first_layer_height),
-        valueText = String.format(Locale.US, "%.2f mm", options.firstLayerHeight),
+        valueText = stringResource(R.string.millimeters_value_precise, options.firstLayerHeight),
         value = options.firstLayerHeight,
         range = 0.10f..0.50f,
         steps = 39,
@@ -278,7 +279,7 @@ private fun SlicingSettingsSheet(
     )
     SettingSlider(
         label = stringResource(R.string.print_speed),
-        valueText = String.format(Locale.US, "%.0f mm/s", options.printSpeed),
+        valueText = stringResource(R.string.print_speed_value, options.printSpeed),
         value = options.printSpeed,
         range = 40f..300f,
         steps = 25,

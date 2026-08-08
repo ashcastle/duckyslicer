@@ -14,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -115,7 +116,11 @@ private fun DuckySlicerScreen() {
     var previewLoading by remember { mutableStateOf(false) }
     var sliceOptions by remember { mutableStateOf(SliceOptions()) }
     val profileStore = remember(context.applicationContext) { ProfileStore(context.applicationContext) }
-    var profileCatalog by remember { mutableStateOf(profileStore.load()) }
+    var profileCatalog by remember { mutableStateOf(ProfileCatalog()) }
+
+    LaunchedEffect(profileStore) {
+        profileCatalog = withContext(Dispatchers.IO) { profileStore.load() }
+    }
 
     fun applyOptions(options: SliceOptions) {
         if (options != sliceOptions) {
@@ -173,7 +178,7 @@ private fun DuckySlicerScreen() {
 
     val loadPreviewRange: (Int, Int) -> Unit = { startLayer, endLayer ->
         val output = sliceOutcome?.output
-        if (output != null && !previewLoading) {
+        if (output != null && !previewLoading && !slicing) {
             previewLoading = true
             scope.launch {
                 runCatching {
@@ -273,43 +278,61 @@ private fun DuckySlicerScreen() {
         onSave = saveGcode,
         onSliceOptionsChanged = ::applyOptions,
         onSavePrinterProfile = { name ->
-            runCatching { profileStore.savePrinter(name, sliceOptions) }
-                .onSuccess { saved ->
-                    profileCatalog = profileStore.load()
+            val options = sliceOptions
+            scope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        profileStore.savePrinter(name, options) to profileStore.load()
+                    }
+                }.onSuccess { (saved, catalog) ->
+                    profileCatalog = catalog
                     applyOptions(sliceOptions.selectPrinter(saved))
                     notice = profileSavedNotice
                     error = null
                 }
-                .onFailure {
-                    error = profileSaveError
-                    notice = null
-                }
+                    .onFailure {
+                        error = profileSaveError
+                        notice = null
+                    }
+            }
         },
         onSaveFilamentProfile = { name ->
-            runCatching { profileStore.saveFilament(name, sliceOptions) }
-                .onSuccess { saved ->
-                    profileCatalog = profileStore.load()
+            val options = sliceOptions
+            scope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        profileStore.saveFilament(name, options) to profileStore.load()
+                    }
+                }.onSuccess { (saved, catalog) ->
+                    profileCatalog = catalog
                     applyOptions(sliceOptions.selectFilament(saved))
                     notice = profileSavedNotice
                     error = null
                 }
-                .onFailure {
-                    error = profileSaveError
-                    notice = null
-                }
+                    .onFailure {
+                        error = profileSaveError
+                        notice = null
+                    }
+            }
         },
         onSaveSlicingProfile = { name ->
-            runCatching { profileStore.saveSlicing(name, sliceOptions) }
-                .onSuccess { saved ->
-                    profileCatalog = profileStore.load()
+            val options = sliceOptions
+            scope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        profileStore.saveSlicing(name, options) to profileStore.load()
+                    }
+                }.onSuccess { (saved, catalog) ->
+                    profileCatalog = catalog
                     applyOptions(sliceOptions.selectQuality(saved))
                     notice = profileSavedNotice
                     error = null
                 }
-                .onFailure {
-                    error = profileSaveError
-                    notice = null
-                }
+                    .onFailure {
+                        error = profileSaveError
+                        notice = null
+                    }
+            }
         },
         onLayerRangeSelected = loadPreviewRange,
     )

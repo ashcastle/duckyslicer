@@ -133,18 +133,19 @@ data class SliceOptions(
     val brimWidth: Float = 0f,
 ) {
     fun selectPrinter(profile: PrinterProfile): SliceOptions {
-        val compatibleQuality = if (abs(quality.nozzleDiameter - profile.nozzleDiameter) < 0.05f) {
-            quality
-        } else {
-            QualityProfile.standardFor(profile.nozzleDiameter)
-        }
-        return copy(
+        val nozzleMatches = abs(quality.nozzleDiameter - profile.nozzleDiameter) < 0.05f
+        val updated = copy(
             printerProfile = profile,
             bedSizeX = profile.bedSizeX,
             bedSizeY = profile.bedSizeY,
             maxPrintHeight = profile.maxPrintHeight,
             nozzleDiameter = profile.nozzleDiameter,
-        ).selectQuality(compatibleQuality)
+        )
+        return if (nozzleMatches) {
+            updated
+        } else {
+            updated.selectQuality(QualityProfile.standardFor(profile.nozzleDiameter))
+        }
     }
 
     fun selectFilament(profile: FilamentProfile) = copy(

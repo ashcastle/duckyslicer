@@ -537,15 +537,18 @@ private fun PreviewSheet(
         }
         if (error != null) Text(error, color = Color(0xFFFF8A80))
         if (preview != null) {
-            var selectedRange by remember(preview.startLayer, preview.endLayer, preview.layerCount) {
-                mutableStateOf(preview.startLayer.toFloat()..preview.endLayer.toFloat())
+            val lastLayerIndex = (preview.layerCount - 1).coerceAtLeast(0)
+            val safeStartLayer = preview.startLayer.coerceIn(0, lastLayerIndex)
+            val safeEndLayer = preview.endLayer.coerceIn(safeStartLayer, lastLayerIndex)
+            var selectedRange by remember(safeStartLayer, safeEndLayer, preview.layerCount) {
+                mutableStateOf(safeStartLayer.toFloat()..safeEndLayer.toFloat())
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
                     stringResource(
                         R.string.layer_range,
-                        preview.startLayer + 1,
-                        preview.endLayer + 1,
+                        safeStartLayer + 1,
+                        safeEndLayer + 1,
                         preview.layerCount,
                     ),
                     fontWeight = FontWeight.Bold,
@@ -565,7 +568,7 @@ private fun PreviewSheet(
                             selectedRange.endInclusive.roundToInt(),
                         )
                     },
-                    valueRange = 0f..(preview.layerCount - 1).toFloat(),
+                    valueRange = 0f..lastLayerIndex.toFloat(),
                     steps = 0,
                 )
             }

@@ -206,10 +206,11 @@ fn preview_gcode(
         }
     }
 
+    let last_layer = layer_count.saturating_sub(1);
     Ok(GcodeLayerPreview {
         ok: true,
-        start_layer,
-        end_layer: end_layer.min(layer_count.saturating_sub(1)),
+        start_layer: start_layer.min(last_layer),
+        end_layer: end_layer.min(last_layer),
         layer_count,
         min_z_mm: min_requested_z.unwrap_or(0.0),
         max_z_mm: max_requested_z.unwrap_or(0.0),
@@ -329,7 +330,9 @@ mod tests {
             .expect("write fixture");
         drop(file);
 
-        let preview = preview_gcode(path.to_str().expect("utf8 path"), 0, 1).expect("parse gcode");
+        let path = path.to_str().expect("utf8 path");
+        let preview = preview_gcode(path, 0, 1).expect("parse gcode");
+        let clamped = preview_gcode(path, 99, 120).expect("clamp layer range");
         std::fs::remove_file(path).expect("remove fixture");
 
         assert_eq!(preview.layer_count, 2);
@@ -341,5 +344,7 @@ mod tests {
             preview.segments,
             vec![[10.0, 10.0, 20.0, 10.0, 0.2], [20.0, 10.0, 20.0, 20.0, 0.4],]
         );
+        assert_eq!(clamped.start_layer, 1);
+        assert_eq!(clamped.end_layer, 1);
     }
 }

@@ -93,10 +93,13 @@ both APKs, then copy an STL into the debuggable app's `filesDir` before running 
 test:
 
 ```shell
+cd android
+./gradlew assembleDebug assembleDebugAndroidTest
+
 MODEL_FILE="/absolute/path/to/model.stl"
 
-adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 adb push "$MODEL_FILE" /data/local/tmp/model-under-test.stl
 adb shell run-as com.ashcastle.duckyslicer \
   cp /data/local/tmp/model-under-test.stl files/model-under-test.stl
