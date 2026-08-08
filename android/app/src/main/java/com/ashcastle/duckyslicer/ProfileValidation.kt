@@ -58,9 +58,30 @@ internal object ProfileValidation {
             profile.perimeters in 0..20 &&
             profile.fillDensity in 0f..1f &&
             profile.printSpeed in 1f..2_000f &&
+            listOf(
+                profile.innerWallSpeed,
+                profile.sparseInfillSpeed,
+                profile.internalSolidInfillSpeed,
+                profile.topSurfaceSpeed,
+                profile.supportSpeed,
+            ).all { it in 0f..2_000f } &&
+            listOf(
+                profile.defaultAcceleration,
+                profile.outerWallAcceleration,
+                profile.innerWallAcceleration,
+                profile.topSurfaceAcceleration,
+                profile.travelAcceleration,
+                profile.firstLayerAcceleration,
+            ).all { it in 0f..100_000f } &&
             profile.travelSpeed in 1f..2_000f &&
-            profile.outerWallLineWidth in 0f..3f &&
-            profile.innerWallLineWidth in 0f..3f &&
+            listOf(
+                profile.outerWallLineWidth,
+                profile.innerWallLineWidth,
+                profile.topSurfaceLineWidth,
+                profile.sparseInfillLineWidth,
+                profile.internalSolidInfillLineWidth,
+                profile.supportLineWidth,
+            ).all { it in 0f..3f } &&
             profile.wallGenerator in setOf("arachne", "classic") &&
             profile.wallSequence in setOf("inner-outer", "outer-inner", "inner-outer-inner") &&
             profile.topSolidLayers in 0..100 &&

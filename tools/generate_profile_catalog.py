@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 
 
@@ -188,6 +188,13 @@ def line_width_mm(value: Any, nozzle: float) -> float:
     return number(candidate, 0)
 
 
+def relative_number(value: Any, base: float, default: float) -> float:
+    candidate = str(scalar(value, default)).strip()
+    if candidate.endswith("%"):
+        return base * number(candidate, 100) / 100
+    return number(candidate, default)
+
+
 def wall_sequence(value: Any) -> str:
     return {
         "inner wall/outer wall": "inner-outer",
@@ -278,6 +285,27 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         or general_line_width_mm
         or nozzle * 1.125
     )
+    top_surface_line_width = (
+        line_width_mm(raw.get("top_surface_line_width"), nozzle)
+        or general_line_width_mm
+        or nozzle * 1.05
+    )
+    sparse_infill_line_width = (
+        line_width_mm(raw.get("sparse_infill_line_width"), nozzle)
+        or general_line_width_mm
+        or nozzle * 1.125
+    )
+    internal_solid_infill_line_width = (
+        line_width_mm(raw.get("internal_solid_infill_line_width"), nozzle)
+        or general_line_width_mm
+        or nozzle * 1.125
+    )
+    support_line_width = (
+        line_width_mm(raw.get("support_line_width"), nozzle)
+        or general_line_width_mm
+        or nozzle * 1.05
+    )
+    outer_wall_speed = number(raw.get("outer_wall_speed"), 100)
     profile = {
         "id": stable_id("process", brand, name),
         "name": name,
@@ -286,7 +314,20 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "firstLayerHeightMm": first_layer,
         "perimeters": integer(raw.get("wall_loops"), 2),
         "fillDensity": density,
-        "printSpeed": number(raw.get("outer_wall_speed"), 100),
+        "printSpeed": outer_wall_speed,
+        "innerWallSpeed": relative_number(raw.get("inner_wall_speed"), outer_wall_speed, outer_wall_speed * 1.5),
+        "sparseInfillSpeed": relative_number(raw.get("sparse_infill_speed"), outer_wall_speed, outer_wall_speed * 1.35),
+        "internalSolidInfillSpeed": relative_number(
+            raw.get("internal_solid_infill_speed"), outer_wall_speed, outer_wall_speed * 1.25
+        ),
+        "topSurfaceSpeed": relative_number(raw.get("top_surface_speed"), outer_wall_speed, outer_wall_speed),
+        "supportSpeed": relative_number(raw.get("support_speed"), outer_wall_speed, 100),
+        "defaultAcceleration": number(raw.get("default_acceleration"), 0),
+        "outerWallAcceleration": number(raw.get("outer_wall_acceleration"), 0),
+        "innerWallAcceleration": number(raw.get("inner_wall_acceleration"), 0),
+        "topSurfaceAcceleration": number(raw.get("top_surface_acceleration"), 0),
+        "travelAcceleration": number(raw.get("travel_acceleration"), 0),
+        "firstLayerAcceleration": number(raw.get("initial_layer_acceleration"), 0),
         "nozzleDiameter": nozzle,
         "supportEnabled": boolean(raw.get("enable_support")),
         "brimWidth": 0 if raw.get("brim_type") == "no_brim" else number(raw.get("brim_width"), 0),
@@ -301,6 +342,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "skirtDistance": number(raw.get("skirt_distance"), 6),
         "outerWallLineWidth": outer_wall_line_width,
         "innerWallLineWidth": inner_wall_line_width,
+        "topSurfaceLineWidth": top_surface_line_width,
+        "sparseInfillLineWidth": sparse_infill_line_width,
+        "internalSolidInfillLineWidth": internal_solid_infill_line_width,
+        "supportLineWidth": support_line_width,
         "wallGenerator": wall_generator(raw.get("wall_generator")),
         "wallSequence": wall_sequence(raw.get("wall_sequence")),
         "detectThinWalls": boolean(raw.get("detect_thin_wall")),
@@ -312,9 +357,39 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     if not (
         0 <= profile["fillDensity"] <= 1
         and 1 <= profile["printSpeed"] <= 2_000
+        and all(
+            1 <= profile[key] <= 2_000
+            for key in [
+                "innerWallSpeed",
+                "sparseInfillSpeed",
+                "internalSolidInfillSpeed",
+                "topSurfaceSpeed",
+                "supportSpeed",
+            ]
+        )
         and 1 <= profile["travelSpeed"] <= 2_000
-        and 0.1 <= profile["outerWallLineWidth"] <= 3
-        and 0.1 <= profile["innerWallLineWidth"] <= 3
+        and all(
+            0 <= profile[key] <= 100_000
+            for key in [
+                "defaultAcceleration",
+                "outerWallAcceleration",
+                "innerWallAcceleration",
+                "topSurfaceAcceleration",
+                "travelAcceleration",
+                "firstLayerAcceleration",
+            ]
+        )
+        and all(
+            0.1 <= profile[key] <= 3
+            for key in [
+                "outerWallLineWidth",
+                "innerWallLineWidth",
+                "topSurfaceLineWidth",
+                "sparseInfillLineWidth",
+                "internalSolidInfillLineWidth",
+                "supportLineWidth",
+            ]
+        )
     ):
         raise ValueError("unsafe process limits")
     return profile
