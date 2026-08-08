@@ -11,6 +11,20 @@ ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW_ROOT = ROOT / ".github/workflows"
 PINNED_REF = re.compile(r"[0-9a-f]{40}")
 USES = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)", re.MULTILINE)
+JOB = re.compile(r"^  ([A-Za-z0-9_-]+):\s*$", re.MULTILINE)
+
+
+def job_sections(workflow: str) -> dict[str, str]:
+    _, separator, jobs_source = workflow.partition("\njobs:\n")
+    if not separator:
+        return {}
+    matches = list(JOB.finditer(jobs_source))
+    return {
+        match.group(1): jobs_source[
+            match.start() : matches[index + 1].start() if index + 1 < len(matches) else None
+        ]
+        for index, match in enumerate(matches)
+    }
 
 
 def main() -> None:
@@ -34,6 +48,13 @@ def main() -> None:
 
     android_source = (WORKFLOW_ROOT / "android.yml").read_text(encoding="utf-8")
     release_source = (WORKFLOW_ROOT / "release.yml").read_text(encoding="utf-8")
+    release_jobs = job_sections(release_source)
+    expected_release_jobs = {"build", "sign", "device-tests", "publish"}
+    if set(release_jobs) != expected_release_jobs:
+        errors.append(
+            "release.yml: expected build, sign, device-tests, and publish jobs; "
+            f"found {sorted(release_jobs)}"
+        )
     required_android_gates = {
         "Gradle uses strict dependency verification": (
             "./gradlew --dependency-verification=strict"
@@ -47,8 +68,13 @@ def main() -> None:
             errors.append(f"android.yml: missing gate: {description}")
 
     required_release_gates = {
-        "device-tests depends on build": "  device-tests:\n    needs: build\n",
-        "publish depends on device tests": "  publish:\n    needs: [build, device-tests]\n",
+        "sign depends on build": "  sign:\n    needs: build\n",
+        "device tests depend on build and signer": (
+            "  device-tests:\n    needs: [build, sign]\n"
+        ),
+        "publish depends on build, signer, and device tests": (
+            "  publish:\n    needs: [build, sign, device-tests]\n"
+        ),
         "publish has attestation permission": "      attestations: write\n",
         "publish has release permission": "      contents: write\n",
         "release candidate runs instrumentation": "Run release-candidate device tests",
@@ -57,7 +83,9 @@ def main() -> None:
             "adb shell am start -W \\\n"
             "            -n com.ashcastle.duckyslicer/.MainActivity"
         ),
-        "release APK runs structural verifier": "python3 tools/verify_apk.py \"$release_apk\"",
+        "signed release APK runs structural verifier": (
+            'python3 tools/verify_apk.py "${release_apks[0]}"'
+        ),
         "Gradle uses strict dependency verification": (
             "./gradlew --dependency-verification=strict"
         ),
@@ -69,11 +97,67 @@ def main() -> None:
         if marker not in release_source:
             errors.append(f"release.yml: missing gate: {description}")
 
+    build = release_jobs.get("build", "")
+    signer = release_jobs.get("sign", "")
+    device_tests = release_jobs.get("device-tests", "")
+    publish = release_jobs.get("publish", "")
+    isolated_signing_rules = {
+        "build produces an unsigned release": (
+            "app-release-unsigned.apk" in build
+            and "${{ secrets." not in build
+            and "apksigner sign" not in build
+        ),
+        "signer uses the protected release environment": "environment: release" in signer,
+        "signer has artifact-read permission only": (
+            "permissions:\n      actions: read" in signer
+            and "contents:" not in signer
+            and "id-token:" not in signer
+            and "attestations:" not in signer
+        ),
+        "signer receives all secrets only in its own section": (
+            signer.count("${{ secrets.") == 4
+            and "${{ secrets." not in device_tests
+            and "${{ secrets." not in publish
+        ),
+        "signer does not checkout or execute project build code": (
+            "actions/checkout@" not in signer
+            and "./gradlew" not in signer
+            and "python3 tools/" not in signer
+        ),
+        "signer pins and verifies the signing certificate": (
+            "DUCKYSLICER_SIGNING_CERT_SHA256" in signer
+            and "actual_fingerprint" in signer
+            and "expected_fingerprint" in signer
+        ),
+        "signer removes its temporary keystore before later actions": (
+            "trap 'rm -f \"$key_file\"' EXIT" in signer
+        ),
+        "device tests install the isolated signed artifact": (
+            "duckyslicer-release-signed" in device_tests
+        ),
+        "publish regenerates the SBOM from the signed artifact": (
+            "tools/generate_sbom.py" in publish
+            and "duckyslicer-release-signed" in publish
+        ),
+        "publish verifies a release checksum manifest": (
+            "SHA256SUMS.txt" in publish and "sha256sum --check" in publish
+        ),
+        "only publish can write releases": (
+            release_source.count("contents: write") == 1
+            and "contents: write" in publish
+            and release_source.count("attestations: write") == 1
+            and "attestations: write" in publish
+        ),
+    }
+    for description, valid in isolated_signing_rules.items():
+        if not valid:
+            errors.append(f"release.yml: isolated signing invariant failed: {description}")
+
     if errors:
         raise SystemExit("Workflow verification failed:\n- " + "\n- ".join(errors))
     print(
         f"Verified {len(workflows)} workflows and {action_count} immutable Action references; "
-        "release publication depends on ARM64 device tests"
+        "isolated signing and ARM64 device tests gate release publication"
     )
 
 

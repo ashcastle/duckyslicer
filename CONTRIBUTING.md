@@ -63,8 +63,12 @@ default depth renderer and the low-power compatibility renderer must both remain
 usable.
 
 Workflow changes must keep third-party Actions pinned to full commit hashes. A
-tagged release must preserve the build → ARM64 device test → publish dependency;
-publishing an APK before device tests finish is not an accepted fallback.
+tagged release must preserve the build → isolated sign → ARM64 device test →
+publish dependency; publishing an APK before device tests finish is not an
+accepted fallback.
+The release build job must never receive signing secrets. Only the isolated `sign`
+job may use them; it must not check out source or execute Gradle, repository scripts,
+or other project code, and it must verify the pinned signing-certificate fingerprint.
 
 ## Updating Android dependencies
 

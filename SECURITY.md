@@ -16,6 +16,11 @@ is expected to include a CycloneDX SBOM and GitHub build-provenance attestation;
 an APK without those matching release artifacts should not be treated as an
 official DuckySlicer build.
 
+The source build has no access to the Android signing key. Signing occurs in a
+protected environment job without a repository checkout, and the resulting APK
+must match the pinned public certificate fingerprint before the same artifact is
+tested and published. The temporary keystore is removed before artifact upload.
+
 ## Reporting a vulnerability
 
 Do not publish exploit details, private data, or a proof-of-concept in a public

@@ -4,21 +4,37 @@ Tagged releases are built from source by GitHub Actions, signed without checking
 keys into the repository, verified for Android 16 KB page compatibility, and
 published with a CycloneDX SBOM of the resolved Android, Rust, and native
 dependency graph and a build-provenance attestation. Every external GitHub Action
-is pinned to an immutable commit. The publish job cannot run until the signed build
-finishes, the matching release-candidate test APK passes the complete ARM64 Android
-device suite, and the signed minified APK installs and cold-launches on that emulator.
+is pinned to an immutable commit. The build job has no signing secrets and produces
+an unsigned candidate. A separate protected job that does not check out or execute
+project code signs the candidate, verifies the public certificate fingerprint, and
+removes its temporary keystore before uploading the signed artifact. The publish job
+cannot run until that exact signed APK passes the complete ARM64 Android device suite
+and cold-launches on the emulator.
 Gradle plug-ins, module metadata, and library artifacts are resolved from a checked-in
 lock and must match the reviewed SHA-256 verification metadata.
 
 ## One-time repository setup
 
-Create an Android signing key outside the repository and add these encrypted
-GitHub Actions secrets:
+Create an Android signing key outside the repository. In GitHub, create a protected
+environment named `release`, restrict it to release tags, and configure required
+reviewers when the repository plan supports them. Store these encrypted environment
+secrets there, not as build-job environment variables:
 
 - `DUCKYSLICER_KEYSTORE_BASE64`: base64-encoded keystore bytes
 - `DUCKYSLICER_STORE_PASSWORD`: keystore password
 - `DUCKYSLICER_KEY_ALIAS`: signing alias
 - `DUCKYSLICER_KEY_PASSWORD`: key password
+
+Export the public signing certificate and calculate its SHA-256 fingerprint:
+
+```shell
+keytool -exportcert -keystore /secure/path/duckyslicer-release.jks \
+  -alias <release-alias> | openssl dgst -sha256
+```
+
+Add the normalized 64-character result as the `release` environment variable
+`DUCKYSLICER_SIGNING_CERT_SHA256`. This value is public identity metadata, not a
+secret. The isolated signer refuses to publish an APK from any other key.
 
 Back up the keystore and passwords in an appropriate secret manager. Losing the
 key prevents publishing a compatible update under the same Android identity.
@@ -29,10 +45,12 @@ key prevents publishing a compatible update under the same Android identity.
 2. Review the source diff, dependency changes, license notices, and generated
    profile-catalog counts.
 3. Create and push an annotated SemVer tag such as `v0.2.0` or `v0.2.0-rc.1`.
-4. Wait for all three **Release APK** jobs: build, ARM64 device tests, and publish.
-   A failed device test intentionally leaves no GitHub Release behind.
-5. Verify that the GitHub release contains the ARM64 APK and CycloneDX JSON, and
-   that the provenance attestation is visible.
+4. Approve the protected `release` environment when prompted, then wait for all four
+   **Release APK** stages: unsigned build, isolated sign, ARM64 device tests, and
+   publish. A signing mismatch or failed device test intentionally leaves no GitHub
+   Release behind.
+5. Verify that the GitHub release contains the ARM64 APK, CycloneDX JSON, and
+   `SHA256SUMS` file; check the hashes and confirm the provenance attestation is visible.
 6. Install the release APK on a supported ARM64 device and perform an offline
    import, slice, full-layer preview, export, and optional printer upload smoke
    test before announcing the release.
@@ -53,8 +71,9 @@ python3 tools/verify_gradle_supply_chain.py
 python3 tools/verify_workflows.py
 ```
 
-Without the four signing environment variables Gradle intentionally produces an
-unsigned local release. Never weaken the release workflow to accept an unsigned
-artifact. The structural verifier rejects unexpected ABIs or native libraries,
-compressed or misaligned native entries, ELF LOAD segments below 16 KB alignment,
-unsafe or duplicate ZIP paths, and missing or legacy profile catalogs.
+Keep the four signing variables unset during the local build so Gradle produces an
+unsigned candidate matching the build job. Never move the signing secrets back into
+that job or publish its unsigned artifact. The structural verifier rejects unexpected
+ABIs or native libraries, compressed or misaligned native entries, ELF LOAD segments
+below 16 KB alignment, unsafe or duplicate ZIP paths, and missing or legacy profile
+catalogs.
