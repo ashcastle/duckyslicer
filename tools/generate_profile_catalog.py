@@ -12,7 +12,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 12
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
     "monotonic", "monotonicline", "rectilinear", "alignedrectilinear",
@@ -469,7 +469,13 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "internalSolidInfillAccelerationPercent": internal_solid_infill_acceleration_percent,
         "nozzleDiameter": nozzle,
         "supportEnabled": boolean(raw.get("enable_support")),
-        "brimWidth": 0 if raw.get("brim_type") == "no_brim" else number(raw.get("brim_width"), 0),
+        "brimType": enum_value(
+            raw.get("brim_type"),
+            {"auto_brim", "brim_ears", "outer_only", "inner_only", "outer_and_inner", "no_brim"},
+            "auto_brim",
+        ),
+        "brimWidth": number(raw.get("brim_width"), 0),
+        "brimObjectGap": number(raw.get("brim_object_gap"), 0),
         "topSolidLayers": integer(raw.get("top_shell_layers"), 5),
         "bottomSolidLayers": integer(raw.get("bottom_shell_layers"), 4),
         "topShellThickness": number(raw.get("top_shell_thickness"), 0),
@@ -528,6 +534,15 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         ),
         "skirtLoops": integer(raw.get("skirt_loops"), 0),
         "skirtDistance": number(raw.get("skirt_distance"), 6),
+        "skirtHeight": integer(raw.get("skirt_height"), 1),
+        "skirtSpeed": number(raw.get("skirt_speed"), 50),
+        "minimumSkirtLength": number(raw.get("min_skirt_length"), 0),
+        "draftShield": enum_value(raw.get("draft_shield"), {"disabled", "enabled"}, "disabled"),
+        "raftLayers": integer(raw.get("raft_layers"), 0),
+        "raftContactDistance": number(raw.get("raft_contact_distance"), 0.1),
+        "raftExpansion": number(raw.get("raft_expansion"), 1.5),
+        "raftFirstLayerDensity": number(raw.get("raft_first_layer_density"), 90),
+        "raftFirstLayerExpansion": number(raw.get("raft_first_layer_expansion"), 2),
         "outerWallLineWidth": outer_wall_line_width,
         "innerWallLineWidth": inner_wall_line_width,
         "topSurfaceLineWidth": top_surface_line_width,
@@ -559,6 +574,12 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "ironingSpacing": number(raw.get("ironing_spacing"), 0.1),
         "ironingSpeed": number(raw.get("ironing_speed"), 20),
         "wallGenerator": wall_generator(raw.get("wall_generator")),
+        "wallTransitionLength": number(raw.get("wall_transition_length"), 100),
+        "wallTransitionFilterDeviation": number(raw.get("wall_transition_filter_deviation"), 25),
+        "wallTransitionAngle": number(raw.get("wall_transition_angle"), 10),
+        "wallDistributionCount": integer(raw.get("wall_distribution_count"), 1),
+        "minimumFeatureSize": number(raw.get("min_feature_size"), 25),
+        "minimumWallLengthFactor": number(raw.get("min_length_factor"), 0.5),
         "wallSequence": wall_sequence(resolved_wall_order),
         "wallDirection": enum_value(raw.get("wall_direction"), {"auto", "ccw", "cw"}, "auto"),
         "detectThinWalls": boolean(raw.get("detect_thin_wall")),
@@ -690,6 +711,15 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0 <= profile["supportTopZDistance"] <= 20
         and 0 <= profile["supportBottomZDistance"] <= 20
         and 0 <= profile["supportObjectXYDistance"] <= 20
+        and 0 <= profile["brimObjectGap"] <= 20
+        and 0 <= profile["skirtHeight"] <= 10_000
+        and 0 <= profile["skirtSpeed"] <= 2_000
+        and 0 <= profile["minimumSkirtLength"] <= 1_000_000
+        and 0 <= profile["raftLayers"] <= 100
+        and 0 <= profile["raftContactDistance"] <= 20
+        and 0 <= profile["raftExpansion"] <= 1_000
+        and 10 <= profile["raftFirstLayerDensity"] <= 100
+        and 0 <= profile["raftFirstLayerExpansion"] <= 1_000
         and profile["fillPattern"] in INFILL_PATTERNS
         and profile["topSurfacePattern"] in INFILL_PATTERNS
         and profile["bottomSurfacePattern"] in INFILL_PATTERNS
@@ -698,6 +728,12 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0 <= profile["ironingFlow"] <= 100
         and 0 <= profile["ironingSpacing"] <= 1
         and 1 <= profile["ironingSpeed"] <= 2_000
+        and 0 <= profile["wallTransitionLength"] <= 10_000
+        and 0 <= profile["wallTransitionFilterDeviation"] <= 10_000
+        and 1 <= profile["wallTransitionAngle"] <= 59
+        and 1 <= profile["wallDistributionCount"] <= 100
+        and 0 <= profile["minimumFeatureSize"] <= 10_000
+        and 0 <= profile["minimumWallLengthFactor"] <= 100
     ):
         raise ValueError("unsafe process limits")
     return profile

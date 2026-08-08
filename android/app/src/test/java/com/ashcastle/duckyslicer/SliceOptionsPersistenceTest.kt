@@ -110,6 +110,12 @@ class SliceOptionsPersistenceTest {
         assertEquals(83f, restored.internalSolidInfillAcceleration)
         assertEquals(true, restored.internalSolidInfillAccelerationPercent)
         assertEquals("classic", restored.wallGenerator)
+        assertEquals(135f, restored.wallTransitionLength)
+        assertEquals(31f, restored.wallTransitionFilterDeviation)
+        assertEquals(24f, restored.wallTransitionAngle)
+        assertEquals(3, restored.wallDistributionCount)
+        assertEquals(22f, restored.minimumFeatureSize)
+        assertEquals(0.75f, restored.minimumWallLengthFactor)
         assertEquals("outer-inner", restored.wallSequence)
         assertEquals("cw", restored.wallDirection)
         assertEquals(77f, restored.smallPerimeterSpeed)
@@ -142,6 +148,20 @@ class SliceOptionsPersistenceTest {
         assertEquals(0.23f, restored.elephantFootCompensation)
         assertEquals(3, restored.elephantFootCompensationLayers)
         assertEquals(26f, restored.maxBridgeLength)
+        assertEquals(2, restored.skirtLoops)
+        assertEquals(8f, restored.skirtDistance)
+        assertEquals(3, restored.skirtHeight)
+        assertEquals(57f, restored.skirtSpeed)
+        assertEquals(12f, restored.minimumSkirtLength)
+        assertEquals("enabled", restored.draftShield)
+        assertEquals("inner_only", restored.brimType)
+        assertEquals(5f, restored.brimWidth)
+        assertEquals(0.15f, restored.brimObjectGap)
+        assertEquals(2, restored.raftLayers)
+        assertEquals(0.13f, restored.raftContactDistance)
+        assertEquals(2.5f, restored.raftExpansion)
+        assertEquals(86f, restored.raftFirstLayerDensity)
+        assertEquals(3.5f, restored.raftFirstLayerExpansion)
         assertEquals("klipper", restored.gcodeFlavor)
         assertEquals(4_600f, restored.maxAccelerationTravel)
     }
@@ -209,7 +229,18 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         supportAngle = 38f,
         skirtLoops = 2,
         skirtDistance = 8f,
+        skirtHeight = 3,
+        skirtSpeed = 57f,
+        minimumSkirtLength = 12f,
+        draftShield = "enabled",
+        brimType = "inner_only",
         brimWidth = 5f,
+        brimObjectGap = 0.15f,
+        raftLayers = 2,
+        raftContactDistance = 0.13f,
+        raftExpansion = 2.5f,
+        raftFirstLayerDensity = 86f,
+        raftFirstLayerExpansion = 3.5f,
         outerWallLineWidth = 0.64f,
         innerWallLineWidth = 0.68f,
         topSurfaceLineWidth = 0.55f,
@@ -314,6 +345,12 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         internalSolidInfillAcceleration = 83f,
         internalSolidInfillAccelerationPercent = true,
         wallGenerator = "classic",
+        wallTransitionLength = 135f,
+        wallTransitionFilterDeviation = 31f,
+        wallTransitionAngle = 24f,
+        wallDistributionCount = 3,
+        minimumFeatureSize = 22f,
+        minimumWallLengthFactor = 0.75f,
         wallSequence = "outer-inner",
         wallDirection = "cw",
         detectThinWalls = true,

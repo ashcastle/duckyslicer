@@ -97,7 +97,14 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         internalSolidInfillAccelerationPercent = internalSolidInfillAccelerationPercent,
         nozzleDiameter = nozzleDiameter,
         supportEnabled = supportEnabled,
+        brimType = brimType,
         brimWidth = brimWidth,
+        brimObjectGap = brimObjectGap,
+        raftLayers = raftLayers,
+        raftContactDistance = raftContactDistance,
+        raftExpansion = raftExpansion,
+        raftFirstLayerDensity = raftFirstLayerDensity,
+        raftFirstLayerExpansion = raftFirstLayerExpansion,
         topSolidLayers = topSolidLayers,
         bottomSolidLayers = bottomSolidLayers,
         topShellThickness = topShellThickness,
@@ -142,6 +149,10 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         supportStyle = supportStyle,
         skirtLoops = skirtLoops,
         skirtDistance = skirtDistance,
+        skirtHeight = skirtHeight,
+        skirtSpeed = skirtSpeed,
+        minimumSkirtLength = minimumSkirtLength,
+        draftShield = draftShield,
         outerWallLineWidth = outerWallLineWidth,
         innerWallLineWidth = innerWallLineWidth,
         topSurfaceLineWidth = topSurfaceLineWidth,
@@ -169,6 +180,12 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         ironingSpacing = ironingSpacing,
         ironingSpeed = ironingSpeed,
         wallGenerator = wallGenerator,
+        wallTransitionLength = wallTransitionLength,
+        wallTransitionFilterDeviation = wallTransitionFilterDeviation,
+        wallTransitionAngle = wallTransitionAngle,
+        wallDistributionCount = wallDistributionCount,
+        minimumFeatureSize = minimumFeatureSize,
+        minimumWallLengthFactor = minimumWallLengthFactor,
         wallSequence = wallSequence,
         wallDirection = wallDirection,
         detectThinWalls = detectThinWalls,
@@ -229,7 +246,7 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 9
+private const val SLICE_OPTIONS_FORMAT_VERSION = 11
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f

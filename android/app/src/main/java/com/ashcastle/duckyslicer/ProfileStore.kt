@@ -154,7 +154,14 @@ class ProfileStore private constructor(
             internalSolidInfillAcceleration = options.internalSolidInfillAcceleration,
             internalSolidInfillAccelerationPercent = options.internalSolidInfillAccelerationPercent,
             supportEnabled = options.supportEnabled,
+            brimType = options.brimType,
             brimWidth = options.brimWidth,
+            brimObjectGap = options.brimObjectGap,
+            raftLayers = options.raftLayers,
+            raftContactDistance = options.raftContactDistance,
+            raftExpansion = options.raftExpansion,
+            raftFirstLayerDensity = options.raftFirstLayerDensity,
+            raftFirstLayerExpansion = options.raftFirstLayerExpansion,
             topSolidLayers = options.topSolidLayers,
             bottomSolidLayers = options.bottomSolidLayers,
             topShellThickness = options.topShellThickness,
@@ -199,6 +206,10 @@ class ProfileStore private constructor(
             supportStyle = options.supportStyle,
             skirtLoops = options.skirtLoops,
             skirtDistance = options.skirtDistance,
+            skirtHeight = options.skirtHeight,
+            skirtSpeed = options.skirtSpeed,
+            minimumSkirtLength = options.minimumSkirtLength,
+            draftShield = options.draftShield,
             outerWallLineWidth = options.outerWallLineWidth,
             innerWallLineWidth = options.innerWallLineWidth,
             topSurfaceLineWidth = options.topSurfaceLineWidth,
@@ -226,6 +237,12 @@ class ProfileStore private constructor(
             ironingSpacing = options.ironingSpacing,
             ironingSpeed = options.ironingSpeed,
             wallGenerator = options.wallGenerator,
+            wallTransitionLength = options.wallTransitionLength,
+            wallTransitionFilterDeviation = options.wallTransitionFilterDeviation,
+            wallTransitionAngle = options.wallTransitionAngle,
+            wallDistributionCount = options.wallDistributionCount,
+            minimumFeatureSize = options.minimumFeatureSize,
+            minimumWallLengthFactor = options.minimumWallLengthFactor,
             wallSequence = options.wallSequence,
             wallDirection = options.wallDirection,
             detectThinWalls = options.detectThinWalls,
@@ -288,7 +305,7 @@ class ProfileStore private constructor(
         ?: throw IllegalArgumentException("Profile name is required")
 
     private companion object {
-        const val USER_PROFILE_SCHEMA_VERSION = 12
+        const val USER_PROFILE_SCHEMA_VERSION = 14
     }
 }
 
@@ -371,7 +388,15 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("sparseInfillAccelerationPercent", sparseInfillAccelerationPercent)
     .put("internalSolidInfillAcceleration", internalSolidInfillAcceleration)
     .put("internalSolidInfillAccelerationPercent", internalSolidInfillAccelerationPercent)
-    .put("supportEnabled", supportEnabled).put("brimWidth", brimWidth)
+    .put("supportEnabled", supportEnabled)
+    .put("brimType", brimType)
+    .put("brimWidth", brimWidth)
+    .put("brimObjectGap", brimObjectGap)
+    .put("raftLayers", raftLayers)
+    .put("raftContactDistance", raftContactDistance)
+    .put("raftExpansion", raftExpansion)
+    .put("raftFirstLayerDensity", raftFirstLayerDensity)
+    .put("raftFirstLayerExpansion", raftFirstLayerExpansion)
     .put("topSolidLayers", topSolidLayers).put("bottomSolidLayers", bottomSolidLayers)
     .put("topShellThickness", topShellThickness).put("bottomShellThickness", bottomShellThickness)
     .put("fillPattern", fillPattern)
@@ -411,6 +436,10 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("supportBasePattern", supportBasePattern)
     .put("supportInterfacePattern", supportInterfacePattern)
     .put("supportStyle", supportStyle)
+    .put("skirtHeight", skirtHeight)
+    .put("skirtSpeed", skirtSpeed)
+    .put("minimumSkirtLength", minimumSkirtLength)
+    .put("draftShield", draftShield)
     .put("skirtDistance", skirtDistance)
     .put("outerWallLineWidth", outerWallLineWidth)
     .put("innerWallLineWidth", innerWallLineWidth)
@@ -439,6 +468,12 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("ironingSpacing", ironingSpacing)
     .put("ironingSpeed", ironingSpeed)
     .put("wallGenerator", wallGenerator)
+    .put("wallTransitionLength", wallTransitionLength)
+    .put("wallTransitionFilterDeviation", wallTransitionFilterDeviation)
+    .put("wallTransitionAngle", wallTransitionAngle)
+    .put("wallDistributionCount", wallDistributionCount)
+    .put("minimumFeatureSize", minimumFeatureSize)
+    .put("minimumWallLengthFactor", minimumWallLengthFactor)
     .put("wallSequence", wallSequence)
     .put("wallDirection", wallDirection)
     .put("detectThinWalls", detectThinWalls)
@@ -568,8 +603,15 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         sparseInfillAccelerationPercent = optBoolean("sparseInfillAccelerationPercent", true),
         internalSolidInfillAcceleration = optDouble("internalSolidInfillAcceleration", 100.0).toFloat(),
         internalSolidInfillAccelerationPercent = optBoolean("internalSolidInfillAccelerationPercent", true),
-        optBoolean("supportEnabled"),
-        optDouble("brimWidth", 0.0).toFloat(),
+        supportEnabled = optBoolean("supportEnabled"),
+        brimType = optString("brimType", "no_brim"),
+        brimWidth = optDouble("brimWidth", 0.0).toFloat(),
+        brimObjectGap = optDouble("brimObjectGap", 0.0).toFloat(),
+        raftLayers = optInt("raftLayers", 0),
+        raftContactDistance = optDouble("raftContactDistance", 0.1).toFloat(),
+        raftExpansion = optDouble("raftExpansion", 1.5).toFloat(),
+        raftFirstLayerDensity = optDouble("raftFirstLayerDensity", 90.0).toFloat(),
+        raftFirstLayerExpansion = optDouble("raftFirstLayerExpansion", 2.0).toFloat(),
         builtIn = optBoolean("builtIn"),
         topSolidLayers = optInt("topSolidLayers", 5),
         bottomSolidLayers = optInt("bottomSolidLayers", 4),
@@ -615,6 +657,10 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         supportStyle = optString("supportStyle", "default"),
         skirtLoops = optInt("skirtLoops", 0),
         skirtDistance = optDouble("skirtDistance", 6.0).toFloat(),
+        skirtHeight = optInt("skirtHeight", 1),
+        skirtSpeed = optDouble("skirtSpeed", 50.0).toFloat(),
+        minimumSkirtLength = optDouble("minimumSkirtLength", 0.0).toFloat(),
+        draftShield = optString("draftShield", "disabled"),
         outerWallLineWidth = optDouble("outerWallLineWidth", 0.0).toFloat(),
         innerWallLineWidth = optDouble("innerWallLineWidth", 0.0).toFloat(),
         topSurfaceLineWidth = optDouble("topSurfaceLineWidth", 0.0).toFloat(),
@@ -642,6 +688,12 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         ironingSpacing = optDouble("ironingSpacing", 0.1).toFloat(),
         ironingSpeed = optDouble("ironingSpeed", 20.0).toFloat(),
         wallGenerator = optString("wallGenerator", "arachne"),
+        wallTransitionLength = optDouble("wallTransitionLength", 100.0).toFloat(),
+        wallTransitionFilterDeviation = optDouble("wallTransitionFilterDeviation", 25.0).toFloat(),
+        wallTransitionAngle = optDouble("wallTransitionAngle", 10.0).toFloat(),
+        wallDistributionCount = optInt("wallDistributionCount", 1),
+        minimumFeatureSize = optDouble("minimumFeatureSize", 25.0).toFloat(),
+        minimumWallLengthFactor = optDouble("minimumWallLengthFactor", 0.5).toFloat(),
         wallSequence = optString("wallSequence", "inner-outer"),
         wallDirection = optString("wallDirection", "auto"),
         detectThinWalls = optBoolean("detectThinWalls"),

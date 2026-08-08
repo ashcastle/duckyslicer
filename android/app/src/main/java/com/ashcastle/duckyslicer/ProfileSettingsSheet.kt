@@ -603,6 +603,58 @@ private fun SlicingSettingsSheet(
         },
         onSelected = { onOptionsChanged(options.copy(wallGenerator = it)) },
     )
+    if (options.wallGenerator == "arachne") {
+        SettingSlider(
+            label = stringResource(R.string.wall_transition_length),
+            valueText = stringResource(R.string.percent_value, options.wallTransitionLength.roundToInt()),
+            value = options.wallTransitionLength,
+            range = 0f..200f,
+            steps = 39,
+            onValueChange = { onOptionsChanged(options.copy(wallTransitionLength = it.roundToInt().toFloat())) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.wall_transition_filter),
+            valueText = stringResource(R.string.percent_value, options.wallTransitionFilterDeviation.roundToInt()),
+            value = options.wallTransitionFilterDeviation,
+            range = 0f..100f,
+            steps = 19,
+            onValueChange = { onOptionsChanged(options.copy(wallTransitionFilterDeviation = it.roundToInt().toFloat())) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.wall_transition_angle),
+            valueText = stringResource(R.string.degrees_value, options.wallTransitionAngle),
+            value = options.wallTransitionAngle,
+            range = 1f..59f,
+            steps = 57,
+            onValueChange = { onOptionsChanged(options.copy(wallTransitionAngle = it.roundToInt().toFloat())) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.wall_distribution_count),
+            valueText = options.wallDistributionCount.toString(),
+            value = options.wallDistributionCount.toFloat(),
+            range = 1f..10f,
+            steps = 8,
+            onValueChange = { onOptionsChanged(options.copy(wallDistributionCount = it.roundToInt())) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.minimum_feature_size),
+            valueText = stringResource(R.string.percent_value, options.minimumFeatureSize.roundToInt()),
+            value = options.minimumFeatureSize,
+            range = 0f..100f,
+            steps = 19,
+            onValueChange = { onOptionsChanged(options.copy(minimumFeatureSize = it.roundToInt().toFloat())) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.minimum_wall_length),
+            valueText = stringResource(R.string.flow_ratio_value, options.minimumWallLengthFactor),
+            value = options.minimumWallLengthFactor,
+            range = 0f..2f,
+            steps = 39,
+            onValueChange = {
+                onOptionsChanged(options.copy(minimumWallLengthFactor = (it * 20f).roundToInt() / 20f))
+            },
+        )
+    }
     Text(stringResource(R.string.wall_order), fontWeight = FontWeight.SemiBold)
     CompactChoices(
         entries = listOf("inner-outer", "outer-inner", "inner-outer-inner"),
@@ -1644,20 +1696,124 @@ private fun SlicingSettingsSheet(
     )
     SettingSlider(
         label = stringResource(R.string.skirt_distance),
-        valueText = stringResource(R.string.millimeters_value, options.skirtDistance),
+        valueText = stringResource(R.string.millimeters_value_precise, options.skirtDistance),
         value = options.skirtDistance,
-        range = 1f..20f,
-        steps = 18,
-        onValueChange = { onOptionsChanged(options.copy(skirtDistance = it.roundToInt().toFloat())) },
+        range = 0f..max(60f, options.skirtDistance),
+        steps = (max(60f, options.skirtDistance) / 0.5f).roundToInt().coerceAtLeast(2) - 1,
+        onValueChange = { onOptionsChanged(options.copy(skirtDistance = (it * 2f).roundToInt() / 2f)) },
     )
     SettingSlider(
-        label = stringResource(R.string.brim_width),
-        valueText = stringResource(R.string.millimeters_value, options.brimWidth),
-        value = options.brimWidth,
-        range = 0f..20f,
-        steps = 19,
-        onValueChange = { onOptionsChanged(options.copy(brimWidth = it.roundToInt().toFloat())) },
+        label = stringResource(R.string.skirt_height),
+        valueText = options.skirtHeight.toString(),
+        value = options.skirtHeight.toFloat().coerceAtMost(max(10, options.skirtHeight).toFloat()),
+        range = 0f..max(10, options.skirtHeight).toFloat(),
+        steps = max(10, options.skirtHeight).coerceAtLeast(2) - 1,
+        onValueChange = { onOptionsChanged(options.copy(skirtHeight = it.roundToInt())) },
     )
+    SettingSlider(
+        label = stringResource(R.string.skirt_speed),
+        valueText = stringResource(R.string.print_speed_value, options.skirtSpeed),
+        value = options.skirtSpeed,
+        range = 0f..max(300f, options.skirtSpeed),
+        steps = max(300f, options.skirtSpeed).roundToInt().coerceAtLeast(2) - 1,
+        onValueChange = { onOptionsChanged(options.copy(skirtSpeed = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.minimum_skirt_length),
+        valueText = stringResource(R.string.millimeters_value, options.minimumSkirtLength),
+        value = options.minimumSkirtLength,
+        range = 0f..max(100f, options.minimumSkirtLength),
+        steps = max(100f, options.minimumSkirtLength).roundToInt().coerceAtLeast(2) - 1,
+        onValueChange = { onOptionsChanged(options.copy(minimumSkirtLength = it.roundToInt().toFloat())) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.draft_shield),
+        checked = options.draftShield == "enabled",
+        onCheckedChange = {
+            onOptionsChanged(options.copy(draftShield = if (it) "enabled" else "disabled"))
+        },
+    )
+    Text(stringResource(R.string.brim_type), fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf("auto_brim", "brim_ears", "outer_only", "inner_only", "outer_and_inner", "no_brim"),
+        selected = options.brimType,
+        label = {
+            stringResource(
+                when (it) {
+                    "auto_brim" -> R.string.brim_auto
+                    "brim_ears" -> R.string.brim_ears
+                    "outer_only" -> R.string.brim_outer
+                    "inner_only" -> R.string.brim_inner
+                    "outer_and_inner" -> R.string.brim_both
+                    else -> R.string.brim_none
+                },
+            )
+        },
+        onSelected = { onOptionsChanged(options.copy(brimType = it)) },
+    )
+    if (options.brimType != "no_brim") {
+        SettingSlider(
+            label = stringResource(R.string.brim_width),
+            valueText = stringResource(R.string.millimeters_value_precise, options.brimWidth),
+            value = options.brimWidth,
+            range = 0f..max(100f, options.brimWidth),
+            steps = (max(100f, options.brimWidth) / 0.5f).roundToInt().coerceAtLeast(2) - 1,
+            onValueChange = { onOptionsChanged(options.copy(brimWidth = (it * 2f).roundToInt() / 2f)) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.brim_object_gap),
+            valueText = stringResource(R.string.millimeters_value_precise, options.brimObjectGap),
+            value = options.brimObjectGap,
+            range = 0f..max(2f, options.brimObjectGap),
+            steps = (max(2f, options.brimObjectGap) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
+            onValueChange = { onOptionsChanged(options.copy(brimObjectGap = (it * 20f).roundToInt() / 20f)) },
+        )
+    }
+    SettingsGroupTitle(stringResource(R.string.raft))
+    SettingSlider(
+        label = stringResource(R.string.raft_layers),
+        valueText = options.raftLayers.toString(),
+        value = options.raftLayers.toFloat(),
+        range = 0f..max(20, options.raftLayers).toFloat(),
+        steps = max(20, options.raftLayers).coerceAtLeast(2) - 1,
+        onValueChange = { onOptionsChanged(options.copy(raftLayers = it.roundToInt())) },
+    )
+    if (options.raftLayers > 0) {
+        SettingSlider(
+            label = stringResource(R.string.raft_contact_distance),
+            valueText = stringResource(R.string.millimeters_value_precise, options.raftContactDistance),
+            value = options.raftContactDistance,
+            range = 0f..max(2f, options.raftContactDistance),
+            steps = (max(2f, options.raftContactDistance) / 0.02f).roundToInt().coerceAtLeast(2) - 1,
+            onValueChange = { onOptionsChanged(options.copy(raftContactDistance = (it * 50f).roundToInt() / 50f)) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.raft_expansion),
+            valueText = stringResource(R.string.millimeters_value_precise, options.raftExpansion),
+            value = options.raftExpansion,
+            range = 0f..max(20f, options.raftExpansion),
+            steps = (max(20f, options.raftExpansion) / 0.5f).roundToInt().coerceAtLeast(2) - 1,
+            onValueChange = { onOptionsChanged(options.copy(raftExpansion = (it * 2f).roundToInt() / 2f)) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.raft_first_layer_density),
+            valueText = stringResource(R.string.percent_value, options.raftFirstLayerDensity.roundToInt()),
+            value = options.raftFirstLayerDensity,
+            range = 10f..100f,
+            steps = 89,
+            onValueChange = { onOptionsChanged(options.copy(raftFirstLayerDensity = it.roundToInt().toFloat())) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.raft_first_layer_expansion),
+            valueText = stringResource(R.string.millimeters_value_precise, options.raftFirstLayerExpansion),
+            value = options.raftFirstLayerExpansion,
+            range = 0f..max(20f, options.raftFirstLayerExpansion),
+            steps = (max(20f, options.raftFirstLayerExpansion) / 0.5f).roundToInt().coerceAtLeast(2) - 1,
+            onValueChange = {
+                onOptionsChanged(options.copy(raftFirstLayerExpansion = (it * 2f).roundToInt() / 2f))
+            },
+        )
+    }
     SaveProfileField(onSave = onSave, onDismiss = onDismiss)
 }
 
