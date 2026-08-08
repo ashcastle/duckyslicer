@@ -4,12 +4,14 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.util.UUID
 
 /** Stores user-created profile snapshots in app-private storage. */
 class ProfileStore(private val file: File) {
     constructor(context: Context) : this(File(context.filesDir, "profiles/user_profiles.json"))
 
+    @Synchronized
     fun load(): ProfileCatalog {
         val root = readRoot()
         return ProfileCatalog(
@@ -82,7 +84,11 @@ class ProfileStore(private val file: File) {
     private fun writeRoot(root: JSONObject) {
         file.parentFile?.mkdirs()
         val temporary = File(file.parentFile, "${file.name}.tmp")
-        temporary.writeText(root.toString(2))
+        FileOutputStream(temporary).use { output ->
+            output.write(root.toString(2).toByteArray(Charsets.UTF_8))
+            output.flush()
+            output.fd.sync()
+        }
         check(temporary.renameTo(file) || runCatching {
             temporary.copyTo(file, overwrite = true)
             temporary.delete()
@@ -142,7 +148,7 @@ private fun JSONArray?.toQualityProfiles() = objects().mapNotNull { value ->
             value.getInt("perimeters"), value.getDouble("fillDensity").toFloat(),
             value.getDouble("printSpeed").toFloat(), value.optDouble("nozzleDiameter", 0.4).toFloat(),
             value.optBoolean("supportEnabled"),
-            value.optDouble("brimWidth").toFloat(),
+            value.optDouble("brimWidth", 0.0).toFloat(),
         )
     }.getOrNull()
 }
@@ -150,5 +156,5 @@ private fun JSONArray?.toQualityProfiles() = objects().mapNotNull { value ->
 private fun JSONArray?.objects(): List<JSONObject> = if (this == null) {
     emptyList()
 } else {
-    List(length()) { index -> getJSONObject(index) }
+    List(length()) { index -> optJSONObject(index) }.filterNotNull()
 }

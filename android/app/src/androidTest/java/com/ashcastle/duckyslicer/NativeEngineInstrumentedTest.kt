@@ -103,7 +103,8 @@ class NativeEngineInstrumentedTest {
         assertTrue("Preview must include the first layer", preview.startLayer == 0)
         assertTrue("Preview must include the final G-code layer", preview.endLayer == preview.layerCount - 1)
         assertTrue("Full preview must contain extrusion paths", preview.segments.isNotEmpty())
-        assertTrue("Full preview must contain segment Z coordinates", preview.segments.size % 5 == 0)
-        assertTrue("Full preview must span upward in Z", preview.maxZMm >= preview.minZMm)
+        assertTrue("Segment Z coordinates must be positive", preview.segments[4] > 0f)
+        assertTrue("Preview must report a positive first layer Z", preview.minZMm > 0f)
+        assertTrue("Multi-layer preview must span upward in Z", preview.maxZMm > preview.minZMm)
     }
 }
