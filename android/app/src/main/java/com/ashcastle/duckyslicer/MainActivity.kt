@@ -115,6 +115,7 @@ private fun DuckySlicerScreen() {
     var layerPreview by remember { mutableStateOf<GcodeLayerPreview?>(null) }
     var previewLoading by remember { mutableStateOf(false) }
     var sliceOptions by remember { mutableStateOf(SliceOptions()) }
+    var modelTransform by remember { mutableStateOf(ModelTransform()) }
     val profileStore = remember(context.applicationContext) { ProfileStore(context.applicationContext) }
     var profileCatalog by remember { mutableStateOf(ProfileCatalog()) }
 
@@ -132,6 +133,16 @@ private fun DuckySlicerScreen() {
         }
     }
 
+    fun applyModelTransform(transform: ModelTransform) {
+        if (transform != modelTransform) {
+            modelTransform = transform
+            sliceOutcome = null
+            layerPreview = null
+            sliceProgress = 0
+            notice = null
+        }
+    }
+
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && !slicing && !previewLoading) {
             importing = true
@@ -141,6 +152,7 @@ private fun DuckySlicerScreen() {
                 runCatching { importAndInspect(context, uri) }
                     .onSuccess {
                         model = it
+                        modelTransform = ModelTransform()
                         sliceOutcome = null
                         layerPreview = null
                         sliceProgress = 0
@@ -210,7 +222,7 @@ private fun DuckySlicerScreen() {
             scope.launch {
                 runCatching {
                     withContext(Dispatchers.IO) {
-                        OnDeviceSlicer.slice(File(selected.localPath), sliceOptions) { progress ->
+                        OnDeviceSlicer.slice(File(selected.localPath), sliceOptions, modelTransform) { progress ->
                             scope.launch { sliceProgress = progress }
                         }
                     }
@@ -257,6 +269,7 @@ private fun DuckySlicerScreen() {
     WorkspaceScreen(
         selectedTab = selectedTab,
         model = model,
+        modelTransform = modelTransform,
         sliceOptions = sliceOptions,
         profileCatalog = profileCatalog,
         sliceOutcome = sliceOutcome,
@@ -274,6 +287,17 @@ private fun DuckySlicerScreen() {
             }
         },
         onChoose = { filePicker.launch(arrayOf("model/stl", "application/sla", "*/*")) },
+        onModelTransformChanged = ::applyModelTransform,
+        onRemoveModel = {
+            model = null
+            modelTransform = ModelTransform()
+            sliceOutcome = null
+            layerPreview = null
+            sliceProgress = 0
+            notice = null
+            error = null
+            selectedTab = WorkspaceTab.SLICE
+        },
         onSlice = startSlice,
         onSave = saveGcode,
         onSliceOptionsChanged = ::applyOptions,

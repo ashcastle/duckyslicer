@@ -5,7 +5,7 @@ import com.u1.slicer.data.SliceConfig
 import com.u1.slicer.data.SliceResult
 
 /**
- * Compatibility seam for the Android OrcaSlicer runtime used during the MVP bootstrap.
+ * Compatibility seam for the inherited Android slicer runtime used during the MVP bootstrap.
  * Keep this package and method surface stable until the runtime is rebuilt behind the Rust ABI.
  */
 class NativeLibrary(

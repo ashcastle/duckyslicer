@@ -4,6 +4,7 @@ import com.u1.slicer.NativeLibrary
 import com.u1.slicer.data.SliceConfig
 import java.io.File
 import kotlin.math.abs
+import org.json.JSONObject
 
 data class SliceOutcome(
     val output: File,
@@ -22,9 +23,11 @@ data class PrinterProfile(
     val builtIn: Boolean = false,
 ) {
     companion object {
+        val U1_02 = PrinterProfile("snapmaker-u1-02", "U1 · 0.2 mm", 270f, 270f, 270f, 0.2f, true)
         val U1_04 = PrinterProfile("snapmaker-u1-04", "U1 · 0.4 mm", 270f, 270f, 270f, 0.4f, true)
         val U1_06 = PrinterProfile("snapmaker-u1-06", "U1 · 0.6 mm", 270f, 270f, 270f, 0.6f, true)
-        val builtIns = listOf(U1_04, U1_06)
+        val U1_08 = PrinterProfile("snapmaker-u1-08", "U1 · 0.8 mm", 270f, 270f, 270f, 0.8f, true)
+        val builtIns = listOf(U1_02, U1_04, U1_06, U1_08)
     }
 }
 
@@ -41,7 +44,7 @@ data class FilamentProfile(
     val builtIn: Boolean = false,
 ) {
     companion object {
-        // Curated from OrcaSlicer resources/profiles/Snapmaker/filament for Snapmaker U1.
+        // Curated from the included Snapmaker U1 filament catalog.
         val PLA = FilamentProfile(
             "snapmaker-u1-pla", "Snapmaker PLA", "PLA",
             220, 220, 60, 60, 0.98f, 14f, true,
@@ -54,7 +57,27 @@ data class FilamentProfile(
             "snapmaker-u1-abs", "Snapmaker ABS", "ABS",
             260, 260, 110, 105, 0.95f, 8f, true,
         )
-        val builtIns = listOf(PLA, PETG, ABS)
+        val ASA = FilamentProfile(
+            "snapmaker-u1-asa", "Snapmaker ASA", "ASA",
+            255, 255, 110, 100, 0.94f, 8f, true,
+        )
+        val PLA_CF = FilamentProfile(
+            "snapmaker-u1-pla-cf", "Snapmaker PLA-CF", "PLA-CF",
+            230, 230, 55, 55, 0.98f, 15f, true,
+        )
+        val PETG_CF = FilamentProfile(
+            "snapmaker-u1-petg-cf", "Snapmaker PETG-CF", "PETG-CF",
+            245, 250, 70, 70, 0.95f, 6.4f, true,
+        )
+        val TPU_95A = FilamentProfile(
+            "snapmaker-u1-tpu-95a", "Snapmaker TPU 95A", "TPU",
+            240, 240, 35, 35, 1.0f, 15f, true,
+        )
+        val PA_CF = FilamentProfile(
+            "snapmaker-u1-pa-cf", "Snapmaker PA-CF", "PA-CF",
+            250, 255, 100, 95, 0.96f, 8f, true,
+        )
+        val builtIns = listOf(PLA, PETG, ABS, ASA, PLA_CF, PETG_CF, TPU_95A, PA_CF)
     }
 }
 
@@ -72,7 +95,19 @@ data class QualityProfile(
     val builtIn: Boolean = false,
 ) {
     companion object {
-        // Curated from OrcaSlicer Snapmaker U1 0.4 mm and 0.6 mm process profiles.
+        // Curated from the included Snapmaker U1 process catalog.
+        val FINE_02 = QualityProfile(
+            "snapmaker-u1-02-006", "0.06 mm Fine",
+            0.06f, 0.10f, 4, 0.15f, 120f, 0.2f, builtIn = true,
+        )
+        val STANDARD_02 = QualityProfile(
+            "snapmaker-u1-02-012", "0.12 mm Standard",
+            0.12f, 0.10f, 4, 0.15f, 120f, 0.2f, builtIn = true,
+        )
+        val DRAFT_02 = QualityProfile(
+            "snapmaker-u1-02-014", "0.14 mm Draft",
+            0.14f, 0.10f, 4, 0.15f, 120f, 0.2f, builtIn = true,
+        )
         val DRAFT = QualityProfile(
             "snapmaker-u1-04-028", "0.28 mm Extra Draft",
             0.28f, 0.20f, 2, 0.15f, 200f, 0.4f, builtIn = true,
@@ -97,9 +132,31 @@ data class QualityProfile(
             "snapmaker-u1-06-020", "0.20 mm Fine",
             0.20f, 0.25f, 2, 0.15f, 200f, 0.6f, builtIn = true,
         )
-        val builtIns = listOf(DRAFT, STANDARD, FINE, DRAFT_06, STANDARD_06, FINE_06)
+        val FINE_08 = QualityProfile(
+            "snapmaker-u1-08-024", "0.24 mm Fine",
+            0.24f, 0.40f, 2, 0.15f, 200f, 0.8f, builtIn = true,
+        )
+        val STANDARD_08 = QualityProfile(
+            "snapmaker-u1-08-040", "0.40 mm Standard",
+            0.40f, 0.40f, 2, 0.15f, 200f, 0.8f, builtIn = true,
+        )
+        val DRAFT_08 = QualityProfile(
+            "snapmaker-u1-08-056", "0.56 mm Draft",
+            0.56f, 0.40f, 2, 0.15f, 200f, 0.8f, builtIn = true,
+        )
+        val builtIns = listOf(
+            FINE_02, STANDARD_02, DRAFT_02,
+            FINE, STANDARD, DRAFT,
+            FINE_06, STANDARD_06, DRAFT_06,
+            FINE_08, STANDARD_08, DRAFT_08,
+        )
 
-        fun standardFor(nozzleDiameter: Float) = if (abs(nozzleDiameter - 0.6f) < 0.05f) STANDARD_06 else STANDARD
+        fun standardFor(nozzleDiameter: Float) = when {
+            abs(nozzleDiameter - 0.2f) < 0.05f -> STANDARD_02
+            abs(nozzleDiameter - 0.6f) < 0.05f -> STANDARD_06
+            abs(nozzleDiameter - 0.8f) < 0.05f -> STANDARD_08
+            else -> STANDARD
+        }
     }
 }
 
@@ -199,13 +256,23 @@ object OnDeviceSlicer {
     fun slice(
         model: File,
         options: SliceOptions = SliceOptions(),
+        modelTransform: ModelTransform = ModelTransform(),
         onProgress: (Int) -> Unit = {},
     ): SliceOutcome {
         require(model.isFile) { "Model file is unavailable" }
 
+        val transformedModel = File.createTempFile("slice-input-", ".stl", model.parentFile)
         val runtime = NativeLibrary(onProgress)
         return try {
-            check(runtime.loadModel(model.absolutePath)) { "Model could not be prepared" }
+            val transformed = JSONObject(
+                NativeEngine.transformStl(
+                    model.absolutePath,
+                    transformedModel.absolutePath,
+                    modelTransform.toJson(options.bedSizeX, options.bedSizeY),
+                ),
+            )
+            check(transformed.optBoolean("ok")) { "Model transform failed" }
+            check(runtime.loadModel(transformedModel.absolutePath)) { "Model could not be prepared" }
             val result = requireNotNull(runtime.slice(options.toNativeConfig())) {
                 "Slicer returned no output"
             }
@@ -222,6 +289,7 @@ object OnDeviceSlicer {
             )
         } finally {
             runtime.clearModel()
+            transformedModel.delete()
         }
     }
 }

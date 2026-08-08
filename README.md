@@ -1,4 +1,8 @@
-# DuckySlicer
+<p align="center">
+  <img src="docs/assets/duckyslicer-mark.svg" alt="DuckySlicer duck mark" width="128">
+</p>
+
+<h1 align="center">DuckySlicer</h1>
 
 <p align="center">
   <strong>Slice on your Android device. Keep the whole workflow offline.</strong>
@@ -12,10 +16,9 @@
   <img alt="License AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue">
 </p>
 
-DuckySlicer is an Android-first 3D-print slicer derived from
-[OrcaSlicer](https://github.com/OrcaSlicer/OrcaSlicer). It imports STL models,
-slices them on-device, previews real G-code layers, and exports G-code without an
-account, cloud service, or network permission.
+DuckySlicer is an Android-first 3D-print slicer. It imports STL models, slices them
+on-device, previews real G-code layers, and exports G-code without an account,
+cloud service, or network permission.
 
 > DuckySlicer is an early MVP, not yet a production release. If you want to follow
 > its progress, a ⭐ on the repository is always appreciated.
@@ -26,12 +29,17 @@ account, cloud service, or network permission.
 - A full-screen print bed that keeps the model and G-code at their real millimetre scale
 - One-finger orbit and two-finger pan/zoom for the whole scene
 - Full-layer preview by default, with a two-handle slider for choosing a visible layer range
-- Curated Snapmaker U1 printer, filament, and slicing defaults from OrcaSlicer
+- Role colors for walls, infill, solid surfaces, support, bridges, and bed adhesion
+- Adaptive preview detail that stays lighter while the camera is moving and refines after release
+- Working move, rotate, scale, center, reset, and remove controls for imported models
+- Snapmaker U1 profiles for 0.2, 0.4, 0.6, and 0.8 mm nozzles
+- Eight built-in material profiles and twelve matching slicing profiles
 - Editable settings and named user profiles saved entirely in app-private storage
 - Bottom navigation on phones and a space-saving vertical rail on tablets
 - English defaults with Korean device-language localization
-- Yellow and charcoal mobile UI with minimal in-app branding
+- A distinct DuckySlicer identity built around the duck mark, yellow accents, and charcoal surfaces
 - No Bambu network plug-in and no `INTERNET` permission in the MVP
+- 16 KB page-size-compatible ARM64 native libraries for current Android devices
 
 The physical-device test uses a real 82 MB STL and verifies Rust mesh inspection,
 native slicing, non-empty G-code, all generated layers, and extrusion paths with
@@ -53,17 +61,16 @@ real Z coordinates.
 ```text
 Jetpack Compose mobile UI
         │
-        ├── Rust JNI: input validation, bounded mesh conversion,
-        │             G-code range parsing, preview data
+        ├── Rust JNI: input validation, streaming STL transforms,
+        │             G-code role/range parsing, preview data
         │
         └── Native slicer runtime: model loading, slicing,
                                    G-code generation
 ```
 
 New DuckySlicer-owned native code should prefer Rust. Inherited slicing algorithms
-remain C++ while they are isolated behind a narrow boundary. The bundled MVP runtime
-currently reports Snapmaker Orca 2.3.3; rebuilding that runtime from this repository's
-OrcaSlicer 2.4.2 source baseline remains follow-up work.
+remain C++ while they are isolated behind a narrow boundary. Rebuilding the current
+native runtime reproducibly from the included source baseline remains follow-up work.
 
 ## Build the APK
 
@@ -111,15 +118,10 @@ adb shell am instrument -w -r \
 ## Languages
 
 The MVP ships English and Korean resources. Future translations will stay within
-the language set already supported by OrcaSlicer and reuse its established slicing
-terms.
+the inherited language set and reuse established slicing terms.
 
-## Source lineage and license
+## License and provenance
 
-DuckySlicer is based on OrcaSlicer and retains its open-source lineage through
-Bambu Studio, PrusaSlicer, and Slic3r. The project is distributed under the
-[GNU Affero General Public License v3](LICENSE). Binary provenance and corresponding
-source locations are recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-OrcaSlicer is a trademark and project of its respective maintainers. DuckySlicer
-is an independent fork and is not an official OrcaSlicer release.
+DuckySlicer is distributed under the [GNU Affero General Public License v3](LICENSE).
+Inherited source lineage, binary provenance, and corresponding source locations are
+recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

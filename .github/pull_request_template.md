@@ -1,4 +1,4 @@
-# Description
+# Summary
 
 <!--
 > Please provide a summary of the changes made in this PR. Include details such as:
@@ -7,7 +7,7 @@
   > * Are there any breaking changes or dependencies that need to be considered?
 -->
 
-# Screenshots/Recordings/Graphs
+# Screenshots or recordings
 
 <!--
 > Please attach relevant screenshots to showcase the UI changes.
@@ -20,8 +20,9 @@
 > Please describe the tests that you have conducted to verify the changes made in this PR.
 -->
 
-<!--
-> A guide for users on how to download the artifacts from this PR.
--->
+## Checklist
 
-[How to Download Pull Requests Artifacts for Testing](https://www.orcaslicer.com/wiki/how_to_download_pr_artifacts)
+- [ ] User-facing text is available in English and Korean where applicable.
+- [ ] The APK still works without the `INTERNET` permission.
+- [ ] Native libraries remain compatible with 16 KB Android page sizes.
+- [ ] No private models, credentials, signing material, or AI working files are included.

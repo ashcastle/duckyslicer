@@ -1,4 +1,5 @@
 import org.gradle.api.tasks.Exec
+import org.gradle.api.tasks.Sync
 
 plugins {
     id("com.android.application")
@@ -6,13 +7,41 @@ plugins {
 }
 
 val repositoryRoot = rootDir.parentFile
-val nativeOutput = layout.projectDirectory.dir("src/main/jniLibs").asFile
 val nativeNdkDirectory = androidComponents.sdkComponents.ndkDirectory
+val generatedNativeOutput = layout.buildDirectory.dir("generated/native-libs")
+val bootstrapRuntime = layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libprusaslicer-jni.so")
+val ndkSharedRuntime = nativeNdkDirectory.map { ndk ->
+    val prebuiltRoot = ndk.asFile.resolve("toolchains/llvm/prebuilt")
+    val candidates = prebuiltRoot.listFiles()
+        ?.filter { hostDirectory ->
+            hostDirectory.resolve(
+                "sysroot/usr/lib/aarch64-linux-android/libc++_shared.so",
+            ).isFile
+        }
+        .orEmpty()
+
+    check(candidates.size == 1) {
+        "Expected one Android NDK host toolchain under ${prebuiltRoot.absolutePath}, " +
+            "found ${candidates.size}."
+    }
+    candidates.single().resolve(
+        "sysroot/usr/lib/aarch64-linux-android/libc++_shared.so",
+    )
+}
+
+val prepareNativeRuntime = tasks.register<Sync>("prepareNativeRuntime") {
+    group = "build"
+    description = "Stages the slicer bootstrap with the pinned NDK's 16 KB-compatible C++ runtime."
+    into(generatedNativeOutput.map { it.dir("arm64-v8a") })
+    from(bootstrapRuntime)
+    from(ndkSharedRuntime)
+}
 
 val buildRustNative = tasks.register<Exec>("buildRustNative") {
     group = "build"
     description = "Builds the Rust JNI library for arm64-v8a."
     workingDir(repositoryRoot.resolve("rust/duckyslicer-jni"))
+    dependsOn(prepareNativeRuntime)
     doFirst {
         environment("ANDROID_NDK_HOME", nativeNdkDirectory.get().asFile.absolutePath)
     }
@@ -24,7 +53,7 @@ val buildRustNative = tasks.register<Exec>("buildRustNative") {
         "-P",
         "26",
         "-o",
-        nativeOutput.absolutePath,
+        generatedNativeOutput.get().asFile.absolutePath,
         "build",
         "--release",
         "--locked",
@@ -37,7 +66,7 @@ val buildRustNative = tasks.register<Exec>("buildRustNative") {
             include("include/**/*.h", "src/**/*.cpp")
         },
     )
-    outputs.file(nativeOutput.resolve("arm64-v8a/libduckyslicer.so"))
+    outputs.file(generatedNativeOutput.map { it.file("arm64-v8a/libduckyslicer.so") })
 }
 
 tasks.named("preBuild").configure {
@@ -80,6 +109,11 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    sourceSets.getByName("main").jniLibs.directories.apply {
+        clear()
+        add(generatedNativeOutput.get().asFile.absolutePath)
     }
 
     packaging {
