@@ -61,6 +61,51 @@ class ToolpathMeshBuilderTest {
     }
 
     @Test
+    fun roleVisibilityCanExposeInnerToolpathsWithoutRemovingTheBed() {
+        val preview = GcodeLayerPreview(
+            startLayer = 0,
+            endLayer = 0,
+            layerCount = 1,
+            minZMm = 0.2f,
+            maxZMm = 0.2f,
+            segments = floatArrayOf(
+                10f, 10f, 20f, 10f, 0.2f, 0f,
+                10f, 12f, 20f, 12f, 0.2f, 1f,
+            ),
+            roleSegmentCounts = intArrayOf(1, 1, 0, 0, 0, 0, 0, 0, 0),
+        )
+        val allRoles = ToolpathMeshBuilder.build(
+            ToolpathScene(preview, 100f, 100f, 1f, 0.8f, PreviewDetail.BALANCED),
+        )
+        val onlyInnerWall = ToolpathMeshBuilder.build(
+            ToolpathScene(
+                preview = preview,
+                bedSizeX = 100f,
+                bedSizeY = 100f,
+                opacity = 1f,
+                depthContrast = 0.8f,
+                detail = PreviewDetail.BALANCED,
+                visibleRoles = setOf(1),
+            ),
+        )
+        val noToolpaths = ToolpathMeshBuilder.build(
+            ToolpathScene(
+                preview = preview,
+                bedSizeX = 100f,
+                bedSizeY = 100f,
+                opacity = 1f,
+                depthContrast = 0.8f,
+                detail = PreviewDetail.BALANCED,
+                visibleRoles = emptySet(),
+            ),
+        )
+
+        assertTrue("Hiding the outer wall must remove its geometry", onlyInnerWall.remaining() < allRoles.remaining())
+        assertTrue("Selecting the inner wall must retain its geometry", onlyInnerWall.remaining() > noToolpaths.remaining())
+        assertTrue("The bed must remain visible when every role is hidden", noToolpaths.remaining() > 0)
+    }
+
+    @Test
     fun balancedModeCapsDensePreviewGeometry() {
         val segmentCount = 30_000
         val segments = FloatArray(segmentCount * GcodeLayerPreview.SEGMENT_STRIDE)

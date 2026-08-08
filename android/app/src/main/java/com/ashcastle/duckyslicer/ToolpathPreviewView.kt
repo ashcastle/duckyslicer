@@ -27,13 +27,14 @@ internal fun DepthTestedToolpathScene(
     bedSizeY: Float,
     opacity: Float,
     depthContrast: Float,
+    visibleRoles: Set<Int>,
     detail: PreviewDetail,
     modifier: Modifier = Modifier,
 ) {
     AndroidView(
         factory = { context -> ToolpathSurfaceView(context) },
         update = { view ->
-            view.submit(preview, bedSizeX, bedSizeY, opacity, depthContrast, detail)
+            view.submit(preview, bedSizeX, bedSizeY, opacity, depthContrast, visibleRoles, detail)
         },
         modifier = modifier,
     )
@@ -66,10 +67,19 @@ private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
         bedSizeY: Float,
         opacity: Float,
         depthContrast: Float,
+        visibleRoles: Set<Int>,
         detail: PreviewDetail,
     ) {
         toolpathRenderer.submit(
-            ToolpathScene(preview, bedSizeX, bedSizeY, opacity, depthContrast, detail),
+            ToolpathScene(
+                preview = preview,
+                bedSizeX = bedSizeX,
+                bedSizeY = bedSizeY,
+                opacity = opacity,
+                depthContrast = depthContrast,
+                detail = detail,
+                visibleRoles = visibleRoles,
+            ),
         )
         requestRender()
     }
@@ -144,6 +154,7 @@ internal data class ToolpathScene(
     val opacity: Float,
     val depthContrast: Float,
     val detail: PreviewDetail,
+    val visibleRoles: Set<Int> = (0 until GcodeLayerPreview.ROLE_COUNT).toSet(),
 )
 
 private class ToolpathRenderer : GLSurfaceView.Renderer {
@@ -338,6 +349,7 @@ internal object ToolpathMeshBuilder {
             val y2 = scene.preview.segments[offset + 3]
             val z = scene.preview.segments[offset + 4]
             val role = scene.preview.segments[offset + 5].toInt().coerceIn(0, roleColors.lastIndex)
+            if (role !in scene.visibleRoles) return@forEach
             val dx = x2 - x1
             val dy = y2 - y1
             val length = hypot(dx, dy)

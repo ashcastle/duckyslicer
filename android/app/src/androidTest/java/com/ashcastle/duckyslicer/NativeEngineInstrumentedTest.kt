@@ -11,10 +11,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import kotlin.math.abs
 
 @RunWith(AndroidJUnit4::class)
 class NativeEngineInstrumentedTest {
     private data class ToolpathBounds(val minX: Float, val minY: Float, val maxX: Float, val maxY: Float)
+
+    private data class TestVertex(val x: Float, val y: Float, val z: Float)
 
     private fun outerWallBounds(gcode: File): ToolpathBounds {
         val preview = GcodeLayerPreview.fromJson(
@@ -47,6 +50,64 @@ class NativeEngineInstrumentedTest {
 
         instrumentation.context.assets.open(modelName).use { input ->
             destination.outputStream().use(input::copyTo)
+        }
+        return destination
+    }
+
+    private fun hollowTubeModel(): File {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val destination = File(context.cacheDir, "hollow-tube-topology.stl")
+        val facets = mutableListOf<List<TestVertex>>()
+
+        fun vertex(x: Float, y: Float, z: Float) = TestVertex(x, y, z)
+        fun quad(a: TestVertex, b: TestVertex, c: TestVertex, d: TestVertex) {
+            facets += listOf(a, b, c)
+            facets += listOf(a, c, d)
+        }
+
+        val z0 = 0f
+        val z1 = 20f
+        val low = 0f
+        val high = 30f
+        val holeLow = 10f
+        val holeHigh = 20f
+
+        // Outer walls, wound toward the air outside the part.
+        quad(vertex(low, low, z0), vertex(high, low, z0), vertex(high, low, z1), vertex(low, low, z1))
+        quad(vertex(high, low, z0), vertex(high, high, z0), vertex(high, high, z1), vertex(high, low, z1))
+        quad(vertex(high, high, z0), vertex(low, high, z0), vertex(low, high, z1), vertex(high, high, z1))
+        quad(vertex(low, high, z0), vertex(low, low, z0), vertex(low, low, z1), vertex(low, high, z1))
+
+        // Cavity walls use the opposite winding, toward the empty center.
+        quad(vertex(holeLow, holeLow, z0), vertex(holeLow, holeLow, z1), vertex(holeHigh, holeLow, z1), vertex(holeHigh, holeLow, z0))
+        quad(vertex(holeHigh, holeLow, z0), vertex(holeHigh, holeLow, z1), vertex(holeHigh, holeHigh, z1), vertex(holeHigh, holeHigh, z0))
+        quad(vertex(holeHigh, holeHigh, z0), vertex(holeHigh, holeHigh, z1), vertex(holeLow, holeHigh, z1), vertex(holeLow, holeHigh, z0))
+        quad(vertex(holeLow, holeHigh, z0), vertex(holeLow, holeHigh, z1), vertex(holeLow, holeLow, z1), vertex(holeLow, holeLow, z0))
+
+        // Close the annulus at the top and bottom without filling the cavity.
+        val strips = listOf(
+            arrayOf(low, high, low, holeLow),
+            arrayOf(low, high, holeHigh, high),
+            arrayOf(low, holeLow, holeLow, holeHigh),
+            arrayOf(holeHigh, high, holeLow, holeHigh),
+        )
+        strips.forEach { (x0, x1, y0, y1) ->
+            quad(vertex(x0, y0, z1), vertex(x1, y0, z1), vertex(x1, y1, z1), vertex(x0, y1, z1))
+            quad(vertex(x0, y1, z0), vertex(x1, y1, z0), vertex(x1, y0, z0), vertex(x0, y0, z0))
+        }
+
+        destination.bufferedWriter().use { writer ->
+            writer.appendLine("solid hollow_tube")
+            facets.forEach { triangle ->
+                writer.appendLine("  facet normal 0 0 0")
+                writer.appendLine("    outer loop")
+                triangle.forEach { point ->
+                    writer.appendLine("      vertex ${point.x} ${point.y} ${point.z}")
+                }
+                writer.appendLine("    endloop")
+                writer.appendLine("  endfacet")
+            }
+            writer.appendLine("endsolid hollow_tube")
         }
         return destination
     }
@@ -1048,6 +1109,59 @@ class NativeEngineInstrumentedTest {
         assertTrue("Classic must generate outer walls", gcode.contains(";TYPE:Outer wall"))
         assertTrue("Classic must generate inner walls", gcode.contains(";TYPE:Inner wall"))
         assertTrue("Classic G-code must contain extrusion", gcode.lineSequence().any { it.startsWith("G1 ") && it.contains(" E") })
+    }
+
+    @Test
+    fun hollowSolidKeepsExteriorAndCavityContoursDistinctOnDevice() {
+        val options = SliceOptions()
+            .selectPrinter(PrinterProfile.CUSTOM_CARTESIAN)
+            .selectFilament(FilamentProfile.GENERIC_PLA)
+            .selectQuality(QualityProfile.STANDARD)
+            .copy(
+                wallGenerator = "arachne",
+                perimeters = 3,
+                fillDensity = 0.18f,
+                topSolidLayers = 4,
+                bottomSolidLayers = 4,
+            )
+        val outcome = OnDeviceSlicer.slice(hollowTubeModel(), options)
+        val middleLayer = (outcome.layers / 2).coerceAtLeast(1)
+        val preview = GcodeLayerPreview.fromJson(
+            NativeEngine.previewGcodeRange(
+                outcome.output.absolutePath,
+                middleLayer,
+                middleLayer,
+            ),
+        )
+
+        val centerX = options.bedSizeX / 2f
+        val centerY = options.bedSizeY / 2f
+        var exteriorOuterWalls = 0
+        var cavityOuterWalls = 0
+        var innerWalls = 0
+        var cavityCrossings = 0
+        preview.segments.indices.step(GcodeLayerPreview.SEGMENT_STRIDE).forEach { offset ->
+            val x1 = preview.segments[offset]
+            val y1 = preview.segments[offset + 1]
+            val x2 = preview.segments[offset + 2]
+            val y2 = preview.segments[offset + 3]
+            val role = preview.segments[offset + 5].toInt()
+            val midpointX = (x1 + x2) / 2f
+            val midpointY = (y1 + y2) / 2f
+            val centerDistance = maxOf(abs(midpointX - centerX), abs(midpointY - centerY))
+
+            if (role == 0 && centerDistance > 12.5f) exteriorOuterWalls += 1
+            if (role == 0 && centerDistance in 4f..7.5f) cavityOuterWalls += 1
+            if (role == 1) innerWalls += 1
+            if (abs(midpointX - centerX) < 3.5f && abs(midpointY - centerY) < 3.5f) {
+                cavityCrossings += 1
+            }
+        }
+
+        assertTrue("Orca must classify the exterior contour as an outer wall", exteriorOuterWalls > 0)
+        assertTrue("Orca must classify the cavity contour as a surface-facing outer wall", cavityOuterWalls > 0)
+        assertTrue("Orca must keep structural inner-wall shells separate", innerWalls > 0)
+        assertEquals("No extrusion may cross the hollow cavity", 0, cavityCrossings)
     }
 
     @Test

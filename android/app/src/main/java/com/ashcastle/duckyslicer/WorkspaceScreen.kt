@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -87,6 +88,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -196,6 +198,7 @@ fun WorkspaceScreen(
     val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
     val panelMaxHeight = (maxHeight - if (tabletLayout) 24.dp else 94.dp).coerceAtLeast(320.dp)
     var showModelTools by remember { mutableStateOf(false) }
+    var visibleToolpathRoles by remember { mutableStateOf(ToolpathStyles.indices.toSet()) }
     Scaffold(
         containerColor = Color(0xFF191A18),
         bottomBar = {
@@ -213,6 +216,7 @@ fun WorkspaceScreen(
                     bedSizeY = sliceOptions.bedSizeY,
                     toolpathOpacity = appSettings.toolpathOpacity,
                     toolpathDepthContrast = appSettings.toolpathDepthContrast,
+                    visibleToolpathRoles = visibleToolpathRoles,
                     previewDetail = appSettings.previewDetail,
                     previewRenderingMode = appSettings.previewRenderingMode,
                     objectManipulationEnabled = selectedTab == WorkspaceTab.SLICE &&
@@ -311,6 +315,14 @@ fun WorkspaceScreen(
                     toolpathDepthContrast = appSettings.toolpathDepthContrast,
                     onToolpathDepthContrastChanged = {
                         onAppSettingsChanged(appSettings.copy(toolpathDepthContrast = it))
+                    },
+                    visibleToolpathRoles = visibleToolpathRoles,
+                    onToolpathRoleVisibilityChanged = { role, visible ->
+                        visibleToolpathRoles = if (visible) {
+                            visibleToolpathRoles + role
+                        } else {
+                            visibleToolpathRoles - role
+                        }
                     },
                     onLayerRangeSelected = onLayerRangeSelected,
                     onGoToSlice = { onTabSelected(WorkspaceTab.SLICE) },
@@ -619,6 +631,7 @@ private fun BedScene(
     bedSizeY: Float,
     toolpathOpacity: Float,
     toolpathDepthContrast: Float,
+    visibleToolpathRoles: Set<Int>,
     previewDetail: PreviewDetail,
     previewRenderingMode: PreviewRenderingMode,
     objectManipulationEnabled: Boolean,
@@ -640,6 +653,7 @@ private fun BedScene(
             bedSizeY = bedSizeY,
             opacity = toolpathOpacity,
             depthContrast = toolpathDepthContrast,
+            visibleRoles = visibleToolpathRoles,
             detail = previewDetail,
             modifier = modifier,
         )
@@ -833,6 +847,7 @@ private fun BedScene(
             renderPlan?.segmentOffsets?.forEachIndexed { selectedIndex, segmentIndex ->
                 val role = preview.segments[segmentIndex + 5].roundToInt()
                     .coerceIn(0, ToolpathStyles.lastIndex)
+                if (role !in visibleToolpathRoles) return@forEachIndexed
                 val startX = preview.segments[segmentIndex]
                 val startY = preview.segments[segmentIndex + 1]
                 val z = preview.segments[segmentIndex + 4]
@@ -1078,6 +1093,8 @@ private fun PreviewSheet(
     onToolpathOpacityChanged: (Float) -> Unit,
     toolpathDepthContrast: Float,
     onToolpathDepthContrastChanged: (Float) -> Unit,
+    visibleToolpathRoles: Set<Int>,
+    onToolpathRoleVisibilityChanged: (Int, Boolean) -> Unit,
     onLayerRangeSelected: (Int, Int) -> Unit,
     onGoToSlice: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1174,20 +1191,30 @@ private fun PreviewSheet(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     rowStyles.forEach { style ->
+                        val visible = style.code in visibleToolpathRoles
                         Row(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .toggleable(
+                                    value = visible,
+                                    role = Role.Checkbox,
+                                    onValueChange = { nextVisible ->
+                                        onToolpathRoleVisibilityChanged(style.code, nextVisible)
+                                    },
+                                )
+                                .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Surface(
                                 modifier = Modifier.size(width = 18.dp, height = 6.dp),
-                                color = style.color,
+                                color = if (visible) style.color else Color(0xFF62635F),
                                 shape = RoundedCornerShape(50),
                             ) {}
                             Spacer(Modifier.width(7.dp))
                             Text(
                                 stringResource(style.label),
                                 style = MaterialTheme.typography.labelMedium,
-                                color = Color(0xFFE2E3DD),
+                                color = if (visible) Color(0xFFE2E3DD) else Color(0xFF858681),
                             )
                         }
                     }
