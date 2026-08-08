@@ -23,8 +23,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Layers
@@ -65,10 +69,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -82,6 +88,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -155,6 +162,7 @@ fun WorkspaceScreen(
     var toolpathOpacity by remember { mutableFloatStateOf(0.92f) }
     var toolpathDepthContrast by remember { mutableFloatStateOf(0.78f) }
     var showModelTools by remember { mutableStateOf(false) }
+    var objectSelected by remember(model?.localPath) { mutableStateOf(false) }
     Scaffold(
         containerColor = Color(0xFF191A18),
         bottomBar = {
@@ -172,6 +180,11 @@ fun WorkspaceScreen(
                     bedSizeY = sliceOptions.bedSizeY,
                     toolpathOpacity = toolpathOpacity,
                     toolpathDepthContrast = toolpathDepthContrast,
+                    objectSelected = objectSelected,
+                    objectManipulationEnabled = selectedTab == WorkspaceTab.SLICE &&
+                        !importing && !slicing && !previewLoading,
+                    onObjectSelectedChanged = { objectSelected = it },
+                    onModelTransformChanged = onModelTransformChanged,
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -187,20 +200,17 @@ fun WorkspaceScreen(
                     .padding(16.dp),
             )
 
-            if (model != null && selectedTab == WorkspaceTab.SLICE) {
-                Button(
-                    onClick = { showModelTools = true },
-                    enabled = !importing && !slicing && !previewLoading,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Black.copy(alpha = 0.68f),
-                        contentColor = Color(0xFFF4F4EE),
-                    ),
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 16.dp),
-                ) {
-                    Text(stringResource(R.string.edit_model))
-                }
+            if (model != null && selectedTab == WorkspaceTab.SLICE && objectSelected) {
+                ObjectToolRail(
+                    transform = modelTransform,
+                    onTransformChanged = onModelTransformChanged,
+                    onMore = { showModelTools = true },
+                    onRemove = {
+                        objectSelected = false
+                        onRemoveModel()
+                    },
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp),
+                )
             }
 
             Surface(
@@ -525,6 +535,10 @@ private fun BedScene(
     bedSizeY: Float,
     toolpathOpacity: Float,
     toolpathDepthContrast: Float,
+    objectSelected: Boolean,
+    objectManipulationEnabled: Boolean,
+    onObjectSelectedChanged: (Boolean) -> Unit,
+    onModelTransformChanged: (ModelTransform) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var yaw by remember { mutableFloatStateOf(-45f) }
@@ -533,6 +547,10 @@ private fun BedScene(
     var pan by remember { mutableStateOf(Offset.Zero) }
     var interactionActive by remember { mutableStateOf(false) }
     var refinedPreview by remember { mutableStateOf(true) }
+    var modelScreenBounds by remember(model) { mutableStateOf<Rect?>(null) }
+    val currentTransform by rememberUpdatedState(modelTransform)
+    val currentSelectionCallback by rememberUpdatedState(onObjectSelectedChanged)
+    val currentTransformCallback by rememberUpdatedState(onModelTransformChanged)
     val previewPaths = remember(preview) {
         Array(PreviewDepthBands) { Array(ToolpathStyles.size) { Path() } }
     }
@@ -550,9 +568,14 @@ private fun BedScene(
     }
 
     Canvas(
-        modifier.pointerInput(Unit) {
+        modifier.pointerInput(model, preview, objectManipulationEnabled) {
             awaitEachGesture {
-                awaitFirstDown(requireUnconsumed = false)
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val hitObject = objectManipulationEnabled && modelScreenBounds
+                    ?.inflate(14.dp.toPx())
+                    ?.contains(down.position) == true
+                if (hitObject) currentSelectionCallback(true)
+                var movement = 0f
                 interactionActive = true
                 try {
                     var event: PointerEvent
@@ -563,8 +586,32 @@ private fun BedScene(
                             pressed.size == 1 -> {
                                 val change = pressed.first()
                                 val delta = change.position - change.previousPosition
-                                yaw += delta.x * 0.32f
-                                pitch = (pitch - delta.y * 0.26f).coerceIn(22f, 88f)
+                                movement += abs(delta.x) + abs(delta.y)
+                                if (hitObject) {
+                                    val currentSceneScale = min(
+                                        size.width * 0.64f,
+                                        size.height * 0.72f,
+                                    ) / max(bedSizeX, bedSizeY) * zoom
+                                    val pitchRadians = pitch / 180f * PI.toFloat()
+                                    val yawRadians = yaw / 180f * PI.toFloat()
+                                    val projectedX = delta.x / currentSceneScale.coerceAtLeast(0.001f)
+                                    val projectedY = delta.y /
+                                        (currentSceneScale * sin(pitchRadians)).coerceAtLeast(0.001f)
+                                    val bedDeltaX = projectedX * cos(yawRadians) + projectedY * sin(yawRadians)
+                                    val bedDeltaY = -projectedX * sin(yawRadians) + projectedY * cos(yawRadians)
+                                    val transform = currentTransform
+                                    currentTransformCallback(
+                                        transform.copy(
+                                            offsetXmm = (transform.offsetXmm + bedDeltaX)
+                                                .coerceIn(-bedSizeX / 2f, bedSizeX / 2f),
+                                            offsetYmm = (transform.offsetYmm + bedDeltaY)
+                                                .coerceIn(-bedSizeY / 2f, bedSizeY / 2f),
+                                        ),
+                                    )
+                                } else {
+                                    yaw += delta.x * 0.32f
+                                    pitch = (pitch - delta.y * 0.26f).coerceIn(22f, 88f)
+                                }
                             }
 
                             pressed.size >= 2 -> {
@@ -578,6 +625,7 @@ private fun BedScene(
                     } while (event.changes.any { it.pressed })
                 } finally {
                     interactionActive = false
+                    if (!hitObject && movement < 12f) currentSelectionCallback(false)
                 }
             }
         },
@@ -696,6 +744,10 @@ private fun BedScene(
             val minimumRotatedZ = modelTransform.minimumRotatedZ(model)
             meshPath.reset()
             var triangleIndex = 0
+            var minimumScreenX = Float.POSITIVE_INFINITY
+            var minimumScreenY = Float.POSITIVE_INFINITY
+            var maximumScreenX = Float.NEGATIVE_INFINITY
+            var maximumScreenY = Float.NEGATIVE_INFINITY
             while (triangleIndex + 8 < model.previewTriangles.size) {
                 val aPosition = modelTransform.placeVertex(
                     model.previewTriangles[triangleIndex],
@@ -727,14 +779,67 @@ private fun BedScene(
                 val a = project(aPosition[0], aPosition[1], aPosition[2])
                 val b = project(bPosition[0], bPosition[1], bPosition[2])
                 val c = project(cPosition[0], cPosition[1], cPosition[2])
+                listOf(a, b, c).forEach { point ->
+                    minimumScreenX = min(minimumScreenX, point.x)
+                    minimumScreenY = min(minimumScreenY, point.y)
+                    maximumScreenX = max(maximumScreenX, point.x)
+                    maximumScreenY = max(maximumScreenY, point.y)
+                }
                 meshPath.moveTo(a.x, a.y)
                 meshPath.lineTo(b.x, b.y)
                 meshPath.lineTo(c.x, c.y)
                 meshPath.close()
                 triangleIndex += 9
             }
-            drawPath(meshPath, WorkspaceYellow.copy(alpha = 0.14f))
-            drawPath(meshPath, WorkspaceYellow.copy(alpha = 0.52f), style = Stroke(0.7.dp.toPx()))
+            if (minimumScreenX.isFinite()) {
+                val nextBounds = Rect(minimumScreenX, minimumScreenY, maximumScreenX, maximumScreenY)
+                if (modelScreenBounds != nextBounds) modelScreenBounds = nextBounds
+            }
+            drawPath(meshPath, WorkspaceYellow.copy(alpha = if (objectSelected) 0.24f else 0.14f))
+            drawPath(
+                meshPath,
+                if (objectSelected) Color.White.copy(alpha = 0.92f) else WorkspaceYellow.copy(alpha = 0.52f),
+                style = Stroke(if (objectSelected) 1.5.dp.toPx() else 0.7.dp.toPx()),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ObjectToolRail(
+    transform: ModelTransform,
+    onTransformChanged: (ModelTransform) -> Unit,
+    onMore: () -> Unit,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        color = Color.Black.copy(alpha = 0.82f),
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Default.DragIndicator, contentDescription = null, tint = WorkspaceYellow)
+            Text(stringResource(R.string.drag_to_move), modifier = Modifier.padding(horizontal = 6.dp))
+            IconButton(onClick = {
+                onTransformChanged(transform.copy(offsetXmm = 0f, offsetYmm = 0f))
+            }) {
+                Icon(Icons.Default.CenterFocusStrong, stringResource(R.string.center_model))
+            }
+            IconButton(onClick = {
+                val rotation = ((transform.rotationZdeg + 270f) % 360f) - 180f
+                onTransformChanged(transform.copy(rotationZdeg = rotation))
+            }) {
+                Icon(Icons.AutoMirrored.Filled.RotateRight, stringResource(R.string.rotate_90))
+            }
+            TextButton(onClick = onMore) { Text(stringResource(R.string.more_settings)) }
+            IconButton(onClick = onRemove) {
+                Icon(Icons.Default.DeleteOutline, stringResource(R.string.remove_model), tint = Color(0xFFFF8A80))
+            }
         }
     }
 }

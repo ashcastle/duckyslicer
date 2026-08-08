@@ -23,6 +23,15 @@ class NativeEngineInstrumentedTest {
             .copy(nozzleTemp = 248, firstLayerNozzleTemp = 253)
             .selectQuality(QualityProfile.FINE_06)
             .copy(fillDensity = 0.22f, supportEnabled = true)
+            .copy(
+                fillPattern = "grid",
+                topSolidLayers = 7,
+                travelSpeed = 420f,
+                retractLength = 1.2f,
+                fanMinSpeed = 40,
+                pressureAdvanceEnabled = true,
+                pressureAdvance = 0.035f,
+            )
 
         val printer = store.savePrinter("Workshop U1", edited)
         val filament = store.saveFilament("My PETG", edited)
@@ -36,6 +45,13 @@ class NativeEngineInstrumentedTest {
         assertEquals(253, restored.filaments.last().firstLayerNozzleTemp)
         assertEquals(0.22f, restored.slicing.last().fillDensity)
         assertTrue(restored.slicing.last().supportEnabled)
+        assertEquals("grid", restored.slicing.last().fillPattern)
+        assertEquals(7, restored.slicing.last().topSolidLayers)
+        assertEquals(420f, restored.slicing.last().travelSpeed)
+        assertEquals(1.2f, restored.filaments.last().retractLength)
+        assertEquals(40, restored.filaments.last().fanMinSpeed)
+        assertTrue(restored.filaments.last().pressureAdvanceEnabled)
+        assertEquals(0.035f, restored.filaments.last().pressureAdvance)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
         assertTrue("Saved profiles must stay in app-private storage", file.canonicalPath.startsWith(context.cacheDir.canonicalPath))
@@ -45,10 +61,17 @@ class NativeEngineInstrumentedTest {
 
     @Test
     fun builtInCatalogCoversAllU1NozzlesAndCommonMaterials() {
-        assertEquals(listOf(0.2f, 0.4f, 0.6f, 0.8f), PrinterProfile.builtIns.map { it.nozzleDiameter })
+        assertEquals(
+            listOf(0.2f, 0.4f, 0.6f, 0.8f),
+            PrinterProfile.builtIns.filter { it.brand == "Snapmaker" }.map { it.nozzleDiameter },
+        )
         assertTrue(FilamentProfile.builtIns.map { it.nativeName }.containsAll(listOf("PLA", "PETG", "ABS", "ASA", "PLA-CF", "PETG-CF", "TPU", "PA-CF")))
         assertEquals(setOf("Snapmaker"), PrinterProfile.builtIns.mapNotNull { it.brand }.toSet())
-        assertEquals(setOf("Snapmaker"), FilamentProfile.builtIns.mapNotNull { it.brand }.toSet())
+        assertTrue(
+            FilamentProfile.builtIns.mapNotNull { it.brand }.containsAll(
+                listOf("Generic", "Snapmaker", "Prusa", "Creality", "Anycubic", "Elegoo"),
+            ),
+        )
         assertEquals(QualityProfile.STANDARD_02, QualityProfile.standardFor(0.2f))
         assertEquals(QualityProfile.STANDARD_08, QualityProfile.standardFor(0.8f))
     }
@@ -114,6 +137,17 @@ class NativeEngineInstrumentedTest {
             .selectPrinter(PrinterProfile.U1_06)
             .selectFilament(FilamentProfile.PETG)
             .selectQuality(QualityProfile.DRAFT_06)
+            .copy(
+                topSolidLayers = 6,
+                bottomSolidLayers = 5,
+                fillPattern = "grid",
+                travelSpeed = 420f,
+                firstLayerSpeed = 35f,
+                retractLength = 1.1f,
+                retractSpeed = 38f,
+                skirtLoops = 2,
+                skirtDistance = 7f,
+            )
         val outcome = OnDeviceSlicer.slice(model, options) { progress ->
             highestProgress = maxOf(highestProgress, progress)
         }
@@ -132,6 +166,13 @@ class NativeEngineInstrumentedTest {
         assertTrue("Maximum flow must reach G-code", gcode.contains("; filament_max_volumetric_speed = 10"))
         assertTrue("Layer height must reach G-code", gcode.contains("; layer_height = 0.4"))
         assertTrue("First layer height must reach G-code", gcode.contains("; first_layer_height = 0.350"))
+        assertTrue("Top shell layers must reach G-code", gcode.contains("; top_shell_layers = 6"))
+        assertTrue("Bottom shell layers must reach G-code", gcode.contains("; bottom_shell_layers = 5"))
+        assertTrue("Infill pattern must reach G-code", gcode.contains("; sparse_infill_pattern = grid"))
+        assertTrue("Travel speed must reach G-code", gcode.contains("; travel_speed = 420"))
+        assertTrue("First layer speed must reach G-code", gcode.contains("; initial_layer_speed = 35"))
+        assertTrue("Retraction length must reach G-code", gcode.contains("; retraction_length = 1.1"))
+        assertTrue("Skirt loops must reach G-code", gcode.contains("; skirt_loops = 2"))
 
         val preview = GcodeLayerPreview.fromJson(
             NativeEngine.previewGcodeRange(outcome.output.absolutePath, 0, Int.MAX_VALUE),
@@ -146,4 +187,5 @@ class NativeEngineInstrumentedTest {
         assertTrue("Preview must report a positive first layer Z", preview.minZMm > 0f)
         assertTrue("Multi-layer preview must span upward in Z", preview.maxZMm > preview.minZMm)
     }
+
 }

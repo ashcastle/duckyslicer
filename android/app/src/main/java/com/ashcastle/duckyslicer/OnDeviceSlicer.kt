@@ -22,6 +22,8 @@ data class PrinterProfile(
     val nozzleDiameter: Float,
     val builtIn: Boolean = false,
     val brand: String? = null,
+    val machineStartGcode: String = "",
+    val machineEndGcode: String = "",
 ) {
     companion object {
         val U1_02 = PrinterProfile("snapmaker-u1-02", "U1 · 0.2 mm", 270f, 270f, 270f, 0.2f, true, "Snapmaker")
@@ -44,6 +46,17 @@ data class FilamentProfile(
     val maxVolumetricSpeed: Float,
     val builtIn: Boolean = false,
     val brand: String? = null,
+    val retractLength: Float = 0.8f,
+    val retractSpeed: Float = 45f,
+    val fanMinSpeed: Int = 30,
+    val fanMaxSpeed: Int = 100,
+    val overhangFanSpeed: Int = 100,
+    val slowDownLayerTime: Float = 8f,
+    val slowDownMinSpeed: Float = 10f,
+    val closeFanFirstLayers: Int = 1,
+    val fullFanSpeedLayer: Int = 3,
+    val pressureAdvanceEnabled: Boolean = false,
+    val pressureAdvance: Float = 0f,
 ) {
     companion object {
         // Curated from the included Snapmaker U1 filament catalog.
@@ -79,7 +92,47 @@ data class FilamentProfile(
             "snapmaker-u1-pa-cf", "Snapmaker PA-CF", "PA-CF",
             250, 255, 100, 95, 0.96f, 8f, true, "Snapmaker",
         )
-        val builtIns = listOf(PLA, PETG, ABS, ASA, PLA_CF, PETG_CF, TPU_95A, PA_CF)
+        val GENERIC_PLA = FilamentProfile(
+            "generic-pla", "Generic PLA", "PLA", 220, 220, 60, 60, 0.98f, 12f, true, "Generic",
+            fanMinSpeed = 100,
+        )
+        val GENERIC_PETG = FilamentProfile(
+            "generic-petg", "Generic PETG", "PETG", 245, 250, 70, 70, 0.98f, 10f, true, "Generic",
+            fanMinSpeed = 30, fanMaxSpeed = 70,
+        )
+        val GENERIC_ABS = FilamentProfile(
+            "generic-abs", "Generic ABS", "ABS", 260, 260, 100, 100, 0.98f, 12f, true, "Generic",
+            fanMinSpeed = 10, fanMaxSpeed = 50,
+        )
+        val GENERIC_ASA = FilamentProfile(
+            "generic-asa", "Generic ASA", "ASA", 260, 260, 100, 100, 0.98f, 12f, true, "Generic",
+            fanMinSpeed = 10, fanMaxSpeed = 50,
+        )
+        val GENERIC_TPU = FilamentProfile(
+            "generic-tpu", "Generic TPU 95A", "TPU", 240, 240, 35, 35, 1f, 6f, true, "Generic",
+            retractLength = 0.4f, retractSpeed = 30f,
+        )
+        val PRUSAMENT_PLA = FilamentProfile(
+            "prusa-pla", "Prusament PLA", "PLA", 220, 220, 60, 60, 1f, 12f, true, "Prusa",
+            fanMinSpeed = 100,
+        )
+        val CREALITY_PLA = FilamentProfile(
+            "creality-pla", "Creality Generic PLA", "PLA", 220, 220, 60, 60, 0.98f, 12f, true, "Creality",
+            fanMinSpeed = 100,
+        )
+        val ANYCUBIC_PLA = FilamentProfile(
+            "anycubic-pla", "Anycubic Generic PLA", "PLA", 220, 220, 45, 45, 0.98f, 12f, true, "Anycubic",
+            fanMinSpeed = 100,
+        )
+        val ELEGOO_PLA = FilamentProfile(
+            "elegoo-pla", "Elegoo PLA", "PLA", 220, 220, 60, 60, 1f, 12f, true, "Elegoo",
+            fanMinSpeed = 50,
+        )
+        val builtIns = listOf(
+            GENERIC_PLA, GENERIC_PETG, GENERIC_ABS, GENERIC_ASA, GENERIC_TPU,
+            PLA, PETG, ABS, ASA, PLA_CF, PETG_CF, TPU_95A, PA_CF,
+            PRUSAMENT_PLA, CREALITY_PLA, ANYCUBIC_PLA, ELEGOO_PLA,
+        )
     }
 }
 
@@ -95,6 +148,15 @@ data class QualityProfile(
     val supportEnabled: Boolean = false,
     val brimWidth: Float = 0f,
     val builtIn: Boolean = false,
+    val topSolidLayers: Int = 5,
+    val bottomSolidLayers: Int = 4,
+    val fillPattern: String = "gyroid",
+    val travelSpeed: Float = 500f,
+    val firstLayerSpeed: Float = 50f,
+    val supportType: String = "normal",
+    val supportAngle: Float = 45f,
+    val skirtLoops: Int = 0,
+    val skirtDistance: Float = 6f,
 ) {
     companion object {
         // Curated from the included Snapmaker U1 process catalog.
@@ -183,13 +245,33 @@ data class SliceOptions(
     val filamentDiameter: Float = 1.75f,
     val flowRatio: Float = filamentProfile.flowRatio,
     val maxVolumetricSpeed: Float = filamentProfile.maxVolumetricSpeed,
+    val retractLength: Float = filamentProfile.retractLength,
+    val retractSpeed: Float = filamentProfile.retractSpeed,
+    val fanMinSpeed: Int = filamentProfile.fanMinSpeed,
+    val fanMaxSpeed: Int = filamentProfile.fanMaxSpeed,
+    val overhangFanSpeed: Int = filamentProfile.overhangFanSpeed,
+    val slowDownLayerTime: Float = filamentProfile.slowDownLayerTime,
+    val slowDownMinSpeed: Float = filamentProfile.slowDownMinSpeed,
+    val closeFanFirstLayers: Int = filamentProfile.closeFanFirstLayers,
+    val fullFanSpeedLayer: Int = filamentProfile.fullFanSpeedLayer,
+    val pressureAdvanceEnabled: Boolean = filamentProfile.pressureAdvanceEnabled,
+    val pressureAdvance: Float = filamentProfile.pressureAdvance,
     val layerHeight: Float = quality.layerHeightMm,
     val firstLayerHeight: Float = quality.firstLayerHeightMm,
     val perimeters: Int = quality.perimeters,
     val fillDensity: Float = quality.fillDensity,
     val printSpeed: Float = quality.printSpeed,
-    val supportEnabled: Boolean = false,
-    val brimWidth: Float = 0f,
+    val topSolidLayers: Int = quality.topSolidLayers,
+    val bottomSolidLayers: Int = quality.bottomSolidLayers,
+    val fillPattern: String = quality.fillPattern,
+    val travelSpeed: Float = quality.travelSpeed,
+    val firstLayerSpeed: Float = quality.firstLayerSpeed,
+    val supportEnabled: Boolean = quality.supportEnabled,
+    val supportType: String = quality.supportType,
+    val supportAngle: Float = quality.supportAngle,
+    val skirtLoops: Int = quality.skirtLoops,
+    val skirtDistance: Float = quality.skirtDistance,
+    val brimWidth: Float = quality.brimWidth,
 ) {
     fun selectPrinter(profile: PrinterProfile): SliceOptions {
         val nozzleMatches = abs(quality.nozzleDiameter - profile.nozzleDiameter) < 0.05f
@@ -215,6 +297,17 @@ data class SliceOptions(
         firstLayerBedTemp = profile.firstLayerBedTemp,
         flowRatio = profile.flowRatio,
         maxVolumetricSpeed = profile.maxVolumetricSpeed,
+        retractLength = profile.retractLength,
+        retractSpeed = profile.retractSpeed,
+        fanMinSpeed = profile.fanMinSpeed,
+        fanMaxSpeed = profile.fanMaxSpeed,
+        overhangFanSpeed = profile.overhangFanSpeed,
+        slowDownLayerTime = profile.slowDownLayerTime,
+        slowDownMinSpeed = profile.slowDownMinSpeed,
+        closeFanFirstLayers = profile.closeFanFirstLayers,
+        fullFanSpeedLayer = profile.fullFanSpeedLayer,
+        pressureAdvanceEnabled = profile.pressureAdvanceEnabled,
+        pressureAdvance = profile.pressureAdvance,
     )
 
     fun selectQuality(profile: QualityProfile) = copy(
@@ -224,7 +317,16 @@ data class SliceOptions(
         perimeters = profile.perimeters,
         fillDensity = profile.fillDensity,
         printSpeed = profile.printSpeed,
+        topSolidLayers = profile.topSolidLayers,
+        bottomSolidLayers = profile.bottomSolidLayers,
+        fillPattern = profile.fillPattern,
+        travelSpeed = profile.travelSpeed,
+        firstLayerSpeed = profile.firstLayerSpeed,
         supportEnabled = profile.supportEnabled,
+        supportType = profile.supportType,
+        supportAngle = profile.supportAngle,
+        skirtLoops = profile.skirtLoops,
+        skirtDistance = profile.skirtDistance,
         brimWidth = profile.brimWidth,
     )
 
@@ -232,11 +334,22 @@ data class SliceOptions(
         layerHeight = layerHeight,
         firstLayerHeight = firstLayerHeight,
         perimeters = perimeters,
+        topSolidLayers = topSolidLayers,
+        bottomSolidLayers = bottomSolidLayers,
         fillDensity = fillDensity,
+        fillPattern = fillPattern,
         printSpeed = printSpeed,
+        travelSpeed = travelSpeed,
+        firstLayerSpeed = firstLayerSpeed,
         nozzleTemp = nozzleTemp,
         bedTemp = bedTemp,
+        retractLength = retractLength,
+        retractSpeed = retractSpeed,
         supportEnabled = supportEnabled,
+        supportType = supportType,
+        supportAngle = supportAngle,
+        skirtLoops = skirtLoops,
+        skirtDistance = skirtDistance,
         brimWidth = brimWidth,
         bedSizeX = bedSizeX,
         bedSizeY = bedSizeY,
@@ -247,8 +360,21 @@ data class SliceOptions(
         filamentTypes = arrayOf(filamentProfile.nativeName),
         extruderCount = 1,
         extruderTemps = intArrayOf(nozzleTemp),
+        extruderRetractLength = floatArrayOf(retractLength),
+        extruderRetractSpeed = floatArrayOf(retractSpeed),
+        machineStartGcode = printerProfile.machineStartGcode,
+        machineEndGcode = printerProfile.machineEndGcode,
         filamentFlowRatios = floatArrayOf(flowRatio),
         filamentMaxVolumetricSpeeds = floatArrayOf(maxVolumetricSpeed),
+        filamentFanMinSpeeds = intArrayOf(fanMinSpeed),
+        filamentFanMaxSpeeds = intArrayOf(fanMaxSpeed),
+        filamentOverhangFanSpeeds = intArrayOf(overhangFanSpeed),
+        filamentSlowDownLayerTimes = floatArrayOf(slowDownLayerTime),
+        filamentSlowDownMinSpeeds = floatArrayOf(slowDownMinSpeed),
+        filamentCloseFanFirstLayers = intArrayOf(closeFanFirstLayers),
+        filamentFullFanSpeedLayers = intArrayOf(fullFanSpeedLayer),
+        filamentEnablePressureAdvance = intArrayOf(if (pressureAdvanceEnabled) 1 else 0),
+        filamentPressureAdvances = floatArrayOf(pressureAdvance),
         filamentNozzleTempInitialLayers = intArrayOf(firstLayerNozzleTemp),
         filamentBedTempInitialLayers = intArrayOf(firstLayerBedTemp),
     )

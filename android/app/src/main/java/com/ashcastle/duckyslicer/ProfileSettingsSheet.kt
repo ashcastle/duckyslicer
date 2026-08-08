@@ -242,6 +242,95 @@ private fun FilamentSettingsSheet(
         steps = 35,
         onValueChange = { onOptionsChanged(options.copy(maxVolumetricSpeed = it.roundToInt().toFloat())) },
     )
+    SettingsGroupTitle(stringResource(R.string.retraction))
+    SettingSlider(
+        label = stringResource(R.string.retraction_length),
+        valueText = stringResource(R.string.millimeters_value_precise, options.retractLength),
+        value = options.retractLength,
+        range = 0f..8f,
+        steps = 79,
+        onValueChange = { onOptionsChanged(options.copy(retractLength = it)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.retraction_speed),
+        valueText = stringResource(R.string.print_speed_value, options.retractSpeed),
+        value = options.retractSpeed,
+        range = 10f..100f,
+        steps = 89,
+        onValueChange = { onOptionsChanged(options.copy(retractSpeed = it.roundToInt().toFloat())) },
+    )
+    SettingsGroupTitle(stringResource(R.string.cooling))
+    SettingSlider(
+        label = stringResource(R.string.minimum_fan_speed),
+        valueText = stringResource(R.string.percent_value, options.fanMinSpeed),
+        value = options.fanMinSpeed.toFloat(),
+        range = 0f..100f,
+        steps = 99,
+        onValueChange = { onOptionsChanged(options.copy(fanMinSpeed = it.roundToInt().coerceAtMost(options.fanMaxSpeed))) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.maximum_fan_speed),
+        valueText = stringResource(R.string.percent_value, options.fanMaxSpeed),
+        value = options.fanMaxSpeed.toFloat(),
+        range = 0f..100f,
+        steps = 99,
+        onValueChange = { onOptionsChanged(options.copy(fanMaxSpeed = it.roundToInt().coerceAtLeast(options.fanMinSpeed))) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.overhang_fan_speed),
+        valueText = stringResource(R.string.percent_value, options.overhangFanSpeed),
+        value = options.overhangFanSpeed.toFloat(),
+        range = 0f..100f,
+        steps = 99,
+        onValueChange = { onOptionsChanged(options.copy(overhangFanSpeed = it.roundToInt())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.slow_down_layer_time),
+        valueText = stringResource(R.string.seconds_value, options.slowDownLayerTime),
+        value = options.slowDownLayerTime,
+        range = 1f..30f,
+        steps = 28,
+        onValueChange = { onOptionsChanged(options.copy(slowDownLayerTime = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.minimum_print_speed),
+        valueText = stringResource(R.string.print_speed_value, options.slowDownMinSpeed),
+        value = options.slowDownMinSpeed,
+        range = 5f..50f,
+        steps = 44,
+        onValueChange = { onOptionsChanged(options.copy(slowDownMinSpeed = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.no_fan_first_layers),
+        valueText = options.closeFanFirstLayers.toString(),
+        value = options.closeFanFirstLayers.toFloat(),
+        range = 0f..10f,
+        steps = 9,
+        onValueChange = { onOptionsChanged(options.copy(closeFanFirstLayers = it.roundToInt())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.full_fan_layer),
+        valueText = options.fullFanSpeedLayer.toString(),
+        value = options.fullFanSpeedLayer.toFloat(),
+        range = 1f..20f,
+        steps = 18,
+        onValueChange = { onOptionsChanged(options.copy(fullFanSpeedLayer = it.roundToInt())) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.pressure_advance),
+        checked = options.pressureAdvanceEnabled,
+        onCheckedChange = { onOptionsChanged(options.copy(pressureAdvanceEnabled = it)) },
+    )
+    if (options.pressureAdvanceEnabled) {
+        SettingSlider(
+            label = stringResource(R.string.pressure_advance_value),
+            valueText = String.format(Locale.ROOT, "%.3f", options.pressureAdvance),
+            value = options.pressureAdvance,
+            range = 0f..0.2f,
+            steps = 199,
+            onValueChange = { onOptionsChanged(options.copy(pressureAdvance = it)) },
+        )
+    }
     SaveProfileField(onSave = onSave, onDismiss = onDismiss)
 }
 
@@ -261,6 +350,7 @@ private fun SlicingSettingsSheet(
         label = { profileLabel(it) },
         onSelected = { onOptionsChanged(options.selectQuality(it)) },
     )
+    SettingsGroupTitle(stringResource(R.string.quality))
     SettingSlider(
         label = stringResource(R.string.layer_height),
         valueText = stringResource(R.string.millimeters_value_precise, options.layerHeight),
@@ -286,6 +376,29 @@ private fun SlicingSettingsSheet(
         onValueChange = { onOptionsChanged(options.copy(perimeters = it.roundToInt())) },
     )
     SettingSlider(
+        label = stringResource(R.string.top_shell_layers),
+        valueText = options.topSolidLayers.toString(),
+        value = options.topSolidLayers.toFloat(),
+        range = 0f..12f,
+        steps = 11,
+        onValueChange = { onOptionsChanged(options.copy(topSolidLayers = it.roundToInt())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.bottom_shell_layers),
+        valueText = options.bottomSolidLayers.toString(),
+        value = options.bottomSolidLayers.toFloat(),
+        range = 0f..12f,
+        steps = 11,
+        onValueChange = { onOptionsChanged(options.copy(bottomSolidLayers = it.roundToInt())) },
+    )
+    SettingsGroupTitle(stringResource(R.string.infill))
+    CompactChoices(
+        entries = listOf("gyroid", "grid", "honeycomb", "rectilinear", "alignedrectilinear"),
+        selected = options.fillPattern,
+        label = { fillPatternLabel(it) },
+        onSelected = { onOptionsChanged(options.copy(fillPattern = it)) },
+    )
+    SettingSlider(
         label = stringResource(R.string.infill),
         valueText = stringResource(R.string.percent_value, (options.fillDensity * 100f).roundToInt()),
         value = options.fillDensity,
@@ -293,6 +406,7 @@ private fun SlicingSettingsSheet(
         steps = 19,
         onValueChange = { onOptionsChanged(options.copy(fillDensity = it)) },
     )
+    SettingsGroupTitle(stringResource(R.string.speed))
     SettingSlider(
         label = stringResource(R.string.print_speed),
         valueText = stringResource(R.string.print_speed_value, options.printSpeed),
@@ -301,17 +415,61 @@ private fun SlicingSettingsSheet(
         steps = 25,
         onValueChange = { onOptionsChanged(options.copy(printSpeed = (it / 10f).roundToInt() * 10f)) },
     )
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(stringResource(R.string.supports), fontWeight = FontWeight.SemiBold)
-        Switch(
-            checked = options.supportEnabled,
-            onCheckedChange = { onOptionsChanged(options.copy(supportEnabled = it)) },
+    SettingSlider(
+        label = stringResource(R.string.travel_speed),
+        valueText = stringResource(R.string.print_speed_value, options.travelSpeed),
+        value = options.travelSpeed,
+        range = 50f..700f,
+        steps = 64,
+        onValueChange = { onOptionsChanged(options.copy(travelSpeed = (it / 10f).roundToInt() * 10f)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.first_layer_speed),
+        valueText = stringResource(R.string.print_speed_value, options.firstLayerSpeed),
+        value = options.firstLayerSpeed,
+        range = 10f..150f,
+        steps = 27,
+        onValueChange = { onOptionsChanged(options.copy(firstLayerSpeed = (it / 5f).roundToInt() * 5f)) },
+    )
+    SettingsGroupTitle(stringResource(R.string.supports))
+    SettingsSwitch(
+        label = stringResource(R.string.enable_supports),
+        checked = options.supportEnabled,
+        onCheckedChange = { onOptionsChanged(options.copy(supportEnabled = it)) },
+    )
+    if (options.supportEnabled) {
+        CompactChoices(
+            entries = listOf("normal", "tree"),
+            selected = options.supportType,
+            label = { if (it == "tree") stringResource(R.string.tree_support) else stringResource(R.string.normal_support) },
+            onSelected = { onOptionsChanged(options.copy(supportType = it)) },
+        )
+        SettingSlider(
+            label = stringResource(R.string.support_threshold_angle),
+            valueText = stringResource(R.string.degrees_value, options.supportAngle),
+            value = options.supportAngle,
+            range = 10f..80f,
+            steps = 69,
+            onValueChange = { onOptionsChanged(options.copy(supportAngle = it.roundToInt().toFloat())) },
         )
     }
+    SettingsGroupTitle(stringResource(R.string.bed_adhesion))
+    SettingSlider(
+        label = stringResource(R.string.skirt_loops),
+        valueText = options.skirtLoops.toString(),
+        value = options.skirtLoops.toFloat(),
+        range = 0f..10f,
+        steps = 9,
+        onValueChange = { onOptionsChanged(options.copy(skirtLoops = it.roundToInt())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.skirt_distance),
+        valueText = stringResource(R.string.millimeters_value, options.skirtDistance),
+        value = options.skirtDistance,
+        range = 1f..20f,
+        steps = 18,
+        onValueChange = { onOptionsChanged(options.copy(skirtDistance = it.roundToInt().toFloat())) },
+    )
     SettingSlider(
         label = stringResource(R.string.brim_width),
         valueText = stringResource(R.string.millimeters_value, options.brimWidth),
@@ -321,6 +479,53 @@ private fun SlicingSettingsSheet(
         onValueChange = { onOptionsChanged(options.copy(brimWidth = it.roundToInt().toFloat())) },
     )
     SaveProfileField(onSave = onSave, onDismiss = onDismiss)
+}
+
+@Composable
+private fun SettingsGroupTitle(title: String) {
+    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
+}
+
+@Composable
+private fun SettingsSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, fontWeight = FontWeight.SemiBold)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun <T> CompactChoices(
+    entries: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    onSelected: (T) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        entries.forEach { entry ->
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { onSelected(entry) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = entry == selected, onClick = { onSelected(entry) })
+                Text(label(entry))
+            }
+        }
+    }
+}
+
+@Composable
+private fun fillPatternLabel(value: String): String = when (value) {
+    "grid" -> stringResource(R.string.infill_grid)
+    "honeycomb" -> stringResource(R.string.infill_honeycomb)
+    "rectilinear" -> stringResource(R.string.infill_rectilinear)
+    "alignedrectilinear" -> stringResource(R.string.infill_aligned_rectilinear)
+    else -> stringResource(R.string.infill_gyroid)
 }
 
 @Composable
