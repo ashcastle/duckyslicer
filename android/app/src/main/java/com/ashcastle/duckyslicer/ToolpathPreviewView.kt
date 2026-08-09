@@ -157,12 +157,13 @@ internal data class ToolpathScene(
     val visibleRoles: Set<Int> = (0 until GcodeLayerPreview.ROLE_COUNT).toSet(),
 )
 
-private class ToolpathRenderer : GLSurfaceView.Renderer {
+internal class ToolpathRenderer : GLSurfaceView.Renderer {
     @Volatile
-    private var pendingScene: ToolpathScene? = null
-    private var activeScene: ToolpathScene? = null
-    private var vertices: FloatBuffer? = null
+    private var latestScene: ToolpathScene? = null
+    private var renderedScene: ToolpathScene? = null
+    private val uploadState = ToolpathGeometryUploadState()
     private var vertexCount = 0
+    private var vertexBufferId = 0
     private var program = 0
     private var positionLocation = 0
     private var colorLocation = 0
@@ -174,9 +175,12 @@ private class ToolpathRenderer : GLSurfaceView.Renderer {
     private var zoom = 1f
     private var panX = 0f
     private var panY = 0f
+    private var geometryUploadCount = 0
+
+    internal fun geometryUploadCountForTest(): Int = geometryUploadCount
 
     fun submit(scene: ToolpathScene) {
-        if (scene != activeScene) pendingScene = scene
+        latestScene = scene
     }
 
     fun orbitBy(deltaX: Float, deltaY: Float) {
@@ -189,13 +193,19 @@ private class ToolpathRenderer : GLSurfaceView.Renderer {
     }
 
     fun panBy(deltaX: Float, deltaY: Float, width: Int, height: Int) {
-        val scene = activeScene ?: pendingScene ?: return
+        val scene = latestScene ?: return
         val scale = max(scene.bedSizeX, scene.bedSizeY) / max(width, height).coerceAtLeast(1)
         panX -= deltaX * scale / zoom
         panY += deltaY * scale / zoom
     }
 
     override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {
+        program = 0
+        vertexBufferId = 0
+        vertexCount = 0
+        geometryUploadCount = 0
+        renderedScene = null
+        uploadState.invalidate()
         GLES30.glClearColor(0.098f, 0.102f, 0.094f, 1f)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         GLES30.glDepthFunc(GLES30.GL_LEQUAL)
@@ -206,6 +216,10 @@ private class ToolpathRenderer : GLSurfaceView.Renderer {
         positionLocation = GLES30.glGetAttribLocation(program, "aPosition")
         colorLocation = GLES30.glGetAttribLocation(program, "aColor")
         matrixLocation = GLES30.glGetUniformLocation(program, "uMvp")
+        val buffers = IntArray(1)
+        GLES30.glGenBuffers(1, buffers, 0)
+        vertexBufferId = buffers[0]
+        if (vertexBufferId == 0) program = 0
     }
 
     override fun onSurfaceChanged(unused: GL10?, width: Int, height: Int) {
@@ -215,25 +229,51 @@ private class ToolpathRenderer : GLSurfaceView.Renderer {
     }
 
     override fun onDrawFrame(unused: GL10?) {
-        pendingScene?.let { scene ->
-            activeScene = scene
-            vertices = ToolpathMeshBuilder.build(scene)
-            vertexCount = vertices?.remaining()?.div(FLOATS_PER_VERTEX) ?: 0
-            pendingScene = null
-        }
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
-        val scene = activeScene ?: return
-        val buffer = vertices ?: return
-        if (program == 0) return
+        if (program == 0 || vertexBufferId == 0) return
+        latestScene?.let { scene ->
+            if (uploadState.needsUpload(scene)) uploadGeometry(scene)
+        }
+        val scene = renderedScene ?: return
         GLES30.glUseProgram(program)
         GLES30.glUniformMatrix4fv(matrixLocation, 1, false, cameraMatrix(scene), 0)
-        buffer.position(0)
-        GLES30.glVertexAttribPointer(positionLocation, 3, GLES30.GL_FLOAT, false, STRIDE_BYTES, buffer)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vertexBufferId)
+        GLES30.glVertexAttribPointer(
+            positionLocation,
+            3,
+            GLES30.GL_FLOAT,
+            false,
+            STRIDE_BYTES,
+            POSITION_OFFSET_BYTES,
+        )
         GLES30.glEnableVertexAttribArray(positionLocation)
-        buffer.position(3)
-        GLES30.glVertexAttribPointer(colorLocation, 4, GLES30.GL_FLOAT, false, STRIDE_BYTES, buffer)
+        GLES30.glVertexAttribPointer(
+            colorLocation,
+            4,
+            GLES30.GL_FLOAT,
+            false,
+            STRIDE_BYTES,
+            COLOR_OFFSET_BYTES,
+        )
         GLES30.glEnableVertexAttribArray(colorLocation)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, vertexCount)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+    }
+
+    private fun uploadGeometry(scene: ToolpathScene) {
+        val buffer = ToolpathMeshBuilder.build(scene)
+        vertexCount = buffer.remaining() / FLOATS_PER_VERTEX
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vertexBufferId)
+        GLES30.glBufferData(
+            GLES30.GL_ARRAY_BUFFER,
+            buffer.remaining() * Float.SIZE_BYTES,
+            buffer,
+            GLES30.GL_STATIC_DRAW,
+        )
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+        renderedScene = scene
+        uploadState.markUploaded(scene)
+        geometryUploadCount += 1
     }
 
     private fun cameraMatrix(scene: ToolpathScene): FloatArray {
@@ -298,6 +338,8 @@ private class ToolpathRenderer : GLSurfaceView.Renderer {
     private companion object {
         const val FLOATS_PER_VERTEX = 7
         const val STRIDE_BYTES = FLOATS_PER_VERTEX * 4
+        const val POSITION_OFFSET_BYTES = 0
+        const val COLOR_OFFSET_BYTES = 3 * 4
         const val VERTEX_SHADER = """#version 300 es
             uniform mat4 uMvp;
             in vec3 aPosition;
@@ -314,6 +356,20 @@ private class ToolpathRenderer : GLSurfaceView.Renderer {
             out vec4 outColor;
             void main() { outColor = vColor; }
         """
+    }
+}
+
+internal class ToolpathGeometryUploadState {
+    private var uploadedScene: ToolpathScene? = null
+
+    fun needsUpload(scene: ToolpathScene): Boolean = scene != uploadedScene
+
+    fun markUploaded(scene: ToolpathScene) {
+        uploadedScene = scene
+    }
+
+    fun invalidate() {
+        uploadedScene = null
     }
 }
 
@@ -392,13 +448,7 @@ internal object ToolpathMeshBuilder {
                 scene.opacity,
             )
         }
-        return ByteBuffer.allocateDirect(builder.size * 4)
-            .order(ByteOrder.nativeOrder())
-            .asFloatBuffer()
-            .apply {
-                builder.writeTo(this)
-                flip()
-            }
+        return builder.finish()
     }
 
     private fun addBed(builder: FloatBuilder, width: Float, depth: Float) {
@@ -527,28 +577,31 @@ internal object ToolpathMeshBuilder {
 }
 
 private class FloatBuilder(initialCapacity: Int) {
-    private var values = FloatArray(initialCapacity.coerceAtLeast(64))
-    var size: Int = 0
-        private set
+    private var values = allocate(initialCapacity.coerceAtLeast(64))
 
     fun vertex(x: Float, y: Float, z: Float, color: FloatArray, alpha: Float) {
         ensure(7)
-        values[size++] = x
-        values[size++] = y
-        values[size++] = z
-        values[size++] = color[0]
-        values[size++] = color[1]
-        values[size++] = color[2]
-        values[size++] = alpha
+        values.put(x)
+        values.put(y)
+        values.put(z)
+        values.put(color[0])
+        values.put(color[1])
+        values.put(color[2])
+        values.put(alpha)
     }
 
-    fun writeTo(buffer: FloatBuffer) {
-        buffer.put(values, 0, size)
-    }
+    fun finish(): FloatBuffer = values.apply { flip() }
 
     private fun ensure(additional: Int) {
-        if (size + additional > values.size) {
-            values = values.copyOf(max(values.size * 2, size + additional))
-        }
+        if (values.remaining() >= additional) return
+        val next = allocate(max(values.capacity() * 2, values.position() + additional))
+        values.flip()
+        next.put(values)
+        values = next
     }
+
+    private fun allocate(capacity: Int): FloatBuffer = ByteBuffer
+        .allocateDirect(capacity * Float.SIZE_BYTES)
+        .order(ByteOrder.nativeOrder())
+        .asFloatBuffer()
 }

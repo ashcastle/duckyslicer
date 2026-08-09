@@ -1,5 +1,8 @@
 package com.ashcastle.duckyslicer
 
+import android.opengl.EGL14
+import android.opengl.EGLExt
+import android.opengl.GLES30
 import android.os.SystemClock
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -28,6 +31,113 @@ class NativeEngineInstrumentedTest {
         val model: File,
         val mustSlice: Boolean,
     )
+
+    @Test
+    fun depthPreviewUploadsVboOnceAcrossCameraFrames() {
+        val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
+        assertNotEquals("EGL display must be available", EGL14.EGL_NO_DISPLAY, display)
+        val version = IntArray(2)
+        assertTrue("EGL must initialize", EGL14.eglInitialize(display, version, 0, version, 1))
+        val configs = arrayOfNulls<android.opengl.EGLConfig>(1)
+        val configCount = IntArray(1)
+        val configAttributes = intArrayOf(
+            EGL14.EGL_RENDERABLE_TYPE,
+            EGLExt.EGL_OPENGL_ES3_BIT_KHR,
+            EGL14.EGL_SURFACE_TYPE,
+            EGL14.EGL_PBUFFER_BIT,
+            EGL14.EGL_RED_SIZE,
+            8,
+            EGL14.EGL_GREEN_SIZE,
+            8,
+            EGL14.EGL_BLUE_SIZE,
+            8,
+            EGL14.EGL_DEPTH_SIZE,
+            24,
+            EGL14.EGL_NONE,
+        )
+        assertTrue(
+            "An OpenGL ES 3 pbuffer config must be available",
+            EGL14.eglChooseConfig(
+                display,
+                configAttributes,
+                0,
+                configs,
+                0,
+                configs.size,
+                configCount,
+                0,
+            ) && configCount[0] == 1,
+        )
+        val config = checkNotNull(configs[0])
+        val context = EGL14.eglCreateContext(
+            display,
+            config,
+            EGL14.EGL_NO_CONTEXT,
+            intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 3, EGL14.EGL_NONE),
+            0,
+        )
+        assertNotEquals("OpenGL ES 3 context creation must succeed", EGL14.EGL_NO_CONTEXT, context)
+        val surface = EGL14.eglCreatePbufferSurface(
+            display,
+            config,
+            intArrayOf(EGL14.EGL_WIDTH, 64, EGL14.EGL_HEIGHT, 64, EGL14.EGL_NONE),
+            0,
+        )
+        assertNotEquals("EGL pbuffer creation must succeed", EGL14.EGL_NO_SURFACE, surface)
+        try {
+            assertTrue(
+                "The pbuffer must become current",
+                EGL14.eglMakeCurrent(display, surface, surface, context),
+            )
+            val preview = GcodeLayerPreview(
+                startLayer = 0,
+                endLayer = 0,
+                layerCount = 1,
+                minZMm = 0.2f,
+                maxZMm = 0.2f,
+                segments = floatArrayOf(10f, 10f, 20f, 10f, 0.2f, 0f),
+                roleSegmentCounts = intArrayOf(1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+            )
+            val scene = ToolpathScene(preview, 100f, 100f, 1f, 0.8f, PreviewDetail.BALANCED)
+            val renderer = ToolpathRenderer()
+            renderer.submit(scene)
+            renderer.onSurfaceCreated(null, null)
+            renderer.onSurfaceChanged(null, 64, 64)
+            renderer.onDrawFrame(null)
+
+            assertEquals("The first frame must upload one VBO", 1, renderer.geometryUploadCountForTest())
+            assertEquals("The VBO draw must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
+
+            renderer.orbitBy(12f, -7f)
+            renderer.zoomBy(1.1f)
+            renderer.onDrawFrame(null)
+            assertEquals(
+                "Camera-only frames must reuse the uploaded VBO",
+                1,
+                renderer.geometryUploadCountForTest(),
+            )
+            assertEquals("The reused VBO draw must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
+
+            renderer.submit(scene.copy(visibleRoles = setOf(1)))
+            renderer.onDrawFrame(null)
+            assertEquals(
+                "A geometry change must replace the VBO exactly once",
+                2,
+                renderer.geometryUploadCountForTest(),
+            )
+            assertEquals("The replacement VBO draw must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
+        } finally {
+            EGL14.eglMakeCurrent(
+                display,
+                EGL14.EGL_NO_SURFACE,
+                EGL14.EGL_NO_SURFACE,
+                EGL14.EGL_NO_CONTEXT,
+            )
+            EGL14.eglDestroySurface(display, surface)
+            EGL14.eglDestroyContext(display, context)
+            EGL14.eglTerminate(display)
+        }
+    }
 
     private fun outerWallBounds(gcode: File): ToolpathBounds {
         val preview = GcodeLayerPreview.fromNative(
@@ -1418,6 +1528,20 @@ class NativeEngineInstrumentedTest {
         assertTrue("Visible bottom surfaces must stay separate", preview.roleSegmentCounts[9] > 0)
         assertTrue("Preview must report a positive first layer Z", preview.minZMm > 0f)
         assertTrue("Multi-layer preview must span upward in Z", preview.maxZMm > preview.minZMm)
+
+        val gpuStaging = ToolpathMeshBuilder.build(
+            ToolpathScene(
+                preview = preview,
+                bedSizeX = options.bedSizeX,
+                bedSizeY = options.bedSizeY,
+                opacity = 0.92f,
+                depthContrast = 0.78f,
+                detail = PreviewDetail.BALANCED,
+            ),
+        )
+        val gpuVertexCount = gpuStaging.remaining() / 7
+        assertTrue("ARM64 GPU staging must use direct memory", gpuStaging.isDirect)
+        assertTrue("ARM64 balanced preview must honor its geometry budget", gpuVertexCount < 600_000)
     }
 
     private companion object {

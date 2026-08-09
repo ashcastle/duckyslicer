@@ -1,5 +1,6 @@
 package com.ashcastle.duckyslicer
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -58,6 +59,7 @@ class ToolpathMeshBuilderTest {
         assertTrue("Each path must include a dark outline at its real layer", zValues.any { it == 0.2f })
         assertTrue("Colored ribbons must sit above outlines without Z fighting", zValues.any { it > 0.4f })
         assertTrue("Every draw vertex must contain XYZ and RGBA", values.size % 7 == 0)
+        assertTrue("GPU staging geometry must use direct native memory", buffer.isDirect)
     }
 
     @Test
@@ -129,5 +131,32 @@ class ToolpathMeshBuilderTest {
 
         assertTrue("Balanced rendering must stay under its mobile geometry budget", vertexCount < 600_000)
         assertTrue("Dense previews must still retain substantial visible detail", vertexCount > 400_000)
+    }
+
+    @Test
+    fun unchangedSceneUploadsOnceUntilGeometryOrContextChanges() {
+        val preview = GcodeLayerPreview(
+            startLayer = 0,
+            endLayer = 0,
+            layerCount = 1,
+            minZMm = 0.2f,
+            maxZMm = 0.2f,
+            segments = floatArrayOf(10f, 10f, 20f, 10f, 0.2f, 0f),
+            roleSegmentCounts = intArrayOf(1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+        )
+        val scene = ToolpathScene(preview, 100f, 100f, 1f, 0.8f, PreviewDetail.BALANCED)
+        val state = ToolpathGeometryUploadState()
+
+        assertTrue("A new GL context must upload its first scene", state.needsUpload(scene))
+        state.markUploaded(scene)
+        assertFalse("Camera-only frames must reuse the GPU buffer", state.needsUpload(scene.copy()))
+
+        val changed = scene.copy(visibleRoles = setOf(1))
+        assertTrue("Role filtering must replace the GPU geometry", state.needsUpload(changed))
+        state.markUploaded(changed)
+        assertFalse("The changed scene must also upload only once", state.needsUpload(changed))
+
+        state.invalidate()
+        assertTrue("Context recreation must re-upload retained scene data", state.needsUpload(changed))
     }
 }

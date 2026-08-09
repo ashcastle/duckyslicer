@@ -17,9 +17,11 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     required = {
         "NativeEngine.kt",
         "PreviewModels.kt",
+        "ToolpathPreviewView.kt",
         "MainActivity.kt",
         "NativeEngineInstrumentedTest.kt",
         "PreviewModelsTest.kt",
+        "ToolpathMeshBuilderTest.kt",
         "lib.rs",
         "README.md",
         "CONTRIBUTING.md",
@@ -48,6 +50,26 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     if "JSONObject" in preview or "fun fromJson" in preview:
         raise VerificationError("G-code preview reverted to object-heavy JSON decoding")
 
+    renderer = sources["ToolpathPreviewView.kt"]
+    for marker in (
+        "renderMode = RENDERMODE_WHEN_DIRTY",
+        "ToolpathGeometryUploadState",
+        "uploadState.needsUpload(scene)",
+        "GLES30.glGenBuffers",
+        "GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER",
+        "GLES30.glBufferData(",
+        "GLES30.GL_STATIC_DRAW",
+        "geometryUploadCountForTest",
+        "POSITION_OFFSET_BYTES",
+        "COLOR_OFFSET_BYTES",
+        ".allocateDirect(capacity * Float.SIZE_BYTES)",
+        "return builder.finish()",
+    ):
+        if marker not in renderer:
+            raise VerificationError(f"GPU preview upload contract is missing: {marker}")
+    if "private var vertices: FloatBuffer?" in renderer or "builder.writeTo" in renderer:
+        raise VerificationError("GPU preview reverted to duplicated client-side vertex storage")
+
     rust = sources["lib.rs"]
     for marker in (
         "-> jfloatArray",
@@ -73,6 +95,16 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     device = sources["NativeEngineInstrumentedTest.kt"]
     if device.count("GcodeLayerPreview.fromNative") < 3 or "gcodeResult == null" not in device:
         raise VerificationError("ARM64 primitive preview regressions are incomplete")
+    for marker in (
+        "depthPreviewUploadsVboOnceAcrossCameraFrames",
+        "The first frame must upload one VBO",
+        "Camera-only frames must reuse the uploaded VBO",
+        "A geometry change must replace the VBO exactly once",
+        "ARM64 GPU staging must use direct memory",
+        "ARM64 balanced preview must honor its geometry budget",
+    ):
+        if marker not in device:
+            raise VerificationError(f"ARM64 GPU preview regression is missing: {marker}")
 
     host_tests = sources["PreviewModelsTest.kt"]
     for marker in (
@@ -82,10 +114,20 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     ):
         if marker not in host_tests:
             raise VerificationError(f"preview payload host regression is missing: {marker}")
+    mesh_tests = sources["ToolpathMeshBuilderTest.kt"]
+    for marker in (
+        "balancedModeCapsDensePreviewGeometry",
+        "GPU staging geometry must use direct native memory",
+        "unchangedSceneUploadsOnceUntilGeometryOrContextChanges",
+        "Camera-only frames must reuse the GPU buffer",
+        "Context recreation must re-upload retained scene data",
+    ):
+        if marker not in mesh_tests:
+            raise VerificationError(f"GPU preview performance regression is missing: {marker}")
 
     for document in ("README.md", "CONTRIBUTING.md"):
         lowered = sources[document].lower()
-        if "preview" not in lowered or "floatarray" not in lowered:
+        if "preview" not in lowered or "floatarray" not in lowered or "vbo" not in lowered:
             raise VerificationError(f"primitive preview boundary is not documented in {document}")
 
 
@@ -96,11 +138,17 @@ def read_sources() -> dict[str, str]:
     return {
         "NativeEngine.kt": (main / "NativeEngine.kt").read_text(encoding="utf-8"),
         "PreviewModels.kt": (main / "PreviewModels.kt").read_text(encoding="utf-8"),
+        "ToolpathPreviewView.kt": (main / "ToolpathPreviewView.kt").read_text(
+            encoding="utf-8"
+        ),
         "MainActivity.kt": (main / "MainActivity.kt").read_text(encoding="utf-8"),
         "NativeEngineInstrumentedTest.kt": (
             device / "NativeEngineInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "PreviewModelsTest.kt": (tests / "PreviewModelsTest.kt").read_text(
+            encoding="utf-8"
+        ),
+        "ToolpathMeshBuilderTest.kt": (tests / "ToolpathMeshBuilderTest.kt").read_text(
             encoding="utf-8"
         ),
         "lib.rs": (ROOT / "rust/duckyslicer-jni/src/lib.rs").read_text(encoding="utf-8"),
@@ -114,7 +162,7 @@ def main() -> None:
         verify_preview_boundary(read_sources())
     except (OSError, VerificationError) as error:
         raise SystemExit(f"Preview boundary verification failed: {error}") from error
-    print("Verified bounded FloatArray G-code preview JNI boundary without JSON decoding")
+    print("Verified bounded FloatArray preview boundary and scene-stable OpenGL VBO uploads")
 
 
 if __name__ == "__main__":

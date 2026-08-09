@@ -89,6 +89,10 @@ The Rust-to-Kotlin G-code preview boundary must remain a versioned, bounded prim
 `FloatArray`; do not reintroduce a JSON string or per-segment JSON objects. Payload
 format changes require Rust encoding, Kotlin validation, malformed-payload host tests,
 and the ARM64 production parser test to change together.
+Depth-tested preview geometry must be built directly in native-order direct memory and
+uploaded through an OpenGL VBO only when the layer range, role visibility, quality, or
+visual style changes. Camera gestures must reuse the existing GPU buffer; do not return
+to client-side vertex arrays or per-frame geometry uploads.
 
 Generated G-code changes must retain the per-output and total-byte limits, free-space
 reserve, stale-output recovery, and reader lease around every preview, export, and
