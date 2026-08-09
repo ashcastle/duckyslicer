@@ -87,6 +87,10 @@ def main() -> None:
         "runtime resilience policy is unit tested": (
             "tools.test_verify_runtime_resilience"
         ),
+        "data-practice explanation is verified": (
+            "python3 tools/verify_data_practices.py"
+        ),
+        "data-practice policy is unit tested": "tools.test_verify_data_practices",
         "generated G-code storage policy is verified": (
             "python3 tools/verify_slice_storage.py"
         ),
@@ -162,6 +166,10 @@ def main() -> None:
         "runtime resilience policy is unit tested": (
             "tools.test_verify_runtime_resilience"
         ),
+        "data-practice explanation is verified": (
+            "python3 tools/verify_data_practices.py"
+        ),
+        "data-practice policy is unit tested": "tools.test_verify_data_practices",
         "generated G-code storage policy is verified": (
             "python3 tools/verify_slice_storage.py"
         ),

@@ -49,6 +49,7 @@ internal fun AppSettingsSheet(
 ) {
     val context = LocalContext.current
     var legalDocument by remember { mutableStateOf<LegalDocument?>(null) }
+    var showDataPractices by remember { mutableStateOf(false) }
 
     Card(
         modifier = modifier.padding(12.dp).fillMaxWidth().widthIn(max = 620.dp),
@@ -174,6 +175,16 @@ internal fun AppSettingsSheet(
             Text(stringResource(R.string.language_settings), fontWeight = FontWeight.Bold)
             Text(stringResource(R.string.settings_message), color = Color(0xFFC8C9C2))
 
+            Text(stringResource(R.string.data_privacy), fontWeight = FontWeight.Bold)
+            Text(
+                stringResource(R.string.data_privacy_summary),
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            TextButton(onClick = { showDataPractices = true }) {
+                Text(stringResource(R.string.data_handling_details))
+            }
+
             Text(stringResource(R.string.about), fontWeight = FontWeight.Bold)
             Text(
                 stringResource(R.string.app_version, BuildConfig.VERSION_NAME),
@@ -231,6 +242,58 @@ internal fun AppSettingsSheet(
                     Text(stringResource(R.string.close))
                 }
             },
+        )
+    }
+
+    if (showDataPractices) {
+        DataPracticesDialog(onDismiss = { showDataPractices = false })
+    }
+}
+
+@Composable
+private fun DataPracticesDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.data_handling_title)) },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                DataPracticesSection(
+                    title = stringResource(R.string.data_stored_title),
+                    body = stringResource(R.string.data_stored_body),
+                )
+                DataPracticesSection(
+                    title = stringResource(R.string.printer_connection_data_title),
+                    body = stringResource(R.string.printer_connection_data_body),
+                )
+                DataPracticesSection(
+                    title = stringResource(R.string.no_tracking_title),
+                    body = stringResource(R.string.no_tracking_body),
+                )
+                DataPracticesSection(
+                    title = stringResource(R.string.removing_data_title),
+                    body = stringResource(R.string.removing_data_body),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.close))
+            }
+        },
+    )
+}
+
+@Composable
+private fun DataPracticesSection(title: String, body: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, fontWeight = FontWeight.SemiBold)
+        Text(
+            body,
+            color = Color(0xFFC8C9C2),
+            style = MaterialTheme.typography.bodySmall,
         )
     }
 }
