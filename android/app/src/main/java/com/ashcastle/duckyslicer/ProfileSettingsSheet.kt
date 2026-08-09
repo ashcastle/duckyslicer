@@ -62,6 +62,7 @@ internal enum class SlicingSettingsSection(val titleResource: Int) {
 internal fun ProfileSettings(
     options: SliceOptions,
     catalog: ProfileCatalog,
+    recents: ProfileRecents,
     enabled: Boolean,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSavePrinter: (String) -> Unit,
@@ -112,6 +113,7 @@ internal fun ProfileSettings(
         ProfileSettingsKind.PRINTER -> PrinterSettingsSheet(
             options = options,
             profiles = catalog.printers,
+            recentIds = recents.printerIds,
             onProfileSelected = { printer ->
                 var updated = options.selectPrinter(printer)
                 if (!updated.filamentProfile.compatiblePrinters.matchesPrinter(printer)) {
@@ -136,6 +138,7 @@ internal fun ProfileSettings(
 
         ProfileSettingsKind.FILAMENT -> FilamentSettingsSheet(
             options = options,
+            recentIds = recents.filamentIds,
             profiles = catalog.filaments.filter {
                 it == options.filamentProfile ||
                     it.compatiblePrinters.matchesPrinter(options.printerProfile)
@@ -147,6 +150,7 @@ internal fun ProfileSettings(
 
         ProfileSettingsKind.SLICING -> SlicingSettingsSheet(
             options = options,
+            recentIds = recents.slicingIds,
             profiles = catalog.slicing.filter {
                 it == options.quality ||
                     (
@@ -184,6 +188,7 @@ private fun ProfileRow(title: String, summary: String, enabled: Boolean, onClick
 private fun PrinterSettingsSheet(
     options: SliceOptions,
     profiles: List<PrinterProfile>,
+    recentIds: List<String>,
     onProfileSelected: (PrinterProfile) -> Unit,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSave: (String) -> Unit,
@@ -192,6 +197,8 @@ private fun PrinterSettingsSheet(
     SearchableGroupedProfileChoices(
         entries = profiles,
         selected = options.printerProfile,
+        recentIds = recentIds,
+        id = { it.id },
         label = { profileLabel(it) },
         brand = { it.brand },
         builtIn = { it.builtIn },
@@ -347,6 +354,7 @@ private fun PrinterSettingsSheet(
 private fun FilamentSettingsSheet(
     options: SliceOptions,
     profiles: List<FilamentProfile>,
+    recentIds: List<String>,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSave: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -354,6 +362,8 @@ private fun FilamentSettingsSheet(
     SearchableGroupedProfileChoices(
         entries = profiles,
         selected = options.filamentProfile,
+        recentIds = recentIds,
+        id = { it.id },
         label = { profileLabel(it) },
         brand = { it.brand },
         builtIn = { it.builtIn },
@@ -506,6 +516,7 @@ private fun FilamentSettingsSheet(
 private fun SlicingSettingsSheet(
     options: SliceOptions,
     profiles: List<QualityProfile>,
+    recentIds: List<String>,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSave: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -569,6 +580,8 @@ private fun SlicingSettingsSheet(
         SearchableGroupedProfileChoices(
             entries = profiles,
             selected = options.quality,
+            recentIds = recentIds,
+            id = { it.id },
             label = { profileLabel(it) },
             brand = { it.brand },
             builtIn = { it.builtIn },
@@ -2114,6 +2127,8 @@ private fun List<String>.matchesPrinter(printer: PrinterProfile): Boolean =
 private fun <T> SearchableGroupedProfileChoices(
     entries: List<T>,
     selected: T,
+    recentIds: List<String>,
+    id: (T) -> String,
     label: @Composable (T) -> String,
     brand: (T) -> String?,
     builtIn: (T) -> Boolean,
@@ -2122,14 +2137,18 @@ private fun <T> SearchableGroupedProfileChoices(
 ) {
     val myProfiles = stringResource(R.string.my_profiles)
     val otherProfiles = stringResource(R.string.other_profiles)
+    val recentProfiles = stringResource(R.string.recent_profiles)
     val myProfilesKey = "user-profiles"
+    val recentProfilesKey = "recent-profiles"
     var query by remember { mutableStateOf("") }
     val selectedGroupKey = if (builtIn(selected)) {
         "brand:${brand(selected).orEmpty()}"
     } else {
         myProfilesKey
     }
-    var expandedGroups by remember(entries) { mutableStateOf(setOf(selectedGroupKey)) }
+    var expandedGroups by remember(entries, recentIds) {
+        mutableStateOf(setOf(recentProfilesKey, selectedGroupKey))
+    }
     val normalizedQuery = query.trim().lowercase(Locale.ROOT)
     val matchingEntries = if (normalizedQuery.isBlank()) {
         entries
@@ -2138,7 +2157,7 @@ private fun <T> SearchableGroupedProfileChoices(
             searchTerms(entry).any { value -> value.lowercase(Locale.ROOT).contains(normalizedQuery) }
         }
     }
-    val groups = matchingEntries
+    val groupedProfiles = matchingEntries
         .groupBy { entry ->
             if (builtIn(entry)) "brand:${brand(entry).orEmpty()}" else myProfilesKey
         }
@@ -2151,6 +2170,15 @@ private fun <T> SearchableGroupedProfileChoices(
             ProfileChoiceGroup(key, title, groupEntries)
         }
         .sortedWith(compareBy({ it.key != myProfilesKey }, { it.title.lowercase(Locale.ROOT) }))
+    val recentEntries = recentIds.mapNotNull { recentId ->
+        matchingEntries.firstOrNull { id(it) == recentId }
+    }
+    val groups = buildList {
+        if (recentEntries.isNotEmpty()) {
+            add(ProfileChoiceGroup(recentProfilesKey, recentProfiles, recentEntries))
+        }
+        addAll(groupedProfiles)
+    }
 
     OutlinedTextField(
         value = query,
