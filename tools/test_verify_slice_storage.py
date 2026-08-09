@@ -45,7 +45,6 @@ def valid_sources() -> dict[str, str]:
             "nativeGcodeWriterHardLimitContainsDiskGrowthAndRecovers "
             "persistentProjectModelSlicesIntoRetainedArtifact"
         ),
-        "README.md": "G-code reader lease RLIMIT_FSIZE",
         "SECURITY.md": "G-code reader lease RLIMIT_FSIZE",
         "CONTRIBUTING.md": "G-code reader lease RLIMIT_FSIZE",
     }
