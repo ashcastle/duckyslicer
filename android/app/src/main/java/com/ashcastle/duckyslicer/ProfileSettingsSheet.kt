@@ -6,10 +6,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
@@ -43,6 +45,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
@@ -231,10 +236,17 @@ internal fun ProfileSettings(
 
 @Composable
 private fun ProfileRow(title: String, summary: String, enabled: Boolean, onClick: () -> Unit) {
+    val editDetailsLabel = stringResource(R.string.edit_details)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
+            .heightIn(min = 48.dp)
+            .clickable(
+                enabled = enabled,
+                onClickLabel = editDetailsLabel,
+                role = Role.Button,
+                onClick = onClick,
+            )
             .padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -242,7 +254,7 @@ private fun ProfileRow(title: String, summary: String, enabled: Boolean, onClick
             Text(title, style = MaterialTheme.typography.labelLarge)
             Text(summary, color = Color(0xFFC8C9C2), style = MaterialTheme.typography.bodySmall)
         }
-        Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.edit_details))
+        Icon(Icons.Default.ChevronRight, contentDescription = null)
     }
 }
 
@@ -2141,11 +2153,19 @@ private fun <T> CompactChoices(
 ) {
     Column(Modifier.fillMaxWidth()) {
         entries.forEach { entry ->
+            val selectedEntry = entry == selected
             Row(
-                modifier = Modifier.fillMaxWidth().clickable { onSelected(entry) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .selectable(
+                        selected = selectedEntry,
+                        role = Role.RadioButton,
+                        onClick = { onSelected(entry) },
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                RadioButton(selected = entry == selected, onClick = { onSelected(entry) })
+                RadioButton(selected = selectedEntry, onClick = null)
                 Text(label(entry))
             }
         }
@@ -2333,17 +2353,25 @@ private fun <T> SearchableGroupedProfileChoices(
     } else {
         groups.forEach { group ->
             val expanded = normalizedQuery.isNotBlank() || group.key in expandedGroups
+            val groupState = stringResource(
+                if (expanded) R.string.expanded_state else R.string.collapsed_state,
+            )
             Column(Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
+                        .heightIn(min = 48.dp)
+                        .clickable(
+                            enabled = normalizedQuery.isBlank(),
+                            role = Role.Button,
+                        ) {
                             expandedGroups = if (expanded) {
                                 expandedGroups - group.key
                             } else {
                                 expandedGroups + group.key
                             }
                         }
+                        .semantics { stateDescription = groupState }
                         .padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -2359,16 +2387,22 @@ private fun <T> SearchableGroupedProfileChoices(
                 }
                 if (expanded) {
                     group.entries.forEach { entry ->
+                        val selectedEntry = entry == selected
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onSelected(entry) }
+                                .heightIn(min = 48.dp)
+                                .selectable(
+                                    selected = selectedEntry,
+                                    role = Role.RadioButton,
+                                    onClick = { onSelected(entry) },
+                                )
                                 .padding(start = 18.dp, top = 1.dp, bottom = 1.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             RadioButton(
-                                selected = entry == selected,
-                                onClick = { onSelected(entry) },
+                                selected = selectedEntry,
+                                onClick = null,
                                 colors = RadioButtonDefaults.colors(selectedColor = Color(0xFFF6C945)),
                             )
                             Text(label(entry), maxLines = 1)

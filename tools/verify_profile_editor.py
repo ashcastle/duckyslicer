@@ -75,6 +75,23 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         if marker not in editor:
             raise VerificationError(f"sticky profile action bar is missing: {marker}")
 
+    for marker in (
+        "onClickLabel = editDetailsLabel",
+        ".heightIn(min = 48.dp)",
+        ".selectable(",
+        "role = Role.RadioButton",
+        "onClick = null",
+        ".semantics { stateDescription = groupState }",
+    ):
+        if marker not in editor:
+            raise VerificationError(f"accessible profile interaction is missing: {marker}")
+    if editor.count(".selectable(") < 2 or editor.count("onClick = null") < 2:
+        raise VerificationError(
+            "both compact and grouped profile choices must expose one radio target per row"
+        )
+    if ".clickable { onSelected(entry) }" in editor:
+        raise VerificationError("profile choice rows must not expose duplicate click targets")
+
     recents = sources["ProfileRecents.kt"]
     for marker in (
         "data class ProfileRecents(",
@@ -96,6 +113,11 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         for resource in ('name="revert_changes"', 'name="apply_changes"'):
             if resource not in strings:
                 raise VerificationError(f"localized profile action is missing from {source_name}: {resource}")
+        for resource in ('name="expanded_state"', 'name="collapsed_state"'):
+            if resource not in strings:
+                raise VerificationError(
+                    f"localized profile disclosure state is missing from {source_name}: {resource}"
+                )
 
     test = sources["SlicingSettingsSectionTest.kt"]
     for marker in (
@@ -155,7 +177,7 @@ def main() -> None:
         verify_profile_editor(read_sources())
     except (OSError, VerificationError) as error:
         raise SystemExit(f"Profile editor verification failed: {error}") from error
-    print("Verified localized Orca-style mobile slicing profile sections")
+    print("Verified localized, accessible Orca-style mobile slicing profile sections")
 
 
 if __name__ == "__main__":

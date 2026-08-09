@@ -119,6 +119,29 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         if marker not in workspace:
             raise VerificationError(f"preview device policy is not connected to the UI: {marker}")
 
+    export_controls = workspace.split("private fun PreviewExportSplitButton(", 1)[-1].split(
+        "@Composable", 1
+    )[0]
+    for marker in (
+        ".width(48.dp)",
+        ".height(50.dp)",
+        ".clickable(",
+        "role = Role.Button",
+        "modifier = Modifier.width(34.dp).height(50.dp)",
+    ):
+        if marker not in export_controls:
+            raise VerificationError(
+                f"preview export split button accessibility is missing: {marker}"
+            )
+    if export_controls.find(".width(48.dp)") > export_controls.find(".width(34.dp)"):
+        raise VerificationError("preview export hit target must wrap the compact visual control")
+
+    preview_controls = workspace.split("private fun PreviewControls(", 1)[-1].split(
+        "@Composable", 1
+    )[0]
+    if ".heightIn(min = 48.dp)" not in preview_controls or ".toggleable(" not in preview_controls:
+        raise VerificationError("preview role toggles need a 48 dp minimum touch target")
+
     outcome = sources["OnDeviceSlicer.kt"]
     if "val filamentMm: Float" not in outcome:
         raise VerificationError("slice outcome drops the native filament-length estimate")
@@ -294,7 +317,10 @@ def main() -> None:
         verify_preview_boundary(read_sources())
     except (OSError, VerificationError) as error:
         raise SystemExit(f"Preview boundary verification failed: {error}") from error
-    print("Verified bounded FloatArray preview, adaptive detail, and scene-stable VBO uploads")
+    print(
+        "Verified bounded FloatArray preview, adaptive detail, accessible controls, "
+        "and scene-stable VBO uploads"
+    )
 
 
 if __name__ == "__main__":

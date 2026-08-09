@@ -1,6 +1,7 @@
 package com.ashcastle.duckyslicer
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -704,19 +705,33 @@ private fun PreviewExportSplitButton(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val exportOptionsLabel = stringResource(R.string.export_options)
     Box(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(
-                color = Color.Black.copy(alpha = 0.68f),
-                contentColor = Color(0xFFF4F4EE),
-                shape = RoundedCornerShape(topStart = 50.dp, bottomStart = 50.dp),
-                modifier = Modifier.width(34.dp).height(50.dp),
+            Box(
+                modifier = Modifier
+                    .width(48.dp)
+                    .height(50.dp)
+                    .clickable(
+                        enabled = canExport,
+                        onClickLabel = exportOptionsLabel,
+                        role = Role.Button,
+                        onClick = { expanded = true },
+                    ),
+                contentAlignment = Alignment.CenterEnd,
             ) {
-                IconButton(
-                    enabled = canExport,
-                    onClick = { expanded = true },
+                Surface(
+                    color = Color.Black.copy(alpha = 0.68f),
+                    contentColor = Color(0xFFF4F4EE),
+                    shape = RoundedCornerShape(topStart = 50.dp, bottomStart = 50.dp),
+                    modifier = Modifier.width(34.dp).height(50.dp),
                 ) {
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = stringResource(R.string.export_options))
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.ArrowDropDown,
+                            contentDescription = exportOptionsLabel,
+                        )
+                    }
                 }
             }
             Spacer(Modifier.width(2.dp))
@@ -1730,6 +1745,7 @@ private fun PreviewControls(
                     Row(
                         modifier = Modifier
                             .weight(1f)
+                            .heightIn(min = 48.dp)
                             .toggleable(
                                 value = visible,
                                 role = Role.Checkbox,
