@@ -63,6 +63,8 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - 16 KB page-size-compatible ARM64 native libraries for current Android devices
 - Immutable GitHub Action pins and checksum-verified, version-locked Gradle artifacts;
   releases publish only after the full ARM64 device suite passes
+- Byte-for-byte reproducible unsigned release builds and a deterministic recursive
+  source archive with exact repository, submodule, patch, and dependency pins
 
 The device test suite uses repository-generated geometry fixtures and verifies Rust mesh
 inspection, malformed-input recovery, repair of open, reversed, duplicate, degenerate,
@@ -111,7 +113,11 @@ also locked to reviewed versions and SHA-256 checksums.
 Release builds produce an unsigned candidate without access to signing secrets. A
 separate protected job—with no source checkout or project build execution—signs it,
 checks the public certificate fingerprint, and hands that exact APK to device tests
-and publication.
+and publication. Before signing, CI performs a clean second assembly without the
+Gradle build cache and requires both unsigned APKs to have identical bytes. Each
+release also publishes a deterministic recursive source archive and detached source
+manifest; unlike GitHub's automatic source ZIP, it contains the pinned runtime and
+engine submodules and records every externally fetched native input.
 
 ## Build the APK
 
@@ -120,7 +126,7 @@ Requirements:
 - JDK 17
 - Android SDK 36
 - Android NDK 28.2.13676358
-- Rust with the `aarch64-linux-android` target
+- Rust 1.91.1 with the `aarch64-linux-android` target
 - `cargo-ndk`
 - Python 3.11 or newer for profile and SBOM generation
 - CMake, Ninja, Git, Curl, Tar, and Make
@@ -167,7 +173,9 @@ Inherited source lineage, binary provenance, and corresponding source locations 
 recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Every APK includes
 an offline, component-indexed copy of all resolved Android, Rust, native, and
 vendored license texts under **Settings → About → Third-party notices**. Release
-SBOM generation fails if a component has no reviewed license expression.
+SBOM generation fails if a component has no reviewed license expression. Official
+releases include the APK, CycloneDX SBOM, recursive `source.tar.gz`, detached source
+manifest, and one checksum file covering all four artifacts.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development and validation rules,
 [SECURITY.md](SECURITY.md) for private vulnerability reporting, and

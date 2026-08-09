@@ -18,9 +18,11 @@ the reviewed Android adaptation is
 - Toolchain: Android NDK `28.2.13676358`, API 26, `arm64-v8a`
 
 Native binary hashes belong to each release artifact rather than this source
-notice. The release `SHA256SUMS`, CycloneDX SBOM, and provenance attestation bind
-the APK and its source-built runtime to that release; the revisions above are the
-authoritative corresponding-source inputs.
+notice. The release `SHA256SUMS`, CycloneDX SBOM, detached source manifest,
+recursive source archive, and provenance attestation bind the APK and its
+source-built runtime to that release. The archive includes the exact runtime and
+engine gitlinks; the manifest records the revisions above and every external source
+input used by the native build.
 
 The APK also contains a compact, normalized profile catalog generated from the
 same pinned OrcaSlicer source tree. The generator resolves profile inheritance,

@@ -35,6 +35,8 @@ cd duckyslicer/android
 
 The first build reconstructs the pinned ARM64 slicer runtime from source and can
 take a while. The complete prerequisites are listed in [README.md](README.md).
+The checked-in `rust-toolchain.toml` pins the compiler, formatter, linter, and Android
+target used by local and CI builds; do not replace it with an unversioned `stable`.
 
 ## Validate a change
 
@@ -54,7 +56,7 @@ cd ../../android
   :app:assembleDebugAndroidTest :app:lintDebug
 
 cd ..
-python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_open_source_distribution
+python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_open_source_distribution tools.test_generate_source_bundle tools.test_verify_reproducible_release
 python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
 python3 tools/verify_gradle_supply_chain.py
 python3 tools/verify_native_safety.py
@@ -82,6 +84,10 @@ accepted fallback.
 The release build job must never receive signing secrets. Only the isolated `sign`
 job may use them; it must not check out source or execute Gradle, repository scripts,
 or other project code, and it must verify the pinned signing-certificate fingerprint.
+The build job must stage the first unsigned APK, rebuild the same version after a
+clean with the build cache disabled, and reject any byte difference. Release source
+generation must retain recursive submodule pins and the detached source manifest;
+GitHub's automatic source ZIP is not a replacement because it omits submodule files.
 
 ## Updating Android dependencies
 

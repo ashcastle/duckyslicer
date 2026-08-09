@@ -12,9 +12,10 @@ Only the latest source on the default branch is currently supported. There is no
 production release channel yet.
 
 Tagged pre-release APKs are built by the repository release workflow. Each release
-is expected to include a CycloneDX SBOM and GitHub build-provenance attestation;
-an APK without those matching release artifacts should not be treated as an
-official DuckySlicer build.
+is expected to include a CycloneDX SBOM, recursive source archive, detached source
+manifest, checksum manifest, and GitHub build-provenance attestation; an APK without
+those matching release artifacts should not be treated as an official DuckySlicer
+build.
 
 The source build has no access to the Android signing key. Signing occurs in a
 protected environment job without a repository checkout, and the resulting APK

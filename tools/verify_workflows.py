@@ -62,6 +62,7 @@ def main() -> None:
         "Gradle trust data is structurally verified": (
             "python3 tools/verify_gradle_supply_chain.py"
         ),
+        "Rust compiler is pinned": "toolchain: 1.91.1",
         "Rust JNI failure containment is verified": (
             "python3 tools/verify_native_safety.py"
         ),
@@ -75,6 +76,10 @@ def main() -> None:
             "python3 tools/generate_license_inventory.py"
         ),
         "offline license policy is unit tested": "tools.test_generate_offline_licenses",
+        "source bundle policy is unit tested": "tools.test_generate_source_bundle",
+        "release reproducibility policy is unit tested": (
+            "tools.test_verify_reproducible_release"
+        ),
     }
     for description, marker in required_android_gates.items():
         if marker not in android_source:
@@ -105,6 +110,7 @@ def main() -> None:
         "Gradle trust data is structurally verified": (
             "python3 tools/verify_gradle_supply_chain.py"
         ),
+        "Rust compiler is pinned": "toolchain: 1.91.1",
         "Rust JNI failure containment is verified": (
             "python3 tools/verify_native_safety.py"
         ),
@@ -118,6 +124,19 @@ def main() -> None:
             "python3 tools/generate_license_inventory.py"
         ),
         "offline license policy is unit tested": "tools.test_generate_offline_licenses",
+        "source bundle policy is unit tested": "tools.test_generate_source_bundle",
+        "release reproducibility policy is unit tested": (
+            "tools.test_verify_reproducible_release"
+        ),
+        "unsigned release is rebuilt without the build cache": (
+            "Rebuild and verify reproducible unsigned release"
+        ),
+        "unsigned release bytes are compared": (
+            "python3 tools/verify_reproducible_release.py"
+        ),
+        "recursive corresponding source is generated": (
+            "python3 tools/generate_source_bundle.py"
+        ),
     }
     for description, marker in required_release_gates.items():
         if marker not in release_source:
@@ -168,6 +187,22 @@ def main() -> None:
         "publish verifies a release checksum manifest": (
             "SHA256SUMS.txt" in publish and "sha256sum --check" in publish
         ),
+        "build publishes recursive corresponding source": (
+            "duckyslicer-release-source" in build
+            and "DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-source.tar.gz" in build
+            and "DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-SOURCE-MANIFEST.json" in build
+        ),
+        "publish verifies corresponding source before release": (
+            "duckyslicer-release-source" in publish
+            and "tools/generate_source_bundle.py --verify" in publish
+            and "source.tar.gz" in publish
+            and "SOURCE-MANIFEST.json" in publish
+        ),
+        "release checksums cover corresponding source": (
+            '"DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-source.tar.gz"' in publish
+            and '"DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-SOURCE-MANIFEST.json"'
+            in publish
+        ),
         "only publish can write releases": (
             release_source.count("contents: write") == 1
             and "contents: write" in publish
@@ -178,6 +213,19 @@ def main() -> None:
     for description, valid in isolated_signing_rules.items():
         if not valid:
             errors.append(f"release.yml: isolated signing invariant failed: {description}")
+
+    reproducibility_order = (
+        build.find("Stage first release build"),
+        build.find("Rebuild and verify reproducible unsigned release"),
+        build.find("Generate recursive corresponding source"),
+    )
+    if min(reproducibility_order) < 0 or reproducibility_order != tuple(
+        sorted(reproducibility_order)
+    ):
+        errors.append(
+            "release.yml: first build staging, independent rebuild, and source generation "
+            "must run in that order"
+        )
 
     if errors:
         raise SystemExit("Workflow verification failed:\n- " + "\n- ".join(errors))
