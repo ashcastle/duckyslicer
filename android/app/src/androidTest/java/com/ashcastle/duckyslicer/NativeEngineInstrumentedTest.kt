@@ -61,6 +61,9 @@ class NativeEngineInstrumentedTest {
             )
 
             assertTrue("Persistent project models must produce retained G-code", outcome.output.length() > 1_000L)
+            assertTrue("Slice outcome must retain Orca's print-time estimate", outcome.estimatedSeconds > 0f)
+            assertTrue("Slice outcome must retain Orca's filament-length estimate", outcome.filamentMm > 0f)
+            assertTrue("Slice outcome must retain Orca's filament-mass estimate", outcome.filamentGrams > 0f)
             assertEquals(
                 "Completed G-code must move into bounded slice storage",
                 File(context.filesDir, SliceArtifactStore.OUTPUT_DIRECTORY).canonicalFile,
