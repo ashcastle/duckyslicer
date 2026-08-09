@@ -1121,19 +1121,24 @@ object OnDeviceSlicer {
             ),
         ),
         options,
-        onProgress,
+        onProgress = onProgress,
     )
 
     fun slice(
         objects: List<ProjectObject>,
         options: SliceOptions = SliceOptions(),
+        cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit = {},
     ): SliceOutcome {
         require(objects.all { projectObject ->
             projectObject.supportPaint.facets.keys.all { it in 0 until projectObject.model.triangles }
         }) { "Support paint references an unavailable facet" }
 
-        return withTransformedModels(objects, options) { transformedModels ->
+        return withTransformedModels(
+            objects,
+            options,
+            cancellationRequested = cancellationRequested,
+        ) { transformedModels ->
             val supportPaintFiles = objects.mapIndexed { index, projectObject ->
                 projectObject.supportPaint
                     .takeIf { it.facets.isNotEmpty() }
@@ -1146,7 +1151,13 @@ object OnDeviceSlicer {
                     }
             }
             try {
-                SlicerProcessClient.slice(transformedModels, supportPaintFiles, options, onProgress)
+                SlicerProcessClient.slice(
+                    transformedModels,
+                    supportPaintFiles,
+                    options,
+                    cancellationRequested,
+                    onProgress,
+                )
             } finally {
                 supportPaintFiles.filterNotNull().forEach(File::delete)
             }
@@ -1176,13 +1187,16 @@ object OnDeviceSlicer {
         objects: List<ProjectObject>,
         options: SliceOptions,
         includePlacement: Boolean = true,
+        cancellationRequested: () -> Boolean = { false },
         block: (List<File>) -> Result,
     ): Result {
         require(objects.isNotEmpty()) { "Project has no objects" }
         require(objects.all { File(it.model.localPath).isFile }) { "Model file is unavailable" }
         val transformedModels = ArrayList<File>(objects.size)
         return try {
+            if (cancellationRequested()) throw SlicingCancelledException()
             objects.forEachIndexed { index, projectObject ->
+                if (cancellationRequested()) throw SlicingCancelledException()
                 val modelRoot = File(projectObject.model.localPath).parentFile
                 val transformedModel = File.createTempFile("slicer-input-$index-", ".stl", modelRoot)
                 transformedModels += transformedModel
@@ -1206,7 +1220,9 @@ object OnDeviceSlicer {
                     ),
                 )
                 check(transformed.optBoolean("ok")) { "Model transform failed" }
+                if (cancellationRequested()) throw SlicingCancelledException()
             }
+            if (cancellationRequested()) throw SlicingCancelledException()
             block(transformedModels)
         } finally {
             transformedModels.forEach(File::delete)

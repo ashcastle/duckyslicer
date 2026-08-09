@@ -124,6 +124,13 @@ internal fun useWorkspaceNavigationRail(widthDp: Float, heightDp: Float): Boolea
 internal fun showWorkspaceNavigationLabels(fontScale: Float): Boolean =
     fontScale < CompactNavigationLabelFontScale
 
+internal fun workspaceEditingBusy(
+    autoLaying: Boolean,
+    arranging: Boolean,
+    slicing: Boolean,
+    previewLoading: Boolean,
+): Boolean = autoLaying || arranging || slicing || previewLoading
+
 private enum class SupportPaintTool(val state: SupportPaintState?, val label: Int) {
     ENFORCE(SupportPaintState.ENFORCE, R.string.support_enforce),
     BLOCK(SupportPaintState.BLOCK, R.string.support_block),
@@ -234,7 +241,7 @@ internal fun WorkspaceScreen(
     val selectedObject = projectObjects.firstOrNull { it.id == selectedObjectId }
     val model = selectedObject?.model ?: projectObjects.firstOrNull()?.model
     val modelTransform = selectedObject?.transform ?: ModelTransform()
-    val editingBusy = autoLaying || arranging
+    val editingBusy = workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading)
     val tabletLayout = useWorkspaceNavigationRail(maxWidth.value, maxHeight.value)
     val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
     val panelMaxHeight = (maxHeight - if (tabletLayout) 24.dp else 94.dp).coerceAtLeast(320.dp)

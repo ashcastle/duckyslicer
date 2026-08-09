@@ -16,6 +16,10 @@ DEVICE_TEST = (
     ANDROID_ROOT
     / "androidTest/java/com/ashcastle/duckyslicer/NativeEngineInstrumentedTest.kt"
 )
+LIFECYCLE_DEVICE_TEST = (
+    ANDROID_ROOT
+    / "androidTest/java/com/ashcastle/duckyslicer/SliceLifecycleInstrumentedTest.kt"
+)
 ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
 SERVICE_NAME = ".SlicerProcessService"
 APPLICATION_NAME = ".DuckySlicerApplication"
@@ -58,8 +62,9 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
     artifacts = sources.get("com/ashcastle/duckyslicer/SliceArtifactStore.kt")
     orchestrator = sources.get("com/ashcastle/duckyslicer/OnDeviceSlicer.kt")
     main = sources.get("com/ashcastle/duckyslicer/MainActivity.kt")
+    lifecycle = sources.get("com/ashcastle/duckyslicer/SliceOperationViewModel.kt")
     workspace = sources.get("com/ashcastle/duckyslicer/WorkspaceScreen.kt")
-    if service is None or artifacts is None or orchestrator is None or main is None or workspace is None:
+    if any(source is None for source in (service, artifacts, orchestrator, main, lifecycle, workspace)):
         raise VerificationError("required slicer process sources are missing")
 
     direct_calls = []
@@ -74,11 +79,35 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         )
     if "SlicerProcessClient.slice(" not in orchestrator:
         raise VerificationError("OnDeviceSlicer must delegate through the isolated process client")
-    if "SlicerProcessClient.cancelActiveSlice()" not in main or \
-            "SlicerProcessClient.cancelActiveSliceAsync()" not in main:
-        raise VerificationError("active slicing must be cancelable from the UI and on disposal")
+    for marker in (
+        "class SliceOperationViewModel : ViewModel()",
+        "viewModelScope.launch",
+        "cancellationRequested = operationCancellation::get",
+        "operationCancellation.set(true)",
+        "override fun onCleared()",
+        "SlicerProcessClient.cancelActiveSliceAsync()",
+    ):
+        if marker not in lifecycle:
+            raise VerificationError(f"retained slice lifecycle is missing: {marker}")
+    if "ViewModelProvider(this)[SliceOperationViewModel::class.java]" not in main:
+        raise VerificationError("the Activity must retain active slicing across configuration changes")
+    for marker in (
+        "DisposableEffect(sliceOperationModel)",
+        "if (!sliceOperationModel.state.value.busy)",
+        "SlicerProcessClient.cancelActiveSliceAsync()",
+    ):
+        if marker not in main:
+            raise VerificationError(f"non-slice disposal containment is missing: {marker}")
+    if "DisposableEffect(Unit)" in main:
+        raise VerificationError("configuration disposal must not cancel active slicing")
     if "onCancelSlice" not in workspace or "canceling_slice" not in workspace:
         raise VerificationError("the Slice workspace must expose cancellation progress")
+    for marker in (
+        "cancellationRequested: () -> Boolean",
+        "if (cancellationRequested()) throw SlicingCancelledException()",
+    ):
+        if marker not in orchestrator:
+            raise VerificationError(f"pre-service slice cancellation is missing: {marker}")
     required_service_markers = {
         "bound service connection": "bindService(",
         "Binder death handling": "IBinder.DeathRecipient",
@@ -87,6 +116,7 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         "debug worker termination": "MESSAGE_TERMINATE_FOR_TEST",
         "dedicated Orca thread": "HandlerThread(\"DuckySlicer Orca work\")",
         "request-scoped cancellation": "MESSAGE_CANCEL",
+        "pre-bind cancellation race containment": "if (cancellationRequested())",
         "cancellation process containment": "Process.killProcess(Process.myPid())",
         "abandoned-client containment": "override fun onUnbind",
     }
@@ -102,6 +132,11 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         raise VerificationError("ARM64 imperfect-mesh recovery corpus is missing")
     if "activeSliceCancellationKeepsServiceResponsiveAndRestartsCleanly" not in device_test:
         raise VerificationError("ARM64 active-slice cancellation regression is missing")
+    if (
+        "activeSliceSurvivesActivityRecreationAndCompletes" not in device_test
+        or "Configuration recreation must retain the active operation" not in device_test
+    ):
+        raise VerificationError("ARM64 configuration-recreation slice regression is missing")
     return len(direct_calls)
 
 
@@ -117,7 +152,8 @@ def main() -> None:
         verify_manifest(MANIFEST.read_text(encoding="utf-8"))
         native_call_count = verify_sources(
             read_sources(),
-            DEVICE_TEST.read_text(encoding="utf-8"),
+            DEVICE_TEST.read_text(encoding="utf-8")
+            + LIFECYCLE_DEVICE_TEST.read_text(encoding="utf-8"),
         )
     except (OSError, VerificationError) as error:
         raise SystemExit(f"Android isolation verification failed: {error}") from error
