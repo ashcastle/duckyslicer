@@ -131,8 +131,8 @@ jobs:
 
   device-tests:
     needs: verify
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
+    runs-on: macos-14
+    timeout-minutes: 45
     steps:
       - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
         with:
@@ -149,11 +149,11 @@ jobs:
             "platform-tools" \
             "emulator" \
             "platforms;android-35" \
-            "system-images;android-35;google_apis;arm64-v8a"
+            "system-images;android-35;google_apis_ps16k;arm64-v8a"
           echo no | avdmanager create avd \
             --force \
             --name duckyslicer-arm64 \
-            --package "system-images;android-35;google_apis;arm64-v8a" \
+            --package "system-images;android-35;google_apis_ps16k;arm64-v8a" \
             --device pixel_6
 
       - name: Start ARM64 emulator
@@ -165,7 +165,7 @@ jobs:
             -no-boot-anim \
             -no-snapshot \
             -gpu swiftshader_indirect \
-            -accel on \
+            -accel off \
             > "$RUNNER_TEMP/duckyslicer-emulator.log" 2>&1 &
           adb wait-for-device
           booted=false
@@ -183,6 +183,12 @@ jobs:
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0
           adb shell settings put global animator_duration_scale 0
+
+      - name: Verify ARM64 16 KB device
+        run: |
+          test "$(uname -m)" = arm64
+          test "$(adb shell getprop ro.product.cpu.abi | tr -d '\r')" = arm64-v8a
+          test "$(adb shell getconf PAGE_SIZE | tr -d '\r')" = 16384
 
       - name: Run on-device slicing tests
         run: |

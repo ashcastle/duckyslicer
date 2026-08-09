@@ -160,8 +160,13 @@ private fun DuckySlicerScreen() {
     val model = selectedProjectObject?.model ?: projectObjects.firstOrNull()?.model
     val modelTransform = selectedProjectObject?.transform ?: ModelTransform()
     val profileStore = remember(context.applicationContext) { ProfileStore(context.applicationContext) }
+    val profileRecentStore = remember(context.applicationContext) {
+        ProfileRecentStore(context.applicationContext)
+    }
     val projectStore = remember(context.applicationContext) { ProjectStore(context.applicationContext) }
     var profileCatalog by remember { mutableStateOf(ProfileCatalog()) }
+    var profileRecents by remember { mutableStateOf(ProfileRecents()) }
+    var profileRecentsLoaded by remember { mutableStateOf(false) }
     val appSettingsStore = remember(context.applicationContext) {
         AppSettingsStore(context.applicationContext)
     }
@@ -182,6 +187,11 @@ private fun DuckySlicerScreen() {
         profileCatalog = withContext(Dispatchers.IO) { profileStore.load() }
         if (profileStore.storageUnavailable) error = savedDataUnavailable
     }
+    LaunchedEffect(profileRecentStore) {
+        profileRecents = withContext(Dispatchers.IO) { profileRecentStore.load() }
+        profileRecentsLoaded = true
+        if (profileRecentStore.storageUnavailable) error = savedDataUnavailable
+    }
     LaunchedEffect(projectStore) {
         val restored = withContext(Dispatchers.IO) { projectStore.loadProject() }
         projectHistory = ProjectHistoryState(current = restored.snapshot)
@@ -199,6 +209,21 @@ private fun DuckySlicerScreen() {
             }
         }.onFailure {
             error = projectSaveError
+            notice = null
+        }
+    }
+    LaunchedEffect(projectRestored, profileRecentsLoaded) {
+        if (projectRestored && profileRecentsLoaded) {
+            profileRecents = profileRecents.record(sliceOptions)
+        }
+    }
+    LaunchedEffect(profileRecents, profileRecentsLoaded) {
+        if (!profileRecentsLoaded || profileRecentStore.storageUnavailable) return@LaunchedEffect
+        delay(350)
+        runCatching {
+            withContext(Dispatchers.IO) { profileRecentStore.save(profileRecents) }
+        }.onFailure {
+            error = savedDataUnavailable
             notice = null
         }
     }
@@ -227,6 +252,18 @@ private fun DuckySlicerScreen() {
 
     fun applyOptions(options: SliceOptions) {
         if (options != sliceOptions) {
+            val previous = sliceOptions
+            var nextRecents = profileRecents
+            if (options.printerProfile.id != previous.printerProfile.id) {
+                nextRecents = nextRecents.recordPrinter(options.printerProfile.id)
+            }
+            if (options.filamentProfile.id != previous.filamentProfile.id) {
+                nextRecents = nextRecents.recordFilament(options.filamentProfile.id)
+            }
+            if (options.quality.id != previous.quality.id) {
+                nextRecents = nextRecents.recordSlicing(options.quality.id)
+            }
+            profileRecents = nextRecents
             sliceOptions = options
             sliceOutcome = null
             layerPreview = null
@@ -549,6 +586,7 @@ private fun DuckySlicerScreen() {
         selectedObjectId = projectHistory.current.selectedObjectId,
         sliceOptions = sliceOptions,
         profileCatalog = profileCatalog,
+        profileRecents = profileRecents,
         appSettings = appSettings,
         remoteDevices = remoteDevices,
         selectedRemoteDeviceId = selectedRemoteDeviceId,
