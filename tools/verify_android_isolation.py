@@ -20,6 +20,12 @@ LIFECYCLE_DEVICE_TEST = (
     ANDROID_ROOT
     / "androidTest/java/com/ashcastle/duckyslicer/SliceLifecycleInstrumentedTest.kt"
 )
+PROCESS_REATTACHMENT_HARNESS = ROOT / "tools/run_process_reattachment_test.py"
+DEBUG_RECOVERY_ACTIVITY = (
+    ANDROID_ROOT
+    / "debug/java/com/ashcastle/duckyslicer/ProcessRecoveryHarnessActivity.kt"
+)
+DEBUG_MANIFEST = ANDROID_ROOT / "debug/AndroidManifest.xml"
 ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
 SERVICE_NAME = ".SlicerProcessService"
 APPLICATION_NAME = ".DuckySlicerApplication"
@@ -78,8 +84,20 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
     orchestrator = sources.get("com/ashcastle/duckyslicer/OnDeviceSlicer.kt")
     main = sources.get("com/ashcastle/duckyslicer/MainActivity.kt")
     lifecycle = sources.get("com/ashcastle/duckyslicer/SliceOperationViewModel.kt")
+    foreground_store = sources.get("com/ashcastle/duckyslicer/ForegroundSliceStore.kt")
     workspace = sources.get("com/ashcastle/duckyslicer/WorkspaceScreen.kt")
-    if any(source is None for source in (service, artifacts, orchestrator, main, lifecycle, workspace)):
+    if any(
+        source is None
+        for source in (
+            service,
+            artifacts,
+            orchestrator,
+            main,
+            lifecycle,
+            foreground_store,
+            workspace,
+        )
+    ):
         raise VerificationError("required slicer process sources are missing")
 
     direct_calls = []
@@ -98,6 +116,9 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         "class SliceOperationViewModel : ViewModel()",
         "viewModelScope.launch",
         "SlicerProcessClient.beginUserSlice()",
+        "SlicerProcessClient.recoverUserSlice()",
+        "SlicerProcessClient.awaitRecoveredSlice(",
+        "Recovered foreground slice",
         "foregroundSession.cancellationRequested()",
         "foregroundSession.close()",
         "operationCancellation.get()",
@@ -145,6 +166,10 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         "pre-bind notification cancellation": "ForegroundSliceSession.markCanceled(",
         "post-bind notification cancellation race containment":
             "ForegroundSliceSession.wasCanceled(this, requestId)",
+        "foreground observer reattachment": "MESSAGE_ATTACH",
+        "completed result handoff": "completedForegroundResult",
+        "foreground unbind survival":
+            "foregroundRequestId.get() != abandonedRequestId",
     }
     missing = [description for description, marker in required_service_markers.items() if marker not in service]
     if missing:
@@ -152,6 +177,15 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
     for marker in ("output.fd.sync()", "MAXIMUM_RETAINED_OUTPUTS", "MAXIMUM_RETAINED_BYTES"):
         if marker not in artifacts:
             raise VerificationError(f"slicer artifact safety marker is missing: {marker}")
+    for marker in (
+        "ForegroundSlicePhase.ACTIVE",
+        "ForegroundSlicePhase.COMPLETED",
+        "StandardCopyOption.ATOMIC_MOVE",
+        "output.fd.sync()",
+        "outcome.isRestorableFrom(context.filesDir)",
+    ):
+        if marker not in foreground_store:
+            raise VerificationError(f"foreground slice checkpoint is missing: {marker}")
     if "nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly" not in device_test:
         raise VerificationError("ARM64 worker-crash recovery regression is missing")
     if "imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp" not in device_test:
@@ -160,12 +194,47 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         raise VerificationError("ARM64 active-slice cancellation regression is missing")
     if (
         "activeSliceSurvivesActivityRecreationAndCompletes" not in device_test
-        or "Configuration recreation must retain the active operation" not in device_test
-        or "Background Activity must retain the foreground slice" not in device_test
-        or "The slicer service must be foreground while the Activity is stopped" not in device_test
+        or "Stopping the Activity must not cancel the slice" not in device_test
+        or "The slicer service must be foreground while a stopped Activity is slicing"
+        not in device_test
+        or "A slice that finishes during the background transition must retain its result"
+        not in device_test
+        or "Configuration recreation must retain the operation" not in device_test
     ):
         raise VerificationError("ARM64 configuration/background slice regression is missing")
     return len(direct_calls)
+
+
+def verify_process_reattachment_harness(source: str) -> None:
+    for marker in (
+        'page_size != "16384"',
+        'run_as(serial, "kill", "-9", str(old_ui_pid))',
+        "surviving_service_pid != old_service_pid",
+        "current_boot_id != boot_id",
+        '"Recovered foreground slice"',
+        "SESSION_PATH",
+    ):
+        if marker not in source:
+            raise VerificationError(f"local process-reattachment harness is missing: {marker}")
+
+
+def verify_debug_recovery_harness(source: str, manifest: str) -> None:
+    for marker in (
+        "class ProcessRecoveryHarnessActivity",
+        "ForegroundSlicePhase.ACTIVE",
+        "Process.myPid()",
+        "output.fd.sync()",
+        "Process recovery slice finished too early",
+    ):
+        if marker not in source:
+            raise VerificationError(f"Debug process-recovery activity is missing: {marker}")
+    for marker in (
+        'android:name=".ProcessRecoveryHarnessActivity"',
+        'android:exported="true"',
+        'android:permission="android.permission.DUMP"',
+    ):
+        if marker not in manifest:
+            raise VerificationError(f"Debug process-recovery manifest is missing: {marker}")
 
 
 def read_sources() -> dict[str, str]:
@@ -183,12 +252,19 @@ def main() -> None:
             DEVICE_TEST.read_text(encoding="utf-8")
             + LIFECYCLE_DEVICE_TEST.read_text(encoding="utf-8"),
         )
+        verify_process_reattachment_harness(
+            PROCESS_REATTACHMENT_HARNESS.read_text(encoding="utf-8")
+        )
+        verify_debug_recovery_harness(
+            DEBUG_RECOVERY_ACTIVITY.read_text(encoding="utf-8"),
+            DEBUG_MANIFEST.read_text(encoding="utf-8"),
+        )
     except (OSError, VerificationError) as error:
         raise SystemExit(f"Android isolation verification failed: {error}") from error
     print(
         "Verified Android slicer isolation: private :slicer service, "
         f"{native_call_count} confined NativeLibrary construction, "
-        "crash and cancellation recovery regressions"
+        "crash, cancellation, and UI-process reattachment regressions"
     )
 
 

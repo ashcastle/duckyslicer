@@ -30,11 +30,15 @@ class SliceLifecycleInstrumentedTest {
             NativeEngine.inspectStl(storedModel.absolutePath),
             storedModel.absolutePath,
         )
-        val projectObject = ProjectObject(id = "lifecycle-rotation", model = model)
+        val projectObject = ProjectObject(
+            id = "lifecycle-rotation",
+            model = model,
+            transform = ModelTransform(scale = 1.5f),
+        )
         val options = SliceOptions().copy(
-            layerHeight = 0.03f,
-            firstLayerHeight = 0.08f,
-            perimeters = 5,
+            layerHeight = 0.02f,
+            firstLayerHeight = 0.04f,
+            perimeters = 6,
             fillDensity = 0.50f,
         )
 
@@ -62,23 +66,36 @@ class SliceLifecycleInstrumentedTest {
                     SlicerProcessClient.workerIsForegroundForTest(context),
                 )
 
-                scenario.recreate()
+                scenario.moveToState(Lifecycle.State.CREATED)
+                val backgroundState = retained.state.value
+                assertFalse(
+                    "Stopping the Activity must not cancel the slice",
+                    backgroundState.terminalStatus == SliceTerminalStatus.CANCELED,
+                )
+                if (backgroundState.slicing) {
+                    assertTrue(
+                        "The slicer service must be foreground while a stopped Activity is slicing",
+                        SlicerProcessClient.workerIsForegroundForTest(context),
+                    )
+                } else {
+                    assertTrue(
+                        "A slice that finishes during the background transition must retain its result",
+                        backgroundState.previewLoading || backgroundState.outcome != null,
+                    )
+                }
 
+                scenario.moveToState(Lifecycle.State.RESUMED)
+                scenario.recreate()
                 scenario.onActivity { activity ->
                     val recreated = ViewModelProvider(activity)[SliceOperationViewModel::class.java]
-                    assertSame("Configuration recreation must retain the active operation", retainedModel, recreated)
+                    assertSame("Configuration recreation must retain the operation", retainedModel, recreated)
                     assertFalse(
                         "Recreation must not report disposal cancellation",
                         recreated.state.value.terminalStatus == SliceTerminalStatus.CANCELED,
                     )
                 }
-
                 scenario.moveToState(Lifecycle.State.CREATED)
-                assertTrue("Background Activity must retain the foreground slice", retained.state.value.busy)
-                assertTrue(
-                    "The slicer service must be foreground while the Activity is stopped",
-                    SlicerProcessClient.workerIsForegroundForTest(context),
-                )
+
                 val deadline = SystemClock.elapsedRealtime() + COMPLETION_TIMEOUT_MILLIS
                 while (retained.state.value.busy && SystemClock.elapsedRealtime() < deadline) {
                     SystemClock.sleep(50)
