@@ -119,6 +119,16 @@ def main() -> None:
         "Play bundle isolation is unit tested": (
             "tools.test_verify_play_bundle_workflow"
         ),
+        "CodeQL traces the real Kotlin build": (
+            "github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3"
+        ),
+        "CodeQL uses manual Java and Kotlin extraction": (
+            "languages: java-kotlin\n          build-mode: manual"
+        ),
+        "CodeQL runs the extended security suite": "queries: security-extended",
+        "CodeQL uploads the Java and Kotlin analysis": (
+            "github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3"
+        ),
         "generated G-code storage policy is verified": (
             "python3 tools/verify_slice_storage.py"
         ),
@@ -148,6 +158,37 @@ def main() -> None:
     for description, marker in required_android_gates.items():
         if marker not in android_source:
             errors.append(f"android.yml: missing gate: {description}")
+
+    verify_job = android_jobs.get("verify", "")
+    codeql_fork_guard = (
+        "github.event_name != 'pull_request' || "
+        "github.event.pull_request.head.repo.full_name == github.repository"
+    )
+    codeql_permissions = "permissions:\n      contents: read\n      security-events: write"
+    if codeql_permissions not in verify_job:
+        errors.append(
+            "android.yml: CodeQL verify job needs only contents read and "
+            "security-events write"
+        )
+    if verify_job.count(codeql_fork_guard) != 2:
+        errors.append(
+            "android.yml: CodeQL init and analyze must skip untrusted fork pull requests"
+        )
+    codeql_init_index = verify_job.find("github/codeql-action/init@")
+    gradle_index = verify_job.find("./gradlew")
+    codeql_analyze_index = verify_job.find("github/codeql-action/analyze@")
+    if (
+        codeql_init_index >= 0
+        and gradle_index >= 0
+        and codeql_init_index > gradle_index
+    ):
+        errors.append("android.yml: CodeQL must initialize before the Kotlin build")
+    if (
+        codeql_analyze_index >= 0
+        and gradle_index >= 0
+        and codeql_analyze_index < gradle_index
+    ):
+        errors.append("android.yml: CodeQL must analyze after the Kotlin build")
 
     if "device-tests" in android_jobs or "runs-on: macos-14" in android_source:
         errors.append("android.yml: hosted emulator jobs are not allowed")
@@ -345,7 +386,7 @@ def main() -> None:
         raise SystemExit("Workflow verification failed:\n- " + "\n- ".join(errors))
     print(
         f"Verified {len(workflows)} workflows and {action_count} immutable Action references; "
-        "isolated signing and static ARM64 16 KB checks gate release publication"
+        "CodeQL, isolated signing, and static ARM64 16 KB checks are enforced"
     )
 
 

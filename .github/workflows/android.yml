@@ -16,6 +16,9 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    permissions:
+      contents: read
+      security-events: write
     env:
       DUCKYSLICER_NATIVE_JOBS: "4"
     steps:
@@ -38,6 +41,14 @@ jobs:
           toolchain: 1.91.1
           components: clippy, rustfmt
           targets: aarch64-linux-android
+
+      - name: Initialize Java and Kotlin security analysis
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        with:
+          languages: java-kotlin
+          build-mode: manual
+          queries: security-extended
 
       - name: Install Android SDK components
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
@@ -81,6 +92,12 @@ jobs:
             :app:assembleDebugAndroidTest :app:lintDebug \
             :app:bundleRelease :app:packageReleaseUniversalApk \
             :app:writeDebugDependencyInventory
+
+      - name: Analyze Java and Kotlin
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        with:
+          category: /language:java-kotlin
 
       - name: Verify 16 KB APK and Play delivery packaging
         run: |
