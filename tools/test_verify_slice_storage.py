@@ -13,10 +13,11 @@ def valid_sources() -> dict[str, str]:
             "output.fd.sync() copyBounded tryLock() SliceArtifactLease activeOutputIsUnsafe"
         ),
         "SliceConfig.kt": "maximumGcodeBytes: Int = 1_073_741_824",
+        "ProjectStore.kt": "modelStorageRoot(filesRoot: File)",
         "SlicerProcessService.kt": (
             "artifactStore.prepareForSlice() artifactStore.persist( scheduleStorageGuard "
             "artifactStore.activeOutputIsUnsafe() estimatedTimeSeconds.isFinite() "
-            "estimatedFilamentGrams.isFinite() transientRoots = listOf(filesDir, cacheDir) "
+            "estimatedFilamentGrams.isFinite() ProjectStore.modelStorageRoot(filesDir) "
             "sliceWithOutputLimitForTest KEY_MAXIMUM_GCODE_BYTES_FOR_TEST "
             "PRODUCTION_MAXIMUM_GCODE_BYTES this.maximumGcodeBytes = maximumGcodeBytes"
         ),
@@ -32,11 +33,13 @@ def valid_sources() -> dict[str, str]:
             "oversizedNativeOutputIsRejectedAndRemoved "
             "preparationRecoversStaleWorkAndFreesTheReserve "
             "activeOutputGuardRequiresAFileAndDetectsSizeOrEmergencySpace "
-            "privateCacheOutputIsAcceptedAndRecovered"
+            "privateCacheOutputIsAcceptedAndRecovered "
+            "persistentProjectModelOutputIsAcceptedGuardedAndRecovered"
         ),
         "NativeEngineInstrumentedTest.kt": (
             "sliceArtifactLeaseProtectsConcurrentReadersAcrossProcesses "
-            "nativeGcodeWriterHardLimitContainsDiskGrowthAndRecovers"
+            "nativeGcodeWriterHardLimitContainsDiskGrowthAndRecovers "
+            "persistentProjectModelSlicesIntoRetainedArtifact"
         ),
         "README.md": "G-code reader lease RLIMIT_FSIZE",
         "SECURITY.md": "G-code reader lease RLIMIT_FSIZE",
@@ -70,6 +73,14 @@ class VerifySliceStorageTest(unittest.TestCase):
         sources = valid_sources()
         sources["runtime.patch"] += "\n+gcode_file.rdbuf()"
         with self.assertRaisesRegex(VerificationError, "complete G-code"):
+            verify_slice_storage(sources)
+
+    def test_rejects_missing_persistent_project_output_root(self) -> None:
+        sources = valid_sources()
+        sources["SlicerProcessService.kt"] = sources["SlicerProcessService.kt"].replace(
+            "ProjectStore.modelStorageRoot(filesDir)", "cacheDir"
+        )
+        with self.assertRaisesRegex(VerificationError, "modelStorageRoot"):
             verify_slice_storage(sources)
 
 

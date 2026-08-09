@@ -647,6 +647,10 @@ private fun BedScene(
 ) {
     val context = LocalContext.current
     val depthPreviewSupported = remember(context) { supportsDepthTestedPreview(context) }
+    val previewCapabilities = remember(context) { previewDeviceCapabilities(context) }
+    val effectivePreviewDetail = remember(previewDetail, previewCapabilities) {
+        resolvePreviewDetail(previewDetail, previewCapabilities)
+    }
     if (
         preview != null &&
         previewRenderingMode == PreviewRenderingMode.DEPTH_TESTED &&
@@ -659,7 +663,7 @@ private fun BedScene(
             opacity = toolpathOpacity,
             depthContrast = toolpathDepthContrast,
             visibleRoles = visibleToolpathRoles,
-            detail = previewDetail,
+            detail = effectivePreviewDetail,
             modifier = modifier,
         )
         return
@@ -679,22 +683,14 @@ private fun BedScene(
     val previewPaths = remember(preview) {
         Array(PreviewDepthBands) { Array(ToolpathStyles.size) { Path() } }
     }
-    val movingPreviewPlan = remember(preview, previewDetail) {
+    val movingPreviewPlan = remember(preview, effectivePreviewDetail) {
         preview?.buildRenderPlan(
-            segmentBudget = when (previewDetail) {
-                PreviewDetail.PERFORMANCE -> 250
-                PreviewDetail.BALANCED -> 450
-                PreviewDetail.DETAIL -> 700
-            },
+            segmentBudget = compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = false),
         )
     }
-    val refinedPreviewPlan = remember(preview, previewDetail) {
+    val refinedPreviewPlan = remember(preview, effectivePreviewDetail) {
         preview?.buildRenderPlan(
-            segmentBudget = when (previewDetail) {
-                PreviewDetail.PERFORMANCE -> 2_000
-                PreviewDetail.BALANCED -> 4_000
-                PreviewDetail.DETAIL -> 8_000
-            },
+            segmentBudget = compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = true),
         )
     }
 

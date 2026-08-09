@@ -17,10 +17,13 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     required = {
         "NativeEngine.kt",
         "PreviewModels.kt",
+        "AppSettings.kt",
         "ToolpathPreviewView.kt",
+        "WorkspaceScreen.kt",
         "MainActivity.kt",
         "NativeEngineInstrumentedTest.kt",
         "PreviewModelsTest.kt",
+        "PreviewPerformancePolicyTest.kt",
         "ToolpathMeshBuilderTest.kt",
         "lib.rs",
         "README.md",
@@ -50,6 +53,21 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     if "JSONObject" in preview or "fun fromJson" in preview:
         raise VerificationError("G-code preview reverted to object-heavy JSON decoding")
 
+    settings = sources["AppSettings.kt"]
+    for marker in (
+        "PreviewDetail.AUTOMATIC",
+        "val previewDetail: PreviewDetail = PreviewDetail.AUTOMATIC",
+        "PreviewDeviceCapabilities",
+        "manager?.isLowRamDevice",
+        "capabilities.appMemoryClassMb <= 192",
+        "resolvePreviewDetail(",
+        "previewDetailForInteraction(",
+        "depthPreviewSegmentBudget(",
+        "compatibilityPreviewSegmentBudget(",
+    ):
+        if marker not in settings:
+            raise VerificationError(f"adaptive preview policy is missing: {marker}")
+
     renderer = sources["ToolpathPreviewView.kt"]
     for marker in (
         "renderMode = RENDERMODE_WHEN_DIRTY",
@@ -64,11 +82,26 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "COLOR_OFFSET_BYTES",
         ".allocateDirect(capacity * Float.SIZE_BYTES)",
         "return builder.finish()",
+        "setInteractionActive(true)",
+        "postDelayed(restoreDetail, DETAIL_RESTORE_DELAY_MS)",
+        "previewDetailForInteraction(sourceScene.detail, interactionActive)",
+        "depthPreviewSegmentBudget(scene.detail)",
     ):
         if marker not in renderer:
             raise VerificationError(f"GPU preview upload contract is missing: {marker}")
     if "private var vertices: FloatBuffer?" in renderer or "builder.writeTo" in renderer:
         raise VerificationError("GPU preview reverted to duplicated client-side vertex storage")
+
+    workspace = sources["WorkspaceScreen.kt"]
+    for marker in (
+        "previewDeviceCapabilities(context)",
+        "resolvePreviewDetail(previewDetail, previewCapabilities)",
+        "detail = effectivePreviewDetail",
+        "compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = false)",
+        "compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = true)",
+    ):
+        if marker not in workspace:
+            raise VerificationError(f"preview device policy is not connected to the UI: {marker}")
 
     rust = sources["lib.rs"]
     for marker in (
@@ -100,6 +133,10 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "The first frame must upload one VBO",
         "Camera-only frames must reuse the uploaded VBO",
         "A geometry change must replace the VBO exactly once",
+        "automaticPreviewQualityResolvesToAConcreteDeviceTier",
+        "Starting a gesture must upload one lower-detail VBO",
+        "Every subsequent gesture frame must reuse the lower-detail VBO",
+        "Settling after a gesture must restore the requested VBO once",
         "ARM64 GPU staging must use direct memory",
         "ARM64 balanced preview must honor its geometry budget",
     ):
@@ -124,10 +161,25 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     ):
         if marker not in mesh_tests:
             raise VerificationError(f"GPU preview performance regression is missing: {marker}")
+    policy_tests = sources["PreviewPerformancePolicyTest.kt"]
+    for marker in (
+        "automaticDefaultsToSmoothOnMemoryConstrainedDevices",
+        "automaticUsesBalancedQualityWhenTheDeviceHasHeadroom",
+        "explicitQualityAlwaysWinsOverAutomaticDeviceSelection",
+        "gesturesTemporarilyUseOneLowerGeometryTier",
+        "segmentBudgetsStayBoundedForBothRenderers",
+    ):
+        if marker not in policy_tests:
+            raise VerificationError(f"adaptive preview host regression is missing: {marker}")
 
     for document in ("README.md", "CONTRIBUTING.md"):
         lowered = sources[document].lower()
-        if "preview" not in lowered or "floatarray" not in lowered or "vbo" not in lowered:
+        if (
+            "preview" not in lowered
+            or "floatarray" not in lowered
+            or "vbo" not in lowered
+            or "automatic" not in lowered
+        ):
             raise VerificationError(f"primitive preview boundary is not documented in {document}")
 
 
@@ -138,9 +190,11 @@ def read_sources() -> dict[str, str]:
     return {
         "NativeEngine.kt": (main / "NativeEngine.kt").read_text(encoding="utf-8"),
         "PreviewModels.kt": (main / "PreviewModels.kt").read_text(encoding="utf-8"),
+        "AppSettings.kt": (main / "AppSettings.kt").read_text(encoding="utf-8"),
         "ToolpathPreviewView.kt": (main / "ToolpathPreviewView.kt").read_text(
             encoding="utf-8"
         ),
+        "WorkspaceScreen.kt": (main / "WorkspaceScreen.kt").read_text(encoding="utf-8"),
         "MainActivity.kt": (main / "MainActivity.kt").read_text(encoding="utf-8"),
         "NativeEngineInstrumentedTest.kt": (
             device / "NativeEngineInstrumentedTest.kt"
@@ -148,6 +202,9 @@ def read_sources() -> dict[str, str]:
         "PreviewModelsTest.kt": (tests / "PreviewModelsTest.kt").read_text(
             encoding="utf-8"
         ),
+        "PreviewPerformancePolicyTest.kt": (
+            tests / "PreviewPerformancePolicyTest.kt"
+        ).read_text(encoding="utf-8"),
         "ToolpathMeshBuilderTest.kt": (tests / "ToolpathMeshBuilderTest.kt").read_text(
             encoding="utf-8"
         ),
@@ -162,7 +219,7 @@ def main() -> None:
         verify_preview_boundary(read_sources())
     except (OSError, VerificationError) as error:
         raise SystemExit(f"Preview boundary verification failed: {error}") from error
-    print("Verified bounded FloatArray preview boundary and scene-stable OpenGL VBO uploads")
+    print("Verified bounded FloatArray preview, adaptive detail, and scene-stable VBO uploads")
 
 
 if __name__ == "__main__":

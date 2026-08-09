@@ -131,6 +131,27 @@ class SliceArtifactStoreTest {
     }
 
     @Test
+    fun persistentProjectModelOutputIsAcceptedGuardedAndRecovered() = withRoot { root ->
+        val projectModels = root.resolve("projects/models").apply { mkdirs() }
+        val store = testStore(root, transientRoots = listOf(root, projectModels))
+        val native = projectModels.resolve(SliceArtifactStore.NATIVE_OUTPUT_NAME).apply {
+            writeBytes(ByteArray(7) { 4 })
+        }
+
+        val retained = store.persist(native)
+
+        assertEquals(
+            root.resolve("slices").canonicalFile,
+            requireNotNull(retained.parentFile).canonicalFile,
+        )
+        assertFalse("Native output must leave persistent model storage", native.exists())
+        native.writeBytes(ByteArray(11))
+        assertTrue("The active guard must watch persistent model storage", store.activeOutputIsUnsafe())
+        store.recover()
+        assertFalse("Recovery must remove stale project-root output", native.exists())
+    }
+
+    @Test
     fun activeOutputGuardRequiresAFileAndDetectsSizeOrEmergencySpace() = withRoot { root ->
         var free = 100L
         val store = testStore(

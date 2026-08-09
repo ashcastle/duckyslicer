@@ -152,6 +152,8 @@
     <string name="vertical_shell_all">All</string>
     <string name="detect_narrow_internal_solid_infill">Detect narrow internal solid infill</string>
     <string name="quality">Quality</string>
+    <string name="strength">Strength</string>
+    <string name="others">Others</string>
     <string name="top_shell_layers">Top shell layers</string>
     <string name="bottom_shell_layers">Bottom shell layers</string>
     <string name="top_shell_thickness">Minimum top thickness</string>
@@ -347,7 +349,8 @@
     <string name="device_state_offline">Offline</string>
     <string name="device_state_unknown">Status unavailable</string>
     <string name="preview_settings">Preview</string>
-    <string name="preview_detail">Detail while moving and zooming</string>
+    <string name="preview_detail">Preview quality</string>
+    <string name="preview_detail_automatic">Automatic</string>
     <string name="preview_detail_performance">Smooth</string>
     <string name="preview_detail_balanced">Balanced</string>
     <string name="preview_detail_detail">Detailed</string>

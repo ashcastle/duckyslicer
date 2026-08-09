@@ -62,13 +62,14 @@ cd ../../android
   :app:assembleDebugAndroidTest :app:lintDebug
 
 cd ..
-python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_slice_storage tools.test_verify_preview_boundary tools.test_verify_open_source_distribution tools.test_verify_runtime_resilience tools.test_generate_source_bundle tools.test_verify_reproducible_release
+python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_slice_storage tools.test_verify_preview_boundary tools.test_verify_profile_editor tools.test_verify_open_source_distribution tools.test_verify_runtime_resilience tools.test_generate_source_bundle tools.test_verify_reproducible_release
 python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
 python3 tools/verify_gradle_supply_chain.py
 python3 tools/verify_native_safety.py
 python3 tools/verify_android_isolation.py
 python3 tools/verify_slice_storage.py
 python3 tools/verify_preview_boundary.py
+python3 tools/verify_profile_editor.py
 python3 tools/verify_open_source_distribution.py
 python3 tools/verify_runtime_resilience.py
 python3 tools/verify_workflows.py
@@ -93,6 +94,16 @@ Depth-tested preview geometry must be built directly in native-order direct memo
 uploaded through an OpenGL VBO only when the layer range, role visibility, quality, or
 visual style changes. Camera gestures must reuse the existing GPU buffer; do not return
 to client-side vertex arrays or per-frame geometry uploads.
+Automatic preview quality must resolve to a concrete tier before mesh generation.
+Low-RAM or 192 MiB-and-smaller app heaps use the bounded performance tier, explicit
+user choices remain authoritative, and active gestures may downgrade at most one tier
+until the view settles. Keep this policy pure and host-tested alongside the real ARM64
+EGL renderer regression.
+
+The mobile slicing-profile editor keeps the Orca mental model in five horizontally
+scrollable sections: Quality, Strength, Speed, Support, and Others. Keep profile
+selection above those settings, preserve that order, localize every title, and place
+new process controls in the narrowest matching section instead of restoring one long form.
 
 Generated G-code changes must retain the per-output and total-byte limits, free-space
 reserve, stale-output recovery, and reader lease around every preview, export, and
@@ -100,6 +111,9 @@ printer-upload stream. The isolated native writer's `RLIMIT_FSIZE` ceiling and b
 compatibility preview cache are part of that contract; do not replace either with a
 periodic-only check or a full-file read. Run the host storage regressions and both ARM64
 hard-limit recovery and cross-process lease regressions when changing retention or file access.
+Orca writes beside its transformed input, so the persistent project-model directory must
+remain an explicit monitored transient root. The ARM64 persistent-project regression must
+finish with G-code in bounded slice storage and no `output.gcode` beside the model.
 
 Workflow changes must keep third-party Actions pinned to full commit hashes. A
 tagged release must preserve the build → isolated sign → ARM64 device test →

@@ -99,6 +99,7 @@ internal fun AppSettingsSheet(
                             Text(
                                 stringResource(
                                     when (detail) {
+                                        PreviewDetail.AUTOMATIC -> R.string.preview_detail_automatic
                                         PreviewDetail.PERFORMANCE -> R.string.preview_detail_performance
                                         PreviewDetail.BALANCED -> R.string.preview_detail_balanced
                                         PreviewDetail.DETAIL -> R.string.preview_detail_detail

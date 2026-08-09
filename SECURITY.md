@@ -102,6 +102,9 @@ being previewed, exported, or uploaded. Stale native output and interrupted temp
 files are recovered on the next worker start. This is crash/address-space isolation,
 not a permission sandbox: both processes run under the same Android UID and share the
 app's private storage.
+The persistent project-model directory is an explicit monitored transient root because
+Orca writes beside its transformed input; completed output is moved into bounded slice
+storage before it is returned, and stale adjacent output is removed on worker recovery.
 
 The ARM64 suite additionally forces a small native file-size limit, verifies that disk
 growth stops at that boundary, and requires a normal recovery slice. Its mesh corpus

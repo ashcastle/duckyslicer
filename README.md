@@ -55,8 +55,12 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
   JSON strings and per-segment JSON objects before GPU rendering
 - Direct-memory toolpath meshes uploaded to an OpenGL VBO only when geometry changes,
   so orbit, pan, and zoom reuse GPU data instead of retransmitting every visible layer
+- Automatic preview quality defaults to a bounded smooth tier on low-memory devices;
+  gestures temporarily use one lower geometry tier and restore the selected detail
+  after the view settles
 - Orca skirt height/speed, draft shield, brim topology/gap, and raft geometry preserved in bundled, project, and saved profiles
 - Searchable printer, filament, and slicing selectors with collapsible brand and personal-profile groups
+- Orca-style slicing editor sections for Quality, Strength, Speed, Support, and Others
 - Printer compatibility filtering, validated profile inheritance, and unsafe-entry rejection during the build
 - Editable settings and schema-versioned named user profiles saved entirely in app-private storage
 - Bottom navigation on phones and a space-saving vertical rail on tablets
@@ -77,6 +81,8 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - Retained G-code limited to 1 GiB per slice and 1 GiB in total, with a 512 MiB
   free-space reserve, secondary active-generation emergency monitoring, and
   cross-process reader leases protecting preview, export, and printer upload from cleanup
+- Native output beside a persistent project model is monitored and atomically moved
+  into bounded slice storage before the result is exposed to the app
 - 16 KB page-size-compatible ARM64 native libraries for current Android devices
 - Immutable GitHub Action pins and checksum-verified, version-locked Gradle artifacts;
   releases publish only after the full ARM64 device suite passes
