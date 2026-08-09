@@ -83,11 +83,20 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "renderMode = RENDERMODE_WHEN_DIRTY",
         "ToolpathGeometryUploadState",
         "uploadState.needsUpload(scene)",
+        "ToolpathGeometryUploadState(capacity = GPU_GEOMETRY_CACHE_SIZE)",
+        "const val GPU_GEOMETRY_CACHE_SIZE = 2",
+        "pendingPrewarmScene",
+        "requestPrewarmFrame()",
+        "uploadState.markUsed(scene)",
+        "releaseStaleGeometry(setOf(sourceScene, interactionScene))",
+        "uploadState.remove(staleScene)",
         "GLES30.glGenBuffers",
+        "GLES30.glDeleteBuffers",
         "GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER",
         "GLES30.glBufferData(",
         "GLES30.GL_STATIC_DRAW",
         "geometryUploadCountForTest",
+        "cachedGeometryCountForTest",
         "POSITION_OFFSET_BYTES",
         "COLOR_OFFSET_BYTES",
         ".allocateDirect(capacity * Float.SIZE_BYTES)",
@@ -99,7 +108,11 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     ):
         if marker not in renderer:
             raise VerificationError(f"GPU preview upload contract is missing: {marker}")
-    if "private var vertices: FloatBuffer?" in renderer or "builder.writeTo" in renderer:
+    if (
+        "private var vertices: FloatBuffer?" in renderer
+        or "private var vertexBufferId" in renderer
+        or "builder.writeTo" in renderer
+    ):
         raise VerificationError("GPU preview reverted to duplicated client-side vertex storage")
 
     workspace = sources["WorkspaceScreen.kt"]
@@ -345,14 +358,17 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     if device.count("GcodeLayerPreview.fromNative") < 3 or "gcodeResult == null" not in device:
         raise VerificationError("ARM64 primitive preview regressions are incomplete")
     for marker in (
-        "depthPreviewUploadsVboOnceAcrossCameraFrames",
+        "depthPreviewPrewarmsGestureVboAndReusesItAcrossCameraFrames",
         "The first frame must upload one VBO",
+        "The next idle frame must prewarm one lower-detail VBO",
         "Camera-only frames must reuse the uploaded VBO",
         "A geometry change must replace the VBO exactly once",
+        "Old-scene VBOs must be released before the new gesture tier is prewarmed",
         "automaticPreviewQualityResolvesToAConcreteDeviceTier",
-        "Starting a gesture must upload one lower-detail VBO",
+        "Starting a gesture must reuse the prewarmed lower-detail VBO",
         "Every subsequent gesture frame must reuse the lower-detail VBO",
-        "Settling after a gesture must restore the requested VBO once",
+        "Settling after a gesture must reuse the requested VBO",
+        "The GPU cache must remain bounded to two VBOs",
         "ARM64 GPU staging must use direct memory",
         "ARM64 balanced preview must honor its geometry budget",
         "Slice outcome must retain Orca's print-time estimate",
@@ -375,7 +391,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "balancedModeCapsDensePreviewGeometry",
         "GPU staging geometry must use direct native memory",
         "unchangedSceneUploadsOnceUntilGeometryOrContextChanges",
+        "twoSlotGeometryCacheEvictsTheLeastRecentlyUsedDetail",
         "Camera-only frames must reuse the GPU buffer",
+        "The least recently used gesture VBO must be evicted",
         "Context recreation must re-upload retained scene data",
     ):
         if marker not in mesh_tests:
@@ -468,7 +486,7 @@ def main() -> None:
         raise SystemExit(f"Preview boundary verification failed: {error}") from error
     print(
         "Verified bounded FloatArray preview, responsive controls, adaptive detail, "
-        "and scene-stable VBO uploads"
+        "and a bounded prewarmed two-tier VBO cache"
     )
 
 
