@@ -7,9 +7,12 @@ from tools.verify_android_isolation import VerificationError, verify_manifest, v
 
 VALID_MANIFEST = """\
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
   <application android:name=".DuckySlicerApplication">
     <service android:name=".SlicerProcessService"
              android:exported="false"
+             android:foregroundServiceType="dataSync"
              android:process=":slicer" />
   </application>
 </manifest>
@@ -26,6 +29,14 @@ class SlicerProcessService {
   val cancel = MESSAGE_CANCEL
   fun containPreBindCancellation() { if (cancellationRequested()) return }
   fun containCancellation() { Process.killProcess(Process.myPid()) }
+  fun beginForeground() { startForegroundService(); FOREGROUND_SERVICE_TYPE_DATA_SYNC }
+  fun notificationCancel() {
+    ACTION_CANCEL_SLICE
+    ACTION_FINISH_SLICE
+    ForegroundSliceSession.markCanceled()
+    ForegroundSliceSession.wasCanceled(this, requestId)
+  }
+  override fun onTimeout(startId: Int, fgsType: Int) = Unit
   override fun onUnbind() = false
 }
 """
@@ -36,6 +47,8 @@ imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp
 activeSliceCancellationKeepsServiceResponsiveAndRestartsCleanly
 activeSliceSurvivesActivityRecreationAndCompletes
 Configuration recreation must retain the active operation
+Background Activity must retain the foreground slice
+The slicer service must be foreground while the Activity is stopped
 """
 
 
@@ -57,7 +70,9 @@ def valid_sources() -> dict[str, str]:
         ),
         "com/ashcastle/duckyslicer/SliceOperationViewModel.kt": (
             "class SliceOperationViewModel : ViewModel() viewModelScope.launch "
-            "cancellationRequested = operationCancellation::get "
+            "SlicerProcessClient.beginUserSlice() foregroundSession.cancellationRequested() "
+            "foregroundSession.close() "
+            "operationCancellation.get() "
             "operationCancellation.set(true) "
             "override fun onCleared() SlicerProcessClient.cancelActiveSliceAsync()"
         ),
@@ -85,6 +100,21 @@ class VerifyAndroidIsolationTest(unittest.TestCase):
             with self.assertRaises(VerificationError):
                 verify_manifest(invalid)
 
+    def test_requires_data_sync_foreground_declaration_and_permissions(self) -> None:
+        for invalid in (
+            VALID_MANIFEST.replace('android:foregroundServiceType="dataSync"', ""),
+            VALID_MANIFEST.replace(
+                '<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />',
+                "",
+            ),
+            VALID_MANIFEST.replace(
+                '<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />',
+                "",
+            ),
+        ):
+            with self.assertRaisesRegex(VerificationError, "foreground|dataSync"):
+                verify_manifest(invalid)
+
     def test_rejects_native_runtime_construction_outside_worker(self) -> None:
         sources = valid_sources()
         sources["com/ashcastle/duckyslicer/OnDeviceSlicer.kt"] += "\nNativeLibrary()"
@@ -96,7 +126,12 @@ class VerifyAndroidIsolationTest(unittest.TestCase):
             ("imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp", "imperfect-mesh"),
             ("nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly", "crash recovery"),
             ("activeSliceCancellationKeepsServiceResponsiveAndRestartsCleanly", "active-slice"),
-            ("activeSliceSurvivesActivityRecreationAndCompletes", "configuration-recreation"),
+            ("activeSliceSurvivesActivityRecreationAndCompletes", "configuration/background"),
+            ("Background Activity must retain the foreground slice", "configuration/background"),
+            (
+                "The slicer service must be foreground while the Activity is stopped",
+                "configuration/background",
+            ),
         ):
             with self.assertRaisesRegex(VerificationError, message):
                 verify_sources(valid_sources(), VALID_DEVICE_TEST.replace(missing, ""))
@@ -137,6 +172,22 @@ class VerifyAndroidIsolationTest(unittest.TestCase):
             sources = valid_sources()
             sources[source_path] = sources[source_path].replace(marker, "")
             with self.assertRaisesRegex(VerificationError, "cancellation"):
+                verify_sources(sources, VALID_DEVICE_TEST)
+
+    def test_requires_foreground_lifecycle_and_notification_cancellation(self) -> None:
+        for marker in (
+            "startForegroundService(",
+            "FOREGROUND_SERVICE_TYPE_DATA_SYNC",
+            "override fun onTimeout(",
+            "ACTION_CANCEL_SLICE",
+            "ACTION_FINISH_SLICE",
+            "ForegroundSliceSession.markCanceled(",
+            "ForegroundSliceSession.wasCanceled(this, requestId)",
+        ):
+            sources = valid_sources()
+            service_path = "com/ashcastle/duckyslicer/SlicerProcessService.kt"
+            sources[service_path] = sources[service_path].replace(marker, "")
+            with self.assertRaisesRegex(VerificationError, "foreground|notification"):
                 verify_sources(sources, VALID_DEVICE_TEST)
 
 

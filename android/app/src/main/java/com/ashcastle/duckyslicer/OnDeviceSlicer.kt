@@ -1124,9 +1124,10 @@ object OnDeviceSlicer {
         onProgress = onProgress,
     )
 
-    fun slice(
+    internal fun slice(
         objects: List<ProjectObject>,
         options: SliceOptions = SliceOptions(),
+        foregroundSession: ForegroundSliceSession? = null,
         cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit = {},
     ): SliceOutcome {
@@ -1155,8 +1156,9 @@ object OnDeviceSlicer {
                     transformedModels,
                     supportPaintFiles,
                     options,
-                    cancellationRequested,
-                    onProgress,
+                    foregroundSession = foregroundSession,
+                    cancellationRequested = cancellationRequested,
+                    onProgress = onProgress,
                 )
             } finally {
                 supportPaintFiles.filterNotNull().forEach(File::delete)

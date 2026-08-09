@@ -276,6 +276,10 @@ private fun DataPracticesDialog(onDismiss: () -> Unit) {
                     body = stringResource(R.string.data_stored_body),
                 )
                 DataPracticesSection(
+                    title = stringResource(R.string.background_slicing_title),
+                    body = stringResource(R.string.background_slicing_body),
+                )
+                DataPracticesSection(
                     title = stringResource(R.string.printer_connection_data_title),
                     body = stringResource(R.string.printer_connection_data_body),
                 )

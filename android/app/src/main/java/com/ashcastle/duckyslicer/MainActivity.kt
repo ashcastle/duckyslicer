@@ -1,8 +1,11 @@
 package com.ashcastle.duckyslicer
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.util.Log
@@ -48,6 +51,8 @@ private val DuckyColors = darkColorScheme(
 )
 
 internal const val GCODE_DOCUMENT_MIME_TYPE = "application/octet-stream"
+private const val SLICE_NOTIFICATION_PREFERENCES = "slice_notifications"
+private const val SLICE_NOTIFICATION_PERMISSION_ASKED = "permission_asked"
 
 data class ModelInfo(
     val fileName: String,
@@ -474,7 +479,7 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
         }
     }
 
-    val startSlice = {
+    fun beginSlice() {
         val objects = projectObjects
         if (
             objects.isNotEmpty() &&
@@ -486,6 +491,32 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
             remoteUpload = null
             error = null
             notice = null
+        }
+    }
+    val sliceNotificationPreferences = remember(context) {
+        context.getSharedPreferences(SLICE_NOTIFICATION_PREFERENCES, Context.MODE_PRIVATE)
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        beginSlice()
+    }
+    val startSlice = {
+        val shouldRequestNotification =
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED &&
+                !sliceNotificationPreferences.getBoolean(
+                    SLICE_NOTIFICATION_PERMISSION_ASKED,
+                    false,
+                )
+        if (shouldRequestNotification) {
+            sliceNotificationPreferences.edit()
+                .putBoolean(SLICE_NOTIFICATION_PERMISSION_ASKED, true)
+                .apply()
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            beginSlice()
         }
     }
 
