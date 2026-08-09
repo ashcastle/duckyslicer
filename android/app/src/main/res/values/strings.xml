@@ -313,6 +313,8 @@
     <string name="other_profiles">Other</string>
     <string name="no_profiles_found">No matching profiles</string>
     <string name="save_as_new_profile">Save as new profile</string>
+    <string name="revert_changes">Revert</string>
+    <string name="apply_changes">Apply</string>
     <string name="profile_saved">Profile saved.</string>
     <string name="profile_save_error">Couldn’t save this profile.</string>
     <string name="project_save_error">Couldn’t save this project.</string>

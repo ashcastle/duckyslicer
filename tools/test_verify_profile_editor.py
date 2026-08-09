@@ -18,6 +18,9 @@ def valid_sources() -> dict[str, str]:
             "scrollKey = selectedSection SlicingSettingsSection.entries.forEach"
             " recentIds: List<String> val recentProfilesKey = \"recent-profiles\" "
             "add(ProfileChoiceGroup(recentProfilesKey, recentProfiles, recentEntries))"
+            " data class ProfileEditSession( val isDirty: Boolean get() = working != opening "
+            "fun revert(): ProfileEditSession fun applied(): ProfileEditSession "
+            "ProfileDirtyActionBar( Modifier.weight(3f) Modifier.weight(7f) .imePadding()"
         ),
         "ProfileRecents.kt": (
             "data class ProfileRecents( MAX_RECENT_PROFILES = 5 class ProfileRecentStore "
@@ -28,6 +31,10 @@ def valid_sources() -> dict[str, str]:
             "threeProfileKindsRoundTripIndependently "
             "corruptPrimaryRecoversLastKnownGoodRecentProfiles"
         ),
+        "ProfileEditSessionTest.kt": (
+            "changesStayStagedUntilApplied revertRestoresTheOpeningSnapshot "
+            "applyPromotesWorkingValuesWithoutClosingTheSession"
+        ),
         "SlicingSettingsSectionTest.kt": (
             "processEditorUsesOrcaStyleSectionOrder "
             'listOf("QUALITY", "STRENGTH", "SPEED", "SUPPORT", "OTHERS") '
@@ -35,11 +42,11 @@ def valid_sources() -> dict[str, str]:
         ),
         "strings.xml": (
             'name="quality" name="strength" name="speed" name="supports" name="others" '
-            'name="recent_profiles"'
+            'name="recent_profiles" name="revert_changes" name="apply_changes"'
         ),
         "strings-ko.xml": (
             'name="quality" name="strength" name="speed" name="supports" name="others" '
-            'name="recent_profiles"'
+            'name="recent_profiles" name="revert_changes" name="apply_changes"'
         ),
         "CONTRIBUTING.md": "Quality Strength Speed Support Others",
     }
@@ -78,6 +85,14 @@ class VerifyProfileEditorTest(unittest.TestCase):
             "DurableJsonFile", "VolatileMemory"
         )
         with self.assertRaisesRegex(VerificationError, "DurableJsonFile"):
+            verify_profile_editor(sources)
+
+    def test_rejects_non_sticky_equal_width_profile_actions(self) -> None:
+        sources = valid_sources()
+        sources["ProfileSettingsSheet.kt"] = sources["ProfileSettingsSheet.kt"].replace(
+            "Modifier.weight(7f)", "Modifier.weight(3f)"
+        )
+        with self.assertRaisesRegex(VerificationError, r"weight\(7f\)"):
             verify_profile_editor(sources)
 
 
