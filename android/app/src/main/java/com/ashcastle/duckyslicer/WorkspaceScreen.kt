@@ -27,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.ContentCopy
@@ -40,6 +41,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -305,30 +307,39 @@ fun WorkspaceScreen(
                 )
             }
 
-            Surface(
-                color = Color.Black.copy(alpha = 0.62f),
-                contentColor = Color(0xFFF4F4EE),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(
-                        top = 16.dp,
-                        end = 16.dp,
-                    )
-                    .widthIn(max = 280.dp),
-            ) {
-                Text(
-                    text = selectedObject?.model?.fileName
-                        ?: if (projectObjects.isEmpty()) {
-                            stringResource(R.string.no_model)
-                        } else {
-                            stringResource(R.string.object_count, projectObjects.size)
-                        },
-                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.labelLarge,
+            if (selectedTab == WorkspaceTab.PREVIEW) {
+                PreviewExportSplitButton(
+                    canExport = sliceOutcome != null,
+                    canSend = sliceOutcome != null && selectedRemoteDeviceId != null && !remoteBusy,
+                    onExport = onSave,
+                    onSend = onRemoteUpload,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 16.dp, end = 16.dp),
                 )
+            } else {
+                Surface(
+                    color = Color.Black.copy(alpha = 0.62f),
+                    contentColor = Color(0xFFF4F4EE),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 16.dp, end = 16.dp)
+                        .widthIn(max = 280.dp),
+                ) {
+                    Text(
+                        text = selectedObject?.model?.fileName
+                            ?: if (projectObjects.isEmpty()) {
+                                stringResource(R.string.no_model)
+                            } else {
+                                stringResource(R.string.object_count, projectObjects.size)
+                            },
+                        modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
             }
 
             when (selectedTab) {
@@ -668,6 +679,65 @@ private fun WorkspaceMenu(
                 onClick = {
                     expanded = false
                     onExport()
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PreviewExportSplitButton(
+    canExport: Boolean,
+    canSend: Boolean,
+    onExport: () -> Unit,
+    onSend: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                color = Color.Black.copy(alpha = 0.68f),
+                contentColor = Color(0xFFF4F4EE),
+                shape = RoundedCornerShape(topStart = 50.dp, bottomStart = 50.dp),
+                modifier = Modifier.width(34.dp).height(50.dp),
+            ) {
+                IconButton(
+                    enabled = canExport,
+                    onClick = { expanded = true },
+                ) {
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = stringResource(R.string.export_options))
+                }
+            }
+            Spacer(Modifier.width(2.dp))
+            Surface(
+                color = WorkspaceYellow,
+                contentColor = WorkspaceBlack,
+                shape = RoundedCornerShape(50),
+                modifier = Modifier.size(50.dp),
+            ) {
+                IconButton(enabled = canExport, onClick = onExport) {
+                    Icon(Icons.Default.SaveAlt, contentDescription = stringResource(R.string.export_gcode))
+                }
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.export_gcode)) },
+                leadingIcon = { Icon(Icons.Default.SaveAlt, null) },
+                enabled = canExport,
+                onClick = {
+                    expanded = false
+                    onExport()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.send_gcode)) },
+                leadingIcon = { Icon(Icons.Default.UploadFile, null) },
+                enabled = canSend,
+                onClick = {
+                    expanded = false
+                    onSend()
                 },
             )
         }

@@ -99,6 +99,11 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "detail = effectivePreviewDetail",
         "compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = false)",
         "compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = true)",
+        "if (selectedTab == WorkspaceTab.PREVIEW)",
+        "PreviewExportSplitButton(",
+        "Icons.Default.ArrowDropDown",
+        "Icons.Default.SaveAlt",
+        "onSend = onRemoteUpload",
     ):
         if marker not in workspace:
             raise VerificationError(f"preview device policy is not connected to the UI: {marker}")

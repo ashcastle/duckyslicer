@@ -51,6 +51,7 @@
     <string name="menu">메뉴</string>
     <string name="import_model">모델 임포트</string>
     <string name="export_gcode">G-code 내보내기</string>
+    <string name="export_options">내보내기 옵션</string>
     <string name="import_from_menu">위 메뉴에서 모델을 임포트하세요.</string>
     <string name="edit_model">모델 편집</string>
     <string name="drag_to_move">끌어서 이동</string>

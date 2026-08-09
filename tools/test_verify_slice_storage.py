@@ -25,7 +25,11 @@ def valid_sources() -> dict[str, str]:
             "+maximum_gcode_bytes\n+RLIMIT_FSIZE\n+getrlimit\n+setrlimit\n"
             "+MAXIMUM_GCODE_BYTES\n+LEGACY_GCODE_PREVIEW_BYTES\n+gcode_file.read"
         ),
-        "MainActivity.kt": " ".join(["SliceArtifactLease.acquire"] * 3),
+        "MainActivity.kt": (
+            "GCODE_DOCUMENT_MIME_TYPE = \"application/octet-stream\" "
+            "CreateDocument(GCODE_DOCUMENT_MIME_TYPE) "
+            + " ".join(["SliceArtifactLease.acquire"] * 3)
+        ),
         "RemoteDevice.kt": "SliceArtifactLease.acquire(gcode)",
         "SliceArtifactStoreTest.kt": (
             "pruningEnforcesCountAndByteBudgetsOldestFirst "
@@ -61,6 +65,14 @@ class VerifySliceStorageTest(unittest.TestCase):
         sources = valid_sources()
         sources["RemoteDevice.kt"] = "upload without a lease"
         with self.assertRaisesRegex(VerificationError, "remote upload"):
+            verify_slice_storage(sources)
+
+    def test_rejects_text_plain_gcode_export(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+            "CreateDocument(GCODE_DOCUMENT_MIME_TYPE)", 'CreateDocument("text/plain")'
+        )
+        with self.assertRaisesRegex(VerificationError, "document contract|txt-producing"):
             verify_slice_storage(sources)
 
     def test_rejects_missing_native_file_size_limit(self) -> None:
