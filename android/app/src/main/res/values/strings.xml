@@ -291,6 +291,14 @@
     <string name="seconds_value">%1$.0f s</string>
     <string name="celsius_value">%1$d °C</string>
     <string name="percent_value">%1$d%%</string>
+    <string name="estimated_print_time">Estimated print time</string>
+    <string name="filament_usage">Filament usage</string>
+    <string name="duration_under_one_minute">&lt; 1 min</string>
+    <string name="duration_minutes">%1$d min</string>
+    <string name="duration_hours_minutes">%1$d h %2$d min</string>
+    <string name="filament_usage_compact">%1$.1f g · %2$.2f m</string>
+    <string name="expand_preview_controls">Expand preview controls</string>
+    <string name="collapse_preview_controls">Collapse preview controls</string>
     <string name="layer_range">Layers %1$d–%2$d of %3$d</string>
     <string name="z_range">Z %1$.2f–%2$.2f mm</string>
     <string name="toolpath_opacity">Toolpath visibility · %1$d%%</string>
