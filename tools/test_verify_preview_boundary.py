@@ -46,6 +46,10 @@ def valid_sources() -> dict[str, str]:
             "var previewControlsExpanded by rememberSaveable PreviewSummaryHeader( "
             "Icons.Default.ExpandLess Icons.Default.ExpandMore "
             "summary.filamentGrams summary.filamentMeters"
+            " private fun PreviewExportSplitButton( .width(48.dp) .height(50.dp) "
+            ".clickable( role = Role.Button modifier = Modifier.width(34.dp).height(50.dp) "
+            "@Composable private fun PreviewControls( .heightIn(min = 48.dp) .toggleable( "
+            "@Composable"
         ),
         "MainActivity.kt": "GcodeLayerPreview.fromNative GcodeLayerPreview.fromNative",
         "OnDeviceSlicer.kt": "val filamentMm: Float",
@@ -169,6 +173,22 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "PreviewExportSplitButton(", "ModelNameBadge("
         )
         with self.assertRaisesRegex(VerificationError, "PreviewExportSplitButton"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_undersized_preview_export_hit_target(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            ".width(48.dp)", ".width(34.dp)", 1
+        )
+        with self.assertRaisesRegex(VerificationError, r"width\(48\.dp\)"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_undersized_toolpath_role_toggle(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            ".heightIn(min = 48.dp)", ".heightIn(min = 32.dp)", 1
+        )
+        with self.assertRaisesRegex(VerificationError, "48 dp minimum"):
             verify_preview_boundary(sources)
 
     def test_rejects_missing_collapsed_preview_summary(self) -> None:
