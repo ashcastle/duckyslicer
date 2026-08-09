@@ -38,6 +38,26 @@ internal object SlicerProcessClient {
         transformedModels: List<File>,
         options: SliceOptions,
         onProgress: (Int) -> Unit,
+    ): SliceOutcome = sliceInternal(transformedModels, options, null, onProgress)
+
+    internal fun sliceWithOutputLimitForTest(
+        transformedModels: List<File>,
+        options: SliceOptions,
+        maximumGcodeBytes: Int,
+        onProgress: (Int) -> Unit = {},
+    ): SliceOutcome {
+        check(BuildConfig.DEBUG) { "G-code output overrides are available only in debug builds" }
+        require(maximumGcodeBytes in TEST_MINIMUM_GCODE_BYTES..PRODUCTION_MAXIMUM_GCODE_BYTES) {
+            "Invalid test G-code output limit"
+        }
+        return sliceInternal(transformedModels, options, maximumGcodeBytes, onProgress)
+    }
+
+    private fun sliceInternal(
+        transformedModels: List<File>,
+        options: SliceOptions,
+        maximumGcodeBytesForTest: Int?,
+        onProgress: (Int) -> Unit,
     ): SliceOutcome {
         check(Looper.myLooper() != Looper.getMainLooper()) {
             "Slicing must run outside the application main thread"
@@ -56,6 +76,9 @@ internal object SlicerProcessClient {
                 ArrayList(modelPaths),
             )
             putString(SlicerProcessContract.KEY_OPTIONS, optionsText)
+            maximumGcodeBytesForTest?.let {
+                putInt(SlicerProcessContract.KEY_MAXIMUM_GCODE_BYTES_FOR_TEST, it)
+            }
         }
         check(activeRequestId.compareAndSet(null, requestId)) {
             "Another slice is already running"
@@ -332,6 +355,8 @@ internal object SlicerProcessClient {
     private const val CONNECTION_TIMEOUT_SECONDS = 10L
     private const val SLICE_TIMEOUT_SECONDS = 30L * 60L
     private const val TEST_PROBE_TIMEOUT_SECONDS = 60L
+    private const val TEST_MINIMUM_GCODE_BYTES = 16 * 1_024
+    private const val PRODUCTION_MAXIMUM_GCODE_BYTES = 1_073_741_824
 }
 
 internal class SlicingCancelledException : Exception("Slicing was cancelled")
@@ -542,7 +567,19 @@ class SlicerProcessService : Service() {
         val options = requireNotNull(JSONObject(optionsText).toProjectSliceOptionsOrNull()) {
             "Slice settings are invalid"
         }
-        success(runNativeSlice(models, options, onProgress))
+        val maximumGcodeBytes = if (
+            BuildConfig.DEBUG &&
+            extras.containsKey(SlicerProcessContract.KEY_MAXIMUM_GCODE_BYTES_FOR_TEST)
+        ) {
+            extras.getInt(SlicerProcessContract.KEY_MAXIMUM_GCODE_BYTES_FOR_TEST).also {
+                require(it in TEST_MINIMUM_GCODE_BYTES..PRODUCTION_MAXIMUM_GCODE_BYTES) {
+                    "Invalid test G-code output limit"
+                }
+            }
+        } else {
+            PRODUCTION_MAXIMUM_GCODE_BYTES
+        }
+        success(runNativeSlice(models, options, maximumGcodeBytes, onProgress))
     } catch (error: Exception) {
         failure(error.message ?: "Slicer operation failed")
     }
@@ -550,6 +587,7 @@ class SlicerProcessService : Service() {
     private fun runNativeSlice(
         models: List<File>,
         options: SliceOptions,
+        maximumGcodeBytes: Int,
         onProgress: (Int) -> Unit,
     ): SliceOutcome {
         artifactStore.prepareForSlice()
@@ -562,7 +600,10 @@ class SlicerProcessService : Service() {
             check(runtime.getObjectBoundingBoxes().size == models.size * 3) {
                 "Native model count does not match the request"
             }
-            val result = requireNotNull(runtime.slice(options.toNativeConfig())) {
+            val nativeConfig = options.toNativeConfig().apply {
+                this.maximumGcodeBytes = maximumGcodeBytes
+            }
+            val result = requireNotNull(runtime.slice(nativeConfig)) {
                 "Slicer returned no output"
             }
             check(result.success) {
@@ -628,6 +669,8 @@ class SlicerProcessService : Service() {
         const val CANCEL_PROCESS_DELAY_MILLIS = 50L
         const val TEST_PROBE_DURATION_MILLIS = 30_000L
         const val STORAGE_GUARD_INTERVAL_MILLIS = 500L
+        const val TEST_MINIMUM_GCODE_BYTES = 16 * 1_024
+        const val PRODUCTION_MAXIMUM_GCODE_BYTES = 1_073_741_824
     }
 }
 
@@ -642,6 +685,7 @@ private object SlicerProcessContract {
     const val KEY_REQUEST_ID = "requestId"
     const val KEY_MODEL_PATHS = "modelPaths"
     const val KEY_OPTIONS = "options"
+    const val KEY_MAXIMUM_GCODE_BYTES_FOR_TEST = "maximumGcodeBytesForTest"
     const val KEY_OK = "ok"
     const val KEY_ERROR = "error"
     const val KEY_PID = "pid"

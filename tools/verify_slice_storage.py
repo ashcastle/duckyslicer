@@ -16,7 +16,9 @@ class VerificationError(ValueError):
 def verify_slice_storage(sources: dict[str, str]) -> None:
     required = {
         "SliceArtifactStore.kt",
+        "SliceConfig.kt",
         "SlicerProcessService.kt",
+        "runtime.patch",
         "MainActivity.kt",
         "RemoteDevice.kt",
         "SliceArtifactStoreTest.kt",
@@ -55,11 +57,38 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "transientRoots = listOf(filesDir, cacheDir)",
         "estimatedTimeSeconds.isFinite()",
         "estimatedFilamentGrams.isFinite()",
+        "sliceWithOutputLimitForTest",
+        "KEY_MAXIMUM_GCODE_BYTES_FOR_TEST",
+        "PRODUCTION_MAXIMUM_GCODE_BYTES",
+        "this.maximumGcodeBytes = maximumGcodeBytes",
     ):
         if marker not in service:
             raise VerificationError(f"slicer worker storage containment is missing: {marker}")
     if ".drop(MAX_RETAINED_OUTPUTS)" in service:
         raise VerificationError("slicer worker reverted to count-only output pruning")
+
+    if "maximumGcodeBytes: Int = 1_073_741_824" not in sources["SliceConfig.kt"]:
+        raise VerificationError("JNI G-code output ceiling is missing")
+
+    runtime_patch = sources["runtime.patch"]
+    added_runtime = "\n".join(
+        line[1:]
+        for line in runtime_patch.splitlines()
+        if line.startswith("+") and not line.startswith("+++")
+    )
+    for marker in (
+        "maximum_gcode_bytes",
+        "RLIMIT_FSIZE",
+        "getrlimit",
+        "setrlimit",
+        "MAXIMUM_GCODE_BYTES",
+        "LEGACY_GCODE_PREVIEW_BYTES",
+        "gcode_file.read",
+    ):
+        if marker not in added_runtime:
+            raise VerificationError(f"native G-code writer containment is missing: {marker}")
+    if "gcode_file.rdbuf()" in added_runtime:
+        raise VerificationError("native compatibility preview reads the complete G-code")
 
     if sources["MainActivity.kt"].count("SliceArtifactLease.acquire") < 3:
         raise VerificationError("preview and export readers are not all leased")
@@ -77,14 +106,17 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
     ):
         if marker not in tests:
             raise VerificationError(f"slice storage host regression is missing: {marker}")
-    if "sliceArtifactLeaseProtectsConcurrentReadersAcrossProcesses" not in sources[
-        "NativeEngineInstrumentedTest.kt"
-    ]:
+    device_tests = sources["NativeEngineInstrumentedTest.kt"]
+    if "sliceArtifactLeaseProtectsConcurrentReadersAcrossProcesses" not in device_tests:
         raise VerificationError("cross-process ARM64 artifact lease regression is missing")
+    if "nativeGcodeWriterHardLimitContainsDiskGrowthAndRecovers" not in device_tests:
+        raise VerificationError("ARM64 native G-code hard-limit recovery regression is missing")
 
     for document in ("README.md", "SECURITY.md", "CONTRIBUTING.md"):
         if "G-code" not in sources[document] or "lease" not in sources[document].lower():
             raise VerificationError(f"slice artifact policy is not documented in {document}")
+        if "RLIMIT_FSIZE" not in sources[document]:
+            raise VerificationError(f"native G-code hard limit is not documented in {document}")
 
 
 def read_sources() -> dict[str, str]:
@@ -93,7 +125,13 @@ def read_sources() -> dict[str, str]:
     device_tests = ROOT / "android/app/src/androidTest/java/com/ashcastle/duckyslicer"
     return {
         "SliceArtifactStore.kt": (main / "SliceArtifactStore.kt").read_text(encoding="utf-8"),
+        "SliceConfig.kt": (
+            ROOT / "android/app/src/main/java/com/u1/slicer/data/SliceConfig.kt"
+        ).read_text(encoding="utf-8"),
         "SlicerProcessService.kt": (main / "SlicerProcessService.kt").read_text(encoding="utf-8"),
+        "runtime.patch": (ROOT / "native/slicer-runtime/runtime.patch").read_text(
+            encoding="utf-8"
+        ),
         "MainActivity.kt": (main / "MainActivity.kt").read_text(encoding="utf-8"),
         "RemoteDevice.kt": (main / "RemoteDevice.kt").read_text(encoding="utf-8"),
         "SliceArtifactStoreTest.kt": (tests / "SliceArtifactStoreTest.kt").read_text(

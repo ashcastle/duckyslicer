@@ -224,4 +224,6 @@ data class SliceConfig(
     @JvmField var filamentBedTempInitialLayers: IntArray = intArrayOf(),
     @JvmField var filamentCosts: FloatArray = floatArrayOf(),
     @JvmField var mixedFilamentDefinitions: String = "",
+    /** Process-local safety ceiling applied before Orca writes G-code. */
+    @JvmField var maximumGcodeBytes: Int = 1_073_741_824,
 )

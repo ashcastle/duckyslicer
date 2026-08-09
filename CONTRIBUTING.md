@@ -92,8 +92,10 @@ and the ARM64 production parser test to change together.
 
 Generated G-code changes must retain the per-output and total-byte limits, free-space
 reserve, stale-output recovery, and reader lease around every preview, export, and
-printer-upload stream. Run both the host storage regressions and the ARM64
-cross-process lease regression when changing retention or file access.
+printer-upload stream. The isolated native writer's `RLIMIT_FSIZE` ceiling and bounded
+compatibility preview cache are part of that contract; do not replace either with a
+periodic-only check or a full-file read. Run the host storage regressions and both ARM64
+hard-limit recovery and cross-process lease regressions when changing retention or file access.
 
 Workflow changes must keep third-party Actions pinned to full commit hashes. A
 tagged release must preserve the build → isolated sign → ARM64 device test →

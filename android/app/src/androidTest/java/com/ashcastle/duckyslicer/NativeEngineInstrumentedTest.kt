@@ -948,6 +948,54 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun nativeGcodeWriterHardLimitContainsDiskGrowthAndRecovers() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val appPid = android.os.Process.myPid()
+        val maximumBytes = 32 * 1_024
+        val transientOutputs = listOf(context.filesDir, context.cacheDir).map {
+            File(it, SliceArtifactStore.NATIVE_OUTPUT_NAME)
+        }
+        val limitedWorkerPid = SlicerProcessClient.workerHealthForTest(context)
+        assertNotEquals("Orca must run outside the application process", appPid, limitedWorkerPid)
+
+        val failure = runCatching {
+            SlicerProcessClient.sliceWithOutputLimitForTest(
+                transformedModels = listOf(fixtureModel()),
+                options = SliceOptions().selectQuality(QualityProfile.DRAFT),
+                maximumGcodeBytes = maximumBytes,
+            )
+        }
+
+        assertTrue("The native writer must reject a truncated slice", failure.isFailure)
+        assertEquals("The output limit must not terminate the app", appPid, android.os.Process.myPid())
+        val limitedOutputs = transientOutputs.filter(File::exists)
+        limitedOutputs.forEach { output ->
+            assertTrue(
+                "Native output must stop at the process file-size limit: ${output.length()}",
+                output.length() in 1..maximumBytes.toLong(),
+            )
+        }
+
+        val healthyWorkerPid = SlicerProcessClient.workerHealthForTest(context)
+        assertTrue("A worker must be available after the native write failure", healthyWorkerPid > 0)
+        assertNotEquals("Orca must remain isolated from the app", appPid, healthyWorkerPid)
+        assertNotEquals(
+            "The file-size signal must replace the limited worker",
+            limitedWorkerPid,
+            healthyWorkerPid,
+        )
+
+        val recovery = OnDeviceSlicer.slice(
+            fixtureModel(),
+            SliceOptions().selectQuality(QualityProfile.DRAFT),
+        )
+        assertTrue(
+            "A normal request must restore the production limit and complete",
+            recovery.output.length() > maximumBytes,
+        )
+    }
+
+    @Test
     fun sliceArtifactLeaseProtectsConcurrentReadersAcrossProcesses() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val outputRoot = File(context.filesDir, SliceArtifactStore.OUTPUT_DIRECTORY).apply { mkdirs() }
