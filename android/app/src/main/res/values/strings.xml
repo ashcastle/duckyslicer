@@ -395,6 +395,7 @@
     <string name="confirm_remote_print">Confirm before starting</string>
     <string name="confirm_remote_print_summary">Shows one last check before a remote print begins.</string>
     <string name="connection_timeout">Wait up to %1$d seconds</string>
+    <string name="connection_timeout_control">Connection timeout</string>
     <string name="connection_security_summary">Access keys are protected on this device. Unencrypted connections are limited to local addresses.</string>
     <string name="language_settings">Language</string>
     <string name="data_privacy">Data &amp; privacy</string>

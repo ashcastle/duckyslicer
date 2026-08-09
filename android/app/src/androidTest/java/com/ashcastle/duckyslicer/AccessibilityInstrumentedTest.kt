@@ -1,6 +1,8 @@
 package com.ashcastle.duckyslicer
 
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.graphics.Rect
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.core.app.ActivityScenario
@@ -8,6 +10,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -82,6 +85,90 @@ class AccessibilityInstrumentedTest {
         }
     }
 
+    @Test
+    fun appSettingsExposeNamedSlidersWholeRowSwitchesAndHeadings() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val sliderLabels = setOf(
+            context.getString(R.string.toolpath_visibility_control),
+            context.getString(R.string.toolpath_depth_contrast_control),
+            context.getString(R.string.connection_timeout_control),
+        )
+        val switchLabels = setOf(
+            context.getString(R.string.keep_screen_awake),
+            context.getString(R.string.confirm_remote_print),
+        )
+        launchHarness(AccessibilityHarnessActivity.SCREEN_SETTINGS).use {
+            val nodes = waitForNodes(sliderLabels + switchLabels)
+            sliderLabels.forEach { label ->
+                assertEquals(
+                    "$label must identify exactly one adjustable Settings control",
+                    1,
+                    nodes.count {
+                        it.className?.toString() == SEEK_BAR_CLASS &&
+                            it.effectiveLabel().contains(label)
+                    },
+                )
+            }
+            switchLabels.forEach { label ->
+                assertEquals(
+                    "$label must expose one whole-row toggle action",
+                    1,
+                    nodes.count { it.isClickable && it.isCheckable && it.effectiveLabel().contains(label) },
+                )
+            }
+            assertTrue(
+                "Settings must be navigable by screen-reader headings",
+                nodes.any {
+                    it.isHeading && it.effectiveLabel().contains(context.getString(R.string.preview_settings))
+                },
+            )
+        }
+    }
+
+    @Test
+    fun largeTextLandscapeKeepsMenuClearOfScrollableWorkspaceSheet() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val menuLabel = context.getString(R.string.menu)
+        val profileLabel = context.getString(R.string.printer_profile)
+        val profilesHeading = context.getString(R.string.profiles)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            }
+            val nodes = waitForNodes(
+                setOf(menuLabel, profileLabel, profilesHeading),
+                requireLandscape = true,
+            )
+            val menu = nodes.firstOrNull {
+                it.isClickable && it.effectiveLabel().contains(menuLabel)
+            }
+            val printerProfile = nodes.firstOrNull {
+                it.isClickable && it.effectiveLabel().contains(profileLabel)
+            }
+            assertNotNull("The import menu must remain actionable at 200% text in landscape", menu)
+            assertNotNull("The workspace sheet must remain actionable at 200% text in landscape", printerProfile)
+            checkNotNull(menu)
+            checkNotNull(printerProfile)
+            assertTrue("The import menu must remain visible to accessibility services", menu.isVisibleToUser)
+            assertTrue("The profile row must remain visible to accessibility services", printerProfile.isVisibleToUser)
+            assertTrue("The import menu must remain keyboard and switch-access focusable", menu.isFocusable)
+            assertTrue("The profile row must remain keyboard and switch-access focusable", printerProfile.isFocusable)
+            assertTrue(
+                "The height-limited sheet must not cover the import menu: " +
+                    "menu=${menu.screenBounds()}, profile=${printerProfile.screenBounds()}",
+                !Rect.intersects(menu.screenBounds(), printerProfile.screenBounds()),
+            )
+            assertTrue(
+                "Profiles must expose a heading for rotor navigation",
+                nodes.any { it.isHeading && it.effectiveLabel().contains(profilesHeading) },
+            )
+            assertTrue(
+                "Reading order must reach the menu before the scrollable profile sheet",
+                nodes.indexOf(menu) < nodes.indexOf(printerProfile),
+            )
+        }
+    }
+
     private fun launchHarness(screen: String): ActivityScenario<AccessibilityHarnessActivity> {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         return ActivityScenario.launch(
@@ -90,12 +177,21 @@ class AccessibilityInstrumentedTest {
         )
     }
 
-    private fun waitForNodes(labels: Set<String>): List<AccessibilityNodeInfo> {
+    private fun waitForNodes(
+        labels: Set<String>,
+        requireLandscape: Boolean = false,
+    ): List<AccessibilityNodeInfo> {
         val deadline = SystemClock.elapsedRealtime() + NODE_TIMEOUT_MILLIS
         do {
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
             val nodes = currentNodes()
-            if (labels.all { expected -> nodes.any { it.effectiveLabel().contains(expected) } }) {
+            val windowBounds = nodes.firstOrNull()?.screenBounds()
+            val orientationMatches = !requireLandscape ||
+                (windowBounds != null && windowBounds.width() > windowBounds.height())
+            if (
+                orientationMatches &&
+                labels.all { expected -> nodes.any { it.effectiveLabel().contains(expected) } }
+            ) {
                 return nodes
             }
             SystemClock.sleep(NODE_POLL_MILLIS)
@@ -125,6 +221,8 @@ class AccessibilityInstrumentedTest {
         }
         return parts.distinct().joinToString(" ")
     }
+
+    private fun AccessibilityNodeInfo.screenBounds(): Rect = Rect().also(::getBoundsInScreen)
 
     private companion object {
         const val SEEK_BAR_CLASS = "android.widget.SeekBar"

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -39,6 +40,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
@@ -51,6 +57,21 @@ internal fun AppSettingsSheet(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val toolpathVisibilityLabel = stringResource(R.string.toolpath_visibility_control)
+    val toolpathVisibilityState = stringResource(
+        R.string.percent_value,
+        (settings.toolpathOpacity * 100).roundToInt(),
+    )
+    val toolpathDepthLabel = stringResource(R.string.toolpath_depth_contrast_control)
+    val toolpathDepthState = stringResource(
+        R.string.percent_value,
+        (settings.toolpathDepthContrast * 100).roundToInt(),
+    )
+    val connectionTimeoutLabel = stringResource(R.string.connection_timeout_control)
+    val connectionTimeoutState = stringResource(
+        R.string.seconds_value,
+        settings.connectionTimeoutSeconds.toFloat(),
+    )
     var legalDocument by remember { mutableStateOf<LegalDocument?>(null) }
     var showDataPractices by remember { mutableStateOf(false) }
 
@@ -66,9 +87,9 @@ internal fun AppSettingsSheet(
             modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge)
+            SettingsHeading(stringResource(R.string.settings), primary = true)
 
-            Text(stringResource(R.string.preview_settings), fontWeight = FontWeight.Bold)
+            SettingsHeading(stringResource(R.string.preview_settings))
             Text(stringResource(R.string.preview_renderer), color = Color(0xFFC8C9C2))
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
@@ -133,6 +154,10 @@ internal fun AppSettingsSheet(
             Slider(
                 value = settings.toolpathOpacity,
                 onValueChange = { onSettingsChanged(settings.copy(toolpathOpacity = it)) },
+                modifier = Modifier.semantics {
+                    contentDescription = toolpathVisibilityLabel
+                    stateDescription = toolpathVisibilityState
+                },
                 valueRange = 0.3f..1f,
                 colors = duckySliderColors(),
             )
@@ -146,6 +171,10 @@ internal fun AppSettingsSheet(
             Slider(
                 value = settings.toolpathDepthContrast,
                 onValueChange = { onSettingsChanged(settings.copy(toolpathDepthContrast = it)) },
+                modifier = Modifier.semantics {
+                    contentDescription = toolpathDepthLabel
+                    stateDescription = toolpathDepthState
+                },
                 valueRange = 0f..1f,
                 colors = duckySliderColors(),
             )
@@ -159,7 +188,7 @@ internal fun AppSettingsSheet(
                 },
             )
 
-            Text(stringResource(R.string.connection_settings), fontWeight = FontWeight.Bold)
+            SettingsHeading(stringResource(R.string.connection_settings))
             SettingsToggle(
                 title = stringResource(R.string.confirm_remote_print),
                 summary = stringResource(R.string.confirm_remote_print_summary),
@@ -177,16 +206,20 @@ internal fun AppSettingsSheet(
                 onValueChange = {
                     onSettingsChanged(settings.copy(connectionTimeoutSeconds = it.roundToInt()))
                 },
+                modifier = Modifier.semantics {
+                    contentDescription = connectionTimeoutLabel
+                    stateDescription = connectionTimeoutState
+                },
                 valueRange = 5f..60f,
                 steps = 10,
                 colors = duckySliderColors(),
             )
             Text(stringResource(R.string.connection_security_summary), color = Color(0xFFC8C9C2))
 
-            Text(stringResource(R.string.language_settings), fontWeight = FontWeight.Bold)
+            SettingsHeading(stringResource(R.string.language_settings))
             Text(stringResource(R.string.settings_message), color = Color(0xFFC8C9C2))
 
-            Text(stringResource(R.string.data_privacy), fontWeight = FontWeight.Bold)
+            SettingsHeading(stringResource(R.string.data_privacy))
             Text(
                 stringResource(R.string.data_privacy_summary),
                 color = Color(0xFFC8C9C2),
@@ -196,7 +229,7 @@ internal fun AppSettingsSheet(
                 Text(stringResource(R.string.data_handling_details))
             }
 
-            Text(stringResource(R.string.about), fontWeight = FontWeight.Bold)
+            SettingsHeading(stringResource(R.string.about))
             Text(
                 stringResource(R.string.app_version, BuildConfig.VERSION_NAME),
                 fontWeight = FontWeight.SemiBold,
@@ -304,7 +337,11 @@ private fun DataPracticesDialog(onDismiss: () -> Unit) {
 @Composable
 private fun DataPracticesSection(title: String, body: String) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, fontWeight = FontWeight.SemiBold)
+        Text(
+            title,
+            modifier = Modifier.semantics { heading() },
+            fontWeight = FontWeight.SemiBold,
+        )
         Text(
             body,
             color = Color(0xFFC8C9C2),
@@ -350,7 +387,17 @@ private fun SettingsToggle(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            )
+            .semantics(mergeDescendants = true) {
+                contentDescription = title
+            },
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -358,6 +405,16 @@ private fun SettingsToggle(
             Text(title, fontWeight = FontWeight.SemiBold)
             Text(summary, color = Color(0xFFC8C9C2), style = MaterialTheme.typography.bodySmall)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, onCheckedChange = null)
     }
+}
+
+@Composable
+private fun SettingsHeading(title: String, primary: Boolean = false) {
+    Text(
+        title,
+        modifier = Modifier.semantics { heading() },
+        style = if (primary) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge,
+        fontWeight = FontWeight.Bold,
+    )
 }
