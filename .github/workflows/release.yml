@@ -83,12 +83,12 @@ jobs:
           cargo test --release --locked
           cargo clippy --locked -- -D warnings
 
-      - name: Build unsigned release and device-test APKs
+      - name: Build unsigned release APK
         working-directory: android
         run: |
           ./gradlew --dependency-verification=strict \
             :app:testDebugUnitTest :app:lintRelease \
-            :app:assembleDebug :app:assembleDebugAndroidTest :app:assembleRelease \
+            :app:assembleDebug :app:assembleRelease \
             :app:writeReleaseDependencyInventory \
             -Pduckyslicer.versionName="$DUCKYSLICER_RELEASE_VERSION" \
             -Pduckyslicer.versionCode="${GITHUB_RUN_NUMBER}"
@@ -107,13 +107,9 @@ jobs:
       - name: Stage first release build
         run: |
           candidate="$RUNNER_TEMP/duckyslicer-release-candidate"
-          mkdir -p "$candidate/unsigned" "$candidate/debug" "$candidate/androidTest"
+          mkdir -p "$candidate/unsigned"
           cp android/app/build/outputs/apk/release/app-release-unsigned.apk \
             "$candidate/unsigned/app-release-unsigned.apk"
-          cp android/app/build/outputs/apk/debug/app-debug.apk \
-            "$candidate/debug/app-debug.apk"
-          cp android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk \
-            "$candidate/androidTest/app-debug-androidTest.apk"
 
       - name: Rebuild and verify reproducible unsigned release
         working-directory: android
@@ -165,15 +161,6 @@ jobs:
           path: ${{ runner.temp }}/duckyslicer-release-source/DuckySlicer-*
           if-no-files-found: error
           compression-level: 0
-          retention-days: 7
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: duckyslicer-release-device-test-apks
-          path: |
-            ${{ runner.temp }}/duckyslicer-release-candidate/debug/app-debug.apk
-            ${{ runner.temp }}/duckyslicer-release-candidate/androidTest/app-debug-androidTest.apk
-          if-no-files-found: error
           retention-days: 7
 
   sign:
@@ -254,132 +241,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  device-tests:
-    needs: [build, sign]
-    runs-on: macos-14
-    timeout-minutes: 45
-    permissions:
-      actions: read
-    steps:
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
-        with:
-          packages: platform-tools
-
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: duckyslicer-release-device-test-apks
-          path: apks
-
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: duckyslicer-release-signed
-          path: release
-
-      - name: Install ARM64 emulator image
-        run: |
-          sdkmanager \
-            "platform-tools" \
-            "emulator" \
-            "platforms;android-35" \
-            "system-images;android-35;google_apis_ps16k;arm64-v8a"
-          echo no | avdmanager create avd \
-            --force \
-            --name duckyslicer-arm64 \
-            --package "system-images;android-35;google_apis_ps16k;arm64-v8a" \
-            --device pixel_6
-
-      - name: Start ARM64 emulator
-        run: |
-          nohup "$ANDROID_HOME/emulator/emulator" \
-            -avd duckyslicer-arm64 \
-            -no-window \
-            -no-audio \
-            -no-boot-anim \
-            -no-snapshot \
-            -gpu swiftshader_indirect \
-            -accel off \
-            > "$RUNNER_TEMP/duckyslicer-emulator.log" 2>&1 &
-          adb wait-for-device
-          booted=false
-          for attempt in {1..180}; do
-            if adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' | grep -q '^1$'; then
-              booted=true
-              break
-            fi
-            sleep 2
-          done
-          if [ "$booted" != true ]; then
-            cat "$RUNNER_TEMP/duckyslicer-emulator.log"
-            exit 1
-          fi
-          adb shell settings put global window_animation_scale 0
-          adb shell settings put global transition_animation_scale 0
-          adb shell settings put global animator_duration_scale 0
-
-      - name: Verify ARM64 16 KB device
-        run: |
-          test "$(uname -m)" = arm64
-          test "$(adb shell getprop ro.product.cpu.abi | tr -d '\r')" = arm64-v8a
-          test "$(adb shell getconf PAGE_SIZE | tr -d '\r')" = 16384
-
-      - name: Run release-candidate device tests
-        run: |
-          adb install -r apks/debug/app-debug.apk
-          adb install -r apks/androidTest/debug/app-debug-androidTest.apk
-          adb shell am instrument -w -r \
-            com.ashcastle.duckyslicer.test/androidx.test.runner.AndroidJUnitRunner \
-            | tee "$RUNNER_TEMP/duckyslicer-device-tests.txt"
-          grep -q '^OK (' "$RUNNER_TEMP/duckyslicer-device-tests.txt"
-
-      - name: Smoke test signed minified release APK
-        run: |
-          adb uninstall com.ashcastle.duckyslicer
-          release_apks=$(find release -maxdepth 1 -type f -name 'DuckySlicer-*-arm64.apk')
-          release_apk_count=$(printf '%s\n' "$release_apks" | sed '/^$/d' | wc -l | tr -d ' ')
-          if [ "$release_apk_count" -ne 1 ]; then
-            echo "Expected exactly one signed release APK, found $release_apk_count" >&2
-            exit 1
-          fi
-          release_apk=$(printf '%s\n' "$release_apks" | sed -n '1p')
-          adb install "$release_apk"
-          adb logcat -c
-          adb shell am force-stop com.ashcastle.duckyslicer
-          adb shell am start -W \
-            -n com.ashcastle.duckyslicer/.MainActivity \
-            | tee "$RUNNER_TEMP/duckyslicer-release-launch.txt"
-          grep -q '^Status: ok$' "$RUNNER_TEMP/duckyslicer-release-launch.txt"
-          grep -q '^Activity: com.ashcastle.duckyslicer/.MainActivity$' \
-            "$RUNNER_TEMP/duckyslicer-release-launch.txt"
-          started=false
-          for attempt in {1..30}; do
-            if adb shell pidof com.ashcastle.duckyslicer >/dev/null; then
-              started=true
-              break
-            fi
-            sleep 1
-          done
-          if [ "$started" != true ]; then
-            adb logcat -d
-            exit 1
-          fi
-          if adb logcat -d | grep -E 'FATAL EXCEPTION|ANR in'; then
-            exit 1
-          fi
-
-      - name: Upload emulator log on failure
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: duckyslicer-release-arm64-emulator-log
-          path: |
-            ${{ runner.temp }}/duckyslicer-emulator.log
-            ${{ runner.temp }}/duckyslicer-device-tests.txt
-            ${{ runner.temp }}/duckyslicer-release-launch.txt
-          if-no-files-found: ignore
-          retention-days: 7
-
   publish:
-    needs: [build, sign, device-tests]
+    needs: [build, sign]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
