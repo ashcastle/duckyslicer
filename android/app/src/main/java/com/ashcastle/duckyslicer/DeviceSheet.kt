@@ -1,15 +1,16 @@
 package com.ashcastle.duckyslicer
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -42,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -103,7 +105,7 @@ internal fun DeviceSheet(
             profiles.forEach { profile ->
                 val isSelected = profile.id == selectedProfileId
                 Card(
-                    modifier = Modifier.fillMaxWidth().clickable { onSelect(profile.id) },
+                    modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = if (isSelected) Color(0xFF3A382D) else Color(0xFF32332F),
                     ),
@@ -112,14 +114,26 @@ internal fun DeviceSheet(
                         modifier = Modifier.fillMaxWidth().padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        RadioButton(selected = isSelected, onClick = { onSelect(profile.id) })
-                        Column(Modifier.weight(1f)) {
-                            Text(profile.name, fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "${profile.kind.displayName()} · ${profile.baseUrl}",
-                                color = Color(0xFFC8C9C2),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .selectable(
+                                    selected = isSelected,
+                                    role = Role.RadioButton,
+                                    onClick = { onSelect(profile.id) },
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = isSelected, onClick = null)
+                            Column(Modifier.weight(1f)) {
+                                Text(profile.name, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "${profile.kind.displayName()} · ${profile.baseUrl}",
+                                    color = Color(0xFFC8C9C2),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
                         }
                         IconButton(onClick = {
                             editing = RemoteDeviceDraft(
