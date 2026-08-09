@@ -27,6 +27,12 @@ not part of the release pipeline; functional qualification runs on the local ARM
 16 KB AVD before tagging, while hosted jobs provide independent build and static
 packaging evidence.
 
+Play bundles use a separate upload key in a separate protected `play` environment.
+The manual Play workflow isolates unsigned building from signing, does not check out
+or execute repository code in the signer, pins the upload-certificate fingerprint,
+and stops at a signed Actions artifact. It has no Play Console credentials and cannot
+select a track or start a rollout.
+
 ## Reporting a vulnerability
 
 Do not publish exploit details, private data, or a proof-of-concept in a public

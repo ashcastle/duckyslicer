@@ -75,6 +75,35 @@ key prevents publishing a compatible update under the same Android identity.
 The workflow derives `versionName` from the tag and uses the GitHub run number as
 the monotonically increasing Android `versionCode`.
 
+## Play Console bundle handoff
+
+Google Play receives an Android App Bundle, but the public GitHub Release remains
+APK-only. The manually dispatched **Play Bundle** workflow builds an unsigned AAB
+from the selected commit and signs it in a separate `play` environment. It uses a
+separate Play upload key instead of the GitHub APK release key and never uploads to
+Play Console. The operator downloads the `duckyslicer-play-signed` Actions artifact,
+checks its SHA-256 file, and uploads the AAB manually after completing the local
+16 KB AVD release gate.
+
+Create an RSA 2048-bit-or-stronger upload key outside the repository, register its
+public certificate in Play Console, and protect the `play` environment with required
+reviewers. Configure only these environment secrets:
+
+- `DUCKYSLICER_PLAY_KEYSTORE_BASE64`
+- `DUCKYSLICER_PLAY_STORE_PASSWORD`
+- `DUCKYSLICER_PLAY_KEY_ALIAS`
+- `DUCKYSLICER_PLAY_KEY_PASSWORD`
+
+Add the normalized 64-character upload-certificate fingerprint as the public
+`DUCKYSLICER_PLAY_CERT_SHA256` environment variable. Keep the upload key separate
+from the Play-managed app signing key and the GitHub APK signing key.
+
+When dispatching the workflow, provide a SemVer `version_name` and a positive,
+previously unused `version_code` that is greater than every version already uploaded
+to Play and no greater than `2100000000`. The workflow stops after producing the
+signed Actions artifact; Play track selection, release notes, review, and rollout
+remain explicit Console actions.
+
 ## Local unsigned release check
 
 ```shell
@@ -90,6 +119,7 @@ python3 tools/verify_preview_boundary.py
 python3 tools/verify_runtime_resilience.py
 python3 tools/verify_data_practices.py
 python3 tools/verify_release_contract.py
+python3 tools/verify_play_bundle_workflow.py
 python3 tools/verify_workflows.py
 ```
 
