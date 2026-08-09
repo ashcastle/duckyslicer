@@ -148,8 +148,6 @@ artifacts/
 *.pdb
 *.dSYM/
 
-# Reviewed Android slicer runtime bootstrap (source/provenance in THIRD_PARTY_NOTICES.md)
-!android/app/src/main/jniLibs/arm64-v8a/libprusaslicer-jni.so
 
 # Local diagnostics and operating-system metadata
 *.trace

@@ -22,10 +22,13 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.SecondaryScrollableTabRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.roundToInt
 import java.util.Locale
 
@@ -44,6 +48,14 @@ private enum class ProfileSettingsKind {
     PRINTER,
     FILAMENT,
     SLICING,
+}
+
+internal enum class SlicingSettingsSection(val titleResource: Int) {
+    QUALITY(R.string.quality),
+    STRENGTH(R.string.strength),
+    SPEED(R.string.speed),
+    SUPPORT(R.string.supports),
+    OTHERS(R.string.others),
 }
 
 @Composable
@@ -100,6 +112,23 @@ internal fun ProfileSettings(
         ProfileSettingsKind.PRINTER -> PrinterSettingsSheet(
             options = options,
             profiles = catalog.printers,
+            onProfileSelected = { printer ->
+                var updated = options.selectPrinter(printer)
+                if (!updated.filamentProfile.compatiblePrinters.matchesPrinter(printer)) {
+                    catalog.filaments.firstOrNull { it.compatiblePrinters.matchesPrinter(printer) }
+                        ?.let { updated = updated.selectFilament(it) }
+                }
+                if (
+                    !updated.quality.compatiblePrinters.matchesPrinter(printer) ||
+                    abs(updated.quality.nozzleDiameter - printer.nozzleDiameter) >= 0.05f
+                ) {
+                    catalog.slicing.firstOrNull {
+                        it.compatiblePrinters.matchesPrinter(printer) &&
+                            abs(it.nozzleDiameter - printer.nozzleDiameter) < 0.05f
+                    }?.let { updated = updated.selectQuality(it) }
+                }
+                onOptionsChanged(updated)
+            },
             onOptionsChanged = onOptionsChanged,
             onSave = onSavePrinter,
             onDismiss = { editing = null },
@@ -107,7 +136,10 @@ internal fun ProfileSettings(
 
         ProfileSettingsKind.FILAMENT -> FilamentSettingsSheet(
             options = options,
-            profiles = catalog.filaments,
+            profiles = catalog.filaments.filter {
+                it == options.filamentProfile ||
+                    it.compatiblePrinters.matchesPrinter(options.printerProfile)
+            },
             onOptionsChanged = onOptionsChanged,
             onSave = onSaveFilament,
             onDismiss = { editing = null },
@@ -116,7 +148,11 @@ internal fun ProfileSettings(
         ProfileSettingsKind.SLICING -> SlicingSettingsSheet(
             options = options,
             profiles = catalog.slicing.filter {
-                it == options.quality || abs(it.nozzleDiameter - options.nozzleDiameter) < 0.05f
+                it == options.quality ||
+                    (
+                        abs(it.nozzleDiameter - options.nozzleDiameter) < 0.05f &&
+                            it.compatiblePrinters.matchesPrinter(options.printerProfile)
+                        )
             },
             onOptionsChanged = onOptionsChanged,
             onSave = onSaveSlicing,
@@ -148,6 +184,7 @@ private fun ProfileRow(title: String, summary: String, enabled: Boolean, onClick
 private fun PrinterSettingsSheet(
     options: SliceOptions,
     profiles: List<PrinterProfile>,
+    onProfileSelected: (PrinterProfile) -> Unit,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSave: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -161,7 +198,7 @@ private fun PrinterSettingsSheet(
         searchTerms = {
             listOf(it.name, it.brand.orEmpty(), it.nozzleDiameter.toString(), "nozzle")
         },
-        onSelected = { onOptionsChanged(options.selectPrinter(it)) },
+        onSelected = onProfileSelected,
     )
     Text(
         stringResource(
@@ -171,6 +208,137 @@ private fun PrinterSettingsSheet(
             options.maxPrintHeight.roundToInt(),
         ),
         color = Color(0xFFC8C9C2),
+    )
+    SettingsGroupTitle(stringResource(R.string.build_volume))
+    SettingSlider(
+        label = stringResource(R.string.bed_width),
+        valueText = stringResource(R.string.millimeters_value, options.bedSizeX),
+        value = options.bedSizeX,
+        range = 100f..500f,
+        steps = 399,
+        onValueChange = {
+            val width = it.roundToInt().toFloat()
+            onOptionsChanged(
+                options.copy(
+                    bedSizeX = width,
+                    bedOriginX = scaledBedOrigin(options.bedOriginX, options.bedSizeX, width),
+                    bedPolygon = scaledBedPolygon(
+                        options.bedPolygon,
+                        options.bedSizeX,
+                        options.bedSizeY,
+                        width,
+                        options.bedSizeY,
+                    ),
+                ),
+            )
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.bed_depth),
+        valueText = stringResource(R.string.millimeters_value, options.bedSizeY),
+        value = options.bedSizeY,
+        range = 100f..500f,
+        steps = 399,
+        onValueChange = {
+            val depth = it.roundToInt().toFloat()
+            onOptionsChanged(
+                options.copy(
+                    bedSizeY = depth,
+                    bedOriginY = scaledBedOrigin(options.bedOriginY, options.bedSizeY, depth),
+                    bedPolygon = scaledBedPolygon(
+                        options.bedPolygon,
+                        options.bedSizeX,
+                        options.bedSizeY,
+                        options.bedSizeX,
+                        depth,
+                    ),
+                ),
+            )
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.build_height),
+        valueText = stringResource(R.string.millimeters_value, options.maxPrintHeight),
+        value = options.maxPrintHeight,
+        range = 100f..600f,
+        steps = 499,
+        onValueChange = { onOptionsChanged(options.copy(maxPrintHeight = it.roundToInt().toFloat())) },
+    )
+    Text(stringResource(R.string.nozzle_diameter), fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf(0.2f, 0.4f, 0.6f, 0.8f),
+        selected = options.nozzleDiameter,
+        label = { stringResource(R.string.millimeters_value_precise, it) },
+        onSelected = {
+            onOptionsChanged(
+                options.copy(nozzleDiameter = it)
+                    .selectQuality(QualityProfile.standardFor(it)),
+            )
+        },
+    )
+    SettingsGroupTitle(stringResource(R.string.printer_firmware))
+    CompactChoices(
+        entries = listOf("marlin", "marlin2", "klipper"),
+        selected = options.gcodeFlavor,
+        label = {
+            when (it) {
+                "marlin2" -> "Marlin 2"
+                "klipper" -> "Klipper"
+                else -> "Marlin"
+            }
+        },
+        onSelected = { onOptionsChanged(options.copy(gcodeFlavor = it)) },
+    )
+    SettingsGroupTitle(stringResource(R.string.motion_limits))
+    SettingSlider(
+        label = stringResource(R.string.maximum_x_speed),
+        valueText = stringResource(R.string.print_speed_value, options.maxSpeedX),
+        value = options.maxSpeedX,
+        range = 50f..700f,
+        steps = 649,
+        onValueChange = { onOptionsChanged(options.copy(maxSpeedX = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.maximum_y_speed),
+        valueText = stringResource(R.string.print_speed_value, options.maxSpeedY),
+        value = options.maxSpeedY,
+        range = 50f..700f,
+        steps = 649,
+        onValueChange = { onOptionsChanged(options.copy(maxSpeedY = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.maximum_print_acceleration),
+        valueText = stringResource(R.string.acceleration_value, options.maxAccelerationExtruding),
+        value = options.maxAccelerationExtruding,
+        range = 500f..30_000f,
+        steps = 117,
+        onValueChange = {
+            val value = (it / 250f).roundToInt() * 250f
+            onOptionsChanged(
+                options.copy(
+                    maxAccelerationExtruding = value,
+                    maxAccelerationX = max(options.maxAccelerationX, value),
+                    maxAccelerationY = max(options.maxAccelerationY, value),
+                ),
+            )
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.maximum_travel_acceleration),
+        valueText = stringResource(R.string.acceleration_value, options.maxAccelerationTravel),
+        value = options.maxAccelerationTravel,
+        range = 500f..30_000f,
+        steps = 117,
+        onValueChange = {
+            val value = (it / 250f).roundToInt() * 250f
+            onOptionsChanged(
+                options.copy(
+                    maxAccelerationTravel = value,
+                    maxAccelerationX = max(options.maxAccelerationX, value),
+                    maxAccelerationY = max(options.maxAccelerationY, value),
+                ),
+            )
+        },
     )
     SaveProfileField(onSave = onSave, onDismiss = onDismiss)
 }
@@ -242,6 +410,95 @@ private fun FilamentSettingsSheet(
         steps = 35,
         onValueChange = { onOptionsChanged(options.copy(maxVolumetricSpeed = it.roundToInt().toFloat())) },
     )
+    SettingsGroupTitle(stringResource(R.string.retraction))
+    SettingSlider(
+        label = stringResource(R.string.retraction_length),
+        valueText = stringResource(R.string.millimeters_value_precise, options.retractLength),
+        value = options.retractLength,
+        range = 0f..8f,
+        steps = 79,
+        onValueChange = { onOptionsChanged(options.copy(retractLength = it)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.retraction_speed),
+        valueText = stringResource(R.string.print_speed_value, options.retractSpeed),
+        value = options.retractSpeed,
+        range = 10f..100f,
+        steps = 89,
+        onValueChange = { onOptionsChanged(options.copy(retractSpeed = it.roundToInt().toFloat())) },
+    )
+    SettingsGroupTitle(stringResource(R.string.cooling))
+    SettingSlider(
+        label = stringResource(R.string.minimum_fan_speed),
+        valueText = stringResource(R.string.percent_value, options.fanMinSpeed),
+        value = options.fanMinSpeed.toFloat(),
+        range = 0f..100f,
+        steps = 99,
+        onValueChange = { onOptionsChanged(options.copy(fanMinSpeed = it.roundToInt().coerceAtMost(options.fanMaxSpeed))) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.maximum_fan_speed),
+        valueText = stringResource(R.string.percent_value, options.fanMaxSpeed),
+        value = options.fanMaxSpeed.toFloat(),
+        range = 0f..100f,
+        steps = 99,
+        onValueChange = { onOptionsChanged(options.copy(fanMaxSpeed = it.roundToInt().coerceAtLeast(options.fanMinSpeed))) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.overhang_fan_speed),
+        valueText = stringResource(R.string.percent_value, options.overhangFanSpeed),
+        value = options.overhangFanSpeed.toFloat(),
+        range = 0f..100f,
+        steps = 99,
+        onValueChange = { onOptionsChanged(options.copy(overhangFanSpeed = it.roundToInt())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.slow_down_layer_time),
+        valueText = stringResource(R.string.seconds_value, options.slowDownLayerTime),
+        value = options.slowDownLayerTime,
+        range = 1f..30f,
+        steps = 28,
+        onValueChange = { onOptionsChanged(options.copy(slowDownLayerTime = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.minimum_print_speed),
+        valueText = stringResource(R.string.print_speed_value, options.slowDownMinSpeed),
+        value = options.slowDownMinSpeed,
+        range = 5f..50f,
+        steps = 44,
+        onValueChange = { onOptionsChanged(options.copy(slowDownMinSpeed = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.no_fan_first_layers),
+        valueText = options.closeFanFirstLayers.toString(),
+        value = options.closeFanFirstLayers.toFloat(),
+        range = 0f..10f,
+        steps = 9,
+        onValueChange = { onOptionsChanged(options.copy(closeFanFirstLayers = it.roundToInt())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.full_fan_layer),
+        valueText = options.fullFanSpeedLayer.toString(),
+        value = options.fullFanSpeedLayer.toFloat(),
+        range = 1f..20f,
+        steps = 18,
+        onValueChange = { onOptionsChanged(options.copy(fullFanSpeedLayer = it.roundToInt())) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.pressure_advance),
+        checked = options.pressureAdvanceEnabled,
+        onCheckedChange = { onOptionsChanged(options.copy(pressureAdvanceEnabled = it)) },
+    )
+    if (options.pressureAdvanceEnabled) {
+        SettingSlider(
+            label = stringResource(R.string.pressure_advance_value),
+            valueText = String.format(Locale.ROOT, "%.3f", options.pressureAdvance),
+            value = options.pressureAdvance,
+            range = 0f..0.2f,
+            steps = 199,
+            onValueChange = { onOptionsChanged(options.copy(pressureAdvance = it)) },
+        )
+    }
     SaveProfileField(onSave = onSave, onDismiss = onDismiss)
 }
 
@@ -252,89 +509,1580 @@ private fun SlicingSettingsSheet(
     onOptionsChanged: (SliceOptions) -> Unit,
     onSave: (String) -> Unit,
     onDismiss: () -> Unit,
-) = SettingsSheet(title = stringResource(R.string.slicing_profile), onDismiss = onDismiss) {
-    val maximumLayerHeight = (options.nozzleDiameter * 0.7f).coerceAtLeast(0.14f)
-    val layerHeightSteps = ((maximumLayerHeight - 0.04f) / 0.01f).roundToInt().coerceAtLeast(2) - 1
-    ProfileChoices(
-        entries = profiles,
-        selected = options.quality,
-        label = { profileLabel(it) },
-        onSelected = { onOptionsChanged(options.selectQuality(it)) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.layer_height),
-        valueText = stringResource(R.string.millimeters_value_precise, options.layerHeight),
-        value = options.layerHeight,
-        range = 0.04f..maximumLayerHeight,
-        steps = layerHeightSteps,
-        onValueChange = { onOptionsChanged(options.copy(layerHeight = it)) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.first_layer_height),
-        valueText = stringResource(R.string.millimeters_value_precise, options.firstLayerHeight),
-        value = options.firstLayerHeight,
-        range = 0.10f..0.50f,
-        steps = 39,
-        onValueChange = { onOptionsChanged(options.copy(firstLayerHeight = it)) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.walls),
-        valueText = options.perimeters.toString(),
-        value = options.perimeters.toFloat(),
-        range = 1f..6f,
-        steps = 4,
-        onValueChange = { onOptionsChanged(options.copy(perimeters = it.roundToInt())) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.infill),
-        valueText = stringResource(R.string.percent_value, (options.fillDensity * 100f).roundToInt()),
-        value = options.fillDensity,
-        range = 0f..1f,
-        steps = 19,
-        onValueChange = { onOptionsChanged(options.copy(fillDensity = it)) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.print_speed),
-        valueText = stringResource(R.string.print_speed_value, options.printSpeed),
-        value = options.printSpeed,
-        range = 40f..300f,
-        steps = 25,
-        onValueChange = { onOptionsChanged(options.copy(printSpeed = (it / 10f).roundToInt() * 10f)) },
-    )
+) {
+    var selectedSection by remember { mutableStateOf(SlicingSettingsSection.QUALITY) }
+    SettingsSheet(
+        title = stringResource(R.string.slicing_profile),
+        onDismiss = onDismiss,
+        scrollKey = selectedSection,
+    ) {
+        val maximumLayerHeight = (options.nozzleDiameter * 0.7f).coerceAtLeast(0.14f)
+        val layerHeightSteps = ((maximumLayerHeight - 0.04f) / 0.01f).roundToInt().coerceAtLeast(2) - 1
+        val minimumLineWidth = options.nozzleDiameter * 0.5f
+        val maximumLineWidth = listOf(
+            options.nozzleDiameter * 2f,
+            options.outerWallLineWidth,
+            options.innerWallLineWidth,
+            options.topSurfaceLineWidth,
+            options.sparseInfillLineWidth,
+            options.internalSolidInfillLineWidth,
+            options.supportLineWidth,
+            options.initialLayerLineWidth,
+        ).maxOrNull() ?: options.nozzleDiameter * 2f
+        val lineWidthSteps = ((maximumLineWidth - minimumLineWidth) / 0.01f).roundToInt().coerceAtLeast(2) - 1
+        val maximumFeatureSpeed = listOf(
+            500f,
+            options.printSpeed,
+            options.innerWallSpeed,
+            options.sparseInfillSpeed,
+            options.internalSolidInfillSpeed,
+            options.topSurfaceSpeed,
+            options.supportSpeed,
+            options.bridgeSpeed,
+            options.gapInfillSpeed,
+            options.firstLayerInfillSpeed,
+            options.supportInterfaceSpeed,
+        ).maxOrNull() ?: 500f
+        val featureSpeedSteps = ((maximumFeatureSpeed - 10f) / 5f).roundToInt().coerceAtLeast(2) - 1
+        val maximumFlowRatio = listOf(
+            1.5f,
+            options.bridgeFlowRatio,
+            options.internalBridgeFlowRatio,
+            options.topSurfaceFlowRatio,
+            options.bottomSurfaceFlowRatio,
+        ).maxOrNull() ?: 1.5f
+        val flowRatioSteps = ((maximumFlowRatio - 0.5f) / 0.01f).roundToInt().coerceAtLeast(2) - 1
+        val maximumFeatureAcceleration = listOf(
+            20_000f,
+            options.defaultAcceleration,
+            options.outerWallAcceleration,
+            options.innerWallAcceleration,
+            options.topSurfaceAcceleration,
+            options.travelAcceleration,
+            options.firstLayerAcceleration,
+        ).maxOrNull() ?: 20_000f
+        val featureAccelerationSteps = (maximumFeatureAcceleration / 100f).roundToInt().coerceAtLeast(2) - 1
+        SlicingSettingsTabs(
+            selected = selectedSection,
+            onSelected = { selectedSection = it },
+        )
+        SearchableGroupedProfileChoices(
+            entries = profiles,
+            selected = options.quality,
+            label = { profileLabel(it) },
+            brand = { it.brand },
+            builtIn = { it.builtIn },
+            searchTerms = {
+                listOf(it.name, it.brand.orEmpty(), it.layerHeightMm.toString())
+            },
+            onSelected = { onOptionsChanged(options.selectQuality(it)) },
+        )
+        when (selectedSection) {
+            SlicingSettingsSection.QUALITY -> {
+                SettingsGroupTitle(stringResource(R.string.quality))
+                SettingSlider(
+                    label = stringResource(R.string.layer_height),
+                    valueText = stringResource(R.string.millimeters_value_precise, options.layerHeight),
+                    value = options.layerHeight,
+                    range = 0.04f..maximumLayerHeight,
+                    steps = layerHeightSteps,
+                    onValueChange = { onOptionsChanged(options.copy(layerHeight = it)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.first_layer_height),
+                    valueText = stringResource(R.string.millimeters_value_precise, options.firstLayerHeight),
+                    value = options.firstLayerHeight,
+                    range = 0.10f..0.50f,
+                    steps = 39,
+                    onValueChange = { onOptionsChanged(options.copy(firstLayerHeight = it)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.initial_layer_line_width),
+                    valueText = stringResource(R.string.millimeters_value_precise, options.initialLayerLineWidth),
+                    value = options.initialLayerLineWidth,
+                    range = minimumLineWidth..maximumLineWidth,
+                    steps = lineWidthSteps,
+                    onValueChange = { onOptionsChanged(options.copy(initialLayerLineWidth = it)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.walls),
+                    valueText = options.perimeters.toString(),
+                    value = options.perimeters.toFloat(),
+                    range = 1f..6f,
+                    steps = 4,
+                    onValueChange = { onOptionsChanged(options.copy(perimeters = it.roundToInt())) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.outer_wall_width),
+                    valueText = stringResource(R.string.millimeters_value_precise, options.outerWallLineWidth),
+                    value = options.outerWallLineWidth,
+                    range = minimumLineWidth..maximumLineWidth,
+                    steps = lineWidthSteps,
+                    onValueChange = { onOptionsChanged(options.copy(outerWallLineWidth = it)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.inner_wall_width),
+                    valueText = stringResource(R.string.millimeters_value_precise, options.innerWallLineWidth),
+                    value = options.innerWallLineWidth,
+                    range = minimumLineWidth..maximumLineWidth,
+                    steps = lineWidthSteps,
+                    onValueChange = { onOptionsChanged(options.copy(innerWallLineWidth = it)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.top_surface_width),
+                    valueText = stringResource(R.string.millimeters_value_precise, options.topSurfaceLineWidth),
+                    value = options.topSurfaceLineWidth,
+                    range = minimumLineWidth..maximumLineWidth,
+                    steps = lineWidthSteps,
+                    onValueChange = { onOptionsChanged(options.copy(topSurfaceLineWidth = it)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.internal_solid_infill_width),
+                    valueText = stringResource(R.string.millimeters_value_precise, options.internalSolidInfillLineWidth),
+                    value = options.internalSolidInfillLineWidth,
+                    range = minimumLineWidth..maximumLineWidth,
+                    steps = lineWidthSteps,
+                    onValueChange = { onOptionsChanged(options.copy(internalSolidInfillLineWidth = it)) },
+                )
+                Text(stringResource(R.string.wall_generator), fontWeight = FontWeight.SemiBold)
+                CompactChoices(
+                    entries = listOf("arachne", "classic"),
+                    selected = options.wallGenerator,
+                    label = {
+                        stringResource(
+                            if (it == "classic") R.string.wall_generator_classic
+                            else R.string.wall_generator_arachne,
+                        )
+                    },
+                    onSelected = { onOptionsChanged(options.copy(wallGenerator = it)) },
+                )
+                if (options.wallGenerator == "arachne") {
+                    SettingSlider(
+                        label = stringResource(R.string.wall_transition_length),
+                        valueText = stringResource(R.string.percent_value, options.wallTransitionLength.roundToInt()),
+                        value = options.wallTransitionLength,
+                        range = 0f..200f,
+                        steps = 39,
+                        onValueChange = { onOptionsChanged(options.copy(wallTransitionLength = it.roundToInt().toFloat())) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.wall_transition_filter),
+                        valueText = stringResource(R.string.percent_value, options.wallTransitionFilterDeviation.roundToInt()),
+                        value = options.wallTransitionFilterDeviation,
+                        range = 0f..100f,
+                        steps = 19,
+                        onValueChange = { onOptionsChanged(options.copy(wallTransitionFilterDeviation = it.roundToInt().toFloat())) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.wall_transition_angle),
+                        valueText = stringResource(R.string.degrees_value, options.wallTransitionAngle),
+                        value = options.wallTransitionAngle,
+                        range = 1f..59f,
+                        steps = 57,
+                        onValueChange = { onOptionsChanged(options.copy(wallTransitionAngle = it.roundToInt().toFloat())) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.wall_distribution_count),
+                        valueText = options.wallDistributionCount.toString(),
+                        value = options.wallDistributionCount.toFloat(),
+                        range = 1f..10f,
+                        steps = 8,
+                        onValueChange = { onOptionsChanged(options.copy(wallDistributionCount = it.roundToInt())) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.minimum_feature_size),
+                        valueText = stringResource(R.string.percent_value, options.minimumFeatureSize.roundToInt()),
+                        value = options.minimumFeatureSize,
+                        range = 0f..100f,
+                        steps = 19,
+                        onValueChange = { onOptionsChanged(options.copy(minimumFeatureSize = it.roundToInt().toFloat())) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.minimum_wall_length),
+                        valueText = stringResource(R.string.flow_ratio_value, options.minimumWallLengthFactor),
+                        value = options.minimumWallLengthFactor,
+                        range = 0f..2f,
+                        steps = 39,
+                        onValueChange = {
+                            onOptionsChanged(options.copy(minimumWallLengthFactor = (it * 20f).roundToInt() / 20f))
+                        },
+                    )
+                }
+                Text(stringResource(R.string.wall_order), fontWeight = FontWeight.SemiBold)
+                CompactChoices(
+                    entries = listOf("inner-outer", "outer-inner", "inner-outer-inner"),
+                    selected = options.wallSequence,
+                    label = {
+                        stringResource(
+                            when (it) {
+                                "outer-inner" -> R.string.wall_order_outer_inner
+                                "inner-outer-inner" -> R.string.wall_order_inner_outer_inner
+                                else -> R.string.wall_order_inner_outer
+                            },
+                        )
+                    },
+                    onSelected = { onOptionsChanged(options.copy(wallSequence = it)) },
+                )
+                Text(stringResource(R.string.wall_direction), fontWeight = FontWeight.SemiBold)
+                CompactChoices(
+                    entries = listOf("auto", "ccw", "cw"),
+                    selected = options.wallDirection,
+                    label = {
+                        stringResource(
+                            when (it) {
+                                "ccw" -> R.string.wall_direction_counter_clockwise
+                                "cw" -> R.string.wall_direction_clockwise
+                                else -> R.string.wall_direction_auto
+                            },
+                        )
+                    },
+                    onSelected = { onOptionsChanged(options.copy(wallDirection = it)) },
+                )
+                Text(stringResource(R.string.seam_position), fontWeight = FontWeight.SemiBold)
+                CompactChoices(
+                    entries = listOf("aligned", "nearest", "back", "random"),
+                    selected = options.seamPosition,
+                    label = { enumLabel(it) },
+                    onSelected = { onOptionsChanged(options.copy(seamPosition = it)) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.staggered_inner_seams),
+                    checked = options.staggeredInnerSeams,
+                    onCheckedChange = { onOptionsChanged(options.copy(staggeredInnerSeams = it)) },
+                )
+                LengthOrPercentSetting(
+                    label = stringResource(R.string.seam_gap),
+                    value = options.seamGap,
+                    percent = options.seamGapPercent,
+                    maximumAbsolute = 10f,
+                    maximumPercent = 100f,
+                    onValueChange = { onOptionsChanged(options.copy(seamGap = it)) },
+                    onPercentChange = { selectedPercent, adjustedValue ->
+                        onOptionsChanged(options.copy(seamGap = adjustedValue, seamGapPercent = selectedPercent))
+                    },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.wipe_before_external_loop),
+                    checked = options.wipeBeforeExternalLoop,
+                    onCheckedChange = { onOptionsChanged(options.copy(wipeBeforeExternalLoop = it)) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.wipe_on_loops),
+                    checked = options.wipeOnLoops,
+                    onCheckedChange = { onOptionsChanged(options.copy(wipeOnLoops = it)) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.role_based_wipe_speed),
+                    checked = options.roleBasedWipeSpeed,
+                    onCheckedChange = { onOptionsChanged(options.copy(roleBasedWipeSpeed = it)) },
+                )
+                if (!options.roleBasedWipeSpeed) {
+                    OverhangSpeedSetting(
+                        label = stringResource(R.string.wipe_speed),
+                        value = options.wipeSpeed,
+                        percent = options.wipeSpeedPercent,
+                        maximumAbsolute = 700f,
+                        maximumPercent = 300f,
+                        onValueChange = { onOptionsChanged(options.copy(wipeSpeed = it)) },
+                        onPercentChange = { selectedPercent, adjustedValue ->
+                            onOptionsChanged(options.copy(wipeSpeed = adjustedValue, wipeSpeedPercent = selectedPercent))
+                        },
+                    )
+                }
+                SettingsSwitch(
+                    label = stringResource(R.string.detect_thin_walls),
+                    checked = options.detectThinWalls,
+                    onCheckedChange = { onOptionsChanged(options.copy(detectThinWalls = it)) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.detect_overhang_walls),
+                    checked = options.detectOverhangWalls,
+                    onCheckedChange = { onOptionsChanged(options.copy(detectOverhangWalls = it)) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.one_wall_on_top),
+                    checked = options.onlyOneWallOnTop,
+                    onCheckedChange = { onOptionsChanged(options.copy(onlyOneWallOnTop = it)) },
+                )
+                if (options.onlyOneWallOnTop) {
+                    LengthOrPercentSetting(
+                        label = stringResource(R.string.one_wall_threshold),
+                        value = options.minWidthTopSurface,
+                        percent = options.minWidthTopSurfacePercent,
+                        maximumAbsolute = if (options.minWidthTopSurfacePercent) {
+                            15f
+                        } else {
+                            max(15f, options.minWidthTopSurface)
+                        },
+                        maximumPercent = if (options.minWidthTopSurfacePercent) {
+                            max(1_500f, options.minWidthTopSurface)
+                        } else {
+                            1_500f
+                        },
+                        onValueChange = { onOptionsChanged(options.copy(minWidthTopSurface = it)) },
+                        onPercentChange = { selectedPercent, adjustedValue ->
+                            onOptionsChanged(
+                                options.copy(
+                                    minWidthTopSurface = adjustedValue,
+                                    minWidthTopSurfacePercent = selectedPercent,
+                                ),
+                            )
+                        },
+                    )
+                }
+                SettingsSwitch(
+                    label = stringResource(R.string.one_wall_on_first_layer),
+                    checked = options.onlyOneWallFirstLayer,
+                    onCheckedChange = { onOptionsChanged(options.copy(onlyOneWallFirstLayer = it)) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.extra_perimeters_on_overhangs),
+                    checked = options.extraPerimetersOnOverhangs,
+                    onCheckedChange = { onOptionsChanged(options.copy(extraPerimetersOnOverhangs = it)) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.overhang_reversal),
+                    checked = options.overhangReverse,
+                    onCheckedChange = { onOptionsChanged(options.copy(overhangReverse = it)) },
+                )
+                if (options.overhangReverse) {
+                    SettingsSwitch(
+                        label = stringResource(R.string.reverse_internal_only),
+                        checked = options.overhangReverseInternalOnly,
+                        onCheckedChange = { onOptionsChanged(options.copy(overhangReverseInternalOnly = it)) },
+                    )
+                    LengthOrPercentSetting(
+                        label = stringResource(R.string.reverse_threshold),
+                        value = options.overhangReverseThreshold,
+                        percent = options.overhangReverseThresholdPercent,
+                        maximumAbsolute = if (options.overhangReverseThresholdPercent) {
+                            20f
+                        } else {
+                            max(20f, options.overhangReverseThreshold)
+                        },
+                        maximumPercent = if (options.overhangReverseThresholdPercent) {
+                            max(2_000f, options.overhangReverseThreshold)
+                        } else {
+                            2_000f
+                        },
+                        onValueChange = { onOptionsChanged(options.copy(overhangReverseThreshold = it)) },
+                        onPercentChange = { selectedPercent, adjustedValue ->
+                            onOptionsChanged(
+                                options.copy(
+                                    overhangReverseThreshold = adjustedValue,
+                                    overhangReverseThresholdPercent = selectedPercent,
+                                ),
+                            )
+                        },
+                    )
+                }
+                SettingsSwitch(
+                    label = stringResource(R.string.alternate_extra_wall),
+                    checked = options.alternateExtraWall,
+                    onCheckedChange = { onOptionsChanged(options.copy(alternateExtraWall = it)) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.precise_outer_walls),
+                    checked = options.preciseOuterWalls,
+                    onCheckedChange = { onOptionsChanged(options.copy(preciseOuterWalls = it)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.path_resolution),
+                    valueText = stringResource(R.string.millimeters_value_fine, options.resolution),
+                    value = options.resolution,
+                    range = 0.001f..max(0.1f, options.resolution),
+                    steps = ((max(0.1f, options.resolution) - 0.001f) / 0.001f).roundToInt().coerceAtLeast(2) - 1,
+                    onValueChange = { onOptionsChanged(options.copy(resolution = (it * 1_000f).roundToInt() / 1_000f)) },
+                )
+                Text(stringResource(R.string.ensure_vertical_shell_thickness), fontWeight = FontWeight.SemiBold)
+                CompactChoices(
+                    entries = listOf("none", "ensure_critical_only", "ensure_moderate", "ensure_all"),
+                    selected = options.ensureVerticalShellThickness,
+                    label = {
+                        stringResource(
+                            when (it) {
+                                "none" -> R.string.vertical_shell_none
+                                "ensure_critical_only" -> R.string.vertical_shell_critical
+                                "ensure_moderate" -> R.string.vertical_shell_moderate
+                                else -> R.string.vertical_shell_all
+                            },
+                        )
+                    },
+                    onSelected = { onOptionsChanged(options.copy(ensureVerticalShellThickness = it)) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.detect_narrow_internal_solid_infill),
+                    checked = options.detectNarrowInternalSolidInfill,
+                    onCheckedChange = { onOptionsChanged(options.copy(detectNarrowInternalSolidInfill = it)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.top_shell_layers),
+                    valueText = options.topSolidLayers.toString(),
+                    value = options.topSolidLayers.toFloat(),
+                    range = 0f..12f,
+                    steps = 11,
+                    onValueChange = { onOptionsChanged(options.copy(topSolidLayers = it.roundToInt())) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.bottom_shell_layers),
+                    valueText = options.bottomSolidLayers.toString(),
+                    value = options.bottomSolidLayers.toFloat(),
+                    range = 0f..12f,
+                    steps = 11,
+                    onValueChange = { onOptionsChanged(options.copy(bottomSolidLayers = it.roundToInt())) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.top_shell_thickness),
+                    valueText = stringResource(R.string.millimeters_value_precise, options.topShellThickness),
+                    value = options.topShellThickness,
+                    range = 0f..max(5f, options.topShellThickness),
+                    steps = (max(5f, options.topShellThickness) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
+                    onValueChange = { onOptionsChanged(options.copy(topShellThickness = (it / 0.05f).roundToInt() * 0.05f)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.bottom_shell_thickness),
+                    valueText = stringResource(R.string.millimeters_value_precise, options.bottomShellThickness),
+                    value = options.bottomShellThickness,
+                    range = 0f..max(5f, options.bottomShellThickness),
+                    steps = (max(5f, options.bottomShellThickness) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
+                    onValueChange = { onOptionsChanged(options.copy(bottomShellThickness = (it / 0.05f).roundToInt() * 0.05f)) },
+                )
+                SettingsGroupTitle(stringResource(R.string.dimensional_accuracy))
+                SettingSlider(
+                    label = stringResource(R.string.xy_hole_compensation),
+                    valueText = stringResource(R.string.millimeters_value_precise, options.xyHoleCompensation),
+                    value = options.xyHoleCompensation,
+                    range = -2f..2f,
+                    steps = 399,
+                    onValueChange = { onOptionsChanged(options.copy(xyHoleCompensation = (it * 100f).roundToInt() / 100f)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.xy_contour_compensation),
+                    valueText = stringResource(R.string.millimeters_value_precise, options.xyContourCompensation),
+                    value = options.xyContourCompensation,
+                    range = -2f..2f,
+                    steps = 399,
+                    onValueChange = { onOptionsChanged(options.copy(xyContourCompensation = (it * 100f).roundToInt() / 100f)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.elephant_foot_compensation),
+                    valueText = stringResource(R.string.millimeters_value_precise, options.elephantFootCompensation),
+                    value = options.elephantFootCompensation,
+                    range = 0f..max(1f, options.elephantFootCompensation),
+                    steps = (max(1f, options.elephantFootCompensation) * 100f).roundToInt().coerceAtLeast(2) - 1,
+                    onValueChange = { onOptionsChanged(options.copy(elephantFootCompensation = (it * 100f).roundToInt() / 100f)) },
+                )
+                if (options.elephantFootCompensation > 0f) {
+                    SettingSlider(
+                        label = stringResource(R.string.elephant_foot_layers),
+                        valueText = options.elephantFootCompensationLayers.toString(),
+                        value = options.elephantFootCompensationLayers.toFloat(),
+                        range = 1f..max(10f, options.elephantFootCompensationLayers.toFloat()),
+                        steps = max(10, options.elephantFootCompensationLayers) - 2,
+                        onValueChange = { onOptionsChanged(options.copy(elephantFootCompensationLayers = it.roundToInt())) },
+                    )
+                }
+            }
+
+            SlicingSettingsSection.STRENGTH -> {
+                SettingsGroupTitle(stringResource(R.string.infill))
+                Text(stringResource(R.string.sparse_infill_pattern), fontWeight = FontWeight.SemiBold)
+                CompactChoices(
+                    entries = listOf(
+                        "crosshatch", "grid", "rectilinear", "gyroid", "cubic",
+                        "alignedrectilinear", "triangles", "lightning",
+                    ),
+                    selected = options.fillPattern,
+                    label = { fillPatternLabel(it) },
+                    onSelected = { onOptionsChanged(options.copy(fillPattern = it)) },
+                )
+                Text(stringResource(R.string.top_surface_pattern), fontWeight = FontWeight.SemiBold)
+                CompactChoices(
+                    entries = listOf("monotonicline", "monotonic", "rectilinear", "concentric"),
+                    selected = options.topSurfacePattern,
+                    label = { fillPatternLabel(it) },
+                    onSelected = { onOptionsChanged(options.copy(topSurfacePattern = it)) },
+                )
+                Text(stringResource(R.string.bottom_surface_pattern), fontWeight = FontWeight.SemiBold)
+                CompactChoices(
+                    entries = listOf("monotonic", "monotonicline", "rectilinear", "concentric"),
+                    selected = options.bottomSurfacePattern,
+                    label = { fillPatternLabel(it) },
+                    onSelected = { onOptionsChanged(options.copy(bottomSurfacePattern = it)) },
+                )
+                Text(stringResource(R.string.internal_solid_pattern), fontWeight = FontWeight.SemiBold)
+                CompactChoices(
+                    entries = listOf("monotonic", "monotonicline", "rectilinear", "grid"),
+                    selected = options.internalSolidInfillPattern,
+                    label = { fillPatternLabel(it) },
+                    onSelected = { onOptionsChanged(options.copy(internalSolidInfillPattern = it)) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.infill_first),
+                    checked = options.infillFirst,
+                    onCheckedChange = { onOptionsChanged(options.copy(infillFirst = it)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.infill_wall_overlap),
+                    valueText = stringResource(R.string.percent_value, options.infillWallOverlap.roundToInt()),
+                    value = options.infillWallOverlap,
+                    range = 0f..100f,
+                    steps = 99,
+                    onValueChange = { onOptionsChanged(options.copy(infillWallOverlap = it.roundToInt().toFloat())) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.solid_infill_wall_overlap),
+                    valueText = stringResource(R.string.percent_value, options.topBottomInfillWallOverlap.roundToInt()),
+                    value = options.topBottomInfillWallOverlap,
+                    range = 0f..100f,
+                    steps = 99,
+                    onValueChange = { onOptionsChanged(options.copy(topBottomInfillWallOverlap = it.roundToInt().toFloat())) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.combine_infill_layers),
+                    checked = options.infillCombination,
+                    onCheckedChange = { onOptionsChanged(options.copy(infillCombination = it)) },
+                )
+                if (options.infillCombination) {
+                    LengthOrPercentSetting(
+                        label = stringResource(R.string.combined_infill_max_height),
+                        value = options.infillCombinationMaxLayerHeight,
+                        percent = options.infillCombinationMaxLayerHeightPercent,
+                        onValueChange = { onOptionsChanged(options.copy(infillCombinationMaxLayerHeight = it)) },
+                        onPercentChange = { selectedPercent, adjustedValue ->
+                            onOptionsChanged(
+                                options.copy(
+                                    infillCombinationMaxLayerHeight = adjustedValue,
+                                    infillCombinationMaxLayerHeightPercent = selectedPercent,
+                                ),
+                            )
+                        },
+                    )
+                }
+                SettingSlider(
+                    label = stringResource(R.string.sparse_infill_direction),
+                    valueText = stringResource(R.string.degrees_value, options.infillDirection),
+                    value = options.infillDirection,
+                    range = 0f..360f,
+                    steps = 359,
+                    onValueChange = { onOptionsChanged(options.copy(infillDirection = it.roundToInt().toFloat())) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.solid_infill_direction),
+                    valueText = stringResource(R.string.degrees_value, options.solidInfillDirection),
+                    value = options.solidInfillDirection,
+                    range = 0f..360f,
+                    steps = 359,
+                    onValueChange = { onOptionsChanged(options.copy(solidInfillDirection = it.roundToInt().toFloat())) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.align_infill_to_model),
+                    checked = options.alignInfillDirectionToModel,
+                    onCheckedChange = { onOptionsChanged(options.copy(alignInfillDirectionToModel = it)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.minimum_sparse_infill_area),
+                    valueText = stringResource(R.string.square_millimeters_value, options.minimumSparseInfillArea),
+                    value = options.minimumSparseInfillArea,
+                    range = 0f..max(100f, options.minimumSparseInfillArea),
+                    steps = max(100f, options.minimumSparseInfillArea).roundToInt().coerceAtLeast(2) - 1,
+                    onValueChange = { onOptionsChanged(options.copy(minimumSparseInfillArea = it.roundToInt().toFloat())) },
+                )
+                Text(stringResource(R.string.gap_fill_target), fontWeight = FontWeight.SemiBold)
+                CompactChoices(
+                    entries = listOf("everywhere", "topbottom", "nowhere"),
+                    selected = options.gapFillTarget,
+                    label = {
+                        stringResource(
+                            when (it) {
+                                "everywhere" -> R.string.gap_fill_everywhere
+                                "topbottom" -> R.string.gap_fill_top_bottom
+                                else -> R.string.gap_fill_nowhere
+                            },
+                        )
+                    },
+                    onSelected = { onOptionsChanged(options.copy(gapFillTarget = it)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.filter_tiny_gaps),
+                    valueText = stringResource(R.string.millimeters_value_precise, options.filterOutGapFill),
+                    value = options.filterOutGapFill,
+                    range = 0f..max(10f, options.filterOutGapFill),
+                    steps = (max(10f, options.filterOutGapFill) * 10f).roundToInt().coerceIn(2, 10_000) - 1,
+                    onValueChange = { onOptionsChanged(options.copy(filterOutGapFill = (it * 10f).roundToInt() / 10f)) },
+                )
+                LengthOrPercentSetting(
+                    label = stringResource(R.string.infill_anchor),
+                    value = options.infillAnchor,
+                    percent = options.infillAnchorPercent,
+                    maximumAbsolute = 1_000f,
+                    maximumPercent = 1_000f,
+                    onValueChange = { onOptionsChanged(options.copy(infillAnchor = it)) },
+                    onPercentChange = { selectedPercent, adjustedValue ->
+                        onOptionsChanged(options.copy(infillAnchor = adjustedValue, infillAnchorPercent = selectedPercent))
+                    },
+                )
+                LengthOrPercentSetting(
+                    label = stringResource(R.string.infill_anchor_max),
+                    value = options.infillAnchorMax,
+                    percent = options.infillAnchorMaxPercent,
+                    maximumAbsolute = 1_000f,
+                    maximumPercent = 1_000f,
+                    onValueChange = { onOptionsChanged(options.copy(infillAnchorMax = it)) },
+                    onPercentChange = { selectedPercent, adjustedValue ->
+                        onOptionsChanged(options.copy(infillAnchorMax = adjustedValue, infillAnchorMaxPercent = selectedPercent))
+                    },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.sparse_infill_width),
+                    valueText = stringResource(R.string.millimeters_value_precise, options.sparseInfillLineWidth),
+                    value = options.sparseInfillLineWidth,
+                    range = minimumLineWidth..maximumLineWidth,
+                    steps = lineWidthSteps,
+                    onValueChange = { onOptionsChanged(options.copy(sparseInfillLineWidth = it)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.infill),
+                    valueText = stringResource(R.string.percent_value, (options.fillDensity * 100f).roundToInt()),
+                    value = options.fillDensity,
+                    range = 0f..1f,
+                    steps = 19,
+                    onValueChange = { onOptionsChanged(options.copy(fillDensity = it)) },
+                )
+            }
+
+            SlicingSettingsSection.SPEED -> {
+                SettingsGroupTitle(stringResource(R.string.speed))
+                SettingSlider(
+                    label = stringResource(R.string.print_speed),
+                    valueText = stringResource(R.string.print_speed_value, options.printSpeed),
+                    value = options.printSpeed,
+                    range = 10f..maximumFeatureSpeed,
+                    steps = featureSpeedSteps,
+                    onValueChange = { onOptionsChanged(options.copy(printSpeed = (it / 5f).roundToInt() * 5f)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.inner_wall_speed),
+                    valueText = stringResource(R.string.print_speed_value, options.innerWallSpeed),
+                    value = options.innerWallSpeed,
+                    range = 10f..maximumFeatureSpeed,
+                    steps = featureSpeedSteps,
+                    onValueChange = { onOptionsChanged(options.copy(innerWallSpeed = (it / 5f).roundToInt() * 5f)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.sparse_infill_speed),
+                    valueText = stringResource(R.string.print_speed_value, options.sparseInfillSpeed),
+                    value = options.sparseInfillSpeed,
+                    range = 10f..maximumFeatureSpeed,
+                    steps = featureSpeedSteps,
+                    onValueChange = { onOptionsChanged(options.copy(sparseInfillSpeed = (it / 5f).roundToInt() * 5f)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.internal_solid_infill_speed),
+                    valueText = stringResource(R.string.print_speed_value, options.internalSolidInfillSpeed),
+                    value = options.internalSolidInfillSpeed,
+                    range = 10f..maximumFeatureSpeed,
+                    steps = featureSpeedSteps,
+                    onValueChange = { onOptionsChanged(options.copy(internalSolidInfillSpeed = (it / 5f).roundToInt() * 5f)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.top_surface_speed),
+                    valueText = stringResource(R.string.print_speed_value, options.topSurfaceSpeed),
+                    value = options.topSurfaceSpeed,
+                    range = 10f..maximumFeatureSpeed,
+                    steps = featureSpeedSteps,
+                    onValueChange = { onOptionsChanged(options.copy(topSurfaceSpeed = (it / 5f).roundToInt() * 5f)) },
+                )
+                OverhangSpeedSetting(
+                    label = stringResource(R.string.small_perimeter_speed),
+                    value = options.smallPerimeterSpeed,
+                    percent = options.smallPerimeterSpeedPercent,
+                    maximumAbsolute = maximumFeatureSpeed,
+                    maximumPercent = 300f,
+                    onValueChange = { onOptionsChanged(options.copy(smallPerimeterSpeed = it)) },
+                    onPercentChange = { selectedPercent, adjustedValue ->
+                        onOptionsChanged(
+                            options.copy(
+                                smallPerimeterSpeed = adjustedValue,
+                                smallPerimeterSpeedPercent = selectedPercent,
+                            ),
+                        )
+                    },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.small_perimeter_threshold),
+                    valueText = stringResource(R.string.millimeters_value_precise, options.smallPerimeterThreshold),
+                    value = options.smallPerimeterThreshold,
+                    range = 0f..max(20f, options.smallPerimeterThreshold),
+                    steps = (max(20f, options.smallPerimeterThreshold) * 2f).roundToInt().coerceAtLeast(2) - 1,
+                    onValueChange = { onOptionsChanged(options.copy(smallPerimeterThreshold = (it * 2f).roundToInt() / 2f)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.travel_speed),
+                    valueText = stringResource(R.string.print_speed_value, options.travelSpeed),
+                    value = options.travelSpeed,
+                    range = 10f..max(700f, options.travelSpeed),
+                    steps = ((max(700f, options.travelSpeed) - 10f) / 5f).roundToInt().coerceAtLeast(2) - 1,
+                    onValueChange = { onOptionsChanged(options.copy(travelSpeed = (it / 5f).roundToInt() * 5f)) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.avoid_crossing_walls),
+                    checked = options.reduceCrossingWall,
+                    onCheckedChange = { onOptionsChanged(options.copy(reduceCrossingWall = it)) },
+                )
+                if (options.reduceCrossingWall) {
+                    LengthOrPercentSetting(
+                        label = stringResource(R.string.maximum_travel_detour),
+                        value = options.maxTravelDetourDistance,
+                        percent = options.maxTravelDetourDistancePercent,
+                        maximumAbsolute = 1_000f,
+                        maximumPercent = 1_000f,
+                        onValueChange = { onOptionsChanged(options.copy(maxTravelDetourDistance = it)) },
+                        onPercentChange = { selectedPercent, adjustedValue ->
+                            onOptionsChanged(
+                                options.copy(
+                                    maxTravelDetourDistance = adjustedValue,
+                                    maxTravelDetourDistancePercent = selectedPercent,
+                                ),
+                            )
+                        },
+                    )
+                }
+                SettingsSwitch(
+                    label = stringResource(R.string.reduce_infill_retraction),
+                    checked = options.reduceInfillRetraction,
+                    onCheckedChange = { onOptionsChanged(options.copy(reduceInfillRetraction = it)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.first_layer_speed),
+                    valueText = stringResource(R.string.print_speed_value, options.firstLayerSpeed),
+                    value = options.firstLayerSpeed,
+                    range = 10f..150f,
+                    steps = 27,
+                    onValueChange = { onOptionsChanged(options.copy(firstLayerSpeed = (it / 5f).roundToInt() * 5f)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.first_layer_infill_speed),
+                    valueText = stringResource(R.string.print_speed_value, options.firstLayerInfillSpeed),
+                    value = options.firstLayerInfillSpeed,
+                    range = 10f..maximumFeatureSpeed,
+                    steps = featureSpeedSteps,
+                    onValueChange = { onOptionsChanged(options.copy(firstLayerInfillSpeed = (it / 5f).roundToInt() * 5f)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.bridge_speed),
+                    valueText = stringResource(R.string.print_speed_value, options.bridgeSpeed),
+                    value = options.bridgeSpeed,
+                    range = 10f..maximumFeatureSpeed,
+                    steps = featureSpeedSteps,
+                    onValueChange = { onOptionsChanged(options.copy(bridgeSpeed = (it / 5f).roundToInt() * 5f)) },
+                )
+                OverhangSpeedSetting(
+                    label = stringResource(R.string.internal_bridge_speed),
+                    value = options.internalBridgeSpeed,
+                    percent = options.internalBridgeSpeedPercent,
+                    maximumAbsolute = maximumFeatureSpeed,
+                    maximumPercent = 300f,
+                    onValueChange = { onOptionsChanged(options.copy(internalBridgeSpeed = it)) },
+                    onPercentChange = { selectedPercent, adjustedValue ->
+                        onOptionsChanged(
+                            options.copy(
+                                internalBridgeSpeed = adjustedValue,
+                                internalBridgeSpeedPercent = selectedPercent,
+                            ),
+                        )
+                    },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.gap_infill_speed),
+                    valueText = stringResource(R.string.print_speed_value, options.gapInfillSpeed),
+                    value = options.gapInfillSpeed,
+                    range = 10f..maximumFeatureSpeed,
+                    steps = featureSpeedSteps,
+                    onValueChange = { onOptionsChanged(options.copy(gapInfillSpeed = (it / 5f).roundToInt() * 5f)) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.overhang_speed),
+                    checked = options.overhangSpeedEnabled,
+                    onCheckedChange = { onOptionsChanged(options.copy(overhangSpeedEnabled = it)) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.slowdown_for_curled_perimeters),
+                    checked = options.slowdownForCurledPerimeters,
+                    onCheckedChange = { onOptionsChanged(options.copy(slowdownForCurledPerimeters = it)) },
+                )
+                if (options.overhangSpeedEnabled) {
+                    OverhangSpeedSetting(
+                        label = stringResource(R.string.overhang_speed_1),
+                        value = options.overhangSpeed1,
+                        percent = options.overhangSpeed1Percent,
+                        maximumAbsolute = maximumFeatureSpeed,
+                        onValueChange = { onOptionsChanged(options.copy(overhangSpeed1 = it)) },
+                        onPercentChange = { selectedPercent, adjustedValue ->
+                            onOptionsChanged(options.copy(overhangSpeed1 = adjustedValue, overhangSpeed1Percent = selectedPercent))
+                        },
+                    )
+                    OverhangSpeedSetting(
+                        label = stringResource(R.string.overhang_speed_2),
+                        value = options.overhangSpeed2,
+                        percent = options.overhangSpeed2Percent,
+                        maximumAbsolute = maximumFeatureSpeed,
+                        onValueChange = { onOptionsChanged(options.copy(overhangSpeed2 = it)) },
+                        onPercentChange = { selectedPercent, adjustedValue ->
+                            onOptionsChanged(options.copy(overhangSpeed2 = adjustedValue, overhangSpeed2Percent = selectedPercent))
+                        },
+                    )
+                    OverhangSpeedSetting(
+                        label = stringResource(R.string.overhang_speed_3),
+                        value = options.overhangSpeed3,
+                        percent = options.overhangSpeed3Percent,
+                        maximumAbsolute = maximumFeatureSpeed,
+                        onValueChange = { onOptionsChanged(options.copy(overhangSpeed3 = it)) },
+                        onPercentChange = { selectedPercent, adjustedValue ->
+                            onOptionsChanged(options.copy(overhangSpeed3 = adjustedValue, overhangSpeed3Percent = selectedPercent))
+                        },
+                    )
+                    OverhangSpeedSetting(
+                        label = stringResource(R.string.overhang_speed_4),
+                        value = options.overhangSpeed4,
+                        percent = options.overhangSpeed4Percent,
+                        maximumAbsolute = maximumFeatureSpeed,
+                        onValueChange = { onOptionsChanged(options.copy(overhangSpeed4 = it)) },
+                        onPercentChange = { selectedPercent, adjustedValue ->
+                            onOptionsChanged(options.copy(overhangSpeed4 = adjustedValue, overhangSpeed4Percent = selectedPercent))
+                        },
+                    )
+                }
+                SettingsGroupTitle(stringResource(R.string.bridges))
+                SettingSlider(
+                    label = stringResource(R.string.maximum_unsupported_bridge_length),
+                    valueText = stringResource(R.string.millimeters_value, options.maxBridgeLength),
+                    value = options.maxBridgeLength,
+                    range = 0f..max(100f, options.maxBridgeLength),
+                    steps = max(100f, options.maxBridgeLength).roundToInt().coerceAtLeast(2) - 1,
+                    onValueChange = { onOptionsChanged(options.copy(maxBridgeLength = it.roundToInt().toFloat())) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.external_bridge_density),
+                    valueText = stringResource(R.string.percent_value, options.bridgeDensity.roundToInt()),
+                    value = options.bridgeDensity,
+                    range = 10f..100f,
+                    steps = 89,
+                    onValueChange = { onOptionsChanged(options.copy(bridgeDensity = it.roundToInt().toFloat())) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.internal_bridge_density),
+                    valueText = stringResource(R.string.percent_value, options.internalBridgeDensity.roundToInt()),
+                    value = options.internalBridgeDensity,
+                    range = 10f..100f,
+                    steps = 89,
+                    onValueChange = { onOptionsChanged(options.copy(internalBridgeDensity = it.roundToInt().toFloat())) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.external_bridge_angle),
+                    valueText = stringResource(R.string.angle_value, options.bridgeAngle),
+                    value = options.bridgeAngle,
+                    range = 0f..360f,
+                    steps = 359,
+                    onValueChange = { onOptionsChanged(options.copy(bridgeAngle = it.roundToInt().toFloat())) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.internal_bridge_angle),
+                    valueText = stringResource(R.string.angle_value, options.internalBridgeAngle),
+                    value = options.internalBridgeAngle,
+                    range = 0f..360f,
+                    steps = 359,
+                    onValueChange = { onOptionsChanged(options.copy(internalBridgeAngle = it.roundToInt().toFloat())) },
+                )
+                Text(stringResource(R.string.extra_bridge_layers), fontWeight = FontWeight.SemiBold)
+                CompactChoices(
+                    entries = listOf("disabled", "external_bridge_only", "internal_bridge_only", "apply_to_all"),
+                    selected = options.extraBridgeLayer,
+                    label = {
+                        stringResource(
+                            when (it) {
+                                "external_bridge_only" -> R.string.extra_bridge_external
+                                "internal_bridge_only" -> R.string.extra_bridge_internal
+                                "apply_to_all" -> R.string.extra_bridge_all
+                                else -> R.string.extra_bridge_disabled
+                            },
+                        )
+                    },
+                    onSelected = { onOptionsChanged(options.copy(extraBridgeLayer = it)) },
+                )
+                Text(stringResource(R.string.internal_bridge_filter), fontWeight = FontWeight.SemiBold)
+                CompactChoices(
+                    entries = listOf("disabled", "limited", "nofilter"),
+                    selected = options.internalBridgeFilter,
+                    label = {
+                        stringResource(
+                            when (it) {
+                                "limited" -> R.string.bridge_filter_limited
+                                "nofilter" -> R.string.bridge_filter_none
+                                else -> R.string.bridge_filter_default
+                            },
+                        )
+                    },
+                    onSelected = { onOptionsChanged(options.copy(internalBridgeFilter = it)) },
+                )
+                Text(stringResource(R.string.counterbore_bridging), fontWeight = FontWeight.SemiBold)
+                CompactChoices(
+                    entries = listOf("none", "partiallybridge", "sacrificiallayer"),
+                    selected = options.counterboreHoleBridging,
+                    label = {
+                        stringResource(
+                            when (it) {
+                                "partiallybridge" -> R.string.counterbore_partial
+                                "sacrificiallayer" -> R.string.counterbore_sacrificial
+                                else -> R.string.counterbore_none
+                            },
+                        )
+                    },
+                    onSelected = { onOptionsChanged(options.copy(counterboreHoleBridging = it)) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.do_not_support_bridges),
+                    checked = options.bridgeNoSupport,
+                    onCheckedChange = { onOptionsChanged(options.copy(bridgeNoSupport = it)) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.thick_external_bridges),
+                    checked = options.thickBridges,
+                    onCheckedChange = { onOptionsChanged(options.copy(thickBridges = it)) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.thick_internal_bridges),
+                    checked = options.thickInternalBridges,
+                    onCheckedChange = { onOptionsChanged(options.copy(thickInternalBridges = it)) },
+                )
+                SettingsGroupTitle(stringResource(R.string.ironing))
+                CompactChoices(
+                    entries = listOf("no ironing", "top", "topmost", "solid"),
+                    selected = options.ironingType,
+                    label = { enumLabel(it) },
+                    onSelected = { onOptionsChanged(options.copy(ironingType = it)) },
+                )
+                if (options.ironingType != "no ironing") {
+                    Text(stringResource(R.string.ironing_pattern), fontWeight = FontWeight.SemiBold)
+                    CompactChoices(
+                        entries = listOf("rectilinear", "concentric"),
+                        selected = options.ironingPattern,
+                        label = { fillPatternLabel(it) },
+                        onSelected = { onOptionsChanged(options.copy(ironingPattern = it)) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.ironing_flow),
+                        valueText = stringResource(R.string.percent_value, options.ironingFlow.roundToInt()),
+                        value = options.ironingFlow,
+                        range = 0f..100f,
+                        steps = 99,
+                        onValueChange = { onOptionsChanged(options.copy(ironingFlow = it.roundToInt().toFloat())) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.ironing_spacing),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.ironingSpacing),
+                        value = options.ironingSpacing,
+                        range = 0.05f..0.5f,
+                        steps = 44,
+                        onValueChange = { onOptionsChanged(options.copy(ironingSpacing = it)) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.ironing_speed),
+                        valueText = stringResource(R.string.print_speed_value, options.ironingSpeed),
+                        value = options.ironingSpeed,
+                        range = 1f..maximumFeatureSpeed,
+                        steps = maximumFeatureSpeed.roundToInt().coerceAtLeast(2) - 2,
+                        onValueChange = { onOptionsChanged(options.copy(ironingSpeed = it.roundToInt().toFloat())) },
+                    )
+                }
+                SettingsGroupTitle(stringResource(R.string.feature_flow_ratio))
+                SettingSlider(
+                    label = stringResource(R.string.bridge_flow_ratio),
+                    valueText = String.format(Locale.ROOT, "%.2f", options.bridgeFlowRatio),
+                    value = options.bridgeFlowRatio,
+                    range = 0.5f..maximumFlowRatio,
+                    steps = flowRatioSteps,
+                    onValueChange = { onOptionsChanged(options.copy(bridgeFlowRatio = it)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.internal_bridge_flow_ratio),
+                    valueText = String.format(Locale.ROOT, "%.2f", options.internalBridgeFlowRatio),
+                    value = options.internalBridgeFlowRatio,
+                    range = 0.5f..maximumFlowRatio,
+                    steps = flowRatioSteps,
+                    onValueChange = { onOptionsChanged(options.copy(internalBridgeFlowRatio = it)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.top_surface_flow_ratio),
+                    valueText = String.format(Locale.ROOT, "%.2f", options.topSurfaceFlowRatio),
+                    value = options.topSurfaceFlowRatio,
+                    range = 0.5f..maximumFlowRatio,
+                    steps = flowRatioSteps,
+                    onValueChange = { onOptionsChanged(options.copy(topSurfaceFlowRatio = it)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.bottom_surface_flow_ratio),
+                    valueText = String.format(Locale.ROOT, "%.2f", options.bottomSurfaceFlowRatio),
+                    value = options.bottomSurfaceFlowRatio,
+                    range = 0.5f..maximumFlowRatio,
+                    steps = flowRatioSteps,
+                    onValueChange = { onOptionsChanged(options.copy(bottomSurfaceFlowRatio = it)) },
+                )
+                SettingsGroupTitle(stringResource(R.string.feature_acceleration))
+                SettingSlider(
+                    label = stringResource(R.string.default_acceleration),
+                    valueText = stringResource(R.string.acceleration_value, options.defaultAcceleration),
+                    value = options.defaultAcceleration,
+                    range = 0f..maximumFeatureAcceleration,
+                    steps = featureAccelerationSteps,
+                    onValueChange = { onOptionsChanged(options.copy(defaultAcceleration = (it / 100f).roundToInt() * 100f)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.outer_wall_acceleration),
+                    valueText = stringResource(R.string.acceleration_value, options.outerWallAcceleration),
+                    value = options.outerWallAcceleration,
+                    range = 0f..maximumFeatureAcceleration,
+                    steps = featureAccelerationSteps,
+                    onValueChange = { onOptionsChanged(options.copy(outerWallAcceleration = (it / 100f).roundToInt() * 100f)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.inner_wall_acceleration),
+                    valueText = stringResource(R.string.acceleration_value, options.innerWallAcceleration),
+                    value = options.innerWallAcceleration,
+                    range = 0f..maximumFeatureAcceleration,
+                    steps = featureAccelerationSteps,
+                    onValueChange = { onOptionsChanged(options.copy(innerWallAcceleration = (it / 100f).roundToInt() * 100f)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.top_surface_acceleration),
+                    valueText = stringResource(R.string.acceleration_value, options.topSurfaceAcceleration),
+                    value = options.topSurfaceAcceleration,
+                    range = 0f..maximumFeatureAcceleration,
+                    steps = featureAccelerationSteps,
+                    onValueChange = { onOptionsChanged(options.copy(topSurfaceAcceleration = (it / 100f).roundToInt() * 100f)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.travel_acceleration),
+                    valueText = stringResource(R.string.acceleration_value, options.travelAcceleration),
+                    value = options.travelAcceleration,
+                    range = 0f..maximumFeatureAcceleration,
+                    steps = featureAccelerationSteps,
+                    onValueChange = { onOptionsChanged(options.copy(travelAcceleration = (it / 100f).roundToInt() * 100f)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.first_layer_acceleration),
+                    valueText = stringResource(R.string.acceleration_value, options.firstLayerAcceleration),
+                    value = options.firstLayerAcceleration,
+                    range = 0f..maximumFeatureAcceleration,
+                    steps = featureAccelerationSteps,
+                    onValueChange = { onOptionsChanged(options.copy(firstLayerAcceleration = (it / 100f).roundToInt() * 100f)) },
+                )
+                AccelerationOrPercentSetting(
+                    label = stringResource(R.string.bridge_acceleration),
+                    value = options.bridgeAcceleration,
+                    percent = options.bridgeAccelerationPercent,
+                    maximumAbsolute = maximumFeatureAcceleration,
+                    onValueChange = { onOptionsChanged(options.copy(bridgeAcceleration = it)) },
+                    onPercentChange = { selectedPercent, adjustedValue ->
+                        onOptionsChanged(options.copy(bridgeAcceleration = adjustedValue, bridgeAccelerationPercent = selectedPercent))
+                    },
+                )
+                AccelerationOrPercentSetting(
+                    label = stringResource(R.string.sparse_infill_acceleration),
+                    value = options.sparseInfillAcceleration,
+                    percent = options.sparseInfillAccelerationPercent,
+                    maximumAbsolute = maximumFeatureAcceleration,
+                    onValueChange = { onOptionsChanged(options.copy(sparseInfillAcceleration = it)) },
+                    onPercentChange = { selectedPercent, adjustedValue ->
+                        onOptionsChanged(
+                            options.copy(
+                                sparseInfillAcceleration = adjustedValue,
+                                sparseInfillAccelerationPercent = selectedPercent,
+                            ),
+                        )
+                    },
+                )
+                AccelerationOrPercentSetting(
+                    label = stringResource(R.string.internal_solid_acceleration),
+                    value = options.internalSolidInfillAcceleration,
+                    percent = options.internalSolidInfillAccelerationPercent,
+                    maximumAbsolute = maximumFeatureAcceleration,
+                    onValueChange = { onOptionsChanged(options.copy(internalSolidInfillAcceleration = it)) },
+                    onPercentChange = { selectedPercent, adjustedValue ->
+                        onOptionsChanged(
+                            options.copy(
+                                internalSolidInfillAcceleration = adjustedValue,
+                                internalSolidInfillAccelerationPercent = selectedPercent,
+                            ),
+                        )
+                    },
+                )
+            }
+
+            SlicingSettingsSection.SUPPORT -> {
+                SettingsGroupTitle(stringResource(R.string.supports))
+                SettingsSwitch(
+                    label = stringResource(R.string.enable_supports),
+                    checked = options.supportEnabled,
+                    onCheckedChange = { onOptionsChanged(options.copy(supportEnabled = it)) },
+                )
+                if (options.supportEnabled) {
+                    SettingSlider(
+                        label = stringResource(R.string.support_speed),
+                        valueText = stringResource(R.string.print_speed_value, options.supportSpeed),
+                        value = options.supportSpeed,
+                        range = 10f..maximumFeatureSpeed,
+                        steps = featureSpeedSteps,
+                        onValueChange = { onOptionsChanged(options.copy(supportSpeed = (it / 5f).roundToInt() * 5f)) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.support_interface_speed),
+                        valueText = stringResource(R.string.print_speed_value, options.supportInterfaceSpeed),
+                        value = options.supportInterfaceSpeed,
+                        range = 10f..maximumFeatureSpeed,
+                        steps = featureSpeedSteps,
+                        onValueChange = { onOptionsChanged(options.copy(supportInterfaceSpeed = (it / 5f).roundToInt() * 5f)) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.support_line_width),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.supportLineWidth),
+                        value = options.supportLineWidth,
+                        range = minimumLineWidth..maximumLineWidth,
+                        steps = lineWidthSteps,
+                        onValueChange = { onOptionsChanged(options.copy(supportLineWidth = it)) },
+                    )
+                    CompactChoices(
+                        entries = listOf("normal", "tree"),
+                        selected = options.supportType,
+                        label = { if (it == "tree") stringResource(R.string.tree_support) else stringResource(R.string.normal_support) },
+                        onSelected = { onOptionsChanged(options.copy(supportType = it)) },
+                    )
+                    Text(stringResource(R.string.support_style), fontWeight = FontWeight.SemiBold)
+                    CompactChoices(
+                        entries = listOf("default", "grid", "snug", "organic", "tree_hybrid", "tree_slim"),
+                        selected = options.supportStyle,
+                        label = { enumLabel(it) },
+                        onSelected = { onOptionsChanged(options.copy(supportStyle = it)) },
+                    )
+                    Text(stringResource(R.string.support_base_pattern), fontWeight = FontWeight.SemiBold)
+                    CompactChoices(
+                        entries = listOf("default", "rectilinear", "rectilinear-grid", "lightning", "hollow"),
+                        selected = options.supportBasePattern,
+                        label = { enumLabel(it) },
+                        onSelected = { onOptionsChanged(options.copy(supportBasePattern = it)) },
+                    )
+                    Text(stringResource(R.string.support_interface_pattern), fontWeight = FontWeight.SemiBold)
+                    CompactChoices(
+                        entries = listOf("auto", "rectilinear", "rectilinear_interlaced", "concentric", "grid"),
+                        selected = options.supportInterfacePattern,
+                        label = { enumLabel(it) },
+                        onSelected = { onOptionsChanged(options.copy(supportInterfacePattern = it)) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.support_threshold_angle),
+                        valueText = stringResource(R.string.degrees_value, options.supportAngle),
+                        value = options.supportAngle,
+                        range = 10f..80f,
+                        steps = 69,
+                        onValueChange = { onOptionsChanged(options.copy(supportAngle = it.roundToInt().toFloat())) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.support_top_interface_layers),
+                        valueText = options.supportInterfaceTopLayers.toString(),
+                        value = options.supportInterfaceTopLayers.toFloat(),
+                        range = 0f..20f,
+                        steps = 19,
+                        onValueChange = { onOptionsChanged(options.copy(supportInterfaceTopLayers = it.roundToInt())) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.support_bottom_interface_layers),
+                        valueText = if (options.supportInterfaceBottomLayers < 0) {
+                            stringResource(R.string.same_as_top)
+                        } else {
+                            options.supportInterfaceBottomLayers.toString()
+                        },
+                        value = options.supportInterfaceBottomLayers.toFloat(),
+                        range = -1f..20f,
+                        steps = 20,
+                        onValueChange = { onOptionsChanged(options.copy(supportInterfaceBottomLayers = it.roundToInt())) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.support_interface_spacing),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.supportInterfaceSpacing),
+                        value = options.supportInterfaceSpacing,
+                        range = 0f..max(2f, options.supportInterfaceSpacing),
+                        steps = (max(2f, options.supportInterfaceSpacing) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = { onOptionsChanged(options.copy(supportInterfaceSpacing = (it / 0.05f).roundToInt() * 0.05f)) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.support_bottom_interface_spacing),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.supportBottomInterfaceSpacing),
+                        value = options.supportBottomInterfaceSpacing,
+                        range = 0f..max(2f, options.supportBottomInterfaceSpacing),
+                        steps = (max(2f, options.supportBottomInterfaceSpacing) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = { onOptionsChanged(options.copy(supportBottomInterfaceSpacing = (it / 0.05f).roundToInt() * 0.05f)) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.support_top_z_distance),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.supportTopZDistance),
+                        value = options.supportTopZDistance,
+                        range = 0f..max(2f, options.supportTopZDistance),
+                        steps = (max(2f, options.supportTopZDistance) / 0.02f).roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = { onOptionsChanged(options.copy(supportTopZDistance = (it / 0.02f).roundToInt() * 0.02f)) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.support_bottom_z_distance),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.supportBottomZDistance),
+                        value = options.supportBottomZDistance,
+                        range = 0f..max(2f, options.supportBottomZDistance),
+                        steps = (max(2f, options.supportBottomZDistance) / 0.02f).roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = { onOptionsChanged(options.copy(supportBottomZDistance = (it / 0.02f).roundToInt() * 0.02f)) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.support_object_xy_distance),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.supportObjectXYDistance),
+                        value = options.supportObjectXYDistance,
+                        range = 0f..max(5f, options.supportObjectXYDistance),
+                        steps = (max(5f, options.supportObjectXYDistance) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = { onOptionsChanged(options.copy(supportObjectXYDistance = (it / 0.05f).roundToInt() * 0.05f)) },
+                    )
+                }
+            }
+
+            SlicingSettingsSection.OTHERS -> {
+                SettingsGroupTitle(stringResource(R.string.bed_adhesion))
+                SettingSlider(
+                    label = stringResource(R.string.skirt_loops),
+                    valueText = options.skirtLoops.toString(),
+                    value = options.skirtLoops.toFloat(),
+                    range = 0f..10f,
+                    steps = 9,
+                    onValueChange = { onOptionsChanged(options.copy(skirtLoops = it.roundToInt())) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.skirt_distance),
+                    valueText = stringResource(R.string.millimeters_value_precise, options.skirtDistance),
+                    value = options.skirtDistance,
+                    range = 0f..max(60f, options.skirtDistance),
+                    steps = (max(60f, options.skirtDistance) / 0.5f).roundToInt().coerceAtLeast(2) - 1,
+                    onValueChange = { onOptionsChanged(options.copy(skirtDistance = (it * 2f).roundToInt() / 2f)) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.skirt_height),
+                    valueText = options.skirtHeight.toString(),
+                    value = options.skirtHeight.toFloat().coerceAtMost(max(10, options.skirtHeight).toFloat()),
+                    range = 0f..max(10, options.skirtHeight).toFloat(),
+                    steps = max(10, options.skirtHeight).coerceAtLeast(2) - 1,
+                    onValueChange = { onOptionsChanged(options.copy(skirtHeight = it.roundToInt())) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.skirt_speed),
+                    valueText = stringResource(R.string.print_speed_value, options.skirtSpeed),
+                    value = options.skirtSpeed,
+                    range = 0f..max(300f, options.skirtSpeed),
+                    steps = max(300f, options.skirtSpeed).roundToInt().coerceAtLeast(2) - 1,
+                    onValueChange = { onOptionsChanged(options.copy(skirtSpeed = it.roundToInt().toFloat())) },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.minimum_skirt_length),
+                    valueText = stringResource(R.string.millimeters_value, options.minimumSkirtLength),
+                    value = options.minimumSkirtLength,
+                    range = 0f..max(100f, options.minimumSkirtLength),
+                    steps = max(100f, options.minimumSkirtLength).roundToInt().coerceAtLeast(2) - 1,
+                    onValueChange = { onOptionsChanged(options.copy(minimumSkirtLength = it.roundToInt().toFloat())) },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.draft_shield),
+                    checked = options.draftShield == "enabled",
+                    onCheckedChange = {
+                        onOptionsChanged(options.copy(draftShield = if (it) "enabled" else "disabled"))
+                    },
+                )
+                Text(stringResource(R.string.brim_type), fontWeight = FontWeight.SemiBold)
+                CompactChoices(
+                    entries = listOf("auto_brim", "brim_ears", "outer_only", "inner_only", "outer_and_inner", "no_brim"),
+                    selected = options.brimType,
+                    label = {
+                        stringResource(
+                            when (it) {
+                                "auto_brim" -> R.string.brim_auto
+                                "brim_ears" -> R.string.brim_ears
+                                "outer_only" -> R.string.brim_outer
+                                "inner_only" -> R.string.brim_inner
+                                "outer_and_inner" -> R.string.brim_both
+                                else -> R.string.brim_none
+                            },
+                        )
+                    },
+                    onSelected = { onOptionsChanged(options.copy(brimType = it)) },
+                )
+                if (options.brimType != "no_brim") {
+                    SettingSlider(
+                        label = stringResource(R.string.brim_width),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.brimWidth),
+                        value = options.brimWidth,
+                        range = 0f..max(100f, options.brimWidth),
+                        steps = (max(100f, options.brimWidth) / 0.5f).roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = { onOptionsChanged(options.copy(brimWidth = (it * 2f).roundToInt() / 2f)) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.brim_object_gap),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.brimObjectGap),
+                        value = options.brimObjectGap,
+                        range = 0f..max(2f, options.brimObjectGap),
+                        steps = (max(2f, options.brimObjectGap) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = { onOptionsChanged(options.copy(brimObjectGap = (it * 20f).roundToInt() / 20f)) },
+                    )
+                }
+                SettingsGroupTitle(stringResource(R.string.raft))
+                SettingSlider(
+                    label = stringResource(R.string.raft_layers),
+                    valueText = options.raftLayers.toString(),
+                    value = options.raftLayers.toFloat(),
+                    range = 0f..max(20, options.raftLayers).toFloat(),
+                    steps = max(20, options.raftLayers).coerceAtLeast(2) - 1,
+                    onValueChange = { onOptionsChanged(options.copy(raftLayers = it.roundToInt())) },
+                )
+                if (options.raftLayers > 0) {
+                    SettingSlider(
+                        label = stringResource(R.string.raft_contact_distance),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.raftContactDistance),
+                        value = options.raftContactDistance,
+                        range = 0f..max(2f, options.raftContactDistance),
+                        steps = (max(2f, options.raftContactDistance) / 0.02f).roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = { onOptionsChanged(options.copy(raftContactDistance = (it * 50f).roundToInt() / 50f)) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.raft_expansion),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.raftExpansion),
+                        value = options.raftExpansion,
+                        range = 0f..max(20f, options.raftExpansion),
+                        steps = (max(20f, options.raftExpansion) / 0.5f).roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = { onOptionsChanged(options.copy(raftExpansion = (it * 2f).roundToInt() / 2f)) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.raft_first_layer_density),
+                        valueText = stringResource(R.string.percent_value, options.raftFirstLayerDensity.roundToInt()),
+                        value = options.raftFirstLayerDensity,
+                        range = 10f..100f,
+                        steps = 89,
+                        onValueChange = { onOptionsChanged(options.copy(raftFirstLayerDensity = it.roundToInt().toFloat())) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.raft_first_layer_expansion),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.raftFirstLayerExpansion),
+                        value = options.raftFirstLayerExpansion,
+                        range = 0f..max(20f, options.raftFirstLayerExpansion),
+                        steps = (max(20f, options.raftFirstLayerExpansion) / 0.5f).roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = {
+                            onOptionsChanged(options.copy(raftFirstLayerExpansion = (it * 2f).roundToInt() / 2f))
+                        },
+                    )
+                }
+            }
+        }
+        SaveProfileField(onSave = onSave, onDismiss = onDismiss)
+    }
+}
+
+@Composable
+private fun SlicingSettingsTabs(
+    selected: SlicingSettingsSection,
+    onSelected: (SlicingSettingsSection) -> Unit,
+) {
+    SecondaryScrollableTabRow(
+        selectedTabIndex = SlicingSettingsSection.entries.indexOf(selected),
+        edgePadding = 0.dp,
+        containerColor = Color.Transparent,
+        contentColor = Color(0xFFF6C945),
+        divider = { HorizontalDivider(color = Color.White.copy(alpha = 0.12f)) },
+    ) {
+        SlicingSettingsSection.entries.forEach { section ->
+            Tab(
+                selected = selected == section,
+                onClick = { onSelected(section) },
+                text = { Text(stringResource(section.titleResource)) },
+                selectedContentColor = Color(0xFFF6C945),
+                unselectedContentColor = Color(0xFFC8C9C2),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsGroupTitle(title: String) {
+    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
+}
+
+@Composable
+private fun SettingsSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(stringResource(R.string.supports), fontWeight = FontWeight.SemiBold)
-        Switch(
-            checked = options.supportEnabled,
-            onCheckedChange = { onOptionsChanged(options.copy(supportEnabled = it)) },
-        )
+        Text(label, fontWeight = FontWeight.SemiBold)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
-    SettingSlider(
-        label = stringResource(R.string.brim_width),
-        valueText = stringResource(R.string.millimeters_value, options.brimWidth),
-        value = options.brimWidth,
-        range = 0f..20f,
-        steps = 19,
-        onValueChange = { onOptionsChanged(options.copy(brimWidth = it.roundToInt().toFloat())) },
-    )
-    SaveProfileField(onSave = onSave, onDismiss = onDismiss)
 }
+
+@Composable
+private fun OverhangSpeedSetting(
+    label: String,
+    value: Float,
+    percent: Boolean,
+    maximumAbsolute: Float,
+    maximumPercent: Float = 100f,
+    onValueChange: (Float) -> Unit,
+    onPercentChange: (Boolean, Float) -> Unit,
+) {
+    Text(label, fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf(false, true),
+        selected = percent,
+        label = { if (it) "%" else "mm/s" },
+        onSelected = { selectedPercent ->
+            val newMaximum = if (selectedPercent) maximumPercent else maximumAbsolute
+            onPercentChange(selectedPercent, value.coerceAtMost(newMaximum))
+        },
+    )
+    val maximum = if (percent) maximumPercent else maximumAbsolute
+    SettingSlider(
+        label = label,
+        valueText = if (percent) {
+            stringResource(R.string.percent_value, value.coerceAtMost(maximumPercent).roundToInt())
+        } else {
+            stringResource(R.string.print_speed_value, value)
+        },
+        value = value.coerceIn(0f, maximum),
+        range = 0f..maximum,
+        steps = maximum.roundToInt().coerceAtLeast(2) - 1,
+        onValueChange = onValueChange,
+    )
+}
+
+@Composable
+private fun AccelerationOrPercentSetting(
+    label: String,
+    value: Float,
+    percent: Boolean,
+    maximumAbsolute: Float,
+    onValueChange: (Float) -> Unit,
+    onPercentChange: (Boolean, Float) -> Unit,
+) {
+    Text(label, fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf(false, true),
+        selected = percent,
+        label = { if (it) "%" else "mm/s²" },
+        onSelected = { selectedPercent ->
+            val newMaximum = if (selectedPercent) 300f else maximumAbsolute
+            onPercentChange(selectedPercent, value.coerceAtMost(newMaximum))
+        },
+    )
+    val maximum = if (percent) 300f else maximumAbsolute
+    SettingSlider(
+        label = label,
+        valueText = if (percent) {
+            stringResource(R.string.percent_value, value.coerceAtMost(maximum).roundToInt())
+        } else {
+            stringResource(R.string.acceleration_value, value)
+        },
+        value = value.coerceIn(0f, maximum),
+        range = 0f..maximum,
+        steps = if (percent) 299 else (maximum / 100f).roundToInt().coerceAtLeast(2) - 1,
+        onValueChange = {
+            onValueChange(if (percent) it.roundToInt().toFloat() else (it / 100f).roundToInt() * 100f)
+        },
+    )
+}
+
+@Composable
+private fun LengthOrPercentSetting(
+    label: String,
+    value: Float,
+    percent: Boolean,
+    maximumAbsolute: Float = 2f,
+    maximumPercent: Float = 100f,
+    onValueChange: (Float) -> Unit,
+    onPercentChange: (Boolean, Float) -> Unit,
+) {
+    Text(label, fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = listOf(false, true),
+        selected = percent,
+        label = { if (it) "%" else "mm" },
+        onSelected = { selectedPercent ->
+            val newMaximum = if (selectedPercent) maximumPercent else maximumAbsolute
+            onPercentChange(selectedPercent, value.coerceAtMost(newMaximum))
+        },
+    )
+    val maximum = if (percent) maximumPercent else maximumAbsolute
+    SettingSlider(
+        label = label,
+        valueText = if (percent) {
+            stringResource(R.string.percent_value, value.coerceAtMost(maximumPercent).roundToInt())
+        } else {
+            stringResource(R.string.millimeters_value_precise, value)
+        },
+        value = value.coerceIn(0f, maximum),
+        range = 0f..maximum,
+        steps = if (percent) maximumPercent.roundToInt().coerceIn(2, 1_000) - 1 else 199,
+        onValueChange = { onValueChange(if (percent) it.roundToInt().toFloat() else it) },
+    )
+}
+
+@Composable
+private fun <T> CompactChoices(
+    entries: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    onSelected: (T) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        entries.forEach { entry ->
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { onSelected(entry) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = entry == selected, onClick = { onSelected(entry) })
+                Text(label(entry))
+            }
+        }
+    }
+}
+
+@Composable
+private fun fillPatternLabel(value: String): String = when (value) {
+    "grid" -> stringResource(R.string.infill_grid)
+    "honeycomb" -> stringResource(R.string.infill_honeycomb)
+    "rectilinear" -> stringResource(R.string.infill_rectilinear)
+    "alignedrectilinear" -> stringResource(R.string.infill_aligned_rectilinear)
+    "gyroid" -> stringResource(R.string.infill_gyroid)
+    else -> enumLabel(value)
+}
+
+private fun enumLabel(value: String): String = value
+    .replace('_', ' ')
+    .replace('-', ' ')
+    .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun SettingsSheet(
     title: String,
     onDismiss: () -> Unit,
+    scrollKey: Any? = null,
     content: @Composable () -> Unit,
 ) {
+    val scrollState = rememberScrollState()
+    LaunchedEffect(scrollKey) { scrollState.scrollTo(0) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .navigationBarsPadding()
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -353,34 +2101,14 @@ private fun SettingsSheet(
     }
 }
 
-@Composable
-private fun <T> ProfileChoices(
-    entries: List<T>,
-    selected: T,
-    label: @Composable (T) -> String,
-    onSelected: (T) -> Unit,
-) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        entries.forEach { entry ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSelected(entry) }
-                    .padding(vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RadioButton(selected = entry == selected, onClick = { onSelected(entry) })
-                Text(label(entry), maxLines = 1)
-            }
-        }
-    }
-}
-
 private data class ProfileChoiceGroup<T>(
     val key: String,
     val title: String,
     val entries: List<T>,
 )
+
+private fun List<String>.matchesPrinter(printer: PrinterProfile): Boolean =
+    isEmpty() || printer.name in this
 
 @Composable
 private fun <T> SearchableGroupedProfileChoices(

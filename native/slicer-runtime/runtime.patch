@@ -1,0 +1,1509 @@
+diff --git a/app/src/main/cpp/CMakeLists.txt b/app/src/main/cpp/CMakeLists.txt
+index 963808df..e2c066c6 100644
+--- a/app/src/main/cpp/CMakeLists.txt
++++ b/app/src/main/cpp/CMakeLists.txt
+@@ -371,6 +371,9 @@ if(SLICER_BACKEND STREQUAL "orca")
+         ${BUNDLED_DIR}/libnest2d/include
+         ${BUNDLED_INCLUDES}
+     )
++    # Without a backend, libnest2d's no-fit polygon enumerator is a no-op.
++    # The Android include order routes this through the existing serial TBB shim.
++    target_compile_definitions(libnest2d INTERFACE LIBNEST2D_THREADING_tbb)
+ 
+     # --- nowide (from OrcaSlicer's bundled boost/nowide) ---
+     add_library(nowide INTERFACE)
+@@ -486,16 +489,29 @@ endif()
+ 
+ # LibBGCode — stub (binary G-code not needed)
+ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/extern/libbgcode_stub/include)
+-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/extern/jpeg_stub/include)
+ add_library(bgcode_convert INTERFACE)
+ add_library(LibBGCode::bgcode_convert ALIAS bgcode_convert)
+ 
+-# NLopt — stub
+-add_library(NLopt INTERFACE)
++# Real optimization and JPEG implementations are required. Silent stubbed
++# output is not acceptable in a production slicer runtime.
++set(NLOPT_ROOT "${EXTERN_DIR}/nlopt")
++add_library(NLopt STATIC IMPORTED)
++set_target_properties(NLopt PROPERTIES
++    IMPORTED_LOCATION "${NLOPT_ROOT}/lib/libnlopt.a"
++    INTERFACE_INCLUDE_DIRECTORIES "${NLOPT_ROOT}/include"
++)
++
++set(JPEG_ROOT "${EXTERN_DIR}/jpeg")
++include_directories(BEFORE "${JPEG_ROOT}/include")
++add_library(jpeg STATIC IMPORTED)
++set_target_properties(jpeg PROPERTIES
++    IMPORTED_LOCATION "${JPEG_ROOT}/lib/libjpeg.a"
++    INTERFACE_INCLUDE_DIRECTORIES "${JPEG_ROOT}/include"
++)
+ 
+-# PNG/JPEG — stubs (not needed for headless slicing)
++# PNGReadWrite is excluded from the headless source list. The remaining PNG
++# include is unused and supplied by a declaration-free compatibility header.
+ add_library(png_stub INTERFACE)
+-add_library(jpeg_stub INTERFACE)
+ 
+ if(SLICER_BACKEND STREQUAL "orca")
+     # OpenCV — stub (image analysis features not needed on Android)
+@@ -1075,6 +1091,8 @@ if(SLICER_BACKEND STREQUAL "orca")
+         Clipper2
+         z
+         expat
++        NLopt
++        jpeg
+     )
+ else()
+     target_link_libraries(libslic3r PRIVATE
+@@ -1123,6 +1141,7 @@ add_library(prusaslicer-jni SHARED
+     src/sapil_arrange.cpp
+     src/sapil_bambu_snapshot.cpp
+     src/sapil_bambu_volumes.cpp
++    src/sapil_support_paint.cpp
+     src/sapil_bambu_project.cpp
+     src/sapil_bambu_plate.cpp
+     src/sapil_bambu_objects.cpp
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+index 116a4a85..b870c593 100644
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -40,14 +40,88 @@ struct SliceConfig {
+     int perimeters = 2;
+     int top_solid_layers = 5;
+     int bottom_solid_layers = 4;
++    float top_shell_thickness = 0.0f;
++    float bottom_shell_thickness = 0.0f;
+     float fill_density = 0.15f;  // 0.0 - 1.0
+     std::string fill_pattern = "gyroid";
++    std::string top_surface_pattern = "monotonicline";
++    std::string bottom_surface_pattern = "monotonic";
++    std::string internal_solid_infill_pattern = "monotonic";
++    bool infill_first = false;
++    float infill_wall_overlap = 15.0f;
++    float top_bottom_infill_wall_overlap = 25.0f;
++    bool infill_combination = false;
++    float infill_combination_max_layer_height = 100.0f;
++    bool infill_combination_max_layer_height_percent = true;
++    float infill_direction = 45.0f;
++    float solid_infill_direction = 45.0f;
++    bool align_infill_direction_to_model = false;
++    float minimum_sparse_infill_area = 15.0f;
++    float infill_anchor = 400.0f;
++    bool infill_anchor_percent = true;
++    float infill_anchor_max = 20.0f;
++    bool infill_anchor_max_percent = false;
++    std::string gap_fill_target = "nowhere";
++    float filter_out_gap_fill = 0.0f;
++    bool reduce_crossing_wall = false;
++    float max_travel_detour_distance = 0.0f;
++    bool max_travel_detour_distance_percent = false;
++    bool reduce_infill_retraction = false;
+ 
+     // Speed settings (mm/s)
+     float print_speed = 60.0f;
++    float inner_wall_speed = 90.0f;
++    float sparse_infill_speed = 81.0f;
++    float internal_solid_infill_speed = 75.0f;
++    float top_surface_speed = 60.0f;
++    float support_speed = 100.0f;
++    float bridge_speed = 50.0f;
++    float gap_infill_speed = 75.0f;
++    float first_layer_infill_speed = 42.0f;
++    float support_interface_speed = 80.0f;
++    float internal_bridge_speed = 150.0f;
++    bool internal_bridge_speed_percent = true;
++    bool overhang_speed_enabled = true;
++    float overhang_speed_1 = 55.0f;
++    bool overhang_speed_1_percent = false;
++    float overhang_speed_2 = 30.0f;
++    bool overhang_speed_2_percent = false;
++    float overhang_speed_3 = 10.0f;
++    bool overhang_speed_3_percent = false;
++    float overhang_speed_4 = 10.0f;
++    bool overhang_speed_4_percent = false;
+     float travel_speed = 150.0f;
+     float first_layer_speed = 20.0f;
+ 
++    // Feature flow ratios.
++    float bridge_flow_ratio = 1.0f;
++    float internal_bridge_flow_ratio = 1.0f;
++    float top_surface_flow_ratio = 1.0f;
++    float bottom_surface_flow_ratio = 1.0f;
++    float bridge_density = 100.0f;
++    float internal_bridge_density = 100.0f;
++    float bridge_angle = 0.0f;
++    float internal_bridge_angle = 0.0f;
++    bool bridge_no_support = false;
++    bool thick_bridges = false;
++    bool thick_internal_bridges = true;
++    std::string extra_bridge_layer = "disabled";
++    std::string internal_bridge_filter = "disabled";
++
++    // Feature acceleration (mm/s²). Zero keeps Orca's inheritance behavior.
++    float default_acceleration = 0.0f;
++    float outer_wall_acceleration = 0.0f;
++    float inner_wall_acceleration = 0.0f;
++    float top_surface_acceleration = 0.0f;
++    float travel_acceleration = 0.0f;
++    float first_layer_acceleration = 0.0f;
++    float bridge_acceleration = 50.0f;
++    bool bridge_acceleration_percent = true;
++    float sparse_infill_acceleration = 100.0f;
++    bool sparse_infill_acceleration_percent = true;
++    float internal_solid_infill_acceleration = 100.0f;
++    bool internal_solid_infill_acceleration_percent = true;
++
+     // Temperature
+     int nozzle_temp = 210;
+     int bed_temp = 60;
+@@ -60,17 +134,100 @@ struct SliceConfig {
+     bool support_enabled = false;
+     std::string support_type = "normal"; // "normal", "tree"
+     float support_angle = 45.0f;
++    int support_interface_top_layers = 3;
++    int support_interface_bottom_layers = 0;
++    float support_interface_spacing = 0.5f;
++    float support_bottom_interface_spacing = 0.5f;
++    float support_top_z_distance = 0.2f;
++    float support_bottom_z_distance = 0.2f;
++    float support_object_xy_distance = 0.35f;
++    std::string support_base_pattern = "default";
++    std::string support_interface_pattern = "auto";
++    std::string support_style = "default";
+     int support_filament = 0;            // 1-based Orca filament index; 0 = default
+     int support_interface_filament = 0;  // 1-based Orca filament index; 0 = default
+ 
+     // Skirt/Brim
+     int skirt_loops = 0;
+     float skirt_distance = 6.0f;
++    int skirt_height = 1;
++    float skirt_speed = 50.0f;
++    float minimum_skirt_length = 0.0f;
++    std::string draft_shield = "disabled";
++    std::string brim_type = "no_brim";
+     float brim_width = 0.0f;
+-
+-    // Printer bed (Snapmaker U1: 270x270x270mm)
++    float brim_object_gap = 0.0f;
++    int raft_layers = 0;
++    float raft_contact_distance = 0.1f;
++    float raft_expansion = 1.5f;
++    float raft_first_layer_density = 90.0f;
++    float raft_first_layer_expansion = 2.0f;
++
++    // Orca wall semantics. Keep exterior and interior paths independently
++    // configurable instead of reducing a process profile to wall count alone.
++    float outer_wall_line_width = 0.42f;
++    float inner_wall_line_width = 0.45f;
++    float top_surface_line_width = 0.42f;
++    float sparse_infill_line_width = 0.45f;
++    float internal_solid_infill_line_width = 0.45f;
++    float support_line_width = 0.42f;
++    float initial_layer_line_width = 0.5f;
++    float small_perimeter_speed = 50.0f;
++    bool small_perimeter_speed_percent = true;
++    float small_perimeter_threshold = 0.0f;
++    bool slowdown_for_curled_perimeters = true;
++    float resolution = 0.01f;
++    std::string seam_position = "aligned";
++    bool staggered_inner_seams = false;
++    float seam_gap = 10.0f;
++    bool seam_gap_percent = true;
++    bool wipe_before_external_loop = false;
++    bool wipe_on_loops = false;
++    bool role_based_wipe_speed = true;
++    float wipe_speed = 80.0f;
++    bool wipe_speed_percent = true;
++    std::string ironing_type = "no ironing";
++    std::string ironing_pattern = "rectilinear";
++    float ironing_flow = 10.0f;
++    float ironing_spacing = 0.1f;
++    float ironing_speed = 20.0f;
++    std::string wall_generator = "arachne";
++    float wall_transition_length = 100.0f;
++    float wall_transition_filter_deviation = 25.0f;
++    float wall_transition_angle = 10.0f;
++    int wall_distribution_count = 1;
++    float minimum_feature_size = 25.0f;
++    float minimum_wall_length_factor = 0.5f;
++    std::string wall_sequence = "inner-outer";
++    std::string wall_direction = "auto";
++    bool detect_thin_walls = false;
++    bool detect_overhang_walls = true;
++    bool only_one_wall_on_top = false;
++    float min_width_top_surface = 300.0f;
++    bool min_width_top_surface_percent = true;
++    bool only_one_wall_first_layer = false;
++    bool extra_perimeters_on_overhangs = false;
++    bool overhang_reverse = false;
++    bool overhang_reverse_internal_only = false;
++    float overhang_reverse_threshold = 50.0f;
++    bool overhang_reverse_threshold_percent = true;
++    std::string counterbore_hole_bridging = "none";
++    bool alternate_extra_wall = false;
++    std::string ensure_vertical_shell_thickness = "ensure_all";
++    bool detect_narrow_internal_solid_infill = true;
++    float xy_hole_compensation = 0.0f;
++    float xy_contour_compensation = 0.0f;
++    float elephant_foot_compensation = 0.0f;
++    int elephant_foot_compensation_layers = 1;
++    float max_bridge_length = 10.0f;
++    bool precise_outer_walls = true;
++
++    // Printer build volume. bed_polygon stores flat XY pairs in millimetres.
+     float bed_size_x = 270.0f;
+     float bed_size_y = 270.0f;
++    float bed_origin_x = 0.0f;
++    float bed_origin_y = 0.0f;
++    std::vector<float> bed_polygon = {0.0f, 0.0f, 270.0f, 0.0f, 270.0f, 270.0f, 0.0f, 270.0f};
+     float max_print_height = 270.0f;
+ 
+     // Nozzle
+@@ -98,6 +255,22 @@ struct SliceConfig {
+     // template expressions at G-code generation time.
+     std::string machine_start_gcode;
+     std::string machine_end_gcode;
++    std::string gcode_flavor = "marlin";
++    float machine_max_speed_x = 500.0f;
++    float machine_max_speed_y = 500.0f;
++    float machine_max_speed_z = 20.0f;
++    float machine_max_speed_e = 30.0f;
++    float machine_max_acceleration_x = 20000.0f;
++    float machine_max_acceleration_y = 20000.0f;
++    float machine_max_acceleration_z = 500.0f;
++    float machine_max_acceleration_e = 5000.0f;
++    float machine_max_acceleration_extruding = 20000.0f;
++    float machine_max_acceleration_retracting = 5000.0f;
++    float machine_max_acceleration_travel = 20000.0f;
++    float machine_max_jerk_x = 9.0f;
++    float machine_max_jerk_y = 9.0f;
++    float machine_max_jerk_z = 3.0f;
++    float machine_max_jerk_e = 2.5f;
+ 
+     // F91 (2026-05-25): per-extruder filament tuning sourced from the user's filament
+     // library on the Kotlin side at slice time. Empty vector = "user has not set this
+@@ -124,6 +297,9 @@ struct SliceConfig {
+ 
+     // Full-spectrum mixed-filament recipe (stage 2; serialized MixedFilamentManager output)
+     std::string mixed_filament_definitions = "";
++
++    // Process-local output ceiling. The Android worker sets RLIMIT_FSIZE before export.
++    unsigned long long maximum_gcode_bytes = 1024ULL * 1024ULL * 1024ULL;
+ };
+ 
+ // ---- Model Info ----
+@@ -259,6 +435,12 @@ public:
+     // positions.size() / 2 must equal g_model.objects.size().
+     bool setObjectPositions(const std::vector<std::pair<float, float>>& positions);
+ 
++    // Pack every loaded object on a rectangular bed with Orca's arrangement engine.
++    // Existing object rotations are preserved. Returns world-space lower-left XY
++    // pairs in object order, or std::nullopt when the objects cannot fit safely.
++    std::optional<std::vector<float>> autoArrangeObjects(
++        const std::vector<float>& bedPolygon, float minimumGap);
++
+     // F66 — returns flat [minX0, minY0, minX1, minY1, ...] world-space AABB
+     // min for each object, computed from instance[0]'s full transform applied
+     // to each model-part volume's mesh bounding box. The values are exactly
+diff --git a/app/src/main/cpp/src/orca_stubs.cpp b/app/src/main/cpp/src/orca_stubs.cpp
+index 51a2f8fb..f5cdd410 100644
+--- a/app/src/main/cpp/src/orca_stubs.cpp
++++ b/app/src/main/cpp/src/orca_stubs.cpp
+@@ -5,6 +5,7 @@
+ // Include path has extern/libslic3r_android first, so "Format/STEP.hpp" picks
+ // up our stub before the real OCCT-dependent header.
+ #include "Format/STEP.hpp"
++#include "Polygon.hpp"
+ #include <string>
+ #include <vector>
+ #include <functional>
+@@ -12,7 +13,6 @@
+ namespace Slic3r {
+ class PerimeterGenerator;
+ namespace Arachne { struct ExtrusionLine; }
+-class Polygon;
+ 
+ // STEP — excluded (needs OCCT). Implement Step class methods declared in stub header.
+ Step::Step(std::string, ImportStepProgressFn, StepIsUtf8Fn) {}
+@@ -28,7 +28,7 @@ bool load_step(const char*, Model*, bool&,
+ // FuzzySkin — excluded (needs libnoise)
+ namespace Feature { namespace FuzzySkin {
+ void apply_fuzzy_skin(Arachne::ExtrusionLine*, const PerimeterGenerator&, bool) {}
+-void apply_fuzzy_skin(const Polygon&, const PerimeterGenerator&, unsigned long, bool) {}
++Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator&, size_t, bool) { return polygon; }
+ void group_region_by_fuzzify(PerimeterGenerator&) {}
+ } } // namespace Feature::FuzzySkin
+ 
+diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil_arrange.cpp
+index 44041ca3..574b380d 100644
+--- a/app/src/main/cpp/src/sapil_arrange.cpp
++++ b/app/src/main/cpp/src/sapil_arrange.cpp
+@@ -1,6 +1,7 @@
+ #include "../include/sapil.h"
+ #include "sapil_internal.h"
+ #include "libslic3r/Model.hpp"
++#include "libslic3r/ModelArrange.hpp"
+ #include "libslic3r/Orient.hpp"
+ #include <cmath>
+ #include "libslic3r/BoundingBox.hpp"
+@@ -549,6 +550,54 @@ bool SlicerEngine::setObjectPositions(const std::vector<std::pair<float, float>>
+     return true;
+ }
+ 
++std::optional<std::vector<float>> SlicerEngine::autoArrangeObjects(
++    const std::vector<float>& bedPolygon, float minimumGap) {
++    if (!isModelLoaded() || bedPolygon.size() < 6 || bedPolygon.size() > 512 ||
++        bedPolygon.size() % 2 != 0 || !std::isfinite(minimumGap) || minimumGap < 0.0f) {
++        return std::nullopt;
++    }
++    try {
++        Slic3r::arrangement::ArrangeParams params{Slic3r::scaled(minimumGap)};
++        params.allow_rotations = false;
++        params.progressind = [](unsigned, std::string) {};
++        params.stopcondition = []() { return false; };
++        Slic3r::Points bedPoints;
++        bedPoints.reserve(bedPolygon.size() / 2);
++        for (size_t index = 0; index < bedPolygon.size(); index += 2) {
++            if (!std::isfinite(bedPolygon[index]) || !std::isfinite(bedPolygon[index + 1])) {
++                return std::nullopt;
++            }
++            bedPoints.emplace_back(
++                Slic3r::scaled(bedPolygon[index]),
++                Slic3r::scaled(bedPolygon[index + 1]));
++        }
++        Slic3r::Polygon bed(std::move(bedPoints));
++        if (!bed.is_valid()) return std::nullopt;
++        bed.make_counter_clockwise();
++        Slic3r::ModelInstancePtrs instances;
++        auto polygons = Slic3r::get_arrange_polys(getGlobalModel(), instances);
++        const coord_t inflation = Slic3r::scaled(minimumGap) / 2;
++        for (auto& polygon : polygons) {
++            // This Orca fork uses -1 for both UNARRANGED and libnest2d UNFIT.
++            // Desktop callers seed the selected physical plate before packing.
++            polygon.bed_idx = 0;
++            polygon.inflation = inflation;
++        }
++        Slic3r::arrangement::arrange(polygons, bed, params);
++        if (!Slic3r::apply_arrange_polys(polygons, instances, nullptr)) {
++            return std::nullopt;
++        }
++    } catch (...) {
++        SAPIL_LOGE("autoArrangeObjects: Orca arrangement failed");
++        return std::nullopt;
++    }
++    for (auto* object : getGlobalModel().objects) {
++        object->invalidate_bounding_box();
++    }
++    invalidatePreviewMeshCache();
++    return getObjectWorldAABBMins();
++}
++
+ // =============================================================================
+ // F66 — Split + Auto-Orient + per-object pose
+ // =============================================================================
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+index d93efb7d..276bb039 100644
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -92,10 +92,80 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.perimeters = getInt("perimeters");
+     config.top_solid_layers = getInt("topSolidLayers");
+     config.bottom_solid_layers = getInt("bottomSolidLayers");
++    config.top_shell_thickness = getFloat("topShellThickness");
++    config.bottom_shell_thickness = getFloat("bottomShellThickness");
+     config.fill_density = getFloat("fillDensity");
+     config.fill_pattern = getString("fillPattern");
++    config.top_surface_pattern = getString("topSurfacePattern");
++    config.bottom_surface_pattern = getString("bottomSurfacePattern");
++    config.internal_solid_infill_pattern = getString("internalSolidInfillPattern");
++    config.infill_first = getBool("infillFirst");
++    config.infill_wall_overlap = getFloat("infillWallOverlap");
++    config.top_bottom_infill_wall_overlap = getFloat("topBottomInfillWallOverlap");
++    config.infill_combination = getBool("infillCombination");
++    config.infill_combination_max_layer_height = getFloat("infillCombinationMaxLayerHeight");
++    config.infill_combination_max_layer_height_percent = getBool("infillCombinationMaxLayerHeightPercent");
++    config.infill_direction = getFloat("infillDirection");
++    config.solid_infill_direction = getFloat("solidInfillDirection");
++    config.align_infill_direction_to_model = getBool("alignInfillDirectionToModel");
++    config.minimum_sparse_infill_area = getFloat("minimumSparseInfillArea");
++    config.infill_anchor = getFloat("infillAnchor");
++    config.infill_anchor_percent = getBool("infillAnchorPercent");
++    config.infill_anchor_max = getFloat("infillAnchorMax");
++    config.infill_anchor_max_percent = getBool("infillAnchorMaxPercent");
++    config.gap_fill_target = getString("gapFillTarget");
++    config.filter_out_gap_fill = getFloat("filterOutGapFill");
++    config.reduce_crossing_wall = getBool("reduceCrossingWall");
++    config.max_travel_detour_distance = getFloat("maxTravelDetourDistance");
++    config.max_travel_detour_distance_percent = getBool("maxTravelDetourDistancePercent");
++    config.reduce_infill_retraction = getBool("reduceInfillRetraction");
+ 
+     config.print_speed = getFloat("printSpeed");
++    config.inner_wall_speed = getFloat("innerWallSpeed");
++    config.sparse_infill_speed = getFloat("sparseInfillSpeed");
++    config.internal_solid_infill_speed = getFloat("internalSolidInfillSpeed");
++    config.top_surface_speed = getFloat("topSurfaceSpeed");
++    config.support_speed = getFloat("supportSpeed");
++    config.bridge_speed = getFloat("bridgeSpeed");
++    config.gap_infill_speed = getFloat("gapInfillSpeed");
++    config.first_layer_infill_speed = getFloat("firstLayerInfillSpeed");
++    config.support_interface_speed = getFloat("supportInterfaceSpeed");
++    config.internal_bridge_speed = getFloat("internalBridgeSpeed");
++    config.internal_bridge_speed_percent = getBool("internalBridgeSpeedPercent");
++    config.overhang_speed_enabled = getBool("overhangSpeedEnabled");
++    config.overhang_speed_1 = getFloat("overhangSpeed1");
++    config.overhang_speed_1_percent = getBool("overhangSpeed1Percent");
++    config.overhang_speed_2 = getFloat("overhangSpeed2");
++    config.overhang_speed_2_percent = getBool("overhangSpeed2Percent");
++    config.overhang_speed_3 = getFloat("overhangSpeed3");
++    config.overhang_speed_3_percent = getBool("overhangSpeed3Percent");
++    config.overhang_speed_4 = getFloat("overhangSpeed4");
++    config.overhang_speed_4_percent = getBool("overhangSpeed4Percent");
++    config.bridge_flow_ratio = getFloat("bridgeFlowRatio");
++    config.internal_bridge_flow_ratio = getFloat("internalBridgeFlowRatio");
++    config.top_surface_flow_ratio = getFloat("topSurfaceFlowRatio");
++    config.bottom_surface_flow_ratio = getFloat("bottomSurfaceFlowRatio");
++    config.bridge_density = getFloat("bridgeDensity");
++    config.internal_bridge_density = getFloat("internalBridgeDensity");
++    config.bridge_angle = getFloat("bridgeAngle");
++    config.internal_bridge_angle = getFloat("internalBridgeAngle");
++    config.bridge_no_support = getBool("bridgeNoSupport");
++    config.thick_bridges = getBool("thickBridges");
++    config.thick_internal_bridges = getBool("thickInternalBridges");
++    config.extra_bridge_layer = getString("extraBridgeLayer");
++    config.internal_bridge_filter = getString("internalBridgeFilter");
++    config.default_acceleration = getFloat("defaultAcceleration");
++    config.outer_wall_acceleration = getFloat("outerWallAcceleration");
++    config.inner_wall_acceleration = getFloat("innerWallAcceleration");
++    config.top_surface_acceleration = getFloat("topSurfaceAcceleration");
++    config.travel_acceleration = getFloat("travelAcceleration");
++    config.first_layer_acceleration = getFloat("firstLayerAcceleration");
++    config.bridge_acceleration = getFloat("bridgeAcceleration");
++    config.bridge_acceleration_percent = getBool("bridgeAccelerationPercent");
++    config.sparse_infill_acceleration = getFloat("sparseInfillAcceleration");
++    config.sparse_infill_acceleration_percent = getBool("sparseInfillAccelerationPercent");
++    config.internal_solid_infill_acceleration = getFloat("internalSolidInfillAcceleration");
++    config.internal_solid_infill_acceleration_percent = getBool("internalSolidInfillAccelerationPercent");
+     config.travel_speed = getFloat("travelSpeed");
+     config.first_layer_speed = getFloat("firstLayerSpeed");
+ 
+@@ -108,15 +178,95 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.support_enabled = getBool("supportEnabled");
+     config.support_type = getString("supportType");
+     config.support_angle = getFloat("supportAngle");
++    config.support_interface_top_layers = getInt("supportInterfaceTopLayers");
++    config.support_interface_bottom_layers = getInt("supportInterfaceBottomLayers");
++    config.support_interface_spacing = getFloat("supportInterfaceSpacing");
++    config.support_bottom_interface_spacing = getFloat("supportBottomInterfaceSpacing");
++    config.support_top_z_distance = getFloat("supportTopZDistance");
++    config.support_bottom_z_distance = getFloat("supportBottomZDistance");
++    config.support_object_xy_distance = getFloat("supportObjectXYDistance");
++    config.support_base_pattern = getString("supportBasePattern");
++    config.support_interface_pattern = getString("supportInterfacePattern");
++    config.support_style = getString("supportStyle");
+     config.support_filament = getInt("supportFilament");
+     config.support_interface_filament = getInt("supportInterfaceFilament");
+ 
+     config.skirt_loops = getInt("skirtLoops");
+     config.skirt_distance = getFloat("skirtDistance");
++    config.skirt_height = getInt("skirtHeight");
++    config.skirt_speed = getFloat("skirtSpeed");
++    config.minimum_skirt_length = getFloat("minimumSkirtLength");
++    config.draft_shield = getString("draftShield");
++    config.brim_type = getString("brimType");
+     config.brim_width = getFloat("brimWidth");
++    config.brim_object_gap = getFloat("brimObjectGap");
++    config.raft_layers = getInt("raftLayers");
++    config.raft_contact_distance = getFloat("raftContactDistance");
++    config.raft_expansion = getFloat("raftExpansion");
++    config.raft_first_layer_density = getFloat("raftFirstLayerDensity");
++    config.raft_first_layer_expansion = getFloat("raftFirstLayerExpansion");
++    config.outer_wall_line_width = getFloat("outerWallLineWidth");
++    config.inner_wall_line_width = getFloat("innerWallLineWidth");
++    config.top_surface_line_width = getFloat("topSurfaceLineWidth");
++    config.sparse_infill_line_width = getFloat("sparseInfillLineWidth");
++    config.internal_solid_infill_line_width = getFloat("internalSolidInfillLineWidth");
++    config.support_line_width = getFloat("supportLineWidth");
++    config.initial_layer_line_width = getFloat("initialLayerLineWidth");
++    config.small_perimeter_speed = getFloat("smallPerimeterSpeed");
++    config.small_perimeter_speed_percent = getBool("smallPerimeterSpeedPercent");
++    config.small_perimeter_threshold = getFloat("smallPerimeterThreshold");
++    config.slowdown_for_curled_perimeters = getBool("slowdownForCurledPerimeters");
++    config.resolution = getFloat("resolution");
++    config.seam_position = getString("seamPosition");
++    config.staggered_inner_seams = getBool("staggeredInnerSeams");
++    config.seam_gap = getFloat("seamGap");
++    config.seam_gap_percent = getBool("seamGapPercent");
++    config.wipe_before_external_loop = getBool("wipeBeforeExternalLoop");
++    config.wipe_on_loops = getBool("wipeOnLoops");
++    config.role_based_wipe_speed = getBool("roleBasedWipeSpeed");
++    config.wipe_speed = getFloat("wipeSpeed");
++    config.wipe_speed_percent = getBool("wipeSpeedPercent");
++    config.ironing_type = getString("ironingType");
++    config.ironing_pattern = getString("ironingPattern");
++    config.ironing_flow = getFloat("ironingFlow");
++    config.ironing_spacing = getFloat("ironingSpacing");
++    config.ironing_speed = getFloat("ironingSpeed");
++    config.wall_generator = getString("wallGenerator");
++    config.wall_transition_length = getFloat("wallTransitionLength");
++    config.wall_transition_filter_deviation = getFloat("wallTransitionFilterDeviation");
++    config.wall_transition_angle = getFloat("wallTransitionAngle");
++    config.wall_distribution_count = getInt("wallDistributionCount");
++    config.minimum_feature_size = getFloat("minimumFeatureSize");
++    config.minimum_wall_length_factor = getFloat("minimumWallLengthFactor");
++    config.wall_sequence = getString("wallSequence");
++    config.wall_direction = getString("wallDirection");
++    config.detect_thin_walls = getBool("detectThinWalls");
++    config.detect_overhang_walls = getBool("detectOverhangWalls");
++    config.only_one_wall_on_top = getBool("onlyOneWallOnTop");
++    config.min_width_top_surface = getFloat("minWidthTopSurface");
++    config.min_width_top_surface_percent = getBool("minWidthTopSurfacePercent");
++    config.only_one_wall_first_layer = getBool("onlyOneWallFirstLayer");
++    config.extra_perimeters_on_overhangs = getBool("extraPerimetersOnOverhangs");
++    config.overhang_reverse = getBool("overhangReverse");
++    config.overhang_reverse_internal_only = getBool("overhangReverseInternalOnly");
++    config.overhang_reverse_threshold = getFloat("overhangReverseThreshold");
++    config.overhang_reverse_threshold_percent = getBool("overhangReverseThresholdPercent");
++    config.counterbore_hole_bridging = getString("counterboreHoleBridging");
++    config.alternate_extra_wall = getBool("alternateExtraWall");
++    config.ensure_vertical_shell_thickness = getString("ensureVerticalShellThickness");
++    config.detect_narrow_internal_solid_infill = getBool("detectNarrowInternalSolidInfill");
++    config.xy_hole_compensation = getFloat("xyHoleCompensation");
++    config.xy_contour_compensation = getFloat("xyContourCompensation");
++    config.elephant_foot_compensation = getFloat("elephantFootCompensation");
++    config.elephant_foot_compensation_layers = getInt("elephantFootCompensationLayers");
++    config.max_bridge_length = getFloat("maxBridgeLength");
++    config.precise_outer_walls = getBool("preciseOuterWalls");
+ 
+     config.bed_size_x = getFloat("bedSizeX");
+     config.bed_size_y = getFloat("bedSizeY");
++    config.bed_origin_x = getFloat("bedOriginX");
++    config.bed_origin_y = getFloat("bedOriginY");
++    config.bed_polygon = getFloatArray("bedPolygon");
+     config.max_print_height = getFloat("maxPrintHeight");
+ 
+     config.nozzle_diameter = getFloat("nozzleDiameter");
+@@ -137,6 +287,22 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
+     config.machine_start_gcode = getString("machineStartGcode");
+     config.machine_end_gcode = getString("machineEndGcode");
++    config.gcode_flavor = getString("gcodeFlavor");
++    config.machine_max_speed_x = getFloat("machineMaxSpeedX");
++    config.machine_max_speed_y = getFloat("machineMaxSpeedY");
++    config.machine_max_speed_z = getFloat("machineMaxSpeedZ");
++    config.machine_max_speed_e = getFloat("machineMaxSpeedE");
++    config.machine_max_acceleration_x = getFloat("machineMaxAccelerationX");
++    config.machine_max_acceleration_y = getFloat("machineMaxAccelerationY");
++    config.machine_max_acceleration_z = getFloat("machineMaxAccelerationZ");
++    config.machine_max_acceleration_e = getFloat("machineMaxAccelerationE");
++    config.machine_max_acceleration_extruding = getFloat("machineMaxAccelerationExtruding");
++    config.machine_max_acceleration_retracting = getFloat("machineMaxAccelerationRetracting");
++    config.machine_max_acceleration_travel = getFloat("machineMaxAccelerationTravel");
++    config.machine_max_jerk_x = getFloat("machineMaxJerkX");
++    config.machine_max_jerk_y = getFloat("machineMaxJerkY");
++    config.machine_max_jerk_z = getFloat("machineMaxJerkZ");
++    config.machine_max_jerk_e = getFloat("machineMaxJerkE");
+ 
+     // F91: per-extruder filament tuning from the user's filament library.
+     config.filament_flow_ratios = getFloatArray("filamentFlowRatios");
+@@ -156,6 +322,10 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.filament_bed_temp_initial_layers = getIntArray("filamentBedTempInitialLayers");
+     config.filament_costs = getFloatArray("filamentCosts");
+     config.mixed_filament_definitions = getString("mixedFilamentDefinitions");
++    const int maximum_gcode_bytes = getInt("maximumGcodeBytes");
++    config.maximum_gcode_bytes = maximum_gcode_bytes > 0
++        ? static_cast<unsigned long long>(maximum_gcode_bytes)
++        : 0ULL;
+ 
+     env->DeleteLocalRef(cls);
+     return config;
+@@ -235,9 +405,79 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setInt("perimeters", config.perimeters);
+     setInt("topSolidLayers", config.top_solid_layers);
+     setInt("bottomSolidLayers", config.bottom_solid_layers);
++    setFloat("topShellThickness", config.top_shell_thickness);
++    setFloat("bottomShellThickness", config.bottom_shell_thickness);
+     setFloat("fillDensity", config.fill_density);
+     setString("fillPattern", config.fill_pattern);
++    setString("topSurfacePattern", config.top_surface_pattern);
++    setString("bottomSurfacePattern", config.bottom_surface_pattern);
++    setString("internalSolidInfillPattern", config.internal_solid_infill_pattern);
++    setBool("infillFirst", config.infill_first);
++    setFloat("infillWallOverlap", config.infill_wall_overlap);
++    setFloat("topBottomInfillWallOverlap", config.top_bottom_infill_wall_overlap);
++    setBool("infillCombination", config.infill_combination);
++    setFloat("infillCombinationMaxLayerHeight", config.infill_combination_max_layer_height);
++    setBool("infillCombinationMaxLayerHeightPercent", config.infill_combination_max_layer_height_percent);
++    setFloat("infillDirection", config.infill_direction);
++    setFloat("solidInfillDirection", config.solid_infill_direction);
++    setBool("alignInfillDirectionToModel", config.align_infill_direction_to_model);
++    setFloat("minimumSparseInfillArea", config.minimum_sparse_infill_area);
++    setFloat("infillAnchor", config.infill_anchor);
++    setBool("infillAnchorPercent", config.infill_anchor_percent);
++    setFloat("infillAnchorMax", config.infill_anchor_max);
++    setBool("infillAnchorMaxPercent", config.infill_anchor_max_percent);
++    setString("gapFillTarget", config.gap_fill_target);
++    setFloat("filterOutGapFill", config.filter_out_gap_fill);
++    setBool("reduceCrossingWall", config.reduce_crossing_wall);
++    setFloat("maxTravelDetourDistance", config.max_travel_detour_distance);
++    setBool("maxTravelDetourDistancePercent", config.max_travel_detour_distance_percent);
++    setBool("reduceInfillRetraction", config.reduce_infill_retraction);
+     setFloat("printSpeed", config.print_speed);
++    setFloat("innerWallSpeed", config.inner_wall_speed);
++    setFloat("sparseInfillSpeed", config.sparse_infill_speed);
++    setFloat("internalSolidInfillSpeed", config.internal_solid_infill_speed);
++    setFloat("topSurfaceSpeed", config.top_surface_speed);
++    setFloat("supportSpeed", config.support_speed);
++    setFloat("bridgeSpeed", config.bridge_speed);
++    setFloat("gapInfillSpeed", config.gap_infill_speed);
++    setFloat("firstLayerInfillSpeed", config.first_layer_infill_speed);
++    setFloat("supportInterfaceSpeed", config.support_interface_speed);
++    setFloat("internalBridgeSpeed", config.internal_bridge_speed);
++    setBool("internalBridgeSpeedPercent", config.internal_bridge_speed_percent);
++    setBool("overhangSpeedEnabled", config.overhang_speed_enabled);
++    setFloat("overhangSpeed1", config.overhang_speed_1);
++    setBool("overhangSpeed1Percent", config.overhang_speed_1_percent);
++    setFloat("overhangSpeed2", config.overhang_speed_2);
++    setBool("overhangSpeed2Percent", config.overhang_speed_2_percent);
++    setFloat("overhangSpeed3", config.overhang_speed_3);
++    setBool("overhangSpeed3Percent", config.overhang_speed_3_percent);
++    setFloat("overhangSpeed4", config.overhang_speed_4);
++    setBool("overhangSpeed4Percent", config.overhang_speed_4_percent);
++    setFloat("bridgeFlowRatio", config.bridge_flow_ratio);
++    setFloat("internalBridgeFlowRatio", config.internal_bridge_flow_ratio);
++    setFloat("topSurfaceFlowRatio", config.top_surface_flow_ratio);
++    setFloat("bottomSurfaceFlowRatio", config.bottom_surface_flow_ratio);
++    setFloat("bridgeDensity", config.bridge_density);
++    setFloat("internalBridgeDensity", config.internal_bridge_density);
++    setFloat("bridgeAngle", config.bridge_angle);
++    setFloat("internalBridgeAngle", config.internal_bridge_angle);
++    setBool("bridgeNoSupport", config.bridge_no_support);
++    setBool("thickBridges", config.thick_bridges);
++    setBool("thickInternalBridges", config.thick_internal_bridges);
++    setString("extraBridgeLayer", config.extra_bridge_layer);
++    setString("internalBridgeFilter", config.internal_bridge_filter);
++    setFloat("defaultAcceleration", config.default_acceleration);
++    setFloat("outerWallAcceleration", config.outer_wall_acceleration);
++    setFloat("innerWallAcceleration", config.inner_wall_acceleration);
++    setFloat("topSurfaceAcceleration", config.top_surface_acceleration);
++    setFloat("travelAcceleration", config.travel_acceleration);
++    setFloat("firstLayerAcceleration", config.first_layer_acceleration);
++    setFloat("bridgeAcceleration", config.bridge_acceleration);
++    setBool("bridgeAccelerationPercent", config.bridge_acceleration_percent);
++    setFloat("sparseInfillAcceleration", config.sparse_infill_acceleration);
++    setBool("sparseInfillAccelerationPercent", config.sparse_infill_acceleration_percent);
++    setFloat("internalSolidInfillAcceleration", config.internal_solid_infill_acceleration);
++    setBool("internalSolidInfillAccelerationPercent", config.internal_solid_infill_acceleration_percent);
+     setFloat("travelSpeed", config.travel_speed);
+     setFloat("firstLayerSpeed", config.first_layer_speed);
+     setInt("nozzleTemp", config.nozzle_temp);
+@@ -247,13 +487,93 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setBool("supportEnabled", config.support_enabled);
+     setString("supportType", config.support_type);
+     setFloat("supportAngle", config.support_angle);
++    setInt("supportInterfaceTopLayers", config.support_interface_top_layers);
++    setInt("supportInterfaceBottomLayers", config.support_interface_bottom_layers);
++    setFloat("supportInterfaceSpacing", config.support_interface_spacing);
++    setFloat("supportBottomInterfaceSpacing", config.support_bottom_interface_spacing);
++    setFloat("supportTopZDistance", config.support_top_z_distance);
++    setFloat("supportBottomZDistance", config.support_bottom_z_distance);
++    setFloat("supportObjectXYDistance", config.support_object_xy_distance);
++    setString("supportBasePattern", config.support_base_pattern);
++    setString("supportInterfacePattern", config.support_interface_pattern);
++    setString("supportStyle", config.support_style);
+     setInt("supportFilament", config.support_filament);
+     setInt("supportInterfaceFilament", config.support_interface_filament);
+     setInt("skirtLoops", config.skirt_loops);
+     setFloat("skirtDistance", config.skirt_distance);
++    setInt("skirtHeight", config.skirt_height);
++    setFloat("skirtSpeed", config.skirt_speed);
++    setFloat("minimumSkirtLength", config.minimum_skirt_length);
++    setString("draftShield", config.draft_shield);
++    setString("brimType", config.brim_type);
+     setFloat("brimWidth", config.brim_width);
++    setFloat("brimObjectGap", config.brim_object_gap);
++    setInt("raftLayers", config.raft_layers);
++    setFloat("raftContactDistance", config.raft_contact_distance);
++    setFloat("raftExpansion", config.raft_expansion);
++    setFloat("raftFirstLayerDensity", config.raft_first_layer_density);
++    setFloat("raftFirstLayerExpansion", config.raft_first_layer_expansion);
++    setFloat("outerWallLineWidth", config.outer_wall_line_width);
++    setFloat("innerWallLineWidth", config.inner_wall_line_width);
++    setFloat("topSurfaceLineWidth", config.top_surface_line_width);
++    setFloat("sparseInfillLineWidth", config.sparse_infill_line_width);
++    setFloat("internalSolidInfillLineWidth", config.internal_solid_infill_line_width);
++    setFloat("supportLineWidth", config.support_line_width);
++    setFloat("initialLayerLineWidth", config.initial_layer_line_width);
++    setFloat("smallPerimeterSpeed", config.small_perimeter_speed);
++    setBool("smallPerimeterSpeedPercent", config.small_perimeter_speed_percent);
++    setFloat("smallPerimeterThreshold", config.small_perimeter_threshold);
++    setBool("slowdownForCurledPerimeters", config.slowdown_for_curled_perimeters);
++    setFloat("resolution", config.resolution);
++    setString("seamPosition", config.seam_position);
++    setBool("staggeredInnerSeams", config.staggered_inner_seams);
++    setFloat("seamGap", config.seam_gap);
++    setBool("seamGapPercent", config.seam_gap_percent);
++    setBool("wipeBeforeExternalLoop", config.wipe_before_external_loop);
++    setBool("wipeOnLoops", config.wipe_on_loops);
++    setBool("roleBasedWipeSpeed", config.role_based_wipe_speed);
++    setFloat("wipeSpeed", config.wipe_speed);
++    setBool("wipeSpeedPercent", config.wipe_speed_percent);
++    setString("ironingType", config.ironing_type);
++    setString("ironingPattern", config.ironing_pattern);
++    setFloat("ironingFlow", config.ironing_flow);
++    setFloat("ironingSpacing", config.ironing_spacing);
++    setFloat("ironingSpeed", config.ironing_speed);
++    setString("wallGenerator", config.wall_generator);
++    setFloat("wallTransitionLength", config.wall_transition_length);
++    setFloat("wallTransitionFilterDeviation", config.wall_transition_filter_deviation);
++    setFloat("wallTransitionAngle", config.wall_transition_angle);
++    setInt("wallDistributionCount", config.wall_distribution_count);
++    setFloat("minimumFeatureSize", config.minimum_feature_size);
++    setFloat("minimumWallLengthFactor", config.minimum_wall_length_factor);
++    setString("wallSequence", config.wall_sequence);
++    setString("wallDirection", config.wall_direction);
++    setBool("detectThinWalls", config.detect_thin_walls);
++    setBool("detectOverhangWalls", config.detect_overhang_walls);
++    setBool("onlyOneWallOnTop", config.only_one_wall_on_top);
++    setFloat("minWidthTopSurface", config.min_width_top_surface);
++    setBool("minWidthTopSurfacePercent", config.min_width_top_surface_percent);
++    setBool("onlyOneWallFirstLayer", config.only_one_wall_first_layer);
++    setBool("extraPerimetersOnOverhangs", config.extra_perimeters_on_overhangs);
++    setBool("overhangReverse", config.overhang_reverse);
++    setBool("overhangReverseInternalOnly", config.overhang_reverse_internal_only);
++    setFloat("overhangReverseThreshold", config.overhang_reverse_threshold);
++    setBool("overhangReverseThresholdPercent", config.overhang_reverse_threshold_percent);
++    setString("counterboreHoleBridging", config.counterbore_hole_bridging);
++    setBool("alternateExtraWall", config.alternate_extra_wall);
++    setString("ensureVerticalShellThickness", config.ensure_vertical_shell_thickness);
++    setBool("detectNarrowInternalSolidInfill", config.detect_narrow_internal_solid_infill);
++    setFloat("xyHoleCompensation", config.xy_hole_compensation);
++    setFloat("xyContourCompensation", config.xy_contour_compensation);
++    setFloat("elephantFootCompensation", config.elephant_foot_compensation);
++    setInt("elephantFootCompensationLayers", config.elephant_foot_compensation_layers);
++    setFloat("maxBridgeLength", config.max_bridge_length);
++    setBool("preciseOuterWalls", config.precise_outer_walls);
+     setFloat("bedSizeX", config.bed_size_x);
+     setFloat("bedSizeY", config.bed_size_y);
++    setFloat("bedOriginX", config.bed_origin_x);
++    setFloat("bedOriginY", config.bed_origin_y);
++    setFloatArray("bedPolygon", config.bed_polygon);
+     setFloat("maxPrintHeight", config.max_print_height);
+     setFloat("nozzleDiameter", config.nozzle_diameter);
+     setFloat("filamentDiameter", config.filament_diameter);
+@@ -271,6 +591,23 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setFloat("wipeTowerWidth", config.wipe_tower_width);
+     setString("machineStartGcode", config.machine_start_gcode);
+     setString("machineEndGcode", config.machine_end_gcode);
++    setString("gcodeFlavor", config.gcode_flavor);
++    setFloat("machineMaxSpeedX", config.machine_max_speed_x);
++    setFloat("machineMaxSpeedY", config.machine_max_speed_y);
++    setFloat("machineMaxSpeedZ", config.machine_max_speed_z);
++    setFloat("machineMaxSpeedE", config.machine_max_speed_e);
++    setFloat("machineMaxAccelerationX", config.machine_max_acceleration_x);
++    setFloat("machineMaxAccelerationY", config.machine_max_acceleration_y);
++    setFloat("machineMaxAccelerationZ", config.machine_max_acceleration_z);
++    setFloat("machineMaxAccelerationE", config.machine_max_acceleration_e);
++    setFloat("machineMaxAccelerationExtruding", config.machine_max_acceleration_extruding);
++    setFloat("machineMaxAccelerationRetracting", config.machine_max_acceleration_retracting);
++    setFloat("machineMaxAccelerationTravel", config.machine_max_acceleration_travel);
++    setFloat("machineMaxJerkX", config.machine_max_jerk_x);
++    setFloat("machineMaxJerkY", config.machine_max_jerk_y);
++    setFloat("machineMaxJerkZ", config.machine_max_jerk_z);
++    setFloat("machineMaxJerkE", config.machine_max_jerk_e);
++    setInt("maximumGcodeBytes", static_cast<int>(config.maximum_gcode_bytes));
+ 
+     env->DeleteLocalRef(cls);
+     return obj;
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+index 8d61c9cf..aaaa9bc9 100644
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -6,6 +6,8 @@
+ #include <chrono>
+ #include <fstream>
+ #include <sstream>
++#include <stdexcept>
++#include <sys/resource.h>
+ 
+ // Slicer includes
+ #include "libslic3r/Print.hpp"
+@@ -15,6 +17,7 @@
+ #include "libslic3r/Model.hpp"
+ #include "libslic3r/Config.hpp"
+ #include "libslic3r/Exception.hpp"
++#include "libslic3r/ClipperUtils.hpp"
+ #include "libslic3r/clipper.hpp"
+ 
+ // =============================================================================
+@@ -183,84 +186,172 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
+     dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
+     dpc.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(config.bottom_solid_layers));
+-
+-    // Infill (OrcaSlicer keys)
+-    Slic3r::InfillPattern pattern = Slic3r::InfillPattern::ipGyroid;
+-    if (config.fill_pattern == "grid") pattern = Slic3r::InfillPattern::ipGrid;
+-    else if (config.fill_pattern == "honeycomb") pattern = Slic3r::InfillPattern::ipHoneycomb;
+-    else if (config.fill_pattern == "line") pattern = Slic3r::InfillPattern::ipLine;
+-    else if (config.fill_pattern == "rectilinear") pattern = Slic3r::InfillPattern::ipRectilinear;
+-
+-    // F87/F91 (2026-05-25): gate fallbacks on !has_embedded_profile so an imported
+-    // OrcaSlicer process profile / user-tuned library filament can win. When the Kotlin
+-    // ProfileEmbedder has authored the embed (is_snapmaker_profile=true) the embed's
+-    // values came from the layered: printer profile + bundled process + library +
+-    // SlicingOverrides, so trust it. Raw STL (no embed) still gets these SliceConfig-
+-    // derived defaults.
+-    if (!has_embedded_profile) {
+-        dpc.set_key_value("sparse_infill_pattern", new Slic3r::ConfigOptionEnum<Slic3r::InfillPattern>(pattern));
+-        dpc.set_key_value("sparse_infill_density", new Slic3r::ConfigOptionPercent(config.fill_density * 100.0));
+-    }
++    dpc.set_key_value("top_shell_thickness", new Slic3r::ConfigOptionFloat(config.top_shell_thickness));
++    dpc.set_key_value("bottom_shell_thickness", new Slic3r::ConfigOptionFloat(config.bottom_shell_thickness));
++
++    // Preserve Orca's complete enum vocabulary. The old hand-written mapping silently
++    // turned unsupported values (notably crosshatch) into gyroid and made distinct
++    // sparse/top/bottom/internal-solid regions look like one generic fill.
++    dpc.set_deserialize_strict("sparse_infill_pattern", config.fill_pattern);
++    dpc.set_deserialize_strict("top_surface_pattern", config.top_surface_pattern);
++    dpc.set_deserialize_strict("bottom_surface_pattern", config.bottom_surface_pattern);
++    dpc.set_deserialize_strict("internal_solid_infill_pattern", config.internal_solid_infill_pattern);
++    dpc.set_key_value("sparse_infill_density", new Slic3r::ConfigOptionPercent(config.fill_density * 100.0));
++    dpc.set_key_value("is_infill_first", new Slic3r::ConfigOptionBool(config.infill_first));
++    dpc.set_key_value("infill_wall_overlap", new Slic3r::ConfigOptionPercent(config.infill_wall_overlap));
++    dpc.set_key_value("top_bottom_infill_wall_overlap", new Slic3r::ConfigOptionPercent(config.top_bottom_infill_wall_overlap));
++    dpc.set_key_value("infill_combination", new Slic3r::ConfigOptionBool(config.infill_combination));
++    dpc.set_key_value("infill_combination_max_layer_height", new Slic3r::ConfigOptionFloatOrPercent(
++        config.infill_combination_max_layer_height,
++        config.infill_combination_max_layer_height_percent));
++    dpc.set_key_value("infill_direction", new Slic3r::ConfigOptionFloat(config.infill_direction));
++    dpc.set_key_value("solid_infill_direction", new Slic3r::ConfigOptionFloat(config.solid_infill_direction));
++    dpc.set_key_value("align_infill_direction_to_model", new Slic3r::ConfigOptionBool(config.align_infill_direction_to_model));
++    dpc.set_key_value("minimum_sparse_infill_area", new Slic3r::ConfigOptionFloat(config.minimum_sparse_infill_area));
++    dpc.set_key_value("infill_anchor", new Slic3r::ConfigOptionFloatOrPercent(
++        config.infill_anchor, config.infill_anchor_percent));
++    dpc.set_key_value("infill_anchor_max", new Slic3r::ConfigOptionFloatOrPercent(
++        config.infill_anchor_max, config.infill_anchor_max_percent));
++    dpc.set_deserialize_strict("gap_fill_target", config.gap_fill_target);
++    dpc.set_key_value("filter_out_gap_fill", new Slic3r::ConfigOptionFloat(config.filter_out_gap_fill));
++    dpc.set_key_value("reduce_crossing_wall", new Slic3r::ConfigOptionBool(config.reduce_crossing_wall));
++    dpc.set_key_value("max_travel_detour_distance", new Slic3r::ConfigOptionFloatOrPercent(
++        config.max_travel_detour_distance, config.max_travel_detour_distance_percent));
++    dpc.set_key_value("reduce_infill_retraction", new Slic3r::ConfigOptionBool(config.reduce_infill_retraction));
+ 
+     // Speed (OrcaSlicer keys).
+     // outer_wall_speed is the primary speed control — set from the user's "print speed" setting.
+-    // All other speeds use profile values (applied from embedded config above) rather than
+-    // deriving them all from print_speed.  This gives the profile's per-feature tuning
+-    // (inner walls faster, infill faster, bridge slower) while still honouring the user's
+-    // overall speed preference via outer_wall_speed.
+-    // Fallback values here match standard_0.20mm.json and are used when no profile is embedded.
++    // Preserve feature-specific process tuning instead of deriving the entire profile
++    // from outer-wall speed. SliceOptions has already resolved legacy zero values.
+     dpc.set_key_value("outer_wall_speed",          new Slic3r::ConfigOptionFloat(config.print_speed));
+-    dpc.set_key_value("inner_wall_speed",          new Slic3r::ConfigOptionFloat(config.print_speed * 1.5));
+-    dpc.set_key_value("sparse_infill_speed",       new Slic3r::ConfigOptionFloat(config.print_speed * 1.35));
+-    dpc.set_key_value("internal_solid_infill_speed", new Slic3r::ConfigOptionFloat(config.print_speed * 1.25));
+-    dpc.set_key_value("top_surface_speed",         new Slic3r::ConfigOptionFloat(config.print_speed));
+-    dpc.set_key_value("bridge_speed",              new Slic3r::ConfigOptionFloat(50.0));
+-    dpc.set_key_value("gap_infill_speed",          new Slic3r::ConfigOptionFloat(config.print_speed * 1.25));
++    dpc.set_key_value("inner_wall_speed",          new Slic3r::ConfigOptionFloat(config.inner_wall_speed));
++    dpc.set_key_value("sparse_infill_speed",       new Slic3r::ConfigOptionFloat(config.sparse_infill_speed));
++    dpc.set_key_value("internal_solid_infill_speed", new Slic3r::ConfigOptionFloat(config.internal_solid_infill_speed));
++    dpc.set_key_value("top_surface_speed",         new Slic3r::ConfigOptionFloat(config.top_surface_speed));
++    dpc.set_key_value("bridge_speed",              new Slic3r::ConfigOptionFloat(config.bridge_speed));
++    dpc.set_key_value("internal_bridge_speed",     new Slic3r::ConfigOptionFloatOrPercent(
++        config.internal_bridge_speed, config.internal_bridge_speed_percent));
++    dpc.set_key_value("gap_infill_speed",          new Slic3r::ConfigOptionFloat(config.gap_infill_speed));
+     dpc.set_key_value("travel_speed",              new Slic3r::ConfigOptionFloat(config.travel_speed));
+     dpc.set_key_value("initial_layer_speed",       new Slic3r::ConfigOptionFloat(config.first_layer_speed));
+-    dpc.set_key_value("initial_layer_infill_speed",new Slic3r::ConfigOptionFloat(config.first_layer_speed * 2.1));
+-
+-    // Snapmaker U1 bed geometry — OrcaSlicer defaults to 200×200mm (Bambu A1).
+-    // Must always be set so the slicer knows the actual printable area.
+-    dpc.set_key_value("printable_area", new Slic3r::ConfigOptionPoints({
+-        {0, 0}, {270, 0}, {270, 270}, {0, 270}
+-    }));
++    dpc.set_key_value("initial_layer_infill_speed",new Slic3r::ConfigOptionFloat(config.first_layer_infill_speed));
++    dpc.set_key_value("support_interface_speed",   new Slic3r::ConfigOptionFloat(config.support_interface_speed));
++    dpc.set_key_value("bridge_flow",               new Slic3r::ConfigOptionFloat(config.bridge_flow_ratio));
++    dpc.set_key_value("internal_bridge_flow",      new Slic3r::ConfigOptionFloat(config.internal_bridge_flow_ratio));
++    dpc.set_key_value("top_solid_infill_flow_ratio", new Slic3r::ConfigOptionFloat(config.top_surface_flow_ratio));
++    dpc.set_key_value("bottom_solid_infill_flow_ratio", new Slic3r::ConfigOptionFloat(config.bottom_surface_flow_ratio));
++    dpc.set_key_value("bridge_density",             new Slic3r::ConfigOptionPercent(config.bridge_density));
++    dpc.set_key_value("internal_bridge_density",    new Slic3r::ConfigOptionPercent(config.internal_bridge_density));
++    dpc.set_key_value("bridge_angle",               new Slic3r::ConfigOptionFloat(config.bridge_angle));
++    dpc.set_key_value("internal_bridge_angle",      new Slic3r::ConfigOptionFloat(config.internal_bridge_angle));
++    dpc.set_key_value("bridge_no_support",          new Slic3r::ConfigOptionBool(config.bridge_no_support));
++    dpc.set_key_value("thick_bridges",              new Slic3r::ConfigOptionBool(config.thick_bridges));
++    dpc.set_key_value("thick_internal_bridges",     new Slic3r::ConfigOptionBool(config.thick_internal_bridges));
++    dpc.set_deserialize_strict("enable_extra_bridge_layer", config.extra_bridge_layer);
++    dpc.set_deserialize_strict("dont_filter_internal_bridges", config.internal_bridge_filter);
++
++    // Use the active printer profile geometry. Keep U1 dimensions only as a
++    // defensive fallback for callers using an older Java contract.
++    const double bed_size_x = config.bed_size_x > 0.0f ? config.bed_size_x : 270.0;
++    const double bed_size_y = config.bed_size_y > 0.0f ? config.bed_size_y : 270.0;
++    const double bed_origin_x = std::isfinite(config.bed_origin_x) ? config.bed_origin_x : 0.0;
++    const double bed_origin_y = std::isfinite(config.bed_origin_y) ? config.bed_origin_y : 0.0;
++    const double printable_height = config.max_print_height > 0.0f ? config.max_print_height : 270.0;
++    Slic3r::Pointfs printable_area;
++    if (config.bed_polygon.size() >= 6 && config.bed_polygon.size() <= 512 &&
++        config.bed_polygon.size() % 2 == 0) {
++        printable_area.reserve(config.bed_polygon.size() / 2);
++        for (size_t index = 0; index < config.bed_polygon.size(); index += 2) {
++            const float x = config.bed_polygon[index];
++            const float y = config.bed_polygon[index + 1];
++            if (!std::isfinite(x) || !std::isfinite(y) || x < 0.0f || y < 0.0f ||
++                x > bed_size_x || y > bed_size_y) {
++                printable_area.clear();
++                break;
++            }
++            printable_area.emplace_back(x + bed_origin_x, y + bed_origin_y);
++        }
++    }
++    if (printable_area.size() < 3) {
++        printable_area = {
++            {bed_origin_x, bed_origin_y},
++            {bed_origin_x + bed_size_x, bed_origin_y},
++            {bed_origin_x + bed_size_x, bed_origin_y + bed_size_y},
++            {bed_origin_x, bed_origin_y + bed_size_y}
++        };
++    }
++    printable_area = Slic3r::make_counter_clockwise(printable_area);
++    dpc.set_key_value("printable_area", new Slic3r::ConfigOptionPoints(printable_area));
++    dpc.set_key_value("printable_height", new Slic3r::ConfigOptionFloat(printable_height));
+ 
+     // Bed plate type — OrcaSlicer defaults to btPC (Engineering Plate) whose temp keys
+     // are cool_plate_temp (35°C for PLA).  The Snapmaker U1 uses a textured PEI plate,
+     // so set btPEI so OrcaSlicer resolves bed temp from hot_plate_temp (60°C for PLA).
+     dpc.set_key_value("curr_bed_type", new Slic3r::ConfigOptionEnum<Slic3r::BedType>(Slic3r::btPEI));
+ 
+-    // Snapmaker U1 machine kinematic limits — fallback values used when no Snapmaker
+-    // profile is embedded (e.g. plain STL files).  For 3MF files these are overridden
+-    // by the values from the embedded profile in the is_snapmaker_profile block above.
+-    // Values match snapmaker_u1.json: {normal, silent} mode pairs.
+-    dpc.set_key_value("machine_max_speed_x",          new Slic3r::ConfigOptionFloats({500.0, 200.0}));
+-    dpc.set_key_value("machine_max_speed_y",          new Slic3r::ConfigOptionFloats({500.0, 200.0}));
+-    dpc.set_key_value("machine_max_speed_z",          new Slic3r::ConfigOptionFloats({20.0, 12.0}));
+-    dpc.set_key_value("machine_max_speed_e",          new Slic3r::ConfigOptionFloats({30.0, 25.0}));
+-    dpc.set_key_value("machine_max_acceleration_x",   new Slic3r::ConfigOptionFloats({20000.0, 20000.0}));
+-    dpc.set_key_value("machine_max_acceleration_y",   new Slic3r::ConfigOptionFloats({20000.0, 20000.0}));
+-    dpc.set_key_value("machine_max_acceleration_z",   new Slic3r::ConfigOptionFloats({500.0, 200.0}));
+-    dpc.set_key_value("machine_max_acceleration_e",   new Slic3r::ConfigOptionFloats({5000.0, 5000.0}));
+-    dpc.set_key_value("machine_max_jerk_x",           new Slic3r::ConfigOptionFloats({9.0, 9.0}));
+-    dpc.set_key_value("machine_max_jerk_y",           new Slic3r::ConfigOptionFloats({9.0, 9.0}));
+-    dpc.set_key_value("machine_max_jerk_z",           new Slic3r::ConfigOptionFloats({3.0, 0.4}));
+-    dpc.set_key_value("machine_max_jerk_e",           new Slic3r::ConfigOptionFloats({2.5, 2.5}));
+-    // M204 acceleration values — must match U1 profile for correct G-code and time estimation.
+-    // OrcaSlicer defaults (1500/1250 mm/s²) are 13× too low and inflate print time estimates.
+-    dpc.set_key_value("machine_max_acceleration_extruding",  new Slic3r::ConfigOptionFloats({20000.0, 20000.0}));
+-    dpc.set_key_value("machine_max_acceleration_retracting", new Slic3r::ConfigOptionFloats({5000.0, 5000.0}));
+-    dpc.set_key_value("machine_max_acceleration_travel",     new Slic3r::ConfigOptionFloats({20000.0, 20000.0}));
+-    // Per-feature accelerations from the standard process profile.
+-    // Without these OrcaSlicer uses FullPrintConfig::defaults() which are very low,
+-    // making every short move appear to be in the acceleration ramp → 5× time inflation.
+-    dpc.set_key_value("default_acceleration",          new Slic3r::ConfigOptionFloat(10000.0));
+-    dpc.set_key_value("outer_wall_acceleration",       new Slic3r::ConfigOptionFloat(5000.0));
+-    dpc.set_key_value("inner_wall_acceleration",       new Slic3r::ConfigOptionFloat(0.0));
+-    dpc.set_key_value("top_surface_acceleration",      new Slic3r::ConfigOptionFloat(2000.0));
+-    dpc.set_key_value("travel_acceleration",           new Slic3r::ConfigOptionFloat(10000.0));
+-    dpc.set_key_value("initial_layer_acceleration",    new Slic3r::ConfigOptionFloat(500.0));
++    // Machine limits come from the active printer profile. Store two equal modes
++    // because this mobile contract does not currently expose Orca's silent mode.
++    auto positive = [](float value, double fallback) {
++        return value > 0.0f ? static_cast<double>(value) : fallback;
++    };
++    auto machine_modes = [](double value) {
++        return new Slic3r::ConfigOptionFloats({value, value});
++    };
++    const double max_speed_x = positive(config.machine_max_speed_x, 500.0);
++    const double max_speed_y = positive(config.machine_max_speed_y, 500.0);
++    const double max_acceleration_x = positive(config.machine_max_acceleration_x, 20000.0);
++    const double max_acceleration_y = positive(config.machine_max_acceleration_y, 20000.0);
++    const double max_acceleration_extruding = positive(config.machine_max_acceleration_extruding, 20000.0);
++    const double max_acceleration_travel = positive(config.machine_max_acceleration_travel, 20000.0);
++    dpc.set_key_value("machine_max_speed_x", machine_modes(max_speed_x));
++    dpc.set_key_value("machine_max_speed_y", machine_modes(max_speed_y));
++    dpc.set_key_value("machine_max_speed_z", machine_modes(positive(config.machine_max_speed_z, 20.0)));
++    dpc.set_key_value("machine_max_speed_e", machine_modes(positive(config.machine_max_speed_e, 30.0)));
++    dpc.set_key_value("machine_max_acceleration_x", machine_modes(max_acceleration_x));
++    dpc.set_key_value("machine_max_acceleration_y", machine_modes(max_acceleration_y));
++    dpc.set_key_value("machine_max_acceleration_z", machine_modes(positive(config.machine_max_acceleration_z, 500.0)));
++    dpc.set_key_value("machine_max_acceleration_e", machine_modes(positive(config.machine_max_acceleration_e, 5000.0)));
++    dpc.set_key_value("machine_max_jerk_x", machine_modes(positive(config.machine_max_jerk_x, 9.0)));
++    dpc.set_key_value("machine_max_jerk_y", machine_modes(positive(config.machine_max_jerk_y, 9.0)));
++    dpc.set_key_value("machine_max_jerk_z", machine_modes(positive(config.machine_max_jerk_z, 3.0)));
++    dpc.set_key_value("machine_max_jerk_e", machine_modes(positive(config.machine_max_jerk_e, 2.5)));
++    dpc.set_key_value("machine_max_acceleration_extruding", machine_modes(max_acceleration_extruding));
++    dpc.set_key_value("machine_max_acceleration_retracting", machine_modes(positive(config.machine_max_acceleration_retracting, 5000.0)));
++    dpc.set_key_value("machine_max_acceleration_travel", machine_modes(max_acceleration_travel));
++
++    Slic3r::GCodeFlavor flavor = Slic3r::gcfMarlinLegacy;
++    if (config.gcode_flavor == "marlin2") flavor = Slic3r::gcfMarlinFirmware;
++    else if (config.gcode_flavor == "klipper") flavor = Slic3r::gcfKlipper;
++    dpc.set_key_value("gcode_flavor", new Slic3r::ConfigOptionEnum<Slic3r::GCodeFlavor>(flavor));
++
++    const double xy_machine_acceleration = std::min(max_acceleration_x, max_acceleration_y);
++    const double default_acceleration = config.default_acceleration > 0.0f
++        ? static_cast<double>(config.default_acceleration)
++        : std::min(max_acceleration_extruding, xy_machine_acceleration);
++    const double outer_wall_acceleration = config.outer_wall_acceleration > 0.0f
++        ? static_cast<double>(config.outer_wall_acceleration)
++        : default_acceleration * 0.5;
++    const double top_surface_acceleration = config.top_surface_acceleration > 0.0f
++        ? static_cast<double>(config.top_surface_acceleration)
++        : default_acceleration * 0.2;
++    const double travel_acceleration = config.travel_acceleration > 0.0f
++        ? static_cast<double>(config.travel_acceleration)
++        : std::min(max_acceleration_travel, xy_machine_acceleration);
++    const double first_layer_acceleration = config.first_layer_acceleration > 0.0f
++        ? static_cast<double>(config.first_layer_acceleration)
++        : std::min(500.0, default_acceleration);
++    dpc.set_key_value("default_acceleration",          new Slic3r::ConfigOptionFloat(default_acceleration));
++    dpc.set_key_value("outer_wall_acceleration",       new Slic3r::ConfigOptionFloat(outer_wall_acceleration));
++    dpc.set_key_value("inner_wall_acceleration",       new Slic3r::ConfigOptionFloat(config.inner_wall_acceleration));
++    dpc.set_key_value("top_surface_acceleration",      new Slic3r::ConfigOptionFloat(top_surface_acceleration));
++    dpc.set_key_value("travel_acceleration",           new Slic3r::ConfigOptionFloat(travel_acceleration));
++    dpc.set_key_value("initial_layer_acceleration",    new Slic3r::ConfigOptionFloat(first_layer_acceleration));
++    dpc.set_key_value("bridge_acceleration", new Slic3r::ConfigOptionFloatOrPercent(
++        config.bridge_acceleration, config.bridge_acceleration_percent));
++    dpc.set_key_value("sparse_infill_acceleration", new Slic3r::ConfigOptionFloatOrPercent(
++        config.sparse_infill_acceleration, config.sparse_infill_acceleration_percent));
++    dpc.set_key_value("internal_solid_infill_acceleration", new Slic3r::ConfigOptionFloatOrPercent(
++        config.internal_solid_infill_acceleration, config.internal_solid_infill_acceleration_percent));
+ 
+     // Multi-extruder setup
+     int n_ext = std::max(1, config.extruder_count);
+@@ -461,11 +552,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     applyPerExtFloats("slow_down_layer_time",    config.filament_slow_down_layer_times, 4.0);
+     applyPerExtFloats("slow_down_min_speed",     config.filament_slow_down_min_speeds, 20.0);
+ 
+-    // G-code dialect — NOT set as a fallback here because gcode_flavor=klipper suppresses
+-    // M104/M109 temp commands from the slicer body, relying on the start G-code template.
+-    // For raw STL files (no embedded profile), the Marlin default is correct.
+-    // When the Snapmaker profile IS embedded, gcode_flavor=klipper is applied from the
+-    // profile_keys[] whitelist in the is_snapmaker_profile block above.
++    // G-code flavor is set from the active printer profile above. A Klipper
++    // profile must provide a compatible start template because Orca delegates
++    // part of temperature setup to that template for this flavor.
+ 
+     // Deretraction speed — OrcaSlicer defaults to 0 (= same as retraction speed).
+     // Snapmaker profile uses 35 mm/s for smoother prime-after-retract.
+@@ -480,32 +569,87 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     // the literal 0, not the auto-resolved value, causing Flow::rounded_rectangle_extrusion_spacing()
+     // to throw FlowErrorNegativeSpacing on multi-color models.
+     double nd = config.nozzle_diameter;
++    const double outer_wall_width = config.outer_wall_line_width > 0.0f
++        ? config.outer_wall_line_width : nd * 1.05;
++    const double inner_wall_width = config.inner_wall_line_width > 0.0f
++        ? config.inner_wall_line_width : nd * 1.125;
++    const double top_surface_width = config.top_surface_line_width > 0.0f
++        ? config.top_surface_line_width : nd * 1.05;
++    const double sparse_infill_width = config.sparse_infill_line_width > 0.0f
++        ? config.sparse_infill_line_width : nd * 1.125;
++    const double internal_solid_infill_width = config.internal_solid_infill_line_width > 0.0f
++        ? config.internal_solid_infill_line_width : nd * 1.125;
++    const double support_width = config.support_line_width > 0.0f
++        ? config.support_line_width : nd * 1.05;
++    const double initial_layer_width = config.initial_layer_line_width > 0.0f
++        ? config.initial_layer_line_width : nd * 1.25;
+     dpc.set_key_value("line_width",              new Slic3r::ConfigOptionFloatOrPercent(nd * 1.125, false));
+-    dpc.set_key_value("outer_wall_line_width",   new Slic3r::ConfigOptionFloatOrPercent(nd * 1.05,  false));
+-    dpc.set_key_value("inner_wall_line_width",   new Slic3r::ConfigOptionFloatOrPercent(nd * 1.125, false));
+-    dpc.set_key_value("top_surface_line_width",  new Slic3r::ConfigOptionFloatOrPercent(nd * 1.05,  false));
+-    dpc.set_key_value("sparse_infill_line_width",new Slic3r::ConfigOptionFloatOrPercent(nd * 1.125, false));
+-    dpc.set_key_value("initial_layer_line_width",new Slic3r::ConfigOptionFloatOrPercent(nd * 1.25,  false));
+-
+-    // Wall generator: keep clamped to Arachne for everyone.
+-    // OrcaSlicer 2.2.4's classic perimeter generator crashes (SIGSEGV in
+-    // PerimeterGenerator::process_classic / MultiPoint dtor) on the U1 process config
+-    // — surfaced 2026-05-25 when F87 first un-gated this key. Pre-existing OrcaSlicer
+-    // issue; until it's fixed upstream we must not let the user reach the classic path.
+-    dpc.set_key_value("wall_generator", new Slic3r::ConfigOptionEnum<Slic3r::PerimeterGeneratorType>(Slic3r::PerimeterGeneratorType::Arachne));
+-
+-    // F87 (2026-05-25): gate seam_position + reduce_infill_retraction on
+-    // !has_embedded_profile so an imported process profile or user SlicingOverride
+-    // can win. `buildProfileOverrides` already writes the resolved values into the
+-    // embed map for Snapmaker-authored embeds.
+-    if (!has_embedded_profile) {
+-        // Seam position - aligned is the default; set explicitly for STL files.
+-        dpc.set_key_value("seam_position", new Slic3r::ConfigOptionEnum<Slic3r::SeamPosition>(Slic3r::spAligned));
+-
+-        // Reduce infill retraction - off by default for Snapmaker U1.
+-        dpc.set_key_value("reduce_infill_retraction", new Slic3r::ConfigOptionBool(false));
++    dpc.set_key_value("outer_wall_line_width",   new Slic3r::ConfigOptionFloatOrPercent(outer_wall_width, false));
++    dpc.set_key_value("inner_wall_line_width",   new Slic3r::ConfigOptionFloatOrPercent(inner_wall_width, false));
++    dpc.set_key_value("top_surface_line_width",  new Slic3r::ConfigOptionFloatOrPercent(top_surface_width, false));
++    dpc.set_key_value("sparse_infill_line_width",new Slic3r::ConfigOptionFloatOrPercent(sparse_infill_width, false));
++    dpc.set_key_value("internal_solid_infill_line_width", new Slic3r::ConfigOptionFloatOrPercent(internal_solid_infill_width, false));
++    dpc.set_key_value("support_line_width",      new Slic3r::ConfigOptionFloatOrPercent(support_width, false));
++    dpc.set_key_value("initial_layer_line_width",new Slic3r::ConfigOptionFloatOrPercent(initial_layer_width, false));
++    dpc.set_key_value("small_perimeter_speed", new Slic3r::ConfigOptionFloatOrPercent(
++        config.small_perimeter_speed, config.small_perimeter_speed_percent));
++    dpc.set_key_value("small_perimeter_threshold", new Slic3r::ConfigOptionFloat(config.small_perimeter_threshold));
++    dpc.set_key_value("slowdown_for_curled_perimeters", new Slic3r::ConfigOptionBool(config.slowdown_for_curled_perimeters));
++    dpc.set_key_value("resolution", new Slic3r::ConfigOptionFloat(config.resolution));
++
++    const Slic3r::PerimeterGeneratorType wall_generator = config.wall_generator == "classic"
++        ? Slic3r::PerimeterGeneratorType::Classic
++        : Slic3r::PerimeterGeneratorType::Arachne;
++    dpc.set_key_value("wall_generator", new Slic3r::ConfigOptionEnum<Slic3r::PerimeterGeneratorType>(wall_generator));
++    dpc.set_key_value("wall_transition_length", new Slic3r::ConfigOptionPercent(config.wall_transition_length));
++    dpc.set_key_value("wall_transition_filter_deviation", new Slic3r::ConfigOptionPercent(config.wall_transition_filter_deviation));
++    dpc.set_key_value("wall_transition_angle", new Slic3r::ConfigOptionFloat(config.wall_transition_angle));
++    dpc.set_key_value("wall_distribution_count", new Slic3r::ConfigOptionInt(config.wall_distribution_count));
++    dpc.set_key_value("min_feature_size", new Slic3r::ConfigOptionPercent(config.minimum_feature_size));
++    dpc.set_key_value("min_length_factor", new Slic3r::ConfigOptionFloat(config.minimum_wall_length_factor));
++
++    Slic3r::WallSequence wall_sequence = Slic3r::WallSequence::InnerOuter;
++    if (config.wall_sequence == "outer-inner") {
++        wall_sequence = Slic3r::WallSequence::OuterInner;
++    } else if (config.wall_sequence == "inner-outer-inner") {
++        wall_sequence = Slic3r::WallSequence::InnerOuterInner;
+     }
+-
++    dpc.set_key_value("wall_sequence", new Slic3r::ConfigOptionEnum<Slic3r::WallSequence>(wall_sequence));
++    dpc.set_deserialize_strict("wall_direction", config.wall_direction);
++    dpc.set_key_value("detect_thin_wall", new Slic3r::ConfigOptionBool(config.detect_thin_walls));
++    dpc.set_key_value("detect_overhang_wall", new Slic3r::ConfigOptionBool(config.detect_overhang_walls));
++    dpc.set_key_value("only_one_wall_top", new Slic3r::ConfigOptionBool(config.only_one_wall_on_top));
++    dpc.set_key_value("min_width_top_surface", new Slic3r::ConfigOptionFloatOrPercent(
++        config.min_width_top_surface, config.min_width_top_surface_percent));
++    dpc.set_key_value("only_one_wall_first_layer", new Slic3r::ConfigOptionBool(config.only_one_wall_first_layer));
++    dpc.set_key_value("extra_perimeters_on_overhangs", new Slic3r::ConfigOptionBool(config.extra_perimeters_on_overhangs));
++    dpc.set_key_value("overhang_reverse", new Slic3r::ConfigOptionBool(config.overhang_reverse));
++    dpc.set_key_value("overhang_reverse_internal_only", new Slic3r::ConfigOptionBool(config.overhang_reverse_internal_only));
++    dpc.set_key_value("overhang_reverse_threshold", new Slic3r::ConfigOptionFloatOrPercent(
++        config.overhang_reverse_threshold, config.overhang_reverse_threshold_percent));
++    dpc.set_deserialize_strict("counterbore_hole_bridging", config.counterbore_hole_bridging);
++    dpc.set_key_value("alternate_extra_wall", new Slic3r::ConfigOptionBool(config.alternate_extra_wall));
++    dpc.set_deserialize_strict("ensure_vertical_shell_thickness", config.ensure_vertical_shell_thickness);
++    dpc.set_key_value("detect_narrow_internal_solid_infill", new Slic3r::ConfigOptionBool(config.detect_narrow_internal_solid_infill));
++    dpc.set_key_value("xy_hole_compensation", new Slic3r::ConfigOptionFloat(config.xy_hole_compensation));
++    dpc.set_key_value("xy_contour_compensation", new Slic3r::ConfigOptionFloat(config.xy_contour_compensation));
++    dpc.set_key_value("elefant_foot_compensation", new Slic3r::ConfigOptionFloat(config.elephant_foot_compensation));
++    dpc.set_key_value("elefant_foot_compensation_layers", new Slic3r::ConfigOptionInt(config.elephant_foot_compensation_layers));
++    dpc.set_key_value("max_bridge_length", new Slic3r::ConfigOptionFloat(config.max_bridge_length));
++    dpc.set_key_value("precise_outer_wall", new Slic3r::ConfigOptionBool(config.precise_outer_walls));
++
++    dpc.set_deserialize_strict("seam_position", config.seam_position);
++    dpc.set_key_value("staggered_inner_seams", new Slic3r::ConfigOptionBool(config.staggered_inner_seams));
++    dpc.set_key_value("seam_gap", new Slic3r::ConfigOptionFloatOrPercent(config.seam_gap, config.seam_gap_percent));
++    dpc.set_key_value("wipe_before_external_loop", new Slic3r::ConfigOptionBool(config.wipe_before_external_loop));
++    dpc.set_key_value("wipe_on_loops", new Slic3r::ConfigOptionBool(config.wipe_on_loops));
++    dpc.set_key_value("role_based_wipe_speed", new Slic3r::ConfigOptionBool(config.role_based_wipe_speed));
++    dpc.set_key_value("wipe_speed", new Slic3r::ConfigOptionFloatOrPercent(config.wipe_speed, config.wipe_speed_percent));
++    dpc.set_deserialize_strict("ironing_type", config.ironing_type);
++    dpc.set_deserialize_strict("ironing_pattern", config.ironing_pattern);
++    dpc.set_key_value("ironing_flow", new Slic3r::ConfigOptionPercent(config.ironing_flow));
++    dpc.set_key_value("ironing_spacing", new Slic3r::ConfigOptionFloat(config.ironing_spacing));
++    dpc.set_key_value("ironing_speed", new Slic3r::ConfigOptionFloat(config.ironing_speed));
+     // F91 (2026-05-25) — SliceConfig user overrides for the per-filament tuning keys
+     // that applyConfigToPrusa doesn't otherwise touch. When the user sets a value via the
+     // Filament Library, populate dpc here so the slicer picks it up. When unset, the
+@@ -568,19 +712,27 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+         dpc.set_key_value("filament_cost", new Slic3r::ConfigOptionFloats(std::move(v)));
+     }
+ 
+-    // Support speeds — OrcaSlicer defaults to 80mm/s which is fine today, but pin to
+-    // Snapmaker profile values so future OrcaSlicer changes don't silently regress.
+-    dpc.set_key_value("support_speed", new Slic3r::ConfigOptionFloat(100.0));
+-    dpc.set_key_value("support_interface_speed", new Slic3r::ConfigOptionFloat(80.0));
+-
+-    // Overhang speed control — OrcaSlicer defaults enable_overhang_speed=true with all
+-    // overhang speeds at 0 (= use wall speed).  Pin to Snapmaker 0.4mm nozzle profile
+-    // values so a future default change doesn't break overhang quality.
+-    dpc.set_key_value("enable_overhang_speed", new Slic3r::ConfigOptionBool(true));
+-    dpc.set_key_value("overhang_1_4_speed", new Slic3r::ConfigOptionFloatOrPercent(55, false));
+-    dpc.set_key_value("overhang_2_4_speed", new Slic3r::ConfigOptionFloatOrPercent(30, false));
+-    dpc.set_key_value("overhang_3_4_speed", new Slic3r::ConfigOptionFloatOrPercent(10, false));
+-    dpc.set_key_value("overhang_4_4_speed", new Slic3r::ConfigOptionFloatOrPercent(10, false));
++    // Preserve the active process profile's support speed.
++    dpc.set_key_value("support_speed", new Slic3r::ConfigOptionFloat(config.support_speed));
++    dpc.set_key_value("support_interface_speed", new Slic3r::ConfigOptionFloat(config.support_interface_speed));
++    dpc.set_key_value("support_interface_top_layers", new Slic3r::ConfigOptionInt(config.support_interface_top_layers));
++    dpc.set_key_value("support_interface_bottom_layers", new Slic3r::ConfigOptionInt(config.support_interface_bottom_layers));
++    dpc.set_key_value("support_interface_spacing", new Slic3r::ConfigOptionFloat(config.support_interface_spacing));
++    dpc.set_key_value("support_bottom_interface_spacing", new Slic3r::ConfigOptionFloat(config.support_bottom_interface_spacing));
++    dpc.set_key_value("support_top_z_distance", new Slic3r::ConfigOptionFloat(config.support_top_z_distance));
++    dpc.set_key_value("support_bottom_z_distance", new Slic3r::ConfigOptionFloat(config.support_bottom_z_distance));
++    dpc.set_key_value("support_object_xy_distance", new Slic3r::ConfigOptionFloat(config.support_object_xy_distance));
++    dpc.set_deserialize_strict("support_base_pattern", config.support_base_pattern);
++    dpc.set_deserialize_strict("support_interface_pattern", config.support_interface_pattern);
++    dpc.set_deserialize_strict("support_style", config.support_style);
++
++    // Orca profiles intentionally mix absolute mm/s and percentages of outer-wall
++    // speed. Preserve both the numeric value and its unit semantics per stage.
++    dpc.set_key_value("enable_overhang_speed", new Slic3r::ConfigOptionBool(config.overhang_speed_enabled));
++    dpc.set_key_value("overhang_1_4_speed", new Slic3r::ConfigOptionFloatOrPercent(config.overhang_speed_1, config.overhang_speed_1_percent));
++    dpc.set_key_value("overhang_2_4_speed", new Slic3r::ConfigOptionFloatOrPercent(config.overhang_speed_2, config.overhang_speed_2_percent));
++    dpc.set_key_value("overhang_3_4_speed", new Slic3r::ConfigOptionFloatOrPercent(config.overhang_speed_3, config.overhang_speed_3_percent));
++    dpc.set_key_value("overhang_4_4_speed", new Slic3r::ConfigOptionFloatOrPercent(config.overhang_speed_4, config.overhang_speed_4_percent));
+ 
+     // Idle extruder standby temperature — prevents idle nozzles from staying at full print temp.
+     // Snapmaker profiles embed ooze_prevention=0 and standby_temperature_delta=-5, which leaves
+@@ -646,13 +798,18 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     // Skirt/Brim (same key names)
+     dpc.set_key_value("skirt_loops", new Slic3r::ConfigOptionInt(config.skirt_loops));
+     dpc.set_key_value("skirt_distance", new Slic3r::ConfigOptionFloat(config.skirt_distance));
++    dpc.set_key_value("skirt_height", new Slic3r::ConfigOptionInt(config.skirt_height));
++    dpc.set_key_value("skirt_speed", new Slic3r::ConfigOptionFloat(config.skirt_speed));
++    dpc.set_key_value("min_skirt_length", new Slic3r::ConfigOptionFloat(config.minimum_skirt_length));
++    dpc.set_deserialize_strict("draft_shield", config.draft_shield);
++    dpc.set_deserialize_strict("brim_type", config.brim_type);
+     dpc.set_key_value("brim_width", new Slic3r::ConfigOptionFloat(config.brim_width));
+-    // Brim type — suppress OrcaSlicer's btAutoBrim default, which adds geometry-based brims
+-    // even when brim_width=0.  Derive from brim_width: no brim → no_brim, else outer_only.
+-    {
+-        Slic3r::BrimType btype = (config.brim_width > 0.0f) ? Slic3r::btOuterOnly : Slic3r::btNoBrim;
+-        dpc.set_key_value("brim_type", new Slic3r::ConfigOptionEnum<Slic3r::BrimType>(btype));
+-    }
++    dpc.set_key_value("brim_object_gap", new Slic3r::ConfigOptionFloat(config.brim_object_gap));
++    dpc.set_key_value("raft_layers", new Slic3r::ConfigOptionInt(config.raft_layers));
++    dpc.set_key_value("raft_contact_distance", new Slic3r::ConfigOptionFloat(config.raft_contact_distance));
++    dpc.set_key_value("raft_expansion", new Slic3r::ConfigOptionFloat(config.raft_expansion));
++    dpc.set_key_value("raft_first_layer_density", new Slic3r::ConfigOptionPercent(config.raft_first_layer_density));
++    dpc.set_key_value("raft_first_layer_expansion", new Slic3r::ConfigOptionFloat(config.raft_first_layer_expansion));
+ 
+     // Prime tower / wipe tower (OrcaSlicer keys)
+     // wipe_tower_x/y are coFloats (arrays) in OrcaSlicer, one value per extruder
+@@ -905,6 +1062,12 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+                     "sparse_infill_pattern",
+                     // Wall generator type (classic vs arachne variable-width)
+                     "wall_generator",
++                    "wall_transition_length",
++                    "wall_transition_filter_deviation",
++                    "wall_transition_angle",
++                    "wall_distribution_count",
++                    "min_feature_size",
++                    "min_length_factor",
+                     // Retraction reduction for infill moves
+                     "reduce_infill_retraction",
+                     // Line widths (from embedded profile)
+@@ -1191,7 +1354,7 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+             obj->ensure_on_bed();
+         }
+ 
+-        // Auto-center model on bed if outside 0–270mm bounds.
++        // Auto-center model on the active profile's build-volume bounds.
+         // This is a safety net for cases where setModelInstances was not called
+         // (e.g. direct native API use, integration tests).  The ViewModel always
+         // calls setModelInstances before slicing, so for normal app use this is
+@@ -1205,7 +1368,10 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+         // 2 mm absorbs that without losing the safety property: a model
+         // that is genuinely off-bed will be off by tens of millimetres.
+         {
+-            const double BED_X = 270.0, BED_Y = 270.0;
++            const double BED_X = config.bed_size_x > 0.0f ? config.bed_size_x : 270.0;
++            const double BED_Y = config.bed_size_y > 0.0f ? config.bed_size_y : 270.0;
++            const double BED_ORIGIN_X = std::isfinite(config.bed_origin_x) ? config.bed_origin_x : 0.0;
++            const double BED_ORIGIN_Y = std::isfinite(config.bed_origin_y) ? config.bed_origin_y : 0.0;
+             const double EDGE_TOL = 2.0;
+             Slic3r::BoundingBoxf3 worldBB;
+             for (auto* obj : model.objects) {
+@@ -1214,12 +1380,14 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+             if (worldBB.defined) {
+                 double xMin = worldBB.min.x(), xMax = worldBB.max.x();
+                 double yMin = worldBB.min.y(), yMax = worldBB.max.y();
+-                bool outOfBounds = xMin < -EDGE_TOL || xMax > BED_X + EDGE_TOL ||
+-                                   yMin < -EDGE_TOL || yMax > BED_Y + EDGE_TOL;
++                bool outOfBounds = xMin < BED_ORIGIN_X - EDGE_TOL ||
++                                   xMax > BED_ORIGIN_X + BED_X + EDGE_TOL ||
++                                   yMin < BED_ORIGIN_Y - EDGE_TOL ||
++                                   yMax > BED_ORIGIN_Y + BED_Y + EDGE_TOL;
+                 if (outOfBounds) {
+                     double sizeX = xMax - xMin, sizeY = yMax - yMin;
+-                    double deltaX = (BED_X - sizeX) / 2.0 - xMin;
+-                    double deltaY = (BED_Y - sizeY) / 2.0 - yMin;
++                    double deltaX = BED_ORIGIN_X + (BED_X - sizeX) / 2.0 - xMin;
++                    double deltaY = BED_ORIGIN_Y + (BED_Y - sizeY) / 2.0 - yMin;
+                     for (auto* obj : model.objects) {
+                         for (auto* inst : obj->instances) {
+                             auto offset = inst->get_offset();
+@@ -1375,6 +1543,28 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+         // Generate G-code — use the same directory as the loaded model
+         extern std::string getFilesDir();
+         std::string output_path = getFilesDir() + "/output.gcode";
++
++        // The periodic Kotlin storage guard is intentionally only a secondary
++        // defence. Constrain the writer in the isolated process before Orca can
++        // emit a byte so fast output cannot race beyond the retained-file policy.
++        constexpr rlim_t MAXIMUM_GCODE_BYTES = 1024ULL * 1024ULL * 1024ULL;
++        if (config.maximum_gcode_bytes == 0 ||
++            config.maximum_gcode_bytes > MAXIMUM_GCODE_BYTES) {
++            throw std::invalid_argument("Invalid G-code output limit");
++        }
++        struct rlimit file_size_limit {};
++        if (getrlimit(RLIMIT_FSIZE, &file_size_limit) != 0) {
++            throw std::runtime_error("Could not inspect G-code output limit");
++        }
++        const rlim_t requested_limit = static_cast<rlim_t>(config.maximum_gcode_bytes);
++        if (file_size_limit.rlim_max != RLIM_INFINITY && requested_limit > file_size_limit.rlim_max) {
++            throw std::runtime_error("G-code output limit exceeds the process hard limit");
++        }
++        file_size_limit.rlim_cur = requested_limit;
++        if (setrlimit(RLIMIT_FSIZE, &file_size_limit) != 0) {
++            throw std::runtime_error("Could not apply G-code output limit");
++        }
++
+         // OrcaSlicer dereferences result without null check, so provide a real object
+         Slic3r::GCodeProcessorResult gcode_result;
+         g_active_print.store(&print, std::memory_order_release);
+@@ -1383,12 +1573,15 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+ 
+         if (progress) progress(95, "Reading results");
+ 
+-        // Read the G-code for preview
++        // Retain only a bounded compatibility preview. Android's real preview
++        // parser streams the persisted G-code and does not need a second full copy.
++        constexpr std::size_t LEGACY_GCODE_PREVIEW_BYTES = 256 * 1024;
+         std::ifstream gcode_file(output_path);
+         if (gcode_file.good()) {
+-            std::ostringstream ss;
+-            ss << gcode_file.rdbuf();
+-            pImpl->last_gcode_content = ss.str();
++            std::string preview(LEGACY_GCODE_PREVIEW_BYTES, '\0');
++            gcode_file.read(preview.data(), static_cast<std::streamsize>(preview.size()));
++            preview.resize(static_cast<std::size_t>(gcode_file.gcount()));
++            pImpl->last_gcode_content = std::move(preview);
+             pImpl->last_gcode_path = output_path;
+         }
+ 
+diff --git a/app/src/main/cpp/src/sapil_support_paint.cpp b/app/src/main/cpp/src/sapil_support_paint.cpp
+new file mode 100644
+index 00000000..bebc6734
+--- /dev/null
++++ b/app/src/main/cpp/src/sapil_support_paint.cpp
+@@ -0,0 +1,101 @@
++#include <jni.h>
++
++#include <array>
++#include <cstdint>
++#include <fstream>
++#include <string>
++
++#include "libslic3r/Model.hpp"
++#include "libslic3r/TriangleSelector.hpp"
++
++namespace sapil {
++extern Slic3r::Model g_model;
++}
++
++namespace {
++
++constexpr std::array<unsigned char, 4> SUPPORT_PAINT_MAGIC{'D', 'S', 'P', '1'};
++constexpr std::uint32_t MAX_PAINTED_FACETS = 100000;
++constexpr std::uint64_t HEADER_BYTES = 8;
++constexpr std::uint64_t ENTRY_BYTES = 5;
++
++bool read_u32_be(std::istream& input, std::uint32_t& value)
++{
++    std::array<unsigned char, 4> bytes{};
++    if (!input.read(reinterpret_cast<char*>(bytes.data()), bytes.size())) return false;
++    value = (static_cast<std::uint32_t>(bytes[0]) << 24) |
++            (static_cast<std::uint32_t>(bytes[1]) << 16) |
++            (static_cast<std::uint32_t>(bytes[2]) << 8) |
++            static_cast<std::uint32_t>(bytes[3]);
++    return true;
++}
++
++bool apply_support_paint(int object_index, const std::string& sidecar_path)
++{
++    if (object_index < 0 || static_cast<std::size_t>(object_index) >= sapil::g_model.objects.size()) {
++        return false;
++    }
++    Slic3r::ModelObject* object = sapil::g_model.objects[static_cast<std::size_t>(object_index)];
++    if (object == nullptr) return false;
++    Slic3r::ModelVolume* volume = nullptr;
++    for (Slic3r::ModelVolume* candidate : object->volumes) {
++        if (candidate != nullptr && candidate->is_model_part()) {
++            if (volume != nullptr) return false;
++            volume = candidate;
++        }
++    }
++    if (volume == nullptr) return false;
++
++    std::ifstream input(sidecar_path, std::ios::binary | std::ios::ate);
++    if (!input) return false;
++    const std::streamoff size = input.tellg();
++    if (size < static_cast<std::streamoff>(HEADER_BYTES)) return false;
++    input.seekg(0, std::ios::beg);
++
++    std::array<unsigned char, 4> magic{};
++    if (!input.read(reinterpret_cast<char*>(magic.data()), magic.size()) || magic != SUPPORT_PAINT_MAGIC) {
++        return false;
++    }
++    std::uint32_t count = 0;
++    if (!read_u32_be(input, count) || count > MAX_PAINTED_FACETS) return false;
++    const std::uint64_t expected_size = HEADER_BYTES + static_cast<std::uint64_t>(count) * ENTRY_BYTES;
++    if (static_cast<std::uint64_t>(size) != expected_size) return false;
++
++    const std::size_t triangle_count = volume->mesh().its.indices.size();
++    Slic3r::TriangleSelector selector(volume->mesh());
++    std::uint32_t previous_index = 0;
++    bool has_previous = false;
++    for (std::uint32_t entry = 0; entry < count; ++entry) {
++        std::uint32_t facet_index = 0;
++        unsigned char state = 0;
++        if (!read_u32_be(input, facet_index) || !input.read(reinterpret_cast<char*>(&state), 1)) {
++            return false;
++        }
++        if (static_cast<std::size_t>(facet_index) >= triangle_count ||
++            (has_previous && facet_index <= previous_index) ||
++            (state != 1 && state != 2)) {
++            return false;
++        }
++        selector.set_facet(
++            static_cast<int>(facet_index),
++            state == 1 ? Slic3r::EnforcerBlockerType::ENFORCER
++                       : Slic3r::EnforcerBlockerType::BLOCKER);
++        previous_index = facet_index;
++        has_previous = true;
++    }
++    return volume->supported_facets.set(selector) || count == 0;
++}
++
++} // namespace
++
++extern "C" JNIEXPORT jboolean JNICALL
++Java_com_u1_slicer_NativeLibrary_applySupportPaint(
++        JNIEnv* env, jobject, jint object_index, jstring sidecar_path)
++{
++    if (sidecar_path == nullptr) return JNI_FALSE;
++    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
++    if (path == nullptr) return JNI_FALSE;
++    const bool result = apply_support_paint(static_cast<int>(object_index), std::string(path));
++    env->ReleaseStringUTFChars(sidecar_path, path);
++    return result ? JNI_TRUE : JNI_FALSE;
++}
+diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slicer_wrapper.cpp
+index 1158e2c4..94d6147e 100644
+--- a/app/src/main/cpp/src/slicer_wrapper.cpp
++++ b/app/src/main/cpp/src/slicer_wrapper.cpp
+@@ -365,6 +365,25 @@ Java_com_u1_slicer_NativeLibrary_setObjectPositions(JNIEnv* env, jobject, jfloat
+     return result ? JNI_TRUE : JNI_FALSE;
+ }
+ 
++JNIEXPORT jfloatArray JNICALL
++Java_com_u1_slicer_NativeLibrary_nativeAutoArrangeObjects(
++        JNIEnv* env, jobject, jfloatArray jbed_polygon, jfloat minimum_gap) {
++    if (!g_engine || !jbed_polygon) return nullptr;
++    const jsize length = env->GetArrayLength(jbed_polygon);
++    if (length < 6 || length > 512 || length % 2 != 0) return nullptr;
++    std::vector<float> bed_polygon(static_cast<size_t>(length));
++    env->GetFloatArrayRegion(jbed_polygon, 0, length, bed_polygon.data());
++    if (env->ExceptionCheck()) return nullptr;
++    auto positions = g_engine->autoArrangeObjects(bed_polygon, minimum_gap);
++    if (!positions) return nullptr;
++    jfloatArray result = env->NewFloatArray(static_cast<jsize>(positions->size()));
++    if (!positions->empty()) {
++        env->SetFloatArrayRegion(
++            result, 0, static_cast<jsize>(positions->size()), positions->data());
++    }
++    return result;
++}
++
+ // ---- Cancellation ----
+ JNIEXPORT void JNICALL
+ Java_com_u1_slicer_NativeLibrary_cancelPreviewMesh(JNIEnv*, jobject) {

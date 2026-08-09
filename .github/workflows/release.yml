@@ -1,0 +1,442 @@
+name: Release APK
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    outputs:
+      release_version: ${{ steps.release_version.outputs.version }}
+    env:
+      DUCKYSLICER_NATIVE_JOBS: "4"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: 1.91.1
+          components: clippy, rustfmt
+          targets: aarch64-linux-android
+
+      - name: Install Android build inputs
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
+          cargo install cargo-ndk --version 4.1.2 --locked
+
+      - name: Verify build supply chain
+        run: |
+          python3 tools/verify_workflows.py
+          python3 tools/verify_gradle_supply_chain.py
+          python3 tools/verify_native_safety.py
+          python3 tools/verify_android_isolation.py
+          python3 tools/verify_profile_editor.py
+          python3 tools/verify_open_source_distribution.py
+          python3 tools/verify_runtime_resilience.py
+
+      - name: Restore native build cache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            build/native-slicer/dependency-sources
+            build/native-slicer/build
+          key: android-native-${{ runner.os }}-${{ hashFiles('native/slicer-runtime/versions.env', 'native/slicer-runtime/runtime.patch') }}
+
+      - name: Validate release tag
+        id: release_version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "Release tag must be SemVer, got: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          echo "DUCKYSLICER_RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check Rust boundary
+        working-directory: rust/duckyslicer-jni
+        run: |
+          cargo fmt --check
+          cargo test --locked
+          cargo test --release --locked
+          cargo clippy --locked -- -D warnings
+
+      - name: Build unsigned release and device-test APKs
+        working-directory: android
+        run: |
+          ./gradlew --dependency-verification=strict \
+            :app:testDebugUnitTest :app:lintRelease \
+            :app:assembleDebug :app:assembleDebugAndroidTest :app:assembleRelease \
+            :app:writeReleaseDependencyInventory \
+            -Pduckyslicer.versionName="$DUCKYSLICER_RELEASE_VERSION" \
+            -Pduckyslicer.versionCode="${GITHUB_RUN_NUMBER}"
+
+      - name: Verify unsigned APK invariants
+        run: |
+          release_apk="android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$release_apk"
+          python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_slice_storage tools.test_verify_preview_boundary tools.test_verify_profile_editor tools.test_verify_open_source_distribution tools.test_verify_runtime_resilience tools.test_generate_license_inventory tools.test_generate_offline_licenses tools.test_generate_profile_catalog tools.test_generate_sbom tools.test_generate_source_bundle tools.test_verify_reproducible_release
+          python3 tools/verify_slice_storage.py
+          python3 tools/verify_preview_boundary.py
+          python3 tools/verify_profile_editor.py
+          python3 tools/verify_apk.py "$release_apk"
+          python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Stage first release build
+        run: |
+          candidate="$RUNNER_TEMP/duckyslicer-release-candidate"
+          mkdir -p "$candidate/unsigned" "$candidate/debug" "$candidate/androidTest"
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk \
+            "$candidate/unsigned/app-release-unsigned.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+            "$candidate/debug/app-debug.apk"
+          cp android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk \
+            "$candidate/androidTest/app-debug-androidTest.apk"
+
+      - name: Rebuild and verify reproducible unsigned release
+        working-directory: android
+        run: |
+          ./gradlew --dependency-verification=strict --no-build-cache \
+            :app:clean :app:assembleRelease \
+            -Pduckyslicer.versionName="$DUCKYSLICER_RELEASE_VERSION" \
+            -Pduckyslicer.versionCode="${GITHUB_RUN_NUMBER}"
+          cd ..
+          python3 tools/verify_reproducible_release.py \
+            "$RUNNER_TEMP/duckyslicer-release-candidate/unsigned/app-release-unsigned.apk" \
+            android/app/build/outputs/apk/release/app-release-unsigned.apk
+
+      - name: Generate reviewed license inventory
+        run: |
+          python3 tools/generate_license_inventory.py \
+            android/app/build/reports/dependencies/release.txt \
+            android/app/build/reports/dependencies/release-licenses.json
+
+      - name: Generate recursive corresponding source
+        run: |
+          source_dir="$RUNNER_TEMP/duckyslicer-release-source"
+          mkdir -p "$source_dir"
+          python3 tools/generate_source_bundle.py \
+            "$DUCKYSLICER_RELEASE_VERSION" \
+            "$GITHUB_RUN_NUMBER" \
+            "$source_dir/DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-source.tar.gz" \
+            "$source_dir/DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-SOURCE-MANIFEST.json"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: duckyslicer-release-unsigned
+          path: ${{ runner.temp }}/duckyslicer-release-candidate/unsigned/app-release-unsigned.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: duckyslicer-release-metadata
+          path: |
+            android/app/build/reports/dependencies/release.txt
+            android/app/build/reports/dependencies/release-licenses.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: duckyslicer-release-source
+          path: ${{ runner.temp }}/duckyslicer-release-source/DuckySlicer-*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: duckyslicer-release-device-test-apks
+          path: |
+            ${{ runner.temp }}/duckyslicer-release-candidate/debug/app-debug.apk
+            ${{ runner.temp }}/duckyslicer-release-candidate/androidTest/app-debug-androidTest.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  sign:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      actions: read
+    steps:
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+
+      - name: Install pinned signing tool
+        run: sdkmanager "build-tools;36.0.0"
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: duckyslicer-release-unsigned
+          path: unsigned
+
+      - name: Sign and verify release APK
+        env:
+          DUCKYSLICER_KEYSTORE_BASE64: ${{ secrets.DUCKYSLICER_KEYSTORE_BASE64 }}
+          DUCKYSLICER_STORE_PASSWORD: ${{ secrets.DUCKYSLICER_STORE_PASSWORD }}
+          DUCKYSLICER_KEY_ALIAS: ${{ secrets.DUCKYSLICER_KEY_ALIAS }}
+          DUCKYSLICER_KEY_PASSWORD: ${{ secrets.DUCKYSLICER_KEY_PASSWORD }}
+          DUCKYSLICER_SIGNING_CERT_SHA256: ${{ vars.DUCKYSLICER_SIGNING_CERT_SHA256 }}
+          DUCKYSLICER_RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+        run: |
+          test -n "$DUCKYSLICER_KEYSTORE_BASE64"
+          test -n "$DUCKYSLICER_STORE_PASSWORD"
+          test -n "$DUCKYSLICER_KEY_ALIAS"
+          test -n "$DUCKYSLICER_KEY_PASSWORD"
+          expected_fingerprint=$(printf '%s' "$DUCKYSLICER_SIGNING_CERT_SHA256" \
+            | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')
+          if [[ ! "$expected_fingerprint" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "DUCKYSLICER_SIGNING_CERT_SHA256 must be a SHA-256 fingerprint" >&2
+            exit 1
+          fi
+
+          key_file="$RUNNER_TEMP/duckyslicer-release.jks"
+          trap 'rm -f "$key_file"' EXIT
+          printf '%s' "$DUCKYSLICER_KEYSTORE_BASE64" | base64 --decode > "$key_file"
+          chmod 600 "$key_file"
+          mkdir -p signed
+          unsigned_apk="unsigned/app-release-unsigned.apk"
+          signed_apk="signed/DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-arm64.apk"
+          apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          "$apksigner" sign \
+            --ks "$key_file" \
+            --ks-key-alias "$DUCKYSLICER_KEY_ALIAS" \
+            --ks-pass env:DUCKYSLICER_STORE_PASSWORD \
+            --key-pass env:DUCKYSLICER_KEY_PASSWORD \
+            --v1-signing-enabled false \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --v4-signing-enabled false \
+            --out "$signed_apk" \
+            "$unsigned_apk"
+
+          signer_report=$("$apksigner" verify --verbose --print-certs "$signed_apk")
+          printf '%s\n' "$signer_report"
+          actual_fingerprint=$(printf '%s\n' "$signer_report" \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
+            | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')
+          if [ "$actual_fingerprint" != "$expected_fingerprint" ]; then
+            echo "Release signing certificate does not match the pinned fingerprint" >&2
+            exit 1
+          fi
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$signed_apk"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: duckyslicer-release-signed
+          path: signed/DuckySlicer-*-arm64.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  device-tests:
+    needs: [build, sign]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      actions: read
+    steps:
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: duckyslicer-release-device-test-apks
+          path: apks
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: duckyslicer-release-signed
+          path: release
+
+      - name: Install ARM64 emulator image
+        run: |
+          sdkmanager \
+            "platform-tools" \
+            "emulator" \
+            "platforms;android-35" \
+            "system-images;android-35;google_apis;arm64-v8a"
+          echo no | avdmanager create avd \
+            --force \
+            --name duckyslicer-arm64 \
+            --package "system-images;android-35;google_apis;arm64-v8a" \
+            --device pixel_6
+
+      - name: Start ARM64 emulator
+        run: |
+          nohup "$ANDROID_HOME/emulator/emulator" \
+            -avd duckyslicer-arm64 \
+            -no-window \
+            -no-audio \
+            -no-boot-anim \
+            -no-snapshot \
+            -gpu swiftshader_indirect \
+            -accel on \
+            > "$RUNNER_TEMP/duckyslicer-emulator.log" 2>&1 &
+          adb wait-for-device
+          booted=false
+          for attempt in {1..180}; do
+            if adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' | grep -q '^1$'; then
+              booted=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$booted" != true ]; then
+            cat "$RUNNER_TEMP/duckyslicer-emulator.log"
+            exit 1
+          fi
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+
+      - name: Run release-candidate device tests
+        run: |
+          adb install -r apks/debug/app-debug.apk
+          adb install -r apks/androidTest/debug/app-debug-androidTest.apk
+          adb shell am instrument -w -r \
+            com.ashcastle.duckyslicer.test/androidx.test.runner.AndroidJUnitRunner \
+            | tee "$RUNNER_TEMP/duckyslicer-device-tests.txt"
+          grep -q '^OK (' "$RUNNER_TEMP/duckyslicer-device-tests.txt"
+
+      - name: Smoke test signed minified release APK
+        run: |
+          adb uninstall com.ashcastle.duckyslicer
+          mapfile -t release_apks < <(find release -maxdepth 1 -type f -name 'DuckySlicer-*-arm64.apk')
+          if [ "${#release_apks[@]}" -ne 1 ]; then
+            echo "Expected exactly one signed release APK, found ${#release_apks[@]}" >&2
+            exit 1
+          fi
+          adb install "${release_apks[0]}"
+          adb logcat -c
+          adb shell am force-stop com.ashcastle.duckyslicer
+          adb shell am start -W \
+            -n com.ashcastle.duckyslicer/.MainActivity \
+            | tee "$RUNNER_TEMP/duckyslicer-release-launch.txt"
+          grep -q '^Status: ok$' "$RUNNER_TEMP/duckyslicer-release-launch.txt"
+          grep -q '^Activity: com.ashcastle.duckyslicer/.MainActivity$' \
+            "$RUNNER_TEMP/duckyslicer-release-launch.txt"
+          started=false
+          for attempt in {1..30}; do
+            if adb shell pidof com.ashcastle.duckyslicer >/dev/null; then
+              started=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$started" != true ]; then
+            adb logcat -d
+            exit 1
+          fi
+          if adb logcat -d | grep -E 'FATAL EXCEPTION|ANR in'; then
+            exit 1
+          fi
+
+      - name: Upload emulator log on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: duckyslicer-release-arm64-emulator-log
+          path: |
+            ${{ runner.temp }}/duckyslicer-emulator.log
+            ${{ runner.temp }}/duckyslicer-device-tests.txt
+            ${{ runner.temp }}/duckyslicer-release-launch.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+  publish:
+    needs: [build, sign, device-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: duckyslicer-release-signed
+          path: release
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: duckyslicer-release-metadata
+          path: release-metadata
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: duckyslicer-release-source
+          path: release
+
+      - name: Verify signed artifact and release metadata
+        env:
+          DUCKYSLICER_RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+        run: |
+          mapfile -t release_apks < <(find release -maxdepth 1 -type f -name 'DuckySlicer-*-arm64.apk')
+          mapfile -t inventories < <(find release-metadata -type f -name 'release.txt')
+          mapfile -t license_inventories < <(find release-metadata -type f -name 'release-licenses.json')
+          mapfile -t source_archives < <(find release -maxdepth 1 -type f -name 'DuckySlicer-*-source.tar.gz')
+          mapfile -t source_manifests < <(find release -maxdepth 1 -type f -name 'DuckySlicer-*-SOURCE-MANIFEST.json')
+          if [ "${#release_apks[@]}" -ne 1 ] || [ "${#inventories[@]}" -ne 1 ] || \
+            [ "${#license_inventories[@]}" -ne 1 ] || [ "${#source_archives[@]}" -ne 1 ] || \
+            [ "${#source_manifests[@]}" -ne 1 ]; then
+            echo "Expected exactly one APK, dependency inventory, license inventory, source archive, and source manifest" >&2
+            exit 1
+          fi
+          python3 tools/verify_apk.py "${release_apks[0]}"
+          python3 tools/generate_source_bundle.py --verify \
+            "${source_archives[0]}" "${source_manifests[0]}"
+          python3 tools/generate_sbom.py \
+            "${release_apks[0]}" \
+            "release/DuckySlicer-$DUCKYSLICER_RELEASE_VERSION.cdx.json" \
+            "$DUCKYSLICER_RELEASE_VERSION" \
+            "${inventories[0]}" \
+            "${license_inventories[0]}"
+          (
+            cd release
+            sha256sum \
+              "DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-arm64.apk" \
+              "DuckySlicer-$DUCKYSLICER_RELEASE_VERSION.cdx.json" \
+              "DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-source.tar.gz" \
+              "DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-SOURCE-MANIFEST.json" \
+              > "DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-SHA256SUMS.txt"
+            sha256sum --check "DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-SHA256SUMS.txt"
+          )
+
+      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: "release/DuckySlicer-*"
+
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release/DuckySlicer-*-arm64.apk
+            release/DuckySlicer-*.cdx.json
+            release/DuckySlicer-*-source.tar.gz
+            release/DuckySlicer-*-SOURCE-MANIFEST.json
+            release/DuckySlicer-*-SHA256SUMS.txt

@@ -1,9 +1,9 @@
 package com.ashcastle.duckyslicer
 
-import org.json.JSONArray
-import org.json.JSONObject
 import kotlin.math.cos
 import kotlin.math.sin
+import org.json.JSONArray
+import org.json.JSONObject
 
 data class ModelTransform(
     val offsetXmm: Float = 0f,
@@ -13,12 +13,77 @@ data class ModelTransform(
     val rotationZdeg: Float = 0f,
     val scale: Float = 1f,
 ) {
-    fun toJson(bedSizeX: Float, bedSizeY: Float): String = JSONObject()
-        .put("bedCenterMm", JSONArray(listOf(bedSizeX / 2f, bedSizeY / 2f)))
+    fun toJson(
+        bedSizeX: Float,
+        bedSizeY: Float,
+        bedOriginX: Float = 0f,
+        bedOriginY: Float = 0f,
+    ): String = JSONObject()
+        .put(
+            "bedCenterMm",
+            JSONArray(listOf(bedOriginX + bedSizeX / 2f, bedOriginY + bedSizeY / 2f)),
+        )
         .put("offsetMm", JSONArray(listOf(offsetXmm, offsetYmm)))
         .put("rotationDeg", JSONArray(listOf(rotationXdeg, rotationYdeg, rotationZdeg)))
         .put("scale", scale)
         .toString()
+
+    internal fun withOrcaOrientation(orientation: OrcaOrientation): ModelTransform = copy(
+        rotationXdeg = Math.toDegrees(orientation.rotationRadians[0]).toFloat(),
+        rotationYdeg = Math.toDegrees(orientation.rotationRadians[1]).toFloat(),
+        rotationZdeg = Math.toDegrees(orientation.rotationRadians[2]).toFloat(),
+    )
+}
+
+internal data class OrcaOrientation(
+    val rotationRadians: DoubleArray,
+) {
+    init {
+        require(rotationRadians.size == 3 && rotationRadians.all { it.isFinite() }) {
+            "Orca orientation is invalid"
+        }
+    }
+
+    override fun equals(other: Any?): Boolean =
+        other is OrcaOrientation && rotationRadians.contentEquals(other.rotationRadians)
+
+    override fun hashCode(): Int = rotationRadians.contentHashCode()
+}
+
+data class OrcaArrangement(
+    val lowerLeftMm: FloatArray,
+    val sizesMm: FloatArray,
+    val centersMm: FloatArray,
+) {
+    init {
+        require(lowerLeftMm.size >= 2 && lowerLeftMm.size % 2 == 0) {
+            "Orca arrangement positions are invalid"
+        }
+        require(sizesMm.size == lowerLeftMm.size / 2 * 3) {
+            "Orca arrangement sizes are invalid"
+        }
+        require(centersMm.size == lowerLeftMm.size) {
+            "Orca arrangement centers are invalid"
+        }
+        require(
+            lowerLeftMm.all { it.isFinite() } &&
+                sizesMm.all { it.isFinite() && it > 0f } &&
+                centersMm.all { it.isFinite() },
+        ) {
+            "Orca arrangement geometry is invalid"
+        }
+    }
+
+    val objectCount: Int get() = lowerLeftMm.size / 2
+
+    override fun equals(other: Any?): Boolean = other is OrcaArrangement &&
+        lowerLeftMm.contentEquals(other.lowerLeftMm) &&
+        sizesMm.contentEquals(other.sizesMm) &&
+        centersMm.contentEquals(other.centersMm)
+
+    override fun hashCode(): Int = 31 * (
+        31 * lowerLeftMm.contentHashCode() + sizesMm.contentHashCode()
+    ) + centersMm.contentHashCode()
 }
 
 internal fun ModelTransform.rotate(point: FloatArray): FloatArray {

@@ -1,5 +1,7 @@
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.Sync
+import org.gradle.api.tasks.TaskProvider
 
 plugins {
     id("com.android.application")
@@ -9,7 +11,20 @@ plugins {
 val repositoryRoot = rootDir.parentFile
 val nativeNdkDirectory = androidComponents.sdkComponents.ndkDirectory
 val generatedNativeOutput = layout.buildDirectory.dir("generated/native-libs")
-val bootstrapRuntime = layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libprusaslicer-jni.so")
+val generatedProfileAssets = layout.buildDirectory.dir("generated/profile-assets")
+val generatedLegalAssets = layout.buildDirectory.dir("generated/legal-assets")
+val generatedOfflineLegalAssets = layout.buildDirectory.dir("generated/offline-legal-assets")
+val slicerRuntimeBuilder = repositoryRoot.resolve("native/slicer-runtime/build.sh")
+val slicerRuntimeOutput = repositoryRoot.resolve(
+    "build/native-slicer/output/arm64-v8a/libprusaslicer-jni.so",
+)
+val orcaProfileRoot = repositoryRoot.resolve(
+    "build/native-slicer/source/app/src/main/cpp/orcaslicer/resources/profiles",
+)
+val profileCatalogGenerator = repositoryRoot.resolve("tools/generate_profile_catalog.py")
+val offlineLicenseGenerator = repositoryRoot.resolve("tools/generate_offline_licenses.py")
+val nativeLicensePolicy = repositoryRoot.resolve("tools/native_license_policy.py")
+val generatedProfileCatalog = generatedProfileAssets.map { it.file("profile_catalog_v14.bin") }
 val ndkSharedRuntime = nativeNdkDirectory.map { ndk ->
     val prebuiltRoot = ndk.asFile.resolve("toolchains/llvm/prebuilt")
     val candidates = prebuiltRoot.listFiles()
@@ -29,12 +44,67 @@ val ndkSharedRuntime = nativeNdkDirectory.map { ndk ->
     )
 }
 
+val buildSlicerRuntime = tasks.register<Exec>("buildSlicerRuntime") {
+    group = "build"
+    description = "Builds the pinned slicer runtime from source for arm64-v8a."
+    workingDir(repositoryRoot)
+    doFirst {
+        environment("ANDROID_NDK_HOME", nativeNdkDirectory.get().asFile.absolutePath)
+    }
+    commandLine(slicerRuntimeBuilder.absolutePath)
+    inputs.file(slicerRuntimeBuilder)
+    inputs.file(repositoryRoot.resolve("native/slicer-runtime/versions.env"))
+    inputs.file(repositoryRoot.resolve("native/slicer-runtime/runtime.patch"))
+    inputs.dir(repositoryRoot.resolve("native/slicer-runtime/overlay"))
+    inputs.file(repositoryRoot.resolve(".gitmodules"))
+    inputs.property("androidNdkVersion", "28.2.13676358")
+    outputs.file(slicerRuntimeOutput)
+}
+
 val prepareNativeRuntime = tasks.register<Sync>("prepareNativeRuntime") {
     group = "build"
-    description = "Stages the slicer bootstrap with the pinned NDK's 16 KB-compatible C++ runtime."
+    description = "Stages source-built 16 KB-compatible native libraries."
+    dependsOn(buildSlicerRuntime)
     into(generatedNativeOutput.map { it.dir("arm64-v8a") })
-    from(bootstrapRuntime)
+    from(slicerRuntimeOutput)
     from(ndkSharedRuntime)
+}
+
+val generateOrcaProfileCatalog = tasks.register<Exec>("generateOrcaProfileCatalog") {
+    group = "build"
+    description = "Normalizes and validates the pinned OrcaSlicer profile catalog."
+    dependsOn(buildSlicerRuntime)
+    workingDir(repositoryRoot)
+    commandLine(
+        "python3",
+        profileCatalogGenerator.absolutePath,
+        orcaProfileRoot.absolutePath,
+        generatedProfileCatalog.get().asFile.absolutePath,
+        "2c8a5385bc53cbc16211b4dd36ef9963ee185f4a",
+    )
+    inputs.file(profileCatalogGenerator)
+    inputs.dir(orcaProfileRoot)
+    inputs.property("profileSchemaVersion", 14)
+    inputs.property("orcaRevision", "2c8a5385bc53cbc16211b4dd36ef9963ee185f4a")
+    outputs.file(generatedProfileCatalog)
+    outputs.upToDateWhen {
+        val expected = generatedProfileCatalog.get().asFile
+        expected.parentFile.listFiles()?.none { candidate ->
+            candidate != expected &&
+                candidate.name.startsWith("profile_catalog_v") &&
+                candidate.extension in setOf("json", "bin")
+        } ?: true
+    }
+    doFirst {
+        val expected = generatedProfileCatalog.get().asFile
+        expected.parentFile.listFiles()?.filter { candidate ->
+            candidate != expected &&
+                candidate.name.startsWith("profile_catalog_v") &&
+                candidate.extension in setOf("json", "bin")
+        }?.forEach { obsolete ->
+            check(obsolete.delete()) { "Could not remove obsolete profile catalog: $obsolete" }
+        }
+    }
 }
 
 val buildRustNative = tasks.register<Exec>("buildRustNative") {
@@ -69,8 +139,82 @@ val buildRustNative = tasks.register<Exec>("buildRustNative") {
     outputs.file(generatedNativeOutput.map { it.file("arm64-v8a/libduckyslicer.so") })
 }
 
+fun registerDependencyInventory(variant: String) = tasks.register(
+    "write${variant.replaceFirstChar { it.uppercase() }}DependencyInventory",
+) {
+    group = "verification"
+    description = "Writes the resolved $variant runtime dependencies for release metadata."
+    val inventory = layout.buildDirectory.file("reports/dependencies/$variant.txt")
+    outputs.file(inventory)
+    doLast {
+        val coordinates = configurations
+            .getByName("${variant}RuntimeClasspath")
+            .incoming
+            .resolutionResult
+            .allComponents
+            .mapNotNull { component ->
+                (component.id as? ModuleComponentIdentifier)?.let { id ->
+                    "${id.group}:${id.module}:${id.version}"
+                }
+            }
+            .distinct()
+            .sorted()
+        val output = inventory.get().asFile
+        output.parentFile.mkdirs()
+        output.writeText(coordinates.joinToString(separator = "\n", postfix = "\n"))
+    }
+}
+
+val debugDependencyInventory = registerDependencyInventory("debug")
+val releaseDependencyInventory = registerDependencyInventory("release")
+
+fun registerOfflineLicenseBundle(variant: String, dependencyInventory: TaskProvider<*>) =
+    tasks.register<Exec>("generate${variant.replaceFirstChar { it.uppercase() }}OfflineLicenseBundle") {
+        group = "build"
+        description = "Packages reviewed $variant dependency licenses for offline viewing."
+        dependsOn(buildRustNative, dependencyInventory)
+        val inventory = layout.buildDirectory.file("reports/dependencies/$variant.txt")
+        val output = generatedOfflineLegalAssets.map {
+            it.file("$variant/legal/THIRD_PARTY_LICENSES.txt")
+        }
+        workingDir(repositoryRoot)
+        commandLine(
+            "python3",
+            offlineLicenseGenerator.absolutePath,
+            inventory.get().asFile.absolutePath,
+            nativeNdkDirectory.get().asFile.absolutePath,
+            output.get().asFile.absolutePath,
+        )
+        inputs.file(offlineLicenseGenerator)
+        inputs.file(nativeLicensePolicy)
+        inputs.file(repositoryRoot.resolve("THIRD_PARTY_NOTICES.md"))
+        inputs.file(repositoryRoot.resolve("native/slicer-runtime/versions.env"))
+        inputs.file(repositoryRoot.resolve("rust/duckyslicer-jni/Cargo.lock"))
+        inputs.file(inventory)
+        inputs.property("androidNdkVersion", "28.2.13676358")
+        outputs.file(output)
+    }
+
+val generateDebugOfflineLicenseBundle =
+    registerOfflineLicenseBundle("debug", debugDependencyInventory)
+val generateReleaseOfflineLicenseBundle =
+    registerOfflineLicenseBundle("release", releaseDependencyInventory)
+
+val prepareOpenSourceNotices = tasks.register<Sync>("prepareOpenSourceNotices") {
+    group = "build"
+    description = "Packages the project license and third-party notices for offline viewing."
+    into(generatedLegalAssets)
+    from(repositoryRoot.resolve("LICENSE.txt")) {
+        into("legal")
+        rename { "AGPL-3.0.txt" }
+    }
+    from(repositoryRoot.resolve("THIRD_PARTY_NOTICES.md")) {
+        into("legal")
+    }
+}
+
 tasks.named("preBuild").configure {
-    dependsOn(buildRustNative)
+    dependsOn(buildRustNative, prepareOpenSourceNotices)
 }
 
 android {
@@ -82,8 +226,8 @@ android {
         applicationId = "com.ashcastle.duckyslicer"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0-dev"
+        versionCode = providers.gradleProperty("duckyslicer.versionCode").orNull?.toInt() ?: 1
+        versionName = providers.gradleProperty("duckyslicer.versionName").orNull ?: "0.1.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
@@ -91,9 +235,37 @@ android {
         }
     }
 
+    val releaseKeystoreFile = providers.environmentVariable("DUCKYSLICER_KEYSTORE_FILE").orNull
+    val releaseStorePassword = providers.environmentVariable("DUCKYSLICER_STORE_PASSWORD").orNull
+    val releaseKeyAlias = providers.environmentVariable("DUCKYSLICER_KEY_ALIAS").orNull
+    val releaseKeyPassword = providers.environmentVariable("DUCKYSLICER_KEY_PASSWORD").orNull
+    val releaseSigningAvailable = listOf(
+        releaseKeystoreFile,
+        releaseStorePassword,
+        releaseKeyAlias,
+        releaseKeyPassword,
+    ).all { !it.isNullOrBlank() }
+
+    signingConfigs {
+        if (releaseSigningAvailable) {
+            create("release") {
+                storeFile = file(requireNotNull(releaseKeystoreFile))
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -115,6 +287,21 @@ android {
         clear()
         add(generatedNativeOutput.get().asFile.absolutePath)
     }
+    sourceSets.getByName("main").assets.directories.add(
+        generatedProfileAssets.get().asFile.absolutePath,
+    )
+    sourceSets.getByName("main").assets.directories.add(
+        generatedLegalAssets.get().asFile.absolutePath,
+    )
+    sourceSets.getByName("debug").assets.directories.add(
+        generatedOfflineLegalAssets.get().dir("debug").asFile.absolutePath,
+    )
+    sourceSets.getByName("release").assets.directories.add(
+        generatedOfflineLegalAssets.get().dir("release").asFile.absolutePath,
+    )
+    sourceSets.getByName("androidTest").assets.directories.add(
+        repositoryRoot.resolve("tests/data/test_stl/ASCII").absolutePath,
+    )
 
     packaging {
         jniLibs {
@@ -123,6 +310,22 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+}
+
+tasks.configureEach {
+    if (name.contains("assets", ignoreCase = true) || name.contains("lint", ignoreCase = true)) {
+        dependsOn(generateOrcaProfileCatalog)
+    }
+    if (name.contains("debug", ignoreCase = true) &&
+        (name.contains("assets", ignoreCase = true) || name.contains("lint", ignoreCase = true))
+    ) {
+        dependsOn(generateDebugOfflineLicenseBundle)
+    }
+    if (name.contains("release", ignoreCase = true) &&
+        (name.contains("assets", ignoreCase = true) || name.contains("lint", ignoreCase = true))
+    ) {
+        dependsOn(generateReleaseOfflineLicenseBundle)
     }
 }
 
@@ -137,11 +340,13 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.2")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20251224")
 }
