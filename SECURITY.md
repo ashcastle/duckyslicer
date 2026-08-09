@@ -11,16 +11,21 @@ supply-chain issues.
 Only the latest source on the default branch is currently supported. There is no
 production release channel yet.
 
-Tagged pre-release APKs are built by the repository release workflow. Each release
-is expected to include a CycloneDX SBOM, recursive source archive, detached source
-manifest, checksum manifest, and GitHub build-provenance attestation; an APK without
-those matching release artifacts should not be treated as an official DuckySlicer
-build.
+Tagged pre-release APKs are built by the repository release workflow. The GitHub
+Release exposes exactly one downloadable asset: the signed ARM64 APK. The tagged
+repository plus its recursive submodule pins are the durable corresponding source.
+The workflow verifies a CycloneDX SBOM, recursive source archive, detached source
+manifest, and checksums as build evidence without adding them as Release downloads.
+An APK that does not match the pinned certificate and APK-bound GitHub provenance
+attestation should not be treated as an official DuckySlicer build.
 
 The source build has no access to the Android signing key. Signing occurs in a
 protected environment job without a repository checkout, and the resulting APK
-must match the pinned public certificate fingerprint before the same artifact is
-tested and published. The temporary keystore is removed before artifact upload.
+must match the pinned public certificate fingerprint before publication. The
+temporary keystore is removed before artifact upload. GitHub-hosted emulators are
+not part of the release pipeline; functional qualification runs on the local ARM64
+16 KB AVD before tagging, while hosted jobs provide independent build and static
+packaging evidence.
 
 ## Reporting a vulnerability
 
