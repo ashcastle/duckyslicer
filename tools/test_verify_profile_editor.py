@@ -20,7 +20,11 @@ def valid_sources() -> dict[str, str]:
             "add(ProfileChoiceGroup(recentProfilesKey, recentProfiles, recentEntries))"
             " data class ProfileEditSession( val isDirty: Boolean get() = working != opening "
             "fun revert(): ProfileEditSession fun applied(): ProfileEditSession "
-            "ProfileDirtyActionBar( Modifier.weight(3f) Modifier.weight(7f) .imePadding()"
+            "ProfileDirtyActionBar( Modifier.weight(3f) Modifier.weight(7f) .imePadding() "
+            "onClickLabel = editDetailsLabel .heightIn(min = 48.dp) "
+            ".selectable( role = Role.RadioButton onClick = null "
+            ".selectable( role = Role.RadioButton onClick = null "
+            ".semantics { stateDescription = groupState }"
         ),
         "ProfileRecents.kt": (
             "data class ProfileRecents( MAX_RECENT_PROFILES = 5 class ProfileRecentStore "
@@ -43,10 +47,12 @@ def valid_sources() -> dict[str, str]:
         "strings.xml": (
             'name="quality" name="strength" name="speed" name="supports" name="others" '
             'name="recent_profiles" name="revert_changes" name="apply_changes"'
+            ' name="expanded_state" name="collapsed_state"'
         ),
         "strings-ko.xml": (
             'name="quality" name="strength" name="speed" name="supports" name="others" '
             'name="recent_profiles" name="revert_changes" name="apply_changes"'
+            ' name="expanded_state" name="collapsed_state"'
         ),
         "CONTRIBUTING.md": "Quality Strength Speed Support Others",
     }
@@ -93,6 +99,22 @@ class VerifyProfileEditorTest(unittest.TestCase):
             "Modifier.weight(7f)", "Modifier.weight(3f)"
         )
         with self.assertRaisesRegex(VerificationError, r"weight\(7f\)"):
+            verify_profile_editor(sources)
+
+    def test_rejects_duplicate_profile_radio_click_targets(self) -> None:
+        sources = valid_sources()
+        sources["ProfileSettingsSheet.kt"] = sources["ProfileSettingsSheet.kt"].replace(
+            "onClick = null", "onClick = { onSelected(entry) }", 1
+        )
+        with self.assertRaisesRegex(VerificationError, "one radio target per row"):
+            verify_profile_editor(sources)
+
+    def test_rejects_missing_profile_touch_target_minimum(self) -> None:
+        sources = valid_sources()
+        sources["ProfileSettingsSheet.kt"] = sources["ProfileSettingsSheet.kt"].replace(
+            ".heightIn(min = 48.dp)", ".heightIn(min = 32.dp)", 1
+        )
+        with self.assertRaisesRegex(VerificationError, r"heightIn\(min = 48\.dp\)"):
             verify_profile_editor(sources)
 
 
