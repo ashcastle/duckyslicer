@@ -50,6 +50,7 @@ struct StlInspection {
     min_mm: [f32; 3],
     max_mm: [f32; 3],
     preview_triangles: Vec<[f32; 9]>,
+    preview_triangle_indices: Vec<usize>,
 }
 
 #[derive(Deserialize)]
@@ -284,6 +285,7 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
     let mut min = [f32::INFINITY; 3];
     let mut max = [f32::NEG_INFINITY; 3];
     let mut preview_triangles = Vec::with_capacity(PREVIEW_TRIANGLE_LIMIT);
+    let mut preview_triangle_indices = Vec::with_capacity(PREVIEW_TRIANGLE_LIMIT);
     let mut preview_stride = 1usize;
 
     for triangle in triangles {
@@ -303,9 +305,11 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
         if ordinal.is_multiple_of(preview_stride) {
             let [a, b, c] = vertices;
             preview_triangles.push([a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]]);
+            preview_triangle_indices.push(ordinal);
         }
         if preview_triangles.len() > PREVIEW_TRIANGLE_LIMIT {
             preview_triangles = preview_triangles.into_iter().step_by(2).collect();
+            preview_triangle_indices = preview_triangle_indices.into_iter().step_by(2).collect();
             preview_stride = preview_stride.saturating_mul(2);
         }
     }
@@ -325,6 +329,7 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
         min_mm: min,
         max_mm: max,
         preview_triangles,
+        preview_triangle_indices,
     })
 }
 
@@ -876,6 +881,16 @@ mod tests {
         assert_eq!(inspection.triangles, 8_001);
         assert!(!inspection.preview_triangles.is_empty());
         assert!(inspection.preview_triangles.len() <= 3_500);
+        assert_eq!(
+            inspection.preview_triangles.len(),
+            inspection.preview_triangle_indices.len()
+        );
+        assert!(
+            inspection
+                .preview_triangle_indices
+                .windows(2)
+                .all(|indices| indices[0] < indices[1])
+        );
         assert!(inspection.dimensions_mm[0] > 79.0);
     }
 

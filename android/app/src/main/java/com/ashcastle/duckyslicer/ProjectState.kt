@@ -4,6 +4,7 @@ data class ProjectObject(
     val id: String,
     val model: ModelInfo,
     val transform: ModelTransform = ModelTransform(),
+    val supportPaint: SupportPaint = SupportPaint(),
 )
 
 data class ProjectSnapshot(
@@ -101,13 +102,62 @@ data class ProjectHistoryState(
         recordHistory: Boolean = true,
     ): ProjectHistoryState {
         val selected = current.selectedObject ?: return this
-        if (selected.transform == transform) return this
+        return updateTransform(selected.id, transform, recordHistory)
+    }
+
+    fun updateTransform(
+        objectId: String,
+        transform: ModelTransform,
+        recordHistory: Boolean = true,
+    ): ProjectHistoryState {
+        val target = current.objects.firstOrNull { it.id == objectId } ?: return this
+        if (target.transform == transform) return this
         val next = current.copy(
             objects = current.objects.map { projectObject ->
-                if (projectObject.id == selected.id) projectObject.copy(transform = transform) else projectObject
+                if (projectObject.id == objectId) projectObject.copy(transform = transform) else projectObject
             },
         )
         return if (recordHistory) record(next) else copy(current = next)
+    }
+
+    fun updateSupportPaint(
+        objectId: String,
+        supportPaint: SupportPaint,
+        recordHistory: Boolean = true,
+    ): ProjectHistoryState {
+        val target = current.objects.firstOrNull { it.id == objectId } ?: return this
+        if (target.supportPaint == supportPaint) return this
+        require(supportPaint.facets.keys.all { it in 0 until target.model.triangles }) {
+            "Support paint references an unavailable facet"
+        }
+        val next = current.copy(
+            objects = current.objects.map { projectObject ->
+                if (projectObject.id == objectId) {
+                    projectObject.copy(supportPaint = supportPaint)
+                } else {
+                    projectObject
+                }
+            },
+        )
+        return if (recordHistory) record(next) else copy(current = next)
+    }
+
+    fun commitSupportPaint(objectId: String, previous: SupportPaint): ProjectHistoryState {
+        val target = current.objects.firstOrNull { it.id == objectId } ?: return this
+        if (target.supportPaint == previous) return this
+        val previousSnapshot = current.copy(
+            objects = current.objects.map { projectObject ->
+                if (projectObject.id == objectId) {
+                    projectObject.copy(supportPaint = previous)
+                } else {
+                    projectObject
+                }
+            },
+        )
+        return copy(
+            undoStates = (undoStates + previousSnapshot).takeLast(HISTORY_LIMIT),
+            redoStates = emptyList(),
+        )
     }
 
     fun commitSelectedTransform(previous: ModelTransform): ProjectHistoryState {

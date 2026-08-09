@@ -25,10 +25,10 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Devices
@@ -107,6 +107,20 @@ private val WorkspaceBlack = Color(0xFF202124)
 private val WorkspacePanel = Color(0xEE2A2A27)
 private const val PreviewDepthBands = 12
 
+private enum class SupportPaintTool(val state: SupportPaintState?, val label: Int) {
+    ENFORCE(SupportPaintState.ENFORCE, R.string.support_enforce),
+    BLOCK(SupportPaintState.BLOCK, R.string.support_block),
+    ERASE(null, R.string.support_erase),
+}
+
+internal data class ModelScreenTriangle(
+    val sourceFacetIndex: Int,
+    val a: Offset,
+    val b: Offset,
+    val c: Offset,
+    val depth: Float,
+)
+
 private data class ToolpathStyle(
     val code: Int,
     val label: Int,
@@ -156,6 +170,7 @@ fun WorkspaceScreen(
     sliceOutcome: SliceOutcome?,
     layerPreview: GcodeLayerPreview?,
     importing: Boolean,
+    autoLaying: Boolean,
     slicing: Boolean,
     sliceCancellationRequested: Boolean,
     sliceProgress: Int,
@@ -174,6 +189,9 @@ fun WorkspaceScreen(
     onRedo: () -> Unit,
     onDuplicate: () -> Unit,
     onArrange: () -> Unit,
+    onAutoLay: () -> Unit,
+    onSupportPaintPreview: (String, Int, SupportPaintState?) -> Unit,
+    onSupportPaintCommitted: (String, SupportPaint) -> Unit,
     onRemoveModel: () -> Unit,
     onSlice: () -> Unit,
     onCancelSlice: () -> Unit,
@@ -201,7 +219,12 @@ fun WorkspaceScreen(
     val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
     val panelMaxHeight = (maxHeight - if (tabletLayout) 24.dp else 94.dp).coerceAtLeast(320.dp)
     var showModelTools by remember { mutableStateOf(false) }
+    var supportPainting by remember { mutableStateOf(false) }
+    var supportPaintTool by remember { mutableStateOf(SupportPaintTool.ENFORCE) }
     var visibleToolpathRoles by remember { mutableStateOf(ToolpathStyles.indices.toSet()) }
+    LaunchedEffect(selectedObjectId, selectedTab) {
+        if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) supportPainting = false
+    }
     Scaffold(
         containerColor = Color(0xFF191A18),
         bottomBar = {
@@ -223,15 +246,20 @@ fun WorkspaceScreen(
                     previewDetail = appSettings.previewDetail,
                     previewRenderingMode = appSettings.previewRenderingMode,
                     objectManipulationEnabled = selectedTab == WorkspaceTab.SLICE &&
-                        !importing && !slicing && !previewLoading,
+                        !importing && !autoLaying && !slicing && !previewLoading,
+                    supportPaintObjectId = selectedObjectId.takeIf { supportPainting },
+                    supportPaintState = supportPaintTool.state,
                     onObjectSelected = onObjectSelected,
                     onModelTransformPreview = onModelTransformPreview,
                     onModelTransformCommitted = onModelTransformCommitted,
+                    onSupportPaintPreview = onSupportPaintPreview,
+                    onSupportPaintCommitted = onSupportPaintCommitted,
                     modifier = Modifier.fillMaxSize(),
                 )
 
             WorkspaceMenu(
                 importing = importing,
+                editingBusy = autoLaying,
                 slicing = slicing,
                 previewLoading = previewLoading,
                 canExport = sliceOutcome != null,
@@ -244,19 +272,29 @@ fun WorkspaceScreen(
                     .padding(16.dp),
             )
 
-            if (selectedObject != null && selectedTab == WorkspaceTab.SLICE) {
+            if (selectedObject != null && selectedTab == WorkspaceTab.SLICE && !supportPainting) {
                 ObjectToolRail(
-                    transform = modelTransform,
-                    onTransformChanged = onModelTransformChanged,
                     canUndo = canUndo,
                     canRedo = canRedo,
                     onUndo = onUndo,
                     onRedo = onRedo,
                     onDuplicate = onDuplicate,
+                    onAutoLay = onAutoLay,
+                    autoLaying = autoLaying,
+                    onSupportPaint = { supportPainting = true },
                     onMore = { showModelTools = true },
                     onRemove = {
                         onRemoveModel()
                     },
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
+                )
+            }
+
+            if (selectedObject != null && selectedTab == WorkspaceTab.SLICE && supportPainting) {
+                SupportPaintPalette(
+                    selectedTool = supportPaintTool,
+                    onToolSelected = { supportPaintTool = it },
+                    onDone = { supportPainting = false },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
                 )
             }
@@ -292,7 +330,7 @@ fun WorkspaceScreen(
                     model = model,
                     options = sliceOptions,
                     catalog = profileCatalog,
-                    importing = importing,
+                    importing = importing || autoLaying,
                     previewLoading = previewLoading,
                     slicing = slicing,
                     cancellationRequested = sliceCancellationRequested,
@@ -379,6 +417,8 @@ fun WorkspaceScreen(
             transform = modelTransform,
             bedSizeX = sliceOptions.bedSizeX,
             bedSizeY = sliceOptions.bedSizeY,
+            autoLaying = autoLaying,
+            onAutoLay = onAutoLay,
             onTransformChanged = onModelTransformChanged,
             onRemoveModel = {
                 showModelTools = false
@@ -395,6 +435,8 @@ private fun ModelTransformSheet(
     transform: ModelTransform,
     bedSizeX: Float,
     bedSizeY: Float,
+    autoLaying: Boolean,
+    onAutoLay: () -> Unit,
     onTransformChanged: (ModelTransform) -> Unit,
     onRemoveModel: () -> Unit,
     onDismiss: () -> Unit,
@@ -418,6 +460,7 @@ private fun ModelTransformSheet(
                 valueText = stringResource(R.string.millimeters_value, transform.offsetXmm),
                 value = transform.offsetXmm,
                 range = -bedSizeX / 2f..bedSizeX / 2f,
+                enabled = !autoLaying,
                 onValueChange = { onTransformChanged(transform.copy(offsetXmm = it)) },
             )
             TransformSlider(
@@ -425,6 +468,7 @@ private fun ModelTransformSheet(
                 valueText = stringResource(R.string.millimeters_value, transform.offsetYmm),
                 value = transform.offsetYmm,
                 range = -bedSizeY / 2f..bedSizeY / 2f,
+                enabled = !autoLaying,
                 onValueChange = { onTransformChanged(transform.copy(offsetYmm = it)) },
             )
             TransformSlider(
@@ -432,6 +476,7 @@ private fun ModelTransformSheet(
                 valueText = stringResource(R.string.degrees_value, transform.rotationXdeg),
                 value = transform.rotationXdeg,
                 range = -180f..180f,
+                enabled = !autoLaying,
                 onValueChange = { onTransformChanged(transform.copy(rotationXdeg = it)) },
             )
             TransformSlider(
@@ -439,6 +484,7 @@ private fun ModelTransformSheet(
                 valueText = stringResource(R.string.degrees_value, transform.rotationYdeg),
                 value = transform.rotationYdeg,
                 range = -180f..180f,
+                enabled = !autoLaying,
                 onValueChange = { onTransformChanged(transform.copy(rotationYdeg = it)) },
             )
             TransformSlider(
@@ -446,6 +492,7 @@ private fun ModelTransformSheet(
                 valueText = stringResource(R.string.degrees_value, transform.rotationZdeg),
                 value = transform.rotationZdeg,
                 range = -180f..180f,
+                enabled = !autoLaying,
                 onValueChange = { onTransformChanged(transform.copy(rotationZdeg = it)) },
             )
             TransformSlider(
@@ -453,8 +500,32 @@ private fun ModelTransformSheet(
                 valueText = stringResource(R.string.percent_value, (transform.scale * 100).roundToInt()),
                 value = transform.scale,
                 range = 0.25f..3f,
+                enabled = !autoLaying,
                 onValueChange = { onTransformChanged(transform.copy(scale = it)) },
             )
+            Button(
+                onClick = onAutoLay,
+                enabled = !autoLaying,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = WorkspaceYellow,
+                    contentColor = WorkspaceBlack,
+                ),
+            ) {
+                if (autoLaying) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = WorkspaceBlack,
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.auto_lay_working))
+                } else {
+                    Icon(Icons.Default.AutoFixHigh, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.auto_lay))
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -464,6 +535,7 @@ private fun ModelTransformSheet(
                         onTransformChanged(transform.copy(offsetXmm = 0f, offsetYmm = 0f))
                     },
                     modifier = Modifier.weight(1f),
+                    enabled = !autoLaying,
                 ) {
                     Text(stringResource(R.string.center_model))
                 }
@@ -473,17 +545,23 @@ private fun ModelTransformSheet(
                         onTransformChanged(transform.copy(rotationZdeg = nextRotation))
                     },
                     modifier = Modifier.weight(1f),
+                    enabled = !autoLaying,
                 ) {
                     Text(stringResource(R.string.rotate_90))
                 }
                 TextButton(
                     onClick = { onTransformChanged(ModelTransform()) },
                     modifier = Modifier.weight(1f),
+                    enabled = !autoLaying,
                 ) {
                     Text(stringResource(R.string.reset))
                 }
             }
-            TextButton(onClick = onRemoveModel, modifier = Modifier.fillMaxWidth()) {
+            TextButton(
+                onClick = onRemoveModel,
+                enabled = !autoLaying,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Text(stringResource(R.string.remove_model), color = Color(0xFFFF8A80))
             }
         }
@@ -496,6 +574,7 @@ private fun TransformSlider(
     valueText: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
+    enabled: Boolean = true,
     onValueChange: (Float) -> Unit,
 ) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -504,6 +583,7 @@ private fun TransformSlider(
     }
     Slider(
         value = value,
+        enabled = enabled,
         onValueChange = onValueChange,
         valueRange = range,
         colors = duckySliderColors(),
@@ -513,6 +593,7 @@ private fun TransformSlider(
 @Composable
 private fun WorkspaceMenu(
     importing: Boolean,
+    editingBusy: Boolean,
     slicing: Boolean,
     previewLoading: Boolean,
     canExport: Boolean,
@@ -542,7 +623,7 @@ private fun WorkspaceMenu(
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.import_model)) },
                 leadingIcon = { Icon(Icons.Default.FileOpen, null) },
-                enabled = !importing && !slicing && !previewLoading,
+                enabled = !importing && !editingBusy && !slicing && !previewLoading,
                 onClick = {
                     expanded = false
                     onImport()
@@ -551,7 +632,7 @@ private fun WorkspaceMenu(
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.arrange_objects)) },
                 leadingIcon = { Icon(Icons.Default.GridView, null) },
-                enabled = canArrange && !slicing && !previewLoading,
+                enabled = canArrange && !editingBusy && !slicing && !previewLoading,
                 onClick = {
                     expanded = false
                     onArrange()
@@ -640,9 +721,13 @@ private fun BedScene(
     previewDetail: PreviewDetail,
     previewRenderingMode: PreviewRenderingMode,
     objectManipulationEnabled: Boolean,
+    supportPaintObjectId: String?,
+    supportPaintState: SupportPaintState?,
     onObjectSelected: (String?) -> Unit,
     onModelTransformPreview: (ModelTransform) -> Unit,
     onModelTransformCommitted: (ModelTransform) -> Unit,
+    onSupportPaintPreview: (String, Int, SupportPaintState?) -> Unit,
+    onSupportPaintCommitted: (String, SupportPaint) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -676,10 +761,15 @@ private fun BedScene(
     var refinedPreview by remember { mutableStateOf(true) }
     val objectIds = projectObjects.map(ProjectObject::id)
     var modelScreenBounds by remember(objectIds) { mutableStateOf<Map<String, Rect>>(emptyMap()) }
+    var modelScreenTriangles by remember(objectIds) {
+        mutableStateOf<Map<String, List<ModelScreenTriangle>>>(emptyMap())
+    }
     val currentObjects by rememberUpdatedState(projectObjects)
     val currentSelectionCallback by rememberUpdatedState(onObjectSelected)
     val currentTransformCallback by rememberUpdatedState(onModelTransformPreview)
     val currentTransformCommitCallback by rememberUpdatedState(onModelTransformCommitted)
+    val currentSupportPaintPreviewCallback by rememberUpdatedState(onSupportPaintPreview)
+    val currentSupportPaintCommitCallback by rememberUpdatedState(onSupportPaintCommitted)
     val previewPaths = remember(preview) {
         Array(PreviewDepthBands) { Array(ToolpathStyles.size) { Path() } }
     }
@@ -704,10 +794,13 @@ private fun BedScene(
     }
 
     Canvas(
-        modifier.pointerInput(objectIds, preview, objectManipulationEnabled) {
+        modifier.pointerInput(objectIds, preview, objectManipulationEnabled, supportPaintObjectId, supportPaintState) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
-                val hitObjectId = if (objectManipulationEnabled) {
+                val paintingObject = supportPaintObjectId?.let { objectId ->
+                    currentObjects.firstOrNull { it.id == objectId }
+                }
+                val hitObjectId = if (objectManipulationEnabled && paintingObject == null) {
                     modelScreenBounds.entries.toList().asReversed().firstOrNull { (_, bounds) ->
                         bounds.inflate(14.dp.toPx()).contains(down.position)
                     }?.key
@@ -717,7 +810,21 @@ private fun BedScene(
                 val dragStartTransform = currentObjects
                     .firstOrNull { it.id == hitObjectId }
                     ?.transform
+                val paintStart = paintingObject?.supportPaint
+                val paintedFacets = HashSet<Int>()
+                fun paintAt(position: Offset) {
+                    val objectId = paintingObject?.id ?: return
+                    val hit = closestPaintFacet(
+                        modelScreenTriangles[objectId].orEmpty(),
+                        position,
+                        18.dp.toPx(),
+                    ) ?: return
+                    if (paintedFacets.add(hit)) {
+                        currentSupportPaintPreviewCallback(objectId, hit, supportPaintState)
+                    }
+                }
                 if (hitObjectId != null) currentSelectionCallback(hitObjectId)
+                if (paintingObject != null) paintAt(down.position)
                 var movement = 0f
                 interactionActive = true
                 try {
@@ -730,7 +837,9 @@ private fun BedScene(
                                 val change = pressed.first()
                                 val delta = change.position - change.previousPosition
                                 movement += abs(delta.x) + abs(delta.y)
-                                if (hitObjectId != null) {
+                                if (paintingObject != null) {
+                                    paintAt(change.position)
+                                } else if (hitObjectId != null) {
                                     val currentSceneScale = min(
                                         size.width * 0.64f,
                                         size.height * 0.72f,
@@ -772,9 +881,11 @@ private fun BedScene(
                     } while (event.changes.any { it.pressed })
                 } finally {
                     interactionActive = false
-                    if (hitObjectId != null && dragStartTransform != null && movement >= 1f) {
+                    if (paintingObject != null && paintStart != null && paintedFacets.isNotEmpty()) {
+                        currentSupportPaintCommitCallback(paintingObject.id, paintStart)
+                    } else if (hitObjectId != null && dragStartTransform != null && movement >= 1f) {
                         currentTransformCommitCallback(dragStartTransform)
-                    } else if (hitObjectId == null && movement < 12f) {
+                    } else if (hitObjectId == null && paintingObject == null && movement < 12f) {
                         currentSelectionCallback(null)
                     }
                 }
@@ -796,6 +907,13 @@ private fun BedScene(
                 x = sceneCenter.x + rotatedX * sceneScale,
                 y = sceneCenter.y + screenY * sceneScale,
             )
+        }
+
+        fun cameraDepth(x: Float, y: Float, z: Float): Float {
+            val dx = x - bedSizeX / 2f
+            val dy = y - bedSizeY / 2f
+            val rotatedY = dx * sin(yawRadians) + dy * cos(yawRadians)
+            return rotatedY * cos(pitchRadians) + z * sin(pitchRadians)
         }
 
         val bed = Path().apply {
@@ -894,12 +1012,16 @@ private fun BedScene(
             }
         } else if (projectObjects.isNotEmpty()) {
             val nextBounds = mutableMapOf<String, Rect>()
+            val nextScreenTriangles = mutableMapOf<String, List<ModelScreenTriangle>>()
             projectObjects.forEach { projectObject ->
                 val model = projectObject.model
                 val modelTransform = projectObject.transform
                 val objectSelected = projectObject.id == selectedObjectId
                 val minimumRotatedZ = modelTransform.minimumRotatedZ(model)
                 val meshPath = Path()
+                val enforcePaintPath = Path()
+                val blockPaintPath = Path()
+                val screenTriangles = ArrayList<ModelScreenTriangle>(model.previewTriangleIndices.size)
                 var triangleIndex = 0
                 var minimumScreenX = Float.POSITIVE_INFINITY
                 var minimumScreenY = Float.POSITIVE_INFINITY
@@ -936,6 +1058,19 @@ private fun BedScene(
                     val a = project(aPosition[0], aPosition[1], aPosition[2])
                     val b = project(bPosition[0], bPosition[1], bPosition[2])
                     val c = project(cPosition[0], cPosition[1], cPosition[2])
+                    val sourceFacetIndex = model.previewTriangleIndices
+                        .getOrElse(triangleIndex / 9) { triangleIndex / 9 }
+                    screenTriangles += ModelScreenTriangle(
+                        sourceFacetIndex = sourceFacetIndex,
+                        a = a,
+                        b = b,
+                        c = c,
+                        depth = (
+                            cameraDepth(aPosition[0], aPosition[1], aPosition[2]) +
+                                cameraDepth(bPosition[0], bPosition[1], bPosition[2]) +
+                                cameraDepth(cPosition[0], cPosition[1], cPosition[2])
+                            ) / 3f,
+                    )
                     listOf(a, b, c).forEach { point ->
                         minimumScreenX = min(minimumScreenX, point.x)
                         minimumScreenY = min(minimumScreenY, point.y)
@@ -946,6 +1081,11 @@ private fun BedScene(
                     meshPath.lineTo(b.x, b.y)
                     meshPath.lineTo(c.x, c.y)
                     meshPath.close()
+                    when (projectObject.supportPaint.facets[sourceFacetIndex]) {
+                        SupportPaintState.ENFORCE -> enforcePaintPath.addTriangle(a, b, c)
+                        SupportPaintState.BLOCK -> blockPaintPath.addTriangle(a, b, c)
+                        null -> Unit
+                    }
                     triangleIndex += 9
                 }
                 if (minimumScreenX.isFinite()) {
@@ -956,6 +1096,7 @@ private fun BedScene(
                         maximumScreenY,
                     )
                 }
+                nextScreenTriangles[projectObject.id] = screenTriangles
                 drawPath(meshPath, WorkspaceYellow.copy(alpha = if (objectSelected) 0.24f else 0.14f))
                 drawPath(
                     meshPath,
@@ -963,21 +1104,137 @@ private fun BedScene(
                     else WorkspaceYellow.copy(alpha = 0.52f),
                     style = Stroke(if (objectSelected) 1.5.dp.toPx() else 0.7.dp.toPx()),
                 )
+                drawPath(enforcePaintPath, Color(0xFF5EE6A8).copy(alpha = 0.9f))
+                drawPath(
+                    enforcePaintPath,
+                    Color(0xFF163C2E),
+                    style = Stroke(1.2.dp.toPx()),
+                )
+                drawPath(blockPaintPath, Color(0xFFFF6B6B).copy(alpha = 0.9f))
+                drawPath(
+                    blockPaintPath,
+                    Color(0xFF541F1F),
+                    style = Stroke(1.2.dp.toPx()),
+                )
             }
             if (modelScreenBounds != nextBounds) modelScreenBounds = nextBounds
+            if (modelScreenTriangles != nextScreenTriangles) modelScreenTriangles = nextScreenTriangles
+        }
+    }
+}
+
+private fun Path.addTriangle(a: Offset, b: Offset, c: Offset) {
+    moveTo(a.x, a.y)
+    lineTo(b.x, b.y)
+    lineTo(c.x, c.y)
+    close()
+}
+
+internal fun closestPaintFacet(
+    triangles: List<ModelScreenTriangle>,
+    point: Offset,
+    brushRadius: Float,
+): Int? {
+    val inside = triangles.filter { triangle -> pointInsideTriangle(point, triangle) }
+    if (inside.isNotEmpty()) return inside.maxByOrNull(ModelScreenTriangle::depth)?.sourceFacetIndex
+    return triangles
+        .asSequence()
+        .map { triangle ->
+            val distance = minOf(
+                pointToSegmentDistance(point, triangle.a, triangle.b),
+                pointToSegmentDistance(point, triangle.b, triangle.c),
+                pointToSegmentDistance(point, triangle.c, triangle.a),
+            )
+            triangle to distance
+        }
+        .filter { (_, distance) -> distance <= brushRadius }
+        .minWithOrNull(
+            compareBy<Pair<ModelScreenTriangle, Float>> { it.second }
+                .thenByDescending { it.first.depth },
+        )
+        ?.first
+        ?.sourceFacetIndex
+}
+
+private fun pointInsideTriangle(point: Offset, triangle: ModelScreenTriangle): Boolean {
+    fun sign(first: Offset, second: Offset, third: Offset): Float =
+        (first.x - third.x) * (second.y - third.y) -
+            (second.x - third.x) * (first.y - third.y)
+    val first = sign(point, triangle.a, triangle.b)
+    val second = sign(point, triangle.b, triangle.c)
+    val third = sign(point, triangle.c, triangle.a)
+    return !(first < 0f || second < 0f || third < 0f) ||
+        !(first > 0f || second > 0f || third > 0f)
+}
+
+private fun pointToSegmentDistance(point: Offset, start: Offset, end: Offset): Float {
+    val segment = end - start
+    val lengthSquared = segment.x * segment.x + segment.y * segment.y
+    if (lengthSquared <= 0.0001f) return (point - start).getDistance()
+    val offset = point - start
+    val position = ((offset.x * segment.x + offset.y * segment.y) / lengthSquared).coerceIn(0f, 1f)
+    return (point - (start + segment * position)).getDistance()
+}
+
+@Composable
+private fun SupportPaintPalette(
+    selectedTool: SupportPaintTool,
+    onToolSelected: (SupportPaintTool) -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.widthIn(max = 560.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = Color.Black.copy(alpha = 0.88f),
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SupportPaintTool.entries.forEach { tool ->
+                    TextButton(
+                        onClick = { onToolSelected(tool) },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColors(
+                            containerColor = if (selectedTool == tool) {
+                                when (tool) {
+                                    SupportPaintTool.ENFORCE -> Color(0xFF296A50)
+                                    SupportPaintTool.BLOCK -> Color(0xFF793D3D)
+                                    SupportPaintTool.ERASE -> Color(0xFF555752)
+                                }
+                            } else {
+                                Color.Transparent
+                            },
+                            contentColor = Color(0xFFF4F4EE),
+                        ),
+                    ) {
+                        Text(stringResource(tool.label), maxLines = 1)
+                    }
+                }
+                TextButton(onClick = onDone) {
+                    Text(stringResource(R.string.done), color = WorkspaceYellow)
+                }
+            }
+            Text(
+                stringResource(R.string.support_paint_hint),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }
 
 @Composable
 private fun ObjectToolRail(
-    transform: ModelTransform,
-    onTransformChanged: (ModelTransform) -> Unit,
     canUndo: Boolean,
     canRedo: Boolean,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onDuplicate: () -> Unit,
+    onAutoLay: () -> Unit,
+    autoLaying: Boolean,
+    onSupportPaint: () -> Unit,
     onMore: () -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
@@ -992,30 +1249,29 @@ private fun ObjectToolRail(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onUndo, enabled = canUndo) {
+            IconButton(onClick = onUndo, enabled = canUndo && !autoLaying) {
                 Icon(Icons.AutoMirrored.Filled.Undo, stringResource(R.string.undo))
             }
-            IconButton(onClick = onRedo, enabled = canRedo) {
+            IconButton(onClick = onRedo, enabled = canRedo && !autoLaying) {
                 Icon(Icons.AutoMirrored.Filled.Redo, stringResource(R.string.redo))
             }
-            IconButton(onClick = onDuplicate) {
+            IconButton(onClick = onDuplicate, enabled = !autoLaying) {
                 Icon(Icons.Default.ContentCopy, stringResource(R.string.duplicate_object))
             }
-            IconButton(onClick = {
-                onTransformChanged(transform.copy(offsetXmm = 0f, offsetYmm = 0f))
-            }) {
-                Icon(Icons.Default.CenterFocusStrong, stringResource(R.string.center_model))
+            IconButton(onClick = onAutoLay, enabled = !autoLaying) {
+                if (autoLaying) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Default.AutoFixHigh, stringResource(R.string.auto_lay))
+                }
             }
-            IconButton(onClick = {
-                val rotation = ((transform.rotationZdeg + 270f) % 360f) - 180f
-                onTransformChanged(transform.copy(rotationZdeg = rotation))
-            }) {
-                Icon(Icons.AutoMirrored.Filled.RotateRight, stringResource(R.string.rotate_90))
+            IconButton(onClick = onSupportPaint, enabled = !autoLaying) {
+                Icon(Icons.Default.Brush, stringResource(R.string.paint_support))
             }
-            IconButton(onClick = onMore) {
+            IconButton(onClick = onMore, enabled = !autoLaying) {
                 Icon(Icons.Default.Tune, stringResource(R.string.more_settings))
             }
-            IconButton(onClick = onRemove) {
+            IconButton(onClick = onRemove, enabled = !autoLaying) {
                 Icon(Icons.Default.DeleteOutline, stringResource(R.string.remove_model), tint = Color(0xFFFF8A80))
             }
         }

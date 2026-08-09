@@ -296,6 +296,43 @@ class NativeEngineInstrumentedTest {
         return destination
     }
 
+    private fun supportPaintOverhangModel(): File {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val destination = File(context.cacheDir, "support-paint-overhang.stl")
+        val facets = mutableListOf<List<TestVertex>>()
+
+        fun vertex(x: Float, y: Float, z: Float) = TestVertex(x, y, z)
+        fun quad(a: TestVertex, b: TestVertex, c: TestVertex, d: TestVertex) {
+            facets += listOf(a, b, c)
+            facets += listOf(a, c, d)
+        }
+        fun box(x0: Float, x1: Float, y0: Float, y1: Float, z0: Float, z1: Float) {
+            quad(vertex(x0, y0, z0), vertex(x1, y0, z0), vertex(x1, y0, z1), vertex(x0, y0, z1))
+            quad(vertex(x1, y0, z0), vertex(x1, y1, z0), vertex(x1, y1, z1), vertex(x1, y0, z1))
+            quad(vertex(x1, y1, z0), vertex(x0, y1, z0), vertex(x0, y1, z1), vertex(x1, y1, z1))
+            quad(vertex(x0, y1, z0), vertex(x0, y0, z0), vertex(x0, y0, z1), vertex(x0, y1, z1))
+            quad(vertex(x0, y0, z1), vertex(x1, y0, z1), vertex(x1, y1, z1), vertex(x0, y1, z1))
+            quad(vertex(x0, y1, z0), vertex(x1, y1, z0), vertex(x1, y0, z0), vertex(x0, y0, z0))
+        }
+
+        box(8f, 12f, 8f, 12f, 0f, 18f)
+        box(0f, 20f, 0f, 20f, 18f, 22f)
+        destination.bufferedWriter().use { writer ->
+            writer.appendLine("solid support_paint_overhang")
+            facets.forEach { triangle ->
+                writer.appendLine("facet normal 0 0 0")
+                writer.appendLine("outer loop")
+                triangle.forEach { point ->
+                    writer.appendLine("vertex ${point.x} ${point.y} ${point.z}")
+                }
+                writer.appendLine("endloop")
+                writer.appendLine("endfacet")
+            }
+            writer.appendLine("endsolid support_paint_overhang")
+        }
+        return destination
+    }
+
     private fun meshCorpus(): List<MeshCorpusEntry> {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
 
@@ -1054,6 +1091,87 @@ class NativeEngineInstrumentedTest {
         } finally {
             root.deleteRecursively()
         }
+    }
+
+    @Test
+    fun automaticLayUsesOrcaInTheIsolatedArm64WorkerAndProducesABedPlacedModel() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        // Developers may seed this private-cache path to repeat a field-model regression;
+        // CI falls back to the deterministic fixture.
+        val source = File(context.cacheDir, "manual-auto-orient.stl")
+            .takeIf(File::isFile)
+            ?: fixtureModel()
+        val output = File(context.cacheDir, "automatic-lay-${System.nanoTime()}.stl")
+        try {
+            val orientation = SlicerProcessClient.autoOrient(source)
+            assertTrue(
+                "Orca orientation must contain finite radians",
+                orientation.rotationRadians.all { it.isFinite() },
+            )
+            assertTrue(
+                "Automatic orientation must run outside the application process",
+                SlicerProcessClient.lastWorkerPid() > 0 &&
+                    SlicerProcessClient.lastWorkerPid() != android.os.Process.myPid(),
+            )
+
+            val transform = ModelTransform().withOrcaOrientation(orientation)
+            val transformResult = JSONObject(
+                NativeEngine.transformStl(
+                    source.absolutePath,
+                    output.absolutePath,
+                    transform.toJson(256f, 256f),
+                ),
+            )
+            assertTrue(
+                "Automatic lay transform failed: ${transformResult.optString("error")}",
+                transformResult.optBoolean("ok"),
+            )
+            val inspection = JSONObject(NativeEngine.inspectStl(output.absolutePath))
+            assertTrue("Transformed model must remain readable", inspection.optBoolean("ok"))
+            assertTrue(
+                "Automatic lay must put the model on Z=0",
+                abs(inspection.getJSONArray("minMm").getDouble(2)) < 0.001,
+            )
+        } finally {
+            output.delete()
+        }
+    }
+
+    @Test
+    fun supportPaintReachesOrcaAndCreatesSupportToolpaths() {
+        val modelFile = supportPaintOverhangModel()
+        val model = ModelInfo.fromJson(
+            NativeEngine.inspectStl(modelFile.absolutePath),
+            modelFile.absolutePath,
+        )
+        assertEquals("Support fixture facet order must remain stable", 24, model.triangles)
+        val options = SliceOptions()
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(supportEnabled = false)
+        val baseline = OnDeviceSlicer.slice(
+            listOf(ProjectObject("baseline", model)),
+            options,
+        )
+        val baselinePreview = GcodeLayerPreview.fromNative(
+            NativeEngine.previewGcodeRange(baseline.output.absolutePath, 0, Int.MAX_VALUE),
+        )
+
+        val paintedFacets = SupportPaint()
+            .paint(22, SupportPaintState.ENFORCE)
+            .paint(23, SupportPaintState.ENFORCE)
+        val painted = OnDeviceSlicer.slice(
+            listOf(ProjectObject("painted", model, supportPaint = paintedFacets)),
+            options,
+        )
+        val paintedPreview = GcodeLayerPreview.fromNative(
+            NativeEngine.previewGcodeRange(painted.output.absolutePath, 0, Int.MAX_VALUE),
+        )
+
+        assertEquals("Support-disabled baseline must not create support", 0, baselinePreview.roleSegmentCounts[5])
+        assertTrue(
+            "Painted enforcer facets must create real Orca support toolpaths",
+            paintedPreview.roleSegmentCounts[5] > 0,
+        )
     }
 
     @Test

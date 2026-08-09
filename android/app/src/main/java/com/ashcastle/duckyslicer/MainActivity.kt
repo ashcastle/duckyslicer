@@ -53,6 +53,7 @@ data class ModelInfo(
     val minMm: List<Double>,
     val maxMm: List<Double>,
     val previewTriangles: FloatArray,
+    val previewTriangleIndices: IntArray = IntArray(previewTriangles.size / 9) { it },
 ) {
     companion object {
         fun fromJson(raw: String, localPath: String): ModelInfo {
@@ -62,6 +63,8 @@ data class ModelInfo(
             val minValues = json.getJSONArray("minMm")
             val maxValues = json.getJSONArray("maxMm")
             val triangleValues = json.getJSONArray("previewTriangles")
+            val triangleIndices = json.getJSONArray("previewTriangleIndices")
+            check(triangleIndices.length() == triangleValues.length()) { "model_invalid" }
             val previewTriangles = FloatArray(triangleValues.length() * 9)
             repeat(triangleValues.length()) { triangleIndex ->
                 val triangle = triangleValues.getJSONArray(triangleIndex)
@@ -77,6 +80,11 @@ data class ModelInfo(
                 minMm = List(3) { index -> minValues.getDouble(index) },
                 maxMm = List(3) { index -> maxValues.getDouble(index) },
                 previewTriangles = previewTriangles,
+                previewTriangleIndices = IntArray(triangleIndices.length()) { index ->
+                    triangleIndices.getInt(index).also { sourceIndex ->
+                        check(sourceIndex in 0 until json.getInt("triangles")) { "model_invalid" }
+                    }
+                },
             )
         }
     }
@@ -103,6 +111,8 @@ private fun DuckySlicerScreen() {
     val scope = rememberCoroutineScope()
     val modelReadError = stringResource(R.string.model_read_error)
     val modelTooLargeError = stringResource(R.string.model_too_large_error)
+    val autoLayDone = stringResource(R.string.auto_lay_done)
+    val autoLayError = stringResource(R.string.auto_lay_error)
     val sliceError = stringResource(R.string.slice_error)
     val sliceCanceledNotice = stringResource(R.string.slice_canceled)
     val saveError = stringResource(R.string.save_error)
@@ -131,6 +141,7 @@ private fun DuckySlicerScreen() {
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var importing by remember { mutableStateOf(false) }
+    var autoLaying by remember { mutableStateOf(false) }
     var slicing by remember { mutableStateOf(false) }
     var sliceCancellationRequested by remember { mutableStateOf(false) }
     var sliceProgress by remember { mutableIntStateOf(0) }
@@ -199,7 +210,7 @@ private fun DuckySlicerScreen() {
     }
 
     val keepScreenAwake = appSettings.keepScreenAwakeWhileWorking &&
-        (importing || slicing || previewLoading || remoteBusy)
+        (importing || autoLaying || slicing || previewLoading || remoteBusy)
     DisposableEffect(keepScreenAwake) {
         val window = (context as? MainActivity)?.window
         if (keepScreenAwake) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -232,8 +243,45 @@ private fun DuckySlicerScreen() {
         }
     }
 
+    fun autoLaySelectedModel() {
+        val target = projectHistory.current.selectedObject ?: return
+        if (autoLaying || importing || slicing || previewLoading) return
+        autoLaying = true
+        error = null
+        notice = null
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    SlicerProcessClient.autoOrient(File(target.model.localPath))
+                }
+            }.onSuccess { orientation ->
+                val currentTarget = projectHistory.current.objects.firstOrNull { it.id == target.id }
+                if (currentTarget != null) {
+                    val nextHistory = projectHistory.updateTransform(
+                        target.id,
+                        currentTarget.transform.withOrcaOrientation(orientation),
+                    )
+                    if (nextHistory != projectHistory) {
+                        projectHistory = nextHistory
+                        sliceOutcome = null
+                        layerPreview = null
+                        sliceProgress = 0
+                        remoteUpload = null
+                    }
+                    notice = autoLayDone
+                    error = null
+                }
+            }.onFailure { failure ->
+                if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Automatic lay failed", failure)
+                error = autoLayError
+                notice = null
+            }
+            autoLaying = false
+        }
+    }
+
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null && projectRestored && !slicing && !previewLoading) {
+        if (uri != null && projectRestored && !autoLaying && !slicing && !previewLoading) {
             importing = true
             error = null
             notice = null
@@ -472,6 +520,7 @@ private fun DuckySlicerScreen() {
         sliceOutcome = sliceOutcome,
         layerPreview = layerPreview,
         importing = importing || !projectRestored,
+        autoLaying = autoLaying,
         slicing = slicing,
         sliceCancellationRequested = sliceCancellationRequested,
         sliceProgress = sliceProgress,
@@ -520,6 +569,29 @@ private fun DuckySlicerScreen() {
             sliceOutcome = null
             layerPreview = null
             remoteUpload = null
+        },
+        onAutoLay = ::autoLaySelectedModel,
+        onSupportPaintPreview = { objectId, facetIndex, state ->
+            val projectObject = projectHistory.current.objects.firstOrNull { it.id == objectId }
+            if (projectObject != null && facetIndex in 0 until projectObject.model.triangles) {
+                val nextPaint = projectObject.supportPaint.paint(facetIndex, state)
+                val nextHistory = projectHistory.updateSupportPaint(
+                    objectId,
+                    nextPaint,
+                    recordHistory = false,
+                )
+                if (nextHistory != projectHistory) {
+                    projectHistory = nextHistory
+                    sliceOutcome = null
+                    layerPreview = null
+                    sliceProgress = 0
+                    remoteUpload = null
+                    notice = null
+                }
+            }
+        },
+        onSupportPaintCommitted = { objectId, previous ->
+            projectHistory = projectHistory.commitSupportPaint(objectId, previous)
         },
         onRemoveModel = {
             projectHistory = projectHistory.removeSelected()

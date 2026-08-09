@@ -1,9 +1,9 @@
 package com.ashcastle.duckyslicer
 
-import org.json.JSONArray
-import org.json.JSONObject
 import kotlin.math.cos
 import kotlin.math.sin
+import org.json.JSONArray
+import org.json.JSONObject
 
 data class ModelTransform(
     val offsetXmm: Float = 0f,
@@ -19,6 +19,27 @@ data class ModelTransform(
         .put("rotationDeg", JSONArray(listOf(rotationXdeg, rotationYdeg, rotationZdeg)))
         .put("scale", scale)
         .toString()
+
+    internal fun withOrcaOrientation(orientation: OrcaOrientation): ModelTransform = copy(
+        rotationXdeg = Math.toDegrees(orientation.rotationRadians[0]).toFloat(),
+        rotationYdeg = Math.toDegrees(orientation.rotationRadians[1]).toFloat(),
+        rotationZdeg = Math.toDegrees(orientation.rotationRadians[2]).toFloat(),
+    )
+}
+
+internal data class OrcaOrientation(
+    val rotationRadians: DoubleArray,
+) {
+    init {
+        require(rotationRadians.size == 3 && rotationRadians.all { it.isFinite() }) {
+            "Orca orientation is invalid"
+        }
+    }
+
+    override fun equals(other: Any?): Boolean =
+        other is OrcaOrientation && rotationRadians.contentEquals(other.rotationRadians)
+
+    override fun hashCode(): Int = rotationRadians.contentHashCode()
 }
 
 internal fun ModelTransform.rotate(point: FloatArray): FloatArray {
