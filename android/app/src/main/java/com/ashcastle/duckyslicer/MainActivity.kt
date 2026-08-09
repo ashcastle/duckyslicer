@@ -5,6 +5,7 @@ import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.util.Log
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -373,6 +374,7 @@ private fun DuckySlicerScreen() {
                         error = null
                         sliceProgress = 0
                     } else {
+                        if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Slice request failed", failure)
                         error = sliceError
                     }
                 }

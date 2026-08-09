@@ -52,6 +52,10 @@ private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
     private var lastSpan = 0f
     private var lastCenterX = 0f
     private var lastCenterY = 0f
+    private val restoreDetail = Runnable {
+        toolpathRenderer.setInteractionActive(false)
+        requestRender()
+    }
 
     init {
         setEGLContextClientVersion(3)
@@ -87,6 +91,8 @@ private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                removeCallbacks(restoreDetail)
+                toolpathRenderer.setInteractionActive(true)
                 lastX = event.x
                 lastY = event.y
             }
@@ -129,10 +135,19 @@ private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
                 }
             }
 
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> lastSpan = 0f
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                lastSpan = 0f
+                removeCallbacks(restoreDetail)
+                postDelayed(restoreDetail, DETAIL_RESTORE_DELAY_MS)
+            }
         }
         requestRender()
         return true
+    }
+
+    override fun onDetachedFromWindow() {
+        removeCallbacks(restoreDetail)
+        super.onDetachedFromWindow()
     }
 
     private fun captureTwoFingerState(event: MotionEvent) {
@@ -144,6 +159,10 @@ private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
         lastSpan = hypot(x1 - x0, y1 - y0).coerceAtLeast(1f)
         lastCenterX = (x0 + x1) / 2f
         lastCenterY = (y0 + y1) / 2f
+    }
+
+    private companion object {
+        const val DETAIL_RESTORE_DELAY_MS = 220L
     }
 }
 
@@ -176,11 +195,17 @@ internal class ToolpathRenderer : GLSurfaceView.Renderer {
     private var panX = 0f
     private var panY = 0f
     private var geometryUploadCount = 0
+    @Volatile
+    private var interactionActive = false
 
     internal fun geometryUploadCountForTest(): Int = geometryUploadCount
 
     fun submit(scene: ToolpathScene) {
         latestScene = scene
+    }
+
+    fun setInteractionActive(active: Boolean) {
+        interactionActive = active
     }
 
     fun orbitBy(deltaX: Float, deltaY: Float) {
@@ -231,7 +256,13 @@ internal class ToolpathRenderer : GLSurfaceView.Renderer {
     override fun onDrawFrame(unused: GL10?) {
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         if (program == 0 || vertexBufferId == 0) return
-        latestScene?.let { scene ->
+        latestScene?.let { sourceScene ->
+            val interactionDetail = previewDetailForInteraction(sourceScene.detail, interactionActive)
+            val scene = if (interactionDetail == sourceScene.detail) {
+                sourceScene
+            } else {
+                sourceScene.copy(detail = interactionDetail)
+            }
             if (uploadState.needsUpload(scene)) uploadGeometry(scene)
         }
         val scene = renderedScene ?: return
@@ -390,11 +421,7 @@ internal object ToolpathMeshBuilder {
         floatArrayOf(0.52f, 0.46f, 0.40f, 0.46f, 0.42f, 0.42f, 0.52f, 0.48f, 0.36f, 0.46f)
 
     fun build(scene: ToolpathScene): FloatBuffer {
-        val budget = when (scene.detail) {
-            PreviewDetail.PERFORMANCE -> 6_000
-            PreviewDetail.BALANCED -> 16_000
-            PreviewDetail.DETAIL -> 40_000
-        }
+        val budget = depthPreviewSegmentBudget(scene.detail)
         val plan = scene.preview.buildRenderPlan(budget)
         val builder = FloatBuilder(plan.segmentOffsets.size * 36 * 7 + 2_000)
         addBed(builder, scene.bedSizeX, scene.bedSizeY)

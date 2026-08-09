@@ -17,6 +17,7 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
     required = {
         "SliceArtifactStore.kt",
         "SliceConfig.kt",
+        "ProjectStore.kt",
         "SlicerProcessService.kt",
         "runtime.patch",
         "MainActivity.kt",
@@ -54,7 +55,7 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "artifactStore.persist(",
         "scheduleStorageGuard",
         "artifactStore.activeOutputIsUnsafe()",
-        "transientRoots = listOf(filesDir, cacheDir)",
+        "ProjectStore.modelStorageRoot(filesDir)",
         "estimatedTimeSeconds.isFinite()",
         "estimatedFilamentGrams.isFinite()",
         "sliceWithOutputLimitForTest",
@@ -66,6 +67,8 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
             raise VerificationError(f"slicer worker storage containment is missing: {marker}")
     if ".drop(MAX_RETAINED_OUTPUTS)" in service:
         raise VerificationError("slicer worker reverted to count-only output pruning")
+    if "modelStorageRoot(filesRoot: File)" not in sources["ProjectStore.kt"]:
+        raise VerificationError("persistent project model output root is not canonicalized")
 
     if "maximumGcodeBytes: Int = 1_073_741_824" not in sources["SliceConfig.kt"]:
         raise VerificationError("JNI G-code output ceiling is missing")
@@ -103,6 +106,7 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "preparationRecoversStaleWorkAndFreesTheReserve",
         "activeOutputGuardRequiresAFileAndDetectsSizeOrEmergencySpace",
         "privateCacheOutputIsAcceptedAndRecovered",
+        "persistentProjectModelOutputIsAcceptedGuardedAndRecovered",
     ):
         if marker not in tests:
             raise VerificationError(f"slice storage host regression is missing: {marker}")
@@ -111,6 +115,8 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         raise VerificationError("cross-process ARM64 artifact lease regression is missing")
     if "nativeGcodeWriterHardLimitContainsDiskGrowthAndRecovers" not in device_tests:
         raise VerificationError("ARM64 native G-code hard-limit recovery regression is missing")
+    if "persistentProjectModelSlicesIntoRetainedArtifact" not in device_tests:
+        raise VerificationError("ARM64 persistent-project slice regression is missing")
 
     for document in ("README.md", "SECURITY.md", "CONTRIBUTING.md"):
         if "G-code" not in sources[document] or "lease" not in sources[document].lower():
@@ -128,6 +134,7 @@ def read_sources() -> dict[str, str]:
         "SliceConfig.kt": (
             ROOT / "android/app/src/main/java/com/u1/slicer/data/SliceConfig.kt"
         ).read_text(encoding="utf-8"),
+        "ProjectStore.kt": (main / "ProjectStore.kt").read_text(encoding="utf-8"),
         "SlicerProcessService.kt": (main / "SlicerProcessService.kt").read_text(encoding="utf-8"),
         "runtime.patch": (ROOT / "native/slicer-runtime/runtime.patch").read_text(
             encoding="utf-8"

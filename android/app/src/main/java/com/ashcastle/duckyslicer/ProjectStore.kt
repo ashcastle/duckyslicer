@@ -236,7 +236,10 @@ internal class ProjectStore(
     private fun Float.checkedTransformValue(minimum: Float, maximum: Float): Float =
         takeIf { it.isFinite() && it in minimum..maximum } ?: error("Invalid model transform")
 
-    private companion object {
+    internal companion object {
+        internal fun modelStorageRoot(filesRoot: File): File =
+            File(File(filesRoot, PROJECT_DIRECTORY), MODELS_DIRECTORY)
+
         const val SCHEMA_VERSION = 2
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"

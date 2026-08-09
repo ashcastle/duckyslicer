@@ -152,6 +152,8 @@
     <string name="vertical_shell_all">전체</string>
     <string name="detect_narrow_internal_solid_infill">좁은 내부 솔리드 인필 감지</string>
     <string name="quality">품질</string>
+    <string name="strength">강도</string>
+    <string name="others">기타</string>
     <string name="top_shell_layers">상단 솔리드 레이어</string>
     <string name="bottom_shell_layers">하단 솔리드 레이어</string>
     <string name="top_shell_thickness">최소 상단 두께</string>
@@ -347,7 +349,8 @@
     <string name="device_state_offline">오프라인</string>
     <string name="device_state_unknown">상태를 확인할 수 없음</string>
     <string name="preview_settings">미리 보기</string>
-    <string name="preview_detail">이동·확대 중 표시 품질</string>
+    <string name="preview_detail">미리 보기 품질</string>
+    <string name="preview_detail_automatic">자동</string>
     <string name="preview_detail_performance">부드럽게</string>
     <string name="preview_detail_balanced">균형</string>
     <string name="preview_detail_detail">선명하게</string>

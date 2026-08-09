@@ -14,6 +14,7 @@ import android.os.Message
 import android.os.Messenger
 import android.os.Process
 import android.os.RemoteException
+import android.util.Log
 import com.u1.slicer.NativeLibrary
 import java.io.File
 import java.util.UUID
@@ -375,7 +376,14 @@ class SlicerProcessService : Service() {
     }
     private val messenger = Messenger(mainHandler)
     private val artifactStore by lazy {
-        SliceArtifactStore(filesDir, transientRoots = listOf(filesDir, cacheDir))
+        SliceArtifactStore(
+            filesDir,
+            transientRoots = listOf(
+                filesDir,
+                cacheDir,
+                ProjectStore.modelStorageRoot(filesDir),
+            ),
+        )
     }
 
     override fun onCreate() {
@@ -581,6 +589,7 @@ class SlicerProcessService : Service() {
         }
         success(runNativeSlice(models, options, maximumGcodeBytes, onProgress))
     } catch (error: Exception) {
+        if (BuildConfig.DEBUG) Log.e(LOG_TAG, "On-device slicing failed", error)
         failure(error.message ?: "Slicer operation failed")
     }
 
@@ -671,6 +680,7 @@ class SlicerProcessService : Service() {
         const val STORAGE_GUARD_INTERVAL_MILLIS = 500L
         const val TEST_MINIMUM_GCODE_BYTES = 16 * 1_024
         const val PRODUCTION_MAXIMUM_GCODE_BYTES = 1_073_741_824
+        const val LOG_TAG = "DuckySlicer"
     }
 }
 

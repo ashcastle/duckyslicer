@@ -33,6 +33,46 @@ class NativeEngineInstrumentedTest {
     )
 
     @Test
+    fun automaticPreviewQualityResolvesToAConcreteDeviceTier() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val capabilities = previewDeviceCapabilities(context)
+        val resolved = resolvePreviewDetail(PreviewDetail.AUTOMATIC, capabilities)
+
+        assertTrue("Android must report a positive app memory class", capabilities.appMemoryClassMb > 0)
+        assertTrue(
+            "Automatic preview must resolve before building GPU geometry",
+            resolved == PreviewDetail.PERFORMANCE || resolved == PreviewDetail.BALANCED,
+        )
+    }
+
+    @Test
+    fun persistentProjectModelSlicesIntoRetainedArtifact() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val projectStore = ProjectStore(context)
+        val storedModel = projectStore.createModelDestination("persistent-slice.stl")
+        val nativeOutput = File(requireNotNull(storedModel.parentFile), SliceArtifactStore.NATIVE_OUTPUT_NAME)
+        try {
+            fixtureModel().copyTo(storedModel, overwrite = true)
+
+            val outcome = OnDeviceSlicer.slice(
+                storedModel,
+                SliceOptions().selectQuality(QualityProfile.DRAFT),
+            )
+
+            assertTrue("Persistent project models must produce retained G-code", outcome.output.length() > 1_000L)
+            assertEquals(
+                "Completed G-code must move into bounded slice storage",
+                File(context.filesDir, SliceArtifactStore.OUTPUT_DIRECTORY).canonicalFile,
+                requireNotNull(outcome.output.parentFile).canonicalFile,
+            )
+            assertFalse("Native output must not remain beside the project model", nativeOutput.exists())
+        } finally {
+            storedModel.delete()
+            nativeOutput.delete()
+        }
+    }
+
+    @Test
     fun depthPreviewUploadsVboOnceAcrossCameraFrames() {
         val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
         assertNotEquals("EGL display must be available", EGL14.EGL_NO_DISPLAY, display)
@@ -118,11 +158,35 @@ class NativeEngineInstrumentedTest {
             )
             assertEquals("The reused VBO draw must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
 
+            renderer.setInteractionActive(true)
+            renderer.onDrawFrame(null)
+            assertEquals(
+                "Starting a gesture must upload one lower-detail VBO",
+                2,
+                renderer.geometryUploadCountForTest(),
+            )
+            renderer.orbitBy(-8f, 5f)
+            renderer.onDrawFrame(null)
+            assertEquals(
+                "Every subsequent gesture frame must reuse the lower-detail VBO",
+                2,
+                renderer.geometryUploadCountForTest(),
+            )
+            assertEquals("The gesture VBO draw must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
+
+            renderer.setInteractionActive(false)
+            renderer.onDrawFrame(null)
+            assertEquals(
+                "Settling after a gesture must restore the requested VBO once",
+                3,
+                renderer.geometryUploadCountForTest(),
+            )
+
             renderer.submit(scene.copy(visibleRoles = setOf(1)))
             renderer.onDrawFrame(null)
             assertEquals(
                 "A geometry change must replace the VBO exactly once",
-                2,
+                4,
                 renderer.geometryUploadCountForTest(),
             )
             assertEquals("The replacement VBO draw must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
