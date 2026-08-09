@@ -99,6 +99,19 @@ def main() -> None:
         "primitive preview boundary is unit tested": (
             "tools.test_verify_preview_boundary"
         ),
+        "Play App Bundle is assembled": (
+            ":app:bundleRelease :app:packageReleaseUniversalApk"
+        ),
+        "Play delivery APK is structurally verified": (
+            'play_apk="android/app/build/outputs/apk_from_bundle/release/'
+            'app-release-universal-unsigned.apk"'
+        ),
+        "Play delivery APK is 16 KB aligned": (
+            'zipalign" -c -P 16 -v 4 "$play_apk"'
+        ),
+        "Play delivery APK runs the full APK verifier": (
+            'python3 tools/verify_apk.py "$play_apk"'
+        ),
     }
     for description, marker in required_android_gates.items():
         if marker not in android_source:
@@ -106,6 +119,8 @@ def main() -> None:
 
     if "device-tests" in android_jobs or "runs-on: macos-14" in android_source:
         errors.append("android.yml: hosted emulator jobs are not allowed")
+    if "app-release.aab" in release_source:
+        errors.append("release.yml: GitHub Releases must remain APK-only")
 
     required_release_gates = {
         "sign depends on build": "  sign:\n    needs: build\n",
