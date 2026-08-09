@@ -62,7 +62,7 @@ cd ../../android
   :app:assembleDebugAndroidTest :app:lintDebug
 
 cd ..
-python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_slice_storage tools.test_verify_preview_boundary tools.test_verify_profile_editor tools.test_verify_open_source_distribution tools.test_verify_runtime_resilience tools.test_generate_source_bundle tools.test_verify_reproducible_release
+python3 -m unittest discover -s tools -p 'test_*.py'
 python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
 python3 tools/verify_gradle_supply_chain.py
 python3 tools/verify_native_safety.py
@@ -72,14 +72,17 @@ python3 tools/verify_preview_boundary.py
 python3 tools/verify_profile_editor.py
 python3 tools/verify_open_source_distribution.py
 python3 tools/verify_runtime_resilience.py
+python3 tools/verify_data_practices.py
+python3 tools/verify_release_contract.py
 python3 tools/verify_workflows.py
 ```
 
-With an ARM64 Android device or emulator connected:
+The local ARM64 16 KB AVD is the authoritative functional gate. With
+`DuckySlicer_16KB_API35` running:
 
 ```shell
 cd android
-./gradlew :app:connectedDebugAndroidTest
+ANDROID_SERIAL=emulator-5556 ./gradlew :app:connectedDebugAndroidTest
 ```
 
 Preview changes should be checked with outer walls, inner walls, sparse infill,
@@ -116,9 +119,10 @@ remain an explicit monitored transient root. The ARM64 persistent-project regres
 finish with G-code in bounded slice storage and no `output.gcode` beside the model.
 
 Workflow changes must keep third-party Actions pinned to full commit hashes. A
-tagged release must preserve the build → isolated sign → ARM64 device test →
-publish dependency; publishing an APK before device tests finish is not an
-accepted fallback.
+tagged release must preserve the build → isolated sign → publish dependency and
+the GitHub Release must contain only the signed ARM64 APK. Hosted emulator jobs
+must remain absent. The complete local ARM64 16 KB AVD gate must pass before a tag
+is created; hosted build or static packaging checks are not a substitute.
 The release build job must never receive signing secrets. Only the isolated `sign`
 job may use them; it must not check out source or execute Gradle, repository scripts,
 or other project code, and it must verify the pinned signing-certificate fingerprint.
