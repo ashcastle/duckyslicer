@@ -64,6 +64,13 @@ repairs a damaged primary from that generation, and refuses to overwrite the fil
 when neither copy is readable or when a newer schema is encountered. The UI blocks
 project autosave and reports that the original files were left unchanged.
 
+Long-running Orca work never runs on the isolated service's main thread. Each slice
+has an unpredictable request identifier and only its matching cancellation request
+may terminate the worker. Cancellation or UI disposal kills only the private
+`:slicer` process; the application remains alive and a later request starts a fresh
+worker. ARM64 tests exercise service responsiveness, cancellation, PID replacement,
+and a successful recovery slice.
+
 Untrusted STL and G-code cross a Rust validation boundary before reaching preview
 or transformation code. That boundary accepts regular files, applies the same
 512 MiB STL limit as Android import, bounds individual text lines, rejects

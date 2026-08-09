@@ -23,12 +23,17 @@ class SlicerProcessService {
   val max = MAX_OPTIONS_BYTES + MAX_RETAINED_OUTPUTS
   fun save() { output.fd.sync() }
   val terminate = MESSAGE_TERMINATE_FOR_TEST
+  val worker = HandlerThread("DuckySlicer Orca work")
+  val cancel = MESSAGE_CANCEL
+  fun containCancellation() { Process.killProcess(Process.myPid()) }
+  override fun onUnbind() = false
 }
 """
 
 VALID_DEVICE_TEST = """
 nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly
 imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp
+activeSliceCancellationKeepsServiceResponsiveAndRestartsCleanly
 """
 
 
@@ -36,6 +41,11 @@ def valid_sources() -> dict[str, str]:
     return {
         "com/ashcastle/duckyslicer/SlicerProcessService.kt": VALID_SERVICE,
         "com/ashcastle/duckyslicer/OnDeviceSlicer.kt": "SlicerProcessClient.slice()",
+        "com/ashcastle/duckyslicer/MainActivity.kt": (
+            "SlicerProcessClient.cancelActiveSlice() "
+            "SlicerProcessClient.cancelActiveSliceAsync()"
+        ),
+        "com/ashcastle/duckyslicer/WorkspaceScreen.kt": "onCancelSlice canceling_slice",
         "com/u1/slicer/NativeLibrary.kt": "class NativeLibrary()",
     }
 
@@ -69,9 +79,20 @@ class VerifyAndroidIsolationTest(unittest.TestCase):
         for missing, message in (
             ("imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp", "imperfect-mesh"),
             ("nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly", "crash recovery"),
+            ("activeSliceCancellationKeepsServiceResponsiveAndRestartsCleanly", "active-slice"),
         ):
             with self.assertRaisesRegex(VerificationError, message):
                 verify_sources(valid_sources(), VALID_DEVICE_TEST.replace(missing, ""))
+
+    def test_requires_ui_and_disposal_cancellation_paths(self) -> None:
+        for source_path, marker in (
+            ("com/ashcastle/duckyslicer/MainActivity.kt", "cancelActiveSliceAsync()"),
+            ("com/ashcastle/duckyslicer/WorkspaceScreen.kt", "onCancelSlice"),
+        ):
+            sources = valid_sources()
+            sources[source_path] = sources[source_path].replace(marker, "")
+            with self.assertRaisesRegex(VerificationError, "cancel"):
+                verify_sources(sources, VALID_DEVICE_TEST)
 
 
 if __name__ == "__main__":

@@ -26,6 +26,8 @@
     <string name="save_error">Couldn’t save G-code.</string>
     <string name="gcode_saved">G-code saved.</string>
     <string name="slicing_progress">Slicing… %1$d%%</string>
+    <string name="canceling_slice">Canceling…</string>
+    <string name="slice_canceled">Slice canceled.</string>
     <string name="gcode_ready">G-code ready</string>
     <string name="layers">Layers</string>
     <string name="slice_model">Slice</string>

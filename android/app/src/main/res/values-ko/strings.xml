@@ -26,6 +26,8 @@
     <string name="save_error">G-code를 저장하지 못했습니다.</string>
     <string name="gcode_saved">G-code를 저장했습니다.</string>
     <string name="slicing_progress">슬라이스 중… %1$d%%</string>
+    <string name="canceling_slice">취소 중…</string>
+    <string name="slice_canceled">슬라이스를 취소했습니다.</string>
     <string name="gcode_ready">G-code 준비 완료</string>
     <string name="layers">레이어</string>
     <string name="slice_model">슬라이스</string>

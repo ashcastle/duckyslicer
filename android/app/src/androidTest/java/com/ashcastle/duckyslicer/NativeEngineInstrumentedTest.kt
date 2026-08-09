@@ -11,6 +11,9 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 
 @RunWith(AndroidJUnit4::class)
@@ -910,6 +913,39 @@ class NativeEngineInstrumentedTest {
             firstOutcome.output.canonicalPath,
             recoveredOutcome.output.canonicalPath,
         )
+    }
+
+    @Test
+    fun activeSliceCancellationKeepsServiceResponsiveAndRestartsCleanly() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val appPid = android.os.Process.myPid()
+        val started = CountDownLatch(1)
+        val failure = AtomicReference<Throwable?>(null)
+        val probe = Thread {
+            runCatching {
+                SlicerProcessClient.cancellationProbeForTest(started::countDown)
+            }.onFailure(failure::set)
+        }.apply { start() }
+
+        assertTrue("Cancellation probe must start", started.await(10, TimeUnit.SECONDS))
+        val busyWorkerPid = SlicerProcessClient.workerHealthForTest(context)
+        assertNotEquals("Orca work must not block the service main thread", appPid, busyWorkerPid)
+
+        assertTrue("The active slice must accept cancellation", SlicerProcessClient.cancelActiveSlice())
+        probe.join(10_000)
+
+        assertTrue("Cancellation must promptly release the waiting client", !probe.isAlive)
+        assertTrue("Cancellation must have a distinct result", failure.get() is SlicingCancelledException)
+        assertEquals("Cancellation must not terminate the app", appPid, android.os.Process.myPid())
+
+        val restartedWorkerPid = SlicerProcessClient.workerHealthForTest(context)
+        assertTrue("The isolated worker must restart after cancellation", restartedWorkerPid > 0)
+        assertNotEquals("Cancellation must replace the terminated worker", busyWorkerPid, restartedWorkerPid)
+        val recovery = OnDeviceSlicer.slice(
+            fixtureModel(),
+            SliceOptions().selectQuality(QualityProfile.DRAFT),
+        )
+        assertTrue("A new slice must succeed after cancellation", recovery.output.length() > 1_000L)
     }
 
     @Test
