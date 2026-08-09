@@ -15,6 +15,7 @@ class VerificationError(ValueError):
 
 def verify_profile_editor(sources: dict[str, str]) -> None:
     required = {
+        "DeviceSheet.kt",
         "ProfileSettingsSheet.kt",
         "ProfileRecents.kt",
         "ProfileRecentsTest.kt",
@@ -95,6 +96,44 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
     if "LocalConfiguration.current.screenHeightDp" in editor:
         raise VerificationError("profile sheet height must follow the current window container")
 
+    settings_switch = editor.split("internal fun SettingsSwitch(", 1)[-1].split(
+        "@Composable", 1
+    )[0]
+    for marker in (
+        ".heightIn(min = 48.dp)",
+        ".toggleable(",
+        "role = Role.Switch",
+        ".semantics(mergeDescendants = true)",
+        "contentDescription = label",
+        "Switch(checked = checked, onCheckedChange = null)",
+    ):
+        if marker not in settings_switch:
+            raise VerificationError(f"profile switch accessibility is missing: {marker}")
+
+    settings_slider = editor.split("internal fun SettingSlider(", 1)[-1].split(
+        "@Composable", 1
+    )[0]
+    for marker in (
+        "modifier = Modifier.semantics",
+        "contentDescription = label",
+        "stateDescription = valueText",
+    ):
+        if marker not in settings_slider:
+            raise VerificationError(f"profile slider accessibility is missing: {marker}")
+
+    device_choices = sources["DeviceSheet.kt"].split("profiles.forEach", 1)[-1].split(
+        "if (selected != null)", 1
+    )[0]
+    for marker in (
+        ".selectable(",
+        "role = Role.RadioButton",
+        "RadioButton(selected = isSelected, onClick = null)",
+    ):
+        if marker not in device_choices:
+            raise VerificationError(f"remote device selection accessibility is missing: {marker}")
+    if ".clickable { onSelect(profile.id) }" in device_choices:
+        raise VerificationError("remote device profiles must expose one radio target per row")
+
     recents = sources["ProfileRecents.kt"]
     for marker in (
         "data class ProfileRecents(",
@@ -160,6 +199,7 @@ def read_sources() -> dict[str, str]:
     tests = ROOT / "android/app/src/test/java/com/ashcastle/duckyslicer"
     resources = ROOT / "android/app/src/main/res"
     return {
+        "DeviceSheet.kt": (main / "DeviceSheet.kt").read_text(encoding="utf-8"),
         "ProfileSettingsSheet.kt": (main / "ProfileSettingsSheet.kt").read_text(encoding="utf-8"),
         "ProfileRecents.kt": (main / "ProfileRecents.kt").read_text(encoding="utf-8"),
         "ProfileRecentsTest.kt": (tests / "ProfileRecentsTest.kt").read_text(encoding="utf-8"),
