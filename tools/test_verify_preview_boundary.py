@@ -66,7 +66,10 @@ def valid_sources() -> dict[str, str]:
             "Every subsequent gesture frame must reuse the lower-detail VBO "
             "Settling after a gesture must restore the requested VBO once "
             "ARM64 GPU staging must use direct memory "
-            "ARM64 balanced preview must honor its geometry budget"
+            "ARM64 balanced preview must honor its geometry budget "
+            "Slice outcome must retain Orca's print-time estimate "
+            "Slice outcome must retain Orca's filament-length estimate "
+            "Slice outcome must retain Orca's filament-mass estimate"
         ),
         "PreviewModelsTest.kt": (
             "nativePayloadKeepsMetadataSegmentsAndRolesWithoutJson "
@@ -182,6 +185,14 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "result.estimatedFilamentMm", "0f"
         )
         with self.assertRaisesRegex(VerificationError, "estimatedFilamentMm"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_missing_device_statistic_regression(self) -> None:
+        sources = valid_sources()
+        sources["NativeEngineInstrumentedTest.kt"] = sources[
+            "NativeEngineInstrumentedTest.kt"
+        ].replace("Slice outcome must retain Orca's filament-length estimate", "")
+        with self.assertRaisesRegex(VerificationError, "filament-length estimate"):
             verify_preview_boundary(sources)
 
 
