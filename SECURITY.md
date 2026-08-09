@@ -33,6 +33,12 @@ or execute repository code in the signer, pins the upload-certificate fingerprin
 and stops at a signed Actions artifact. It has no Play Console credentials and cannot
 select a track or start a rollout.
 
+The same Gradle build used by pull-request verification is traced by CodeQL for
+Java and Kotlin using the extended security query suite. Analysis runs for trusted
+repository pull requests and every push to `main`; untrusted fork pull requests do
+not receive a write-capable security token and are scanned after merge. This is
+static analysis only and does not replace the local ARM64 16 KB functional gate.
+
 ## Reporting a vulnerability
 
 Do not publish exploit details, private data, or a proof-of-concept in a public
