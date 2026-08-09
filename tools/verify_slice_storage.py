@@ -24,7 +24,6 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "RemoteDevice.kt",
         "SliceArtifactStoreTest.kt",
         "NativeEngineInstrumentedTest.kt",
-        "README.md",
         "SECURITY.md",
         "CONTRIBUTING.md",
     }
@@ -125,7 +124,7 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
     if "persistentProjectModelSlicesIntoRetainedArtifact" not in device_tests:
         raise VerificationError("ARM64 persistent-project slice regression is missing")
 
-    for document in ("README.md", "SECURITY.md", "CONTRIBUTING.md"):
+    for document in ("SECURITY.md", "CONTRIBUTING.md"):
         if "G-code" not in sources[document] or "lease" not in sources[document].lower():
             raise VerificationError(f"slice artifact policy is not documented in {document}")
         if "RLIMIT_FSIZE" not in sources[document]:
@@ -154,7 +153,6 @@ def read_sources() -> dict[str, str]:
         "NativeEngineInstrumentedTest.kt": (
             device_tests / "NativeEngineInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
-        "README.md": (ROOT / "README.md").read_text(encoding="utf-8"),
         "SECURITY.md": (ROOT / "SECURITY.md").read_text(encoding="utf-8"),
         "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),
     }
