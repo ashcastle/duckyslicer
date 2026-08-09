@@ -70,23 +70,28 @@ jobs:
           cargo test --release --locked
           cargo clippy --locked -- -D warnings
 
-      - name: Build, test, and lint APK
+      - name: Build, test, lint, and assemble Play bundle
         working-directory: android
         run: |
           ./gradlew --dependency-verification=strict \
             :app:testDebugUnitTest :app:assembleDebug \
             :app:assembleDebugAndroidTest :app:lintDebug \
+            :app:bundleRelease :app:packageReleaseUniversalApk \
             :app:writeDebugDependencyInventory
 
-      - name: Verify 16 KB APK packaging
+      - name: Verify 16 KB APK and Play delivery packaging
         run: |
+          play_apk="android/app/build/outputs/apk_from_bundle/release/app-release-universal-unsigned.apk"
+          test -s android/app/build/outputs/bundle/release/app-release.aab
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 \
             android/app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$play_apk"
           python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_slice_storage tools.test_verify_preview_boundary tools.test_verify_profile_editor tools.test_verify_open_source_distribution tools.test_verify_runtime_resilience tools.test_generate_license_inventory tools.test_generate_offline_licenses tools.test_generate_profile_catalog tools.test_generate_sbom tools.test_generate_source_bundle tools.test_verify_reproducible_release
           python3 tools/verify_slice_storage.py
           python3 tools/verify_preview_boundary.py
           python3 tools/verify_profile_editor.py
           python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
+          python3 tools/verify_apk.py "$play_apk"
 
       - name: Generate CycloneDX SBOM
         run: |
