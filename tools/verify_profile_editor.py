@@ -18,6 +18,7 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "ProfileSettingsSheet.kt",
         "ProfileRecents.kt",
         "ProfileRecentsTest.kt",
+        "ProfileEditSessionTest.kt",
         "SlicingSettingsSectionTest.kt",
         "strings.xml",
         "strings-ko.xml",
@@ -61,6 +62,19 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         if marker not in editor:
             raise VerificationError(f"recent profile group is missing: {marker}")
 
+    for marker in (
+        "data class ProfileEditSession(",
+        "val isDirty: Boolean get() = working != opening",
+        "fun revert(): ProfileEditSession",
+        "fun applied(): ProfileEditSession",
+        "ProfileDirtyActionBar(",
+        "Modifier.weight(3f)",
+        "Modifier.weight(7f)",
+        ".imePadding()",
+    ):
+        if marker not in editor:
+            raise VerificationError(f"sticky profile action bar is missing: {marker}")
+
     recents = sources["ProfileRecents.kt"]
     for marker in (
         "data class ProfileRecents(",
@@ -79,6 +93,9 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
                 raise VerificationError(f"localized slicing tab title is missing from {source_name}: {resource}")
         if 'name="recent_profiles"' not in strings:
             raise VerificationError(f"localized recent profile title is missing from {source_name}")
+        for resource in ('name="revert_changes"', 'name="apply_changes"'):
+            if resource not in strings:
+                raise VerificationError(f"localized profile action is missing from {source_name}: {resource}")
 
     test = sources["SlicingSettingsSectionTest.kt"]
     for marker in (
@@ -98,6 +115,15 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         if marker not in recent_test:
             raise VerificationError(f"recent profile host regression is missing: {marker}")
 
+    edit_test = sources["ProfileEditSessionTest.kt"]
+    for marker in (
+        "changesStayStagedUntilApplied",
+        "revertRestoresTheOpeningSnapshot",
+        "applyPromotesWorkingValuesWithoutClosingTheSession",
+    ):
+        if marker not in edit_test:
+            raise VerificationError(f"profile edit-session regression is missing: {marker}")
+
     for document in ("CONTRIBUTING.md",):
         lowered = sources[document].lower()
         if not all(term in lowered for term in ("quality", "strength", "speed", "support", "others")):
@@ -112,6 +138,9 @@ def read_sources() -> dict[str, str]:
         "ProfileSettingsSheet.kt": (main / "ProfileSettingsSheet.kt").read_text(encoding="utf-8"),
         "ProfileRecents.kt": (main / "ProfileRecents.kt").read_text(encoding="utf-8"),
         "ProfileRecentsTest.kt": (tests / "ProfileRecentsTest.kt").read_text(encoding="utf-8"),
+        "ProfileEditSessionTest.kt": (tests / "ProfileEditSessionTest.kt").read_text(
+            encoding="utf-8"
+        ),
         "SlicingSettingsSectionTest.kt": (tests / "SlicingSettingsSectionTest.kt").read_text(
             encoding="utf-8"
         ),

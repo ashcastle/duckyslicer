@@ -682,8 +682,7 @@ private fun DuckySlicerScreen() {
         onCancelSlice = cancelSlice,
         onSave = saveGcode,
         onSliceOptionsChanged = ::applyOptions,
-        onSavePrinterProfile = { name ->
-            val options = sliceOptions
+        onSavePrinterProfile = { name, options ->
             scope.launch {
                 runCatching {
                     withContext(Dispatchers.IO) {
@@ -691,7 +690,7 @@ private fun DuckySlicerScreen() {
                     }
                 }.onSuccess { (saved, catalog) ->
                     profileCatalog = catalog
-                    applyOptions(sliceOptions.selectPrinter(saved))
+                    applyOptions(options.selectPrinter(saved))
                     notice = profileSavedNotice
                     error = null
                 }
@@ -701,8 +700,7 @@ private fun DuckySlicerScreen() {
                     }
             }
         },
-        onSaveFilamentProfile = { name ->
-            val options = sliceOptions
+        onSaveFilamentProfile = { name, options ->
             scope.launch {
                 runCatching {
                     withContext(Dispatchers.IO) {
@@ -710,7 +708,7 @@ private fun DuckySlicerScreen() {
                     }
                 }.onSuccess { (saved, catalog) ->
                     profileCatalog = catalog
-                    applyOptions(sliceOptions.selectFilament(saved))
+                    applyOptions(options.selectFilament(saved))
                     notice = profileSavedNotice
                     error = null
                 }
@@ -720,8 +718,7 @@ private fun DuckySlicerScreen() {
                     }
             }
         },
-        onSaveSlicingProfile = { name ->
-            val options = sliceOptions
+        onSaveSlicingProfile = { name, options ->
             scope.launch {
                 runCatching {
                     withContext(Dispatchers.IO) {
@@ -729,7 +726,7 @@ private fun DuckySlicerScreen() {
                     }
                 }.onSuccess { (saved, catalog) ->
                     profileCatalog = catalog
-                    applyOptions(sliceOptions.selectQuality(saved))
+                    applyOptions(options.selectQuality(saved))
                     notice = profileSavedNotice
                     error = null
                 }
