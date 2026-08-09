@@ -60,7 +60,9 @@ internal fun supportsDepthTestedPreview(context: Context): Boolean {
 }
 
 private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
-    private val toolpathRenderer = ToolpathRenderer()
+    private val toolpathRenderer = ToolpathRenderer {
+        post { requestRender() }
+    }
     private var lastX = 0f
     private var lastY = 0f
     private var lastSpan = 0f
@@ -199,13 +201,14 @@ internal data class ToolpathScene(
     val bedOriginY: Float = 0f,
 )
 
-internal class ToolpathRenderer : GLSurfaceView.Renderer {
+internal class ToolpathRenderer(
+    private val requestPrewarmFrame: () -> Unit = {},
+) : GLSurfaceView.Renderer {
     @Volatile
     private var latestScene: ToolpathScene? = null
-    private var renderedScene: ToolpathScene? = null
-    private val uploadState = ToolpathGeometryUploadState()
-    private var vertexCount = 0
-    private var vertexBufferId = 0
+    private val uploadState = ToolpathGeometryUploadState(capacity = GPU_GEOMETRY_CACHE_SIZE)
+    private val gpuGeometry = HashMap<ToolpathScene, ToolpathGpuGeometry>()
+    private var pendingPrewarmScene: ToolpathScene? = null
     private var program = 0
     private var positionLocation = 0
     private var colorLocation = 0
@@ -222,6 +225,8 @@ internal class ToolpathRenderer : GLSurfaceView.Renderer {
     private var interactionActive = false
 
     internal fun geometryUploadCountForTest(): Int = geometryUploadCount
+
+    internal fun cachedGeometryCountForTest(): Int = gpuGeometry.size
 
     fun submit(scene: ToolpathScene) {
         latestScene = scene
@@ -249,10 +254,9 @@ internal class ToolpathRenderer : GLSurfaceView.Renderer {
 
     override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {
         program = 0
-        vertexBufferId = 0
-        vertexCount = 0
         geometryUploadCount = 0
-        renderedScene = null
+        pendingPrewarmScene = null
+        gpuGeometry.clear()
         uploadState.invalidate()
         GLES30.glClearColor(0.098f, 0.102f, 0.094f, 1f)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
@@ -264,10 +268,6 @@ internal class ToolpathRenderer : GLSurfaceView.Renderer {
         positionLocation = GLES30.glGetAttribLocation(program, "aPosition")
         colorLocation = GLES30.glGetAttribLocation(program, "aColor")
         matrixLocation = GLES30.glGetUniformLocation(program, "uMvp")
-        val buffers = IntArray(1)
-        GLES30.glGenBuffers(1, buffers, 0)
-        vertexBufferId = buffers[0]
-        if (vertexBufferId == 0) program = 0
     }
 
     override fun onSurfaceChanged(unused: GL10?, width: Int, height: Int) {
@@ -278,20 +278,27 @@ internal class ToolpathRenderer : GLSurfaceView.Renderer {
 
     override fun onDrawFrame(unused: GL10?) {
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
-        if (program == 0 || vertexBufferId == 0) return
-        latestScene?.let { sourceScene ->
-            val interactionDetail = previewDetailForInteraction(sourceScene.detail, interactionActive)
-            val scene = if (interactionDetail == sourceScene.detail) {
-                sourceScene
-            } else {
-                sourceScene.copy(detail = interactionDetail)
-            }
-            if (uploadState.needsUpload(scene)) uploadGeometry(scene)
+        if (program == 0) return
+        val sourceScene = latestScene ?: return
+        val prewarmAtFrameStart = pendingPrewarmScene
+        pendingPrewarmScene = null
+        val prewarmDetail = previewDetailForInteraction(sourceScene.detail, interactionActive = true)
+        val interactionScene = if (prewarmDetail == sourceScene.detail) {
+            sourceScene
+        } else {
+            sourceScene.copy(detail = prewarmDetail)
         }
-        val scene = renderedScene ?: return
+        releaseStaleGeometry(setOf(sourceScene, interactionScene))
+        val renderDetail = previewDetailForInteraction(sourceScene.detail, interactionActive)
+        val scene = if (renderDetail == sourceScene.detail) {
+            sourceScene
+        } else {
+            sourceScene.copy(detail = renderDetail)
+        }
+        val geometry = geometryFor(scene) ?: return
         GLES30.glUseProgram(program)
         GLES30.glUniformMatrix4fv(matrixLocation, 1, false, cameraMatrix(scene), 0)
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vertexBufferId)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.bufferId)
         GLES30.glVertexAttribPointer(
             positionLocation,
             3,
@@ -310,14 +317,49 @@ internal class ToolpathRenderer : GLSurfaceView.Renderer {
             COLOR_OFFSET_BYTES,
         )
         GLES30.glEnableVertexAttribArray(colorLocation)
-        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, vertexCount)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, geometry.vertexCount)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+
+        if (!interactionActive && interactionScene != sourceScene) {
+            if (uploadState.needsUpload(interactionScene)) {
+                if (prewarmAtFrameStart == interactionScene) {
+                    uploadGeometry(interactionScene)
+                } else {
+                    pendingPrewarmScene = interactionScene
+                    requestPrewarmFrame()
+                }
+            }
+        }
     }
 
-    private fun uploadGeometry(scene: ToolpathScene) {
+    private fun releaseStaleGeometry(retainedScenes: Set<ToolpathScene>) {
+        gpuGeometry.keys.filterNot { it in retainedScenes }.forEach { staleScene ->
+            gpuGeometry.remove(staleScene)?.let { stale ->
+                GLES30.glDeleteBuffers(1, intArrayOf(stale.bufferId), 0)
+            }
+            uploadState.remove(staleScene)
+        }
+    }
+
+    private fun geometryFor(scene: ToolpathScene): ToolpathGpuGeometry? {
+        if (!uploadState.needsUpload(scene)) {
+            uploadState.markUsed(scene)
+            return gpuGeometry[scene]
+        }
+        return uploadGeometry(scene)
+    }
+
+    private fun uploadGeometry(scene: ToolpathScene): ToolpathGpuGeometry? {
         val buffer = ToolpathMeshBuilder.build(scene)
-        vertexCount = buffer.remaining() / FLOATS_PER_VERTEX
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vertexBufferId)
+        val buffers = IntArray(1)
+        GLES30.glGenBuffers(1, buffers, 0)
+        val bufferId = buffers[0]
+        if (bufferId == 0) return null
+        val geometry = ToolpathGpuGeometry(
+            bufferId = bufferId,
+            vertexCount = buffer.remaining() / FLOATS_PER_VERTEX,
+        )
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, bufferId)
         GLES30.glBufferData(
             GLES30.GL_ARRAY_BUFFER,
             buffer.remaining() * Float.SIZE_BYTES,
@@ -325,9 +367,14 @@ internal class ToolpathRenderer : GLSurfaceView.Renderer {
             GLES30.GL_STATIC_DRAW,
         )
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
-        renderedScene = scene
-        uploadState.markUploaded(scene)
+        uploadState.markUploaded(scene)?.let { evictedScene ->
+            gpuGeometry.remove(evictedScene)?.let { evicted ->
+                GLES30.glDeleteBuffers(1, intArrayOf(evicted.bufferId), 0)
+            }
+        }
+        gpuGeometry[scene] = geometry
         geometryUploadCount += 1
+        return geometry
     }
 
     private fun cameraMatrix(scene: ToolpathScene): FloatArray {
@@ -390,6 +437,7 @@ internal class ToolpathRenderer : GLSurfaceView.Renderer {
     }
 
     private companion object {
+        const val GPU_GEOMETRY_CACHE_SIZE = 2
         const val FLOATS_PER_VERTEX = 7
         const val STRIDE_BYTES = FLOATS_PER_VERTEX * 4
         const val POSITION_OFFSET_BYTES = 0
@@ -413,17 +461,36 @@ internal class ToolpathRenderer : GLSurfaceView.Renderer {
     }
 }
 
-internal class ToolpathGeometryUploadState {
-    private var uploadedScene: ToolpathScene? = null
+private data class ToolpathGpuGeometry(
+    val bufferId: Int,
+    val vertexCount: Int,
+)
 
-    fun needsUpload(scene: ToolpathScene): Boolean = scene != uploadedScene
+internal class ToolpathGeometryUploadState(private val capacity: Int = 2) {
+    private val uploadedScenes = ArrayList<ToolpathScene>(capacity)
 
-    fun markUploaded(scene: ToolpathScene) {
-        uploadedScene = scene
+    init {
+        require(capacity > 0)
+    }
+
+    fun needsUpload(scene: ToolpathScene): Boolean = scene !in uploadedScenes
+
+    fun markUploaded(scene: ToolpathScene): ToolpathScene? {
+        uploadedScenes.remove(scene)
+        uploadedScenes += scene
+        return if (uploadedScenes.size > capacity) uploadedScenes.removeAt(0) else null
+    }
+
+    fun markUsed(scene: ToolpathScene) {
+        if (uploadedScenes.remove(scene)) uploadedScenes += scene
+    }
+
+    fun remove(scene: ToolpathScene) {
+        uploadedScenes.remove(scene)
     }
 
     fun invalidate() {
-        uploadedScene = null
+        uploadedScenes.clear()
     }
 }
 

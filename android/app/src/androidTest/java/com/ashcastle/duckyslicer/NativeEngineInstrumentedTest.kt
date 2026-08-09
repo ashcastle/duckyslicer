@@ -77,7 +77,7 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
-    fun depthPreviewUploadsVboOnceAcrossCameraFrames() {
+    fun depthPreviewPrewarmsGestureVboAndReusesItAcrossCameraFrames() {
         val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
         assertNotEquals("EGL display must be available", EGL14.EGL_NO_DISPLAY, display)
         val version = IntArray(2)
@@ -152,12 +152,24 @@ class NativeEngineInstrumentedTest {
             assertEquals("The first frame must upload one VBO", 1, renderer.geometryUploadCountForTest())
             assertEquals("The VBO draw must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
 
+            renderer.onDrawFrame(null)
+            assertEquals(
+                "The next idle frame must prewarm one lower-detail VBO",
+                2,
+                renderer.geometryUploadCountForTest(),
+            )
+            assertEquals(
+                "Only the requested and gesture VBOs may stay resident",
+                2,
+                renderer.cachedGeometryCountForTest(),
+            )
+
             renderer.orbitBy(12f, -7f)
             renderer.zoomBy(1.1f)
             renderer.onDrawFrame(null)
             assertEquals(
                 "Camera-only frames must reuse the uploaded VBO",
-                1,
+                2,
                 renderer.geometryUploadCountForTest(),
             )
             assertEquals("The reused VBO draw must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
@@ -165,7 +177,7 @@ class NativeEngineInstrumentedTest {
             renderer.setInteractionActive(true)
             renderer.onDrawFrame(null)
             assertEquals(
-                "Starting a gesture must upload one lower-detail VBO",
+                "Starting a gesture must reuse the prewarmed lower-detail VBO",
                 2,
                 renderer.geometryUploadCountForTest(),
             )
@@ -181,8 +193,8 @@ class NativeEngineInstrumentedTest {
             renderer.setInteractionActive(false)
             renderer.onDrawFrame(null)
             assertEquals(
-                "Settling after a gesture must restore the requested VBO once",
-                3,
+                "Settling after a gesture must reuse the requested VBO",
+                2,
                 renderer.geometryUploadCountForTest(),
             )
 
@@ -190,8 +202,24 @@ class NativeEngineInstrumentedTest {
             renderer.onDrawFrame(null)
             assertEquals(
                 "A geometry change must replace the VBO exactly once",
+                3,
+                renderer.geometryUploadCountForTest(),
+            )
+            assertEquals(
+                "Old-scene VBOs must be released before the new gesture tier is prewarmed",
+                1,
+                renderer.cachedGeometryCountForTest(),
+            )
+            renderer.onDrawFrame(null)
+            assertEquals(
+                "Changed geometry must prewarm its gesture VBO without growing the cache",
                 4,
                 renderer.geometryUploadCountForTest(),
+            )
+            assertEquals(
+                "The GPU cache must remain bounded to two VBOs",
+                2,
+                renderer.cachedGeometryCountForTest(),
             )
             assertEquals("The replacement VBO draw must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
         } finally {

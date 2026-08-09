@@ -1,7 +1,9 @@
 package com.ashcastle.duckyslicer
 
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -200,5 +202,32 @@ class ToolpathMeshBuilderTest {
 
         state.invalidate()
         assertTrue("Context recreation must re-upload retained scene data", state.needsUpload(changed))
+    }
+
+    @Test
+    fun twoSlotGeometryCacheEvictsTheLeastRecentlyUsedDetail() {
+        val preview = GcodeLayerPreview(
+            startLayer = 0,
+            endLayer = 0,
+            layerCount = 1,
+            minZMm = 0.2f,
+            maxZMm = 0.2f,
+            segments = floatArrayOf(10f, 10f, 20f, 10f, 0.2f, 0f),
+            roleSegmentCounts = intArrayOf(1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+        )
+        val requested = ToolpathScene(preview, 100f, 100f, 1f, 0.8f, PreviewDetail.BALANCED)
+        val interaction = requested.copy(detail = PreviewDetail.PERFORMANCE)
+        val changed = requested.copy(visibleRoles = setOf(1))
+        val state = ToolpathGeometryUploadState(capacity = 2)
+
+        assertNull(state.markUploaded(requested))
+        assertNull(state.markUploaded(interaction))
+        state.markUsed(requested)
+        assertEquals(interaction, state.markUploaded(changed))
+        assertFalse("The recently used requested VBO must remain cached", state.needsUpload(requested))
+        assertTrue("The least recently used gesture VBO must be evicted", state.needsUpload(interaction))
+        assertFalse("The replacement VBO must be cached", state.needsUpload(changed))
+        state.remove(changed)
+        assertTrue("Removing stale geometry must release its cache entry", state.needsUpload(changed))
     }
 }
