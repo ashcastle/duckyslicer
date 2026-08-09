@@ -19,6 +19,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
+import kotlin.math.sqrt
 
 @RunWith(AndroidJUnit4::class)
 class NativeEngineInstrumentedTest {
@@ -1135,6 +1136,79 @@ class NativeEngineInstrumentedTest {
         } finally {
             output.delete()
         }
+    }
+
+    @Test
+    fun automaticArrangementUsesOrcaInTheIsolatedArm64WorkerAndRecoversAfterNoFit() {
+        val source = fixtureModel()
+        val model = ModelInfo.fromJson(
+            NativeEngine.inspectStl(source.absolutePath),
+            source.absolutePath,
+        )
+        val objects = listOf(
+            ProjectObject("arrange-first", model, ModelTransform(offsetXmm = -25f)),
+            ProjectObject("arrange-second", model, ModelTransform(offsetXmm = 25f)),
+        )
+        val options = SliceOptions().copy(bedSizeX = 100f, bedSizeY = 100f)
+
+        val arrangement = OnDeviceSlicer.arrange(objects, options, minimumGap = 6f)
+        assertEquals("Orca must return one placement per object", objects.size, arrangement.objectCount)
+        assertTrue(
+            "Automatic arrangement must run outside the application process",
+            SlicerProcessClient.lastWorkerPid() > 0 &&
+                SlicerProcessClient.lastWorkerPid() != android.os.Process.myPid(),
+        )
+        repeat(arrangement.objectCount) { index ->
+            val x = arrangement.lowerLeftMm[index * 2]
+            val y = arrangement.lowerLeftMm[index * 2 + 1]
+            val width = arrangement.sizesMm[index * 3]
+            val depth = arrangement.sizesMm[index * 3 + 1]
+            assertTrue("Arranged object must remain inside the bed", x >= -0.05f && y >= -0.05f)
+            assertTrue(
+                "Arranged object must remain inside the bed",
+                x + width <= options.bedSizeX + 0.05f &&
+                    y + depth <= options.bedSizeY + 0.05f,
+            )
+        }
+        val firstX = arrangement.lowerLeftMm[0]
+        val firstY = arrangement.lowerLeftMm[1]
+        val firstWidth = arrangement.sizesMm[0]
+        val firstDepth = arrangement.sizesMm[1]
+        val secondX = arrangement.lowerLeftMm[2]
+        val secondY = arrangement.lowerLeftMm[3]
+        val secondWidth = arrangement.sizesMm[3]
+        val secondDepth = arrangement.sizesMm[4]
+        val horizontalGap = maxOf(
+            secondX - (firstX + firstWidth),
+            firstX - (secondX + secondWidth),
+        )
+        val verticalGap = maxOf(
+            secondY - (firstY + firstDepth),
+            firstY - (secondY + secondDepth),
+        )
+        val measuredGap = sqrt(
+            horizontalGap.coerceAtLeast(0f) * horizontalGap.coerceAtLeast(0f) +
+                verticalGap.coerceAtLeast(0f) * verticalGap.coerceAtLeast(0f),
+        )
+        assertTrue(
+            "Orca arrangement must keep the requested object clearance; measured=$measuredGap, " +
+                "horizontal=$horizontalGap, vertical=$verticalGap",
+            measuredGap >= 5.8f,
+        )
+
+        val noFit = runCatching {
+            OnDeviceSlicer.arrange(
+                objects,
+                options.copy(bedSizeX = 10f, bedSizeY = 10f),
+                minimumGap = 6f,
+            )
+        }
+        assertTrue("Orca must reject objects that cannot fit on the bed", noFit.isFailure)
+        val healthyWorkerPid = SlicerProcessClient.workerHealthForTest(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+        )
+        assertTrue("The isolated slicer worker must remain healthy after no-fit", healthyWorkerPid > 0)
+        assertNotEquals("Orca must remain isolated from the app", android.os.Process.myPid(), healthyWorkerPid)
     }
 
     @Test

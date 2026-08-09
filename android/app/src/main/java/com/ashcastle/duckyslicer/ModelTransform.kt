@@ -42,6 +42,42 @@ internal data class OrcaOrientation(
     override fun hashCode(): Int = rotationRadians.contentHashCode()
 }
 
+data class OrcaArrangement(
+    val lowerLeftMm: FloatArray,
+    val sizesMm: FloatArray,
+    val centersMm: FloatArray,
+) {
+    init {
+        require(lowerLeftMm.size >= 2 && lowerLeftMm.size % 2 == 0) {
+            "Orca arrangement positions are invalid"
+        }
+        require(sizesMm.size == lowerLeftMm.size / 2 * 3) {
+            "Orca arrangement sizes are invalid"
+        }
+        require(centersMm.size == lowerLeftMm.size) {
+            "Orca arrangement centers are invalid"
+        }
+        require(
+            lowerLeftMm.all { it.isFinite() } &&
+                sizesMm.all { it.isFinite() && it > 0f } &&
+                centersMm.all { it.isFinite() },
+        ) {
+            "Orca arrangement geometry is invalid"
+        }
+    }
+
+    val objectCount: Int get() = lowerLeftMm.size / 2
+
+    override fun equals(other: Any?): Boolean = other is OrcaArrangement &&
+        lowerLeftMm.contentEquals(other.lowerLeftMm) &&
+        sizesMm.contentEquals(other.sizesMm) &&
+        centersMm.contentEquals(other.centersMm)
+
+    override fun hashCode(): Int = 31 * (
+        31 * lowerLeftMm.contentHashCode() + sizesMm.contentHashCode()
+    ) + centersMm.contentHashCode()
+}
+
 internal fun ModelTransform.rotate(point: FloatArray): FloatArray {
     val rx = Math.toRadians(rotationXdeg.toDouble()).toFloat()
     val ry = Math.toRadians(rotationYdeg.toDouble()).toFloat()

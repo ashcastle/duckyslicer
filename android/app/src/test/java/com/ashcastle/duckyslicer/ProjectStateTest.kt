@@ -72,14 +72,24 @@ class ProjectStateTest {
     }
 
     @Test
-    fun duplicateAndArrangeAreSingleUndoableProjectEdits() {
+    fun duplicateAndOrcaArrangementAreSingleUndoableProjectEdits() {
         var state = ProjectHistoryState().add(projectObject("part"))
         state = state.duplicateSelected("copy")
         assertEquals(2, state.current.objects.size)
         assertEquals("copy", state.current.selectedObjectId)
 
-        state = state.arrange(100f, 100f)
-        assertTrue(state.current.objects.all { it.transform.offsetXmm < 0f })
+        state = state.applyOrcaArrangement(
+            OrcaArrangement(
+                lowerLeftMm = floatArrayOf(10f, 10f, 20f, 10f),
+                sizesMm = floatArrayOf(1f, 1f, 1f, 1f, 1f, 1f),
+                centersMm = floatArrayOf(55f, 56f, 43f, 42f),
+            ),
+            bedSizeX = 100f,
+            bedSizeY = 100f,
+        )
+        assertEquals(5f, state.current.objects.first().transform.offsetXmm)
+        assertEquals(-7f, state.current.selectedObject!!.transform.offsetXmm)
+        assertEquals(-8f, state.current.selectedObject!!.transform.offsetYmm)
         state = state.undo()
         assertEquals(12f, state.current.selectedObject!!.transform.offsetXmm)
     }

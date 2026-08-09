@@ -8,6 +8,8 @@
     <string name="redo">Redo</string>
     <string name="duplicate_object">Duplicate object</string>
     <string name="arrange_objects">Arrange objects</string>
+    <string name="arrange_done">Objects arranged.</string>
+    <string name="arrange_error">The objects could not be arranged on this bed.</string>
     <string name="app_name">DuckySlicer</string>
     <string name="workspace_title">Prepare</string>
     <string name="workspace_subtitle">Choose a model and get it ready to print.</string>

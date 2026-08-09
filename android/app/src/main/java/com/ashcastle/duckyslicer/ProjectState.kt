@@ -64,30 +64,23 @@ data class ProjectHistoryState(
         )
     }
 
-    fun arrange(bedSizeX: Float, bedSizeY: Float, gap: Float = 6f): ProjectHistoryState {
-        if (current.objects.isEmpty()) return this
-        var cursorX = gap
-        var cursorY = gap
-        var rowDepth = 0f
-        val arranged = ArrayList<ProjectObject>(current.objects.size)
-        current.objects.forEach { projectObject ->
-            val (width, depth) = projectObject.footprintMm()
-            if (cursorX + width + gap > bedSizeX) {
-                cursorX = gap
-                cursorY += rowDepth + gap
-                rowDepth = 0f
-            }
-            if (cursorY + depth + gap > bedSizeY) return this
-            arranged += projectObject.copy(
+    fun applyOrcaArrangement(
+        arrangement: OrcaArrangement,
+        bedSizeX: Float,
+        bedSizeY: Float,
+    ): ProjectHistoryState {
+        require(arrangement.objectCount == current.objects.size) {
+            "Arrangement count does not match the project"
+        }
+        val arranged = current.objects.mapIndexed { index, projectObject ->
+            projectObject.copy(
                 transform = projectObject.transform.copy(
-                    offsetXmm = cursorX + width / 2f - bedSizeX / 2f,
-                    offsetYmm = cursorY + depth / 2f - bedSizeY / 2f,
+                    offsetXmm = arrangement.centersMm[index * 2] - bedSizeX / 2f,
+                    offsetYmm = arrangement.centersMm[index * 2 + 1] - bedSizeY / 2f,
                 ),
             )
-            cursorX += width + gap
-            rowDepth = maxOf(rowDepth, depth)
         }
-        return record(current.copy(objects = arranged))
+        return if (arranged == current.objects) this else record(current.copy(objects = arranged))
     }
 
     fun select(objectId: String?): ProjectHistoryState {
@@ -205,27 +198,4 @@ data class ProjectHistoryState(
     private companion object {
         const val HISTORY_LIMIT = 60
     }
-}
-
-private fun ProjectObject.footprintMm(): Pair<Float, Float> {
-    val halfX = model.dimensions[0].toFloat() * transform.scale / 2f
-    val halfY = model.dimensions[1].toFloat() * transform.scale / 2f
-    val halfZ = model.dimensions[2].toFloat() * transform.scale / 2f
-    var minimumX = Float.POSITIVE_INFINITY
-    var maximumX = Float.NEGATIVE_INFINITY
-    var minimumY = Float.POSITIVE_INFINITY
-    var maximumY = Float.NEGATIVE_INFINITY
-    listOf(-halfX, halfX).forEach { x ->
-        listOf(-halfY, halfY).forEach { y ->
-            listOf(-halfZ, halfZ).forEach { z ->
-                val rotated = transform.rotate(floatArrayOf(x, y, z))
-                minimumX = minOf(minimumX, rotated[0])
-                maximumX = maxOf(maximumX, rotated[0])
-                minimumY = minOf(minimumY, rotated[1])
-                maximumY = maxOf(maximumY, rotated[1])
-            }
-        }
-    }
-    return (maximumX - minimumX).coerceAtLeast(0.1f) to
-        (maximumY - minimumY).coerceAtLeast(0.1f)
 }

@@ -40,4 +40,35 @@ class ModelTransformTest {
             assertTrue(runCatching { OrcaOrientation(rotations) }.isFailure)
         }
     }
+
+    @Test
+    fun orcaArrangementRejectsCountAndGeometryMismatches() {
+        val malformed = listOf(
+            { OrcaArrangement(floatArrayOf(), floatArrayOf(), floatArrayOf()) },
+            { OrcaArrangement(floatArrayOf(0f, 0f), floatArrayOf(1f, 1f), floatArrayOf(0f, 0f)) },
+            {
+                OrcaArrangement(
+                    floatArrayOf(0f, Float.NaN),
+                    floatArrayOf(1f, 1f, 1f),
+                    floatArrayOf(0f, 0f),
+                )
+            },
+            {
+                OrcaArrangement(
+                    floatArrayOf(0f, 0f),
+                    floatArrayOf(1f, 0f, 1f),
+                    floatArrayOf(0f, 0f),
+                )
+            },
+            {
+                OrcaArrangement(
+                    floatArrayOf(0f, 0f),
+                    floatArrayOf(1f, 1f, 1f),
+                    floatArrayOf(Float.NaN, 0f),
+                )
+            },
+        )
+
+        malformed.forEach { create -> assertTrue(runCatching(create).isFailure) }
+    }
 }

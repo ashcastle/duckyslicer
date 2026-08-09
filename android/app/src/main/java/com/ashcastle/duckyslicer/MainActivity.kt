@@ -113,6 +113,8 @@ private fun DuckySlicerScreen() {
     val modelTooLargeError = stringResource(R.string.model_too_large_error)
     val autoLayDone = stringResource(R.string.auto_lay_done)
     val autoLayError = stringResource(R.string.auto_lay_error)
+    val arrangeDone = stringResource(R.string.arrange_done)
+    val arrangeError = stringResource(R.string.arrange_error)
     val sliceError = stringResource(R.string.slice_error)
     val sliceCanceledNotice = stringResource(R.string.slice_canceled)
     val saveError = stringResource(R.string.save_error)
@@ -142,6 +144,7 @@ private fun DuckySlicerScreen() {
     var notice by remember { mutableStateOf<String?>(null) }
     var importing by remember { mutableStateOf(false) }
     var autoLaying by remember { mutableStateOf(false) }
+    var arranging by remember { mutableStateOf(false) }
     var slicing by remember { mutableStateOf(false) }
     var sliceCancellationRequested by remember { mutableStateOf(false) }
     var sliceProgress by remember { mutableIntStateOf(0) }
@@ -210,7 +213,7 @@ private fun DuckySlicerScreen() {
     }
 
     val keepScreenAwake = appSettings.keepScreenAwakeWhileWorking &&
-        (importing || autoLaying || slicing || previewLoading || remoteBusy)
+        (importing || autoLaying || arranging || slicing || previewLoading || remoteBusy)
     DisposableEffect(keepScreenAwake) {
         val window = (context as? MainActivity)?.window
         if (keepScreenAwake) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -245,7 +248,7 @@ private fun DuckySlicerScreen() {
 
     fun autoLaySelectedModel() {
         val target = projectHistory.current.selectedObject ?: return
-        if (autoLaying || importing || slicing || previewLoading) return
+        if (autoLaying || arranging || importing || slicing || previewLoading) return
         autoLaying = true
         error = null
         notice = null
@@ -280,8 +283,44 @@ private fun DuckySlicerScreen() {
         }
     }
 
+    fun arrangeProjectObjects() {
+        val targets = projectHistory.current.objects
+        if (targets.size < 2 || arranging || autoLaying || importing || slicing || previewLoading) return
+        arranging = true
+        error = null
+        notice = null
+        sliceOutcome = null
+        layerPreview = null
+        sliceProgress = 0
+        remoteUpload = null
+        val targetOptions = sliceOptions
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { OnDeviceSlicer.arrange(targets, targetOptions) }
+            }.onSuccess { arrangement ->
+                val currentObjects = projectHistory.current.objects
+                if (currentObjects.map(ProjectObject::id) == targets.map(ProjectObject::id) &&
+                    currentObjects.map(ProjectObject::transform) == targets.map(ProjectObject::transform)
+                ) {
+                    projectHistory = projectHistory.applyOrcaArrangement(
+                        arrangement,
+                        targetOptions.bedSizeX,
+                        targetOptions.bedSizeY,
+                    )
+                    notice = arrangeDone
+                    error = null
+                }
+            }.onFailure { failure ->
+                if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Automatic arrangement failed", failure)
+                error = arrangeError
+                notice = null
+            }
+            arranging = false
+        }
+    }
+
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null && projectRestored && !autoLaying && !slicing && !previewLoading) {
+        if (uri != null && projectRestored && !autoLaying && !arranging && !slicing && !previewLoading) {
             importing = true
             error = null
             notice = null
@@ -346,7 +385,7 @@ private fun DuckySlicerScreen() {
 
     val loadPreviewRange: (Int, Int) -> Unit = { startLayer, endLayer ->
         val output = sliceOutcome?.output
-        if (output != null && !previewLoading && !slicing) {
+        if (output != null && !previewLoading && !slicing && !autoLaying && !arranging) {
             previewLoading = true
             scope.launch {
                 runCatching {
@@ -374,7 +413,7 @@ private fun DuckySlicerScreen() {
 
     val startSlice = {
         val objects = projectObjects
-        if (objects.isNotEmpty() && !slicing && !importing && !previewLoading) {
+        if (objects.isNotEmpty() && !slicing && !importing && !autoLaying && !arranging && !previewLoading) {
             slicing = true
             sliceCancellationRequested = false
             sliceProgress = 0
@@ -521,6 +560,7 @@ private fun DuckySlicerScreen() {
         layerPreview = layerPreview,
         importing = importing || !projectRestored,
         autoLaying = autoLaying,
+        arranging = arranging,
         slicing = slicing,
         sliceCancellationRequested = sliceCancellationRequested,
         sliceProgress = sliceProgress,
@@ -564,12 +604,7 @@ private fun DuckySlicerScreen() {
             layerPreview = null
             remoteUpload = null
         },
-        onArrange = {
-            projectHistory = projectHistory.arrange(sliceOptions.bedSizeX, sliceOptions.bedSizeY)
-            sliceOutcome = null
-            layerPreview = null
-            remoteUpload = null
-        },
+        onArrange = ::arrangeProjectObjects,
         onAutoLay = ::autoLaySelectedModel,
         onSupportPaintPreview = { objectId, facetIndex, state ->
             val projectObject = projectHistory.current.objects.firstOrNull { it.id == objectId }
