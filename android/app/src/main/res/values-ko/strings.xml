@@ -395,6 +395,7 @@
     <string name="confirm_remote_print">시작 전 확인</string>
     <string name="confirm_remote_print_summary">원격 출력을 시작하기 전에 한 번 더 확인합니다.</string>
     <string name="connection_timeout">최대 %1$d초 기다리기</string>
+    <string name="connection_timeout_control">연결 대기 시간</string>
     <string name="connection_security_summary">접속 키는 이 기기에서 보호됩니다. 암호화되지 않은 연결은 로컬 주소에서만 허용됩니다.</string>
     <string name="language_settings">언어</string>
     <string name="data_privacy">데이터 및 개인정보</string>

@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -122,7 +123,11 @@ internal fun ProfileSettings(
         }
     }
 
-    Text(stringResource(R.string.profiles), fontWeight = FontWeight.Bold)
+    Text(
+        stringResource(R.string.profiles),
+        modifier = Modifier.semantics { heading() },
+        fontWeight = FontWeight.Bold,
+    )
     ProfileRow(
         title = stringResource(R.string.printer_profile),
         summary = stringResource(
@@ -2025,7 +2030,12 @@ private fun SlicingSettingsTabs(
 
 @Composable
 private fun SettingsGroupTitle(title: String) {
-    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    Text(
+        title,
+        modifier = Modifier.semantics { heading() },
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+    )
     HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
 }
 
@@ -2232,7 +2242,12 @@ private fun SettingsSheet(
                     .padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    title,
+                    modifier = Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                )
                 content()
                 Button(
                     onClick = onDismiss,

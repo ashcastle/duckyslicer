@@ -9,12 +9,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 
 /** Debug-only host for deterministic device accessibility regressions. */
@@ -27,6 +30,15 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                     when (intent.getStringExtra(EXTRA_SCREEN)) {
                         SCREEN_PROFILE -> ProfileAccessibilityHarness()
                         SCREEN_DEVICE -> DeviceAccessibilityHarness()
+                        SCREEN_SETTINGS -> SettingsAccessibilityHarness()
+                        SCREEN_WORKSPACE -> {
+                            val density = LocalDensity.current
+                            CompositionLocalProvider(
+                                LocalDensity provides Density(density.density, fontScale = 2f),
+                            ) {
+                                WorkspaceAccessibilityHarness()
+                            }
+                        }
                         else -> PreviewAccessibilityHarness()
                     }
                 }
@@ -39,6 +51,8 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_PREVIEW = "preview"
         const val SCREEN_PROFILE = "profile"
         const val SCREEN_DEVICE = "device"
+        const val SCREEN_SETTINGS = "settings"
+        const val SCREEN_WORKSPACE = "workspace"
     }
 }
 
@@ -119,6 +133,81 @@ private fun DeviceAccessibilityHarness() {
         onPause = {},
         onResume = {},
         onCancel = {},
+    )
+}
+
+@Composable
+private fun SettingsAccessibilityHarness() {
+    var settings by remember { mutableStateOf(AppSettings()) }
+    AppSettingsSheet(
+        settings = settings,
+        onSettingsChanged = { settings = it },
+    )
+}
+
+@Composable
+private fun WorkspaceAccessibilityHarness() {
+    WorkspaceScreen(
+        selectedTab = WorkspaceTab.SLICE,
+        projectObjects = emptyList(),
+        selectedObjectId = null,
+        sliceOptions = SliceOptions(),
+        profileCatalog = ProfileCatalog(),
+        profileRecents = ProfileRecents(),
+        appSettings = AppSettings(),
+        remoteDevices = emptyList(),
+        selectedRemoteDeviceId = null,
+        remoteStatus = null,
+        remoteUpload = null,
+        remoteBusy = false,
+        remoteUploadProgress = null,
+        remoteMessage = null,
+        remoteMessageIsError = false,
+        sliceOutcome = null,
+        layerPreview = null,
+        importing = false,
+        autoLaying = false,
+        arranging = false,
+        slicing = false,
+        sliceCancellationRequested = false,
+        sliceProgress = 0,
+        previewLoading = false,
+        error = null,
+        notice = null,
+        canUndo = false,
+        canRedo = false,
+        onTabSelected = {},
+        onChoose = {},
+        onObjectSelected = {},
+        onModelTransformChanged = {},
+        onModelTransformPreview = {},
+        onModelTransformCommitted = {},
+        onUndo = {},
+        onRedo = {},
+        onDuplicate = {},
+        onArrange = {},
+        onAutoLay = {},
+        onSupportPaintPreview = { _, _, _ -> },
+        onSupportPaintCommitted = { _, _ -> },
+        onRemoveModel = {},
+        onSlice = {},
+        onCancelSlice = {},
+        onSave = {},
+        onSliceOptionsChanged = {},
+        onSavePrinterProfile = { _, _ -> },
+        onSaveFilamentProfile = { _, _ -> },
+        onSaveSlicingProfile = { _, _ -> },
+        onLayerRangeSelected = { _, _ -> },
+        onAppSettingsChanged = {},
+        onRemoteDeviceSelected = {},
+        onRemoteDeviceSaved = {},
+        onRemoteDeviceDeleted = {},
+        onRemoteRefresh = {},
+        onRemoteUpload = {},
+        onRemoteStart = {},
+        onRemotePause = {},
+        onRemoteResume = {},
+        onRemoteCancel = {},
     )
 }
 

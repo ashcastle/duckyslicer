@@ -103,6 +103,7 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
@@ -126,12 +127,16 @@ private val WorkspacePanel = Color(0xEE2A2A27)
 private const val PreviewDepthBands = 12
 private const val TabletShortestSideDp = 600f
 private const val CompactNavigationLabelFontScale = 1.5f
+private const val WorkspaceTopOverlayClearanceDp = 82f
 
 internal fun useWorkspaceNavigationRail(widthDp: Float, heightDp: Float): Boolean =
     minOf(widthDp, heightDp) >= TabletShortestSideDp
 
 internal fun showWorkspaceNavigationLabels(fontScale: Float): Boolean =
     fontScale < CompactNavigationLabelFontScale
+
+internal fun workspacePanelMaxHeightDp(availableHeightDp: Float): Float =
+    (availableHeightDp - WorkspaceTopOverlayClearanceDp).coerceAtLeast(1f)
 
 internal fun workspaceEditingBusy(
     autoLaying: Boolean,
@@ -253,7 +258,6 @@ internal fun WorkspaceScreen(
     val editingBusy = workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading)
     val tabletLayout = useWorkspaceNavigationRail(maxWidth.value, maxHeight.value)
     val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
-    val panelMaxHeight = (maxHeight - if (tabletLayout) 24.dp else 94.dp).coerceAtLeast(320.dp)
     var showModelTools by remember { mutableStateOf(false) }
     var supportPainting by remember { mutableStateOf(false) }
     var supportPaintTool by remember { mutableStateOf(SupportPaintTool.ENFORCE) }
@@ -270,7 +274,10 @@ internal fun WorkspaceScreen(
     ) { padding ->
         Row(Modifier.fillMaxSize().padding(padding)) {
             if (tabletLayout) WorkspaceNavigationRail(selectedTab = selectedTab, onSelected = onTabSelected)
-            Box(modifier = Modifier.weight(1f).fillMaxSize()) {
+            BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxSize()) {
+                // Measure below Scaffold insets and navigation. This keeps the menu and
+                // export actions reachable when large text makes a bottom sheet fill its height.
+                val panelMaxHeight = workspacePanelMaxHeightDp(maxHeight.value).dp
                 BedScene(
                     projectObjects = projectObjects,
                     selectedObjectId = selectedObjectId,
@@ -524,7 +531,11 @@ private fun ModelTransformSheet(
                 .padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(stringResource(R.string.model_placement), style = MaterialTheme.typography.titleLarge)
+            Text(
+                stringResource(R.string.model_placement),
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleLarge,
+            )
             TransformSlider(
                 label = stringResource(R.string.move_x),
                 valueText = stringResource(R.string.millimeters_value, transform.offsetXmm),
@@ -1919,7 +1930,11 @@ private fun ProjectSheet(
     modifier: Modifier = Modifier,
 ) {
     WorkspaceCard(modifier) {
-        Text(stringResource(R.string.tab_project), fontWeight = FontWeight.Bold)
+        Text(
+            stringResource(R.string.tab_project),
+            modifier = Modifier.semantics { heading() },
+            fontWeight = FontWeight.Bold,
+        )
         Text(
             if (objects.isEmpty()) stringResource(R.string.no_model)
             else stringResource(R.string.object_count, objects.size),

@@ -44,6 +44,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -92,7 +94,11 @@ internal fun DeviceSheet(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(stringResource(R.string.device_profiles), style = MaterialTheme.typography.titleLarge)
+                Text(
+                    stringResource(R.string.device_profiles),
+                    modifier = Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.titleLarge,
+                )
                 TextButton(onClick = { editing = RemoteDeviceDraft() }) {
                     Icon(Icons.Default.Add, null)
                     Spacer(Modifier.width(4.dp))
