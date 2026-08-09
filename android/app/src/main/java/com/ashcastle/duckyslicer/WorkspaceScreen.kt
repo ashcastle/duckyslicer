@@ -2,6 +2,7 @@ package com.ashcastle.duckyslicer
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -97,7 +99,14 @@ import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -646,6 +655,10 @@ private fun TransformSlider(
         value = value,
         enabled = enabled,
         onValueChange = onValueChange,
+        modifier = Modifier.semantics {
+            contentDescription = label
+            stateDescription = valueText
+        },
         valueRange = range,
         colors = duckySliderColors(),
     )
@@ -1683,7 +1696,8 @@ private fun PreviewSummaryHeader(
 }
 
 @Composable
-private fun PreviewControls(
+@OptIn(ExperimentalMaterial3Api::class)
+internal fun PreviewControls(
     preview: GcodeLayerPreview,
     toolpathOpacity: Float,
     onToolpathOpacityChanged: (Float) -> Unit,
@@ -1699,6 +1713,17 @@ private fun PreviewControls(
     var selectedRange by remember(safeStartLayer, safeEndLayer, preview.layerCount) {
         mutableStateOf(safeStartLayer.toFloat()..safeEndLayer.toFloat())
     }
+    val rangeColors = duckySliderColors()
+    val toolpathVisibilityLabel = stringResource(R.string.toolpath_visibility_control)
+    val toolpathVisibilityState = stringResource(
+        R.string.percent_value,
+        (toolpathOpacity * 100).roundToInt(),
+    )
+    val toolpathDepthLabel = stringResource(R.string.toolpath_depth_contrast_control)
+    val toolpathDepthState = stringResource(
+        R.string.percent_value,
+        (toolpathDepthContrast * 100).roundToInt(),
+    )
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
@@ -1716,18 +1741,93 @@ private fun PreviewControls(
             )
         }
         if (preview.layerCount > 1) {
-            RangeSlider(
-                value = selectedRange,
-                onValueChange = { selectedRange = it },
-                onValueChangeFinished = {
-                    onLayerRangeSelected(
-                        selectedRange.start.roundToInt(),
-                        selectedRange.endInclusive.roundToInt(),
-                    )
-                },
-                valueRange = 0f..lastLayerIndex.toFloat(),
-                steps = 0,
+            val startLayerLabel = stringResource(R.string.first_visible_layer)
+            val endLayerLabel = stringResource(R.string.last_visible_layer)
+            val startLayerState = stringResource(
+                R.string.layer_position,
+                selectedRange.start.roundToInt() + 1,
+                preview.layerCount,
             )
+            val endLayerState = stringResource(
+                R.string.layer_position,
+                selectedRange.endInclusive.roundToInt() + 1,
+                preview.layerCount,
+            )
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                RangeSlider(
+                    value = selectedRange,
+                    onValueChange = { selectedRange = it },
+                    onValueChangeFinished = {
+                        onLayerRangeSelected(
+                            selectedRange.start.roundToInt(),
+                            selectedRange.endInclusive.roundToInt(),
+                        )
+                    },
+                    modifier = Modifier.clearAndSetSemantics { },
+                    valueRange = 0f..lastLayerIndex.toFloat(),
+                    colors = rangeColors,
+                    steps = 0,
+                )
+
+                val accessibilityThumbSize = 48.dp
+                val accessibilityTrackWidth = (maxWidth - accessibilityThumbSize).coerceAtLeast(0.dp)
+                val rangeMaximum = lastLayerIndex.toFloat()
+                val startFraction = (selectedRange.start / rangeMaximum).coerceIn(0f, 1f)
+                val endFraction = (selectedRange.endInclusive / rangeMaximum).coerceIn(0f, 1f)
+
+                Box(
+                    Modifier
+                        .offset(x = accessibilityTrackWidth * startFraction)
+                        .size(accessibilityThumbSize)
+                        .semantics {
+                            contentDescription = startLayerLabel
+                            stateDescription = startLayerState
+                            progressBarRangeInfo = ProgressBarRangeInfo(
+                                current = selectedRange.start,
+                                range = 0f..rangeMaximum,
+                            )
+                            setProgress { requestedValue ->
+                                val nextStart = requestedValue
+                                    .roundToInt()
+                                    .coerceIn(0, selectedRange.endInclusive.roundToInt())
+                                    .toFloat()
+                                selectedRange = nextStart..selectedRange.endInclusive
+                                onLayerRangeSelected(
+                                    nextStart.roundToInt(),
+                                    selectedRange.endInclusive.roundToInt(),
+                                )
+                                true
+                            }
+                        }
+                        .focusable(),
+                )
+                Box(
+                    Modifier
+                        .offset(x = accessibilityTrackWidth * endFraction)
+                        .size(accessibilityThumbSize)
+                        .semantics {
+                            contentDescription = endLayerLabel
+                            stateDescription = endLayerState
+                            progressBarRangeInfo = ProgressBarRangeInfo(
+                                current = selectedRange.endInclusive,
+                                range = 0f..rangeMaximum,
+                            )
+                            setProgress { requestedValue ->
+                                val nextEnd = requestedValue
+                                    .roundToInt()
+                                    .coerceIn(selectedRange.start.roundToInt(), lastLayerIndex)
+                                    .toFloat()
+                                selectedRange = selectedRange.start..nextEnd
+                                onLayerRangeSelected(
+                                    selectedRange.start.roundToInt(),
+                                    nextEnd.roundToInt(),
+                                )
+                                true
+                            }
+                        }
+                        .focusable(),
+                )
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1742,6 +1842,10 @@ private fun PreviewControls(
                 Slider(
                     value = toolpathOpacity,
                     onValueChange = onToolpathOpacityChanged,
+                    modifier = Modifier.semantics {
+                        contentDescription = toolpathVisibilityLabel
+                        stateDescription = toolpathVisibilityState
+                    },
                     valueRange = 0.3f..1f,
                     colors = duckySliderColors(),
                 )
@@ -1758,6 +1862,10 @@ private fun PreviewControls(
                 Slider(
                     value = toolpathDepthContrast,
                     onValueChange = onToolpathDepthContrastChanged,
+                    modifier = Modifier.semantics {
+                        contentDescription = toolpathDepthLabel
+                        stateDescription = toolpathDepthState
+                    },
                     valueRange = 0f..1f,
                     colors = duckySliderColors(),
                 )
