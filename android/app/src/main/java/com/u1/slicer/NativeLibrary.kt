@@ -21,8 +21,14 @@ class NativeLibrary(
     external fun loadModel(path: String): Boolean
     external fun addModel(path: String): Boolean
     external fun nativeAutoOrientObject(objectIndex: Int): DoubleArray?
+    external fun nativeAutoArrangeObjects(
+        bedSizeX: Float,
+        bedSizeY: Float,
+        minimumGap: Float,
+    ): FloatArray?
     external fun applySupportPaint(objectIndex: Int, sidecarPath: String): Boolean
     external fun getObjectBoundingBoxes(): FloatArray
+    external fun nativeGetObjectWorldAABBMins(): FloatArray
     external fun clearModel()
     external fun getModelInfo(): ModelInfo?
     external fun slice(config: SliceConfig): SliceResult?

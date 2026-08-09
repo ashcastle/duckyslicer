@@ -110,6 +110,61 @@ internal object SlicerProcessClient {
         }
     }
 
+    /** Uses OrcaSlicer's silhouette-aware arrangement engine in the isolated worker. */
+    fun autoArrange(
+        transformedModels: List<File>,
+        bedSizeX: Float,
+        bedSizeY: Float,
+        minimumGap: Float = 6f,
+    ): OrcaArrangement {
+        check(Looper.myLooper() != Looper.getMainLooper()) {
+            "Automatic arrangement must run outside the application main thread"
+        }
+        require(transformedModels.size >= 2) { "At least two models are required" }
+        val requestId = UUID.randomUUID().toString()
+        val modelPaths = transformedModels.map(File::getAbsolutePath)
+        require(encodedRequestBytes(modelPaths, "") <= SlicerProcessContract.MAX_REQUEST_BYTES) {
+            "Arrange request is too large"
+        }
+        check(activeRequestId.compareAndSet(null, requestId)) {
+            "Another slicer operation is already running"
+        }
+        return try {
+            val response = withWorker(DuckySlicerApplication.context()) { worker ->
+                worker.request(
+                    what = SlicerProcessContract.MESSAGE_AUTO_ARRANGE,
+                    data = Bundle().apply {
+                        putString(SlicerProcessContract.KEY_REQUEST_ID, requestId)
+                        putStringArrayList(SlicerProcessContract.KEY_MODEL_PATHS, ArrayList(modelPaths))
+                        putFloat(SlicerProcessContract.KEY_BED_SIZE_X, bedSizeX)
+                        putFloat(SlicerProcessContract.KEY_BED_SIZE_Y, bedSizeY)
+                        putFloat(SlicerProcessContract.KEY_MINIMUM_GAP, minimumGap)
+                    },
+                    timeoutSeconds = ARRANGEMENT_TIMEOUT_SECONDS,
+                )
+            }
+            check(response.getBoolean(SlicerProcessContract.KEY_OK)) {
+                response.getString(SlicerProcessContract.KEY_ERROR)
+                    ?: "The objects could not be arranged"
+            }
+            latestWorkerPid = response.getInt(SlicerProcessContract.KEY_PID)
+            OrcaArrangement(
+                lowerLeftMm = requireNotNull(
+                    response.getFloatArray(SlicerProcessContract.KEY_ARRANGED_LOWER_LEFT),
+                ) { "OrcaSlicer returned no arrangement" },
+                sizesMm = requireNotNull(
+                    response.getFloatArray(SlicerProcessContract.KEY_OBJECT_SIZES),
+                ) { "OrcaSlicer returned no object sizes" },
+                centersMm = requireNotNull(
+                    response.getFloatArray(SlicerProcessContract.KEY_OBJECT_CENTERS),
+                ) { "OrcaSlicer returned no object centers" },
+            )
+        } finally {
+            activeRequestId.compareAndSet(requestId, null)
+            cancelledRequestId.compareAndSet(requestId, null)
+        }
+    }
+
     private fun sliceInternal(
         transformedModels: List<File>,
         supportPaintFiles: List<File?>,
@@ -392,6 +447,7 @@ internal object SlicerProcessClient {
         private fun cancelAbandonedWork(activeBinder: IBinder, what: Int, data: Bundle) {
             val cancellable = what == SlicerProcessContract.MESSAGE_SLICE ||
                 what == SlicerProcessContract.MESSAGE_AUTO_ORIENT ||
+                what == SlicerProcessContract.MESSAGE_AUTO_ARRANGE ||
                 what == SlicerProcessContract.MESSAGE_BLOCK_FOR_TEST
             if (!cancellable) return
             val requestId = data.getString(SlicerProcessContract.KEY_REQUEST_ID) ?: return
@@ -421,6 +477,7 @@ internal object SlicerProcessClient {
     }
 
     private const val CONNECTION_TIMEOUT_SECONDS = 10L
+    private const val ARRANGEMENT_TIMEOUT_SECONDS = 5L * 60L
     private const val ORIENTATION_TIMEOUT_SECONDS = 5L * 60L
     private const val SLICE_TIMEOUT_SECONDS = 30L * 60L
     private const val TEST_PROBE_TIMEOUT_SECONDS = 60L
@@ -484,12 +541,9 @@ class SlicerProcessService : Service() {
 
     private fun handleMessage(message: Message) {
         when (message.what) {
-            SlicerProcessContract.MESSAGE_SLICE -> startWork(message, testProbe = false)
-            SlicerProcessContract.MESSAGE_AUTO_ORIENT -> startWork(
-                message,
-                testProbe = false,
-                autoOrient = true,
-            )
+            SlicerProcessContract.MESSAGE_SLICE -> startWork(message, WorkOperation.SLICE)
+            SlicerProcessContract.MESSAGE_AUTO_ORIENT -> startWork(message, WorkOperation.AUTO_ORIENT)
+            SlicerProcessContract.MESSAGE_AUTO_ARRANGE -> startWork(message, WorkOperation.AUTO_ARRANGE)
             SlicerProcessContract.MESSAGE_CANCEL -> cancelWork(message)
             SlicerProcessContract.MESSAGE_HEALTH -> send(
                 message.replyTo,
@@ -515,7 +569,7 @@ class SlicerProcessService : Service() {
             }
             SlicerProcessContract.MESSAGE_BLOCK_FOR_TEST -> {
                 if (BuildConfig.DEBUG) {
-                    startWork(message, testProbe = true)
+                    startWork(message, WorkOperation.TEST_PROBE)
                 } else {
                     send(
                         message.replyTo,
@@ -532,7 +586,7 @@ class SlicerProcessService : Service() {
         }
     }
 
-    private fun startWork(message: Message, testProbe: Boolean, autoOrient: Boolean = false) {
+    private fun startWork(message: Message, operation: WorkOperation) {
         val requestId = message.data.getString(SlicerProcessContract.KEY_REQUEST_ID)
         if (requestId == null || requestId.length !in 1..MAX_REQUEST_ID_LENGTH) {
             send(
@@ -554,10 +608,11 @@ class SlicerProcessService : Service() {
         val requestData = Bundle(message.data)
         val reply = message.replyTo
         val accepted = sliceHandler.post {
-            val result = when {
-                testProbe -> runCancellationProbe(reply)
-                autoOrient -> runAutoOrient(requestData)
-                else -> runSlice(requestData) { percent ->
+            val result = when (operation) {
+                WorkOperation.TEST_PROBE -> runCancellationProbe(reply)
+                WorkOperation.AUTO_ORIENT -> runAutoOrient(requestData)
+                WorkOperation.AUTO_ARRANGE -> runAutoArrange(requestData)
+                WorkOperation.SLICE -> runSlice(requestData) { percent ->
                     send(reply, SlicerProcessContract.MESSAGE_PROGRESS, percent)
                 }
             }
@@ -566,7 +621,7 @@ class SlicerProcessService : Service() {
                 send(reply, SlicerProcessContract.MESSAGE_RESULT, data = result)
             }
         }
-        if (accepted && !testProbe && !autoOrient) scheduleStorageGuard(requestId)
+        if (accepted && operation == WorkOperation.SLICE) scheduleStorageGuard(requestId)
         if (!accepted) {
             activeRequestId.compareAndSet(requestId, null)
             send(
@@ -703,6 +758,73 @@ class SlicerProcessService : Service() {
         failure(error.message ?: "OrcaSlicer could not orient the model")
     }
 
+    private fun runAutoArrange(extras: Bundle): Bundle = try {
+        val paths = requireNotNull(extras.getStringArrayList(SlicerProcessContract.KEY_MODEL_PATHS)) {
+            "Model paths are unavailable"
+        }
+        require(paths.size in 2..MAX_OBJECTS) { "Invalid model count" }
+        require(encodedRequestBytes(paths, "") <= SlicerProcessContract.MAX_REQUEST_BYTES) {
+            "Arrange request is too large"
+        }
+        val models = paths.map(::validateModel)
+        val bedSizeX = extras.getFloat(SlicerProcessContract.KEY_BED_SIZE_X)
+        val bedSizeY = extras.getFloat(SlicerProcessContract.KEY_BED_SIZE_Y)
+        val minimumGap = extras.getFloat(SlicerProcessContract.KEY_MINIMUM_GAP)
+        require(
+            bedSizeX.isFinite() && bedSizeX in MINIMUM_BED_SIZE_MM..MAXIMUM_BED_SIZE_MM &&
+                bedSizeY.isFinite() && bedSizeY in MINIMUM_BED_SIZE_MM..MAXIMUM_BED_SIZE_MM &&
+                minimumGap.isFinite() && minimumGap in 0f..MAXIMUM_ARRANGE_GAP_MM,
+        ) { "Arrange settings are invalid" }
+
+        val runtime = createNativeRuntime()
+        try {
+            check(runtime.loadModel(models.first().absolutePath)) { "Model could not be prepared" }
+            models.drop(1).forEach { model ->
+                check(runtime.addModel(model.absolutePath)) { "Additional model could not be prepared" }
+            }
+            val sizes = runtime.getObjectBoundingBoxes()
+            require(sizes.size == models.size * 3 && sizes.all { it.isFinite() && it > 0f }) {
+                "OrcaSlicer returned invalid object sizes"
+            }
+            val originalLowerLeft = runtime.nativeGetObjectWorldAABBMins()
+            require(originalLowerLeft.size == models.size * 2 && originalLowerLeft.all(Float::isFinite)) {
+                "OrcaSlicer returned invalid source positions"
+            }
+            val lowerLeft = requireNotNull(
+                runtime.nativeAutoArrangeObjects(bedSizeX, bedSizeY, minimumGap),
+            ) { "The objects do not fit on this bed" }
+            require(lowerLeft.size == models.size * 2 && lowerLeft.all { it.isFinite() }) {
+                "OrcaSlicer returned an invalid arrangement"
+            }
+            repeat(models.size) { index ->
+                val x = lowerLeft[index * 2]
+                val y = lowerLeft[index * 2 + 1]
+                val width = sizes[index * 3]
+                val depth = sizes[index * 3 + 1]
+                require(
+                    x >= -ARRANGE_TOLERANCE_MM && y >= -ARRANGE_TOLERANCE_MM &&
+                        x + width <= bedSizeX + ARRANGE_TOLERANCE_MM &&
+                        y + depth <= bedSizeY + ARRANGE_TOLERANCE_MM,
+                ) { "OrcaSlicer placed an object outside the bed" }
+            }
+            val centers = FloatArray(lowerLeft.size) { index ->
+                lowerLeft[index] - originalLowerLeft[index]
+            }
+            Bundle().apply {
+                putBoolean(SlicerProcessContract.KEY_OK, true)
+                putInt(SlicerProcessContract.KEY_PID, Process.myPid())
+                putFloatArray(SlicerProcessContract.KEY_ARRANGED_LOWER_LEFT, lowerLeft)
+                putFloatArray(SlicerProcessContract.KEY_OBJECT_SIZES, sizes)
+                putFloatArray(SlicerProcessContract.KEY_OBJECT_CENTERS, centers)
+            }
+        } finally {
+            runtime.clearModel()
+        }
+    } catch (error: Exception) {
+        if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Automatic arrangement failed", error)
+        failure(error.message ?: "The objects could not be arranged")
+    }
+
     private fun runNativeSlice(
         models: List<File>,
         supportPaintFiles: List<ValidatedSupportPaint?>,
@@ -832,6 +954,10 @@ class SlicerProcessService : Service() {
 
     private companion object {
         const val MAX_OBJECTS = 256
+        const val MINIMUM_BED_SIZE_MM = 1f
+        const val MAXIMUM_BED_SIZE_MM = 10_000f
+        const val MAXIMUM_ARRANGE_GAP_MM = 100f
+        const val ARRANGE_TOLERANCE_MM = 0.05f
         const val MAX_PATH_LENGTH = 1_024
         const val MAX_MODEL_BYTES = 512L * 1_024 * 1_024
         const val MAX_ERROR_LENGTH = 500
@@ -842,6 +968,13 @@ class SlicerProcessService : Service() {
         const val TEST_MINIMUM_GCODE_BYTES = 16 * 1_024
         const val PRODUCTION_MAXIMUM_GCODE_BYTES = 1_073_741_824
         const val LOG_TAG = "DuckySlicer"
+    }
+
+    private enum class WorkOperation {
+        SLICE,
+        AUTO_ORIENT,
+        AUTO_ARRANGE,
+        TEST_PROBE,
     }
 
     private data class ValidatedSupportPaint(
@@ -859,6 +992,7 @@ private object SlicerProcessContract {
     const val MESSAGE_CANCEL = 6
     const val MESSAGE_BLOCK_FOR_TEST = 7
     const val MESSAGE_AUTO_ORIENT = 8
+    const val MESSAGE_AUTO_ARRANGE = 9
     const val KEY_REQUEST_ID = "requestId"
     const val KEY_MODEL_PATH = "modelPath"
     const val KEY_MODEL_PATHS = "modelPaths"
@@ -873,6 +1007,12 @@ private object SlicerProcessContract {
     const val KEY_ESTIMATED_SECONDS = "estimatedSeconds"
     const val KEY_FILAMENT_GRAMS = "filamentGrams"
     const val KEY_ROTATION_RADIANS = "rotationRadians"
+    const val KEY_BED_SIZE_X = "bedSizeX"
+    const val KEY_BED_SIZE_Y = "bedSizeY"
+    const val KEY_MINIMUM_GAP = "minimumGap"
+    const val KEY_ARRANGED_LOWER_LEFT = "arrangedLowerLeft"
+    const val KEY_OBJECT_SIZES = "objectSizes"
+    const val KEY_OBJECT_CENTERS = "objectCenters"
     const val OUTPUT_DIRECTORY = SliceArtifactStore.OUTPUT_DIRECTORY
     const val MAX_OPTIONS_BYTES = 384 * 1_024
     const val MAX_REQUEST_BYTES = 640 * 1_024

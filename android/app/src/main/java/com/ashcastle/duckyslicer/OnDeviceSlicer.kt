@@ -1103,39 +1103,79 @@ object OnDeviceSlicer {
         options: SliceOptions = SliceOptions(),
         onProgress: (Int) -> Unit = {},
     ): SliceOutcome {
-        require(objects.isNotEmpty()) { "Project has no objects" }
-        require(objects.all { File(it.model.localPath).isFile }) { "Model file is unavailable" }
         require(objects.all { projectObject ->
             projectObject.supportPaint.facets.keys.all { it in 0 until projectObject.model.triangles }
         }) { "Support paint references an unavailable facet" }
 
+        return withTransformedModels(objects, options) { transformedModels ->
+            val supportPaintFiles = objects.mapIndexed { index, projectObject ->
+                projectObject.supportPaint
+                    .takeIf { it.facets.isNotEmpty() }
+                    ?.let {
+                        File.createTempFile(
+                            "slice-support-$index-",
+                            ".bin",
+                            File(projectObject.model.localPath).parentFile,
+                        ).also(it::writeSidecar)
+                    }
+            }
+            try {
+                SlicerProcessClient.slice(transformedModels, supportPaintFiles, options, onProgress)
+            } finally {
+                supportPaintFiles.filterNotNull().forEach(File::delete)
+            }
+        }
+    }
+
+    fun arrange(
+        objects: List<ProjectObject>,
+        options: SliceOptions = SliceOptions(),
+        minimumGap: Float = 6f,
+    ): OrcaArrangement {
+        require(objects.size >= 2) { "At least two objects are required" }
+        return withTransformedModels(objects, options, includePlacement = false) { transformedModels ->
+            SlicerProcessClient.autoArrange(
+                transformedModels,
+                options.bedSizeX,
+                options.bedSizeY,
+                minimumGap,
+            )
+        }
+    }
+
+    private fun <Result> withTransformedModels(
+        objects: List<ProjectObject>,
+        options: SliceOptions,
+        includePlacement: Boolean = true,
+        block: (List<File>) -> Result,
+    ): Result {
+        require(objects.isNotEmpty()) { "Project has no objects" }
+        require(objects.all { File(it.model.localPath).isFile }) { "Model file is unavailable" }
         val transformedModels = ArrayList<File>(objects.size)
-        val supportPaintFiles = ArrayList<File?>(objects.size)
         return try {
             objects.forEachIndexed { index, projectObject ->
                 val modelRoot = File(projectObject.model.localPath).parentFile
-                transformedModels += File.createTempFile("slice-input-$index-", ".stl", modelRoot)
-                supportPaintFiles += projectObject.supportPaint
-                    .takeIf { it.facets.isNotEmpty() }
-                    ?.let { File.createTempFile("slice-support-$index-", ".bin", modelRoot) }
-            }
-            objects.indices.forEach { index ->
-                val projectObject = objects[index]
-                val transformedModel = transformedModels[index]
+                val transformedModel = File.createTempFile("slicer-input-$index-", ".stl", modelRoot)
+                transformedModels += transformedModel
+                val transform = if (includePlacement) {
+                    projectObject.transform.toJson(options.bedSizeX, options.bedSizeY)
+                } else {
+                    projectObject.transform
+                        .copy(offsetXmm = 0f, offsetYmm = 0f)
+                        .toJson(0f, 0f)
+                }
                 val transformed = JSONObject(
                     NativeEngine.transformStl(
                         projectObject.model.localPath,
                         transformedModel.absolutePath,
-                        projectObject.transform.toJson(options.bedSizeX, options.bedSizeY),
+                        transform,
                     ),
                 )
                 check(transformed.optBoolean("ok")) { "Model transform failed" }
-                supportPaintFiles[index]?.let(projectObject.supportPaint::writeSidecar)
             }
-            SlicerProcessClient.slice(transformedModels, supportPaintFiles, options, onProgress)
+            block(transformedModels)
         } finally {
             transformedModels.forEach(File::delete)
-            supportPaintFiles.filterNotNull().forEach(File::delete)
         }
     }
 }

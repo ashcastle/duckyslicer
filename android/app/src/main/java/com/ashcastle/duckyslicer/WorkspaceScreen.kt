@@ -171,6 +171,7 @@ fun WorkspaceScreen(
     layerPreview: GcodeLayerPreview?,
     importing: Boolean,
     autoLaying: Boolean,
+    arranging: Boolean,
     slicing: Boolean,
     sliceCancellationRequested: Boolean,
     sliceProgress: Int,
@@ -215,6 +216,7 @@ fun WorkspaceScreen(
     val selectedObject = projectObjects.firstOrNull { it.id == selectedObjectId }
     val model = selectedObject?.model ?: projectObjects.firstOrNull()?.model
     val modelTransform = selectedObject?.transform ?: ModelTransform()
+    val editingBusy = autoLaying || arranging
     val tabletLayout = maxWidth >= 600.dp
     val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
     val panelMaxHeight = (maxHeight - if (tabletLayout) 24.dp else 94.dp).coerceAtLeast(320.dp)
@@ -246,7 +248,7 @@ fun WorkspaceScreen(
                     previewDetail = appSettings.previewDetail,
                     previewRenderingMode = appSettings.previewRenderingMode,
                     objectManipulationEnabled = selectedTab == WorkspaceTab.SLICE &&
-                        !importing && !autoLaying && !slicing && !previewLoading,
+                        !importing && !editingBusy && !slicing && !previewLoading,
                     supportPaintObjectId = selectedObjectId.takeIf { supportPainting },
                     supportPaintState = supportPaintTool.state,
                     onObjectSelected = onObjectSelected,
@@ -259,7 +261,7 @@ fun WorkspaceScreen(
 
             WorkspaceMenu(
                 importing = importing,
-                editingBusy = autoLaying,
+                editingBusy = editingBusy,
                 slicing = slicing,
                 previewLoading = previewLoading,
                 canExport = sliceOutcome != null,
@@ -281,6 +283,7 @@ fun WorkspaceScreen(
                     onDuplicate = onDuplicate,
                     onAutoLay = onAutoLay,
                     autoLaying = autoLaying,
+                    editingBusy = editingBusy,
                     onSupportPaint = { supportPainting = true },
                     onMore = { showModelTools = true },
                     onRemove = {
@@ -330,7 +333,7 @@ fun WorkspaceScreen(
                     model = model,
                     options = sliceOptions,
                     catalog = profileCatalog,
-                    importing = importing || autoLaying,
+                    importing = importing || editingBusy,
                     previewLoading = previewLoading,
                     slicing = slicing,
                     cancellationRequested = sliceCancellationRequested,
@@ -612,7 +615,7 @@ private fun WorkspaceMenu(
             modifier = Modifier.size(50.dp),
         ) {
             IconButton(onClick = { expanded = true }) {
-                if (importing) {
+                if (importing || editingBusy) {
                     CircularProgressIndicator(Modifier.size(22.dp), color = WorkspaceYellow, strokeWidth = 2.dp)
                 } else {
                     Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.menu))
@@ -1234,6 +1237,7 @@ private fun ObjectToolRail(
     onDuplicate: () -> Unit,
     onAutoLay: () -> Unit,
     autoLaying: Boolean,
+    editingBusy: Boolean,
     onSupportPaint: () -> Unit,
     onMore: () -> Unit,
     onRemove: () -> Unit,
@@ -1249,29 +1253,29 @@ private fun ObjectToolRail(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onUndo, enabled = canUndo && !autoLaying) {
+            IconButton(onClick = onUndo, enabled = canUndo && !editingBusy) {
                 Icon(Icons.AutoMirrored.Filled.Undo, stringResource(R.string.undo))
             }
-            IconButton(onClick = onRedo, enabled = canRedo && !autoLaying) {
+            IconButton(onClick = onRedo, enabled = canRedo && !editingBusy) {
                 Icon(Icons.AutoMirrored.Filled.Redo, stringResource(R.string.redo))
             }
-            IconButton(onClick = onDuplicate, enabled = !autoLaying) {
+            IconButton(onClick = onDuplicate, enabled = !editingBusy) {
                 Icon(Icons.Default.ContentCopy, stringResource(R.string.duplicate_object))
             }
-            IconButton(onClick = onAutoLay, enabled = !autoLaying) {
+            IconButton(onClick = onAutoLay, enabled = !editingBusy) {
                 if (autoLaying) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 } else {
                     Icon(Icons.Default.AutoFixHigh, stringResource(R.string.auto_lay))
                 }
             }
-            IconButton(onClick = onSupportPaint, enabled = !autoLaying) {
+            IconButton(onClick = onSupportPaint, enabled = !editingBusy) {
                 Icon(Icons.Default.Brush, stringResource(R.string.paint_support))
             }
-            IconButton(onClick = onMore, enabled = !autoLaying) {
+            IconButton(onClick = onMore, enabled = !editingBusy) {
                 Icon(Icons.Default.Tune, stringResource(R.string.more_settings))
             }
-            IconButton(onClick = onRemove, enabled = !autoLaying) {
+            IconButton(onClick = onRemove, enabled = !editingBusy) {
                 Icon(Icons.Default.DeleteOutline, stringResource(R.string.remove_model), tint = Color(0xFFFF8A80))
             }
         }

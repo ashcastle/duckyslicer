@@ -31,7 +31,8 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - A full-screen print bed that keeps the model and G-code at their real millimetre scale
 - One-finger orbit and two-finger pan/zoom for the whole scene
 - Tap an object to select it, then drag it directly across the bed
-- Import, select, duplicate, arrange, and slice multiple objects in one project, with undo and redo
+- Import, select, duplicate, and slice multiple objects in one project, with undo and redo;
+  automatic arrangement uses Orca's silhouette-aware bed packer instead of a mobile-only row heuristic
 - Automatic app-private project recovery that keeps imported models, selection, placement, and effective printer, filament, and slicing settings across process restarts
 - Last-known-good recovery for project metadata, saved profiles, and printer connections;
   unreadable generations are preserved instead of being replaced by an empty autosave
@@ -122,6 +123,7 @@ Jetpack Compose mobile UI
         │
         └── Private Binder worker process (:slicer)
                     └── Native Orca runtime: model loading, automatic orientation,
+                                             silhouette-aware object arrangement,
                                              support-facet selection, slicing,
                                              G-code generation
 ```
