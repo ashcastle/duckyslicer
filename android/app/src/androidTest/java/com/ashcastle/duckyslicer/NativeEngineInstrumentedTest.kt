@@ -864,7 +864,7 @@ class NativeEngineInstrumentedTest {
         assertEquals(7f, restored.printers.last().maxJerkX)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
-        assertEquals(14, JSONObject(file.readText()).getInt("schemaVersion"))
+        assertEquals(15, JSONObject(file.readText()).getInt("schemaVersion"))
         assertTrue("Saved profiles must stay in app-private storage", file.canonicalPath.startsWith(context.cacheDir.canonicalPath))
         file.delete()
         directory.delete()
@@ -896,13 +896,17 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(12, catalog.schemaVersion)
+        assertEquals(13, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include Orca filament presets", catalog.filaments.size > 3_000)
         assertTrue("The catalog must include Orca slicing presets", catalog.slicing.size > 2_000)
         assertTrue(catalog.printers.all(ProfileValidation::printer))
+        assertTrue(
+            "The catalog must retain Orca non-rectangular build plates",
+            catalog.printers.any { it.bedPolygon.size > 8 },
+        )
         assertTrue(catalog.filaments.all(ProfileValidation::filament))
         assertTrue(catalog.slicing.all(ProfileValidation::slicing))
         assertTrue(catalog.slicing.any { it.outerWallLineWidth != it.innerWallLineWidth })
@@ -1149,7 +1153,12 @@ class NativeEngineInstrumentedTest {
             ProjectObject("arrange-first", model, ModelTransform(offsetXmm = -25f)),
             ProjectObject("arrange-second", model, ModelTransform(offsetXmm = 25f)),
         )
-        val options = SliceOptions().copy(bedSizeX = 100f, bedSizeY = 100f)
+        val diamondBed = listOf(50f, 0f, 100f, 50f, 50f, 100f, 0f, 50f)
+        val options = SliceOptions().copy(
+            bedSizeX = 100f,
+            bedSizeY = 100f,
+            bedPolygon = diamondBed,
+        )
 
         val arrangement = OnDeviceSlicer.arrange(objects, options, minimumGap = 6f)
         assertEquals("Orca must return one placement per object", objects.size, arrangement.objectCount)
@@ -1169,6 +1178,12 @@ class NativeEngineInstrumentedTest {
                 x + width <= options.bedSizeX + 0.05f &&
                     y + depth <= options.bedSizeY + 0.05f,
             )
+            listOf(x to y, x + width to y, x + width to y + depth, x to y + depth).forEach { corner ->
+                assertTrue(
+                    "Orca arrangement must honor the non-rectangular printable area: $corner",
+                    pointInsideBedPolygon(corner.first, corner.second, diamondBed),
+                )
+            }
         }
         val firstX = arrangement.lowerLeftMm[0]
         val firstY = arrangement.lowerLeftMm[1]
@@ -1199,7 +1214,11 @@ class NativeEngineInstrumentedTest {
         val noFit = runCatching {
             OnDeviceSlicer.arrange(
                 objects,
-                options.copy(bedSizeX = 10f, bedSizeY = 10f),
+                options.copy(
+                    bedSizeX = 10f,
+                    bedSizeY = 10f,
+                    bedPolygon = listOf(5f, 0f, 10f, 5f, 5f, 10f, 0f, 5f),
+                ),
                 minimumGap = 6f,
             )
         }
@@ -1940,6 +1959,7 @@ class NativeEngineInstrumentedTest {
         val customPrinter = PrinterProfile.CUSTOM_CARTESIAN.copy(
             bedSizeX = 180f,
             bedSizeY = 190f,
+            bedPolygon = listOf(90f, 0f, 180f, 95f, 90f, 190f, 0f, 95f),
             maxPrintHeight = 180f,
             gcodeFlavor = "marlin2",
             maxSpeedX = 240f,
@@ -1959,6 +1979,8 @@ class NativeEngineInstrumentedTest {
 
         assertTrue("Custom bed width must reach Orca", printableArea.contains("180"))
         assertTrue("Custom bed depth must reach Orca", printableArea.contains("190"))
+        assertTrue("The original non-rectangular bed must reach Orca", printableArea.contains("90x0"))
+        assertTrue("The original non-rectangular bed must reach Orca", printableArea.contains("0x95"))
         assertTrue("Custom height must reach Orca", gcode.contains("; printable_height = 180"))
         assertTrue("Custom X speed must reach Orca", gcode.contains("; machine_max_speed_x = 240,240"))
         assertTrue("Custom Y speed must reach Orca", gcode.contains("; machine_max_speed_y = 250,250"))

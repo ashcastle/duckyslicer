@@ -176,6 +176,7 @@ data class SliceConfig(
     @JvmField var preciseOuterWalls: Boolean = true,
     @JvmField var bedSizeX: Float = 270f,
     @JvmField var bedSizeY: Float = 270f,
+    @JvmField var bedPolygon: FloatArray = floatArrayOf(0f, 0f, 270f, 0f, 270f, 270f, 0f, 270f),
     @JvmField var maxPrintHeight: Float = 270f,
     @JvmField var nozzleDiameter: Float = 0.4f,
     @JvmField var filamentDiameter: Float = 1.75f,

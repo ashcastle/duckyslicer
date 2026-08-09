@@ -39,6 +39,7 @@ data class PrinterProfile(
     val maxJerkY: Float = 9f,
     val maxJerkZ: Float = 3f,
     val maxJerkE: Float = 2.5f,
+    val bedPolygon: List<Float> = rectangularBedPolygon(bedSizeX, bedSizeY),
 ) {
     companion object {
         val U1_02 = PrinterProfile("snapmaker-u1-02", "U1 · 0.2 mm", 270f, 270f, 270f, 0.2f, true, "Snapmaker")
@@ -418,7 +419,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 12,
+    val schemaVersion: Int = 13,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -429,6 +430,7 @@ data class SliceOptions(
     val quality: QualityProfile = QualityProfile.STANDARD,
     val bedSizeX: Float = printerProfile.bedSizeX,
     val bedSizeY: Float = printerProfile.bedSizeY,
+    val bedPolygon: List<Float> = printerProfile.bedPolygon,
     val maxPrintHeight: Float = printerProfile.maxPrintHeight,
     val nozzleDiameter: Float = printerProfile.nozzleDiameter,
     val nozzleTemp: Int = filamentProfile.nozzleTemp,
@@ -644,6 +646,7 @@ data class SliceOptions(
             printerProfile = profile,
             bedSizeX = profile.bedSizeX,
             bedSizeY = profile.bedSizeY,
+            bedPolygon = profile.bedPolygon,
             maxPrintHeight = profile.maxPrintHeight,
             nozzleDiameter = profile.nozzleDiameter,
             gcodeFlavor = profile.gcodeFlavor,
@@ -1037,6 +1040,7 @@ data class SliceOptions(
         preciseOuterWalls = preciseOuterWalls,
         bedSizeX = bedSizeX,
         bedSizeY = bedSizeY,
+        bedPolygon = bedPolygon.toFloatArray(),
         maxPrintHeight = maxPrintHeight,
         nozzleDiameter = nozzleDiameter,
         filamentDiameter = filamentDiameter,
@@ -1138,6 +1142,7 @@ object OnDeviceSlicer {
                 transformedModels,
                 options.bedSizeX,
                 options.bedSizeY,
+                options.bedPolygon,
                 minimumGap,
             )
         }

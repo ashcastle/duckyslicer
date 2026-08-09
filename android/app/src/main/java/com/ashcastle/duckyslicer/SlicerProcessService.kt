@@ -115,6 +115,7 @@ internal object SlicerProcessClient {
         transformedModels: List<File>,
         bedSizeX: Float,
         bedSizeY: Float,
+        bedPolygon: List<Float>,
         minimumGap: Float = 6f,
     ): OrcaArrangement {
         check(Looper.myLooper() != Looper.getMainLooper()) {
@@ -138,6 +139,7 @@ internal object SlicerProcessClient {
                         putStringArrayList(SlicerProcessContract.KEY_MODEL_PATHS, ArrayList(modelPaths))
                         putFloat(SlicerProcessContract.KEY_BED_SIZE_X, bedSizeX)
                         putFloat(SlicerProcessContract.KEY_BED_SIZE_Y, bedSizeY)
+                        putFloatArray(SlicerProcessContract.KEY_BED_POLYGON, bedPolygon.toFloatArray())
                         putFloat(SlicerProcessContract.KEY_MINIMUM_GAP, minimumGap)
                     },
                     timeoutSeconds = ARRANGEMENT_TIMEOUT_SECONDS,
@@ -769,10 +771,14 @@ class SlicerProcessService : Service() {
         val models = paths.map(::validateModel)
         val bedSizeX = extras.getFloat(SlicerProcessContract.KEY_BED_SIZE_X)
         val bedSizeY = extras.getFloat(SlicerProcessContract.KEY_BED_SIZE_Y)
+        val bedPolygon = requireNotNull(extras.getFloatArray(SlicerProcessContract.KEY_BED_POLYGON)) {
+            "Bed geometry is unavailable"
+        }.toList()
         val minimumGap = extras.getFloat(SlicerProcessContract.KEY_MINIMUM_GAP)
         require(
             bedSizeX.isFinite() && bedSizeX in MINIMUM_BED_SIZE_MM..MAXIMUM_BED_SIZE_MM &&
                 bedSizeY.isFinite() && bedSizeY in MINIMUM_BED_SIZE_MM..MAXIMUM_BED_SIZE_MM &&
+                bedPolygonIsValid(bedPolygon, bedSizeX, bedSizeY) &&
                 minimumGap.isFinite() && minimumGap in 0f..MAXIMUM_ARRANGE_GAP_MM,
         ) { "Arrange settings are invalid" }
 
@@ -791,7 +797,7 @@ class SlicerProcessService : Service() {
                 "OrcaSlicer returned invalid source positions"
             }
             val lowerLeft = requireNotNull(
-                runtime.nativeAutoArrangeObjects(bedSizeX, bedSizeY, minimumGap),
+                runtime.nativeAutoArrangeObjects(bedPolygon.toFloatArray(), minimumGap),
             ) { "The objects do not fit on this bed" }
             require(lowerLeft.size == models.size * 2 && lowerLeft.all { it.isFinite() }) {
                 "OrcaSlicer returned an invalid arrangement"
@@ -1009,6 +1015,7 @@ private object SlicerProcessContract {
     const val KEY_ROTATION_RADIANS = "rotationRadians"
     const val KEY_BED_SIZE_X = "bedSizeX"
     const val KEY_BED_SIZE_Y = "bedSizeY"
+    const val KEY_BED_POLYGON = "bedPolygon"
     const val KEY_MINIMUM_GAP = "minimumGap"
     const val KEY_ARRANGED_LOWER_LEFT = "arrangedLowerLeft"
     const val KEY_OBJECT_SIZES = "objectSizes"

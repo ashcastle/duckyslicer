@@ -7,6 +7,7 @@ internal object ProfileValidation {
             profile.brand.isSafeOptionalLabel() &&
             profile.bedSizeX in 50f..1_500f &&
             profile.bedSizeY in 50f..1_500f &&
+            bedPolygonIsValid(profile.bedPolygon, profile.bedSizeX, profile.bedSizeY) &&
             profile.maxPrintHeight in 50f..1_500f &&
             profile.nozzleDiameter in 0.1f..2f &&
             profile.gcodeFlavor in setOf("marlin", "marlin2", "klipper") &&

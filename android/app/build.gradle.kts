@@ -24,7 +24,7 @@ val orcaProfileRoot = repositoryRoot.resolve(
 val profileCatalogGenerator = repositoryRoot.resolve("tools/generate_profile_catalog.py")
 val offlineLicenseGenerator = repositoryRoot.resolve("tools/generate_offline_licenses.py")
 val nativeLicensePolicy = repositoryRoot.resolve("tools/native_license_policy.py")
-val generatedProfileCatalog = generatedProfileAssets.map { it.file("profile_catalog_v12.bin") }
+val generatedProfileCatalog = generatedProfileAssets.map { it.file("profile_catalog_v13.bin") }
 val ndkSharedRuntime = nativeNdkDirectory.map { ndk ->
     val prebuiltRoot = ndk.asFile.resolve("toolchains/llvm/prebuilt")
     val candidates = prebuiltRoot.listFiles()
@@ -84,7 +84,7 @@ val generateOrcaProfileCatalog = tasks.register<Exec>("generateOrcaProfileCatalo
     )
     inputs.file(profileCatalogGenerator)
     inputs.dir(orcaProfileRoot)
-    inputs.property("profileSchemaVersion", 12)
+    inputs.property("profileSchemaVersion", 13)
     inputs.property("orcaRevision", "2c8a5385bc53cbc16211b4dd36ef9963ee185f4a")
     outputs.file(generatedProfileCatalog)
     outputs.upToDateWhen {

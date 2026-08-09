@@ -22,8 +22,7 @@ class NativeLibrary(
     external fun addModel(path: String): Boolean
     external fun nativeAutoOrientObject(objectIndex: Int): DoubleArray?
     external fun nativeAutoArrangeObjects(
-        bedSizeX: Float,
-        bedSizeY: Float,
+        bedPolygon: FloatArray,
         minimumGap: Float,
     ): FloatArray?
     external fun applySupportPaint(objectIndex: Int, sidecarPath: String): Boolean
