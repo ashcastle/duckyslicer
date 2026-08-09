@@ -101,8 +101,10 @@ to client-side vertex arrays or per-frame geometry uploads.
 Automatic preview quality must resolve to a concrete tier before mesh generation.
 Low-RAM or 192 MiB-and-smaller app heaps use the bounded performance tier, explicit
 user choices remain authoritative, and active gestures may downgrade at most one tier
-until the view settles. Keep this policy pure and host-tested alongside the real ARM64
-EGL renderer regression.
+until the view settles. The requested and gesture tiers may retain at most two VBOs;
+prewarm the gesture tier after the first visible frame instead of rebuilding or uploading
+geometry on touch-down or touch-up. Keep this policy pure and host-tested alongside the
+real ARM64 EGL renderer regression.
 
 The mobile slicing-profile editor keeps the Orca mental model in five horizontally
 scrollable sections: Quality, Strength, Speed, Support, and Others. Keep profile
