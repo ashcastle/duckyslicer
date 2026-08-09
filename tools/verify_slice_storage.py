@@ -95,6 +95,13 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
 
     if sources["MainActivity.kt"].count("SliceArtifactLease.acquire") < 3:
         raise VerificationError("preview and export readers are not all leased")
+    main_activity = sources["MainActivity.kt"]
+    if 'GCODE_DOCUMENT_MIME_TYPE = "application/octet-stream"' not in main_activity:
+        raise VerificationError("G-code document MIME type may let providers append .txt")
+    if "CreateDocument(GCODE_DOCUMENT_MIME_TYPE)" not in main_activity:
+        raise VerificationError("G-code export does not use the binary document contract")
+    if 'CreateDocument("text/plain")' in main_activity:
+        raise VerificationError("G-code export reverted to a .txt-producing MIME type")
     if "SliceArtifactLease.acquire(gcode)" not in sources["RemoteDevice.kt"]:
         raise VerificationError("remote upload does not lease its G-code")
 

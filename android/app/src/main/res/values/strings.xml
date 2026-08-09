@@ -51,6 +51,7 @@
     <string name="menu">Menu</string>
     <string name="import_model">Import model</string>
     <string name="export_gcode">Export G-code</string>
+    <string name="export_options">Export options</string>
     <string name="import_from_menu">Import a model from the menu above.</string>
     <string name="edit_model">Edit model</string>
     <string name="drag_to_move">Drag to move</string>
