@@ -154,12 +154,13 @@ enum class WorkspaceTab {
 }
 
 @Composable
-fun WorkspaceScreen(
+internal fun WorkspaceScreen(
     selectedTab: WorkspaceTab,
     projectObjects: List<ProjectObject>,
     selectedObjectId: String?,
     sliceOptions: SliceOptions,
     profileCatalog: ProfileCatalog,
+    profileRecents: ProfileRecents,
     appSettings: AppSettings,
     remoteDevices: List<RemoteDeviceProfile>,
     selectedRemoteDeviceId: String?,
@@ -347,6 +348,7 @@ fun WorkspaceScreen(
                     model = model,
                     options = sliceOptions,
                     catalog = profileCatalog,
+                    recents = profileRecents,
                     importing = importing || editingBusy,
                     previewLoading = previewLoading,
                     slicing = slicing,
@@ -1396,6 +1398,7 @@ private fun SliceSheet(
     model: ModelInfo?,
     options: SliceOptions,
     catalog: ProfileCatalog,
+    recents: ProfileRecents,
     importing: Boolean,
     previewLoading: Boolean,
     slicing: Boolean,
@@ -1415,6 +1418,7 @@ private fun SliceSheet(
         ProfileSettings(
             options = options,
             catalog = catalog,
+            recents = recents,
             enabled = !slicing && !importing && !previewLoading,
             onOptionsChanged = onOptionsChanged,
             onSavePrinter = onSavePrinter,
