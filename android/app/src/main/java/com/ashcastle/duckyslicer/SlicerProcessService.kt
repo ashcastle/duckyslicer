@@ -39,11 +39,13 @@ internal object SlicerProcessClient {
     fun slice(
         transformedModels: List<File>,
         options: SliceOptions,
+        cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit,
     ): SliceOutcome = sliceInternal(
         transformedModels,
         List(transformedModels.size) { null },
         options,
+        cancellationRequested,
         null,
         onProgress,
     )
@@ -52,8 +54,16 @@ internal object SlicerProcessClient {
         transformedModels: List<File>,
         supportPaintFiles: List<File?>,
         options: SliceOptions,
+        cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit,
-    ): SliceOutcome = sliceInternal(transformedModels, supportPaintFiles, options, null, onProgress)
+    ): SliceOutcome = sliceInternal(
+        transformedModels,
+        supportPaintFiles,
+        options,
+        cancellationRequested,
+        null,
+        onProgress,
+    )
 
     internal fun sliceWithOutputLimitForTest(
         transformedModels: List<File>,
@@ -69,6 +79,7 @@ internal object SlicerProcessClient {
             transformedModels,
             List(transformedModels.size) { null },
             options,
+            { false },
             maximumGcodeBytes,
             onProgress,
         )
@@ -175,6 +186,7 @@ internal object SlicerProcessClient {
         transformedModels: List<File>,
         supportPaintFiles: List<File?>,
         options: SliceOptions,
+        cancellationRequested: () -> Boolean,
         maximumGcodeBytesForTest: Int?,
         onProgress: (Int) -> Unit,
     ): SliceOutcome {
@@ -212,6 +224,10 @@ internal object SlicerProcessClient {
             "Another slice is already running"
         }
         try {
+            if (cancellationRequested()) {
+                cancelledRequestId.set(requestId)
+                throw SlicingCancelledException()
+            }
             val response = withWorker(context) { worker ->
                 worker.request(
                     what = SlicerProcessContract.MESSAGE_SLICE,

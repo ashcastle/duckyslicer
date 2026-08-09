@@ -19,7 +19,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -28,6 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -96,20 +97,21 @@ data class ModelInfo(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val sliceOperationModel = ViewModelProvider(this)[SliceOperationViewModel::class.java]
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
         )
         setContent {
             MaterialTheme(colorScheme = DuckyColors) {
-                DuckySlicerScreen()
+                DuckySlicerScreen(sliceOperationModel)
             }
         }
     }
 }
 
 @Composable
-private fun DuckySlicerScreen() {
+private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val modelReadError = stringResource(R.string.model_read_error)
@@ -148,13 +150,14 @@ private fun DuckySlicerScreen() {
     var importing by remember { mutableStateOf(false) }
     var autoLaying by remember { mutableStateOf(false) }
     var arranging by remember { mutableStateOf(false) }
-    var slicing by remember { mutableStateOf(false) }
-    var sliceCancellationRequested by remember { mutableStateOf(false) }
-    var sliceProgress by remember { mutableIntStateOf(0) }
     var sliceOutcome by rememberSaveable { mutableStateOf<SliceOutcome?>(null) }
     var selectedTab by rememberSaveable { mutableStateOf(WorkspaceTab.SLICE) }
     var layerPreview by remember { mutableStateOf<GcodeLayerPreview?>(null) }
-    var previewLoading by remember { mutableStateOf(false) }
+    val sliceOperationState by sliceOperationModel.state.collectAsStateWithLifecycle()
+    val slicing = sliceOperationState.slicing
+    val sliceCancellationRequested = sliceOperationState.cancellationRequested
+    val sliceProgress = sliceOperationState.progress
+    val previewLoading = sliceOperationState.previewLoading
     var sliceOptions by remember { mutableStateOf(SliceOptions()) }
     val projectObjects = projectHistory.current.objects
     val selectedProjectObject = projectHistory.current.selectedObject
@@ -184,6 +187,12 @@ private fun DuckySlicerScreen() {
     var remoteMessage by remember { mutableStateOf<String?>(null) }
     var remoteMessageIsError by remember { mutableStateOf(false) }
 
+    fun clearCompletedSlice() {
+        sliceOperationModel.clearCompleted()
+        sliceOutcome = null
+        layerPreview = null
+    }
+
     LaunchedEffect(profileStore) {
         profileCatalog = withContext(Dispatchers.IO) { profileStore.load() }
         if (profileStore.storageUnavailable) error = savedDataUnavailable
@@ -204,9 +213,32 @@ private fun DuckySlicerScreen() {
     LaunchedEffect(sliceOutcome?.output?.absolutePath) {
         val restored = sliceOutcome ?: return@LaunchedEffect
         if (!restored.isRestorableFrom(context.filesDir)) {
-            sliceOutcome = null
-            layerPreview = null
+            clearCompletedSlice()
             if (selectedTab == WorkspaceTab.PREVIEW) selectedTab = WorkspaceTab.SLICE
+        }
+    }
+    LaunchedEffect(sliceOperationState.outcome, sliceOperationState.preview) {
+        val completed = sliceOperationState.outcome ?: return@LaunchedEffect
+        sliceOutcome = completed
+        sliceOperationState.preview?.let { layerPreview = it }
+        remoteUpload = null
+        selectedTab = WorkspaceTab.PREVIEW
+    }
+    LaunchedEffect(sliceOperationState.terminalStatus) {
+        when (sliceOperationState.terminalStatus) {
+            SliceTerminalStatus.CANCELED -> {
+                notice = sliceCanceledNotice
+                error = null
+            }
+            SliceTerminalStatus.SLICE_FAILED -> {
+                error = sliceError
+                notice = null
+            }
+            SliceTerminalStatus.PREVIEW_FAILED -> {
+                error = previewError
+                notice = null
+            }
+            SliceTerminalStatus.NONE -> Unit
         }
     }
     LaunchedEffect(projectHistory.current, sliceOptions, projectRestored) {
@@ -255,8 +287,12 @@ private fun DuckySlicerScreen() {
         if (keepScreenAwake) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
-    DisposableEffect(Unit) {
-        onDispose { SlicerProcessClient.cancelActiveSliceAsync() }
+    DisposableEffect(sliceOperationModel) {
+        onDispose {
+            if (!sliceOperationModel.state.value.busy) {
+                SlicerProcessClient.cancelActiveSliceAsync()
+            }
+        }
     }
 
     fun applyOptions(options: SliceOptions) {
@@ -274,10 +310,8 @@ private fun DuckySlicerScreen() {
             }
             profileRecents = nextRecents
             sliceOptions = options
-            sliceOutcome = null
-            layerPreview = null
+            clearCompletedSlice()
             remoteUpload = null
-            sliceProgress = 0
             notice = null
         }
     }
@@ -286,9 +320,7 @@ private fun DuckySlicerScreen() {
         val nextHistory = projectHistory.updateSelectedTransform(transform, recordHistory)
         if (nextHistory != projectHistory) {
             projectHistory = nextHistory
-            sliceOutcome = null
-            layerPreview = null
-            sliceProgress = 0
+            clearCompletedSlice()
             notice = null
             remoteUpload = null
         }
@@ -314,9 +346,7 @@ private fun DuckySlicerScreen() {
                     )
                     if (nextHistory != projectHistory) {
                         projectHistory = nextHistory
-                        sliceOutcome = null
-                        layerPreview = null
-                        sliceProgress = 0
+                        clearCompletedSlice()
                         remoteUpload = null
                     }
                     notice = autoLayDone
@@ -337,9 +367,7 @@ private fun DuckySlicerScreen() {
         arranging = true
         error = null
         notice = null
-        sliceOutcome = null
-        layerPreview = null
-        sliceProgress = 0
+        clearCompletedSlice()
         remoteUpload = null
         val targetOptions = sliceOptions
         scope.launch {
@@ -391,9 +419,7 @@ private fun DuckySlicerScreen() {
                                 transform = initialTransform,
                             ),
                         )
-                        sliceOutcome = null
-                        layerPreview = null
-                        sliceProgress = 0
+                        clearCompletedSlice()
                         remoteUpload = null
                         selectedTab = WorkspaceTab.SLICE
                     }
@@ -432,30 +458,9 @@ private fun DuckySlicerScreen() {
     }
 
     val loadPreviewRange: (Int, Int) -> Unit = { startLayer, endLayer ->
-        val output = sliceOutcome?.output
-        if (output != null && !previewLoading && !slicing && !autoLaying && !arranging) {
-            previewLoading = true
-            scope.launch {
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        GcodeLayerPreview.fromNative(
-                            SliceArtifactLease.acquire(output).use {
-                                NativeEngine.previewGcodeRange(
-                                    output.absolutePath,
-                                    startLayer,
-                                    endLayer,
-                                )
-                            },
-                        )
-                    }
-                }.onSuccess {
-                    layerPreview = it
-                    error = null
-                }.onFailure {
-                    error = previewError
-                }
-                previewLoading = false
-            }
+        val completed = sliceOutcome
+        if (completed != null && !slicing && !autoLaying && !arranging) {
+            sliceOperationModel.loadPreview(completed, startLayer, endLayer)
         }
     }
     LaunchedEffect(selectedTab, sliceOutcome?.output?.absolutePath) {
@@ -471,74 +476,21 @@ private fun DuckySlicerScreen() {
 
     val startSlice = {
         val objects = projectObjects
-        if (objects.isNotEmpty() && !slicing && !importing && !autoLaying && !arranging && !previewLoading) {
-            slicing = true
-            sliceCancellationRequested = false
-            sliceProgress = 0
+        if (
+            objects.isNotEmpty() &&
+            !slicing && !importing && !autoLaying && !arranging && !previewLoading &&
+            sliceOperationModel.start(objects, sliceOptions)
+        ) {
             sliceOutcome = null
             layerPreview = null
             remoteUpload = null
             error = null
             notice = null
-            scope.launch {
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        OnDeviceSlicer.slice(objects, sliceOptions) { progress ->
-                            scope.launch { sliceProgress = progress }
-                        }
-                    }
-                }.onSuccess { outcome ->
-                    sliceOutcome = outcome
-                    remoteUpload = null
-                    sliceProgress = 100
-                    selectedTab = WorkspaceTab.PREVIEW
-                    previewLoading = true
-                    scope.launch {
-                        runCatching {
-                            withContext(Dispatchers.IO) {
-                                GcodeLayerPreview.fromNative(
-                                    SliceArtifactLease.acquire(outcome.output).use {
-                                        NativeEngine.previewGcodeRange(
-                                            outcome.output.absolutePath,
-                                            0,
-                                            Int.MAX_VALUE,
-                                        )
-                                    },
-                                )
-                            }
-                        }.onSuccess { preview ->
-                            layerPreview = preview
-                            sliceOutcome = outcome.copy(layers = preview.layerCount)
-                        }
-                            .onFailure { error = previewError }
-                        previewLoading = false
-                    }
-                }.onFailure { failure ->
-                    if (failure is SlicingCancelledException) {
-                        notice = sliceCanceledNotice
-                        error = null
-                        sliceProgress = 0
-                    } else {
-                        if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Slice request failed", failure)
-                        error = sliceError
-                    }
-                }
-                slicing = false
-                sliceCancellationRequested = false
-            }
         }
     }
 
     val cancelSlice = {
-        if (slicing && !sliceCancellationRequested) {
-            sliceCancellationRequested = true
-            scope.launch {
-                val accepted = withContext(Dispatchers.IO) {
-                    SlicerProcessClient.cancelActiveSlice()
-                }
-                if (!accepted && slicing) sliceCancellationRequested = false
-            }
-        }
+        sliceOperationModel.cancel()
     }
 
     val saveGcode = {
@@ -644,23 +596,20 @@ private fun DuckySlicerScreen() {
         onUndo = {
             if (projectHistory.canUndo) {
                 projectHistory = projectHistory.undo()
-                sliceOutcome = null
-                layerPreview = null
+                clearCompletedSlice()
                 remoteUpload = null
             }
         },
         onRedo = {
             if (projectHistory.canRedo) {
                 projectHistory = projectHistory.redo()
-                sliceOutcome = null
-                layerPreview = null
+                clearCompletedSlice()
                 remoteUpload = null
             }
         },
         onDuplicate = {
             projectHistory = projectHistory.duplicateSelected(UUID.randomUUID().toString())
-            sliceOutcome = null
-            layerPreview = null
+            clearCompletedSlice()
             remoteUpload = null
         },
         onArrange = ::arrangeProjectObjects,
@@ -676,9 +625,7 @@ private fun DuckySlicerScreen() {
                 )
                 if (nextHistory != projectHistory) {
                     projectHistory = nextHistory
-                    sliceOutcome = null
-                    layerPreview = null
-                    sliceProgress = 0
+                    clearCompletedSlice()
                     remoteUpload = null
                     notice = null
                 }
@@ -689,10 +636,8 @@ private fun DuckySlicerScreen() {
         },
         onRemoveModel = {
             projectHistory = projectHistory.removeSelected()
-            sliceOutcome = null
-            layerPreview = null
+            clearCompletedSlice()
             remoteUpload = null
-            sliceProgress = 0
             notice = null
             error = null
             selectedTab = WorkspaceTab.SLICE

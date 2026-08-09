@@ -28,4 +28,11 @@ class WorkspaceLayoutPolicyTest {
         assertFalse(showWorkspaceNavigationLabels(fontScale = 1.5f))
         assertFalse(showWorkspaceNavigationLabels(fontScale = 2f))
     }
+
+    @Test
+    fun activeSliceAndInitialPreviewLockModelEditing() {
+        assertTrue(workspaceEditingBusy(false, false, slicing = true, previewLoading = false))
+        assertTrue(workspaceEditingBusy(false, false, slicing = false, previewLoading = true))
+        assertFalse(workspaceEditingBusy(false, false, slicing = false, previewLoading = false))
+    }
 }
