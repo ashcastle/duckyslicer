@@ -16,6 +16,8 @@ class VerificationError(ValueError):
 def verify_profile_editor(sources: dict[str, str]) -> None:
     required = {
         "ProfileSettingsSheet.kt",
+        "ProfileRecents.kt",
+        "ProfileRecentsTest.kt",
         "SlicingSettingsSectionTest.kt",
         "strings.xml",
         "strings-ko.xml",
@@ -52,11 +54,32 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
     if not (0 <= tab_position < profile_position < settings_position):
         raise VerificationError("slicing tabs and profile selection must precede section settings")
 
+    for marker in (
+        "recentIds: List<String>",
+        "val recentProfilesKey = \"recent-profiles\"",
+        "add(ProfileChoiceGroup(recentProfilesKey, recentProfiles, recentEntries))",
+    ):
+        if marker not in editor:
+            raise VerificationError(f"recent profile group is missing: {marker}")
+
+    recents = sources["ProfileRecents.kt"]
+    for marker in (
+        "data class ProfileRecents(",
+        "MAX_RECENT_PROFILES = 5",
+        "class ProfileRecentStore",
+        "DurableJsonFile",
+        "fun record(options: SliceOptions)",
+    ):
+        if marker not in recents:
+            raise VerificationError(f"recent profile persistence is missing: {marker}")
+
     for source_name in ("strings.xml", "strings-ko.xml"):
         strings = sources[source_name]
         for resource in ('name="quality"', 'name="strength"', 'name="speed"', 'name="supports"', 'name="others"'):
             if resource not in strings:
                 raise VerificationError(f"localized slicing tab title is missing from {source_name}: {resource}")
+        if 'name="recent_profiles"' not in strings:
+            raise VerificationError(f"localized recent profile title is missing from {source_name}")
 
     test = sources["SlicingSettingsSectionTest.kt"]
     for marker in (
@@ -66,6 +89,15 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
     ):
         if marker not in test:
             raise VerificationError(f"slicing section host regression is missing: {marker}")
+
+    recent_test = sources["ProfileRecentsTest.kt"]
+    for marker in (
+        "usageMovesProfilesToTheFrontWithoutDuplicatesAndCapsHistory",
+        "threeProfileKindsRoundTripIndependently",
+        "corruptPrimaryRecoversLastKnownGoodRecentProfiles",
+    ):
+        if marker not in recent_test:
+            raise VerificationError(f"recent profile host regression is missing: {marker}")
 
     for document in ("README.md", "CONTRIBUTING.md"):
         lowered = sources[document].lower()
@@ -79,6 +111,8 @@ def read_sources() -> dict[str, str]:
     resources = ROOT / "android/app/src/main/res"
     return {
         "ProfileSettingsSheet.kt": (main / "ProfileSettingsSheet.kt").read_text(encoding="utf-8"),
+        "ProfileRecents.kt": (main / "ProfileRecents.kt").read_text(encoding="utf-8"),
+        "ProfileRecentsTest.kt": (tests / "ProfileRecentsTest.kt").read_text(encoding="utf-8"),
         "SlicingSettingsSectionTest.kt": (tests / "SlicingSettingsSectionTest.kt").read_text(
             encoding="utf-8"
         ),

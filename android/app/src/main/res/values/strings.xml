@@ -308,6 +308,7 @@
     <string name="toolpath_other">Other</string>
     <string name="profile_name">Profile name</string>
     <string name="search_profiles">Search profiles</string>
+    <string name="recent_profiles">Recent</string>
     <string name="my_profiles">My profiles</string>
     <string name="other_profiles">Other</string>
     <string name="no_profiles_found">No matching profiles</string>
