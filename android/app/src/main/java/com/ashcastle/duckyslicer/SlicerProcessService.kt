@@ -1,10 +1,18 @@
 package com.ashcastle.duckyslicer
 
+import android.app.ActivityManager
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.content.pm.ServiceInfo
+import android.graphics.drawable.Icon
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
@@ -18,6 +26,7 @@ import android.util.Log
 import com.u1.slicer.NativeLibrary
 import java.io.DataInputStream
 import java.io.File
+import java.io.FileOutputStream
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -39,12 +48,14 @@ internal object SlicerProcessClient {
     fun slice(
         transformedModels: List<File>,
         options: SliceOptions,
+        foregroundSession: ForegroundSliceSession? = null,
         cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit,
     ): SliceOutcome = sliceInternal(
         transformedModels,
         List(transformedModels.size) { null },
         options,
+        foregroundSession,
         cancellationRequested,
         null,
         onProgress,
@@ -54,12 +65,14 @@ internal object SlicerProcessClient {
         transformedModels: List<File>,
         supportPaintFiles: List<File?>,
         options: SliceOptions,
+        foregroundSession: ForegroundSliceSession? = null,
         cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit,
     ): SliceOutcome = sliceInternal(
         transformedModels,
         supportPaintFiles,
         options,
+        foregroundSession,
         cancellationRequested,
         null,
         onProgress,
@@ -79,6 +92,7 @@ internal object SlicerProcessClient {
             transformedModels,
             List(transformedModels.size) { null },
             options,
+            null,
             { false },
             maximumGcodeBytes,
             onProgress,
@@ -186,6 +200,7 @@ internal object SlicerProcessClient {
         transformedModels: List<File>,
         supportPaintFiles: List<File?>,
         options: SliceOptions,
+        foregroundSession: ForegroundSliceSession?,
         cancellationRequested: () -> Boolean,
         maximumGcodeBytesForTest: Int?,
         onProgress: (Int) -> Unit,
@@ -194,7 +209,7 @@ internal object SlicerProcessClient {
             "Slicing must run outside the application main thread"
         }
         val context = DuckySlicerApplication.context()
-        val requestId = UUID.randomUUID().toString()
+        val requestId = foregroundSession?.requestId ?: UUID.randomUUID().toString()
         val modelPaths = transformedModels.map(File::getAbsolutePath)
         require(supportPaintFiles.size == transformedModels.size) { "Support paint count does not match models" }
         val supportPaintPaths = supportPaintFiles.map { it?.absolutePath.orEmpty() }
@@ -220,8 +235,14 @@ internal object SlicerProcessClient {
                 putInt(SlicerProcessContract.KEY_MAXIMUM_GCODE_BYTES_FOR_TEST, it)
             }
         }
-        check(activeRequestId.compareAndSet(null, requestId)) {
-            "Another slice is already running"
+        if (foregroundSession == null) {
+            check(activeRequestId.compareAndSet(null, requestId)) {
+                "Another slice is already running"
+            }
+        } else {
+            check(activeRequestId.get() == requestId) {
+                "Foreground slice session is no longer active"
+            }
         }
         try {
             if (cancellationRequested()) {
@@ -235,6 +256,9 @@ internal object SlicerProcessClient {
                     timeoutSeconds = SLICE_TIMEOUT_SECONDS,
                     onProgress = onProgress,
                 )
+            }
+            if (response.getBoolean(SlicerProcessContract.KEY_CANCELED)) {
+                throw SlicingCancelledException()
             }
             check(response.getBoolean(SlicerProcessContract.KEY_OK)) {
                 response.getString(SlicerProcessContract.KEY_ERROR)
@@ -255,6 +279,38 @@ internal object SlicerProcessClient {
         } finally {
             activeRequestId.compareAndSet(requestId, null)
             cancelledRequestId.compareAndSet(requestId, null)
+        }
+    }
+
+    fun beginUserSlice(): ForegroundSliceSession {
+        check(Looper.myLooper() == Looper.getMainLooper()) {
+            "A foreground slice must begin from visible UI"
+        }
+        val context = DuckySlicerApplication.context()
+        val requestId = UUID.randomUUID().toString()
+        check(activeRequestId.compareAndSet(null, requestId)) {
+            "Another slicer operation is already running"
+        }
+        val session = ForegroundSliceSession.prepare(context, requestId)
+        return try {
+            context.startForegroundService(SlicerProcessService.startSliceIntent(context, requestId))
+            session
+        } catch (failure: Exception) {
+            activeRequestId.compareAndSet(requestId, null)
+            session.abandon()
+            throw failure
+        }
+    }
+
+    internal fun finishUserSlice(session: ForegroundSliceSession) {
+        activeRequestId.compareAndSet(session.requestId, null)
+        cancelledRequestId.compareAndSet(session.requestId, null)
+        runCatching {
+            session.context.startService(
+                SlicerProcessService.finishSliceIntent(session.context, session.requestId),
+            )
+        }.onFailure {
+            session.context.stopService(Intent(session.context, SlicerProcessService::class.java))
         }
     }
 
@@ -285,6 +341,22 @@ internal object SlicerProcessClient {
     }
 
     internal fun lastWorkerPid(): Int = latestWorkerPid
+
+    @Suppress("DEPRECATION")
+    internal fun workerIsForegroundForTest(context: Context): Boolean {
+        check(BuildConfig.DEBUG) { "Foreground service inspection is available only in debug builds" }
+        val manager = context.getSystemService(ActivityManager::class.java)
+        return manager.getRunningServices(32).any { running ->
+            running.service.className == SlicerProcessService::class.java.name && running.foreground
+        }
+    }
+
+    internal fun cancelFromNotificationForTest(): Boolean {
+        check(BuildConfig.DEBUG) { "Notification cancellation is available only in debug builds" }
+        val requestId = activeRequestId.get() ?: return false
+        val context = DuckySlicerApplication.context()
+        return context.startService(SlicerProcessService.cancelSliceIntent(context, requestId)) != null
+    }
 
     internal fun terminateWorkerForTest(context: Context): Int {
         check(BuildConfig.DEBUG) { "Worker termination is available only in debug builds" }
@@ -508,11 +580,58 @@ internal object SlicerProcessClient {
     private const val PRODUCTION_MAXIMUM_GCODE_BYTES = 1_073_741_824
 }
 
+internal class ForegroundSliceSession internal constructor(
+    internal val context: Context,
+    internal val requestId: String,
+) : AutoCloseable {
+    private val cancellationFile = File(context.filesDir, CANCELLATION_FILE)
+
+    internal fun cancellationRequested(): Boolean = wasCanceled(context, requestId)
+
+    override fun close() {
+        SlicerProcessClient.finishUserSlice(this)
+        if (cancellationRequested()) cancellationFile.delete()
+    }
+
+    internal fun abandon() {
+        if (cancellationRequested()) cancellationFile.delete()
+    }
+
+    internal companion object {
+        private const val CANCELLATION_FILE = "foreground-slice.cancel"
+        private const val MAX_CANCELLATION_BYTES = 128L
+
+        fun prepare(context: Context, requestId: String): ForegroundSliceSession =
+            ForegroundSliceSession(context, requestId).also { session ->
+                check(!session.cancellationFile.exists() || session.cancellationFile.delete()) {
+                    "Slice cancellation state is unavailable"
+                }
+            }
+
+        fun markCanceled(context: Context, requestId: String) {
+            FileOutputStream(File(context.filesDir, CANCELLATION_FILE)).use { output ->
+                output.write(requestId.toByteArray(Charsets.UTF_8))
+                output.flush()
+                output.fd.sync()
+            }
+        }
+
+        fun wasCanceled(context: Context, requestId: String): Boolean = runCatching {
+            val cancellationFile = File(context.filesDir, CANCELLATION_FILE)
+            cancellationFile.isFile &&
+                cancellationFile.length() in 1..MAX_CANCELLATION_BYTES &&
+                cancellationFile.readText(Charsets.UTF_8).trim() == requestId
+        }.getOrDefault(false)
+    }
+}
+
 internal class SlicingCancelledException : Exception("Slicing was cancelled")
 
 class SlicerProcessService : Service() {
     private val activeRequestId = AtomicReference<String?>(null)
     private val cancelledRequestId = AtomicReference<String?>(null)
+    private val activeReply = AtomicReference<Messenger?>(null)
+    private val foregroundRequestId = AtomicReference<String?>(null)
     private val sliceThreadDelegate = lazy {
         HandlerThread("DuckySlicer Orca work").apply { start() }
     }
@@ -539,6 +658,31 @@ class SlicerProcessService : Service() {
         runCatching { artifactStore.recover() }
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val requestId = intent?.getStringExtra(EXTRA_REQUEST_ID)
+        when (intent?.action) {
+            ACTION_START_SLICE -> {
+                if (
+                    requestId == null || requestId.length !in 1..MAX_REQUEST_ID_LENGTH ||
+                    !beginForegroundSlice(requestId)
+                ) {
+                    stopSelf(startId)
+                }
+            }
+            ACTION_CANCEL_SLICE -> if (requestId != null) cancelFromNotification(requestId)
+            ACTION_FINISH_SLICE -> {
+                if (
+                    requestId == null || requestId.length !in 1..MAX_REQUEST_ID_LENGTH ||
+                    !finishForegroundSlice(requestId)
+                ) {
+                    stopSelf(startId)
+                }
+            }
+            else -> stopSelf(startId)
+        }
+        return START_NOT_STICKY
+    }
+
     override fun onBind(intent: Intent?): IBinder = messenger.binder
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -554,12 +698,144 @@ class SlicerProcessService : Service() {
     }
 
     override fun onDestroy() {
+        stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
         if (activeRequestId.get() != null) {
             Process.killProcess(Process.myPid())
         } else if (sliceThreadDelegate.isInitialized()) {
             sliceThread.quitSafely()
         }
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        val requestId = foregroundRequestId.get()
+        if (requestId != null) {
+            activeReply.getAndSet(null)?.let { reply ->
+                send(
+                    reply,
+                    SlicerProcessContract.MESSAGE_RESULT,
+                    data = failure("Slicing timed out"),
+                )
+            }
+            cancelledRequestId.set(requestId)
+            finishForegroundSlice(requestId)
+        }
+        stopSelf(startId)
+        if (activeRequestId.get() != null) Process.killProcess(Process.myPid())
+    }
+
+    private fun beginForegroundSlice(requestId: String): Boolean {
+        val current = foregroundRequestId.get()
+        if (current != null && current != requestId) return false
+        if (current == null && !foregroundRequestId.compareAndSet(null, requestId)) return false
+        val notifications = getSystemService(NotificationManager::class.java)
+        notifications.createNotificationChannel(
+            NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                getString(R.string.slice_notification_channel),
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = getString(R.string.slice_notification_channel_summary)
+                setShowBadge(false)
+            },
+        )
+        val notification = sliceNotification(requestId, progress = 0, canceling = false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+        return true
+    }
+
+    private fun sliceNotification(
+        requestId: String,
+        progress: Int,
+        canceling: Boolean,
+    ): Notification {
+        val contentIntent = PendingIntent.getActivity(
+            this,
+            OPEN_APP_REQUEST_CODE,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val cancelIntent = PendingIntent.getService(
+            this,
+            CANCEL_REQUEST_CODE,
+            cancelSliceIntent(this, requestId),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val text = when {
+            canceling -> getString(R.string.slice_notification_canceling)
+            progress <= 0 -> getString(R.string.slice_notification_preparing)
+            else -> getString(R.string.slice_notification_progress, progress.coerceIn(0, 100))
+        }
+        return Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_slice_notification)
+            .setContentTitle(getString(R.string.slice_notification_title))
+            .setContentText(text)
+            .setCategory(Notification.CATEGORY_PROGRESS)
+            .setContentIntent(contentIntent)
+            .setOnlyAlertOnce(true)
+            .setOngoing(!canceling)
+            .setProgress(100, progress.coerceIn(0, 100), progress <= 0 && !canceling)
+            .addAction(
+                Notification.Action.Builder(
+                    Icon.createWithResource(this, R.drawable.ic_slice_notification),
+                    getString(R.string.cancel),
+                    cancelIntent,
+                ).build(),
+            )
+            .build()
+    }
+
+    private fun updateForegroundSlice(requestId: String, progress: Int, canceling: Boolean = false) {
+        if (foregroundRequestId.get() != requestId) return
+        getSystemService(NotificationManager::class.java).notify(
+            NOTIFICATION_ID,
+            sliceNotification(requestId, progress, canceling),
+        )
+    }
+
+    private fun finishForegroundSlice(requestId: String): Boolean {
+        if (!foregroundRequestId.compareAndSet(requestId, null)) return false
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        return true
+    }
+
+    private fun cancelFromNotification(requestId: String) {
+        if (foregroundRequestId.get() != requestId) return
+        runCatching { ForegroundSliceSession.markCanceled(this, requestId) }
+        if (activeRequestId.get() != requestId) {
+            finishForegroundSlice(requestId)
+            return
+        }
+        cancelledRequestId.set(requestId)
+        updateForegroundSlice(requestId, progress = 0, canceling = true)
+        activeReply.getAndSet(null)?.let { reply ->
+            send(
+                reply,
+                SlicerProcessContract.MESSAGE_RESULT,
+                data = failure("Slicing was canceled").apply {
+                    putBoolean(SlicerProcessContract.KEY_CANCELED, true)
+                },
+            )
+        }
+        mainHandler.postDelayed(
+            {
+                if (cancelledRequestId.get() == requestId) {
+                    Process.killProcess(Process.myPid())
+                }
+            },
+            CANCEL_PROCESS_DELAY_MILLIS,
+        )
     }
 
     private fun handleMessage(message: Message) {
@@ -619,6 +895,19 @@ class SlicerProcessService : Service() {
             )
             return
         }
+        if (
+            operation == WorkOperation.SLICE &&
+            ForegroundSliceSession.wasCanceled(this, requestId)
+        ) {
+            send(
+                message.replyTo,
+                SlicerProcessContract.MESSAGE_RESULT,
+                data = failure("Slicing was canceled").apply {
+                    putBoolean(SlicerProcessContract.KEY_CANCELED, true)
+                },
+            )
+            return
+        }
         if (!activeRequestId.compareAndSet(null, requestId)) {
             send(
                 message.replyTo,
@@ -630,28 +919,39 @@ class SlicerProcessService : Service() {
         cancelledRequestId.set(null)
         val requestData = Bundle(message.data)
         val reply = message.replyTo
+        if (operation == WorkOperation.SLICE) activeReply.set(reply)
         val accepted = sliceHandler.post {
             val result = when (operation) {
                 WorkOperation.TEST_PROBE -> runCancellationProbe(reply)
                 WorkOperation.AUTO_ORIENT -> runAutoOrient(requestData)
                 WorkOperation.AUTO_ARRANGE -> runAutoArrange(requestData)
                 WorkOperation.SLICE -> runSlice(requestData) { percent ->
+                    mainHandler.post { updateForegroundSlice(requestId, percent) }
                     send(reply, SlicerProcessContract.MESSAGE_PROGRESS, percent)
                 }
             }
             if (cancelledRequestId.get() == requestId) return@post
             if (activeRequestId.compareAndSet(requestId, null)) {
+                activeReply.compareAndSet(reply, null)
                 send(reply, SlicerProcessContract.MESSAGE_RESULT, data = result)
+                if (operation == WorkOperation.SLICE) {
+                    mainHandler.post {
+                        updateForegroundSlice(requestId, progress = 100)
+                        scheduleForegroundCompletionGuard(requestId)
+                    }
+                }
             }
         }
         if (accepted && operation == WorkOperation.SLICE) scheduleStorageGuard(requestId)
         if (!accepted) {
             activeRequestId.compareAndSet(requestId, null)
+            activeReply.compareAndSet(reply, null)
             send(
                 reply,
                 SlicerProcessContract.MESSAGE_RESULT,
                 data = failure("Slicer worker thread is unavailable"),
             )
+            if (operation == WorkOperation.SLICE) finishForegroundSlice(requestId)
         }
     }
 
@@ -673,6 +973,20 @@ class SlicerProcessService : Service() {
         )
     }
 
+    private fun scheduleForegroundCompletionGuard(requestId: String) {
+        mainHandler.postDelayed(
+            {
+                if (
+                    foregroundRequestId.get() == requestId &&
+                    activeRequestId.get() == null
+                ) {
+                    finishForegroundSlice(requestId)
+                }
+            },
+            FOREGROUND_COMPLETION_GRACE_MILLIS,
+        )
+    }
+
     private fun cancelWork(message: Message) {
         val requestId = message.data.getString(SlicerProcessContract.KEY_REQUEST_ID)
         if (requestId == null || activeRequestId.get() != requestId) {
@@ -684,6 +998,16 @@ class SlicerProcessService : Service() {
             return
         }
         cancelledRequestId.set(requestId)
+        updateForegroundSlice(requestId, progress = 0, canceling = true)
+        activeReply.getAndSet(null)?.let { active ->
+            send(
+                active,
+                SlicerProcessContract.MESSAGE_RESULT,
+                data = failure("Slicing was canceled").apply {
+                    putBoolean(SlicerProcessContract.KEY_CANCELED, true)
+                },
+            )
+        }
         send(
             message.replyTo,
             SlicerProcessContract.MESSAGE_RESULT,
@@ -994,7 +1318,37 @@ class SlicerProcessService : Service() {
         }
     }
 
-    private companion object {
+    internal companion object {
+        private const val ACTION_START_SLICE =
+            "com.ashcastle.duckyslicer.action.START_FOREGROUND_SLICE"
+        private const val ACTION_CANCEL_SLICE =
+            "com.ashcastle.duckyslicer.action.CANCEL_FOREGROUND_SLICE"
+        private const val ACTION_FINISH_SLICE =
+            "com.ashcastle.duckyslicer.action.FINISH_FOREGROUND_SLICE"
+        private const val EXTRA_REQUEST_ID = "foregroundRequestId"
+        private const val NOTIFICATION_CHANNEL_ID = "active_slicing"
+        private const val NOTIFICATION_ID = 2_041
+        private const val OPEN_APP_REQUEST_CODE = 2_042
+        private const val CANCEL_REQUEST_CODE = 2_043
+
+        fun startSliceIntent(context: Context, requestId: String): Intent =
+            Intent(context, SlicerProcessService::class.java).apply {
+                action = ACTION_START_SLICE
+                putExtra(EXTRA_REQUEST_ID, requestId)
+            }
+
+        fun cancelSliceIntent(context: Context, requestId: String): Intent =
+            Intent(context, SlicerProcessService::class.java).apply {
+                action = ACTION_CANCEL_SLICE
+                putExtra(EXTRA_REQUEST_ID, requestId)
+            }
+
+        fun finishSliceIntent(context: Context, requestId: String): Intent =
+            Intent(context, SlicerProcessService::class.java).apply {
+                action = ACTION_FINISH_SLICE
+                putExtra(EXTRA_REQUEST_ID, requestId)
+            }
+
         const val MAX_OBJECTS = 256
         const val MINIMUM_BED_SIZE_MM = 1f
         const val MAXIMUM_BED_SIZE_MM = 10_000f
@@ -1007,6 +1361,7 @@ class SlicerProcessService : Service() {
         const val CANCEL_PROCESS_DELAY_MILLIS = 50L
         const val TEST_PROBE_DURATION_MILLIS = 30_000L
         const val STORAGE_GUARD_INTERVAL_MILLIS = 500L
+        const val FOREGROUND_COMPLETION_GRACE_MILLIS = 10L * 60L * 1_000L
         const val TEST_MINIMUM_GCODE_BYTES = 16 * 1_024
         const val PRODUCTION_MAXIMUM_GCODE_BYTES = 1_073_741_824
         const val LOG_TAG = "DuckySlicer"
@@ -1042,6 +1397,7 @@ private object SlicerProcessContract {
     const val KEY_OPTIONS = "options"
     const val KEY_MAXIMUM_GCODE_BYTES_FOR_TEST = "maximumGcodeBytesForTest"
     const val KEY_OK = "ok"
+    const val KEY_CANCELED = "canceled"
     const val KEY_ERROR = "error"
     const val KEY_PID = "pid"
     const val KEY_OUTPUT_PATH = "outputPath"

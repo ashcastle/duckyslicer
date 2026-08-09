@@ -1,6 +1,7 @@
 package com.ashcastle.duckyslicer
 
 import android.os.SystemClock
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -47,6 +48,20 @@ class SliceLifecycleInstrumentedTest {
                     assertTrue("The slice must be active before recreation", initial.state.value.slicing)
                 }
 
+                val retained = requireNotNull(retainedModel)
+                val foregroundDeadline = SystemClock.elapsedRealtime() + SERVICE_STATE_TIMEOUT_MILLIS
+                while (
+                    !SlicerProcessClient.workerIsForegroundForTest(context) &&
+                    retained.state.value.busy &&
+                    SystemClock.elapsedRealtime() < foregroundDeadline
+                ) {
+                    SystemClock.sleep(20)
+                }
+                assertTrue(
+                    "The user-started slice must promote the isolated worker",
+                    SlicerProcessClient.workerIsForegroundForTest(context),
+                )
+
                 scenario.recreate()
 
                 scenario.onActivity { activity ->
@@ -58,7 +73,12 @@ class SliceLifecycleInstrumentedTest {
                     )
                 }
 
-                val retained = requireNotNull(retainedModel)
+                scenario.moveToState(Lifecycle.State.CREATED)
+                assertTrue("Background Activity must retain the foreground slice", retained.state.value.busy)
+                assertTrue(
+                    "The slicer service must be foreground while the Activity is stopped",
+                    SlicerProcessClient.workerIsForegroundForTest(context),
+                )
                 val deadline = SystemClock.elapsedRealtime() + COMPLETION_TIMEOUT_MILLIS
                 while (retained.state.value.busy && SystemClock.elapsedRealtime() < deadline) {
                     SystemClock.sleep(50)
@@ -71,6 +91,18 @@ class SliceLifecycleInstrumentedTest {
                 }
                 assertNotNull("The retained slice must produce a Preview", completed.preview)
                 assertTrue(outcome.isRestorableFrom(context.filesDir))
+                val stoppedDeadline = SystemClock.elapsedRealtime() + SERVICE_STATE_TIMEOUT_MILLIS
+                while (
+                    SlicerProcessClient.workerIsForegroundForTest(context) &&
+                    SystemClock.elapsedRealtime() < stoppedDeadline
+                ) {
+                    SystemClock.sleep(20)
+                }
+                assertFalse(
+                    "The foreground service must stop after Preview generation",
+                    SlicerProcessClient.workerIsForegroundForTest(context),
+                )
+                scenario.moveToState(Lifecycle.State.RESUMED)
 
                 scenario.onActivity {
                     assertTrue(retained.loadPreview(outcome, 0, outcome.layers / 2))
@@ -105,6 +137,44 @@ class SliceLifecycleInstrumentedTest {
                 assertFalse("Pre-service cancellation must finish", retained.state.value.busy)
                 assertEquals(SliceTerminalStatus.CANCELED, retained.state.value.terminalStatus)
                 assertNull("A canceled operation must not publish G-code", retained.state.value.outcome)
+
+                val cancelCleanupDeadline =
+                    SystemClock.elapsedRealtime() + SERVICE_STATE_TIMEOUT_MILLIS
+                while (
+                    SlicerProcessClient.workerIsForegroundForTest(context) &&
+                    SystemClock.elapsedRealtime() < cancelCleanupDeadline
+                ) {
+                    SystemClock.sleep(20)
+                }
+                scenario.onActivity {
+                    retained.clearCompleted()
+                    assertTrue(retained.start(listOf(projectObject), options))
+                }
+                val notificationDeadline =
+                    SystemClock.elapsedRealtime() + SERVICE_STATE_TIMEOUT_MILLIS
+                while (
+                    !SlicerProcessClient.workerIsForegroundForTest(context) &&
+                    retained.state.value.busy &&
+                    SystemClock.elapsedRealtime() < notificationDeadline
+                ) {
+                    SystemClock.sleep(20)
+                }
+                assertTrue(
+                    "Notification cancellation requires an active foreground slice",
+                    SlicerProcessClient.workerIsForegroundForTest(context),
+                )
+                assertTrue(SlicerProcessClient.cancelFromNotificationForTest())
+                val notificationCancelDeadline =
+                    SystemClock.elapsedRealtime() + COMPLETION_TIMEOUT_MILLIS
+                while (
+                    retained.state.value.busy &&
+                    SystemClock.elapsedRealtime() < notificationCancelDeadline
+                ) {
+                    SystemClock.sleep(20)
+                }
+                assertFalse("Notification cancellation must finish", retained.state.value.busy)
+                assertEquals(SliceTerminalStatus.CANCELED, retained.state.value.terminalStatus)
+                assertNull("Notification cancellation must publish no G-code", retained.state.value.outcome)
             }
         } finally {
             storedModel.delete()
@@ -114,5 +184,6 @@ class SliceLifecycleInstrumentedTest {
 
     private companion object {
         const val COMPLETION_TIMEOUT_MILLIS = 90_000L
+        const val SERVICE_STATE_TIMEOUT_MILLIS = 10_000L
     }
 }

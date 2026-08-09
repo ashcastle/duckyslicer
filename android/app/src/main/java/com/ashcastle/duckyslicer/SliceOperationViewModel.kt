@@ -47,6 +47,15 @@ internal class SliceOperationViewModel : ViewModel() {
         if (objects.isEmpty() || mutableState.value.busy || operationJob.get()?.isActive == true) {
             return false
         }
+        val foregroundSession = try {
+            SlicerProcessClient.beginUserSlice()
+        } catch (failure: Exception) {
+            if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Foreground slice could not start", failure)
+            mutableState.value = SliceOperationState(
+                terminalStatus = SliceTerminalStatus.SLICE_FAILED,
+            )
+            return false
+        }
         mutableState.value = SliceOperationState(slicing = true)
         operationCancellation.set(false)
         val job = viewModelScope.launch {
@@ -55,7 +64,10 @@ internal class SliceOperationViewModel : ViewModel() {
                     OnDeviceSlicer.slice(
                         objects,
                         options,
-                        cancellationRequested = operationCancellation::get,
+                        foregroundSession = foregroundSession,
+                        cancellationRequested = {
+                            operationCancellation.get() || foregroundSession.cancellationRequested()
+                        },
                     ) { progress ->
                         mutableState.update { current ->
                             if (current.slicing) {
@@ -72,13 +84,21 @@ internal class SliceOperationViewModel : ViewModel() {
                     previewLoading = true,
                 )
                 try {
+                    if (foregroundSession.cancellationRequested()) {
+                        throw SlicingCancelledException()
+                    }
                     val preview = withContext(Dispatchers.IO) { buildPreview(outcome, 0, Int.MAX_VALUE) }
+                    if (foregroundSession.cancellationRequested()) {
+                        throw SlicingCancelledException()
+                    }
                     mutableState.value = SliceOperationState(
                         progress = 100,
                         outcome = outcome.copy(layers = preview.layerCount),
                         preview = preview,
                     )
                 } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (cancellation: SlicingCancelledException) {
                     throw cancellation
                 } catch (failure: Exception) {
                     if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Initial Preview failed", failure)
@@ -100,6 +120,12 @@ internal class SliceOperationViewModel : ViewModel() {
                     terminalStatus = SliceTerminalStatus.SLICE_FAILED,
                 )
             } finally {
+                if (foregroundSession.cancellationRequested()) {
+                    mutableState.value = SliceOperationState(
+                        terminalStatus = SliceTerminalStatus.CANCELED,
+                    )
+                }
+                foregroundSession.close()
                 operationCancellation.set(false)
                 operationJob.set(null)
             }
