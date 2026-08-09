@@ -25,6 +25,7 @@ internal fun DepthTestedToolpathScene(
     preview: GcodeLayerPreview,
     bedSizeX: Float,
     bedSizeY: Float,
+    bedPolygon: List<Float>,
     opacity: Float,
     depthContrast: Float,
     visibleRoles: Set<Int>,
@@ -34,7 +35,7 @@ internal fun DepthTestedToolpathScene(
     AndroidView(
         factory = { context -> ToolpathSurfaceView(context) },
         update = { view ->
-            view.submit(preview, bedSizeX, bedSizeY, opacity, depthContrast, visibleRoles, detail)
+            view.submit(preview, bedSizeX, bedSizeY, bedPolygon, opacity, depthContrast, visibleRoles, detail)
         },
         modifier = modifier,
     )
@@ -69,6 +70,7 @@ private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
         preview: GcodeLayerPreview,
         bedSizeX: Float,
         bedSizeY: Float,
+        bedPolygon: List<Float>,
         opacity: Float,
         depthContrast: Float,
         visibleRoles: Set<Int>,
@@ -79,6 +81,7 @@ private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
                 preview = preview,
                 bedSizeX = bedSizeX,
                 bedSizeY = bedSizeY,
+                bedPolygon = bedPolygon,
                 opacity = opacity,
                 depthContrast = depthContrast,
                 detail = detail,
@@ -174,6 +177,7 @@ internal data class ToolpathScene(
     val depthContrast: Float,
     val detail: PreviewDetail,
     val visibleRoles: Set<Int> = (0 until GcodeLayerPreview.ROLE_COUNT).toSet(),
+    val bedPolygon: List<Float> = rectangularBedPolygon(bedSizeX, bedSizeY),
 )
 
 internal class ToolpathRenderer : GLSurfaceView.Renderer {
@@ -424,7 +428,7 @@ internal object ToolpathMeshBuilder {
         val budget = depthPreviewSegmentBudget(scene.detail)
         val plan = scene.preview.buildRenderPlan(budget)
         val builder = FloatBuilder(plan.segmentOffsets.size * 36 * 7 + 2_000)
-        addBed(builder, scene.bedSizeX, scene.bedSizeY)
+        addBed(builder, scene.bedSizeX, scene.bedSizeY, scene.bedPolygon)
         val zSpan = (scene.preview.maxZMm - scene.preview.minZMm).coerceAtLeast(0.001f)
         plan.segmentOffsets.forEach { offset ->
             val x1 = scene.preview.segments[offset]
@@ -478,32 +482,56 @@ internal object ToolpathMeshBuilder {
         return builder.finish()
     }
 
-    private fun addBed(builder: FloatBuilder, width: Float, depth: Float) {
-        addQuad(
-            builder,
-            0f, 0f, -0.08f,
-            width, 0f, -0.08f,
-            width, depth, -0.08f,
-            0f, depth, -0.08f,
-            floatArrayOf(0.15f, 0.16f, 0.145f),
-            1f,
-        )
+    private fun addBed(builder: FloatBuilder, width: Float, depth: Float, bedPolygon: List<Float>) {
+        val polygon = bedPolygon.takeIf { bedPolygonIsValid(it, width, depth) }
+            ?: rectangularBedPolygon(width, depth)
+        val bedColor = floatArrayOf(0.15f, 0.16f, 0.145f)
+        triangulateBedPolygon(polygon).chunked(3).forEach { triangle ->
+            triangle.forEach { index ->
+                builder.vertex(polygon[index * 2], polygon[index * 2 + 1], -0.08f, bedColor, 1f)
+            }
+        }
         val step = if (max(width, depth) <= 230f) 20f else 30f
         var x = 0f
         while (x <= width) {
-            addRibbon(
-                builder, x, 0f, x, depth, -0.06f, -1f, 0f, 0.12f,
-                floatArrayOf(0.33f, 0.35f, 0.31f), 0.72f,
-            )
+            verticalBedSegments(x, polygon).forEach { (start, end) ->
+                addRibbon(
+                    builder, x, start, x, end, -0.06f, -1f, 0f, 0.12f,
+                    floatArrayOf(0.33f, 0.35f, 0.31f), 0.72f,
+                )
+            }
             x += step
         }
         var y = 0f
         while (y <= depth) {
-            addRibbon(
-                builder, 0f, y, width, y, -0.06f, 0f, 1f, 0.12f,
-                floatArrayOf(0.33f, 0.35f, 0.31f), 0.72f,
-            )
+            horizontalBedSegments(y, polygon).forEach { (start, end) ->
+                addRibbon(
+                    builder, start, y, end, y, -0.06f, 0f, 1f, 0.12f,
+                    floatArrayOf(0.33f, 0.35f, 0.31f), 0.72f,
+                )
+            }
             y += step
+        }
+        repeat(polygon.size / 2) { index ->
+            val next = (index + 1) % (polygon.size / 2)
+            val x1 = polygon[index * 2]
+            val y1 = polygon[index * 2 + 1]
+            val x2 = polygon[next * 2]
+            val y2 = polygon[next * 2 + 1]
+            val length = hypot(x2 - x1, y2 - y1).coerceAtLeast(0.001f)
+            addRibbon(
+                builder,
+                x1,
+                y1,
+                x2,
+                y2,
+                -0.04f,
+                -(y2 - y1) / length,
+                (x2 - x1) / length,
+                0.35f,
+                floatArrayOf(0.96f, 0.75f, 0.18f),
+                0.9f,
+            )
         }
     }
 

@@ -71,6 +71,33 @@ class ProfileStoreMigrationTest {
     }
 
     @Test
+    fun nonRectangularBedPersistsAndMalformedPolygonFailsClosed() {
+        val directory = Files.createTempDirectory("duckyslicer-profile-bed-").toFile()
+        val file = directory.resolve("user_profiles.json")
+        val polygon = listOf(110f, 0f, 220f, 110f, 110f, 220f, 0f, 110f)
+        try {
+            val options = SliceOptions().selectPrinter(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(bedPolygon = polygon),
+            )
+            val saved = ProfileStore(file).savePrinter("Delta bed", options)
+            assertEquals(polygon, saved.bedPolygon)
+            assertEquals(polygon, ProfileStore(file).load().printers.single { it.id == saved.id }.bedPolygon)
+
+            val root = JSONObject(file.readText())
+            root.getJSONArray("printers").getJSONObject(0)
+                .put("bedPolygon", JSONArray(listOf(0, 0, 220, 220, 0, 220, 220, 0)))
+            file.writeText(root.toString())
+            directory.resolve("user_profiles.json.bak").delete()
+
+            val invalid = ProfileStore(file)
+            invalid.load()
+            assertTrue(invalid.storageUnavailable)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun unreadableOrFutureProfilesAreNotOverwrittenBySave() {
         val semanticallyInvalid = JSONObject()
             .put("schemaVersion", 14)

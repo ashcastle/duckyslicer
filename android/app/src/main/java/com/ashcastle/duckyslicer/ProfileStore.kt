@@ -47,6 +47,7 @@ class ProfileStore private constructor(
             name = requireName(name),
             bedSizeX = options.bedSizeX,
             bedSizeY = options.bedSizeY,
+            bedPolygon = options.bedPolygon,
             maxPrintHeight = options.maxPrintHeight,
             nozzleDiameter = options.nozzleDiameter,
             machineStartGcode = options.printerProfile.machineStartGcode,
@@ -327,7 +328,7 @@ class ProfileStore private constructor(
         ?: throw IllegalArgumentException("Profile name is required")
 
     private companion object {
-        const val USER_PROFILE_SCHEMA_VERSION = 14
+        const val USER_PROFILE_SCHEMA_VERSION = 15
         const val MAX_USER_PROFILE_BYTES = 16 * 1_024 * 1_024
         const val MAX_USER_PROFILES = 4_096
         val PROFILE_ARRAY_PARSERS: Map<String, (JSONObject) -> String?> = mapOf(
@@ -347,6 +348,7 @@ class ProfileStore private constructor(
 internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("id", id).put("name", name)
     .put("bedSizeX", bedSizeX).put("bedSizeY", bedSizeY)
+    .put("bedPolygon", JSONArray(bedPolygon))
     .put("maxPrintHeight", maxPrintHeight).put("nozzleDiameter", nozzleDiameter)
     .put("machineStartGcode", machineStartGcode).put("machineEndGcode", machineEndGcode)
     .put("gcodeFlavor", gcodeFlavor)
@@ -537,9 +539,11 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("compatiblePrinters", JSONArray(compatiblePrinters))
 
 internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching {
+    val bedSizeX = getDouble("bedSizeX").toFloat()
+    val bedSizeY = getDouble("bedSizeY").toFloat()
     PrinterProfile(
         getString("id"), getString("name"),
-        getDouble("bedSizeX").toFloat(), getDouble("bedSizeY").toFloat(),
+        bedSizeX, bedSizeY,
         getDouble("maxPrintHeight").toFloat(), getDouble("nozzleDiameter").toFloat(),
         builtIn = optBoolean("builtIn"),
         brand = optionalString("brand"),
@@ -561,6 +565,11 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         maxJerkY = optDouble("maxJerkY", 9.0).toFloat(),
         maxJerkZ = optDouble("maxJerkZ", 3.0).toFloat(),
         maxJerkE = optDouble("maxJerkE", 2.5).toFloat(),
+        bedPolygon = if (has("bedPolygon")) {
+            requireNotNull(floatList("bedPolygon")) { "Invalid bed polygon" }
+        } else {
+            rectangularBedPolygon(bedSizeX, bedSizeY)
+        },
     )
 }.getOrNull()
 
@@ -770,6 +779,11 @@ private fun JSONObject.stringList(key: String): List<String> =
     optJSONArray(key)?.let { values ->
         List(values.length()) { index -> values.optString(index) }.filter(String::isNotBlank)
     }.orEmpty()
+
+private fun JSONObject.floatList(key: String): List<Float>? = optJSONArray(key)?.let { values ->
+    if (values.length() !in 6..512 || values.length() % 2 != 0) return null
+    List(values.length()) { index -> values.getDouble(index).toFloat() }
+}
 
 private fun JSONArray?.objects(): List<JSONObject> = if (this == null) {
     emptyList()

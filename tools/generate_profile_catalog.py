@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
     "monotonic", "monotonicline", "rectilinear", "alignedrectilinear",
@@ -30,6 +30,7 @@ BINARY_FLOAT = 2
 BINARY_INT = 3
 BINARY_BOOL = 4
 BINARY_STRING_LIST = 5
+BINARY_FLOAT_LIST = 6
 
 
 def scalar(value: Any, default: Any = None) -> Any:
@@ -116,7 +117,7 @@ class Resolver:
         return result
 
 
-def printable_size(area: Any) -> tuple[float, float]:
+def printable_geometry(area: Any) -> tuple[float, float, list[float]]:
     points: list[tuple[float, float]] = []
     for item in values(area):
         try:
@@ -126,16 +127,30 @@ def printable_size(area: Any) -> tuple[float, float]:
             continue
     if len(points) < 3:
         raise ValueError("invalid printable area")
-    width = max(point[0] for point in points) - min(point[0] for point in points)
-    depth = max(point[1] for point in points) - min(point[1] for point in points)
+    if points[-1] == points[0]:
+        points.pop()
+    if len(points) < 3 or len(points) > 256:
+        raise ValueError("unsafe printable area point count")
+    minimum_x = min(point[0] for point in points)
+    minimum_y = min(point[1] for point in points)
+    width = max(point[0] for point in points) - minimum_x
+    depth = max(point[1] for point in points) - minimum_y
     if not (50 <= width <= 1_500 and 50 <= depth <= 1_500):
         raise ValueError("unsafe printable area")
-    return width, depth
+    normalized = [coordinate for point in points for coordinate in (point[0] - minimum_x, point[1] - minimum_y)]
+    signed_double_area = sum(
+        normalized[index] * normalized[(index + 3) % len(normalized)] -
+        normalized[(index + 2) % len(normalized)] * normalized[index + 1]
+        for index in range(0, len(normalized), 2)
+    )
+    if not all(math.isfinite(value) for value in normalized) or abs(signed_double_area) < 2.0:
+        raise ValueError("degenerate printable area")
+    return width, depth, normalized
 
 
 def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     name = str(raw["name"])
-    width, depth = printable_size(raw.get("printable_area"))
+    width, depth, bed_polygon = printable_geometry(raw.get("printable_area"))
     height = number(raw.get("printable_height"), 0)
     nozzle = number(raw.get("nozzle_diameter"), 0)
     flavor = str(scalar(raw.get("gcode_flavor"), "")).lower()
@@ -154,6 +169,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "brand": brand,
         "bedSizeX": width,
         "bedSizeY": depth,
+        "bedPolygon": bed_polygon,
         "maxPrintHeight": height,
         "nozzleDiameter": nozzle,
         "machineStartGcode": str(raw.get("machine_start_gcode", "")),
@@ -758,6 +774,8 @@ def binary_kind(value: Any) -> int:
         return BINARY_STRING
     if isinstance(value, list) and all(isinstance(item, str) for item in value):
         return BINARY_STRING_LIST
+    if isinstance(value, list) and all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in value):
+        return BINARY_FLOAT_LIST
     raise ValueError(f"unsupported binary catalog value: {type(value).__name__}")
 
 
@@ -789,6 +807,10 @@ def write_binary_value(output: Any, kind: int, value: Any) -> None:
         output.write(struct.pack(">I", len(value)))
         for item in value:
             write_binary_string(output, item)
+    elif kind == BINARY_FLOAT_LIST:
+        output.write(struct.pack(">I", len(value)))
+        for item in value:
+            output.write(struct.pack(">f", item))
     else:
         raise ValueError(f"unsupported binary catalog kind: {kind}")
 

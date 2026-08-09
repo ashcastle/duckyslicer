@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v12.bin"
+private const val CATALOG_ASSET = "profile_catalog_v13.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -15,6 +15,7 @@ internal const val BINARY_FLOAT = 2
 internal const val BINARY_INT = 3
 internal const val BINARY_BOOL = 4
 internal const val BINARY_STRING_LIST = 5
+internal const val BINARY_FLOAT_LIST = 6
 
 internal data class BinaryField(val name: String, val kind: Int)
 
@@ -30,12 +31,15 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 12) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 13) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
         val filaments = input.readSection(FILAMENT_BINARY_FIELDS, ::readFilament)
         val slicing = input.readSection(QUALITY_BINARY_FIELDS, ::readQuality)
+        check(printers.all(ProfileValidation::printer)) { "Invalid printer profile in catalog" }
+        check(filaments.all(ProfileValidation::filament)) { "Invalid filament profile in catalog" }
+        check(slicing.all(ProfileValidation::slicing)) { "Invalid slicing profile in catalog" }
         check(input.read() == -1) { "Unexpected trailing profile catalog data" }
         return ProfileCatalog(
             printers = (PrinterProfile.builtIns + printers).distinctBy(PrinterProfile::id),
@@ -53,6 +57,7 @@ class OrcaProfileCatalog(private val context: Context) {
         brand = input.readCatalogString(),
         bedSizeX = input.readFloat(),
         bedSizeY = input.readFloat(),
+        bedPolygon = input.readCatalogFloatList(),
         maxPrintHeight = input.readFloat(),
         nozzleDiameter = input.readFloat(),
         machineStartGcode = input.readCatalogString(),
@@ -140,6 +145,11 @@ internal fun DataInputStream.readCatalogStringList(): List<String> {
     return List(count) { readCatalogString() }
 }
 
+internal fun DataInputStream.readCatalogFloatList(): List<Float> {
+    val count = readBoundedCount(MAX_BED_POLYGON_COORDINATES, "bed polygon coordinates")
+    return List(count) { readFloat() }
+}
+
 private fun DataInputStream.readBoundedCount(maximum: Int, label: String): Int {
     val value = readInt()
     check(value in 0..maximum) { "Invalid $label count: $value" }
@@ -152,6 +162,7 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("brand", BINARY_STRING),
     BinaryField("bedSizeX", BINARY_FLOAT),
     BinaryField("bedSizeY", BINARY_FLOAT),
+    BinaryField("bedPolygon", BINARY_FLOAT_LIST),
     BinaryField("maxPrintHeight", BINARY_FLOAT),
     BinaryField("nozzleDiameter", BINARY_FLOAT),
     BinaryField("machineStartGcode", BINARY_STRING),
@@ -173,6 +184,8 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("maxJerkZ", BINARY_FLOAT),
     BinaryField("maxJerkE", BINARY_FLOAT),
 )
+
+private const val MAX_BED_POLYGON_COORDINATES = 512
 
 private val FILAMENT_BINARY_FIELDS = arrayOf(
     BinaryField("id", BINARY_STRING),

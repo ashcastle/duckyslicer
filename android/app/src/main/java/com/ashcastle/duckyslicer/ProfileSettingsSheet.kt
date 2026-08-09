@@ -216,7 +216,21 @@ private fun PrinterSettingsSheet(
         value = options.bedSizeX,
         range = 100f..500f,
         steps = 399,
-        onValueChange = { onOptionsChanged(options.copy(bedSizeX = it.roundToInt().toFloat())) },
+        onValueChange = {
+            val width = it.roundToInt().toFloat()
+            onOptionsChanged(
+                options.copy(
+                    bedSizeX = width,
+                    bedPolygon = scaledBedPolygon(
+                        options.bedPolygon,
+                        options.bedSizeX,
+                        options.bedSizeY,
+                        width,
+                        options.bedSizeY,
+                    ),
+                ),
+            )
+        },
     )
     SettingSlider(
         label = stringResource(R.string.bed_depth),
@@ -224,7 +238,21 @@ private fun PrinterSettingsSheet(
         value = options.bedSizeY,
         range = 100f..500f,
         steps = 399,
-        onValueChange = { onOptionsChanged(options.copy(bedSizeY = it.roundToInt().toFloat())) },
+        onValueChange = {
+            val depth = it.roundToInt().toFloat()
+            onOptionsChanged(
+                options.copy(
+                    bedSizeY = depth,
+                    bedPolygon = scaledBedPolygon(
+                        options.bedPolygon,
+                        options.bedSizeX,
+                        options.bedSizeY,
+                        options.bedSizeX,
+                        depth,
+                    ),
+                ),
+            )
+        },
     )
     SettingSlider(
         label = stringResource(R.string.build_height),

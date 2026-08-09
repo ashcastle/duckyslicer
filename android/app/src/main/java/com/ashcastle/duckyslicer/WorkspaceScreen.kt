@@ -242,6 +242,7 @@ fun WorkspaceScreen(
                     preview = if (selectedTab == WorkspaceTab.PREVIEW) layerPreview else null,
                     bedSizeX = sliceOptions.bedSizeX,
                     bedSizeY = sliceOptions.bedSizeY,
+                    bedPolygon = sliceOptions.bedPolygon,
                     toolpathOpacity = appSettings.toolpathOpacity,
                     toolpathDepthContrast = appSettings.toolpathDepthContrast,
                     visibleToolpathRoles = visibleToolpathRoles,
@@ -420,6 +421,7 @@ fun WorkspaceScreen(
             transform = modelTransform,
             bedSizeX = sliceOptions.bedSizeX,
             bedSizeY = sliceOptions.bedSizeY,
+            bedPolygon = sliceOptions.bedPolygon,
             autoLaying = autoLaying,
             onAutoLay = onAutoLay,
             onTransformChanged = onModelTransformChanged,
@@ -438,12 +440,28 @@ private fun ModelTransformSheet(
     transform: ModelTransform,
     bedSizeX: Float,
     bedSizeY: Float,
+    bedPolygon: List<Float>,
     autoLaying: Boolean,
     onAutoLay: () -> Unit,
     onTransformChanged: (ModelTransform) -> Unit,
     onRemoveModel: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val effectiveBedPolygon = bedPolygon.takeIf { bedPolygonIsValid(it, bedSizeX, bedSizeY) }
+        ?: rectangularBedPolygon(bedSizeX, bedSizeY)
+
+    fun constrainedTransform(offsetX: Float, offsetY: Float): ModelTransform {
+        val center = coercePointToBedPolygon(
+            bedSizeX / 2f + offsetX,
+            bedSizeY / 2f + offsetY,
+            effectiveBedPolygon,
+        )
+        return transform.copy(
+            offsetXmm = center.first - bedSizeX / 2f,
+            offsetYmm = center.second - bedSizeY / 2f,
+        )
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = Color(0xFF282925),
@@ -464,7 +482,7 @@ private fun ModelTransformSheet(
                 value = transform.offsetXmm,
                 range = -bedSizeX / 2f..bedSizeX / 2f,
                 enabled = !autoLaying,
-                onValueChange = { onTransformChanged(transform.copy(offsetXmm = it)) },
+                onValueChange = { onTransformChanged(constrainedTransform(it, transform.offsetYmm)) },
             )
             TransformSlider(
                 label = stringResource(R.string.move_y),
@@ -472,7 +490,7 @@ private fun ModelTransformSheet(
                 value = transform.offsetYmm,
                 range = -bedSizeY / 2f..bedSizeY / 2f,
                 enabled = !autoLaying,
-                onValueChange = { onTransformChanged(transform.copy(offsetYmm = it)) },
+                onValueChange = { onTransformChanged(constrainedTransform(transform.offsetXmm, it)) },
             )
             TransformSlider(
                 label = stringResource(R.string.rotate_x),
@@ -718,6 +736,7 @@ private fun BedScene(
     preview: GcodeLayerPreview?,
     bedSizeX: Float,
     bedSizeY: Float,
+    bedPolygon: List<Float>,
     toolpathOpacity: Float,
     toolpathDepthContrast: Float,
     visibleToolpathRoles: Set<Int>,
@@ -748,6 +767,7 @@ private fun BedScene(
             preview = preview,
             bedSizeX = bedSizeX,
             bedSizeY = bedSizeY,
+            bedPolygon = bedPolygon,
             opacity = toolpathOpacity,
             depthContrast = toolpathDepthContrast,
             visibleRoles = visibleToolpathRoles,
@@ -773,6 +793,10 @@ private fun BedScene(
     val currentTransformCommitCallback by rememberUpdatedState(onModelTransformCommitted)
     val currentSupportPaintPreviewCallback by rememberUpdatedState(onSupportPaintPreview)
     val currentSupportPaintCommitCallback by rememberUpdatedState(onSupportPaintCommitted)
+    val effectiveBedPolygon = remember(bedPolygon, bedSizeX, bedSizeY) {
+        bedPolygon.takeIf { bedPolygonIsValid(it, bedSizeX, bedSizeY) }
+            ?: rectangularBedPolygon(bedSizeX, bedSizeY)
+    }
     val previewPaths = remember(preview) {
         Array(PreviewDepthBands) { Array(ToolpathStyles.size) { Path() } }
     }
@@ -859,12 +883,15 @@ private fun BedScene(
                                         ?.transform
                                         ?: dragStartTransform
                                         ?: ModelTransform()
+                                    val coerced = coercePointToBedPolygon(
+                                        bedSizeX / 2f + transform.offsetXmm + bedDeltaX,
+                                        bedSizeY / 2f + transform.offsetYmm + bedDeltaY,
+                                        effectiveBedPolygon,
+                                    )
                                     currentTransformCallback(
                                         transform.copy(
-                                            offsetXmm = (transform.offsetXmm + bedDeltaX)
-                                                .coerceIn(-bedSizeX / 2f, bedSizeX / 2f),
-                                            offsetYmm = (transform.offsetYmm + bedDeltaY)
-                                                .coerceIn(-bedSizeY / 2f, bedSizeY / 2f),
+                                            offsetXmm = coerced.first - bedSizeX / 2f,
+                                            offsetYmm = coerced.second - bedSizeY / 2f,
                                         ),
                                     )
                                 } else {
@@ -920,10 +947,12 @@ private fun BedScene(
         }
 
         val bed = Path().apply {
-            moveTo(project(0f, 0f).x, project(0f, 0f).y)
-            lineTo(project(bedSizeX, 0f).x, project(bedSizeX, 0f).y)
-            lineTo(project(bedSizeX, bedSizeY).x, project(bedSizeX, bedSizeY).y)
-            lineTo(project(0f, bedSizeY).x, project(0f, bedSizeY).y)
+            val first = project(effectiveBedPolygon[0], effectiveBedPolygon[1])
+            moveTo(first.x, first.y)
+            for (index in 2 until effectiveBedPolygon.size step 2) {
+                val point = project(effectiveBedPolygon[index], effectiveBedPolygon[index + 1])
+                lineTo(point.x, point.y)
+            }
             close()
         }
         drawPath(
@@ -934,22 +963,26 @@ private fun BedScene(
         val gridStep = if (max(bedSizeX, bedSizeY) <= 230f) 20f else 30f
         var gridX = 0f
         while (gridX <= bedSizeX) {
-            drawLine(
-                if (preview == null) Color(0xFF555950) else Color(0xFF70746B).copy(alpha = 0.45f),
-                project(gridX, 0f),
-                project(gridX, bedSizeY),
-                1.dp.toPx(),
-            )
+            verticalBedSegments(gridX, effectiveBedPolygon).forEach { (start, end) ->
+                drawLine(
+                    if (preview == null) Color(0xFF555950) else Color(0xFF70746B).copy(alpha = 0.45f),
+                    project(gridX, start),
+                    project(gridX, end),
+                    1.dp.toPx(),
+                )
+            }
             gridX += gridStep
         }
         var gridY = 0f
         while (gridY <= bedSizeY) {
-            drawLine(
-                if (preview == null) Color(0xFF555950) else Color(0xFF70746B).copy(alpha = 0.45f),
-                project(0f, gridY),
-                project(bedSizeX, gridY),
-                1.dp.toPx(),
-            )
+            horizontalBedSegments(gridY, effectiveBedPolygon).forEach { (start, end) ->
+                drawLine(
+                    if (preview == null) Color(0xFF555950) else Color(0xFF70746B).copy(alpha = 0.45f),
+                    project(start, gridY),
+                    project(end, gridY),
+                    1.dp.toPx(),
+                )
+            }
             gridY += gridStep
         }
         drawPath(
