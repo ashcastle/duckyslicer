@@ -15,10 +15,12 @@ class GenerateProfileCatalogTest(unittest.TestCase):
             "-100x0",
         ]
 
-        width, depth, polygon = printable_geometry(area)
+        width, depth, origin_x, origin_y, polygon = printable_geometry(area)
 
         self.assertEqual(200.0, width)
         self.assertEqual(200.0, depth)
+        self.assertEqual(-100.0, origin_x)
+        self.assertEqual(-100.0, origin_y)
         self.assertEqual(
             [100.0, 0.0, 200.0, 100.0, 100.0, 200.0, 0.0, 100.0],
             polygon,

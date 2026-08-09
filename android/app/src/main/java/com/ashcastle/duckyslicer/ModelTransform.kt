@@ -13,8 +13,16 @@ data class ModelTransform(
     val rotationZdeg: Float = 0f,
     val scale: Float = 1f,
 ) {
-    fun toJson(bedSizeX: Float, bedSizeY: Float): String = JSONObject()
-        .put("bedCenterMm", JSONArray(listOf(bedSizeX / 2f, bedSizeY / 2f)))
+    fun toJson(
+        bedSizeX: Float,
+        bedSizeY: Float,
+        bedOriginX: Float = 0f,
+        bedOriginY: Float = 0f,
+    ): String = JSONObject()
+        .put(
+            "bedCenterMm",
+            JSONArray(listOf(bedOriginX + bedSizeX / 2f, bedOriginY + bedSizeY / 2f)),
+        )
         .put("offsetMm", JSONArray(listOf(offsetXmm, offsetYmm)))
         .put("rotationDeg", JSONArray(listOf(rotationXdeg, rotationYdeg, rotationZdeg)))
         .put("scale", scale)

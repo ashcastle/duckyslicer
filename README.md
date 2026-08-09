@@ -29,8 +29,9 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 
 - Fully offline STL import, on-device slicing, preview, and G-code export
 - A full-screen print bed that keeps the model and G-code at their real millimetre scale
-- Orca printer profiles keep their original printable-area polygon end to end, so circular
-  and irregular beds remain accurate in placement, slicing, editing, and preview
+- Orca printer profiles keep their original printable-area polygon and machine origin end to
+  end, so circular, irregular, and centered-coordinate beds remain accurate in placement,
+  slicing, editing, generated G-code, and preview
 - One-finger orbit and two-finger pan/zoom for the whole scene
 - Tap an object to select it, then drag it directly across the bed
 - Import, select, duplicate, and slice multiple objects in one project, with undo and redo;

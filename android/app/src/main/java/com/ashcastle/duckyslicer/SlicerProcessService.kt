@@ -115,6 +115,8 @@ internal object SlicerProcessClient {
         transformedModels: List<File>,
         bedSizeX: Float,
         bedSizeY: Float,
+        bedOriginX: Float,
+        bedOriginY: Float,
         bedPolygon: List<Float>,
         minimumGap: Float = 6f,
     ): OrcaArrangement {
@@ -139,6 +141,8 @@ internal object SlicerProcessClient {
                         putStringArrayList(SlicerProcessContract.KEY_MODEL_PATHS, ArrayList(modelPaths))
                         putFloat(SlicerProcessContract.KEY_BED_SIZE_X, bedSizeX)
                         putFloat(SlicerProcessContract.KEY_BED_SIZE_Y, bedSizeY)
+                        putFloat(SlicerProcessContract.KEY_BED_ORIGIN_X, bedOriginX)
+                        putFloat(SlicerProcessContract.KEY_BED_ORIGIN_Y, bedOriginY)
                         putFloatArray(SlicerProcessContract.KEY_BED_POLYGON, bedPolygon.toFloatArray())
                         putFloat(SlicerProcessContract.KEY_MINIMUM_GAP, minimumGap)
                     },
@@ -771,6 +775,8 @@ class SlicerProcessService : Service() {
         val models = paths.map(::validateModel)
         val bedSizeX = extras.getFloat(SlicerProcessContract.KEY_BED_SIZE_X)
         val bedSizeY = extras.getFloat(SlicerProcessContract.KEY_BED_SIZE_Y)
+        val bedOriginX = extras.getFloat(SlicerProcessContract.KEY_BED_ORIGIN_X)
+        val bedOriginY = extras.getFloat(SlicerProcessContract.KEY_BED_ORIGIN_Y)
         val bedPolygon = requireNotNull(extras.getFloatArray(SlicerProcessContract.KEY_BED_POLYGON)) {
             "Bed geometry is unavailable"
         }.toList()
@@ -778,6 +784,8 @@ class SlicerProcessService : Service() {
         require(
             bedSizeX.isFinite() && bedSizeX in MINIMUM_BED_SIZE_MM..MAXIMUM_BED_SIZE_MM &&
                 bedSizeY.isFinite() && bedSizeY in MINIMUM_BED_SIZE_MM..MAXIMUM_BED_SIZE_MM &&
+                bedOriginX.isFinite() && bedOriginX in -MAXIMUM_BED_SIZE_MM..MAXIMUM_BED_SIZE_MM &&
+                bedOriginY.isFinite() && bedOriginY in -MAXIMUM_BED_SIZE_MM..MAXIMUM_BED_SIZE_MM &&
                 bedPolygonIsValid(bedPolygon, bedSizeX, bedSizeY) &&
                 minimumGap.isFinite() && minimumGap in 0f..MAXIMUM_ARRANGE_GAP_MM,
         ) { "Arrange settings are invalid" }
@@ -796,25 +804,31 @@ class SlicerProcessService : Service() {
             require(originalLowerLeft.size == models.size * 2 && originalLowerLeft.all(Float::isFinite)) {
                 "OrcaSlicer returned invalid source positions"
             }
-            val lowerLeft = requireNotNull(
-                runtime.nativeAutoArrangeObjects(bedPolygon.toFloatArray(), minimumGap),
+            val machinePolygon = machineBedPolygon(bedPolygon, bedOriginX, bedOriginY)
+            val machineLowerLeft = requireNotNull(
+                runtime.nativeAutoArrangeObjects(machinePolygon.toFloatArray(), minimumGap),
             ) { "The objects do not fit on this bed" }
-            require(lowerLeft.size == models.size * 2 && lowerLeft.all { it.isFinite() }) {
+            require(machineLowerLeft.size == models.size * 2 && machineLowerLeft.all { it.isFinite() }) {
                 "OrcaSlicer returned an invalid arrangement"
             }
             repeat(models.size) { index ->
-                val x = lowerLeft[index * 2]
-                val y = lowerLeft[index * 2 + 1]
+                val x = machineLowerLeft[index * 2]
+                val y = machineLowerLeft[index * 2 + 1]
                 val width = sizes[index * 3]
                 val depth = sizes[index * 3 + 1]
                 require(
-                    x >= -ARRANGE_TOLERANCE_MM && y >= -ARRANGE_TOLERANCE_MM &&
-                        x + width <= bedSizeX + ARRANGE_TOLERANCE_MM &&
-                        y + depth <= bedSizeY + ARRANGE_TOLERANCE_MM,
+                    x >= bedOriginX - ARRANGE_TOLERANCE_MM &&
+                        y >= bedOriginY - ARRANGE_TOLERANCE_MM &&
+                        x + width <= bedOriginX + bedSizeX + ARRANGE_TOLERANCE_MM &&
+                        y + depth <= bedOriginY + bedSizeY + ARRANGE_TOLERANCE_MM,
                 ) { "OrcaSlicer placed an object outside the bed" }
             }
-            val centers = FloatArray(lowerLeft.size) { index ->
-                lowerLeft[index] - originalLowerLeft[index]
+            val lowerLeft = FloatArray(machineLowerLeft.size) { index ->
+                machineLowerLeft[index] - if (index % 2 == 0) bedOriginX else bedOriginY
+            }
+            val centers = FloatArray(machineLowerLeft.size) { index ->
+                machineLowerLeft[index] - originalLowerLeft[index] -
+                    (if (index % 2 == 0) bedOriginX else bedOriginY)
             }
             Bundle().apply {
                 putBoolean(SlicerProcessContract.KEY_OK, true)
@@ -1015,6 +1029,8 @@ private object SlicerProcessContract {
     const val KEY_ROTATION_RADIANS = "rotationRadians"
     const val KEY_BED_SIZE_X = "bedSizeX"
     const val KEY_BED_SIZE_Y = "bedSizeY"
+    const val KEY_BED_ORIGIN_X = "bedOriginX"
+    const val KEY_BED_ORIGIN_Y = "bedOriginY"
     const val KEY_BED_POLYGON = "bedPolygon"
     const val KEY_MINIMUM_GAP = "minimumGap"
     const val KEY_ARRANGED_LOWER_LEFT = "arrangedLowerLeft"

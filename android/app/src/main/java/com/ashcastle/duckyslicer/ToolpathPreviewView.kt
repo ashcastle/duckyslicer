@@ -25,6 +25,8 @@ internal fun DepthTestedToolpathScene(
     preview: GcodeLayerPreview,
     bedSizeX: Float,
     bedSizeY: Float,
+    bedOriginX: Float,
+    bedOriginY: Float,
     bedPolygon: List<Float>,
     opacity: Float,
     depthContrast: Float,
@@ -35,7 +37,18 @@ internal fun DepthTestedToolpathScene(
     AndroidView(
         factory = { context -> ToolpathSurfaceView(context) },
         update = { view ->
-            view.submit(preview, bedSizeX, bedSizeY, bedPolygon, opacity, depthContrast, visibleRoles, detail)
+            view.submit(
+                preview,
+                bedSizeX,
+                bedSizeY,
+                bedOriginX,
+                bedOriginY,
+                bedPolygon,
+                opacity,
+                depthContrast,
+                visibleRoles,
+                detail,
+            )
         },
         modifier = modifier,
     )
@@ -70,6 +83,8 @@ private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
         preview: GcodeLayerPreview,
         bedSizeX: Float,
         bedSizeY: Float,
+        bedOriginX: Float,
+        bedOriginY: Float,
         bedPolygon: List<Float>,
         opacity: Float,
         depthContrast: Float,
@@ -81,6 +96,8 @@ private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
                 preview = preview,
                 bedSizeX = bedSizeX,
                 bedSizeY = bedSizeY,
+                bedOriginX = bedOriginX,
+                bedOriginY = bedOriginY,
                 bedPolygon = bedPolygon,
                 opacity = opacity,
                 depthContrast = depthContrast,
@@ -178,6 +195,8 @@ internal data class ToolpathScene(
     val detail: PreviewDetail,
     val visibleRoles: Set<Int> = (0 until GcodeLayerPreview.ROLE_COUNT).toSet(),
     val bedPolygon: List<Float> = rectangularBedPolygon(bedSizeX, bedSizeY),
+    val bedOriginX: Float = 0f,
+    val bedOriginY: Float = 0f,
 )
 
 internal class ToolpathRenderer : GLSurfaceView.Renderer {
@@ -431,10 +450,10 @@ internal object ToolpathMeshBuilder {
         addBed(builder, scene.bedSizeX, scene.bedSizeY, scene.bedPolygon)
         val zSpan = (scene.preview.maxZMm - scene.preview.minZMm).coerceAtLeast(0.001f)
         plan.segmentOffsets.forEach { offset ->
-            val x1 = scene.preview.segments[offset]
-            val y1 = scene.preview.segments[offset + 1]
-            val x2 = scene.preview.segments[offset + 2]
-            val y2 = scene.preview.segments[offset + 3]
+            val x1 = scene.preview.segments[offset] - scene.bedOriginX
+            val y1 = scene.preview.segments[offset + 1] - scene.bedOriginY
+            val x2 = scene.preview.segments[offset + 2] - scene.bedOriginX
+            val y2 = scene.preview.segments[offset + 3] - scene.bedOriginY
             val z = scene.preview.segments[offset + 4]
             val role = scene.preview.segments[offset + 5].toInt().coerceIn(0, roleColors.lastIndex)
             if (role !in scene.visibleRoles) return@forEach

@@ -7,6 +7,8 @@ internal object ProfileValidation {
             profile.brand.isSafeOptionalLabel() &&
             profile.bedSizeX in 50f..1_500f &&
             profile.bedSizeY in 50f..1_500f &&
+            profile.bedOriginX.isFinite() && profile.bedOriginX in -1_500f..1_500f &&
+            profile.bedOriginY.isFinite() && profile.bedOriginY in -1_500f..1_500f &&
             bedPolygonIsValid(profile.bedPolygon, profile.bedSizeX, profile.bedSizeY) &&
             profile.maxPrintHeight in 50f..1_500f &&
             profile.nozzleDiameter in 0.1f..2f &&

@@ -85,6 +85,21 @@ internal fun scaledBedPolygon(
     }
 }
 
+internal fun scaledBedOrigin(origin: Float, oldSize: Float, newSize: Float): Float =
+    if (origin.isFinite() && oldSize.isFinite() && oldSize > 0f && newSize.isFinite() && newSize > 0f) {
+        origin * newSize / oldSize
+    } else {
+        0f
+    }
+
+internal fun machineBedPolygon(
+    polygon: List<Float>,
+    originX: Float,
+    originY: Float,
+): List<Float> = polygon.mapIndexed { index, coordinate ->
+    coordinate + if (index % 2 == 0) originX else originY
+}
+
 internal fun pointInsideBedPolygon(x: Float, y: Float, polygon: List<Float>): Boolean {
     if (polygon.size < 6 || polygon.size % 2 != 0 || !x.isFinite() || !y.isFinite()) return false
     var inside = false

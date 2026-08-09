@@ -221,6 +221,7 @@ private fun PrinterSettingsSheet(
             onOptionsChanged(
                 options.copy(
                     bedSizeX = width,
+                    bedOriginX = scaledBedOrigin(options.bedOriginX, options.bedSizeX, width),
                     bedPolygon = scaledBedPolygon(
                         options.bedPolygon,
                         options.bedSizeX,
@@ -243,6 +244,7 @@ private fun PrinterSettingsSheet(
             onOptionsChanged(
                 options.copy(
                     bedSizeY = depth,
+                    bedOriginY = scaledBedOrigin(options.bedOriginY, options.bedSizeY, depth),
                     bedPolygon = scaledBedPolygon(
                         options.bedPolygon,
                         options.bedSizeX,

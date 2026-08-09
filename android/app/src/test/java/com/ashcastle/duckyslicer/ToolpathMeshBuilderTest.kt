@@ -1,10 +1,52 @@
 package com.ashcastle.duckyslicer
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ToolpathMeshBuilderTest {
+    @Test
+    fun machineOriginIsNormalizedOnlyForPreviewRendering() {
+        fun preview(xOffset: Float, yOffset: Float) = GcodeLayerPreview(
+            startLayer = 0,
+            endLayer = 0,
+            layerCount = 1,
+            minZMm = 0.2f,
+            maxZMm = 0.2f,
+            segments = floatArrayOf(
+                10f + xOffset,
+                20f + yOffset,
+                30f + xOffset,
+                20f + yOffset,
+                0.2f,
+                0f,
+            ),
+            roleSegmentCounts = intArrayOf(1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+        )
+        fun values(scene: ToolpathScene): FloatArray = ToolpathMeshBuilder.build(scene).let { buffer ->
+            FloatArray(buffer.remaining()).also(buffer::get)
+        }
+
+        val normalized = values(
+            ToolpathScene(preview(0f, 0f), 100f, 100f, 1f, 0.8f, PreviewDetail.BALANCED),
+        )
+        val machineCoordinates = values(
+            ToolpathScene(
+                preview = preview(-50f, -60f),
+                bedSizeX = 100f,
+                bedSizeY = 100f,
+                opacity = 1f,
+                depthContrast = 0.8f,
+                detail = PreviewDetail.BALANCED,
+                bedOriginX = -50f,
+                bedOriginY = -60f,
+            ),
+        )
+
+        assertArrayEquals(normalized, machineCoordinates, 0f)
+    }
+
     @Test
     fun densePreviewKeepsCompleteRepresentativeLayers() {
         val layerCount = 8
