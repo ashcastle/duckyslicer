@@ -9,6 +9,7 @@ data class SliceOutcome(
     val output: File,
     val layers: Int,
     val estimatedSeconds: Float,
+    val filamentMm: Float,
     val filamentGrams: Float,
 )
 

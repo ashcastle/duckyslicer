@@ -230,6 +230,7 @@ internal object SlicerProcessClient {
                 output = output,
                 layers = response.getInt(SlicerProcessContract.KEY_LAYERS),
                 estimatedSeconds = response.getFloat(SlicerProcessContract.KEY_ESTIMATED_SECONDS),
+                filamentMm = response.getFloat(SlicerProcessContract.KEY_FILAMENT_MM),
                 filamentGrams = response.getFloat(SlicerProcessContract.KEY_FILAMENT_GRAMS),
             )
         } catch (failure: Exception) {
@@ -890,6 +891,9 @@ class SlicerProcessService : Service() {
             require(result.estimatedTimeSeconds.isFinite() && result.estimatedTimeSeconds >= 0f) {
                 "Slicer returned an invalid time estimate"
             }
+            require(result.estimatedFilamentMm.isFinite() && result.estimatedFilamentMm >= 0f) {
+                "Slicer returned an invalid filament length estimate"
+            }
             require(result.estimatedFilamentGrams.isFinite() && result.estimatedFilamentGrams >= 0f) {
                 "Slicer returned an invalid filament estimate"
             }
@@ -897,6 +901,7 @@ class SlicerProcessService : Service() {
                 output = artifactStore.persist(File(result.gcodePath)),
                 layers = result.totalLayers,
                 estimatedSeconds = result.estimatedTimeSeconds,
+                filamentMm = result.estimatedFilamentMm,
                 filamentGrams = result.estimatedFilamentGrams,
             )
         } finally {
@@ -954,6 +959,7 @@ class SlicerProcessService : Service() {
         putString(SlicerProcessContract.KEY_OUTPUT_PATH, outcome.output.absolutePath)
         putInt(SlicerProcessContract.KEY_LAYERS, outcome.layers)
         putFloat(SlicerProcessContract.KEY_ESTIMATED_SECONDS, outcome.estimatedSeconds)
+        putFloat(SlicerProcessContract.KEY_FILAMENT_MM, outcome.filamentMm)
         putFloat(SlicerProcessContract.KEY_FILAMENT_GRAMS, outcome.filamentGrams)
     }
 
@@ -1025,6 +1031,7 @@ private object SlicerProcessContract {
     const val KEY_OUTPUT_PATH = "outputPath"
     const val KEY_LAYERS = "layers"
     const val KEY_ESTIMATED_SECONDS = "estimatedSeconds"
+    const val KEY_FILAMENT_MM = "filamentMm"
     const val KEY_FILAMENT_GRAMS = "filamentGrams"
     const val KEY_ROTATION_RADIANS = "rotationRadians"
     const val KEY_BED_SIZE_X = "bedSizeX"

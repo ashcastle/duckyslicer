@@ -15,6 +15,10 @@ def valid_sources() -> dict[str, str]:
             "HEADER_FLOATS = 7 MAX_SEGMENTS = 120_000 preview_coordinate_invalid "
             "MAX_PAYLOAD_FLOATS preview_role_invalid"
         ),
+        "PreviewSummary.kt": (
+            "fun SliceOutcome.previewSummary() estimatedSeconds / SECONDS_PER_MINUTE "
+            "filamentMm / MILLIMETERS_PER_METER Invalid preview filament mass"
+        ),
         "AppSettings.kt": (
             "PreviewDetail.AUTOMATIC val previewDetail: PreviewDetail = PreviewDetail.AUTOMATIC "
             "PreviewDeviceCapabilities manager?.isLowRamDevice capabilities.appMemoryClassMb <= 192 "
@@ -38,9 +42,18 @@ def valid_sources() -> dict[str, str]:
             "compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = false) "
             "compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = true) "
             "if (selectedTab == WorkspaceTab.PREVIEW) PreviewExportSplitButton( "
-            "Icons.Default.ArrowDropDown Icons.Default.SaveAlt onSend = onRemoteUpload"
+            "Icons.Default.ArrowDropDown Icons.Default.SaveAlt onSend = onRemoteUpload "
+            "var previewControlsExpanded by rememberSaveable PreviewSummaryHeader( "
+            "Icons.Default.ExpandLess Icons.Default.ExpandMore "
+            "summary.filamentGrams summary.filamentMeters"
         ),
         "MainActivity.kt": "GcodeLayerPreview.fromNative GcodeLayerPreview.fromNative",
+        "OnDeviceSlicer.kt": "val filamentMm: Float",
+        "SlicerProcessService.kt": (
+            "result.estimatedFilamentMm KEY_FILAMENT_MM "
+            "filamentMm = response.getFloat(SlicerProcessContract.KEY_FILAMENT_MM) "
+            "putFloat(SlicerProcessContract.KEY_FILAMENT_MM, outcome.filamentMm)"
+        ),
         "NativeEngineInstrumentedTest.kt": (
             "GcodeLayerPreview.fromNative GcodeLayerPreview.fromNative "
             "GcodeLayerPreview.fromNative gcodeResult == null "
@@ -59,6 +72,11 @@ def valid_sources() -> dict[str, str]:
             "nativePayloadKeepsMetadataSegmentsAndRolesWithoutJson "
             "nativePayloadRejectsNullTruncatedOrUnknownFormats "
             "nativePayloadRejectsNonFiniteCoordinatesAndInvalidRoles"
+        ),
+        "PreviewSummaryTest.kt": (
+            "sliceResultKeepsTimeMassAndLengthWithoutReadingGcode "
+            "subMinuteEstimateUsesCompactFallback "
+            "invalidNativeStatisticsAreRejectedBeforeDisplay"
         ),
         "PreviewPerformancePolicyTest.kt": (
             "automaticDefaultsToSmoothOnMemoryConstrainedDevices "
@@ -80,6 +98,14 @@ def valid_sources() -> dict[str, str]:
             "MAX_PREVIEW_SEGMENTS: usize = 120_000 MAX_PREVIEW_LAYERS: usize = 1_000_000 "
             "env.new_float_array env.set_float_array_region preview_payload(preview_gcode( "
             "#[cfg(test)]"
+        ),
+        "strings.xml": (
+            'name="estimated_print_time" name="filament_usage_compact" '
+            'name="expand_preview_controls" name="collapse_preview_controls"'
+        ),
+        "strings-ko.xml": (
+            'name="estimated_print_time" name="filament_usage_compact" '
+            'name="expand_preview_controls" name="collapse_preview_controls"'
         ),
         "CONTRIBUTING.md": "Preview FloatArray VBO Automatic",
     }
@@ -140,6 +166,22 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "PreviewExportSplitButton(", "ModelNameBadge("
         )
         with self.assertRaisesRegex(VerificationError, "PreviewExportSplitButton"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_missing_collapsed_preview_summary(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            "PreviewSummaryHeader(", "PreviewControls("
+        )
+        with self.assertRaisesRegex(VerificationError, "PreviewSummaryHeader"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_dropped_filament_length(self) -> None:
+        sources = valid_sources()
+        sources["SlicerProcessService.kt"] = sources["SlicerProcessService.kt"].replace(
+            "result.estimatedFilamentMm", "0f"
+        )
+        with self.assertRaisesRegex(VerificationError, "estimatedFilamentMm"):
             verify_preview_boundary(sources)
 
 
