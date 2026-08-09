@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from tools.verify_data_practices import DATA_STRING_NAMES, VerificationError
+from tools.verify_data_practices import DATA_STRING_NAMES, EXPECTED_PERMISSIONS, VerificationError
 from tools.verify_data_practices import verify_data_practices
 
 
@@ -17,6 +17,10 @@ def valid_sources() -> dict[str, str]:
     settings_markers = " ".join(
         f"R.string.{resource_name}" for resource_name in DATA_STRING_NAMES
     )
+    permissions = "".join(
+        f'<uses-permission android:name="{permission}" />'
+        for permission in sorted(EXPECTED_PERMISSIONS)
+    )
     return {
         "AppSettingsSheet.kt": (
             f"showDataPractices DataPracticesDialog( {settings_markers}"
@@ -27,7 +31,7 @@ def valid_sources() -> dict[str, str]:
         ),
         "AndroidManifest.xml": (
             '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
-            '<uses-permission android:name="android.permission.INTERNET" />'
+            f"{permissions}"
             "</manifest>"
         ),
         "build.gradle.kts": "dependencies { implementation(libs.compose) }",

@@ -9,7 +9,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ANDROID_NAME = "{http://schemas.android.com/apk/res/android}name"
-EXPECTED_PERMISSIONS = {"android.permission.INTERNET"}
+EXPECTED_PERMISSIONS = {
+    "android.permission.FOREGROUND_SERVICE",
+    "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+    "android.permission.INTERNET",
+    "android.permission.POST_NOTIFICATIONS",
+}
 DATA_STRING_NAMES = {
     "data_privacy",
     "data_privacy_summary",
@@ -17,6 +22,8 @@ DATA_STRING_NAMES = {
     "data_handling_title",
     "data_stored_title",
     "data_stored_body",
+    "background_slicing_title",
+    "background_slicing_body",
     "printer_connection_data_title",
     "printer_connection_data_body",
     "no_tracking_title",
