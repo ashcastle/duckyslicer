@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import unittest
 
-from tools.verify_android_isolation import VerificationError, verify_manifest, verify_sources
+from tools.verify_android_isolation import (
+    VerificationError,
+    verify_debug_recovery_harness,
+    verify_manifest,
+    verify_process_reattachment_harness,
+    verify_sources,
+)
 
 
 VALID_MANIFEST = """\
@@ -27,6 +33,8 @@ class SlicerProcessService {
   val terminate = MESSAGE_TERMINATE_FOR_TEST
   val worker = HandlerThread("DuckySlicer Orca work")
   val cancel = MESSAGE_CANCEL
+  val attach = MESSAGE_ATTACH
+  val completed = completedForegroundResult
   fun containPreBindCancellation() { if (cancellationRequested()) return }
   fun containCancellation() { Process.killProcess(Process.myPid()) }
   fun beginForeground() { startForegroundService(); FOREGROUND_SERVICE_TYPE_DATA_SYNC }
@@ -37,8 +45,16 @@ class SlicerProcessService {
     ForegroundSliceSession.wasCanceled(this, requestId)
   }
   override fun onTimeout(startId: Int, fgsType: Int) = Unit
-  override fun onUnbind() = false
+  override fun onUnbind() = foregroundRequestId.get() != abandonedRequestId
 }
+"""
+
+VALID_FOREGROUND_STORE = """
+ForegroundSlicePhase.ACTIVE
+ForegroundSlicePhase.COMPLETED
+StandardCopyOption.ATOMIC_MOVE
+output.fd.sync()
+outcome.isRestorableFrom(context.filesDir)
 """
 
 VALID_DEVICE_TEST = """
@@ -46,9 +62,33 @@ nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly
 imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp
 activeSliceCancellationKeepsServiceResponsiveAndRestartsCleanly
 activeSliceSurvivesActivityRecreationAndCompletes
-Configuration recreation must retain the active operation
-Background Activity must retain the foreground slice
-The slicer service must be foreground while the Activity is stopped
+Stopping the Activity must not cancel the slice
+The slicer service must be foreground while a stopped Activity is slicing
+A slice that finishes during the background transition must retain its result
+Configuration recreation must retain the operation
+"""
+
+VALID_PROCESS_REATTACHMENT_HARNESS = """
+page_size != "16384"
+run_as(serial, "kill", "-9", str(old_ui_pid))
+surviving_service_pid != old_service_pid
+current_boot_id != boot_id
+"Recovered foreground slice"
+SESSION_PATH
+"""
+
+VALID_DEBUG_RECOVERY_ACTIVITY = """
+class ProcessRecoveryHarnessActivity
+ForegroundSlicePhase.ACTIVE
+Process.myPid()
+output.fd.sync()
+Process recovery slice finished too early
+"""
+
+VALID_DEBUG_MANIFEST = """
+android:name=".ProcessRecoveryHarnessActivity"
+android:exported="true"
+android:permission="android.permission.DUMP"
 """
 
 
@@ -71,11 +111,15 @@ def valid_sources() -> dict[str, str]:
         "com/ashcastle/duckyslicer/SliceOperationViewModel.kt": (
             "class SliceOperationViewModel : ViewModel() viewModelScope.launch "
             "SlicerProcessClient.beginUserSlice() foregroundSession.cancellationRequested() "
+            "SlicerProcessClient.recoverUserSlice() "
+            "SlicerProcessClient.awaitRecoveredSlice( "
+            "Recovered foreground slice "
             "foregroundSession.close() "
             "operationCancellation.get() "
             "operationCancellation.set(true) "
             "override fun onCleared() SlicerProcessClient.cancelActiveSliceAsync()"
         ),
+        "com/ashcastle/duckyslicer/ForegroundSliceStore.kt": VALID_FOREGROUND_STORE,
         "com/ashcastle/duckyslicer/WorkspaceScreen.kt": "onCancelSlice canceling_slice",
         "com/u1/slicer/NativeLibrary.kt": "class NativeLibrary()",
     }
@@ -127,14 +171,85 @@ class VerifyAndroidIsolationTest(unittest.TestCase):
             ("nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly", "crash recovery"),
             ("activeSliceCancellationKeepsServiceResponsiveAndRestartsCleanly", "active-slice"),
             ("activeSliceSurvivesActivityRecreationAndCompletes", "configuration/background"),
-            ("Background Activity must retain the foreground slice", "configuration/background"),
+            ("Stopping the Activity must not cancel the slice", "configuration/background"),
             (
-                "The slicer service must be foreground while the Activity is stopped",
+                "The slicer service must be foreground while a stopped Activity is slicing",
+                "configuration/background",
+            ),
+            (
+                "A slice that finishes during the background transition must retain its result",
+                "configuration/background",
+            ),
+            (
+                "Configuration recreation must retain the operation",
                 "configuration/background",
             ),
         ):
             with self.assertRaisesRegex(VerificationError, message):
                 verify_sources(valid_sources(), VALID_DEVICE_TEST.replace(missing, ""))
+
+    def test_requires_durable_process_reattachment(self) -> None:
+        for source_path, marker in (
+            (
+                "com/ashcastle/duckyslicer/SliceOperationViewModel.kt",
+                "SlicerProcessClient.recoverUserSlice()",
+            ),
+            (
+                "com/ashcastle/duckyslicer/SliceOperationViewModel.kt",
+                "SlicerProcessClient.awaitRecoveredSlice(",
+            ),
+            ("com/ashcastle/duckyslicer/SlicerProcessService.kt", "MESSAGE_ATTACH"),
+            (
+                "com/ashcastle/duckyslicer/SlicerProcessService.kt",
+                "foregroundRequestId.get() != abandonedRequestId",
+            ),
+            (
+                "com/ashcastle/duckyslicer/ForegroundSliceStore.kt",
+                "StandardCopyOption.ATOMIC_MOVE",
+            ),
+        ):
+            sources = valid_sources()
+            sources[source_path] = sources[source_path].replace(marker, "")
+            with self.assertRaisesRegex(VerificationError, "reattach|unbind|checkpoint|lifecycle"):
+                verify_sources(sources, VALID_DEVICE_TEST)
+
+    def test_requires_local_process_reattachment_harness(self) -> None:
+        verify_process_reattachment_harness(VALID_PROCESS_REATTACHMENT_HARNESS)
+        for marker in (
+            'page_size != "16384"',
+            'run_as(serial, "kill", "-9", str(old_ui_pid))',
+            "surviving_service_pid != old_service_pid",
+            "current_boot_id != boot_id",
+            '"Recovered foreground slice"',
+            "SESSION_PATH",
+        ):
+            with self.assertRaisesRegex(VerificationError, "reattachment harness"):
+                verify_process_reattachment_harness(
+                    VALID_PROCESS_REATTACHMENT_HARNESS.replace(marker, "")
+                )
+
+    def test_requires_shell_restricted_debug_recovery_activity(self) -> None:
+        verify_debug_recovery_harness(
+            VALID_DEBUG_RECOVERY_ACTIVITY,
+            VALID_DEBUG_MANIFEST,
+        )
+        for source, manifest, marker in (
+            (
+                VALID_DEBUG_RECOVERY_ACTIVITY.replace(
+                    "ForegroundSlicePhase.ACTIVE",
+                    "",
+                ),
+                VALID_DEBUG_MANIFEST,
+                "activity",
+            ),
+            (
+                VALID_DEBUG_RECOVERY_ACTIVITY,
+                VALID_DEBUG_MANIFEST.replace('android:permission="android.permission.DUMP"', ""),
+                "manifest",
+            ),
+        ):
+            with self.assertRaisesRegex(VerificationError, marker):
+                verify_debug_recovery_harness(source, manifest)
 
     def test_requires_retained_ui_and_final_disposal_cancellation_paths(self) -> None:
         for source_path, marker in (

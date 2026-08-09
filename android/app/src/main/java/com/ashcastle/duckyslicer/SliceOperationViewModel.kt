@@ -35,13 +35,17 @@ internal data class SliceOperationState(
         get() = slicing || previewLoading
 }
 
-/** Owns a slice beyond one Activity instance so rotation cannot abandon the worker. */
+/** Owns or reattaches a foreground slice across Activity and UI-process lifecycles. */
 internal class SliceOperationViewModel : ViewModel() {
     private val mutableState = MutableStateFlow(SliceOperationState())
     val state: StateFlow<SliceOperationState> = mutableState.asStateFlow()
 
     private val operationJob = AtomicReference<Job?>(null)
     private val operationCancellation = AtomicBoolean(false)
+
+    init {
+        recoverForegroundSlice()
+    }
 
     fun start(objects: List<ProjectObject>, options: SliceOptions): Boolean {
         if (objects.isEmpty() || mutableState.value.busy || operationJob.get()?.isActive == true) {
@@ -56,19 +60,47 @@ internal class SliceOperationViewModel : ViewModel() {
             )
             return false
         }
+        launchForegroundSlice(foregroundSession, recovering = false) { onProgress ->
+            OnDeviceSlicer.slice(
+                objects,
+                options,
+                foregroundSession = foregroundSession,
+                cancellationRequested = {
+                    operationCancellation.get() || foregroundSession.cancellationRequested()
+                },
+                onProgress = onProgress,
+            )
+        }
+        return true
+    }
+
+    private fun recoverForegroundSlice() {
+        val foregroundSession = try {
+            SlicerProcessClient.recoverUserSlice()
+        } catch (failure: Exception) {
+            if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Foreground slice could not be recovered", failure)
+            mutableState.value = SliceOperationState(
+                terminalStatus = SliceTerminalStatus.SLICE_FAILED,
+            )
+            return
+        } ?: return
+        if (BuildConfig.DEBUG) Log.i(LOG_TAG, "Reattaching foreground slice")
+        launchForegroundSlice(foregroundSession, recovering = true) { onProgress ->
+            SlicerProcessClient.awaitRecoveredSlice(foregroundSession, onProgress)
+        }
+    }
+
+    private fun launchForegroundSlice(
+        foregroundSession: ForegroundSliceSession,
+        recovering: Boolean,
+        slice: ((Int) -> Unit) -> SliceOutcome,
+    ) {
         mutableState.value = SliceOperationState(slicing = true)
         operationCancellation.set(false)
         val job = viewModelScope.launch {
             try {
                 val outcome = withContext(Dispatchers.IO) {
-                    OnDeviceSlicer.slice(
-                        objects,
-                        options,
-                        foregroundSession = foregroundSession,
-                        cancellationRequested = {
-                            operationCancellation.get() || foregroundSession.cancellationRequested()
-                        },
-                    ) { progress ->
+                    slice { progress ->
                         mutableState.update { current ->
                             if (current.slicing) {
                                 current.copy(progress = maxOf(current.progress, progress.coerceIn(0, 100)))
@@ -96,6 +128,9 @@ internal class SliceOperationViewModel : ViewModel() {
                         outcome = outcome.copy(layers = preview.layerCount),
                         preview = preview,
                     )
+                    if (recovering && BuildConfig.DEBUG) {
+                        Log.i(LOG_TAG, "Recovered foreground slice")
+                    }
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (cancellation: SlicingCancelledException) {
@@ -131,7 +166,6 @@ internal class SliceOperationViewModel : ViewModel() {
             }
         }
         operationJob.set(job)
-        return true
     }
 
     fun loadPreview(outcome: SliceOutcome, startLayer: Int, endLayer: Int): Boolean {
