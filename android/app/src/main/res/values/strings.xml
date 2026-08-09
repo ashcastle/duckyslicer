@@ -381,6 +381,12 @@
     <string name="preview_detail_detail">Detailed</string>
     <string name="keep_screen_awake">Keep screen on while working</string>
     <string name="keep_screen_awake_summary">Prevents the screen from turning off during slicing, preview loading, and transfers.</string>
+    <string name="slice_notification_channel">Slicing</string>
+    <string name="slice_notification_channel_summary">Shows progress while a slice continues outside the app.</string>
+    <string name="slice_notification_title">Slicing</string>
+    <string name="slice_notification_preparing">Preparing G-code…</string>
+    <string name="slice_notification_progress">%1$d%% complete</string>
+    <string name="slice_notification_canceling">Canceling…</string>
     <string name="connection_settings">Printer connections</string>
     <string name="confirm_remote_print">Confirm before starting</string>
     <string name="confirm_remote_print_summary">Shows one last check before a remote print begins.</string>
@@ -393,6 +399,8 @@
     <string name="data_handling_title">How DuckySlicer handles data</string>
     <string name="data_stored_title">Stored on this device</string>
     <string name="data_stored_body">Imported models, projects, profiles, recent choices, and generated G-code are stored in the app’s private space. Files you export stay where you save them.</string>
+    <string name="background_slicing_title">Background slicing</string>
+    <string name="background_slicing_body">While a slice is active, Android keeps it running and shows progress. The notification can reopen DuckySlicer or cancel the slice. Models and G-code stay on this device.</string>
     <string name="printer_connection_data_title">Printer connections</string>
     <string name="printer_connection_data_body">Optional OctoPrint and Klipper access keys are protected by Android. Status checks and G-code are sent only to the printer address you add. Uploading a file does not start a print.</string>
     <string name="no_tracking_title">No tracking</string>

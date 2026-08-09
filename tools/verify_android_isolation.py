@@ -23,6 +23,10 @@ LIFECYCLE_DEVICE_TEST = (
 ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
 SERVICE_NAME = ".SlicerProcessService"
 APPLICATION_NAME = ".DuckySlicerApplication"
+FOREGROUND_SERVICE_PERMISSIONS = {
+    "android.permission.FOREGROUND_SERVICE",
+    "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+}
 DIRECT_NATIVE_CONSTRUCTION = re.compile(r"\bNativeLibrary\s*\(")
 
 
@@ -40,6 +44,15 @@ def verify_manifest(source: str) -> None:
         raise VerificationError("Android manifest has no application")
     if application.get(f"{ANDROID_NS}name") != APPLICATION_NAME:
         raise VerificationError("the process-aware Application must remain installed")
+    permissions = {
+        permission.get(f"{ANDROID_NS}name")
+        for permission in root.findall("uses-permission")
+    }
+    missing_permissions = sorted(FOREGROUND_SERVICE_PERMISSIONS - permissions)
+    if missing_permissions:
+        raise VerificationError(
+            f"foreground slicer permissions are missing: {missing_permissions}"
+        )
     services = [
         service
         for service in application.findall("service")
@@ -52,6 +65,8 @@ def verify_manifest(source: str) -> None:
         raise VerificationError("slicer process service must remain non-exported")
     if service.get(f"{ANDROID_NS}process") != ":slicer":
         raise VerificationError("slicer process service must remain in :slicer")
+    if service.get(f"{ANDROID_NS}foregroundServiceType") != "dataSync":
+        raise VerificationError("slicer process service must declare the dataSync type")
     if service.find("intent-filter") is not None:
         raise VerificationError("slicer process service must not expose an intent filter")
 
@@ -82,7 +97,10 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
     for marker in (
         "class SliceOperationViewModel : ViewModel()",
         "viewModelScope.launch",
-        "cancellationRequested = operationCancellation::get",
+        "SlicerProcessClient.beginUserSlice()",
+        "foregroundSession.cancellationRequested()",
+        "foregroundSession.close()",
+        "operationCancellation.get()",
         "operationCancellation.set(true)",
         "override fun onCleared()",
         "SlicerProcessClient.cancelActiveSliceAsync()",
@@ -119,6 +137,14 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         "pre-bind cancellation race containment": "if (cancellationRequested())",
         "cancellation process containment": "Process.killProcess(Process.myPid())",
         "abandoned-client containment": "override fun onUnbind",
+        "user-initiated foreground start": "startForegroundService(",
+        "data-sync foreground type": "FOREGROUND_SERVICE_TYPE_DATA_SYNC",
+        "foreground timeout containment": "override fun onTimeout(",
+        "notification cancellation": "ACTION_CANCEL_SLICE",
+        "ordered foreground completion": "ACTION_FINISH_SLICE",
+        "pre-bind notification cancellation": "ForegroundSliceSession.markCanceled(",
+        "post-bind notification cancellation race containment":
+            "ForegroundSliceSession.wasCanceled(this, requestId)",
     }
     missing = [description for description, marker in required_service_markers.items() if marker not in service]
     if missing:
@@ -135,8 +161,10 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
     if (
         "activeSliceSurvivesActivityRecreationAndCompletes" not in device_test
         or "Configuration recreation must retain the active operation" not in device_test
+        or "Background Activity must retain the foreground slice" not in device_test
+        or "The slicer service must be foreground while the Activity is stopped" not in device_test
     ):
-        raise VerificationError("ARM64 configuration-recreation slice regression is missing")
+        raise VerificationError("ARM64 configuration/background slice regression is missing")
     return len(direct_calls)
 
 
