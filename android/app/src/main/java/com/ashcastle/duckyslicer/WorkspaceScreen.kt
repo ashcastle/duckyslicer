@@ -33,13 +33,17 @@ import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.SaveAlt
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.Visibility
@@ -76,6 +80,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -227,6 +232,7 @@ internal fun WorkspaceScreen(
     var supportPainting by remember { mutableStateOf(false) }
     var supportPaintTool by remember { mutableStateOf(SupportPaintTool.ENFORCE) }
     var visibleToolpathRoles by remember { mutableStateOf(ToolpathStyles.indices.toSet()) }
+    var previewControlsExpanded by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(selectedObjectId, selectedTab) {
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) supportPainting = false
     }
@@ -370,6 +376,8 @@ internal fun WorkspaceScreen(
                     preview = layerPreview,
                     loading = previewLoading,
                     error = error,
+                    expanded = previewControlsExpanded,
+                    onExpandedChanged = { previewControlsExpanded = it },
                     toolpathOpacity = appSettings.toolpathOpacity,
                     onToolpathOpacityChanged = {
                         onAppSettingsChanged(appSettings.copy(toolpathOpacity = it))
@@ -1476,6 +1484,8 @@ private fun PreviewSheet(
     preview: GcodeLayerPreview?,
     loading: Boolean,
     error: String?,
+    expanded: Boolean,
+    onExpandedChanged: (Boolean) -> Unit,
     toolpathOpacity: Float,
     onToolpathOpacityChanged: (Float) -> Unit,
     toolpathDepthContrast: Float,
@@ -1486,124 +1496,261 @@ private fun PreviewSheet(
     onGoToSlice: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    WorkspaceCard(modifier) {
-        if (outcome == null) {
-            Text(stringResource(R.string.preview_requires_slice), fontWeight = FontWeight.SemiBold)
-            Button(onClick = onGoToSlice, colors = primaryButtonColors()) {
-                Text(stringResource(R.string.tab_slice))
+    Card(
+        modifier = modifier
+            .padding(12.dp)
+            .fillMaxWidth()
+            .widthIn(max = 620.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = WorkspacePanel,
+            contentColor = Color(0xFFF4F4EE),
+        ),
+        shape = RoundedCornerShape(22.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (outcome == null) {
+                Text(stringResource(R.string.preview_requires_slice), fontWeight = FontWeight.SemiBold)
+                Button(onClick = onGoToSlice, colors = primaryButtonColors()) {
+                    Text(stringResource(R.string.tab_slice))
+                }
+                return@Column
             }
-            return@WorkspaceCard
+            PreviewSummaryHeader(
+                summary = outcome.previewSummary(),
+                expanded = expanded,
+                loading = loading,
+                onToggle = { onExpandedChanged(!expanded) },
+            )
+            if (error != null) Text(error, color = Color(0xFFFF8A80))
+            if (expanded) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (loading || preview == null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(
+                                Modifier.size(22.dp),
+                                color = WorkspaceYellow,
+                                strokeWidth = 2.dp,
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(stringResource(R.string.loading_preview))
+                        }
+                    }
+                    if (preview != null) {
+                        PreviewControls(
+                            preview = preview,
+                            toolpathOpacity = toolpathOpacity,
+                            onToolpathOpacityChanged = onToolpathOpacityChanged,
+                            toolpathDepthContrast = toolpathDepthContrast,
+                            onToolpathDepthContrastChanged = onToolpathDepthContrastChanged,
+                            visibleToolpathRoles = visibleToolpathRoles,
+                            onToolpathRoleVisibilityChanged = onToolpathRoleVisibilityChanged,
+                            onLayerRangeSelected = onLayerRangeSelected,
+                        )
+                    }
+                }
+            }
         }
-        if (loading || preview == null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(Modifier.size(22.dp), color = WorkspaceYellow, strokeWidth = 2.dp)
-                Spacer(Modifier.width(10.dp))
-                Text(stringResource(R.string.loading_preview))
+    }
+}
+
+@Composable
+private fun PreviewSummaryHeader(
+    summary: PreviewSummary,
+    expanded: Boolean,
+    loading: Boolean,
+    onToggle: () -> Unit,
+) {
+    val durationText = when {
+        summary.duration.underOneMinute -> stringResource(R.string.duration_under_one_minute)
+        summary.duration.hours > 0 -> stringResource(
+            R.string.duration_hours_minutes,
+            summary.duration.hours,
+            summary.duration.minutes,
+        )
+        else -> stringResource(R.string.duration_minutes, summary.duration.minutes)
+    }
+    val toggleDescription = stringResource(
+        if (expanded) R.string.collapse_preview_controls else R.string.expand_preview_controls,
+    )
+    Surface(
+        onClick = onToggle,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = Color.Transparent,
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                Icons.Default.Schedule,
+                contentDescription = stringResource(R.string.estimated_print_time),
+                modifier = Modifier.size(18.dp),
+                tint = WorkspaceYellow,
+            )
+            Text(
+                durationText,
+                maxLines = 1,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                Icons.Default.Straighten,
+                contentDescription = stringResource(R.string.filament_usage),
+                modifier = Modifier.size(18.dp),
+                tint = WorkspaceYellow,
+            )
+            Text(
+                stringResource(
+                    R.string.filament_usage_compact,
+                    summary.filamentGrams,
+                    summary.filamentMeters,
+                ),
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = Color(0xFFE2E3DD),
+                style = MaterialTheme.typography.labelLarge,
+            )
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = WorkspaceYellow,
+                    strokeWidth = 2.dp,
+                )
             }
+            Icon(
+                imageVector = if (expanded) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
+                contentDescription = toggleDescription,
+                tint = Color(0xFFE2E3DD),
+            )
         }
-        if (error != null) Text(error, color = Color(0xFFFF8A80))
-        if (preview != null) {
-            val lastLayerIndex = (preview.layerCount - 1).coerceAtLeast(0)
-            val safeStartLayer = preview.startLayer.coerceIn(0, lastLayerIndex)
-            val safeEndLayer = preview.endLayer.coerceIn(safeStartLayer, lastLayerIndex)
-            var selectedRange by remember(safeStartLayer, safeEndLayer, preview.layerCount) {
-                mutableStateOf(safeStartLayer.toFloat()..safeEndLayer.toFloat())
+    }
+}
+
+@Composable
+private fun PreviewControls(
+    preview: GcodeLayerPreview,
+    toolpathOpacity: Float,
+    onToolpathOpacityChanged: (Float) -> Unit,
+    toolpathDepthContrast: Float,
+    onToolpathDepthContrastChanged: (Float) -> Unit,
+    visibleToolpathRoles: Set<Int>,
+    onToolpathRoleVisibilityChanged: (Int, Boolean) -> Unit,
+    onLayerRangeSelected: (Int, Int) -> Unit,
+) {
+    val lastLayerIndex = (preview.layerCount - 1).coerceAtLeast(0)
+    val safeStartLayer = preview.startLayer.coerceIn(0, lastLayerIndex)
+    val safeEndLayer = preview.endLayer.coerceIn(safeStartLayer, lastLayerIndex)
+    var selectedRange by remember(safeStartLayer, safeEndLayer, preview.layerCount) {
+        mutableStateOf(safeStartLayer.toFloat()..safeEndLayer.toFloat())
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                stringResource(
+                    R.string.layer_range,
+                    safeStartLayer + 1,
+                    safeEndLayer + 1,
+                    preview.layerCount,
+                ),
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                stringResource(R.string.z_range, preview.minZMm, preview.maxZMm),
+                color = Color(0xFFC8C9C2),
+            )
+        }
+        if (preview.layerCount > 1) {
+            RangeSlider(
+                value = selectedRange,
+                onValueChange = { selectedRange = it },
+                onValueChangeFinished = {
+                    onLayerRangeSelected(
+                        selectedRange.start.roundToInt(),
+                        selectedRange.endInclusive.roundToInt(),
+                    )
+                },
+                valueRange = 0f..lastLayerIndex.toFloat(),
+                steps = 0,
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.toolpath_opacity, (toolpathOpacity * 100).roundToInt()),
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Slider(
+                    value = toolpathOpacity,
+                    onValueChange = onToolpathOpacityChanged,
+                    valueRange = 0.3f..1f,
+                    colors = duckySliderColors(),
+                )
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(Modifier.weight(1f)) {
                 Text(
                     stringResource(
-                        R.string.layer_range,
-                        safeStartLayer + 1,
-                        safeEndLayer + 1,
-                        preview.layerCount,
+                        R.string.toolpath_depth_contrast,
+                        (toolpathDepthContrast * 100).roundToInt(),
                     ),
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.labelLarge,
                 )
-                Text(
-                    stringResource(R.string.z_range, preview.minZMm, preview.maxZMm),
-                    color = Color(0xFFC8C9C2),
-                )
-            }
-            if (preview.layerCount > 1) {
-                RangeSlider(
-                    value = selectedRange,
-                    onValueChange = { selectedRange = it },
-                    onValueChangeFinished = {
-                        onLayerRangeSelected(
-                            selectedRange.start.roundToInt(),
-                            selectedRange.endInclusive.roundToInt(),
-                        )
-                    },
-                    valueRange = 0f..lastLayerIndex.toFloat(),
-                    steps = 0,
+                Slider(
+                    value = toolpathDepthContrast,
+                    onValueChange = onToolpathDepthContrastChanged,
+                    valueRange = 0f..1f,
+                    colors = duckySliderColors(),
                 )
             }
+        }
+        ToolpathStyles.chunked(2).forEach { rowStyles ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.toolpath_opacity, (toolpathOpacity * 100).roundToInt()),
-                        fontWeight = FontWeight.SemiBold,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    Slider(
-                        value = toolpathOpacity,
-                        onValueChange = onToolpathOpacityChanged,
-                        valueRange = 0.3f..1f,
-                        colors = duckySliderColors(),
-                    )
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        stringResource(
-                            R.string.toolpath_depth_contrast,
-                            (toolpathDepthContrast * 100).roundToInt(),
-                        ),
-                        fontWeight = FontWeight.SemiBold,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    Slider(
-                        value = toolpathDepthContrast,
-                        onValueChange = onToolpathDepthContrastChanged,
-                        valueRange = 0f..1f,
-                        colors = duckySliderColors(),
-                    )
-                }
-            }
-            ToolpathStyles.chunked(2).forEach { rowStyles ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    rowStyles.forEach { style ->
-                        val visible = style.code in visibleToolpathRoles
-                        Row(
-                            modifier = Modifier
-                                .weight(1f)
-                                .toggleable(
-                                    value = visible,
-                                    role = Role.Checkbox,
-                                    onValueChange = { nextVisible ->
-                                        onToolpathRoleVisibilityChanged(style.code, nextVisible)
-                                    },
-                                )
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Surface(
-                                modifier = Modifier.size(width = 18.dp, height = 6.dp),
-                                color = if (visible) style.color else Color(0xFF62635F),
-                                shape = RoundedCornerShape(50),
-                            ) {}
-                            Spacer(Modifier.width(7.dp))
-                            Text(
-                                stringResource(style.label),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (visible) Color(0xFFE2E3DD) else Color(0xFF858681),
+                rowStyles.forEach { style ->
+                    val visible = style.code in visibleToolpathRoles
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .toggleable(
+                                value = visible,
+                                role = Role.Checkbox,
+                                onValueChange = { nextVisible ->
+                                    onToolpathRoleVisibilityChanged(style.code, nextVisible)
+                                },
                             )
-                        }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(width = 18.dp, height = 6.dp),
+                            color = if (visible) style.color else Color(0xFF62635F),
+                            shape = RoundedCornerShape(50),
+                        ) {}
+                        Spacer(Modifier.width(7.dp))
+                        Text(
+                            stringResource(style.label),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (visible) Color(0xFFE2E3DD) else Color(0xFF858681),
+                        )
                     }
                 }
             }
