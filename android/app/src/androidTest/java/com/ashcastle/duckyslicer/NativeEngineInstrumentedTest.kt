@@ -36,9 +36,46 @@ class NativeEngineInstrumentedTest {
         assertEquals(253, restored.filaments.last().firstLayerNozzleTemp)
         assertEquals(0.22f, restored.slicing.last().fillDensity)
         assertTrue(restored.slicing.last().supportEnabled)
+        assertEquals(null, restored.printers.last().brand)
+        assertEquals(null, restored.filaments.last().brand)
         assertTrue("Saved profiles must stay in app-private storage", file.canonicalPath.startsWith(context.cacheDir.canonicalPath))
         file.delete()
         directory.delete()
+    }
+
+    @Test
+    fun builtInCatalogCoversAllU1NozzlesAndCommonMaterials() {
+        assertEquals(listOf(0.2f, 0.4f, 0.6f, 0.8f), PrinterProfile.builtIns.map { it.nozzleDiameter })
+        assertTrue(FilamentProfile.builtIns.map { it.nativeName }.containsAll(listOf("PLA", "PETG", "ABS", "ASA", "PLA-CF", "PETG-CF", "TPU", "PA-CF")))
+        assertEquals(setOf("Snapmaker"), PrinterProfile.builtIns.mapNotNull { it.brand }.toSet())
+        assertEquals(setOf("Snapmaker"), FilamentProfile.builtIns.mapNotNull { it.brand }.toSet())
+        assertEquals(QualityProfile.STANDARD_02, QualityProfile.standardFor(0.2f))
+        assertEquals(QualityProfile.STANDARD_08, QualityProfile.standardFor(0.8f))
+    }
+
+    @Test
+    fun previewRenderPlanKeepsEveryToolpathRoleWithinItsBudget() {
+        val segmentCount = 8_000
+        val segments = FloatArray(segmentCount * GcodeLayerPreview.SEGMENT_STRIDE)
+        val roleCounts = IntArray(GcodeLayerPreview.ROLE_COUNT)
+        repeat(segmentCount) { index ->
+            val offset = index * GcodeLayerPreview.SEGMENT_STRIDE
+            val role = index % GcodeLayerPreview.ROLE_COUNT
+            segments[offset] = index.toFloat()
+            segments[offset + 1] = role.toFloat()
+            segments[offset + 2] = index + 1f
+            segments[offset + 3] = role.toFloat()
+            segments[offset + 4] = 0.2f
+            segments[offset + 5] = role.toFloat()
+            roleCounts[role] += 1
+        }
+        val preview = GcodeLayerPreview(0, 0, 1, 0.2f, 0.2f, segments, roleCounts)
+        val plan = preview.buildRenderPlan(segmentBudget = 450)
+        val selectedRoles = plan.segmentOffsets.map { segments[it + 5].toInt() }.toSet()
+
+        assertEquals((0 until GcodeLayerPreview.ROLE_COUNT).toSet(), selectedRoles)
+        assertTrue(plan.segmentOffsets.size <= 450 + GcodeLayerPreview.ROLE_COUNT * 26)
+        assertEquals(plan.segmentOffsets.size, plan.connectsToPrevious.size)
     }
 
     @Test
@@ -103,7 +140,9 @@ class NativeEngineInstrumentedTest {
         assertTrue("Preview must include the first layer", preview.startLayer == 0)
         assertTrue("Preview must include the final G-code layer", preview.endLayer == preview.layerCount - 1)
         assertTrue("Full preview must contain extrusion paths", preview.segments.isNotEmpty())
+        assertEquals(0, preview.segments.size % GcodeLayerPreview.SEGMENT_STRIDE)
         assertTrue("Segment Z coordinates must be positive", preview.segments[4] > 0f)
+        assertTrue("Outer-wall paths must be classified", preview.roleSegmentCounts[0] > 0)
         assertTrue("Preview must report a positive first layer Z", preview.minZMm > 0f)
         assertTrue("Multi-layer preview must span upward in Z", preview.maxZMm > preview.minZMm)
     }

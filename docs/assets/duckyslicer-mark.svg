@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title">
+  <title id="title">DuckySlicer duck mark</title>
+  <circle cx="24" cy="24" r="21" fill="#F6C945"/>
+  <path fill="#202124" d="M15 23c0-7 4-12 10-12 5 0 8 3 8 7 4 0 7 2 8 5-3 2-7 3-11 2-1 6-5 10-11 10-5 0-9-3-10-8 2-2 4-3 6-4z"/>
+  <circle cx="27" cy="17" r="2" fill="#FFF9E8"/>
+</svg>

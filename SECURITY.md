@@ -1,47 +1,37 @@
-# Security Policy
+# DuckySlicer security policy
 
-At OrcaSlicer, we are committed to maintaining the security of our ecosystem. Our policy is to ensure that we do not introduce vulnerabilities and that any security issues are addressed promptly and responsibly. We appreciate your help in improving the security of OrcaSlicer and thank you for your responsible disclosure.
-Reporting Security Bugs
+DuckySlicer is an early offline Android slicer. Security reports are welcome,
+especially for malformed model or G-code files, unsafe native-memory behavior,
+unexpected file access, and APK supply-chain issues.
 
-## To report a security bug, please follow these guidelines:
+## Supported versions
 
-  * Email Security Bugs:
-        Send an email to the lead maintainer at softfeverever@gmail.com.
-        Include the word "SECURITY" in the subject line of your email.
+Only the latest source on the default branch is currently supported. There is no
+production release channel yet.
 
-  * Response Times:
-        The lead maintainer will acknowledge receipt of your email within one week (7 days).
-        A detailed response will follow within 48 hours, outlining the next steps for handling your report.
-        After the initial reply, the security team will keep you informed about the progress toward a fix and any announcements.
+## Reporting a vulnerability
 
-  * Information and Collaboration:
-        We may request additional information or guidance as we work on addressing the issue.
+Do not publish exploit details, private data, or a proof-of-concept in a public
+issue.
 
-  * Handling the Report:
-        OrcaSlicer will confirm the problem and determine the affected versions.
-        We will audit the code to find any similar issues and prepare fixes for all releases still under maintenance.
-        Fixes will be released as quickly as possible.
+1. Check the repository's **Security** page for a private vulnerability-reporting
+   form.
+2. If private reporting is not available, open a minimal issue that asks the
+   maintainer for a private contact channel. Include no sensitive details in that
+   issue.
+3. In the private report, include the affected commit or APK version, Android
+   version and device, impact, reproduction steps, and the smallest safe test file
+   needed to reproduce the problem.
 
-  * Third-Party Modules:
-        Report security issues in third-party modules to the respective maintainer of those modules.
+There is no guaranteed response-time SLA during the MVP phase. The maintainer will
+confirm scope and coordinate disclosure before publishing a fix when possible.
 
-## Security Disclosure Guidelines
+## Scope
 
-When disclosing a vulnerability, please follow these steps to ensure your report is clear and actionable:
+Reports about DuckySlicer's Android UI, Rust boundary, build configuration, bundled
+native runtime, and local file handling are in scope. Vulnerabilities that exist
+only in a third-party dependency should also be reported to that dependency's
+maintainer.
 
-  * Provide Detailed Information:
-        Scope: Clearly define the scope of the vulnerability.
-        Potential Impact: Let us know who could be affected by this exploit.
-        Reproduction Steps: Document detailed steps to reproduce the vulnerability.
-
-    Reference OWASP Guidelines:
-        Follow the <a href="https://cheatsheetseries.owasp.org/cheatsheets/Vulnerability_Disclosure_Cheat_Sheet.html">OWASP Vulnerability Disclosure Cheat Sheet</a> for best practices in vulnerability disclosure.
-
-## Security Recommendations
-
-To enhance security when using OrcaSlicer, we recommend following these steps:
-
-  * SEE SOMETHING: If you notice anything suspicious or have concerns, please report it.
-  * SAY SOMETHING: If you have any doubts or need assistance, do not hesitate to contact us.
-
-### Thank you for your commitment to the security of OrcaSlicer. Your efforts help us maintain a safe and reliable ecosystem.
+Never include printer credentials, signing keys, personal models, or generated
+G-code containing private paths or identifiers in a report.

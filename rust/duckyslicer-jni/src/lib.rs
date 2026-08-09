@@ -2,13 +2,13 @@
 
 use std::ffi::{CStr, c_char};
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 
 use jni::JNIEnv;
 use jni::objects::{JClass, JString};
 use jni::sys::{jint, jstring};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 unsafe extern "C" {
@@ -37,6 +37,20 @@ struct StlInspection {
     preview_triangles: Vec<[f32; 9]>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StlTransform {
+    bed_center_mm: [f32; 2],
+    offset_mm: [f32; 2],
+    rotation_deg: [f32; 3],
+    scale: f32,
+}
+
+#[derive(Serialize)]
+struct SuccessResponse {
+    ok: bool,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GcodeLayerPreview {
@@ -46,7 +60,54 @@ struct GcodeLayerPreview {
     layer_count: usize,
     min_z_mm: f32,
     max_z_mm: f32,
-    segments: Vec<[f32; 5]>,
+    segments: Vec<[f32; 6]>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u8)]
+enum ToolpathRole {
+    OuterWall = 0,
+    InnerWall = 1,
+    Infill = 2,
+    Solid = 3,
+    Support = 4,
+    Bridge = 5,
+    Adhesion = 6,
+    #[default]
+    Other = 7,
+}
+
+impl ToolpathRole {
+    fn from_label(label: &str) -> Self {
+        let normalized = label.trim().to_ascii_lowercase();
+        if normalized.contains("outer wall") || normalized.contains("external perimeter") {
+            Self::OuterWall
+        } else if normalized.contains("inner wall") || normalized.contains("perimeter") {
+            Self::InnerWall
+        } else if normalized.contains("bridge") || normalized.contains("overhang") {
+            Self::Bridge
+        } else if normalized.contains("support") {
+            Self::Support
+        } else if normalized.contains("skirt")
+            || normalized.contains("brim")
+            || normalized.contains("raft")
+        {
+            Self::Adhesion
+        } else if normalized.contains("solid")
+            || normalized.contains("top surface")
+            || normalized.contains("bottom surface")
+        {
+            Self::Solid
+        } else if normalized.contains("infill") {
+            Self::Infill
+        } else {
+            Self::Other
+        }
+    }
+
+    fn code(self) -> f32 {
+        self as u8 as f32
+    }
 }
 
 #[derive(Serialize)]
@@ -101,6 +162,170 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
     })
 }
 
+fn rotate_vertex(mut vertex: [f32; 3], rotation_deg: [f32; 3]) -> [f32; 3] {
+    let [rx, ry, rz] = rotation_deg.map(f32::to_radians);
+    let (sin_x, cos_x) = rx.sin_cos();
+    let (sin_y, cos_y) = ry.sin_cos();
+    let (sin_z, cos_z) = rz.sin_cos();
+
+    vertex = [
+        vertex[0],
+        vertex[1] * cos_x - vertex[2] * sin_x,
+        vertex[1] * sin_x + vertex[2] * cos_x,
+    ];
+    vertex = [
+        vertex[0] * cos_y + vertex[2] * sin_y,
+        vertex[1],
+        -vertex[0] * sin_y + vertex[2] * cos_y,
+    ];
+    [
+        vertex[0] * cos_z - vertex[1] * sin_z,
+        vertex[0] * sin_z + vertex[1] * cos_z,
+        vertex[2],
+    ]
+}
+
+fn transformed_vertex(
+    vertex: [f32; 3],
+    source_center: [f32; 3],
+    transformed_min_z: f32,
+    transform: &StlTransform,
+) -> [f32; 3] {
+    let local = [
+        (vertex[0] - source_center[0]) * transform.scale,
+        (vertex[1] - source_center[1]) * transform.scale,
+        (vertex[2] - source_center[2]) * transform.scale,
+    ];
+    let rotated = rotate_vertex(local, transform.rotation_deg);
+    [
+        rotated[0] + transform.bed_center_mm[0] + transform.offset_mm[0],
+        rotated[1] + transform.bed_center_mm[1] + transform.offset_mm[1],
+        rotated[2] - transformed_min_z,
+    ]
+}
+
+fn triangle_normal(vertices: [[f32; 3]; 3]) -> [f32; 3] {
+    let u = [
+        vertices[1][0] - vertices[0][0],
+        vertices[1][1] - vertices[0][1],
+        vertices[1][2] - vertices[0][2],
+    ];
+    let v = [
+        vertices[2][0] - vertices[0][0],
+        vertices[2][1] - vertices[0][1],
+        vertices[2][2] - vertices[0][2],
+    ];
+    let normal = [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+    ];
+    let length = (normal[0].powi(2) + normal[1].powi(2) + normal[2].powi(2)).sqrt();
+    if length <= f32::EPSILON {
+        [0.0, 0.0, 0.0]
+    } else {
+        [normal[0] / length, normal[1] / length, normal[2] / length]
+    }
+}
+
+fn write_f32(writer: &mut impl Write, value: f32) -> Result<(), EngineError> {
+    writer.write_all(&value.to_le_bytes())?;
+    Ok(())
+}
+
+fn transform_stl(
+    input_path: &str,
+    output_path: &str,
+    transform: &StlTransform,
+) -> Result<(), EngineError> {
+    if !transform.scale.is_finite() || !(0.05..=10.0).contains(&transform.scale) {
+        return Err(EngineError::Parse(
+            "Scale must be between 5% and 1000%".to_owned(),
+        ));
+    }
+    if transform
+        .bed_center_mm
+        .iter()
+        .chain(transform.offset_mm.iter())
+        .chain(transform.rotation_deg.iter())
+        .any(|value| !value.is_finite())
+    {
+        return Err(EngineError::Parse(
+            "Transform contains an invalid value".to_owned(),
+        ));
+    }
+
+    let mut first_pass_file = BufReader::new(File::open(input_path)?);
+    let first_pass = stl_io::create_stl_reader(&mut first_pass_file)
+        .map_err(|error| EngineError::Parse(error.to_string()))?;
+    let mut triangle_count = 0u32;
+    let mut min = [f32::INFINITY; 3];
+    let mut max = [f32::NEG_INFINITY; 3];
+    for triangle in first_pass {
+        let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
+        triangle_count = triangle_count
+            .checked_add(1)
+            .ok_or_else(|| EngineError::Parse("STL contains too many triangles".to_owned()))?;
+        for vertex in triangle.vertices {
+            for axis in 0..3 {
+                min[axis] = min[axis].min(vertex[axis]);
+                max[axis] = max[axis].max(vertex[axis]);
+            }
+        }
+    }
+    if triangle_count == 0 {
+        return Err(EngineError::Empty);
+    }
+
+    let source_center = [
+        (min[0] + max[0]) / 2.0,
+        (min[1] + max[1]) / 2.0,
+        (min[2] + max[2]) / 2.0,
+    ];
+    let mut minimum_pass_file = BufReader::new(File::open(input_path)?);
+    let minimum_pass = stl_io::create_stl_reader(&mut minimum_pass_file)
+        .map_err(|error| EngineError::Parse(error.to_string()))?;
+    let mut transformed_min_z = f32::INFINITY;
+    for triangle in minimum_pass {
+        let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
+        for vertex in triangle.vertices {
+            let local = [
+                (vertex[0] - source_center[0]) * transform.scale,
+                (vertex[1] - source_center[1]) * transform.scale,
+                (vertex[2] - source_center[2]) * transform.scale,
+            ];
+            transformed_min_z =
+                transformed_min_z.min(rotate_vertex(local, transform.rotation_deg)[2]);
+        }
+    }
+
+    let mut output_pass_file = BufReader::new(File::open(input_path)?);
+    let output_pass = stl_io::create_stl_reader(&mut output_pass_file)
+        .map_err(|error| EngineError::Parse(error.to_string()))?;
+    let output_file = File::create(output_path)?;
+    let mut writer = BufWriter::new(output_file);
+    writer.write_all(&[0u8; 80])?;
+    writer.write_all(&triangle_count.to_le_bytes())?;
+    for triangle in output_pass {
+        let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
+        let vertices = triangle.vertices.map(|vertex| {
+            transformed_vertex(vertex.0, source_center, transformed_min_z, transform)
+        });
+        for value in triangle_normal(vertices) {
+            write_f32(&mut writer, value)?;
+        }
+        for vertex in vertices {
+            for value in vertex {
+                write_f32(&mut writer, value)?;
+            }
+        }
+        writer.write_all(&0u16.to_le_bytes())?;
+    }
+    writer.flush()?;
+    writer.get_ref().sync_all()?;
+    Ok(())
+}
+
 fn parse_axis(line: &str, axis: char) -> Option<f32> {
     line.split_ascii_whitespace()
         .find(|token| token.starts_with(axis))
@@ -125,6 +350,7 @@ fn preview_gcode(
     let mut y = 0.0f32;
     let mut e = 0.0f32;
     let mut relative_extrusion = false;
+    let mut toolpath_role = ToolpathRole::Other;
     let mut segments = Vec::new();
     let mut segment_stride = 1usize;
     let mut seen_segments = 0usize;
@@ -148,6 +374,10 @@ fn preview_gcode(
                         Some(max_requested_z.map_or(parsed, |value| value.max(parsed)));
                 }
             }
+            continue;
+        }
+        if let Some(value) = trimmed.strip_prefix(";TYPE:") {
+            toolpath_role = ToolpathRole::from_label(value);
             continue;
         }
 
@@ -186,7 +416,7 @@ fn preview_gcode(
         if in_requested_range && extruding && (next_x != x || next_y != y) {
             seen_segments += 1;
             if seen_segments.is_multiple_of(segment_stride) {
-                segments.push([x, y, next_x, next_y, layer_z]);
+                segments.push([x, y, next_x, next_y, layer_z, toolpath_role.code()]);
             }
             const SEGMENT_LIMIT: usize = 60_000;
             if segments.len() > SEGMENT_LIMIT {
@@ -272,6 +502,39 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_inspectStl(
 }
 
 #[unsafe(no_mangle)]
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_transformStl(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    input_path: JString<'_>,
+    output_path: JString<'_>,
+    transform_json: JString<'_>,
+) -> jstring {
+    let read_string = |env: &mut JNIEnv<'_>, value: &JString<'_>| {
+        env.get_string(value)
+            .map(|text| text.to_string_lossy().into_owned())
+            .map_err(|error| EngineError::Parse(error.to_string()))
+    };
+    let result = (|| {
+        let input_path = read_string(&mut env, &input_path)?;
+        let output_path = read_string(&mut env, &output_path)?;
+        let transform_json = read_string(&mut env, &transform_json)?;
+        let transform: StlTransform = serde_json::from_str(&transform_json)
+            .map_err(|error| EngineError::Parse(error.to_string()))?;
+        transform_stl(&input_path, &output_path, &transform)
+    })();
+
+    let response = match result {
+        Ok(()) => serde_json::to_string(&SuccessResponse { ok: true }),
+        Err(error) => serde_json::to_string(&ErrorResponse {
+            ok: false,
+            error: &error.to_string(),
+        }),
+    }
+    .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"Serialization failed\"}".to_owned());
+    make_java_string(&env, &response)
+}
+
+#[unsafe(no_mangle)]
 pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRange(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
@@ -319,6 +582,27 @@ mod tests {
     }
 
     #[test]
+    fn toolpath_roles_cover_surface_support_and_adhesion_labels() {
+        assert_eq!(
+            ToolpathRole::from_label("Outer wall"),
+            ToolpathRole::OuterWall
+        );
+        assert_eq!(
+            ToolpathRole::from_label("Bottom surface"),
+            ToolpathRole::Solid
+        );
+        assert_eq!(
+            ToolpathRole::from_label("Support interface"),
+            ToolpathRole::Support
+        );
+        assert_eq!(
+            ToolpathRole::from_label("Overhang wall"),
+            ToolpathRole::Bridge
+        );
+        assert_eq!(ToolpathRole::from_label("Raft"), ToolpathRole::Adhesion);
+    }
+
+    #[test]
     fn gcode_preview_keeps_extrusion_paths_and_z_for_requested_range() {
         let path = std::env::temp_dir().join(format!(
             "duckyslicer-preview-{}-{}.gcode",
@@ -326,7 +610,7 @@ mod tests {
             std::thread::current().name().unwrap_or("test")
         ));
         let mut file = File::create(&path).expect("create fixture");
-        writeln!(file, "M83\n;LAYER_CHANGE\n;Z:0.2\nG1 X10 Y10\nG1 X20 Y10 E1\n;LAYER_CHANGE\n;Z:0.4\nG1 X20 Y20 E1")
+        writeln!(file, "M83\n;LAYER_CHANGE\n;Z:0.2\n;TYPE:Outer wall\nG1 X10 Y10\nG1 X20 Y10 E1\n;LAYER_CHANGE\n;Z:0.4\n;TYPE:Internal solid infill\nG1 X20 Y20 E1")
             .expect("write fixture");
         drop(file);
 
@@ -342,9 +626,53 @@ mod tests {
         assert_eq!(preview.max_z_mm, 0.4);
         assert_eq!(
             preview.segments,
-            vec![[10.0, 10.0, 20.0, 10.0, 0.2], [20.0, 10.0, 20.0, 20.0, 0.4],]
+            vec![
+                [10.0, 10.0, 20.0, 10.0, 0.2, 0.0],
+                [20.0, 10.0, 20.0, 20.0, 0.4, 3.0],
+            ]
         );
         assert_eq!(clamped.start_layer, 1);
         assert_eq!(clamped.end_layer, 1);
+    }
+
+    #[test]
+    fn stl_transform_centers_rotates_scales_and_places_on_bed() {
+        let input_path = std::env::temp_dir().join(format!(
+            "duckyslicer-transform-input-{}.stl",
+            std::process::id(),
+        ));
+        let output_path = std::env::temp_dir().join(format!(
+            "duckyslicer-transform-output-{}.stl",
+            std::process::id(),
+        ));
+        let mut file = File::create(&input_path).expect("create fixture");
+        writeln!(
+            file,
+            "solid model\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 2 0 0\nvertex 2 4 0\nendloop\nendfacet\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 2 4 0\nvertex 0 4 0\nendloop\nendfacet\nendsolid model",
+        )
+        .expect("write fixture");
+        drop(file);
+
+        let transform = StlTransform {
+            bed_center_mm: [100.0, 100.0],
+            offset_mm: [5.0, -3.0],
+            rotation_deg: [0.0, 0.0, 90.0],
+            scale: 2.0,
+        };
+        transform_stl(
+            input_path.to_str().expect("utf8 path"),
+            output_path.to_str().expect("utf8 path"),
+            &transform,
+        )
+        .expect("transform stl");
+        let inspection = inspect_stl(output_path.to_str().expect("utf8 path")).expect("inspect");
+
+        std::fs::remove_file(input_path).expect("remove fixture");
+        std::fs::remove_file(output_path).expect("remove output");
+        assert!((inspection.dimensions_mm[0] - 8.0).abs() < 0.001);
+        assert!((inspection.dimensions_mm[1] - 4.0).abs() < 0.001);
+        assert!((inspection.min_mm[0] - 101.0).abs() < 0.001);
+        assert!((inspection.max_mm[1] - 99.0).abs() < 0.001);
+        assert_eq!(inspection.min_mm[2], 0.0);
     }
 }
