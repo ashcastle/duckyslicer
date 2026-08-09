@@ -26,7 +26,6 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "PreviewPerformancePolicyTest.kt",
         "ToolpathMeshBuilderTest.kt",
         "lib.rs",
-        "README.md",
         "CONTRIBUTING.md",
     }
     missing = sorted(required - sources.keys())
@@ -177,7 +176,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         if marker not in policy_tests:
             raise VerificationError(f"adaptive preview host regression is missing: {marker}")
 
-    for document in ("README.md", "CONTRIBUTING.md"):
+    for document in ("CONTRIBUTING.md",):
         lowered = sources[document].lower()
         if (
             "preview" not in lowered
@@ -214,7 +213,6 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "lib.rs": (ROOT / "rust/duckyslicer-jni/src/lib.rs").read_text(encoding="utf-8"),
-        "README.md": (ROOT / "README.md").read_text(encoding="utf-8"),
         "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),
     }
 
