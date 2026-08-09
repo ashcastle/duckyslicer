@@ -41,7 +41,6 @@ def valid_sources() -> dict[str, str]:
             'name="quality" name="strength" name="speed" name="supports" name="others" '
             'name="recent_profiles"'
         ),
-        "README.md": "Quality Strength Speed Support Others",
         "CONTRIBUTING.md": "Quality Strength Speed Support Others",
     }
 
