@@ -19,6 +19,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "PreviewModels.kt",
         "PreviewSummary.kt",
         "AppSettings.kt",
+        "AppSettingsSheet.kt",
         "ToolpathPreviewView.kt",
         "WorkspaceScreen.kt",
         "MainActivity.kt",
@@ -27,8 +28,10 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "NativeEngineInstrumentedTest.kt",
         "PreviewModelsTest.kt",
         "PreviewSummaryTest.kt",
+        "SliceOutcomeRestorationTest.kt",
         "PreviewPerformancePolicyTest.kt",
         "ToolpathMeshBuilderTest.kt",
+        "WorkspaceLayoutPolicyTest.kt",
         "strings.xml",
         "strings-ko.xml",
         "lib.rs",
@@ -142,9 +145,64 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     if ".heightIn(min = 48.dp)" not in preview_controls or ".toggleable(" not in preview_controls:
         raise VerificationError("preview role toggles need a 48 dp minimum touch target")
 
+    for marker in (
+        "TabletShortestSideDp = 600f",
+        "useWorkspaceNavigationRail(maxWidth.value, maxHeight.value)",
+        "minOf(widthDp, heightDp) >= TabletShortestSideDp",
+        "showWorkspaceNavigationLabels(LocalDensity.current.fontScale)",
+        "contentDescription = if (showLabels) null else labelText",
+        "alwaysShowLabel = showLabels",
+    ):
+        if marker not in workspace:
+            raise VerificationError(f"responsive workspace policy is missing: {marker}")
+    workspace_card = workspace.split("private fun WorkspaceCard(", 1)[-1]
+    if ".verticalScroll(rememberScrollState())" not in workspace_card:
+        raise VerificationError("height-limited workspace cards must remain scrollable")
+
+    app_settings = sources["AppSettingsSheet.kt"]
+    if app_settings.count("FlowRow(") < 2:
+        raise VerificationError("preview setting chips must wrap at large font scales")
+
+    layout_tests = sources["WorkspaceLayoutPolicyTest.kt"]
+    for marker in (
+        "landscapePhoneKeepsBottomNavigation",
+        "tabletUsesNavigationRailInBothOrientations",
+        "thresholdRequiresTheShortestSideToBeTabletSized",
+        "largeFontUsesIconNavigationWithoutClippedVisibleLabels",
+    ):
+        if marker not in layout_tests:
+            raise VerificationError(f"responsive workspace regression is missing: {marker}")
+
     outcome = sources["OnDeviceSlicer.kt"]
-    if "val filamentMm: Float" not in outcome:
-        raise VerificationError("slice outcome drops the native filament-length estimate")
+    for marker in (
+        "val filamentMm: Float",
+        ") : Serializable",
+        "fun SliceOutcome.isRestorableFrom(filesRoot: File)",
+        "canonicalOutput.parentFile == outputRoot",
+        "canonicalOutput.length() in 1..SliceArtifactStore.MAXIMUM_OUTPUT_BYTES",
+    ):
+        if marker not in outcome:
+            raise VerificationError(f"restorable slice outcome contract is missing: {marker}")
+
+    main_activity = sources["MainActivity.kt"]
+    for marker in (
+        "var sliceOutcome by rememberSaveable",
+        "var selectedTab by rememberSaveable",
+        "restored.isRestorableFrom(context.filesDir)",
+        "completed?.isRestorableFrom(context.filesDir) == true",
+        "loadPreviewRange(0, Int.MAX_VALUE)",
+    ):
+        if marker not in main_activity:
+            raise VerificationError(f"configuration restoration is missing: {marker}")
+
+    restoration_tests = sources["SliceOutcomeRestorationTest.kt"]
+    for marker in (
+        "retainedPrivateOutputCanBeRestoredAfterConfigurationChange",
+        "missingOrOutsideOutputCannotBeRestored",
+        "invalidStatisticsCannotReenterPreviewState",
+    ):
+        if marker not in restoration_tests:
+            raise VerificationError(f"slice restoration host regression is missing: {marker}")
     service = sources["SlicerProcessService.kt"]
     for marker in (
         "result.estimatedFilamentMm",
@@ -277,6 +335,9 @@ def read_sources() -> dict[str, str]:
         "PreviewModels.kt": (main / "PreviewModels.kt").read_text(encoding="utf-8"),
         "PreviewSummary.kt": (main / "PreviewSummary.kt").read_text(encoding="utf-8"),
         "AppSettings.kt": (main / "AppSettings.kt").read_text(encoding="utf-8"),
+        "AppSettingsSheet.kt": (main / "AppSettingsSheet.kt").read_text(
+            encoding="utf-8"
+        ),
         "ToolpathPreviewView.kt": (main / "ToolpathPreviewView.kt").read_text(
             encoding="utf-8"
         ),
@@ -295,10 +356,16 @@ def read_sources() -> dict[str, str]:
         "PreviewSummaryTest.kt": (tests / "PreviewSummaryTest.kt").read_text(
             encoding="utf-8"
         ),
+        "SliceOutcomeRestorationTest.kt": (
+            tests / "SliceOutcomeRestorationTest.kt"
+        ).read_text(encoding="utf-8"),
         "PreviewPerformancePolicyTest.kt": (
             tests / "PreviewPerformancePolicyTest.kt"
         ).read_text(encoding="utf-8"),
         "ToolpathMeshBuilderTest.kt": (tests / "ToolpathMeshBuilderTest.kt").read_text(
+            encoding="utf-8"
+        ),
+        "WorkspaceLayoutPolicyTest.kt": (tests / "WorkspaceLayoutPolicyTest.kt").read_text(
             encoding="utf-8"
         ),
         "lib.rs": (ROOT / "rust/duckyslicer-jni/src/lib.rs").read_text(encoding="utf-8"),
@@ -318,7 +385,7 @@ def main() -> None:
     except (OSError, VerificationError) as error:
         raise SystemExit(f"Preview boundary verification failed: {error}") from error
     print(
-        "Verified bounded FloatArray preview, adaptive detail, accessible controls, "
+        "Verified bounded FloatArray preview, responsive controls, adaptive detail, "
         "and scene-stable VBO uploads"
     )
 

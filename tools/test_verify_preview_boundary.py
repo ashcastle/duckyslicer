@@ -25,6 +25,10 @@ def valid_sources() -> dict[str, str]:
             "resolvePreviewDetail( previewDetailForInteraction( depthPreviewSegmentBudget( "
             "compatibilityPreviewSegmentBudget("
         ),
+        "AppSettingsSheet.kt": (
+            "FlowRow( PreviewRenderingMode.entries.forEach "
+            "FlowRow( PreviewDetail.entries.forEach"
+        ),
         "ToolpathPreviewView.kt": (
             "renderMode = RENDERMODE_WHEN_DIRTY ToolpathGeometryUploadState "
             "uploadState.needsUpload(scene) GLES30.glGenBuffers "
@@ -49,10 +53,27 @@ def valid_sources() -> dict[str, str]:
             " private fun PreviewExportSplitButton( .width(48.dp) .height(50.dp) "
             ".clickable( role = Role.Button modifier = Modifier.width(34.dp).height(50.dp) "
             "@Composable private fun PreviewControls( .heightIn(min = 48.dp) .toggleable( "
-            "@Composable"
+            "@Composable private const val TabletShortestSideDp = 600f "
+            "useWorkspaceNavigationRail(maxWidth.value, maxHeight.value) "
+            "minOf(widthDp, heightDp) >= TabletShortestSideDp "
+            "private fun WorkspaceCard( .verticalScroll(rememberScrollState()) @Composable"
+            " showWorkspaceNavigationLabels(LocalDensity.current.fontScale) "
+            "contentDescription = if (showLabels) null else labelText "
+            "alwaysShowLabel = showLabels"
         ),
-        "MainActivity.kt": "GcodeLayerPreview.fromNative GcodeLayerPreview.fromNative",
-        "OnDeviceSlicer.kt": "val filamentMm: Float",
+        "MainActivity.kt": (
+            "GcodeLayerPreview.fromNative GcodeLayerPreview.fromNative "
+            "var sliceOutcome by rememberSaveable var selectedTab by rememberSaveable "
+            "restored.isRestorableFrom(context.filesDir) "
+            "completed?.isRestorableFrom(context.filesDir) == true "
+            "loadPreviewRange(0, Int.MAX_VALUE)"
+        ),
+        "OnDeviceSlicer.kt": (
+            "val filamentMm: Float ) : Serializable "
+            "fun SliceOutcome.isRestorableFrom(filesRoot: File) "
+            "canonicalOutput.parentFile == outputRoot "
+            "canonicalOutput.length() in 1..SliceArtifactStore.MAXIMUM_OUTPUT_BYTES"
+        ),
         "SlicerProcessService.kt": (
             "result.estimatedFilamentMm KEY_FILAMENT_MM "
             "filamentMm = response.getFloat(SlicerProcessContract.KEY_FILAMENT_MM) "
@@ -85,6 +106,11 @@ def valid_sources() -> dict[str, str]:
             "subMinuteEstimateUsesCompactFallback "
             "invalidNativeStatisticsAreRejectedBeforeDisplay"
         ),
+        "SliceOutcomeRestorationTest.kt": (
+            "retainedPrivateOutputCanBeRestoredAfterConfigurationChange "
+            "missingOrOutsideOutputCannotBeRestored "
+            "invalidStatisticsCannotReenterPreviewState"
+        ),
         "PreviewPerformancePolicyTest.kt": (
             "automaticDefaultsToSmoothOnMemoryConstrainedDevices "
             "automaticUsesBalancedQualityWhenTheDeviceHasHeadroom "
@@ -98,6 +124,12 @@ def valid_sources() -> dict[str, str]:
             "unchangedSceneUploadsOnceUntilGeometryOrContextChanges "
             "Camera-only frames must reuse the GPU buffer "
             "Context recreation must re-upload retained scene data"
+        ),
+        "WorkspaceLayoutPolicyTest.kt": (
+            "landscapePhoneKeepsBottomNavigation "
+            "tabletUsesNavigationRailInBothOrientations "
+            "thresholdRequiresTheShortestSideToBeTabletSized "
+            "largeFontUsesIconNavigationWithoutClippedVisibleLabels"
         ),
         "lib.rs": (
             "Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRange -> jfloatArray "
@@ -189,6 +221,55 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             ".heightIn(min = 48.dp)", ".heightIn(min = 32.dp)", 1
         )
         with self.assertRaisesRegex(VerificationError, "48 dp minimum"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_width_only_tablet_detection(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            "minOf(widthDp, heightDp) >= TabletShortestSideDp",
+            "widthDp >= TabletShortestSideDp",
+        )
+        with self.assertRaisesRegex(VerificationError, "minOf"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_unscrollable_height_limited_workspace_card(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            ".verticalScroll(rememberScrollState())", "", 1
+        )
+        with self.assertRaisesRegex(VerificationError, "scrollable"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_single_row_large_text_setting_chips(self) -> None:
+        sources = valid_sources()
+        sources["AppSettingsSheet.kt"] = sources["AppSettingsSheet.kt"].replace(
+            "FlowRow(", "Row(", 1
+        )
+        with self.assertRaisesRegex(VerificationError, "wrap"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_clipped_large_font_navigation_labels(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            "alwaysShowLabel = showLabels", "alwaysShowLabel = true"
+        )
+        with self.assertRaisesRegex(VerificationError, "alwaysShowLabel"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_configuration_loss_of_completed_slice(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+            "var sliceOutcome by rememberSaveable", "var sliceOutcome by remember"
+        )
+        with self.assertRaisesRegex(VerificationError, "sliceOutcome"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_unvalidated_restored_output_path(self) -> None:
+        sources = valid_sources()
+        sources["OnDeviceSlicer.kt"] = sources["OnDeviceSlicer.kt"].replace(
+            "canonicalOutput.parentFile == outputRoot", "canonicalOutput.isFile"
+        )
+        with self.assertRaisesRegex(VerificationError, "parentFile"):
             verify_preview_boundary(sources)
 
     def test_rejects_missing_collapsed_preview_summary(self) -> None:
