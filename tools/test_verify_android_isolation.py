@@ -24,6 +24,7 @@ class SlicerProcessService {
   val terminate = MESSAGE_TERMINATE_FOR_TEST
   val worker = HandlerThread("DuckySlicer Orca work")
   val cancel = MESSAGE_CANCEL
+  fun containPreBindCancellation() { if (cancellationRequested()) return }
   fun containCancellation() { Process.killProcess(Process.myPid()) }
   override fun onUnbind() = false
 }
@@ -33,6 +34,8 @@ VALID_DEVICE_TEST = """
 nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly
 imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp
 activeSliceCancellationKeepsServiceResponsiveAndRestartsCleanly
+activeSliceSurvivesActivityRecreationAndCompletes
+Configuration recreation must retain the active operation
 """
 
 
@@ -42,10 +45,21 @@ def valid_sources() -> dict[str, str]:
         "com/ashcastle/duckyslicer/SliceArtifactStore.kt": (
             "output.fd.sync() MAXIMUM_RETAINED_OUTPUTS MAXIMUM_RETAINED_BYTES"
         ),
-        "com/ashcastle/duckyslicer/OnDeviceSlicer.kt": "SlicerProcessClient.slice()",
+        "com/ashcastle/duckyslicer/OnDeviceSlicer.kt": (
+            "SlicerProcessClient.slice() cancellationRequested: () -> Boolean "
+            "if (cancellationRequested()) throw SlicingCancelledException()"
+        ),
         "com/ashcastle/duckyslicer/MainActivity.kt": (
-            "SlicerProcessClient.cancelActiveSlice() "
+            "ViewModelProvider(this)[SliceOperationViewModel::class.java] "
+            "DisposableEffect(sliceOperationModel) "
+            "if (!sliceOperationModel.state.value.busy) "
             "SlicerProcessClient.cancelActiveSliceAsync()"
+        ),
+        "com/ashcastle/duckyslicer/SliceOperationViewModel.kt": (
+            "class SliceOperationViewModel : ViewModel() viewModelScope.launch "
+            "cancellationRequested = operationCancellation::get "
+            "operationCancellation.set(true) "
+            "override fun onCleared() SlicerProcessClient.cancelActiveSliceAsync()"
         ),
         "com/ashcastle/duckyslicer/WorkspaceScreen.kt": "onCancelSlice canceling_slice",
         "com/u1/slicer/NativeLibrary.kt": "class NativeLibrary()",
@@ -82,18 +96,47 @@ class VerifyAndroidIsolationTest(unittest.TestCase):
             ("imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp", "imperfect-mesh"),
             ("nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly", "crash recovery"),
             ("activeSliceCancellationKeepsServiceResponsiveAndRestartsCleanly", "active-slice"),
+            ("activeSliceSurvivesActivityRecreationAndCompletes", "configuration-recreation"),
         ):
             with self.assertRaisesRegex(VerificationError, message):
                 verify_sources(valid_sources(), VALID_DEVICE_TEST.replace(missing, ""))
 
-    def test_requires_ui_and_disposal_cancellation_paths(self) -> None:
+    def test_requires_retained_ui_and_final_disposal_cancellation_paths(self) -> None:
         for source_path, marker in (
-            ("com/ashcastle/duckyslicer/MainActivity.kt", "cancelActiveSliceAsync()"),
+            ("com/ashcastle/duckyslicer/MainActivity.kt", "ViewModelProvider(this)"),
+            ("com/ashcastle/duckyslicer/MainActivity.kt", "if (!sliceOperationModel.state.value.busy)"),
+            ("com/ashcastle/duckyslicer/SliceOperationViewModel.kt", "viewModelScope.launch"),
+            ("com/ashcastle/duckyslicer/SliceOperationViewModel.kt", "override fun onCleared()"),
             ("com/ashcastle/duckyslicer/WorkspaceScreen.kt", "onCancelSlice"),
         ):
             sources = valid_sources()
             sources[source_path] = sources[source_path].replace(marker, "")
-            with self.assertRaisesRegex(VerificationError, "cancel"):
+            with self.assertRaises(VerificationError):
+                verify_sources(sources, VALID_DEVICE_TEST)
+
+    def test_rejects_configuration_disposal_cancellation(self) -> None:
+        sources = valid_sources()
+        sources["com/ashcastle/duckyslicer/MainActivity.kt"] += (
+            " DisposableEffect(Unit) { onDispose { "
+            "SlicerProcessClient.cancelActiveSliceAsync() } }"
+        )
+        with self.assertRaisesRegex(VerificationError, "configuration disposal"):
+            verify_sources(sources, VALID_DEVICE_TEST)
+
+    def test_requires_cancellation_before_the_worker_is_bound(self) -> None:
+        for source_path, marker in (
+            (
+                "com/ashcastle/duckyslicer/OnDeviceSlicer.kt",
+                "if (cancellationRequested()) throw SlicingCancelledException()",
+            ),
+            (
+                "com/ashcastle/duckyslicer/SlicerProcessService.kt",
+                "if (cancellationRequested())",
+            ),
+        ):
+            sources = valid_sources()
+            sources[source_path] = sources[source_path].replace(marker, "")
+            with self.assertRaisesRegex(VerificationError, "cancellation"):
                 verify_sources(sources, VALID_DEVICE_TEST)
 
 

@@ -59,15 +59,17 @@ def valid_sources() -> dict[str, str]:
             "private fun WorkspaceCard( .verticalScroll(rememberScrollState()) @Composable"
             " showWorkspaceNavigationLabels(LocalDensity.current.fontScale) "
             "contentDescription = if (showLabels) null else labelText "
-            "alwaysShowLabel = showLabels"
+            "alwaysShowLabel = showLabels "
+            "workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading)"
         ),
         "MainActivity.kt": (
-            "GcodeLayerPreview.fromNative GcodeLayerPreview.fromNative "
             "var sliceOutcome by rememberSaveable var selectedTab by rememberSaveable "
             "restored.isRestorableFrom(context.filesDir) "
             "completed?.isRestorableFrom(context.filesDir) == true "
+            "sliceOperationModel.loadPreview(completed, startLayer, endLayer) "
             "loadPreviewRange(0, Int.MAX_VALUE)"
         ),
+        "SliceOperationViewModel.kt": "GcodeLayerPreview.fromNative",
         "OnDeviceSlicer.kt": (
             "val filamentMm: Float ) : Serializable "
             "fun SliceOutcome.isRestorableFrom(filesRoot: File) "
@@ -129,7 +131,8 @@ def valid_sources() -> dict[str, str]:
             "landscapePhoneKeepsBottomNavigation "
             "tabletUsesNavigationRailInBothOrientations "
             "thresholdRequiresTheShortestSideToBeTabletSized "
-            "largeFontUsesIconNavigationWithoutClippedVisibleLabels"
+            "largeFontUsesIconNavigationWithoutClippedVisibleLabels "
+            "activeSliceAndInitialPreviewLockModelEditing"
         ),
         "lib.rs": (
             "Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRange -> jfloatArray "

@@ -23,6 +23,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "ToolpathPreviewView.kt",
         "WorkspaceScreen.kt",
         "MainActivity.kt",
+        "SliceOperationViewModel.kt",
         "OnDeviceSlicer.kt",
         "SlicerProcessService.kt",
         "NativeEngineInstrumentedTest.kt",
@@ -152,6 +153,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "showWorkspaceNavigationLabels(LocalDensity.current.fontScale)",
         "contentDescription = if (showLabels) null else labelText",
         "alwaysShowLabel = showLabels",
+        "workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading)",
     ):
         if marker not in workspace:
             raise VerificationError(f"responsive workspace policy is missing: {marker}")
@@ -169,6 +171,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "tabletUsesNavigationRailInBothOrientations",
         "thresholdRequiresTheShortestSideToBeTabletSized",
         "largeFontUsesIconNavigationWithoutClippedVisibleLabels",
+        "activeSliceAndInitialPreviewLockModelEditing",
     ):
         if marker not in layout_tests:
             raise VerificationError(f"responsive workspace regression is missing: {marker}")
@@ -190,6 +193,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "var selectedTab by rememberSaveable",
         "restored.isRestorableFrom(context.filesDir)",
         "completed?.isRestorableFrom(context.filesDir) == true",
+        "sliceOperationModel.loadPreview(completed, startLayer, endLayer)",
         "loadPreviewRange(0, Int.MAX_VALUE)",
     ):
         if marker not in main_activity:
@@ -263,8 +267,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     if "guarded_json(" in export or "serde_json::to_string" in export:
         raise VerificationError("Rust G-code preview reverted to JSON serialization")
 
-    if sources["MainActivity.kt"].count("GcodeLayerPreview.fromNative") < 2:
-        raise VerificationError("application preview consumers do not use the primitive payload")
+    if "GcodeLayerPreview.fromNative" not in sources["SliceOperationViewModel.kt"]:
+        raise VerificationError("retained application Preview does not use the primitive payload")
     device = sources["NativeEngineInstrumentedTest.kt"]
     if device.count("GcodeLayerPreview.fromNative") < 3 or "gcodeResult == null" not in device:
         raise VerificationError("ARM64 primitive preview regressions are incomplete")
@@ -343,6 +347,9 @@ def read_sources() -> dict[str, str]:
         ),
         "WorkspaceScreen.kt": (main / "WorkspaceScreen.kt").read_text(encoding="utf-8"),
         "MainActivity.kt": (main / "MainActivity.kt").read_text(encoding="utf-8"),
+        "SliceOperationViewModel.kt": (main / "SliceOperationViewModel.kt").read_text(
+            encoding="utf-8"
+        ),
         "OnDeviceSlicer.kt": (main / "OnDeviceSlicer.kt").read_text(encoding="utf-8"),
         "SlicerProcessService.kt": (main / "SlicerProcessService.kt").read_text(
             encoding="utf-8"
