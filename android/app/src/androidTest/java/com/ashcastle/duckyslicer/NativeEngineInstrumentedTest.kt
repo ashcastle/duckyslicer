@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.json.JSONObject
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -949,6 +950,41 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun sliceArtifactLeaseProtectsConcurrentReadersAcrossProcesses() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val outputRoot = File(context.filesDir, SliceArtifactStore.OUTPUT_DIRECTORY).apply { mkdirs() }
+        val probeFiles = ArrayList<File>()
+        val leased = outputRoot.resolve("lease-probe-oldest.gcode").apply {
+            writeText("G28\n")
+            setLastModified(1L)
+            probeFiles += this
+        }
+        repeat(SliceArtifactStore.MAXIMUM_RETAINED_OUTPUTS + 1) { index ->
+            probeFiles += outputRoot.resolve("lease-probe-$index.gcode").apply {
+                writeText("G1 X$index\n")
+                setLastModified(10_000L + index)
+            }
+        }
+        try {
+            SliceArtifactLease.acquire(leased).use {
+                OnDeviceSlicer.slice(
+                    fixtureModel(),
+                    SliceOptions().selectQuality(QualityProfile.DRAFT),
+                )
+                assertTrue("A cross-process reader lease must prevent pruning", leased.isFile)
+            }
+
+            OnDeviceSlicer.slice(
+                fixtureModel(),
+                SliceOptions().selectQuality(QualityProfile.DRAFT),
+            )
+            assertFalse("The released oldest output must become eligible for pruning", leased.exists())
+        } finally {
+            probeFiles.forEach(File::delete)
+        }
+    }
+
+    @Test
     fun imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp() {
         val appPid = android.os.Process.myPid()
         val options = SliceOptions()
@@ -1326,8 +1362,9 @@ class NativeEngineInstrumentedTest {
         assertTrue("Segment Z coordinates must be positive", preview.segments[4] > 0f)
         assertTrue("Outer-wall paths must be classified", preview.roleSegmentCounts[0] > 0)
         assertTrue("Inner-wall paths must be classified", preview.roleSegmentCounts[1] > 0)
-        assertTrue("Visible top/bottom surfaces must be classified", preview.roleSegmentCounts[3] > 0)
+        assertTrue("Visible top surfaces must be classified", preview.roleSegmentCounts[3] > 0)
         assertTrue("Internal solid infill must stay separate", preview.roleSegmentCounts[4] > 0)
+        assertTrue("Visible bottom surfaces must stay separate", preview.roleSegmentCounts[9] > 0)
         assertTrue("Preview must report a positive first layer Z", preview.minZMm > 0f)
         assertTrue("Multi-layer preview must span upward in Z", preview.maxZMm > preview.minZMm)
     }

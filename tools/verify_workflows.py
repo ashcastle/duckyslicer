@@ -86,6 +86,12 @@ def main() -> None:
         "runtime resilience policy is unit tested": (
             "tools.test_verify_runtime_resilience"
         ),
+        "generated G-code storage policy is verified": (
+            "python3 tools/verify_slice_storage.py"
+        ),
+        "generated G-code storage policy is unit tested": (
+            "tools.test_verify_slice_storage"
+        ),
     }
     for description, marker in required_android_gates.items():
         if marker not in android_source:
@@ -139,6 +145,12 @@ def main() -> None:
         ),
         "runtime resilience policy is unit tested": (
             "tools.test_verify_runtime_resilience"
+        ),
+        "generated G-code storage policy is verified": (
+            "python3 tools/verify_slice_storage.py"
+        ),
+        "generated G-code storage policy is unit tested": (
+            "tools.test_verify_slice_storage"
         ),
         "unsigned release is rebuilt without the build cache": (
             "Rebuild and verify reproducible unsigned release"

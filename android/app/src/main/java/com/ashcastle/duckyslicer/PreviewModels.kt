@@ -135,6 +135,6 @@ data class GcodeLayerPreview(
             )
         }
 
-        internal const val ROLE_COUNT = 9
+        internal const val ROLE_COUNT = 10
     }
 }

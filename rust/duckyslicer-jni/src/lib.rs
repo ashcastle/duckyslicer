@@ -79,13 +79,14 @@ enum ToolpathRole {
     OuterWall = 0,
     InnerWall = 1,
     Infill = 2,
-    Surface = 3,
+    TopSurface = 3,
     InternalSolid = 4,
     Support = 5,
     Bridge = 6,
     Adhesion = 7,
     #[default]
     Other = 8,
+    BottomSurface = 9,
 }
 
 impl ToolpathRole {
@@ -104,8 +105,10 @@ impl ToolpathRole {
             || normalized.contains("raft")
         {
             Self::Adhesion
-        } else if normalized.contains("top surface") || normalized.contains("bottom surface") {
-            Self::Surface
+        } else if normalized.contains("top surface") {
+            Self::TopSurface
+        } else if normalized.contains("bottom surface") {
+            Self::BottomSurface
         } else if normalized.contains("solid") {
             Self::InternalSolid
         } else if normalized.contains("infill") {
@@ -893,7 +896,7 @@ mod tests {
         );
         assert_eq!(
             ToolpathRole::from_label("Bottom surface"),
-            ToolpathRole::Surface
+            ToolpathRole::BottomSurface
         );
         assert_eq!(
             ToolpathRole::from_label("Internal solid infill"),
@@ -902,6 +905,10 @@ mod tests {
         assert_ne!(
             ToolpathRole::from_label("Top surface"),
             ToolpathRole::from_label("Internal solid infill")
+        );
+        assert_ne!(
+            ToolpathRole::from_label("Top surface"),
+            ToolpathRole::from_label("Bottom surface")
         );
         assert_eq!(
             ToolpathRole::from_label("Support interface"),
@@ -926,7 +933,7 @@ mod tests {
             std::thread::current().name().unwrap_or("test")
         ));
         let mut file = File::create(&path).expect("create fixture");
-        writeln!(file, "M83\n;LAYER_CHANGE\n;Z:0.2\n;TYPE:Outer wall\nG1 X10 Y10\nG1 X20 Y10 E1\n;LAYER_CHANGE\n;Z:0.4\n;TYPE:Internal solid infill\nG1 X20 Y20 E1\n;TYPE:Top surface\nG1 X10 Y20 E1")
+        writeln!(file, "M83\n;LAYER_CHANGE\n;Z:0.2\n;TYPE:Outer wall\nG1 X10 Y10\nG1 X20 Y10 E1\n;TYPE:Bottom surface\nG1 X20 Y20 E1\n;LAYER_CHANGE\n;Z:0.4\n;TYPE:Internal solid infill\nG1 X10 Y20 E1\n;TYPE:Top surface\nG1 X10 Y10 E1")
             .expect("write fixture");
         drop(file);
 
@@ -944,8 +951,9 @@ mod tests {
             preview.segments,
             vec![
                 [10.0, 10.0, 20.0, 10.0, 0.2, 0.0],
-                [20.0, 10.0, 20.0, 20.0, 0.4, 4.0],
-                [20.0, 20.0, 10.0, 20.0, 0.4, 3.0],
+                [20.0, 10.0, 20.0, 20.0, 0.2, 9.0],
+                [20.0, 20.0, 10.0, 20.0, 0.4, 4.0],
+                [10.0, 20.0, 10.0, 10.0, 0.4, 3.0],
             ]
         );
         assert_eq!(clamped.start_layer, 1);

@@ -301,7 +301,9 @@ class RemoteDeviceClient(private val timeoutMillis: Int) {
             RemoteDeviceKind.OCTOPRINT -> mapOf("select" to "true", "print" to "false")
             RemoteDeviceKind.KLIPPER -> mapOf("root" to "gcodes", "path" to "")
         }
-        val response = multipart(profile, credential, endpoint, fields, gcode, onProgress)
+        val response = SliceArtifactLease.acquire(gcode).use {
+            multipart(profile, credential, endpoint, fields, gcode, onProgress)
+        }
         val remotePath = when (profile.kind) {
             RemoteDeviceKind.OCTOPRINT -> response.optJSONObject("files")
                 ?.optJSONObject("local")?.optString("path")

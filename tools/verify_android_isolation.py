@@ -55,10 +55,11 @@ def verify_manifest(source: str) -> None:
 def verify_sources(sources: dict[str, str], device_test: str) -> int:
     service_path = "com/ashcastle/duckyslicer/SlicerProcessService.kt"
     service = sources.get(service_path)
+    artifacts = sources.get("com/ashcastle/duckyslicer/SliceArtifactStore.kt")
     orchestrator = sources.get("com/ashcastle/duckyslicer/OnDeviceSlicer.kt")
     main = sources.get("com/ashcastle/duckyslicer/MainActivity.kt")
     workspace = sources.get("com/ashcastle/duckyslicer/WorkspaceScreen.kt")
-    if service is None or orchestrator is None or main is None or workspace is None:
+    if service is None or artifacts is None or orchestrator is None or main is None or workspace is None:
         raise VerificationError("required slicer process sources are missing")
 
     direct_calls = []
@@ -83,8 +84,6 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         "Binder death handling": "IBinder.DeathRecipient",
         "private-path validation": "Model is outside private storage",
         "bounded settings payload": "MAX_OPTIONS_BYTES",
-        "atomic G-code durability": "output.fd.sync()",
-        "bounded output retention": "MAX_RETAINED_OUTPUTS",
         "debug worker termination": "MESSAGE_TERMINATE_FOR_TEST",
         "dedicated Orca thread": "HandlerThread(\"DuckySlicer Orca work\")",
         "request-scoped cancellation": "MESSAGE_CANCEL",
@@ -94,6 +93,9 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
     missing = [description for description, marker in required_service_markers.items() if marker not in service]
     if missing:
         raise VerificationError(f"slicer service safety markers are missing: {missing}")
+    for marker in ("output.fd.sync()", "MAXIMUM_RETAINED_OUTPUTS", "MAXIMUM_RETAINED_BYTES"):
+        if marker not in artifacts:
+            raise VerificationError(f"slicer artifact safety marker is missing: {marker}")
     if "nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly" not in device_test:
         raise VerificationError("ARM64 worker-crash recovery regression is missing")
     if "imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp" not in device_test:

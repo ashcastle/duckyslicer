@@ -20,8 +20,7 @@ class SlicerProcessService {
   fun client() { bindService(); IBinder.DeathRecipient; }
   fun native() { NativeLibrary(); }
   val path = "Model is outside private storage"
-  val max = MAX_OPTIONS_BYTES + MAX_RETAINED_OUTPUTS
-  fun save() { output.fd.sync() }
+  val max = MAX_OPTIONS_BYTES
   val terminate = MESSAGE_TERMINATE_FOR_TEST
   val worker = HandlerThread("DuckySlicer Orca work")
   val cancel = MESSAGE_CANCEL
@@ -40,6 +39,9 @@ activeSliceCancellationKeepsServiceResponsiveAndRestartsCleanly
 def valid_sources() -> dict[str, str]:
     return {
         "com/ashcastle/duckyslicer/SlicerProcessService.kt": VALID_SERVICE,
+        "com/ashcastle/duckyslicer/SliceArtifactStore.kt": (
+            "output.fd.sync() MAXIMUM_RETAINED_OUTPUTS MAXIMUM_RETAINED_BYTES"
+        ),
         "com/ashcastle/duckyslicer/OnDeviceSlicer.kt": "SlicerProcessClient.slice()",
         "com/ashcastle/duckyslicer/MainActivity.kt": (
             "SlicerProcessClient.cancelActiveSlice() "

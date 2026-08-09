@@ -49,6 +49,8 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - Orca wall-crossing avoidance, infill retraction, small-perimeter tuning, seam/wipe behavior, wall direction, and toolpath resolution preserved end to end
 - Orca partial-top-surface thresholds, outer/inner bridge directions and filtering, bridge reinforcement, overhang reversal, counterbore bridging, and alternating extra walls preserved end to end
 - Orca Arachne wall transitions, width distribution, minimum feature/wall rules, and independently rendered outer/inner wall roles preserved end to end
+- Orca top surface, bottom surface, and internal-solid toolpaths kept as distinct
+  preview roles instead of being collapsed into one generic solid fill
 - Orca skirt height/speed, draft shield, brim topology/gap, and raft geometry preserved in bundled, project, and saved profiles
 - Searchable printer, filament, and slicing selectors with collapsible brand and personal-profile groups
 - Printer compatibility filtering, validated profile inheritance, and unsafe-entry rejection during the build
@@ -66,6 +68,9 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - Cancelable on-device slicing on a dedicated worker thread; cancellation terminates
   only the isolated Orca process and the next slice starts in a fresh worker
 - Distinct, synchronized G-code artifacts for successful slices instead of one shared output file being overwritten
+- Retained G-code limited to 1 GiB per slice and 1 GiB in total, with a 512 MiB
+  free-space reserve, active-generation emergency monitoring, and cross-process
+  reader leases protecting preview, export, and printer upload from cleanup
 - 16 KB page-size-compatible ARM64 native libraries for current Android devices
 - Immutable GitHub Action pins and checksum-verified, version-locked Gradle artifacts;
   releases publish only after the full ARM64 device suite passes
