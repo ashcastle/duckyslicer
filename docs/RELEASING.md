@@ -1,21 +1,28 @@
 # Releasing DuckySlicer
 
 Tagged releases are built from source by GitHub Actions, signed without checking
-keys into the repository, verified for Android 16 KB page compatibility, and
-published with a CycloneDX SBOM of the resolved Android, Rust, and native
-dependency graph, a reviewed license expression for every component, and a
-build-provenance attestation. The unsigned APK is assembled twice with identical
-version inputs, with the second build running clean and without the Gradle build
-cache; publication stops unless both files are byte-for-byte identical. Every
-release also carries a deterministic recursive source archive and detached source
-manifest containing the root commit, runtime and engine submodule commits, native
-download pins, and hashes of critical build inputs. Every external GitHub Action
-is pinned to an immutable commit. The build job has no signing secrets and produces
-an unsigned candidate. A separate protected job that does not check out or execute
-project code signs the candidate, verifies the public certificate fingerprint, and
-removes its temporary keystore before uploading the signed artifact. The publish job
-cannot run until that exact signed APK passes the complete ARM64 Android device suite
-and cold-launches on the emulator.
+keys into the repository, and verified for Android 16 KB page compatibility. A
+GitHub Release contains exactly one public asset: the signed ARM64 APK. Its build-
+provenance attestation is bound to that APK alone.
+
+The workflow still generates a CycloneDX SBOM, reviewed dependency inventory,
+deterministic recursive source archive, detached source manifest, and checksum
+manifest as build evidence. Those files are verified inside the workflow and kept
+as short-lived Actions artifacts; they are not GitHub Release downloads. The tagged
+repository and its recursive submodule pins remain the durable corresponding source.
+
+The unsigned APK is assembled twice with identical version inputs, with the second
+build running clean and without the Gradle build cache; publication stops unless
+both files are byte-for-byte identical. Every external GitHub Action is pinned to an
+immutable commit. The build job has no signing secrets. A separate protected job
+that does not check out or execute project code signs the candidate, verifies the
+public certificate fingerprint, and removes its temporary keystore before artifact
+upload.
+
+GitHub Actions does not run an Android emulator. Before a tag is created, the full
+functional suite must pass on the local Android 15 ARM64 16 KB
+`DuckySlicer_16KB_API35` AVD. Hosted CI supplies independent build, host-test, lint,
+packaging, and static 16 KB evidence; it is not the functional device gate.
 Gradle plug-ins, module metadata, and library artifacts are resolved from a checked-in
 lock and must match the reviewed SHA-256 verification metadata.
 
@@ -47,20 +54,21 @@ key prevents publishing a compatible update under the same Android identity.
 
 ## Release procedure
 
-1. Ensure the Android workflow passes on the intended commit.
-2. Review the source diff, dependency changes, license notices, and generated
+1. On `DuckySlicer_16KB_API35`, confirm `getconf PAGE_SIZE` is `16384`, run the
+   complete connected instrumentation suite against the intended commit, then
+   perform an offline import, slice, preview, and G-code export smoke test.
+2. Ensure the Android workflow passes on the intended commit.
+3. Review the source diff, dependency changes, license notices, and generated
    profile-catalog counts.
-3. Create and push an annotated SemVer tag such as `v0.2.0` or `v0.2.0-rc.1`.
-4. Approve the protected `release` environment when prompted, then wait for all four
-   **Release APK** stages: unsigned build, isolated sign, ARM64 device tests, and
-   publish. A signing mismatch or failed device test intentionally leaves no GitHub
-   Release behind.
-5. Verify that the GitHub release contains the ARM64 APK, CycloneDX JSON, recursive
-   `source.tar.gz`, detached `SOURCE-MANIFEST.json`, and `SHA256SUMS` file. Check the
-   hashes, run the source-bundle verifier, confirm every SBOM component has one
-   license expression, confirm the in-app third-party view contains the complete
-   offline license bundle, and confirm the provenance attestation is visible.
-6. Install the release APK on a supported ARM64 device and perform an offline
+4. Create and push an annotated SemVer tag such as `v0.2.0` or `v0.2.0-rc.1`.
+5. Approve the protected `release` environment when prompted, then wait for the
+   unsigned build, isolated sign, and publish stages. A reproducibility, signing,
+   source-verification, or packaging failure intentionally leaves no GitHub Release.
+6. Verify that the GitHub Release contains exactly one asset, the ARM64 APK. Confirm
+   its pinned signing-certificate fingerprint, structural verifier result, and
+   build-provenance attestation. Review the SBOM, source archive, detached source
+   manifest, and checksum results in the workflow evidence.
+7. Install the release APK on a supported ARM64 device and perform an offline
    import, slice, full-layer preview, export, and optional printer upload smoke
    test before announcing the release.
 
@@ -74,12 +82,14 @@ cd android
 ./gradlew --dependency-verification=strict \
   :app:testDebugUnitTest :app:lintRelease :app:assembleRelease
 cd ..
-python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_slice_storage tools.test_verify_preview_boundary tools.test_generate_profile_catalog
+python3 -m unittest discover -s tools -p 'test_*.py'
 python3 tools/verify_apk.py android/app/build/outputs/apk/release/app-release-unsigned.apk
 python3 tools/verify_gradle_supply_chain.py
 python3 tools/verify_slice_storage.py
 python3 tools/verify_preview_boundary.py
 python3 tools/verify_runtime_resilience.py
+python3 tools/verify_data_practices.py
+python3 tools/verify_release_contract.py
 python3 tools/verify_workflows.py
 ```
 

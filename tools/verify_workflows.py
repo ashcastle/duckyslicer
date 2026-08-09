@@ -27,6 +27,21 @@ def job_sections(workflow: str) -> dict[str, str]:
     }
 
 
+def literal_block(section: str, marker: str) -> list[str]:
+    _, separator, remainder = section.partition(marker + "\n")
+    if not separator:
+        return []
+    indentation = len(marker) - len(marker.lstrip()) + 2
+    values: list[str] = []
+    for line in remainder.splitlines():
+        if not line.strip():
+            continue
+        if len(line) - len(line.lstrip()) < indentation:
+            break
+        values.append(line.strip())
+    return values
+
+
 def main() -> None:
     errors: list[str] = []
     action_count = 0
@@ -91,6 +106,12 @@ def main() -> None:
             "python3 tools/verify_data_practices.py"
         ),
         "data-practice policy is unit tested": "tools.test_verify_data_practices",
+        "release publication contract is verified": (
+            "python3 tools/verify_release_contract.py"
+        ),
+        "release publication contract is unit tested": (
+            "tools.test_verify_release_contract"
+        ),
         "generated G-code storage policy is verified": (
             "python3 tools/verify_slice_storage.py"
         ),
@@ -123,7 +144,7 @@ def main() -> None:
 
     if "device-tests" in android_jobs or "runs-on: macos-14" in android_source:
         errors.append("android.yml: hosted emulator jobs are not allowed")
-    if "app-release.aab" in release_source:
+    if "app-release.aab" in release_jobs.get("publish", ""):
         errors.append("release.yml: GitHub Releases must remain APK-only")
 
     required_release_gates = {
@@ -135,6 +156,9 @@ def main() -> None:
         "publish has release permission": "      contents: write\n",
         "signed release APK runs structural verifier": (
             'python3 tools/verify_apk.py "${release_apks[0]}"'
+        ),
+        "build provenance covers only the published APK": (
+            'subject-path: "release/DuckySlicer-*-arm64.apk"'
         ),
         "Gradle uses strict dependency verification": (
             "./gradlew --dependency-verification=strict"
@@ -170,6 +194,12 @@ def main() -> None:
             "python3 tools/verify_data_practices.py"
         ),
         "data-practice policy is unit tested": "tools.test_verify_data_practices",
+        "release publication contract is verified": (
+            "python3 tools/verify_release_contract.py"
+        ),
+        "release publication contract is unit tested": (
+            "tools.test_verify_release_contract"
+        ),
         "generated G-code storage policy is verified": (
             "python3 tools/verify_slice_storage.py"
         ),
@@ -199,6 +229,12 @@ def main() -> None:
     build = release_jobs.get("build", "")
     signer = release_jobs.get("sign", "")
     publish = release_jobs.get("publish", "")
+    release_assets = literal_block(publish, "          files: |")
+    if release_assets != ["release/DuckySlicer-*-arm64.apk"]:
+        errors.append(
+            "release.yml: GitHub Release assets must contain exactly the signed ARM64 APK; "
+            f"found {release_assets}"
+        )
     isolated_signing_rules = {
         "build produces an unsigned release": (
             "app-release-unsigned.apk" in build
