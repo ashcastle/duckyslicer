@@ -57,6 +57,7 @@ jobs:
           python3 tools/verify_runtime_resilience.py
           python3 tools/verify_data_practices.py
           python3 tools/verify_release_contract.py
+          python3 tools/verify_play_bundle_workflow.py
 
       - name: Restore native build cache
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
@@ -99,7 +100,7 @@ jobs:
         run: |
           release_apk="android/app/build/outputs/apk/release/app-release-unsigned.apk"
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$release_apk"
-          python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_slice_storage tools.test_verify_preview_boundary tools.test_verify_profile_editor tools.test_verify_open_source_distribution tools.test_verify_runtime_resilience tools.test_verify_data_practices tools.test_verify_release_contract tools.test_generate_license_inventory tools.test_generate_offline_licenses tools.test_generate_profile_catalog tools.test_generate_sbom tools.test_generate_source_bundle tools.test_verify_reproducible_release
+          python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_slice_storage tools.test_verify_preview_boundary tools.test_verify_profile_editor tools.test_verify_open_source_distribution tools.test_verify_runtime_resilience tools.test_verify_data_practices tools.test_verify_release_contract tools.test_verify_play_bundle_workflow tools.test_generate_license_inventory tools.test_generate_offline_licenses tools.test_generate_profile_catalog tools.test_generate_sbom tools.test_generate_source_bundle tools.test_verify_reproducible_release
           python3 tools/verify_slice_storage.py
           python3 tools/verify_preview_boundary.py
           python3 tools/verify_profile_editor.py
