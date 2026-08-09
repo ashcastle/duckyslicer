@@ -27,7 +27,16 @@ def valid_sources() -> dict[str, str]:
         ),
         "AppSettingsSheet.kt": (
             "FlowRow( PreviewRenderingMode.entries.forEach "
-            "FlowRow( PreviewDetail.entries.forEach"
+            "FlowRow( PreviewDetail.entries.forEach "
+            "val toolpathVisibilityLabel = stringResource(R.string.toolpath_visibility_control) "
+            "val toolpathDepthLabel = stringResource(R.string.toolpath_depth_contrast_control) "
+            "val connectionTimeoutLabel = stringResource(R.string.connection_timeout_control) "
+            "contentDescription = toolpathVisibilityLabel "
+            "contentDescription = toolpathDepthLabel contentDescription = connectionTimeoutLabel "
+            "stateDescription = toolpathVisibilityState stateDescription = toolpathDepthState "
+            "stateDescription = connectionTimeoutState .toggleable( role = Role.Switch "
+            ".semantics(mergeDescendants = true) "
+            "Switch(checked = checked, onCheckedChange = null) Modifier.semantics { heading() }"
         ),
         "ToolpathPreviewView.kt": (
             "renderMode = RENDERMODE_WHEN_DIRTY ToolpathGeometryUploadState "
@@ -65,6 +74,9 @@ def valid_sources() -> dict[str, str]:
             "@Composable private const val TabletShortestSideDp = 600f "
             "useWorkspaceNavigationRail(maxWidth.value, maxHeight.value) "
             "minOf(widthDp, heightDp) >= TabletShortestSideDp "
+            "WorkspaceTopOverlayClearanceDp = 82f "
+            "workspacePanelMaxHeightDp(maxHeight.value).dp "
+            "BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxSize()) "
             "private fun WorkspaceCard( .verticalScroll(rememberScrollState()) @Composable"
             " showWorkspaceNavigationLabels(LocalDensity.current.fontScale) "
             "contentDescription = if (showLabels) null else labelText "
@@ -107,6 +119,13 @@ def valid_sources() -> dict[str, str]:
             "Slice outcome must retain Orca's filament-length estimate "
             "Slice outcome must retain Orca's filament-mass estimate"
         ),
+        "AccessibilityInstrumentedTest.kt": (
+            "appSettingsExposeNamedSlidersWholeRowSwitchesAndHeadings "
+            "largeTextLandscapeKeepsMenuClearOfScrollableWorkspaceSheet "
+            "SCREEN_ORIENTATION_LANDSCAPE menu.isVisibleToUser "
+            "!Rect.intersects(menu.screenBounds(), printerProfile.screenBounds()) "
+            "it.isHeading menu.isFocusable printerProfile.isFocusable"
+        ),
         "PreviewModelsTest.kt": (
             "nativePayloadKeepsMetadataSegmentsAndRolesWithoutJson "
             "nativePayloadRejectsNullTruncatedOrUnknownFormats "
@@ -141,6 +160,7 @@ def valid_sources() -> dict[str, str]:
             "tabletUsesNavigationRailInBothOrientations "
             "thresholdRequiresTheShortestSideToBeTabletSized "
             "largeFontUsesIconNavigationWithoutClippedVisibleLabels "
+            "workspacePanelAlwaysLeavesTheTopOverlayReachable "
             "activeSliceAndInitialPreviewLockModelEditing"
         ),
         "lib.rs": (
@@ -154,13 +174,15 @@ def valid_sources() -> dict[str, str]:
             'name="estimated_print_time" name="filament_usage_compact" '
             'name="expand_preview_controls" name="collapse_preview_controls" '
             'name="first_visible_layer" name="last_visible_layer" '
-            'name="toolpath_visibility_control" name="toolpath_depth_contrast_control"'
+            'name="toolpath_visibility_control" name="toolpath_depth_contrast_control" '
+            'name="connection_timeout_control"'
         ),
         "strings-ko.xml": (
             'name="estimated_print_time" name="filament_usage_compact" '
             'name="expand_preview_controls" name="collapse_preview_controls" '
             'name="first_visible_layer" name="last_visible_layer" '
-            'name="toolpath_visibility_control" name="toolpath_depth_contrast_control"'
+            'name="toolpath_visibility_control" name="toolpath_depth_contrast_control" '
+            'name="connection_timeout_control"'
         ),
         "CONTRIBUTING.md": "Preview FloatArray VBO Automatic",
     }
@@ -271,6 +293,24 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             ".verticalScroll(rememberScrollState())", "", 1
         )
         with self.assertRaisesRegex(VerificationError, "scrollable"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_workspace_sheet_that_can_cover_top_actions(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            "workspacePanelMaxHeightDp(maxHeight.value).dp",
+            "maxHeight",
+        )
+        with self.assertRaisesRegex(VerificationError, "workspacePanelMaxHeightDp"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_duplicate_settings_switch_action(self) -> None:
+        sources = valid_sources()
+        sources["AppSettingsSheet.kt"] = sources["AppSettingsSheet.kt"].replace(
+            "Switch(checked = checked, onCheckedChange = null)",
+            "Switch(checked = checked, onCheckedChange = onCheckedChange)",
+        )
+        with self.assertRaisesRegex(VerificationError, "Settings accessibility"):
             verify_preview_boundary(sources)
 
     def test_rejects_single_row_large_text_setting_chips(self) -> None:

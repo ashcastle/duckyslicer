@@ -27,6 +27,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "OnDeviceSlicer.kt",
         "SlicerProcessService.kt",
         "NativeEngineInstrumentedTest.kt",
+        "AccessibilityInstrumentedTest.kt",
         "PreviewModelsTest.kt",
         "PreviewSummaryTest.kt",
         "SliceOutcomeRestorationTest.kt",
@@ -180,6 +181,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "TabletShortestSideDp = 600f",
         "useWorkspaceNavigationRail(maxWidth.value, maxHeight.value)",
         "minOf(widthDp, heightDp) >= TabletShortestSideDp",
+        "WorkspaceTopOverlayClearanceDp = 82f",
+        "workspacePanelMaxHeightDp(maxHeight.value).dp",
+        "BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxSize())",
         "showWorkspaceNavigationLabels(LocalDensity.current.fontScale)",
         "contentDescription = if (showLabels) null else labelText",
         "alwaysShowLabel = showLabels",
@@ -194,6 +198,24 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     app_settings = sources["AppSettingsSheet.kt"]
     if app_settings.count("FlowRow(") < 2:
         raise VerificationError("preview setting chips must wrap at large font scales")
+    for marker in (
+        "val toolpathVisibilityLabel = stringResource(R.string.toolpath_visibility_control)",
+        "val toolpathDepthLabel = stringResource(R.string.toolpath_depth_contrast_control)",
+        "val connectionTimeoutLabel = stringResource(R.string.connection_timeout_control)",
+        "contentDescription = toolpathVisibilityLabel",
+        "contentDescription = toolpathDepthLabel",
+        "contentDescription = connectionTimeoutLabel",
+        "stateDescription = toolpathVisibilityState",
+        "stateDescription = toolpathDepthState",
+        "stateDescription = connectionTimeoutState",
+        ".toggleable(",
+        "role = Role.Switch",
+        ".semantics(mergeDescendants = true)",
+        "Switch(checked = checked, onCheckedChange = null)",
+        "Modifier.semantics { heading() }",
+    ):
+        if marker not in app_settings:
+            raise VerificationError(f"Settings accessibility contract is missing: {marker}")
 
     layout_tests = sources["WorkspaceLayoutPolicyTest.kt"]
     for marker in (
@@ -201,10 +223,25 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "tabletUsesNavigationRailInBothOrientations",
         "thresholdRequiresTheShortestSideToBeTabletSized",
         "largeFontUsesIconNavigationWithoutClippedVisibleLabels",
+        "workspacePanelAlwaysLeavesTheTopOverlayReachable",
         "activeSliceAndInitialPreviewLockModelEditing",
     ):
         if marker not in layout_tests:
             raise VerificationError(f"responsive workspace regression is missing: {marker}")
+
+    accessibility_test = sources["AccessibilityInstrumentedTest.kt"]
+    for marker in (
+        "appSettingsExposeNamedSlidersWholeRowSwitchesAndHeadings",
+        "largeTextLandscapeKeepsMenuClearOfScrollableWorkspaceSheet",
+        "SCREEN_ORIENTATION_LANDSCAPE",
+        "menu.isVisibleToUser",
+        "!Rect.intersects(menu.screenBounds(), printerProfile.screenBounds())",
+        "it.isHeading",
+        "menu.isFocusable",
+        "printerProfile.isFocusable",
+    ):
+        if marker not in accessibility_test:
+            raise VerificationError(f"device accessibility regression is missing: {marker}")
 
     outcome = sources["OnDeviceSlicer.kt"]
     for marker in (
@@ -275,6 +312,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
             'name="last_visible_layer"',
             'name="toolpath_visibility_control"',
             'name="toolpath_depth_contrast_control"',
+            'name="connection_timeout_control"',
         ):
             if resource not in strings:
                 raise VerificationError(
@@ -390,6 +428,9 @@ def read_sources() -> dict[str, str]:
         ),
         "NativeEngineInstrumentedTest.kt": (
             device / "NativeEngineInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "AccessibilityInstrumentedTest.kt": (
+            device / "AccessibilityInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "PreviewModelsTest.kt": (tests / "PreviewModelsTest.kt").read_text(
             encoding="utf-8"
