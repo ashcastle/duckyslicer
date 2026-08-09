@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -150,8 +151,8 @@ private fun DuckySlicerScreen() {
     var slicing by remember { mutableStateOf(false) }
     var sliceCancellationRequested by remember { mutableStateOf(false) }
     var sliceProgress by remember { mutableIntStateOf(0) }
-    var sliceOutcome by remember { mutableStateOf<SliceOutcome?>(null) }
-    var selectedTab by remember { mutableStateOf(WorkspaceTab.SLICE) }
+    var sliceOutcome by rememberSaveable { mutableStateOf<SliceOutcome?>(null) }
+    var selectedTab by rememberSaveable { mutableStateOf(WorkspaceTab.SLICE) }
     var layerPreview by remember { mutableStateOf<GcodeLayerPreview?>(null) }
     var previewLoading by remember { mutableStateOf(false) }
     var sliceOptions by remember { mutableStateOf(SliceOptions()) }
@@ -199,6 +200,14 @@ private fun DuckySlicerScreen() {
         projectPersistenceBlocked = restored.storageUnavailable
         if (restored.storageUnavailable) error = savedDataUnavailable
         projectRestored = true
+    }
+    LaunchedEffect(sliceOutcome?.output?.absolutePath) {
+        val restored = sliceOutcome ?: return@LaunchedEffect
+        if (!restored.isRestorableFrom(context.filesDir)) {
+            sliceOutcome = null
+            layerPreview = null
+            if (selectedTab == WorkspaceTab.PREVIEW) selectedTab = WorkspaceTab.SLICE
+        }
     }
     LaunchedEffect(projectHistory.current, sliceOptions, projectRestored) {
         if (!projectRestored || projectPersistenceBlocked) return@LaunchedEffect
@@ -447,6 +456,16 @@ private fun DuckySlicerScreen() {
                 }
                 previewLoading = false
             }
+        }
+    }
+    LaunchedEffect(selectedTab, sliceOutcome?.output?.absolutePath) {
+        val completed = sliceOutcome
+        if (
+            selectedTab == WorkspaceTab.PREVIEW &&
+            completed?.isRestorableFrom(context.filesDir) == true &&
+            layerPreview == null
+        ) {
+            loadPreviewRange(0, Int.MAX_VALUE)
         }
     }
 
