@@ -81,7 +81,6 @@ def valid_sources() -> dict[str, str]:
             "env.new_float_array env.set_float_array_region preview_payload(preview_gcode( "
             "#[cfg(test)]"
         ),
-        "README.md": "Preview FloatArray VBO Automatic",
         "CONTRIBUTING.md": "Preview FloatArray VBO Automatic",
     }
 
