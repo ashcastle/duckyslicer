@@ -11,5 +11,5 @@ internal object NativeEngine {
 
     external fun transformStl(inputPath: String, outputPath: String, transformJson: String): String
 
-    external fun previewGcodeRange(path: String, startLayer: Int, endLayer: Int): String
+    external fun previewGcodeRange(path: String, startLayer: Int, endLayer: Int): FloatArray?
 }

@@ -30,7 +30,7 @@ class NativeEngineInstrumentedTest {
     )
 
     private fun outerWallBounds(gcode: File): ToolpathBounds {
-        val preview = GcodeLayerPreview.fromJson(
+        val preview = GcodeLayerPreview.fromNative(
             NativeEngine.previewGcodeRange(gcode.absolutePath, 0, Int.MAX_VALUE),
         )
         var minX = Float.POSITIVE_INFINITY
@@ -831,14 +831,12 @@ class NativeEngineInstrumentedTest {
         try {
             val oversizedGcode = File(root, "oversized-line.gcode")
             oversizedGcode.writeText("G1 X${"1".repeat(65_537)}\n;LAYER_CHANGE\n;Z:0.2\n")
-            val gcodeResult = JSONObject(
-                NativeEngine.previewGcodeRange(oversizedGcode.absolutePath, 0, Int.MAX_VALUE),
+            val gcodeResult = NativeEngine.previewGcodeRange(
+                oversizedGcode.absolutePath,
+                0,
+                Int.MAX_VALUE,
             )
-            assertTrue("Oversized G-code lines must be rejected", !gcodeResult.optBoolean("ok"))
-            assertTrue(
-                "G-code rejection must identify the bounded line",
-                gcodeResult.optString("error").contains("line exceeds"),
-            )
+            assertTrue("Oversized G-code lines must be rejected", gcodeResult == null)
 
             val extremeStl = File(root, "extreme-coordinate.stl")
             extremeStl.writeText(
@@ -1351,9 +1349,14 @@ class NativeEngineInstrumentedTest {
         assertTrue("Unsupported bridge limit must reach Orca", gcode.contains("; max_bridge_length = 26"))
         assertTrue("Outer-wall precision must reach Orca", gcode.contains("; precise_outer_wall = 1"))
 
-        val preview = GcodeLayerPreview.fromJson(
+        val previewPayload = checkNotNull(
             NativeEngine.previewGcodeRange(outcome.output.absolutePath, 0, Int.MAX_VALUE),
         )
+        assertTrue(
+            "Primitive preview payload must remain within the fixed memory budget",
+            previewPayload.size <= GcodeLayerPreview.MAX_PAYLOAD_FLOATS,
+        )
+        val preview = GcodeLayerPreview.fromNative(previewPayload)
         assertTrue("Preview must report generated layers", preview.layerCount > 0)
         assertTrue("Preview must include the first layer", preview.startLayer == 0)
         assertTrue("Preview must include the final G-code layer", preview.endLayer == preview.layerCount - 1)
@@ -1415,7 +1418,7 @@ class NativeEngineInstrumentedTest {
             )
         val outcome = OnDeviceSlicer.slice(hollowTubeModel(), options)
         val middleLayer = (outcome.layers / 2).coerceAtLeast(1)
-        val preview = GcodeLayerPreview.fromJson(
+        val preview = GcodeLayerPreview.fromNative(
             NativeEngine.previewGcodeRange(
                 outcome.output.absolutePath,
                 middleLayer,

@@ -92,6 +92,12 @@ def main() -> None:
         "generated G-code storage policy is unit tested": (
             "tools.test_verify_slice_storage"
         ),
+        "primitive preview boundary is verified": (
+            "python3 tools/verify_preview_boundary.py"
+        ),
+        "primitive preview boundary is unit tested": (
+            "tools.test_verify_preview_boundary"
+        ),
     }
     for description, marker in required_android_gates.items():
         if marker not in android_source:
@@ -151,6 +157,12 @@ def main() -> None:
         ),
         "generated G-code storage policy is unit tested": (
             "tools.test_verify_slice_storage"
+        ),
+        "primitive preview boundary is verified": (
+            "python3 tools/verify_preview_boundary.py"
+        ),
+        "primitive preview boundary is unit tested": (
+            "tools.test_verify_preview_boundary"
         ),
         "unsigned release is rebuilt without the build cache": (
             "Rebuild and verify reproducible unsigned release"

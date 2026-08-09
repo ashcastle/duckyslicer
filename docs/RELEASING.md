@@ -74,10 +74,11 @@ cd android
 ./gradlew --dependency-verification=strict \
   :app:testDebugUnitTest :app:lintRelease :app:assembleRelease
 cd ..
-python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_slice_storage
+python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_slice_storage tools.test_verify_preview_boundary
 python3 tools/verify_apk.py android/app/build/outputs/apk/release/app-release-unsigned.apk
 python3 tools/verify_gradle_supply_chain.py
 python3 tools/verify_slice_storage.py
+python3 tools/verify_preview_boundary.py
 python3 tools/verify_runtime_resilience.py
 python3 tools/verify_workflows.py
 ```

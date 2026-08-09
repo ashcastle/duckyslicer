@@ -302,7 +302,7 @@ private fun DuckySlicerScreen() {
             scope.launch {
                 runCatching {
                     withContext(Dispatchers.IO) {
-                        GcodeLayerPreview.fromJson(
+                        GcodeLayerPreview.fromNative(
                             SliceArtifactLease.acquire(output).use {
                                 NativeEngine.previewGcodeRange(
                                     output.absolutePath,
@@ -350,7 +350,7 @@ private fun DuckySlicerScreen() {
                     scope.launch {
                         runCatching {
                             withContext(Dispatchers.IO) {
-                                GcodeLayerPreview.fromJson(
+                                GcodeLayerPreview.fromNative(
                                     SliceArtifactLease.acquire(outcome.output).use {
                                         NativeEngine.previewGcodeRange(
                                             outcome.output.absolutePath,
