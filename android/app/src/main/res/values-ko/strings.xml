@@ -285,6 +285,8 @@
     <string name="toolpath_inner_wall">내벽</string>
     <string name="toolpath_infill">인필</string>
     <string name="toolpath_surface">상단·하단 면</string>
+    <string name="toolpath_top_surface">상단 면</string>
+    <string name="toolpath_bottom_surface">하단 면</string>
     <string name="toolpath_internal_solid">내부 솔리드</string>
     <string name="toolpath_support">서포트</string>
     <string name="toolpath_bridge">브리지</string>

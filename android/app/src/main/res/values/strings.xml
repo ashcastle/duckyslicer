@@ -285,6 +285,8 @@
     <string name="toolpath_inner_wall">Inner wall</string>
     <string name="toolpath_infill">Infill</string>
     <string name="toolpath_surface">Top &amp; bottom surface</string>
+    <string name="toolpath_top_surface">Top surface</string>
+    <string name="toolpath_bottom_surface">Bottom surface</string>
     <string name="toolpath_internal_solid">Internal solid</string>
     <string name="toolpath_support">Support</string>
     <string name="toolpath_bridge">Bridge</string>

@@ -16,8 +16,6 @@ import android.os.Process
 import android.os.RemoteException
 import com.u1.slicer.NativeLibrary
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -351,6 +349,14 @@ class SlicerProcessService : Service() {
         true
     }
     private val messenger = Messenger(mainHandler)
+    private val artifactStore by lazy {
+        SliceArtifactStore(filesDir, transientRoots = listOf(filesDir, cacheDir))
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        runCatching { artifactStore.recover() }
+    }
 
     override fun onBind(intent: Intent?): IBinder = messenger.binder
 
@@ -454,6 +460,7 @@ class SlicerProcessService : Service() {
                 send(reply, SlicerProcessContract.MESSAGE_RESULT, data = result)
             }
         }
+        if (accepted && !testProbe) scheduleStorageGuard(requestId)
         if (!accepted) {
             activeRequestId.compareAndSet(requestId, null)
             send(
@@ -462,6 +469,24 @@ class SlicerProcessService : Service() {
                 data = failure("Slicer worker thread is unavailable"),
             )
         }
+    }
+
+    private fun scheduleStorageGuard(requestId: String) {
+        mainHandler.postDelayed(
+            object : Runnable {
+                override fun run() {
+                    if (activeRequestId.get() != requestId || cancelledRequestId.get() == requestId) {
+                        return
+                    }
+                    if (artifactStore.activeOutputIsUnsafe()) {
+                        Process.killProcess(Process.myPid())
+                        return
+                    }
+                    mainHandler.postDelayed(this, STORAGE_GUARD_INTERVAL_MILLIS)
+                }
+            },
+            STORAGE_GUARD_INTERVAL_MILLIS,
+        )
     }
 
     private fun cancelWork(message: Message) {
@@ -527,6 +552,7 @@ class SlicerProcessService : Service() {
         options: SliceOptions,
         onProgress: (Int) -> Unit,
     ): SliceOutcome {
+        artifactStore.prepareForSlice()
         val runtime = NativeLibrary(onProgress)
         return try {
             check(runtime.loadModel(models.first().absolutePath)) { "Model could not be prepared" }
@@ -542,8 +568,15 @@ class SlicerProcessService : Service() {
             check(result.success) {
                 if (result.cancelled) "Slicing was cancelled" else "Slicer could not produce output"
             }
+            require(result.totalLayers > 0) { "Slicer returned an invalid layer count" }
+            require(result.estimatedTimeSeconds.isFinite() && result.estimatedTimeSeconds >= 0f) {
+                "Slicer returned an invalid time estimate"
+            }
+            require(result.estimatedFilamentGrams.isFinite() && result.estimatedFilamentGrams >= 0f) {
+                "Slicer returned an invalid filament estimate"
+            }
             SliceOutcome(
-                output = persistOutput(File(result.gcodePath)),
+                output = artifactStore.persist(File(result.gcodePath)),
                 layers = result.totalLayers,
                 estimatedSeconds = result.estimatedTimeSeconds,
                 filamentGrams = result.estimatedFilamentGrams,
@@ -560,38 +593,6 @@ class SlicerProcessService : Service() {
         require(allowedRoots.any(model::isInside)) { "Model is outside private storage" }
         require(model.isFile && model.length() in 1..MAX_MODEL_BYTES) { "Model is unavailable" }
         return model
-    }
-
-    private fun persistOutput(nativeOutput: File): File {
-        require(nativeOutput.isFile && nativeOutput.length() > 0L) { "G-code output is unavailable" }
-        FileOutputStream(nativeOutput, true).use { output -> output.fd.sync() }
-        val outputRoot = File(filesDir, SlicerProcessContract.OUTPUT_DIRECTORY)
-        check(outputRoot.isDirectory || outputRoot.mkdirs()) { "G-code storage is unavailable" }
-        outputRoot.listFiles { file -> file.name.endsWith(".tmp") }.orEmpty().forEach(File::delete)
-        val output = File(outputRoot, "${System.currentTimeMillis()}-${UUID.randomUUID()}.gcode")
-        if (!nativeOutput.renameTo(output)) {
-            val temporary = File(outputRoot, ".${output.name}.tmp")
-            try {
-                FileInputStream(nativeOutput).use { input ->
-                    FileOutputStream(temporary).use { sink ->
-                        input.copyTo(sink)
-                        sink.flush()
-                        sink.fd.sync()
-                    }
-                }
-                check(temporary.renameTo(output)) { "G-code could not be finalized" }
-                nativeOutput.delete()
-            } finally {
-                temporary.delete()
-            }
-        }
-        check(output.isFile && output.length() > 0L) { "G-code output is unavailable" }
-        outputRoot.listFiles { file -> file.isFile && file.extension == "gcode" }
-            .orEmpty()
-            .sortedByDescending(File::lastModified)
-            .drop(MAX_RETAINED_OUTPUTS)
-            .forEach(File::delete)
-        return output
     }
 
     private fun success(outcome: SliceOutcome) = Bundle().apply {
@@ -622,11 +623,11 @@ class SlicerProcessService : Service() {
         const val MAX_OBJECTS = 256
         const val MAX_PATH_LENGTH = 1_024
         const val MAX_MODEL_BYTES = 512L * 1_024 * 1_024
-        const val MAX_RETAINED_OUTPUTS = 8
         const val MAX_ERROR_LENGTH = 500
         const val MAX_REQUEST_ID_LENGTH = 128
         const val CANCEL_PROCESS_DELAY_MILLIS = 50L
         const val TEST_PROBE_DURATION_MILLIS = 30_000L
+        const val STORAGE_GUARD_INTERVAL_MILLIS = 500L
     }
 }
 
@@ -648,7 +649,7 @@ private object SlicerProcessContract {
     const val KEY_LAYERS = "layers"
     const val KEY_ESTIMATED_SECONDS = "estimatedSeconds"
     const val KEY_FILAMENT_GRAMS = "filamentGrams"
-    const val OUTPUT_DIRECTORY = "slices"
+    const val OUTPUT_DIRECTORY = SliceArtifactStore.OUTPUT_DIRECTORY
     const val MAX_OPTIONS_BYTES = 384 * 1_024
     const val MAX_REQUEST_BYTES = 640 * 1_024
 }

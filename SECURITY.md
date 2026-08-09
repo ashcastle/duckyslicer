@@ -88,8 +88,16 @@ native signal or abort terminates that worker and the active slice; the applicat
 process remains alive and the next request starts a clean worker. Binder requests
 accept only bounded settings and canonical files inside app-private storage, and
 successful G-code is synchronized before being atomically retained under a unique
-name. This is crash/address-space isolation, not a permission sandbox: both processes
-run under the same Android UID and share the app's private storage.
+name. A retained slice may contain at most 1 GiB of G-code, retained outputs share a
+1 GiB budget, and slicing starts only with at least 512 MiB of free app-storage space.
+The worker also terminates itself if its periodic guard observes an active native
+output over the limit or free space below the 64 MiB emergency threshold. Old
+outputs are removed oldest first, while cross-process shared reader leases prevent
+cleanup from deleting G-code
+being previewed, exported, or uploaded. Stale native output and interrupted temporary
+files are recovered on the next worker start. This is crash/address-space isolation,
+not a permission sandbox: both processes run under the same Android UID and share the
+app's private storage.
 
 The ARM64 device corpus also passes open shells, reversed and duplicate facets,
 degenerate attachments, intersecting closed shells, and fully degenerate input

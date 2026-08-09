@@ -279,7 +279,9 @@ private fun DuckySlicerScreen() {
                     withContext(Dispatchers.IO) {
                         context.contentResolver.openOutputStream(uri).use { output ->
                             requireNotNull(output) { "output_unavailable" }
-                            completed.output.inputStream().use { input -> input.copyTo(output) }
+                            SliceArtifactLease.acquire(completed.output).use {
+                                completed.output.inputStream().use { input -> input.copyTo(output) }
+                            }
                         }
                     }
                 }.onSuccess {
@@ -301,7 +303,13 @@ private fun DuckySlicerScreen() {
                 runCatching {
                     withContext(Dispatchers.IO) {
                         GcodeLayerPreview.fromJson(
-                            NativeEngine.previewGcodeRange(output.absolutePath, startLayer, endLayer),
+                            SliceArtifactLease.acquire(output).use {
+                                NativeEngine.previewGcodeRange(
+                                    output.absolutePath,
+                                    startLayer,
+                                    endLayer,
+                                )
+                            },
                         )
                     }
                 }.onSuccess {
@@ -343,11 +351,13 @@ private fun DuckySlicerScreen() {
                         runCatching {
                             withContext(Dispatchers.IO) {
                                 GcodeLayerPreview.fromJson(
-                                    NativeEngine.previewGcodeRange(
-                                        outcome.output.absolutePath,
-                                        0,
-                                        Int.MAX_VALUE,
-                                    ),
+                                    SliceArtifactLease.acquire(outcome.output).use {
+                                        NativeEngine.previewGcodeRange(
+                                            outcome.output.absolutePath,
+                                            0,
+                                            Int.MAX_VALUE,
+                                        )
+                                    },
                                 )
                             }
                         }.onSuccess { preview ->

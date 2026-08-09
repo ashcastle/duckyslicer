@@ -62,11 +62,12 @@ cd ../../android
   :app:assembleDebugAndroidTest :app:lintDebug
 
 cd ..
-python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_open_source_distribution tools.test_verify_runtime_resilience tools.test_generate_source_bundle tools.test_verify_reproducible_release
+python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_slice_storage tools.test_verify_open_source_distribution tools.test_verify_runtime_resilience tools.test_generate_source_bundle tools.test_verify_reproducible_release
 python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
 python3 tools/verify_gradle_supply_chain.py
 python3 tools/verify_native_safety.py
 python3 tools/verify_android_isolation.py
+python3 tools/verify_slice_storage.py
 python3 tools/verify_open_source_distribution.py
 python3 tools/verify_runtime_resilience.py
 python3 tools/verify_workflows.py
@@ -83,6 +84,11 @@ Preview changes should be checked with outer walls, inner walls, sparse infill,
 solid surfaces, support, bridges, multiple layer heights, and a dense model. The
 default depth renderer and the low-power compatibility renderer must both remain
 usable.
+
+Generated G-code changes must retain the per-output and total-byte limits, free-space
+reserve, stale-output recovery, and reader lease around every preview, export, and
+printer-upload stream. Run both the host storage regressions and the ARM64
+cross-process lease regression when changing retention or file access.
 
 Workflow changes must keep third-party Actions pinned to full commit hashes. A
 tagged release must preserve the build → isolated sign → ARM64 device test →
