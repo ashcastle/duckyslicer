@@ -6,6 +6,8 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -42,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 internal fun AppSettingsSheet(
     settings: AppSettings,
     onSettingsChanged: (AppSettings) -> Unit,
@@ -67,7 +70,11 @@ internal fun AppSettingsSheet(
 
             Text(stringResource(R.string.preview_settings), fontWeight = FontWeight.Bold)
             Text(stringResource(R.string.preview_renderer), color = Color(0xFFC8C9C2))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 PreviewRenderingMode.entries.forEach { mode ->
                     FilterChip(
                         selected = settings.previewRenderingMode == mode,
@@ -91,7 +98,11 @@ internal fun AppSettingsSheet(
                 }
             }
             Text(stringResource(R.string.preview_detail), color = Color(0xFFC8C9C2))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 PreviewDetail.entries.forEach { detail ->
                     FilterChip(
                         selected = settings.previewDetail == detail,
