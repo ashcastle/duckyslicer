@@ -36,7 +36,9 @@ def valid_sources() -> dict[str, str]:
             "previewDeviceCapabilities(context) resolvePreviewDetail(previewDetail, previewCapabilities) "
             "detail = effectivePreviewDetail "
             "compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = false) "
-            "compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = true)"
+            "compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = true) "
+            "if (selectedTab == WorkspaceTab.PREVIEW) PreviewExportSplitButton( "
+            "Icons.Default.ArrowDropDown Icons.Default.SaveAlt onSend = onRemoteUpload"
         ),
         "MainActivity.kt": "GcodeLayerPreview.fromNative GcodeLayerPreview.fromNative",
         "NativeEngineInstrumentedTest.kt": (
@@ -131,6 +133,14 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "sourceScene.detail",
         )
         with self.assertRaisesRegex(VerificationError, "previewDetailForInteraction"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_missing_preview_export_split_button(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            "PreviewExportSplitButton(", "ModelNameBadge("
+        )
+        with self.assertRaisesRegex(VerificationError, "PreviewExportSplitButton"):
             verify_preview_boundary(sources)
 
 

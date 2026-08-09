@@ -45,6 +45,8 @@ private val DuckyColors = darkColorScheme(
     onSurface = Color(0xFFF7F5EF),
 )
 
+internal const val GCODE_DOCUMENT_MIME_TYPE = "application/octet-stream"
+
 data class ModelInfo(
     val fileName: String,
     val triangles: Int,
@@ -358,7 +360,7 @@ private fun DuckySlicerScreen() {
     }
 
     val savePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/plain"),
+        ActivityResultContracts.CreateDocument(GCODE_DOCUMENT_MIME_TYPE),
     ) { uri ->
         val completed = sliceOutcome
         if (uri != null && completed != null) {
