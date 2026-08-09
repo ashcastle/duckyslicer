@@ -17,14 +17,20 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     required = {
         "NativeEngine.kt",
         "PreviewModels.kt",
+        "PreviewSummary.kt",
         "AppSettings.kt",
         "ToolpathPreviewView.kt",
         "WorkspaceScreen.kt",
         "MainActivity.kt",
+        "OnDeviceSlicer.kt",
+        "SlicerProcessService.kt",
         "NativeEngineInstrumentedTest.kt",
         "PreviewModelsTest.kt",
+        "PreviewSummaryTest.kt",
         "PreviewPerformancePolicyTest.kt",
         "ToolpathMeshBuilderTest.kt",
+        "strings.xml",
+        "strings-ko.xml",
         "lib.rs",
         "CONTRIBUTING.md",
     }
@@ -103,9 +109,58 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "Icons.Default.ArrowDropDown",
         "Icons.Default.SaveAlt",
         "onSend = onRemoteUpload",
+        "var previewControlsExpanded by rememberSaveable",
+        "PreviewSummaryHeader(",
+        "Icons.Default.ExpandLess",
+        "Icons.Default.ExpandMore",
+        "summary.filamentGrams",
+        "summary.filamentMeters",
     ):
         if marker not in workspace:
             raise VerificationError(f"preview device policy is not connected to the UI: {marker}")
+
+    outcome = sources["OnDeviceSlicer.kt"]
+    if "val filamentMm: Float" not in outcome:
+        raise VerificationError("slice outcome drops the native filament-length estimate")
+    service = sources["SlicerProcessService.kt"]
+    for marker in (
+        "result.estimatedFilamentMm",
+        "KEY_FILAMENT_MM",
+        "filamentMm = response.getFloat(SlicerProcessContract.KEY_FILAMENT_MM)",
+        "putFloat(SlicerProcessContract.KEY_FILAMENT_MM, outcome.filamentMm)",
+    ):
+        if marker not in service:
+            raise VerificationError(f"isolated slice result drops filament length: {marker}")
+
+    summary = sources["PreviewSummary.kt"]
+    for marker in (
+        "fun SliceOutcome.previewSummary()",
+        "estimatedSeconds / SECONDS_PER_MINUTE",
+        "filamentMm / MILLIMETERS_PER_METER",
+        "Invalid preview filament mass",
+    ):
+        if marker not in summary:
+            raise VerificationError(f"preview summary derivation is missing: {marker}")
+    summary_test = sources["PreviewSummaryTest.kt"]
+    for marker in (
+        "sliceResultKeepsTimeMassAndLengthWithoutReadingGcode",
+        "subMinuteEstimateUsesCompactFallback",
+        "invalidNativeStatisticsAreRejectedBeforeDisplay",
+    ):
+        if marker not in summary_test:
+            raise VerificationError(f"preview summary regression is missing: {marker}")
+    for source_name in ("strings.xml", "strings-ko.xml"):
+        strings = sources[source_name]
+        for resource in (
+            'name="estimated_print_time"',
+            'name="filament_usage_compact"',
+            'name="expand_preview_controls"',
+            'name="collapse_preview_controls"',
+        ):
+            if resource not in strings:
+                raise VerificationError(
+                    f"localized preview summary is missing from {source_name}: {resource}"
+                )
 
     rust = sources["lib.rs"]
     for marker in (
@@ -194,16 +249,24 @@ def read_sources() -> dict[str, str]:
     return {
         "NativeEngine.kt": (main / "NativeEngine.kt").read_text(encoding="utf-8"),
         "PreviewModels.kt": (main / "PreviewModels.kt").read_text(encoding="utf-8"),
+        "PreviewSummary.kt": (main / "PreviewSummary.kt").read_text(encoding="utf-8"),
         "AppSettings.kt": (main / "AppSettings.kt").read_text(encoding="utf-8"),
         "ToolpathPreviewView.kt": (main / "ToolpathPreviewView.kt").read_text(
             encoding="utf-8"
         ),
         "WorkspaceScreen.kt": (main / "WorkspaceScreen.kt").read_text(encoding="utf-8"),
         "MainActivity.kt": (main / "MainActivity.kt").read_text(encoding="utf-8"),
+        "OnDeviceSlicer.kt": (main / "OnDeviceSlicer.kt").read_text(encoding="utf-8"),
+        "SlicerProcessService.kt": (main / "SlicerProcessService.kt").read_text(
+            encoding="utf-8"
+        ),
         "NativeEngineInstrumentedTest.kt": (
             device / "NativeEngineInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "PreviewModelsTest.kt": (tests / "PreviewModelsTest.kt").read_text(
+            encoding="utf-8"
+        ),
+        "PreviewSummaryTest.kt": (tests / "PreviewSummaryTest.kt").read_text(
             encoding="utf-8"
         ),
         "PreviewPerformancePolicyTest.kt": (
@@ -213,6 +276,12 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "lib.rs": (ROOT / "rust/duckyslicer-jni/src/lib.rs").read_text(encoding="utf-8"),
+        "strings.xml": (ROOT / "android/app/src/main/res/values/strings.xml").read_text(
+            encoding="utf-8"
+        ),
+        "strings-ko.xml": (
+            ROOT / "android/app/src/main/res/values-ko/strings.xml"
+        ).read_text(encoding="utf-8"),
         "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),
     }
 

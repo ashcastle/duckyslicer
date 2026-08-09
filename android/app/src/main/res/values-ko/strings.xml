@@ -291,6 +291,14 @@
     <string name="seconds_value">%1$.0f초</string>
     <string name="celsius_value">%1$d °C</string>
     <string name="percent_value">%1$d%%</string>
+    <string name="estimated_print_time">예상 출력 시간</string>
+    <string name="filament_usage">필라멘트 사용량</string>
+    <string name="duration_under_one_minute">1분 미만</string>
+    <string name="duration_minutes">%1$d분</string>
+    <string name="duration_hours_minutes">%1$d시간 %2$d분</string>
+    <string name="filament_usage_compact">%1$.1f g · %2$.2f m</string>
+    <string name="expand_preview_controls">미리보기 조절 펼치기</string>
+    <string name="collapse_preview_controls">미리보기 조절 접기</string>
     <string name="layer_range">전체 %3$d개 중 %1$d–%2$d 레이어</string>
     <string name="z_range">Z %1$.2f–%2$.2f mm</string>
     <string name="toolpath_opacity">툴패스 표시 강도 · %1$d%%</string>
