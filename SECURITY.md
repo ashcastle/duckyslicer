@@ -64,13 +64,18 @@ This containment does not recover allocation failure, native signals, undefined
 behavior, or faults inside the inherited C++ runtime; reports that reach any of
 those process-level failure modes remain in scope.
 
-The inherited Orca C++ runtime loads only in a non-exported `:slicer` service. A
+The inherited C++ slicer runtime loads only in a non-exported `:slicer` service. A
 native signal or abort terminates that worker and the active slice; the application
 process remains alive and the next request starts a clean worker. Binder requests
 accept only bounded settings and canonical files inside app-private storage, and
 successful G-code is synchronized before being atomically retained under a unique
 name. This is crash/address-space isolation, not a permission sandbox: both processes
 run under the same Android UID and share the app's private storage.
+
+The ARM64 device corpus also passes open shells, reversed and duplicate facets,
+degenerate attachments, intersecting closed shells, and fully degenerate input
+through the production boundary. Repairable geometry must emit finite G-code;
+irreparable geometry must fail cleanly; a known-good model must slice afterward.
 
 Never include printer credentials, signing keys, personal models, or generated
 G-code containing private paths or identifiers in a report.

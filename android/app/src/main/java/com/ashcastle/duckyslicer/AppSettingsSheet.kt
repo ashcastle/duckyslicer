@@ -1,14 +1,22 @@
 package com.ashcastle.duckyslicer
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -17,10 +25,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,6 +46,9 @@ internal fun AppSettingsSheet(
     onSettingsChanged: (AppSettings) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    var legalDocument by remember { mutableStateOf<LegalDocument?>(null) }
+
     Card(
         modifier = modifier.padding(12.dp).fillMaxWidth().widthIn(max = 620.dp),
         colors = CardDefaults.cardColors(
@@ -154,9 +171,86 @@ internal fun AppSettingsSheet(
 
             Text(stringResource(R.string.language_settings), fontWeight = FontWeight.Bold)
             Text(stringResource(R.string.settings_message), color = Color(0xFFC8C9C2))
+
+            Text(stringResource(R.string.about), fontWeight = FontWeight.Bold)
+            Text(
+                stringResource(R.string.app_version, BuildConfig.VERSION_NAME),
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                stringResource(R.string.open_source_summary),
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            SelectionContainer {
+                Text(
+                    SOURCE_CODE_URL,
+                    color = Color(0xFFF6C945),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextButton(onClick = { legalDocument = LegalDocument.LICENSE }) {
+                    Text(stringResource(R.string.open_source_license))
+                }
+                TextButton(onClick = { legalDocument = LegalDocument.THIRD_PARTY }) {
+                    Text(stringResource(R.string.third_party_notices))
+                }
+            }
+            TextButton(onClick = { openSourceRepository(context) }) {
+                Text(stringResource(R.string.view_source_code))
+            }
         }
     }
+
+    legalDocument?.let { document ->
+        val content = remember(document) {
+            context.assets.open(document.assetPath).bufferedReader().use { it.readText() }
+        }
+        AlertDialog(
+            onDismissRequest = { legalDocument = null },
+            title = { Text(stringResource(document.titleResource)) },
+            text = {
+                Box(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
+                    SelectionContainer {
+                        Text(content, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { legalDocument = null }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+        )
+    }
 }
+
+private enum class LegalDocument(
+    val assetPath: String,
+    val titleResource: Int,
+) {
+    LICENSE("legal/AGPL-3.0.txt", R.string.open_source_license),
+    THIRD_PARTY("legal/THIRD_PARTY_NOTICES.md", R.string.third_party_notices),
+}
+
+private fun openSourceRepository(context: Context) {
+    try {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse(SOURCE_CODE_URL)).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            },
+        )
+    } catch (_: ActivityNotFoundException) {
+        // The selectable address remains available on devices without a browser.
+    }
+}
+
+private const val SOURCE_CODE_URL = "https://github.com/ashcastle/duckyslicer"
 
 @Composable
 private fun SettingsToggle(

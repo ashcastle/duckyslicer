@@ -68,6 +68,9 @@ def main() -> None:
         "Orca runtime process isolation is verified": (
             "python3 tools/verify_android_isolation.py"
         ),
+        "offline open-source distribution is verified": (
+            "python3 tools/verify_open_source_distribution.py"
+        ),
     }
     for description, marker in required_android_gates.items():
         if marker not in android_source:
@@ -103,6 +106,9 @@ def main() -> None:
         ),
         "Orca runtime process isolation is verified": (
             "python3 tools/verify_android_isolation.py"
+        ),
+        "offline open-source distribution is verified": (
+            "python3 tools/verify_open_source_distribution.py"
         ),
     }
     for description, marker in required_release_gates.items():

@@ -26,10 +26,31 @@ ALLOWED_NATIVE_LIBRARIES = frozenset(
         "lib/arm64-v8a/libprusaslicer-jni.so",
     }
 )
+REQUIRED_LEGAL_ASSETS = {
+    "assets/legal/AGPL-3.0.txt": (
+        b"GNU AFFERO GENERAL PUBLIC LICENSE",
+        b"Version 3, 19 November 2007",
+        b"WITHOUT ANY WARRANTY",
+    ),
+    "assets/legal/THIRD_PARTY_NOTICES.md": (
+        b"Third-party notices",
+        b"6f64367361c4bd56bacc97a991874ce1f4b837b4",
+        b"2c8a5385bc53cbc16211b4dd36ef9963ee185f4a",
+    ),
+}
 
 
 class VerificationError(ValueError):
     """The APK violates a release invariant."""
+
+
+def inspect_legal_assets(entries: dict[str, bytes]) -> None:
+    for name, markers in REQUIRED_LEGAL_ASSETS.items():
+        data = entries.get(name)
+        if data is None:
+            raise VerificationError(f"APK is missing required legal asset: {name}")
+        if not all(marker in data for marker in markers):
+            raise VerificationError(f"APK legal asset is incomplete or stale: {name}")
 
 
 def inspect_elf(data: bytes, name: str) -> int:
@@ -121,6 +142,14 @@ def verify_apk(apk: Path) -> tuple[int, int]:
                 f"expected one binary profile catalog, found {sorted(catalog_entries)}"
             )
 
+        inspect_legal_assets(
+            {
+                name: archive.read(name)
+                for name in REQUIRED_LEGAL_ASSETS
+                if name in names
+            }
+        )
+
         load_segments = 0
         for name, entry in sorted(native_entries.items()):
             if entry.compress_type != zipfile.ZIP_STORED:
@@ -144,7 +173,8 @@ def main() -> None:
         raise SystemExit(f"APK verification failed: {error}") from error
     print(
         f"Verified {apk}: {library_count} allowlisted ARM64 libraries, "
-        f"{load_count} 16 KB-compatible LOAD segments, one binary profile catalog"
+        f"{load_count} 16 KB-compatible LOAD segments, one binary profile catalog, "
+        "and offline legal notices"
     )
 
 

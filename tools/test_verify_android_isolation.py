@@ -26,6 +26,11 @@ class SlicerProcessService {
 }
 """
 
+VALID_DEVICE_TEST = """
+nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly
+imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp
+"""
+
 
 def valid_sources() -> dict[str, str]:
     return {
@@ -42,7 +47,7 @@ class VerifyAndroidIsolationTest(unittest.TestCase):
             1,
             verify_sources(
                 valid_sources(),
-                "nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly",
+                VALID_DEVICE_TEST,
             ),
         )
 
@@ -61,8 +66,12 @@ class VerifyAndroidIsolationTest(unittest.TestCase):
             verify_sources(sources, "nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly")
 
     def test_requires_device_crash_recovery_regression(self) -> None:
-        with self.assertRaisesRegex(VerificationError, "crash recovery"):
-            verify_sources(valid_sources(), "unrelated test")
+        for missing, message in (
+            ("imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp", "imperfect-mesh"),
+            ("nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly", "crash recovery"),
+        ):
+            with self.assertRaisesRegex(VerificationError, message):
+                verify_sources(valid_sources(), VALID_DEVICE_TEST.replace(missing, ""))
 
 
 if __name__ == "__main__":
