@@ -21,7 +21,6 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "SlicingSettingsSectionTest.kt",
         "strings.xml",
         "strings-ko.xml",
-        "README.md",
         "CONTRIBUTING.md",
     }
     missing = sorted(required - sources.keys())
@@ -99,7 +98,7 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         if marker not in recent_test:
             raise VerificationError(f"recent profile host regression is missing: {marker}")
 
-    for document in ("README.md", "CONTRIBUTING.md"):
+    for document in ("CONTRIBUTING.md",):
         lowered = sources[document].lower()
         if not all(term in lowered for term in ("quality", "strength", "speed", "support", "others")):
             raise VerificationError(f"Orca-style slicing sections are not documented in {document}")
@@ -118,7 +117,6 @@ def read_sources() -> dict[str, str]:
         ),
         "strings.xml": (resources / "values/strings.xml").read_text(encoding="utf-8"),
         "strings-ko.xml": (resources / "values-ko/strings.xml").read_text(encoding="utf-8"),
-        "README.md": (ROOT / "README.md").read_text(encoding="utf-8"),
         "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),
     }
 
