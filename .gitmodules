@@ -1,0 +1,3 @@
+[submodule "third_party/android-slicer-runtime"]
+	path = third_party/android-slicer-runtime
+	url = https://github.com/taylormadearmy/u1-slicer-for-android.git

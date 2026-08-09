@@ -1,0 +1,138 @@
+from __future__ import annotations
+
+import unittest
+
+from tools.verify_preview_boundary import VerificationError, verify_preview_boundary
+
+
+def valid_sources() -> dict[str, str]:
+    return {
+        "NativeEngine.kt": (
+            "previewGcodeRange(path: String, startLayer: Int, endLayer: Int): FloatArray?"
+        ),
+        "PreviewModels.kt": (
+            "fun fromNative(raw: FloatArray?) PAYLOAD_MAGIC PAYLOAD_VERSION "
+            "HEADER_FLOATS = 7 MAX_SEGMENTS = 120_000 preview_coordinate_invalid "
+            "MAX_PAYLOAD_FLOATS preview_role_invalid"
+        ),
+        "AppSettings.kt": (
+            "PreviewDetail.AUTOMATIC val previewDetail: PreviewDetail = PreviewDetail.AUTOMATIC "
+            "PreviewDeviceCapabilities manager?.isLowRamDevice capabilities.appMemoryClassMb <= 192 "
+            "resolvePreviewDetail( previewDetailForInteraction( depthPreviewSegmentBudget( "
+            "compatibilityPreviewSegmentBudget("
+        ),
+        "ToolpathPreviewView.kt": (
+            "renderMode = RENDERMODE_WHEN_DIRTY ToolpathGeometryUploadState "
+            "uploadState.needsUpload(scene) GLES30.glGenBuffers "
+            "GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER GLES30.glBufferData( "
+            "GLES30.GL_STATIC_DRAW geometryUploadCountForTest "
+            "POSITION_OFFSET_BYTES COLOR_OFFSET_BYTES "
+            ".allocateDirect(capacity * Float.SIZE_BYTES) return builder.finish() "
+            "setInteractionActive(true) postDelayed(restoreDetail, DETAIL_RESTORE_DELAY_MS) "
+            "previewDetailForInteraction(sourceScene.detail, interactionActive) "
+            "depthPreviewSegmentBudget(scene.detail)"
+        ),
+        "WorkspaceScreen.kt": (
+            "previewDeviceCapabilities(context) resolvePreviewDetail(previewDetail, previewCapabilities) "
+            "detail = effectivePreviewDetail "
+            "compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = false) "
+            "compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = true)"
+        ),
+        "MainActivity.kt": "GcodeLayerPreview.fromNative GcodeLayerPreview.fromNative",
+        "NativeEngineInstrumentedTest.kt": (
+            "GcodeLayerPreview.fromNative GcodeLayerPreview.fromNative "
+            "GcodeLayerPreview.fromNative gcodeResult == null "
+            "depthPreviewUploadsVboOnceAcrossCameraFrames "
+            "The first frame must upload one VBO "
+            "Camera-only frames must reuse the uploaded VBO "
+            "A geometry change must replace the VBO exactly once "
+            "automaticPreviewQualityResolvesToAConcreteDeviceTier "
+            "Starting a gesture must upload one lower-detail VBO "
+            "Every subsequent gesture frame must reuse the lower-detail VBO "
+            "Settling after a gesture must restore the requested VBO once "
+            "ARM64 GPU staging must use direct memory "
+            "ARM64 balanced preview must honor its geometry budget"
+        ),
+        "PreviewModelsTest.kt": (
+            "nativePayloadKeepsMetadataSegmentsAndRolesWithoutJson "
+            "nativePayloadRejectsNullTruncatedOrUnknownFormats "
+            "nativePayloadRejectsNonFiniteCoordinatesAndInvalidRoles"
+        ),
+        "PreviewPerformancePolicyTest.kt": (
+            "automaticDefaultsToSmoothOnMemoryConstrainedDevices "
+            "automaticUsesBalancedQualityWhenTheDeviceHasHeadroom "
+            "explicitQualityAlwaysWinsOverAutomaticDeviceSelection "
+            "gesturesTemporarilyUseOneLowerGeometryTier "
+            "segmentBudgetsStayBoundedForBothRenderers"
+        ),
+        "ToolpathMeshBuilderTest.kt": (
+            "balancedModeCapsDensePreviewGeometry "
+            "GPU staging geometry must use direct native memory "
+            "unchangedSceneUploadsOnceUntilGeometryOrContextChanges "
+            "Camera-only frames must reuse the GPU buffer "
+            "Context recreation must re-upload retained scene data"
+        ),
+        "lib.rs": (
+            "Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRange -> jfloatArray "
+            "PREVIEW_PAYLOAD_MAGIC PREVIEW_PAYLOAD_VERSION PREVIEW_HEADER_FLOATS "
+            "MAX_PREVIEW_SEGMENTS: usize = 120_000 MAX_PREVIEW_LAYERS: usize = 1_000_000 "
+            "env.new_float_array env.set_float_array_region preview_payload(preview_gcode( "
+            "#[cfg(test)]"
+        ),
+        "README.md": "Preview FloatArray VBO Automatic",
+        "CONTRIBUTING.md": "Preview FloatArray VBO Automatic",
+    }
+
+
+class VerifyPreviewBoundaryTest(unittest.TestCase):
+    def test_accepts_primitive_bounded_preview_contract(self) -> None:
+        verify_preview_boundary(valid_sources())
+
+    def test_rejects_android_json_decoder(self) -> None:
+        sources = valid_sources()
+        sources["PreviewModels.kt"] += " JSONObject fun fromJson"
+        with self.assertRaisesRegex(VerificationError, "JSON decoding"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_rust_json_serialization(self) -> None:
+        sources = valid_sources()
+        sources["lib.rs"] = sources["lib.rs"].replace(
+            "#[cfg(test)]", "guarded_json( #[cfg(test)]"
+        )
+        with self.assertRaisesRegex(VerificationError, "JSON serialization"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_missing_gpu_buffer_upload(self) -> None:
+        sources = valid_sources()
+        sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
+            "GLES30.glBufferData(", "upload("
+        )
+        with self.assertRaisesRegex(VerificationError, "glBufferData"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_duplicated_client_side_vertex_storage(self) -> None:
+        sources = valid_sources()
+        sources["ToolpathPreviewView.kt"] += " private var vertices: FloatBuffer? builder.writeTo"
+        with self.assertRaisesRegex(VerificationError, "client-side"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_missing_automatic_device_policy(self) -> None:
+        sources = valid_sources()
+        sources["AppSettings.kt"] = sources["AppSettings.kt"].replace(
+            "manager?.isLowRamDevice", "false"
+        )
+        with self.assertRaisesRegex(VerificationError, "isLowRamDevice"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_missing_interaction_lod_transition(self) -> None:
+        sources = valid_sources()
+        sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
+            "previewDetailForInteraction(sourceScene.detail, interactionActive)",
+            "sourceScene.detail",
+        )
+        with self.assertRaisesRegex(VerificationError, "previewDetailForInteraction"):
+            verify_preview_boundary(sources)
+
+
+if __name__ == "__main__":
+    unittest.main()
