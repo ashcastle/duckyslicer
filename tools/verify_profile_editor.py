@@ -82,6 +82,7 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "role = Role.RadioButton",
         "onClick = null",
         ".semantics { stateDescription = groupState }",
+        "LocalWindowInfo.current.containerSize.height.toDp()",
     ):
         if marker not in editor:
             raise VerificationError(f"accessible profile interaction is missing: {marker}")
@@ -91,6 +92,8 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         )
     if ".clickable { onSelected(entry) }" in editor:
         raise VerificationError("profile choice rows must not expose duplicate click targets")
+    if "LocalConfiguration.current.screenHeightDp" in editor:
+        raise VerificationError("profile sheet height must follow the current window container")
 
     recents = sources["ProfileRecents.kt"]
     for marker in (
@@ -177,7 +180,7 @@ def main() -> None:
         verify_profile_editor(read_sources())
     except (OSError, VerificationError) as error:
         raise SystemExit(f"Profile editor verification failed: {error}") from error
-    print("Verified localized, accessible Orca-style mobile slicing profile sections")
+    print("Verified localized, responsive, accessible Orca-style mobile slicing profiles")
 
 
 if __name__ == "__main__":

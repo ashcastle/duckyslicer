@@ -25,6 +25,7 @@ def valid_sources() -> dict[str, str]:
             ".selectable( role = Role.RadioButton onClick = null "
             ".selectable( role = Role.RadioButton onClick = null "
             ".semantics { stateDescription = groupState }"
+            " LocalWindowInfo.current.containerSize.height.toDp()"
         ),
         "ProfileRecents.kt": (
             "data class ProfileRecents( MAX_RECENT_PROFILES = 5 class ProfileRecentStore "
@@ -115,6 +116,15 @@ class VerifyProfileEditorTest(unittest.TestCase):
             ".heightIn(min = 48.dp)", ".heightIn(min = 32.dp)", 1
         )
         with self.assertRaisesRegex(VerificationError, r"heightIn\(min = 48\.dp\)"):
+            verify_profile_editor(sources)
+
+    def test_rejects_screen_metrics_for_resizable_profile_sheet(self) -> None:
+        sources = valid_sources()
+        sources["ProfileSettingsSheet.kt"] = sources["ProfileSettingsSheet.kt"].replace(
+            "LocalWindowInfo.current.containerSize.height.toDp()",
+            "LocalConfiguration.current.screenHeightDp.dp",
+        )
+        with self.assertRaisesRegex(VerificationError, "LocalWindowInfo"):
             verify_profile_editor(sources)
 
 

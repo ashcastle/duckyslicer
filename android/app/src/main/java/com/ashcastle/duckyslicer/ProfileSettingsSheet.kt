@@ -43,7 +43,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.stateDescription
@@ -2199,7 +2200,9 @@ private fun SettingsSheet(
     content: @Composable () -> Unit,
 ) {
     val scrollState = rememberScrollState()
-    val sheetHeight = LocalConfiguration.current.screenHeightDp.dp * 0.92f
+    val sheetHeight = with(LocalDensity.current) {
+        LocalWindowInfo.current.containerSize.height.toDp()
+    } * 0.92f
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     LaunchedEffect(scrollKey) { scrollState.scrollTo(0) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {

@@ -1,0 +1,31 @@
+package com.ashcastle.duckyslicer
+
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class WorkspaceLayoutPolicyTest {
+    @Test
+    fun landscapePhoneKeepsBottomNavigation() {
+        assertFalse(useWorkspaceNavigationRail(widthDp = 914f, heightDp = 411f))
+    }
+
+    @Test
+    fun tabletUsesNavigationRailInBothOrientations() {
+        assertTrue(useWorkspaceNavigationRail(widthDp = 800f, heightDp = 1_280f))
+        assertTrue(useWorkspaceNavigationRail(widthDp = 1_280f, heightDp = 800f))
+    }
+
+    @Test
+    fun thresholdRequiresTheShortestSideToBeTabletSized() {
+        assertFalse(useWorkspaceNavigationRail(widthDp = 599f, heightDp = 1_200f))
+        assertTrue(useWorkspaceNavigationRail(widthDp = 600f, heightDp = 600f))
+    }
+
+    @Test
+    fun largeFontUsesIconNavigationWithoutClippedVisibleLabels() {
+        assertTrue(showWorkspaceNavigationLabels(fontScale = 1.49f))
+        assertFalse(showWorkspaceNavigationLabels(fontScale = 1.5f))
+        assertFalse(showWorkspaceNavigationLabels(fontScale = 2f))
+    }
+}

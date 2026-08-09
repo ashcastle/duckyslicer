@@ -95,6 +95,7 @@ import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -114,6 +115,14 @@ private val WorkspaceYellow = Color(0xFFF6C945)
 private val WorkspaceBlack = Color(0xFF202124)
 private val WorkspacePanel = Color(0xEE2A2A27)
 private const val PreviewDepthBands = 12
+private const val TabletShortestSideDp = 600f
+private const val CompactNavigationLabelFontScale = 1.5f
+
+internal fun useWorkspaceNavigationRail(widthDp: Float, heightDp: Float): Boolean =
+    minOf(widthDp, heightDp) >= TabletShortestSideDp
+
+internal fun showWorkspaceNavigationLabels(fontScale: Float): Boolean =
+    fontScale < CompactNavigationLabelFontScale
 
 private enum class SupportPaintTool(val state: SupportPaintState?, val label: Int) {
     ENFORCE(SupportPaintState.ENFORCE, R.string.support_enforce),
@@ -226,7 +235,7 @@ internal fun WorkspaceScreen(
     val model = selectedObject?.model ?: projectObjects.firstOrNull()?.model
     val modelTransform = selectedObject?.transform ?: ModelTransform()
     val editingBusy = autoLaying || arranging
-    val tabletLayout = maxWidth >= 600.dp
+    val tabletLayout = useWorkspaceNavigationRail(maxWidth.value, maxHeight.value)
     val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
     val panelMaxHeight = (maxHeight - if (tabletLayout) 24.dp else 94.dp).coerceAtLeast(320.dp)
     var showModelTools by remember { mutableStateOf(false) }
@@ -774,13 +783,25 @@ private fun WorkspaceNavigation(
     selectedTab: WorkspaceTab,
     onSelected: (WorkspaceTab) -> Unit,
 ) {
+    val showLabels = showWorkspaceNavigationLabels(LocalDensity.current.fontScale)
     NavigationBar(containerColor = Color(0xFF242522)) {
         workspaceNavigationItems().forEach { (tab, icon, label) ->
+            val labelText = stringResource(label)
             NavigationBarItem(
                 selected = selectedTab == tab,
                 onClick = { onSelected(tab) },
-                icon = { Icon(icon, contentDescription = null) },
-                label = { Text(stringResource(label), maxLines = 1) },
+                icon = {
+                    Icon(
+                        icon,
+                        contentDescription = if (showLabels) null else labelText,
+                    )
+                },
+                label = if (showLabels) {
+                    { Text(labelText, maxLines = 1) }
+                } else {
+                    null
+                },
+                alwaysShowLabel = showLabels,
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = WorkspaceBlack,
                     selectedTextColor = WorkspaceYellow,
@@ -1830,7 +1851,9 @@ private fun WorkspaceCard(
         shape = RoundedCornerShape(22.dp),
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             content = content,
         )

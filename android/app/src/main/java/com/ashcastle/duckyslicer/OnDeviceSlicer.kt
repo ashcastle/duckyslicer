@@ -2,6 +2,7 @@ package com.ashcastle.duckyslicer
 
 import com.u1.slicer.data.SliceConfig
 import java.io.File
+import java.io.Serializable
 import kotlin.math.abs
 import org.json.JSONObject
 
@@ -11,7 +12,19 @@ data class SliceOutcome(
     val estimatedSeconds: Float,
     val filamentMm: Float,
     val filamentGrams: Float,
-)
+) : Serializable
+
+internal fun SliceOutcome.isRestorableFrom(filesRoot: File): Boolean = runCatching {
+    val canonicalOutput = output.canonicalFile
+    val outputRoot = File(filesRoot, SliceArtifactStore.OUTPUT_DIRECTORY).canonicalFile
+    canonicalOutput.parentFile == outputRoot &&
+        canonicalOutput.isFile &&
+        canonicalOutput.length() in 1..SliceArtifactStore.MAXIMUM_OUTPUT_BYTES &&
+        layers > 0 &&
+        estimatedSeconds.isFinite() && estimatedSeconds >= 0f &&
+        filamentMm.isFinite() && filamentMm >= 0f &&
+        filamentGrams.isFinite() && filamentGrams >= 0f
+}.getOrDefault(false)
 
 data class PrinterProfile(
     val id: String,
