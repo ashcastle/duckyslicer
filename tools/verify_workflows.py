@@ -48,6 +48,7 @@ def main() -> None:
 
     android_source = (WORKFLOW_ROOT / "android.yml").read_text(encoding="utf-8")
     release_source = (WORKFLOW_ROOT / "release.yml").read_text(encoding="utf-8")
+    android_jobs = job_sections(android_source)
     release_jobs = job_sections(release_source)
     expected_release_jobs = {"build", "sign", "device-tests", "publish"}
     if set(release_jobs) != expected_release_jobs:
@@ -102,6 +103,28 @@ def main() -> None:
     for description, marker in required_android_gates.items():
         if marker not in android_source:
             errors.append(f"android.yml: missing gate: {description}")
+
+    android_device_tests = android_jobs.get("device-tests", "")
+    arm64_device_rules = {
+        "Android device tests use a supported Apple Silicon host": (
+            "runs-on: macos-14" in android_device_tests
+        ),
+        "Android device tests install the 16 KB ARM64 image": (
+            "system-images;android-35;google_apis_ps16k;arm64-v8a" in android_device_tests
+        ),
+        "Android device tests verify the guest ABI": (
+            "ro.product.cpu.abi" in android_device_tests and "arm64-v8a" in android_device_tests
+        ),
+        "Android device tests verify the runtime page size": (
+            "adb shell getconf PAGE_SIZE" in android_device_tests and "16384" in android_device_tests
+        ),
+        "Android device tests account for unavailable nested virtualization": (
+            "-accel off" in android_device_tests
+        ),
+    }
+    for description, valid in arm64_device_rules.items():
+        if not valid:
+            errors.append(f"android.yml: ARM64 device invariant failed: {description}")
 
     required_release_gates = {
         "sign depends on build": "  sign:\n    needs: build\n",
@@ -215,6 +238,14 @@ def main() -> None:
         ),
         "device tests install the isolated signed artifact": (
             "duckyslicer-release-signed" in device_tests
+        ),
+        "release device tests use a supported Apple Silicon host": (
+            "runs-on: macos-14" in device_tests
+        ),
+        "release device tests run on an ARM64 16 KB guest": (
+            "system-images;android-35;google_apis_ps16k;arm64-v8a" in device_tests
+            and "adb shell getconf PAGE_SIZE" in device_tests
+            and "16384" in device_tests
         ),
         "publish regenerates the SBOM from the signed artifact": (
             "tools/generate_sbom.py" in publish

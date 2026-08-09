@@ -256,8 +256,8 @@ jobs:
 
   device-tests:
     needs: [build, sign]
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
+    runs-on: macos-14
+    timeout-minutes: 45
     permissions:
       actions: read
     steps:
@@ -281,11 +281,11 @@ jobs:
             "platform-tools" \
             "emulator" \
             "platforms;android-35" \
-            "system-images;android-35;google_apis;arm64-v8a"
+            "system-images;android-35;google_apis_ps16k;arm64-v8a"
           echo no | avdmanager create avd \
             --force \
             --name duckyslicer-arm64 \
-            --package "system-images;android-35;google_apis;arm64-v8a" \
+            --package "system-images;android-35;google_apis_ps16k;arm64-v8a" \
             --device pixel_6
 
       - name: Start ARM64 emulator
@@ -297,7 +297,7 @@ jobs:
             -no-boot-anim \
             -no-snapshot \
             -gpu swiftshader_indirect \
-            -accel on \
+            -accel off \
             > "$RUNNER_TEMP/duckyslicer-emulator.log" 2>&1 &
           adb wait-for-device
           booted=false
@@ -316,6 +316,12 @@ jobs:
           adb shell settings put global transition_animation_scale 0
           adb shell settings put global animator_duration_scale 0
 
+      - name: Verify ARM64 16 KB device
+        run: |
+          test "$(uname -m)" = arm64
+          test "$(adb shell getprop ro.product.cpu.abi | tr -d '\r')" = arm64-v8a
+          test "$(adb shell getconf PAGE_SIZE | tr -d '\r')" = 16384
+
       - name: Run release-candidate device tests
         run: |
           adb install -r apks/debug/app-debug.apk
@@ -328,12 +334,14 @@ jobs:
       - name: Smoke test signed minified release APK
         run: |
           adb uninstall com.ashcastle.duckyslicer
-          mapfile -t release_apks < <(find release -maxdepth 1 -type f -name 'DuckySlicer-*-arm64.apk')
-          if [ "${#release_apks[@]}" -ne 1 ]; then
-            echo "Expected exactly one signed release APK, found ${#release_apks[@]}" >&2
+          release_apks=$(find release -maxdepth 1 -type f -name 'DuckySlicer-*-arm64.apk')
+          release_apk_count=$(printf '%s\n' "$release_apks" | sed '/^$/d' | wc -l | tr -d ' ')
+          if [ "$release_apk_count" -ne 1 ]; then
+            echo "Expected exactly one signed release APK, found $release_apk_count" >&2
             exit 1
           fi
-          adb install "${release_apks[0]}"
+          release_apk=$(printf '%s\n' "$release_apks" | sed -n '1p')
+          adb install "$release_apk"
           adb logcat -c
           adb shell am force-stop com.ashcastle.duckyslicer
           adb shell am start -W \
