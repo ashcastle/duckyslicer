@@ -37,6 +37,16 @@ REQUIRED_LEGAL_ASSETS = {
         b"6f64367361c4bd56bacc97a991874ce1f4b837b4",
         b"2c8a5385bc53cbc16211b4dd36ef9963ee185f4a",
     ),
+    "assets/legal/THIRD_PARTY_LICENSES.txt": (
+        b"DuckySlicer third-party licenses",
+        b"Resolved component index",
+        b"native:orca-vendored-admesh@",
+        b"pkg:cargo/jni@",
+        b"pkg:maven/androidx.activity/activity-compose@",
+        b"Apache License",
+        b"GNU LESSER GENERAL PUBLIC LICENSE",
+        b"Boost Software License",
+    ),
 }
 
 

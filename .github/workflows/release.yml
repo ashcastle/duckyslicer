@@ -92,9 +92,15 @@ jobs:
         run: |
           release_apk="android/app/build/outputs/apk/release/app-release-unsigned.apk"
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$release_apk"
-          python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_open_source_distribution
+          python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_open_source_distribution tools.test_generate_license_inventory tools.test_generate_offline_licenses tools.test_generate_sbom
           python3 tools/verify_apk.py "$release_apk"
           python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Generate reviewed license inventory
+        run: |
+          python3 tools/generate_license_inventory.py \
+            android/app/build/reports/dependencies/release.txt \
+            android/app/build/reports/dependencies/release-licenses.json
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -106,7 +112,9 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: duckyslicer-release-metadata
-          path: android/app/build/reports/dependencies/release.txt
+          path: |
+            android/app/build/reports/dependencies/release.txt
+            android/app/build/reports/dependencies/release-licenses.json
           if-no-files-found: error
           retention-days: 7
 
@@ -337,8 +345,9 @@ jobs:
         run: |
           mapfile -t release_apks < <(find release -maxdepth 1 -type f -name 'DuckySlicer-*-arm64.apk')
           mapfile -t inventories < <(find release-metadata -type f -name 'release.txt')
-          if [ "${#release_apks[@]}" -ne 1 ] || [ "${#inventories[@]}" -ne 1 ]; then
-            echo "Expected exactly one signed APK and one dependency inventory" >&2
+          mapfile -t license_inventories < <(find release-metadata -type f -name 'release-licenses.json')
+          if [ "${#release_apks[@]}" -ne 1 ] || [ "${#inventories[@]}" -ne 1 ] || [ "${#license_inventories[@]}" -ne 1 ]; then
+            echo "Expected exactly one signed APK, dependency inventory, and license inventory" >&2
             exit 1
           fi
           python3 tools/verify_apk.py "${release_apks[0]}"
@@ -346,7 +355,8 @@ jobs:
             "${release_apks[0]}" \
             "release/DuckySlicer-$DUCKYSLICER_RELEASE_VERSION.cdx.json" \
             "$DUCKYSLICER_RELEASE_VERSION" \
-            "${inventories[0]}"
+            "${inventories[0]}" \
+            "${license_inventories[0]}"
           (
             cd release
             sha256sum \

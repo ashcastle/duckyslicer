@@ -1,6 +1,7 @@
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.Sync
+import org.gradle.api.tasks.TaskProvider
 
 plugins {
     id("com.android.application")
@@ -12,6 +13,7 @@ val nativeNdkDirectory = androidComponents.sdkComponents.ndkDirectory
 val generatedNativeOutput = layout.buildDirectory.dir("generated/native-libs")
 val generatedProfileAssets = layout.buildDirectory.dir("generated/profile-assets")
 val generatedLegalAssets = layout.buildDirectory.dir("generated/legal-assets")
+val generatedOfflineLegalAssets = layout.buildDirectory.dir("generated/offline-legal-assets")
 val slicerRuntimeBuilder = repositoryRoot.resolve("native/slicer-runtime/build.sh")
 val slicerRuntimeOutput = repositoryRoot.resolve(
     "build/native-slicer/output/arm64-v8a/libprusaslicer-jni.so",
@@ -20,6 +22,8 @@ val orcaProfileRoot = repositoryRoot.resolve(
     "build/native-slicer/source/app/src/main/cpp/orcaslicer/resources/profiles",
 )
 val profileCatalogGenerator = repositoryRoot.resolve("tools/generate_profile_catalog.py")
+val offlineLicenseGenerator = repositoryRoot.resolve("tools/generate_offline_licenses.py")
+val nativeLicensePolicy = repositoryRoot.resolve("tools/native_license_policy.py")
 val generatedProfileCatalog = generatedProfileAssets.map { it.file("profile_catalog_v12.bin") }
 val ndkSharedRuntime = nativeNdkDirectory.map { ndk ->
     val prebuiltRoot = ndk.asFile.resolve("toolchains/llvm/prebuilt")
@@ -135,6 +139,67 @@ val buildRustNative = tasks.register<Exec>("buildRustNative") {
     outputs.file(generatedNativeOutput.map { it.file("arm64-v8a/libduckyslicer.so") })
 }
 
+fun registerDependencyInventory(variant: String) = tasks.register(
+    "write${variant.replaceFirstChar { it.uppercase() }}DependencyInventory",
+) {
+    group = "verification"
+    description = "Writes the resolved $variant runtime dependencies for release metadata."
+    val inventory = layout.buildDirectory.file("reports/dependencies/$variant.txt")
+    outputs.file(inventory)
+    doLast {
+        val coordinates = configurations
+            .getByName("${variant}RuntimeClasspath")
+            .incoming
+            .resolutionResult
+            .allComponents
+            .mapNotNull { component ->
+                (component.id as? ModuleComponentIdentifier)?.let { id ->
+                    "${id.group}:${id.module}:${id.version}"
+                }
+            }
+            .distinct()
+            .sorted()
+        val output = inventory.get().asFile
+        output.parentFile.mkdirs()
+        output.writeText(coordinates.joinToString(separator = "\n", postfix = "\n"))
+    }
+}
+
+val debugDependencyInventory = registerDependencyInventory("debug")
+val releaseDependencyInventory = registerDependencyInventory("release")
+
+fun registerOfflineLicenseBundle(variant: String, dependencyInventory: TaskProvider<*>) =
+    tasks.register<Exec>("generate${variant.replaceFirstChar { it.uppercase() }}OfflineLicenseBundle") {
+        group = "build"
+        description = "Packages reviewed $variant dependency licenses for offline viewing."
+        dependsOn(buildRustNative, dependencyInventory)
+        val inventory = layout.buildDirectory.file("reports/dependencies/$variant.txt")
+        val output = generatedOfflineLegalAssets.map {
+            it.file("$variant/legal/THIRD_PARTY_LICENSES.txt")
+        }
+        workingDir(repositoryRoot)
+        commandLine(
+            "python3",
+            offlineLicenseGenerator.absolutePath,
+            inventory.get().asFile.absolutePath,
+            nativeNdkDirectory.get().asFile.absolutePath,
+            output.get().asFile.absolutePath,
+        )
+        inputs.file(offlineLicenseGenerator)
+        inputs.file(nativeLicensePolicy)
+        inputs.file(repositoryRoot.resolve("THIRD_PARTY_NOTICES.md"))
+        inputs.file(repositoryRoot.resolve("native/slicer-runtime/versions.env"))
+        inputs.file(repositoryRoot.resolve("rust/duckyslicer-jni/Cargo.lock"))
+        inputs.file(inventory)
+        inputs.property("androidNdkVersion", "28.2.13676358")
+        outputs.file(output)
+    }
+
+val generateDebugOfflineLicenseBundle =
+    registerOfflineLicenseBundle("debug", debugDependencyInventory)
+val generateReleaseOfflineLicenseBundle =
+    registerOfflineLicenseBundle("release", releaseDependencyInventory)
+
 val prepareOpenSourceNotices = tasks.register<Sync>("prepareOpenSourceNotices") {
     group = "build"
     description = "Packages the project license and third-party notices for offline viewing."
@@ -228,6 +293,12 @@ android {
     sourceSets.getByName("main").assets.directories.add(
         generatedLegalAssets.get().asFile.absolutePath,
     )
+    sourceSets.getByName("debug").assets.directories.add(
+        generatedOfflineLegalAssets.get().dir("debug").asFile.absolutePath,
+    )
+    sourceSets.getByName("release").assets.directories.add(
+        generatedOfflineLegalAssets.get().dir("release").asFile.absolutePath,
+    )
     sourceSets.getByName("androidTest").assets.directories.add(
         repositoryRoot.resolve("tests/data/test_stl/ASCII").absolutePath,
     )
@@ -246,37 +317,17 @@ tasks.configureEach {
     if (name.contains("assets", ignoreCase = true) || name.contains("lint", ignoreCase = true)) {
         dependsOn(generateOrcaProfileCatalog)
     }
-}
-
-fun registerDependencyInventory(variant: String) {
-    val taskSuffix = variant.replaceFirstChar { it.uppercase() }
-    tasks.register("write${taskSuffix}DependencyInventory") {
-        group = "verification"
-        description = "Writes the resolved $variant runtime dependencies for the release SBOM."
-        val inventory = layout.buildDirectory.file("reports/dependencies/$variant.txt")
-        outputs.file(inventory)
-        doLast {
-            val coordinates = configurations
-                .getByName("${variant}RuntimeClasspath")
-                .incoming
-                .resolutionResult
-                .allComponents
-                .mapNotNull { component ->
-                    (component.id as? ModuleComponentIdentifier)?.let { id ->
-                        "${id.group}:${id.module}:${id.version}"
-                    }
-                }
-                .distinct()
-                .sorted()
-            val output = inventory.get().asFile
-            output.parentFile.mkdirs()
-            output.writeText(coordinates.joinToString(separator = "\n", postfix = "\n"))
-        }
+    if (name.contains("debug", ignoreCase = true) &&
+        (name.contains("assets", ignoreCase = true) || name.contains("lint", ignoreCase = true))
+    ) {
+        dependsOn(generateDebugOfflineLicenseBundle)
+    }
+    if (name.contains("release", ignoreCase = true) &&
+        (name.contains("assets", ignoreCase = true) || name.contains("lint", ignoreCase = true))
+    ) {
+        dependsOn(generateReleaseOfflineLicenseBundle)
     }
 }
-
-registerDependencyInventory("debug")
-registerDependencyInventory("release")
 
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.06.01")

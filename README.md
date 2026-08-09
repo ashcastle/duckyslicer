@@ -164,7 +164,10 @@ the inherited language set and reuse established slicing terms.
 
 DuckySlicer is distributed under the [GNU Affero General Public License v3](LICENSE.txt).
 Inherited source lineage, binary provenance, and corresponding source locations are
-recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Every APK includes
+an offline, component-indexed copy of all resolved Android, Rust, native, and
+vendored license texts under **Settings → About → Third-party notices**. Release
+SBOM generation fails if a component has no reviewed license expression.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development and validation rules,
 [SECURITY.md](SECURITY.md) for private vulnerability reporting, and

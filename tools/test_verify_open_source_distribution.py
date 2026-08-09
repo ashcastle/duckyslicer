@@ -18,9 +18,14 @@ def valid_sources() -> dict[str, str]:
         "THIRD_PARTY_NOTICES.md": "[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)\nruntime-rev\nengine-rev",
         "README.md": "[GNU Affero General Public License v3](LICENSE.txt)\n[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)",
         "native/slicer-runtime/versions.env": "ANDROID_SLICER_RUNTIME_COMMIT=runtime-rev\nSLICER_ENGINE_COMMIT=engine-rev",
-        "android/app/build.gradle.kts": "prepareOpenSourceNotices generatedLegalAssets LICENSE.txt THIRD_PARTY_NOTICES.md",
+        "tools/generate_offline_licenses.py": "verify_vendored_policy native_notice_sources render_bundle",
+        "tools/native_license_policy.py": "VENDORED_COMPONENTS native_components native_notice_sources",
+        "android/app/build.gradle.kts": (
+            "prepareOpenSourceNotices registerOfflineLicenseBundle generate_offline_licenses.py "
+            "generatedLegalAssets LICENSE.txt THIRD_PARTY_NOTICES.md THIRD_PARTY_LICENSES.txt"
+        ),
         "android/app/src/main/java/com/ashcastle/duckyslicer/AppSettingsSheet.kt": (
-            "legal/AGPL-3.0.txt legal/THIRD_PARTY_NOTICES.md "
+            "legal/AGPL-3.0.txt legal/THIRD_PARTY_NOTICES.md legal/THIRD_PARTY_LICENSES.txt "
             "https://github.com/ashcastle/duckyslicer BuildConfig.VERSION_NAME open_source_summary"
         ),
         "android/app/src/main/res/values/strings.xml": strings,
