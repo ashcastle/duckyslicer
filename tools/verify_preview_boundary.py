@@ -198,6 +198,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "Settling after a gesture must restore the requested VBO once",
         "ARM64 GPU staging must use direct memory",
         "ARM64 balanced preview must honor its geometry budget",
+        "Slice outcome must retain Orca's print-time estimate",
+        "Slice outcome must retain Orca's filament-length estimate",
+        "Slice outcome must retain Orca's filament-mass estimate",
     ):
         if marker not in device:
             raise VerificationError(f"ARM64 GPU preview regression is missing: {marker}")
