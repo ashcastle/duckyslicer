@@ -265,14 +265,7 @@ internal object SlicerProcessClient {
                     ?: "Slicer process returned no result"
             }
             latestWorkerPid = response.getInt(SlicerProcessContract.KEY_PID)
-            val output = validateOutput(context, response.getString(SlicerProcessContract.KEY_OUTPUT_PATH))
-            return SliceOutcome(
-                output = output,
-                layers = response.getInt(SlicerProcessContract.KEY_LAYERS),
-                estimatedSeconds = response.getFloat(SlicerProcessContract.KEY_ESTIMATED_SECONDS),
-                filamentMm = response.getFloat(SlicerProcessContract.KEY_FILAMENT_MM),
-                filamentGrams = response.getFloat(SlicerProcessContract.KEY_FILAMENT_GRAMS),
-            )
+            return outcomeFromResponse(context, response)
         } catch (failure: Exception) {
             if (cancelledRequestId.get() == requestId) throw SlicingCancelledException()
             throw failure
@@ -291,7 +284,12 @@ internal object SlicerProcessClient {
         check(activeRequestId.compareAndSet(null, requestId)) {
             "Another slicer operation is already running"
         }
-        val session = ForegroundSliceSession.prepare(context, requestId)
+        val session = try {
+            ForegroundSliceSession.prepare(context, requestId)
+        } catch (failure: Exception) {
+            activeRequestId.compareAndSet(requestId, null)
+            throw failure
+        }
         return try {
             context.startForegroundService(SlicerProcessService.startSliceIntent(context, requestId))
             session
@@ -299,6 +297,66 @@ internal object SlicerProcessClient {
             activeRequestId.compareAndSet(requestId, null)
             session.abandon()
             throw failure
+        }
+    }
+
+    fun recoverUserSlice(): ForegroundSliceSession? {
+        check(Looper.myLooper() == Looper.getMainLooper()) {
+            "A foreground slice must be recovered by the UI"
+        }
+        val session = ForegroundSliceSession.recover(DuckySlicerApplication.context()) ?: return null
+        check(activeRequestId.compareAndSet(null, session.requestId)) {
+            "Another slicer operation is already running"
+        }
+        return session
+    }
+
+    fun awaitRecoveredSlice(
+        session: ForegroundSliceSession,
+        onProgress: (Int) -> Unit,
+    ): SliceOutcome {
+        check(Looper.myLooper() != Looper.getMainLooper()) {
+            "Slice recovery must run outside the application main thread"
+        }
+        check(activeRequestId.get() == session.requestId) {
+            "Foreground slice session is no longer active"
+        }
+        val context = session.context
+        try {
+            when (val record = ForegroundSliceStore.load(context)) {
+                null -> error("Foreground slice checkpoint is unavailable")
+                else -> when (record.phase) {
+                    ForegroundSlicePhase.CANCELED -> throw SlicingCancelledException()
+                    ForegroundSlicePhase.FAILED -> error("Foreground slice failed while the app was closed")
+                    ForegroundSlicePhase.COMPLETED -> return requireNotNull(record.outcome)
+                    ForegroundSlicePhase.ACTIVE -> Unit
+                }
+            }
+            val response = withWorker(context) { worker ->
+                worker.request(
+                    what = SlicerProcessContract.MESSAGE_ATTACH,
+                    data = Bundle().apply {
+                        putString(SlicerProcessContract.KEY_REQUEST_ID, session.requestId)
+                    },
+                    timeoutSeconds = SLICE_TIMEOUT_SECONDS,
+                    onProgress = onProgress,
+                )
+            }
+            if (response.getBoolean(SlicerProcessContract.KEY_CANCELED)) {
+                throw SlicingCancelledException()
+            }
+            check(response.getBoolean(SlicerProcessContract.KEY_OK)) {
+                response.getString(SlicerProcessContract.KEY_ERROR)
+                    ?: "Foreground slice could not be recovered"
+            }
+            latestWorkerPid = response.getInt(SlicerProcessContract.KEY_PID)
+            return outcomeFromResponse(context, response)
+        } catch (failure: Exception) {
+            if (cancelledRequestId.get() == session.requestId) throw SlicingCancelledException()
+            throw failure
+        } finally {
+            activeRequestId.compareAndSet(session.requestId, null)
+            cancelledRequestId.compareAndSet(session.requestId, null)
         }
     }
 
@@ -433,6 +491,20 @@ internal object SlicerProcessClient {
         }
         return output
     }
+
+    private fun outcomeFromResponse(context: Context, response: Bundle): SliceOutcome =
+        SliceOutcome(
+            output = validateOutput(
+                context,
+                response.getString(SlicerProcessContract.KEY_OUTPUT_PATH),
+            ),
+            layers = response.getInt(SlicerProcessContract.KEY_LAYERS),
+            estimatedSeconds = response.getFloat(SlicerProcessContract.KEY_ESTIMATED_SECONDS),
+            filamentMm = response.getFloat(SlicerProcessContract.KEY_FILAMENT_MM),
+            filamentGrams = response.getFloat(SlicerProcessContract.KEY_FILAMENT_GRAMS),
+        ).also {
+            check(it.isRestorableFrom(context.filesDir)) { "Slicer result is invalid" }
+        }
 
     private class BoundWorker(
         private val context: Context,
@@ -591,10 +663,12 @@ internal class ForegroundSliceSession internal constructor(
     override fun close() {
         SlicerProcessClient.finishUserSlice(this)
         if (cancellationRequested()) cancellationFile.delete()
+        ForegroundSliceStore.remove(context, requestId)
     }
 
     internal fun abandon() {
         if (cancellationRequested()) cancellationFile.delete()
+        ForegroundSliceStore.remove(context, requestId)
     }
 
     internal companion object {
@@ -606,6 +680,12 @@ internal class ForegroundSliceSession internal constructor(
                 check(!session.cancellationFile.exists() || session.cancellationFile.delete()) {
                     "Slice cancellation state is unavailable"
                 }
+                ForegroundSliceStore.begin(context, requestId)
+            }
+
+        fun recover(context: Context): ForegroundSliceSession? =
+            ForegroundSliceStore.load(context)?.let { record ->
+                ForegroundSliceSession(context, record.requestId)
             }
 
         fun markCanceled(context: Context, requestId: String) {
@@ -614,6 +694,7 @@ internal class ForegroundSliceSession internal constructor(
                 output.flush()
                 output.fd.sync()
             }
+            ForegroundSliceStore.mark(context, requestId, ForegroundSlicePhase.CANCELED)
         }
 
         fun wasCanceled(context: Context, requestId: String): Boolean = runCatching {
@@ -632,6 +713,9 @@ class SlicerProcessService : Service() {
     private val cancelledRequestId = AtomicReference<String?>(null)
     private val activeReply = AtomicReference<Messenger?>(null)
     private val foregroundRequestId = AtomicReference<String?>(null)
+    private val completedForegroundResult = AtomicReference<Bundle?>(null)
+    @Volatile
+    private var foregroundProgress = 0
     private val sliceThreadDelegate = lazy {
         HandlerThread("DuckySlicer Orca work").apply { start() }
     }
@@ -687,9 +771,15 @@ class SlicerProcessService : Service() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         val abandonedRequestId = activeRequestId.get()
-        if (abandonedRequestId != null) {
+        if (
+            abandonedRequestId != null &&
+            foregroundRequestId.get() != abandonedRequestId
+        ) {
             mainHandler.post {
-                if (activeRequestId.get() == abandonedRequestId) {
+                if (
+                    activeRequestId.get() == abandonedRequestId &&
+                    foregroundRequestId.get() != abandonedRequestId
+                ) {
                     Process.killProcess(Process.myPid())
                 }
             }
@@ -718,6 +808,9 @@ class SlicerProcessService : Service() {
                 )
             }
             cancelledRequestId.set(requestId)
+            runCatching {
+                ForegroundSliceStore.mark(this, requestId, ForegroundSlicePhase.FAILED)
+            }
             finishForegroundSlice(requestId)
         }
         stopSelf(startId)
@@ -728,6 +821,8 @@ class SlicerProcessService : Service() {
         val current = foregroundRequestId.get()
         if (current != null && current != requestId) return false
         if (current == null && !foregroundRequestId.compareAndSet(null, requestId)) return false
+        foregroundProgress = 0
+        completedForegroundResult.set(null)
         val notifications = getSystemService(NotificationManager::class.java)
         notifications.createNotificationChannel(
             NotificationChannel(
@@ -843,6 +938,7 @@ class SlicerProcessService : Service() {
             SlicerProcessContract.MESSAGE_SLICE -> startWork(message, WorkOperation.SLICE)
             SlicerProcessContract.MESSAGE_AUTO_ORIENT -> startWork(message, WorkOperation.AUTO_ORIENT)
             SlicerProcessContract.MESSAGE_AUTO_ARRANGE -> startWork(message, WorkOperation.AUTO_ARRANGE)
+            SlicerProcessContract.MESSAGE_ATTACH -> attachToForegroundSlice(message)
             SlicerProcessContract.MESSAGE_CANCEL -> cancelWork(message)
             SlicerProcessContract.MESSAGE_HEALTH -> send(
                 message.replyTo,
@@ -882,6 +978,82 @@ class SlicerProcessService : Service() {
                 SlicerProcessContract.MESSAGE_RESULT,
                 data = failure("Unsupported slicer operation"),
             )
+        }
+    }
+
+    private fun attachToForegroundSlice(message: Message) {
+        val requestId = message.data.getString(SlicerProcessContract.KEY_REQUEST_ID)
+        if (requestId == null || requestId.length !in 1..MAX_REQUEST_ID_LENGTH) {
+            send(
+                message.replyTo,
+                SlicerProcessContract.MESSAGE_RESULT,
+                data = failure("Foreground slice request id is invalid"),
+            )
+            return
+        }
+        val record = ForegroundSliceStore.load(this)
+        if (record == null || record.requestId != requestId) {
+            send(
+                message.replyTo,
+                SlicerProcessContract.MESSAGE_RESULT,
+                data = failure("Foreground slice checkpoint is unavailable"),
+            )
+            return
+        }
+        when (record.phase) {
+            ForegroundSlicePhase.COMPLETED -> {
+                send(
+                    message.replyTo,
+                    SlicerProcessContract.MESSAGE_RESULT,
+                    data = success(requireNotNull(record.outcome)),
+                )
+                return
+            }
+            ForegroundSlicePhase.CANCELED -> {
+                send(
+                    message.replyTo,
+                    SlicerProcessContract.MESSAGE_RESULT,
+                    data = failure("Slicing was canceled").apply {
+                        putBoolean(SlicerProcessContract.KEY_CANCELED, true)
+                    },
+                )
+                return
+            }
+            ForegroundSlicePhase.FAILED -> {
+                send(
+                    message.replyTo,
+                    SlicerProcessContract.MESSAGE_RESULT,
+                    data = failure("Foreground slice failed while the app was closed"),
+                )
+                return
+            }
+            ForegroundSlicePhase.ACTIVE -> Unit
+        }
+        completedForegroundResult.get()?.let { result ->
+            send(message.replyTo, SlicerProcessContract.MESSAGE_RESULT, data = Bundle(result))
+            return
+        }
+        if (
+            foregroundRequestId.get() != requestId ||
+            activeRequestId.get() != requestId
+        ) {
+            send(
+                message.replyTo,
+                SlicerProcessContract.MESSAGE_RESULT,
+                data = failure("Foreground slice worker is unavailable"),
+            )
+            return
+        }
+        activeReply.set(message.replyTo)
+        send(
+            message.replyTo,
+            SlicerProcessContract.MESSAGE_PROGRESS,
+            foregroundProgress.coerceIn(0, 100),
+        )
+        completedForegroundResult.get()?.let { result ->
+            if (activeReply.compareAndSet(message.replyTo, null)) {
+                send(message.replyTo, SlicerProcessContract.MESSAGE_RESULT, data = Bundle(result))
+            }
         }
     }
 
@@ -926,14 +1098,30 @@ class SlicerProcessService : Service() {
                 WorkOperation.AUTO_ORIENT -> runAutoOrient(requestData)
                 WorkOperation.AUTO_ARRANGE -> runAutoArrange(requestData)
                 WorkOperation.SLICE -> runSlice(requestData) { percent ->
+                    foregroundProgress = maxOf(foregroundProgress, percent.coerceIn(0, 100))
                     mainHandler.post { updateForegroundSlice(requestId, percent) }
-                    send(reply, SlicerProcessContract.MESSAGE_PROGRESS, percent)
+                    send(
+                        activeReply.get() ?: reply,
+                        SlicerProcessContract.MESSAGE_PROGRESS,
+                        percent,
+                    )
                 }
             }
             if (cancelledRequestId.get() == requestId) return@post
+            if (
+                operation == WorkOperation.SLICE &&
+                foregroundRequestId.get() == requestId
+            ) {
+                checkpointForegroundResult(requestId, result)
+                completedForegroundResult.set(Bundle(result))
+            }
             if (activeRequestId.compareAndSet(requestId, null)) {
-                activeReply.compareAndSet(reply, null)
-                send(reply, SlicerProcessContract.MESSAGE_RESULT, data = result)
+                val resultReply = if (operation == WorkOperation.SLICE) {
+                    activeReply.getAndSet(null) ?: reply
+                } else {
+                    reply
+                }
+                send(resultReply, SlicerProcessContract.MESSAGE_RESULT, data = result)
                 if (operation == WorkOperation.SLICE) {
                     mainHandler.post {
                         updateForegroundSlice(requestId, progress = 100)
@@ -946,10 +1134,20 @@ class SlicerProcessService : Service() {
         if (!accepted) {
             activeRequestId.compareAndSet(requestId, null)
             activeReply.compareAndSet(reply, null)
+            val rejected = failure("Slicer worker thread is unavailable")
+            if (
+                operation == WorkOperation.SLICE &&
+                foregroundRequestId.get() == requestId
+            ) {
+                runCatching {
+                    ForegroundSliceStore.mark(this, requestId, ForegroundSlicePhase.FAILED)
+                }
+                completedForegroundResult.set(Bundle(rejected))
+            }
             send(
                 reply,
                 SlicerProcessContract.MESSAGE_RESULT,
-                data = failure("Slicer worker thread is unavailable"),
+                data = rejected,
             )
             if (operation == WorkOperation.SLICE) finishForegroundSlice(requestId)
         }
@@ -971,6 +1169,38 @@ class SlicerProcessService : Service() {
             },
             STORAGE_GUARD_INTERVAL_MILLIS,
         )
+    }
+
+    private fun checkpointForegroundResult(requestId: String, result: Bundle) {
+        runCatching {
+            if (result.getBoolean(SlicerProcessContract.KEY_OK)) {
+                ForegroundSliceStore.complete(
+                    this,
+                    requestId,
+                    SliceOutcome(
+                        output = File(
+                            requireNotNull(
+                                result.getString(SlicerProcessContract.KEY_OUTPUT_PATH),
+                            ) { "Foreground slice output is unavailable" },
+                        ),
+                        layers = result.getInt(SlicerProcessContract.KEY_LAYERS),
+                        estimatedSeconds = result.getFloat(
+                            SlicerProcessContract.KEY_ESTIMATED_SECONDS,
+                        ),
+                        filamentMm = result.getFloat(SlicerProcessContract.KEY_FILAMENT_MM),
+                        filamentGrams = result.getFloat(
+                            SlicerProcessContract.KEY_FILAMENT_GRAMS,
+                        ),
+                    ),
+                )
+            } else {
+                ForegroundSliceStore.mark(this, requestId, ForegroundSlicePhase.FAILED)
+            }
+        }.onFailure { failure ->
+            if (BuildConfig.DEBUG) {
+                Log.e(LOG_TAG, "Foreground slice checkpoint failed", failure)
+            }
+        }
     }
 
     private fun scheduleForegroundCompletionGuard(requestId: String) {
@@ -998,6 +1228,9 @@ class SlicerProcessService : Service() {
             return
         }
         cancelledRequestId.set(requestId)
+        if (foregroundRequestId.get() == requestId) {
+            runCatching { ForegroundSliceSession.markCanceled(this, requestId) }
+        }
         updateForegroundSlice(requestId, progress = 0, canceling = true)
         activeReply.getAndSet(null)?.let { active ->
             send(
@@ -1390,6 +1623,7 @@ private object SlicerProcessContract {
     const val MESSAGE_BLOCK_FOR_TEST = 7
     const val MESSAGE_AUTO_ORIENT = 8
     const val MESSAGE_AUTO_ARRANGE = 9
+    const val MESSAGE_ATTACH = 10
     const val KEY_REQUEST_ID = "requestId"
     const val KEY_MODEL_PATH = "modelPath"
     const val KEY_MODEL_PATHS = "modelPaths"
