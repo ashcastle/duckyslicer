@@ -51,6 +51,8 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - Orca Arachne wall transitions, width distribution, minimum feature/wall rules, and independently rendered outer/inner wall roles preserved end to end
 - Orca top surface, bottom surface, and internal-solid toolpaths kept as distinct
   preview roles instead of being collapsed into one generic solid fill
+- Bounded primitive `FloatArray` preview transfer across JNI, avoiding large G-code
+  JSON strings and per-segment JSON objects before GPU rendering
 - Orca skirt height/speed, draft shield, brim topology/gap, and raft geometry preserved in bundled, project, and saved profiles
 - Searchable printer, filament, and slicing selectors with collapsible brand and personal-profile groups
 - Printer compatibility filtering, validated profile inheritance, and unsafe-entry rejection during the build

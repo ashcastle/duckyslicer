@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use jni::JNIEnv;
 use jni::objects::{JClass, JString};
-use jni::sys::{jint, jstring};
+use jni::sys::{jfloatArray, jint, jstring};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -21,6 +21,11 @@ const MAX_MODEL_IMPORT_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_TEXT_LINE_BYTES: usize = 64 * 1024;
 const MAX_STL_COORDINATE_ABS_MM: f32 = 1_000_000.0;
 const MAX_GCODE_COORDINATE_ABS_MM: f32 = 1_000_000.0;
+const MAX_PREVIEW_SEGMENTS: usize = 120_000;
+const MAX_PREVIEW_LAYERS: usize = 1_000_000;
+const PREVIEW_PAYLOAD_MAGIC: f32 = 17_491.0;
+const PREVIEW_PAYLOAD_VERSION: f32 = 1.0;
+const PREVIEW_HEADER_FLOATS: usize = 7;
 const INTERNAL_ERROR_JSON: &str =
     "{\"ok\":false,\"error\":\"The file could not be processed safely\"}";
 static TEMP_OUTPUT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -61,10 +66,7 @@ struct SuccessResponse {
     ok: bool,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 struct GcodeLayerPreview {
-    ok: bool,
     start_layer: usize,
     end_layer: usize,
     layer_count: usize,
@@ -574,6 +576,9 @@ fn preview_gcode(
                 .map(|layer| layer.checked_add(1))
                 .unwrap_or(Some(0))
                 .ok_or_else(|| EngineError::Parse("G-code has too many layers".to_owned()))?;
+            if next >= MAX_PREVIEW_LAYERS {
+                return Err(EngineError::Parse("G-code has too many layers".to_owned()));
+            }
             current_layer = Some(next);
             layer_count = layer_count.max(
                 next.checked_add(1)
@@ -646,8 +651,7 @@ fn preview_gcode(
             }
             // Keep common full-model previews intact so Android can reduce whole
             // layers instead of punching visual gaps through perimeter loops.
-            const SEGMENT_LIMIT: usize = 120_000;
-            if segments.len() > SEGMENT_LIMIT {
+            if segments.len() > MAX_PREVIEW_SEGMENTS {
                 segments = segments.into_iter().step_by(2).collect();
                 segment_stride = segment_stride.saturating_mul(2);
             }
@@ -672,7 +676,6 @@ fn preview_gcode(
 
     let last_layer = layer_count.saturating_sub(1);
     Ok(GcodeLayerPreview {
-        ok: true,
         start_layer: start_layer.min(last_layer),
         end_layer: end_layer.min(last_layer),
         layer_count,
@@ -680,6 +683,34 @@ fn preview_gcode(
         max_z_mm: max_requested_z.unwrap_or(0.0),
         segments,
     })
+}
+
+fn preview_payload(preview: GcodeLayerPreview) -> Result<Vec<f32>, EngineError> {
+    if preview.layer_count > MAX_PREVIEW_LAYERS || preview.segments.len() > MAX_PREVIEW_SEGMENTS {
+        return Err(EngineError::Parse(
+            "G-code preview exceeds the supported limit".to_owned(),
+        ));
+    }
+    let payload_floats = preview
+        .segments
+        .len()
+        .checked_mul(6)
+        .and_then(|count| count.checked_add(PREVIEW_HEADER_FLOATS))
+        .ok_or_else(|| EngineError::Parse("G-code preview size overflow".to_owned()))?;
+    let mut payload = Vec::with_capacity(payload_floats);
+    payload.extend_from_slice(&[
+        PREVIEW_PAYLOAD_MAGIC,
+        PREVIEW_PAYLOAD_VERSION,
+        preview.start_layer as f32,
+        preview.end_layer as f32,
+        preview.layer_count as f32,
+        preview.min_z_mm,
+        preview.max_z_mm,
+    ]);
+    for segment in preview.segments {
+        payload.extend_from_slice(&segment);
+    }
+    Ok(payload)
 }
 
 fn make_java_string(env: &JNIEnv<'_>, value: &str) -> jstring {
@@ -776,19 +807,31 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeR
     path: JString<'_>,
     start_layer: jint,
     end_layer: jint,
-) -> jstring {
-    let response = guarded_json(|| {
+) -> jfloatArray {
+    let payload = catch_unwind(AssertUnwindSafe(|| {
         let path = env
             .get_string(&path)
             .map(|path| path.to_string_lossy().into_owned())
             .map_err(|error| EngineError::Parse(format!("Unable to read file path: {error}")))?;
-        preview_gcode(
+        preview_payload(preview_gcode(
             &path,
             start_layer.max(0) as usize,
             end_layer.max(0) as usize,
-        )
-    });
-    make_java_string(&env, &response)
+        )?)
+    }))
+    .ok()
+    .and_then(Result::ok);
+    let Some(payload) = payload else {
+        return std::ptr::null_mut();
+    };
+    catch_unwind(AssertUnwindSafe(|| {
+        let output = env.new_float_array(payload.len() as jint)?;
+        env.set_float_array_region(&output, 0, &payload)?;
+        Ok::<jfloatArray, jni::errors::Error>(output.into_raw())
+    }))
+    .ok()
+    .and_then(Result::ok)
+    .unwrap_or(std::ptr::null_mut())
 }
 
 #[cfg(test)]
@@ -958,6 +1001,14 @@ mod tests {
         );
         assert_eq!(clamped.start_layer, 1);
         assert_eq!(clamped.end_layer, 1);
+
+        let payload = preview_payload(preview).expect("encode binary preview payload");
+        assert_eq!(payload.len(), PREVIEW_HEADER_FLOATS + 4 * 6);
+        assert_eq!(payload[0], PREVIEW_PAYLOAD_MAGIC);
+        assert_eq!(payload[1], PREVIEW_PAYLOAD_VERSION);
+        assert_eq!(&payload[2..7], &[0.0, 1.0, 2.0, 0.2, 0.4]);
+        assert_eq!(payload[7 + 5], ToolpathRole::OuterWall.code());
+        assert_eq!(payload[7 + 6 + 5], ToolpathRole::BottomSurface.code());
     }
 
     #[test]
