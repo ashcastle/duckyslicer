@@ -79,6 +79,9 @@ def main() -> None:
         "Gradle trust data is structurally verified": (
             "python3 tools/verify_gradle_supply_chain.py"
         ),
+        "credential-bearing signed URLs are rejected": (
+            "python3 tools/verify_no_embedded_credentials.py"
+        ),
         "Rust compiler is pinned": "toolchain: 1.91.1",
         "Rust JNI failure containment is verified": (
             "python3 tools/verify_native_safety.py"
@@ -214,6 +217,9 @@ def main() -> None:
         "Gradle trust data is structurally verified": (
             "python3 tools/verify_gradle_supply_chain.py"
         ),
+        "credential-bearing signed URLs are rejected": (
+            "python3 tools/verify_no_embedded_credentials.py"
+        ),
         "Rust compiler is pinned": "toolchain: 1.91.1",
         "Rust JNI failure containment is verified": (
             "python3 tools/verify_native_safety.py"
@@ -283,6 +289,9 @@ def main() -> None:
     required_play_gates = {
         "manual dispatch only": "  workflow_dispatch:\n",
         "strict Gradle verification": "./gradlew --dependency-verification=strict",
+        "credential-bearing signed URLs are rejected": (
+            "python3 tools/verify_no_embedded_credentials.py"
+        ),
         "Play isolation verifier runs before build": (
             "python3 tools/verify_play_bundle_workflow.py"
         ),

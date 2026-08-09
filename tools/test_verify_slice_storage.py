@@ -28,8 +28,9 @@ def valid_sources() -> dict[str, str]:
         "MainActivity.kt": (
             "GCODE_DOCUMENT_MIME_TYPE = \"application/octet-stream\" "
             "CreateDocument(GCODE_DOCUMENT_MIME_TYPE) "
-            + " ".join(["SliceArtifactLease.acquire"] * 3)
+            "SliceArtifactLease.acquire(completed.output)"
         ),
+        "SliceOperationViewModel.kt": "SliceArtifactLease.acquire(outcome.output)",
         "RemoteDevice.kt": "SliceArtifactLease.acquire(gcode)",
         "SliceArtifactStoreTest.kt": (
             "pruningEnforcesCountAndByteBudgetsOldestFirst "
@@ -60,10 +61,24 @@ class VerifySliceStorageTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "count-only"):
             verify_slice_storage(sources)
 
-    def test_rejects_missing_reader_lease(self) -> None:
+    def test_rejects_missing_remote_reader_lease(self) -> None:
         sources = valid_sources()
         sources["RemoteDevice.kt"] = "upload without a lease"
         with self.assertRaisesRegex(VerificationError, "remote upload"):
+            verify_slice_storage(sources)
+
+    def test_rejects_missing_preview_reader_lease(self) -> None:
+        sources = valid_sources()
+        sources["SliceOperationViewModel.kt"] = "preview without a lease"
+        with self.assertRaisesRegex(VerificationError, "Preview generation"):
+            verify_slice_storage(sources)
+
+    def test_rejects_missing_export_reader_lease(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+            "SliceArtifactLease.acquire(completed.output)", "export without a lease"
+        )
+        with self.assertRaisesRegex(VerificationError, "G-code export"):
             verify_slice_storage(sources)
 
     def test_rejects_text_plain_gcode_export(self) -> None:

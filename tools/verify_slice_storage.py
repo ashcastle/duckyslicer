@@ -21,6 +21,7 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "SlicerProcessService.kt",
         "runtime.patch",
         "MainActivity.kt",
+        "SliceOperationViewModel.kt",
         "RemoteDevice.kt",
         "SliceArtifactStoreTest.kt",
         "NativeEngineInstrumentedTest.kt",
@@ -92,9 +93,12 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
     if "gcode_file.rdbuf()" in added_runtime:
         raise VerificationError("native compatibility preview reads the complete G-code")
 
-    if sources["MainActivity.kt"].count("SliceArtifactLease.acquire") < 3:
-        raise VerificationError("preview and export readers are not all leased")
     main_activity = sources["MainActivity.kt"]
+    if "SliceArtifactLease.acquire(completed.output)" not in main_activity:
+        raise VerificationError("G-code export does not lease its retained artifact")
+    preview_operation = sources["SliceOperationViewModel.kt"]
+    if "SliceArtifactLease.acquire(outcome.output)" not in preview_operation:
+        raise VerificationError("Preview generation does not lease its retained artifact")
     if 'GCODE_DOCUMENT_MIME_TYPE = "application/octet-stream"' not in main_activity:
         raise VerificationError("G-code document MIME type may let providers append .txt")
     if "CreateDocument(GCODE_DOCUMENT_MIME_TYPE)" not in main_activity:
@@ -146,6 +150,9 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "MainActivity.kt": (main / "MainActivity.kt").read_text(encoding="utf-8"),
+        "SliceOperationViewModel.kt": (main / "SliceOperationViewModel.kt").read_text(
+            encoding="utf-8"
+        ),
         "RemoteDevice.kt": (main / "RemoteDevice.kt").read_text(encoding="utf-8"),
         "SliceArtifactStoreTest.kt": (tests / "SliceArtifactStoreTest.kt").read_text(
             encoding="utf-8"
