@@ -11,6 +11,7 @@ val repositoryRoot = rootDir.parentFile
 val nativeNdkDirectory = androidComponents.sdkComponents.ndkDirectory
 val generatedNativeOutput = layout.buildDirectory.dir("generated/native-libs")
 val generatedProfileAssets = layout.buildDirectory.dir("generated/profile-assets")
+val generatedLegalAssets = layout.buildDirectory.dir("generated/legal-assets")
 val slicerRuntimeBuilder = repositoryRoot.resolve("native/slicer-runtime/build.sh")
 val slicerRuntimeOutput = repositoryRoot.resolve(
     "build/native-slicer/output/arm64-v8a/libprusaslicer-jni.so",
@@ -134,8 +135,21 @@ val buildRustNative = tasks.register<Exec>("buildRustNative") {
     outputs.file(generatedNativeOutput.map { it.file("arm64-v8a/libduckyslicer.so") })
 }
 
+val prepareOpenSourceNotices = tasks.register<Sync>("prepareOpenSourceNotices") {
+    group = "build"
+    description = "Packages the project license and third-party notices for offline viewing."
+    into(generatedLegalAssets)
+    from(repositoryRoot.resolve("LICENSE.txt")) {
+        into("legal")
+        rename { "AGPL-3.0.txt" }
+    }
+    from(repositoryRoot.resolve("THIRD_PARTY_NOTICES.md")) {
+        into("legal")
+    }
+}
+
 tasks.named("preBuild").configure {
-    dependsOn(buildRustNative)
+    dependsOn(buildRustNative, prepareOpenSourceNotices)
 }
 
 android {
@@ -210,6 +224,9 @@ android {
     }
     sourceSets.getByName("main").assets.directories.add(
         generatedProfileAssets.get().asFile.absolutePath,
+    )
+    sourceSets.getByName("main").assets.directories.add(
+        generatedLegalAssets.get().asFile.absolutePath,
     )
     sourceSets.getByName("androidTest").assets.directories.add(
         repositoryRoot.resolve("tests/data/test_stl/ASCII").absolutePath,

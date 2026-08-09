@@ -16,8 +16,11 @@ the reviewed Android adaptation is
   [`taylormadearmy/OrcaSlicer`](https://github.com/taylormadearmy/OrcaSlicer)
   at `2c8a5385bc53cbc16211b4dd36ef9963ee185f4a` — GNU AGPL v3.0
 - Toolchain: Android NDK `28.2.13676358`, API 26, `arm64-v8a`
-- Verified stripped `libprusaslicer-jni.so` SHA-256:
-  `157e99364a4263e2947e726664c216802556aaff98399abd2ed000cd9afc1bdb`
+
+Native binary hashes belong to each release artifact rather than this source
+notice. The release `SHA256SUMS`, CycloneDX SBOM, and provenance attestation bind
+the APK and its source-built runtime to that release; the revisions above are the
+authoritative corresponding-source inputs.
 
 The APK also contains a compact, normalized profile catalog generated from the
 same pinned OrcaSlicer source tree. The generator resolves profile inheritance,

@@ -64,8 +64,9 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - Immutable GitHub Action pins and checksum-verified, version-locked Gradle artifacts;
   releases publish only after the full ARM64 device suite passes
 
-The device test suite uses a repository geometry fixture and verifies Rust mesh
-inspection, malformed-input recovery, native slicing, non-empty G-code, all generated layers, extrusion paths
+The device test suite uses repository-generated geometry fixtures and verifies Rust mesh
+inspection, malformed-input recovery, repair of open, reversed, duplicate, degenerate,
+and intersecting facets, native slicing, non-empty G-code, all generated layers, extrusion paths
 with real Z coordinates, hollow-solid cavity preservation, project recovery through native reinspection, and semantic
 G-code contracts for real Creality/Marlin, Prusa/Marlin 2, and Anycubic/Klipper
 profiles. Local
@@ -161,7 +162,7 @@ the inherited language set and reuse established slicing terms.
 
 ## License and provenance
 
-DuckySlicer is distributed under the [GNU Affero General Public License v3](LICENSE).
+DuckySlicer is distributed under the [GNU Affero General Public License v3](LICENSE.txt).
 Inherited source lineage, binary provenance, and corresponding source locations are
 recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 

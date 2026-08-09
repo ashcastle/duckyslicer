@@ -85,6 +85,8 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         raise VerificationError(f"slicer service safety markers are missing: {missing}")
     if "nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly" not in device_test:
         raise VerificationError("ARM64 worker-crash recovery regression is missing")
+    if "imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp" not in device_test:
+        raise VerificationError("ARM64 imperfect-mesh recovery corpus is missing")
     return len(direct_calls)
 
 

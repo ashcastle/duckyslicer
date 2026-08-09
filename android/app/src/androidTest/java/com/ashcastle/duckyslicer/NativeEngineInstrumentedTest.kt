@@ -19,6 +19,12 @@ class NativeEngineInstrumentedTest {
 
     private data class TestVertex(val x: Float, val y: Float, val z: Float)
 
+    private data class MeshCorpusEntry(
+        val name: String,
+        val model: File,
+        val mustSlice: Boolean,
+    )
+
     private fun outerWallBounds(gcode: File): ToolpathBounds {
         val preview = GcodeLayerPreview.fromJson(
             NativeEngine.previewGcodeRange(gcode.absolutePath, 0, Int.MAX_VALUE),
@@ -110,6 +116,82 @@ class NativeEngineInstrumentedTest {
             writer.appendLine("endsolid hollow_tube")
         }
         return destination
+    }
+
+    private fun meshCorpus(): List<MeshCorpusEntry> {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+
+        fun vertex(x: Float, y: Float, z: Float) = TestVertex(x, y, z)
+        fun quad(
+            facets: MutableList<List<TestVertex>>,
+            a: TestVertex,
+            b: TestVertex,
+            c: TestVertex,
+            d: TestVertex,
+        ) {
+            facets += listOf(a, b, c)
+            facets += listOf(a, c, d)
+        }
+        fun cube(low: Float, high: Float): MutableList<List<TestVertex>> {
+            val facets = mutableListOf<List<TestVertex>>()
+            val z0 = 0f
+            val z1 = high - low
+            quad(facets, vertex(low, low, z0), vertex(high, low, z0), vertex(high, low, z1), vertex(low, low, z1))
+            quad(facets, vertex(high, low, z0), vertex(high, high, z0), vertex(high, high, z1), vertex(high, low, z1))
+            quad(facets, vertex(high, high, z0), vertex(low, high, z0), vertex(low, high, z1), vertex(high, high, z1))
+            quad(facets, vertex(low, high, z0), vertex(low, low, z0), vertex(low, low, z1), vertex(low, high, z1))
+            quad(facets, vertex(low, low, z1), vertex(high, low, z1), vertex(high, high, z1), vertex(low, high, z1))
+            quad(facets, vertex(low, high, z0), vertex(high, high, z0), vertex(high, low, z0), vertex(low, low, z0))
+            return facets
+        }
+        fun write(name: String, facets: List<List<TestVertex>>): File {
+            val output = File(context.cacheDir, "mesh-corpus-$name.stl")
+            output.bufferedWriter().use { writer ->
+                writer.appendLine("solid $name")
+                facets.forEach { triangle ->
+                    writer.appendLine("  facet normal 0 0 0")
+                    writer.appendLine("    outer loop")
+                    triangle.forEach { point ->
+                        writer.appendLine("      vertex ${point.x} ${point.y} ${point.z}")
+                    }
+                    writer.appendLine("    endloop")
+                    writer.appendLine("  endfacet")
+                }
+                writer.appendLine("endsolid $name")
+            }
+            return output
+        }
+
+        val closedCube = cube(0f, 20f)
+        val openTop = closedCube.filterIndexed { index, _ -> index !in 8..9 }
+        val reversedFacet = closedCube.mapIndexed { index, triangle ->
+            if (index == 3) triangle.asReversed() else triangle
+        }
+        val duplicateFacet = closedCube.toMutableList().apply { add(closedCube.first()) }
+        val degenerateAttachment = closedCube + listOf(
+            listOf(vertex(5f, 5f, 5f), vertex(5f, 5f, 5f), vertex(10f, 5f, 5f)),
+        )
+        val intersectingShells = cube(0f, 20f) + cube(10f, 30f)
+        val degenerateOnly = listOf(
+            listOf(vertex(0f, 0f, 0f), vertex(0f, 0f, 0f), vertex(0f, 0f, 0f)),
+        )
+
+        return listOf(
+            MeshCorpusEntry("open-top", write("open-top", openTop), mustSlice = true),
+            MeshCorpusEntry("reversed-facet", write("reversed-facet", reversedFacet), mustSlice = true),
+            MeshCorpusEntry("duplicate-facet", write("duplicate-facet", duplicateFacet), mustSlice = true),
+            MeshCorpusEntry(
+                "degenerate-attachment",
+                write("degenerate-attachment", degenerateAttachment),
+                mustSlice = true,
+            ),
+            MeshCorpusEntry(
+                "intersecting-shells",
+                write("intersecting-shells", intersectingShells),
+                mustSlice = true,
+            ),
+            MeshCorpusEntry("degenerate-only", write("degenerate-only", degenerateOnly), mustSlice = false),
+        )
     }
 
     @Test
@@ -831,6 +913,42 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp() {
+        val appPid = android.os.Process.myPid()
+        val options = SliceOptions()
+            .selectPrinter(PrinterProfile.CUSTOM_CARTESIAN)
+            .selectFilament(FilamentProfile.GENERIC_PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(perimeters = 2, fillDensity = 0.10f)
+
+        val corpus = meshCorpus()
+        try {
+            corpus.forEach { entry ->
+                val result = runCatching { OnDeviceSlicer.slice(entry.model, options) }
+
+                assertEquals("${entry.name} must not terminate the app process", appPid, android.os.Process.myPid())
+                if (entry.mustSlice) {
+                    val outcome = result.getOrElse { error ->
+                        throw AssertionError("${entry.name} should be repaired and sliced", error)
+                    }
+                    assertTrue("${entry.name} must produce non-trivial G-code", outcome.output.length() > 1_000L)
+                    val gcode = outcome.output.readText()
+                    assertTrue("${entry.name} must contain outer-wall extrusion", gcode.contains(";TYPE:Outer wall"))
+                    assertTrue("${entry.name} must not emit non-finite coordinates", !NON_FINITE_GCODE.containsMatchIn(gcode))
+                } else {
+                    assertTrue("${entry.name} must be rejected", result.isFailure)
+                }
+
+                val recovery = OnDeviceSlicer.slice(fixtureModel(), options)
+                assertEquals("JNI recovery after ${entry.name} must keep the app process", appPid, android.os.Process.myPid())
+                assertTrue("A valid model must slice after ${entry.name}", recovery.output.length() > 1_000L)
+            }
+        } finally {
+            corpus.forEach { it.model.delete() }
+        }
+    }
+
+    @Test
     fun attachedStlProducesGcodeOnDevice() {
         val model = fixtureModel()
         var highestProgress = 0
@@ -1176,6 +1294,10 @@ class NativeEngineInstrumentedTest {
         assertTrue("Internal solid infill must stay separate", preview.roleSegmentCounts[4] > 0)
         assertTrue("Preview must report a positive first layer Z", preview.minZMm > 0f)
         assertTrue("Multi-layer preview must span upward in Z", preview.maxZMm > preview.minZMm)
+    }
+
+    private companion object {
+        val NON_FINITE_GCODE = Regex("(?i)(?:^|[\\sXYZEF])(?:nan|[+-]?inf)(?:$|\\s)")
     }
 
     @Test

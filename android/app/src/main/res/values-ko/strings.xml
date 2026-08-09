@@ -354,6 +354,13 @@
     <string name="connection_timeout">최대 %1$d초 기다리기</string>
     <string name="connection_security_summary">접속 키는 이 기기에서 보호됩니다. 암호화되지 않은 연결은 로컬 주소에서만 허용됩니다.</string>
     <string name="language_settings">언어</string>
+    <string name="about">정보</string>
+    <string name="app_version">DuckySlicer %1$s</string>
+    <string name="open_source_summary">GNU AGPL v3에 따라 자유롭게 사용·공유·수정할 수 있으며 어떠한 보증도 제공하지 않습니다. 전체 소스 코드와 빌드 방법은 아래에서 확인할 수 있습니다.</string>
+    <string name="open_source_license">오픈 소스 라이선스</string>
+    <string name="third_party_notices">제3자 고지</string>
+    <string name="view_source_code">소스 코드 보기</string>
+    <string name="close">닫기</string>
     <string name="build_height">출력 높이</string>
     <string name="printer_firmware">프린터 펌웨어</string>
     <string name="motion_limits">동작 한계</string>
