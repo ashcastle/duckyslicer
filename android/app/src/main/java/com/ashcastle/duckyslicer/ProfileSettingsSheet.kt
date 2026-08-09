@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -19,14 +21,17 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.SecondaryScrollableTabRow
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,6 +55,24 @@ private enum class ProfileSettingsKind {
     FILAMENT,
     SLICING,
 }
+
+internal data class ProfileEditSession(
+    val opening: SliceOptions,
+    val working: SliceOptions = opening,
+) {
+    val isDirty: Boolean get() = working != opening
+
+    fun update(options: SliceOptions): ProfileEditSession = copy(working = options)
+
+    fun revert(): ProfileEditSession = copy(working = opening)
+
+    fun applied(): ProfileEditSession = copy(opening = working)
+}
+
+private data class ProfileEditorState(
+    val kind: ProfileSettingsKind,
+    val session: ProfileEditSession,
+)
 
 internal enum class SlicingSettingsSection(val titleResource: Int) {
     QUALITY(R.string.quality),
@@ -65,11 +89,30 @@ internal fun ProfileSettings(
     recents: ProfileRecents,
     enabled: Boolean,
     onOptionsChanged: (SliceOptions) -> Unit,
-    onSavePrinter: (String) -> Unit,
-    onSaveFilament: (String) -> Unit,
-    onSaveSlicing: (String) -> Unit,
+    onSavePrinter: (String, SliceOptions) -> Unit,
+    onSaveFilament: (String, SliceOptions) -> Unit,
+    onSaveSlicing: (String, SliceOptions) -> Unit,
 ) {
-    var editing by remember { mutableStateOf<ProfileSettingsKind?>(null) }
+    var editor by remember { mutableStateOf<ProfileEditorState?>(null) }
+
+    fun open(kind: ProfileSettingsKind) {
+        editor = ProfileEditorState(kind, ProfileEditSession(options))
+    }
+
+    fun updateEditor(options: SliceOptions) {
+        editor = editor?.let { it.copy(session = it.session.update(options)) }
+    }
+
+    fun revertEditor() {
+        editor = editor?.let { it.copy(session = it.session.revert()) }
+    }
+
+    fun applyEditor() {
+        editor = editor?.let {
+            onOptionsChanged(it.session.working)
+            it.copy(session = it.session.applied())
+        }
+    }
 
     Text(stringResource(R.string.profiles), fontWeight = FontWeight.Bold)
     ProfileRow(
@@ -82,7 +125,7 @@ internal fun ProfileSettings(
             options.nozzleDiameter,
         ),
         enabled = enabled,
-        onClick = { editing = ProfileSettingsKind.PRINTER },
+        onClick = { open(ProfileSettingsKind.PRINTER) },
     )
     HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
     ProfileRow(
@@ -94,7 +137,7 @@ internal fun ProfileSettings(
             options.bedTemp,
         ),
         enabled = enabled,
-        onClick = { editing = ProfileSettingsKind.FILAMENT },
+        onClick = { open(ProfileSettingsKind.FILAMENT) },
     )
     HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
     ProfileRow(
@@ -106,16 +149,17 @@ internal fun ProfileSettings(
             (options.fillDensity * 100f).roundToInt(),
         ),
         enabled = enabled,
-        onClick = { editing = ProfileSettingsKind.SLICING },
+        onClick = { open(ProfileSettingsKind.SLICING) },
     )
 
-    when (editing) {
+    val activeEditor = editor
+    when (activeEditor?.kind) {
         ProfileSettingsKind.PRINTER -> PrinterSettingsSheet(
-            options = options,
+            options = activeEditor.session.working,
             profiles = catalog.printers,
             recentIds = recents.printerIds,
             onProfileSelected = { printer ->
-                var updated = options.selectPrinter(printer)
+                var updated = activeEditor.session.working.selectPrinter(printer)
                 if (!updated.filamentProfile.compatiblePrinters.matchesPrinter(printer)) {
                     catalog.filaments.firstOrNull { it.compatiblePrinters.matchesPrinter(printer) }
                         ?.let { updated = updated.selectFilament(it) }
@@ -129,38 +173,56 @@ internal fun ProfileSettings(
                             abs(it.nozzleDiameter - printer.nozzleDiameter) < 0.05f
                     }?.let { updated = updated.selectQuality(it) }
                 }
-                onOptionsChanged(updated)
+                updateEditor(updated)
             },
-            onOptionsChanged = onOptionsChanged,
-            onSave = onSavePrinter,
-            onDismiss = { editing = null },
+            onOptionsChanged = ::updateEditor,
+            onSave = { name, staged ->
+                onOptionsChanged(staged)
+                onSavePrinter(name, staged)
+            },
+            dirty = activeEditor.session.isDirty,
+            onRevert = ::revertEditor,
+            onApply = ::applyEditor,
+            onDismiss = { editor = null },
         )
 
         ProfileSettingsKind.FILAMENT -> FilamentSettingsSheet(
-            options = options,
+            options = activeEditor.session.working,
             recentIds = recents.filamentIds,
             profiles = catalog.filaments.filter {
-                it == options.filamentProfile ||
-                    it.compatiblePrinters.matchesPrinter(options.printerProfile)
+                it == activeEditor.session.working.filamentProfile ||
+                    it.compatiblePrinters.matchesPrinter(activeEditor.session.working.printerProfile)
             },
-            onOptionsChanged = onOptionsChanged,
-            onSave = onSaveFilament,
-            onDismiss = { editing = null },
+            onOptionsChanged = ::updateEditor,
+            onSave = { name, staged ->
+                onOptionsChanged(staged)
+                onSaveFilament(name, staged)
+            },
+            dirty = activeEditor.session.isDirty,
+            onRevert = ::revertEditor,
+            onApply = ::applyEditor,
+            onDismiss = { editor = null },
         )
 
         ProfileSettingsKind.SLICING -> SlicingSettingsSheet(
-            options = options,
+            options = activeEditor.session.working,
             recentIds = recents.slicingIds,
             profiles = catalog.slicing.filter {
-                it == options.quality ||
+                it == activeEditor.session.working.quality ||
                     (
-                        abs(it.nozzleDiameter - options.nozzleDiameter) < 0.05f &&
-                            it.compatiblePrinters.matchesPrinter(options.printerProfile)
+                        abs(it.nozzleDiameter - activeEditor.session.working.nozzleDiameter) < 0.05f &&
+                            it.compatiblePrinters.matchesPrinter(activeEditor.session.working.printerProfile)
                         )
             },
-            onOptionsChanged = onOptionsChanged,
-            onSave = onSaveSlicing,
-            onDismiss = { editing = null },
+            onOptionsChanged = ::updateEditor,
+            onSave = { name, staged ->
+                onOptionsChanged(staged)
+                onSaveSlicing(name, staged)
+            },
+            dirty = activeEditor.session.isDirty,
+            onRevert = ::revertEditor,
+            onApply = ::applyEditor,
+            onDismiss = { editor = null },
         )
 
         null -> Unit
@@ -191,9 +253,18 @@ private fun PrinterSettingsSheet(
     recentIds: List<String>,
     onProfileSelected: (PrinterProfile) -> Unit,
     onOptionsChanged: (SliceOptions) -> Unit,
-    onSave: (String) -> Unit,
+    onSave: (String, SliceOptions) -> Unit,
+    dirty: Boolean,
+    onRevert: () -> Unit,
+    onApply: () -> Unit,
     onDismiss: () -> Unit,
-) = SettingsSheet(title = stringResource(R.string.printer_profile), onDismiss = onDismiss) {
+) = SettingsSheet(
+    title = stringResource(R.string.printer_profile),
+    onDismiss = onDismiss,
+    dirty = dirty,
+    onRevert = onRevert,
+    onApply = onApply,
+) {
     SearchableGroupedProfileChoices(
         entries = profiles,
         selected = options.printerProfile,
@@ -347,7 +418,7 @@ private fun PrinterSettingsSheet(
             )
         },
     )
-    SaveProfileField(onSave = onSave, onDismiss = onDismiss)
+    SaveProfileField(onSave = { name -> onSave(name, options) }, onDismiss = onDismiss)
 }
 
 @Composable
@@ -356,9 +427,18 @@ private fun FilamentSettingsSheet(
     profiles: List<FilamentProfile>,
     recentIds: List<String>,
     onOptionsChanged: (SliceOptions) -> Unit,
-    onSave: (String) -> Unit,
+    onSave: (String, SliceOptions) -> Unit,
+    dirty: Boolean,
+    onRevert: () -> Unit,
+    onApply: () -> Unit,
     onDismiss: () -> Unit,
-) = SettingsSheet(title = stringResource(R.string.filament_profile), onDismiss = onDismiss) {
+) = SettingsSheet(
+    title = stringResource(R.string.filament_profile),
+    onDismiss = onDismiss,
+    dirty = dirty,
+    onRevert = onRevert,
+    onApply = onApply,
+) {
     SearchableGroupedProfileChoices(
         entries = profiles,
         selected = options.filamentProfile,
@@ -509,7 +589,7 @@ private fun FilamentSettingsSheet(
             onValueChange = { onOptionsChanged(options.copy(pressureAdvance = it)) },
         )
     }
-    SaveProfileField(onSave = onSave, onDismiss = onDismiss)
+    SaveProfileField(onSave = { name -> onSave(name, options) }, onDismiss = onDismiss)
 }
 
 @Composable
@@ -518,7 +598,10 @@ private fun SlicingSettingsSheet(
     profiles: List<QualityProfile>,
     recentIds: List<String>,
     onOptionsChanged: (SliceOptions) -> Unit,
-    onSave: (String) -> Unit,
+    onSave: (String, SliceOptions) -> Unit,
+    dirty: Boolean,
+    onRevert: () -> Unit,
+    onApply: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var selectedSection by remember { mutableStateOf(SlicingSettingsSection.QUALITY) }
@@ -526,6 +609,9 @@ private fun SlicingSettingsSheet(
         title = stringResource(R.string.slicing_profile),
         onDismiss = onDismiss,
         scrollKey = selectedSection,
+        dirty = dirty,
+        onRevert = onRevert,
+        onApply = onApply,
     ) {
         val maximumLayerHeight = (options.nozzleDiameter * 0.7f).coerceAtLeast(0.14f)
         val layerHeightSteps = ((maximumLayerHeight - 0.04f) / 0.01f).roundToInt().coerceAtLeast(2) - 1
@@ -1894,7 +1980,7 @@ private fun SlicingSettingsSheet(
                 }
             }
         }
-        SaveProfileField(onSave = onSave, onDismiss = onDismiss)
+        SaveProfileField(onSave = { name -> onSave(name, options) }, onDismiss = onDismiss)
     }
 }
 
@@ -2087,28 +2173,77 @@ private fun SettingsSheet(
     title: String,
     onDismiss: () -> Unit,
     scrollKey: Any? = null,
+    dirty: Boolean,
+    onRevert: () -> Unit,
+    onApply: () -> Unit,
     content: @Composable () -> Unit,
 ) {
     val scrollState = rememberScrollState()
+    val sheetHeight = LocalConfiguration.current.screenHeightDp.dp * 0.92f
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     LaunchedEffect(scrollKey) { scrollState.scrollTo(0) }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(scrollState)
+                .height(sheetHeight)
                 .navigationBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            content()
-            Button(
-                onClick = onDismiss,
+            Column(
                 modifier = Modifier
+                    .weight(1f)
                     .fillMaxWidth()
-                    .padding(bottom = 12.dp),
+                    .verticalScroll(scrollState)
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text(stringResource(R.string.done))
+                Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                content()
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                ) {
+                    Text(stringResource(R.string.done))
+                }
+            }
+            if (dirty) {
+                ProfileDirtyActionBar(onRevert = onRevert, onApply = onApply)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileDirtyActionBar(
+    onRevert: () -> Unit,
+    onApply: () -> Unit,
+) {
+    Surface(
+        color = Color(0xFF20211F),
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .imePadding()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            OutlinedButton(
+                onClick = onRevert,
+                modifier = Modifier.weight(3f),
+            ) {
+                Text(stringResource(R.string.revert_changes))
+            }
+            Button(
+                onClick = onApply,
+                modifier = Modifier.weight(7f),
+            ) {
+                Text(stringResource(R.string.apply_changes))
             }
         }
     }
