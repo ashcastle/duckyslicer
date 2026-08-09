@@ -77,16 +77,20 @@ jobs:
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 \
             android/app/build/outputs/apk/debug/app-debug.apk
-          python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_open_source_distribution
+          python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_open_source_distribution tools.test_generate_license_inventory tools.test_generate_offline_licenses tools.test_generate_sbom
           python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Generate CycloneDX SBOM
         run: |
+          python3 tools/generate_license_inventory.py \
+            android/app/build/reports/dependencies/debug.txt \
+            android/app/build/reports/dependencies/debug-licenses.json
           python3 tools/generate_sbom.py \
             android/app/build/outputs/apk/debug/app-debug.apk \
             android/app/build/outputs/duckyslicer-debug.cdx.json \
             "${GITHUB_SHA}" \
-            android/app/build/reports/dependencies/debug.txt
+            android/app/build/reports/dependencies/debug.txt \
+            android/app/build/reports/dependencies/debug-licenses.json
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:

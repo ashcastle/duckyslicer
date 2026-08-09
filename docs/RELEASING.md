@@ -3,7 +3,8 @@
 Tagged releases are built from source by GitHub Actions, signed without checking
 keys into the repository, verified for Android 16 KB page compatibility, and
 published with a CycloneDX SBOM of the resolved Android, Rust, and native
-dependency graph and a build-provenance attestation. Every external GitHub Action
+dependency graph, a reviewed license expression for every component, and a
+build-provenance attestation. Every external GitHub Action
 is pinned to an immutable commit. The build job has no signing secrets and produces
 an unsigned candidate. A separate protected job that does not check out or execute
 project code signs the candidate, verifies the public certificate fingerprint, and
@@ -50,7 +51,9 @@ key prevents publishing a compatible update under the same Android identity.
    publish. A signing mismatch or failed device test intentionally leaves no GitHub
    Release behind.
 5. Verify that the GitHub release contains the ARM64 APK, CycloneDX JSON, and
-   `SHA256SUMS` file; check the hashes and confirm the provenance attestation is visible.
+   `SHA256SUMS` file; check the hashes, confirm every SBOM component has one license
+   expression, confirm the in-app third-party view contains the complete offline
+   license bundle, and confirm the provenance attestation is visible.
 6. Install the release APK on a supported ARM64 device and perform an offline
    import, slice, full-layer preview, export, and optional printer upload smoke
    test before announcing the release.

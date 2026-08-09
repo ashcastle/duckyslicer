@@ -5,13 +5,14 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -207,16 +208,20 @@ internal fun AppSettingsSheet(
     }
 
     legalDocument?.let { document ->
-        val content = remember(document) {
-            context.assets.open(document.assetPath).bufferedReader().use { it.readText() }
+        val contentChunks = remember(document) {
+            legalTextChunks(
+                context.assets.open(document.assetPath).bufferedReader().use { it.readText() },
+            )
         }
         AlertDialog(
             onDismissRequest = { legalDocument = null },
             title = { Text(stringResource(document.titleResource)) },
             text = {
-                Box(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
-                    SelectionContainer {
-                        Text(content, style = MaterialTheme.typography.bodySmall)
+                LazyColumn(Modifier.heightIn(max = 480.dp)) {
+                    itemsIndexed(contentChunks, key = { index, _ -> index }) { _, chunk ->
+                        SelectionContainer {
+                            Text(chunk, style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             },
@@ -234,7 +239,7 @@ private enum class LegalDocument(
     val titleResource: Int,
 ) {
     LICENSE("legal/AGPL-3.0.txt", R.string.open_source_license),
-    THIRD_PARTY("legal/THIRD_PARTY_NOTICES.md", R.string.third_party_notices),
+    THIRD_PARTY("legal/THIRD_PARTY_LICENSES.txt", R.string.third_party_notices),
 }
 
 private fun openSourceRepository(context: Context) {
@@ -251,6 +256,12 @@ private fun openSourceRepository(context: Context) {
 }
 
 private const val SOURCE_CODE_URL = "https://github.com/ashcastle/duckyslicer"
+
+internal fun legalTextChunks(source: String, maximumCharacters: Int = 12_000): List<String> {
+    require(maximumCharacters > 0)
+    if (source.isEmpty()) return listOf("")
+    return source.chunked(maximumCharacters)
+}
 
 @Composable
 private fun SettingsToggle(

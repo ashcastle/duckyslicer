@@ -71,6 +71,10 @@ def main() -> None:
         "offline open-source distribution is verified": (
             "python3 tools/verify_open_source_distribution.py"
         ),
+        "component license inventory is generated": (
+            "python3 tools/generate_license_inventory.py"
+        ),
+        "offline license policy is unit tested": "tools.test_generate_offline_licenses",
     }
     for description, marker in required_android_gates.items():
         if marker not in android_source:
@@ -110,6 +114,10 @@ def main() -> None:
         "offline open-source distribution is verified": (
             "python3 tools/verify_open_source_distribution.py"
         ),
+        "component license inventory is generated": (
+            "python3 tools/generate_license_inventory.py"
+        ),
+        "offline license policy is unit tested": "tools.test_generate_offline_licenses",
     }
     for description, marker in required_release_gates.items():
         if marker not in release_source:

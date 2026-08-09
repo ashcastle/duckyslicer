@@ -28,9 +28,15 @@ keeps source brand and compatibility metadata, and rejects values outside
 DuckySlicer's supported Android runtime bounds. The generated catalog is a
 derived part of the OrcaSlicer work and is distributed under the same AGPL terms.
 
+AndroidX, Jetpack Compose, Kotlin, Kotlin Coroutines, Kotlin Serialization,
+JetBrains annotations, JSpecify, and Guava's `listenablefuture` compatibility
+artifact are distributed under the Apache License 2.0. Exact resolved Maven and
+Cargo versions and their reviewed license expressions are recorded in each
+release's CycloneDX SBOM; an unreviewed group or license identifier fails the build.
+
 The runtime is linked with the following pinned libraries. Exact commit and
 archive checksums are kept in `versions.env`; the corresponding license texts
-remain in each fetched source tree.
+are packaged in the APK's offline third-party license bundle.
 
 | Component | License |
 | --- | --- |
@@ -48,6 +54,14 @@ remain in each fetched source tree.
 | CGAL 5.6 headers | GPL-3.0-or-later, LGPL-3.0-or-later, and component-specific licenses |
 | GMP 6.3.0 | GPL-2.0-or-later or LGPL-3.0-or-later |
 | MPFR 4.2.1 | LGPL-3.0-or-later |
+
+The pinned engine source also vendors code that appears in the completed native
+build dependency graph: Shiny, ADMesh, Anti-Grain Geometry, ankerl
+`unordered_dense`, Clipper 6.4.2, fast_float, SGI GLU libtess, Dear ImGui,
+libigl, libnest2d, MCUT, miniz, NanoSVG, Qhull, QOI, semver.c, and tk spline.
+Each is represented separately in the CycloneDX SBOM and mapped to its exact
+license or attribution source in the offline bundle. A newly observed vendored
+source directory fails packaging until its license policy is reviewed.
 
 This software is based in part on the work of the Independent JPEG Group.
 

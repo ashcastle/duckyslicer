@@ -9,7 +9,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE_URL = "https://github.com/ashcastle/duckyslicer"
-LEGAL_ASSETS = ("legal/AGPL-3.0.txt", "legal/THIRD_PARTY_NOTICES.md")
+LEGAL_ASSETS = (
+    "legal/AGPL-3.0.txt",
+    "legal/THIRD_PARTY_NOTICES.md",
+    "legal/THIRD_PARTY_LICENSES.txt",
+)
+SETTINGS_LEGAL_ASSETS = (
+    "legal/AGPL-3.0.txt",
+    "legal/THIRD_PARTY_LICENSES.txt",
+)
 REQUIRED_STRINGS = {
     "about",
     "app_version",
@@ -51,6 +59,8 @@ def verify_distribution(sources: dict[str, str]) -> None:
         "THIRD_PARTY_NOTICES.md",
         "README.md",
         "native/slicer-runtime/versions.env",
+        "tools/generate_offline_licenses.py",
+        "tools/native_license_policy.py",
         "android/app/build.gradle.kts",
         "android/app/src/main/java/com/ashcastle/duckyslicer/AppSettingsSheet.kt",
         "android/app/src/main/res/values/strings.xml",
@@ -71,12 +81,29 @@ def verify_distribution(sources: dict[str, str]) -> None:
         raise VerificationError("README must link to the third-party notices")
 
     gradle = sources["android/app/build.gradle.kts"]
-    for marker in ("prepareOpenSourceNotices", "LICENSE.txt", "THIRD_PARTY_NOTICES.md", "generatedLegalAssets"):
+    for marker in (
+        "prepareOpenSourceNotices",
+        "registerOfflineLicenseBundle",
+        "generate_offline_licenses.py",
+        "LICENSE.txt",
+        "THIRD_PARTY_NOTICES.md",
+        "THIRD_PARTY_LICENSES.txt",
+        "generatedLegalAssets",
+    ):
         if marker not in gradle:
             raise VerificationError(f"Gradle offline legal packaging is missing: {marker}")
 
+    generator = sources["tools/generate_offline_licenses.py"]
+    policy = sources["tools/native_license_policy.py"]
+    for marker in ("verify_vendored_policy", "native_notice_sources", "render_bundle"):
+        if marker not in generator:
+            raise VerificationError(f"offline license generator is incomplete: {marker}")
+    for marker in ("VENDORED_COMPONENTS", "native_components", "native_notice_sources"):
+        if marker not in policy:
+            raise VerificationError(f"native license policy is incomplete: {marker}")
+
     settings = sources["android/app/src/main/java/com/ashcastle/duckyslicer/AppSettingsSheet.kt"]
-    for marker in (*LEGAL_ASSETS, SOURCE_URL, "BuildConfig.VERSION_NAME", "open_source_summary"):
+    for marker in (*SETTINGS_LEGAL_ASSETS, SOURCE_URL, "BuildConfig.VERSION_NAME", "open_source_summary"):
         if marker not in settings:
             raise VerificationError(f"Settings legal-notice access is missing: {marker}")
 
@@ -105,6 +132,8 @@ def read_sources() -> dict[str, str]:
         "THIRD_PARTY_NOTICES.md",
         "README.md",
         "native/slicer-runtime/versions.env",
+        "tools/generate_offline_licenses.py",
+        "tools/native_license_policy.py",
         "android/app/build.gradle.kts",
         "android/app/src/main/java/com/ashcastle/duckyslicer/AppSettingsSheet.kt",
         "android/app/src/main/res/values/strings.xml",
