@@ -2,7 +2,6 @@ package com.ashcastle.duckyslicer
 
 import android.content.Context
 import java.io.File
-import java.io.FileOutputStream
 import java.util.UUID
 import org.json.JSONArray
 import org.json.JSONObject
@@ -20,7 +19,7 @@ internal class ProjectStore(
 
     private val modelsDirectory = File(projectRoot, MODELS_DIRECTORY)
     private val projectFile = File(projectRoot, PROJECT_FILE)
-    private val backupFile = File(projectRoot, "$PROJECT_FILE.bak")
+    private val durableProject = DurableJsonFile(projectFile, MAX_PROJECT_BYTES.toInt())
 
     fun createModelDestination(displayName: String): File {
         check(modelsDirectory.isDirectory || modelsDirectory.mkdirs()) {
@@ -38,21 +37,24 @@ internal class ProjectStore(
 
     @Synchronized
     fun loadProject(): StoredProjectDocument {
-        val hadMetadata = projectFile.exists() || backupFile.exists()
-        val primary = readSnapshot(projectFile)
-        if (primary != null) {
-            pruneUnreferencedModels(primary.declaredModels)
-            return primary.document
+        val stored = durableProject.read(::readSnapshot, ::isCompatibleProjectRoot)
+        if (stored.value != null) {
+            pruneUnreferencedModels(stored.value.declaredModels)
+            return stored.value.document
         }
-        val backup = readSnapshot(backupFile)
-        if (backup != null) return backup.document
-        if (!hadMetadata) pruneUnreferencedModels(ProjectSnapshot())
-        return StoredProjectDocument()
+        if (stored.status == DurableJsonStatus.MISSING) {
+            pruneUnreferencedModels(ProjectSnapshot())
+        }
+        return StoredProjectDocument(
+            storageUnavailable = stored.status in setOf(
+                DurableJsonStatus.UNREADABLE,
+                DurableJsonStatus.INCOMPATIBLE,
+            ),
+        )
     }
 
-    private fun readSnapshot(source: File): StoredProject? {
-        if (!source.isFile || source.length() !in 1..MAX_PROJECT_BYTES) return null
-        val root = runCatching { JSONObject(source.readText()) }.getOrNull() ?: return null
+    private fun readSnapshot(root: JSONObject): StoredProject? {
+        if (validateProjectRoot(root) == null) return null
         val schemaVersion = root.optInt("schemaVersion", 0)
         if (schemaVersion !in MIN_SUPPORTED_SCHEMA_VERSION..SCHEMA_VERSION) return null
         val values = root.optJSONArray("objects") ?: JSONArray()
@@ -61,16 +63,17 @@ internal class ProjectStore(
         val objectIds = HashSet<String>()
         val declaredModels = HashSet<File>()
         for (index in 0 until values.length()) {
-            val value = runCatching { values.getJSONObject(index) }.getOrNull() ?: continue
+            val value = values.getJSONObject(index)
             value.optString("modelFile")
                 .takeIf(String::isNotBlank)
                 ?.let(::resolveStoredModel)
                 ?.let(declaredModels::add)
-            val restored = runCatching { restoreObject(value) }.getOrNull()
-                ?: continue
-            if (objectIds.add(restored.id)) objects += restored
+            val restored = restoreObject(value)
+            if (!objectIds.add(restored.id)) return null
+            objects += restored
         }
-        val requestedSelection = root.optString("selectedObjectId").takeIf(String::isNotBlank)
+        val requestedSelection = root.takeUnless { it.isNull("selectedObjectId") }
+            ?.optString("selectedObjectId")?.takeIf(String::isNotBlank)
         return StoredProject(
             document = StoredProjectDocument(
                 snapshot = ProjectSnapshot(
@@ -111,26 +114,7 @@ internal class ProjectStore(
         val bytes = root.toString().toByteArray(Charsets.UTF_8)
         require(bytes.size <= MAX_PROJECT_BYTES) { "Project metadata is too large" }
 
-        val temporary = File(projectRoot, "$PROJECT_FILE.tmp")
-        FileOutputStream(temporary).use { output ->
-            output.write(bytes)
-            output.flush()
-            output.fd.sync()
-        }
-        if (projectFile.isFile) {
-            backupFile.delete()
-            check(projectFile.renameTo(backupFile) || runCatching {
-                projectFile.copyTo(backupFile, overwrite = true)
-            }.isSuccess) { "Project backup could not be saved" }
-        }
-        val replaced = temporary.renameTo(projectFile) || runCatching {
-            temporary.copyTo(projectFile, overwrite = true)
-            temporary.delete()
-        }.isSuccess
-        if (!replaced && !projectFile.exists() && backupFile.isFile) {
-            runCatching { backupFile.copyTo(projectFile, overwrite = true) }
-        }
-        check(replaced) { "Project could not be saved" }
+        durableProject.write(root, ::validateProjectRoot, ::isCompatibleProjectRoot)
     }
 
     @Synchronized
@@ -184,6 +168,34 @@ internal class ProjectStore(
             .getOrNull()
             ?.takeIf { it.parentFile == modelRoot && it.isFile }
     }
+
+    private fun validateProjectRoot(root: JSONObject): JSONObject? = runCatching {
+        val schemaVersion = root.optInt("schemaVersion", 0)
+        require(schemaVersion in MIN_SUPPORTED_SCHEMA_VERSION..SCHEMA_VERSION)
+        val values = root.optJSONArray("objects") ?: error("Project objects are missing")
+        require(values.length() <= MAX_PROJECT_OBJECTS)
+        val ids = HashSet<String>()
+        for (index in 0 until values.length()) {
+            val value = values.getJSONObject(index)
+            val id = value.getString("id")
+            require(id.length in 1..MAX_ID_LENGTH && ids.add(id))
+            val storedName = value.getString("modelFile")
+            require(storedName.length in 1..MAX_FILE_NAME_LENGTH && File(storedName).name == storedName)
+            val model = requireNotNull(resolveStoredModel(storedName))
+            require(model.length() in 1..MAX_MODEL_IMPORT_BYTES)
+            value.getJSONObject("transform").toModelTransform()
+        }
+        val selected = root.takeUnless { it.isNull("selectedObjectId") }
+            ?.optString("selectedObjectId")?.takeIf(String::isNotBlank)
+        require(selected == null || selected in ids)
+        if (schemaVersion >= 2 && root.has("sliceOptions")) {
+            require(root.optJSONObject("sliceOptions")?.toProjectSliceOptionsOrNull() != null)
+        }
+        root
+    }.getOrNull()
+
+    private fun isCompatibleProjectRoot(root: JSONObject): Boolean =
+        root.optInt("schemaVersion", 0) <= SCHEMA_VERSION
 
     private fun ProjectObject.toStoredJson(): JSONObject {
         val modelRoot = modelsDirectory.canonicalFile
@@ -250,4 +262,5 @@ internal class ProjectStore(
 internal data class StoredProjectDocument(
     val snapshot: ProjectSnapshot = ProjectSnapshot(),
     val sliceOptions: SliceOptions? = null,
+    val storageUnavailable: Boolean = false,
 )

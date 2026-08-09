@@ -33,6 +33,8 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - Tap an object to select it, then drag it directly across the bed
 - Import, select, duplicate, arrange, and slice multiple objects in one project, with undo and redo
 - Automatic app-private project recovery that keeps imported models, selection, placement, and effective printer, filament, and slicing settings across process restarts
+- Last-known-good recovery for project metadata, saved profiles, and printer connections;
+  unreadable generations are preserved instead of being replaced by an empty autosave
 - Full-layer preview by default, with a two-handle slider for choosing a visible layer range
 - Depth-tested extrusion beads with dark side faces, role-colored outlines, adjustable height shading, and tap-to-isolate controls for outer walls, inner walls, infill, solid surfaces, support, bridges, and bed adhesion
 - Orca role preservation from generated G-code through the Rust parser, with geometry regression tests that require distinct exterior, cavity-facing, and structural inner-wall paths
@@ -56,6 +58,8 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - A distinct DuckySlicer identity built around the duck mark, yellow accents, and charcoal surfaces
 - Optional OctoPrint and Klipper/Moonraker status, upload, start, pause, resume, and cancel controls
 - Printer access keys encrypted with Android Keystore; unencrypted connections limited to local addresses
+- Bounded, depth-checked printer responses, disabled HTTP redirects, constrained credentials,
+  G-code sizes, and returned paths, with connections closed on every failure
 - No account, cloud dependency, analytics SDK, or Bambu network plug-in
 - Fail-closed STL and G-code handling with bounded text lines, finite coordinate checks, atomic transformed-model writes, and recoverable Rust-failure containment at the JNI boundary
 - A non-exported, restartable Android worker process for the inherited Orca C++ runtime, so a native signal ends the slice instead of the app

@@ -13,6 +13,7 @@ import java.net.ServerSocket
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
+import org.json.JSONObject
 
 @RunWith(AndroidJUnit4::class)
 class RemoteDeviceInstrumentedTest {
@@ -150,6 +151,36 @@ class RemoteDeviceInstrumentedTest {
             assertTrue(store.load().any { it.id == id && it.hasCredential })
         } finally {
             store.delete(id)
+        }
+    }
+
+    @Test
+    fun remoteDeviceMetadataRecoversFromLastKnownGoodBackup() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val id = "recovery-${UUID.randomUUID()}"
+        val profileFile = context.filesDir.resolve("remote_devices.json")
+        try {
+            val store = RemoteDeviceStore(context)
+            store.save(
+                RemoteDeviceDraft(
+                    id = id,
+                    name = "Recovery printer",
+                    kind = RemoteDeviceKind.KLIPPER,
+                    baseUrl = "http://127.0.0.1:7125",
+                ),
+            )
+            assertTrue(store.load().any { it.id == id })
+            assertTrue(context.filesDir.resolve("remote_devices.json.bak").isFile)
+            profileFile.writeText("{broken")
+
+            val recoveredStore = RemoteDeviceStore(context)
+            val recovered = recoveredStore.load()
+
+            assertTrue(recovered.any { it.id == id })
+            assertFalse(recoveredStore.storageUnavailable)
+            assertEquals(1, JSONObject(profileFile.readText()).getInt("version"))
+        } finally {
+            runCatching { RemoteDeviceStore(context).delete(id) }
         }
     }
 

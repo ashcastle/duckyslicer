@@ -297,6 +297,7 @@
     <string name="profile_saved">프로필을 저장했습니다.</string>
     <string name="profile_save_error">이 프로필을 저장하지 못했습니다.</string>
     <string name="project_save_error">이 프로젝트를 저장하지 못했습니다.</string>
+    <string name="saved_data_unavailable">일부 저장 항목을 열지 못했습니다. 기존 파일은 변경하지 않았습니다.</string>
     <string name="add_device">추가</string>
     <string name="edit_device">디바이스 편집</string>
     <string name="delete_device">디바이스 삭제</string>

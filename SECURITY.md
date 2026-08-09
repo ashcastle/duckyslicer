@@ -53,6 +53,17 @@ host; unencrypted HTTP profiles are restricted to loopback, link-local, private,
 carrier-grade NAT, and `.local` addresses. Remote printing always requires a
 separate user action after upload, with confirmation enabled by default.
 
+OctoPrint and Moonraker responses have a one-MiB byte ceiling and a fixed nesting
+limit. Credential-bearing requests do not follow redirects. Credentials, uploaded
+G-code, returned paths, and status labels are bounded, and every request disconnects
+on success or failure.
+
+App-private project, profile, and printer metadata is bounded and depth-checked
+before JSON parsing. Each store maintains a synced last-known-good generation,
+repairs a damaged primary from that generation, and refuses to overwrite the files
+when neither copy is readable or when a newer schema is encountered. The UI blocks
+project autosave and reports that the original files were left unchanged.
+
 Untrusted STL and G-code cross a Rust validation boundary before reaching preview
 or transformation code. That boundary accepts regular files, applies the same
 512 MiB STL limit as Android import, bounds individual text lines, rejects

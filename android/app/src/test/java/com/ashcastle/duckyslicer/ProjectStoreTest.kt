@@ -12,6 +12,18 @@ import org.junit.Test
 
 class ProjectStoreTest {
     @Test
+    fun emptyProjectWithNullSelectionRemainsWritableAndReadable() = withStore { _, store ->
+        store.save(ProjectSnapshot(), SliceOptions())
+
+        val restored = store.loadProject()
+
+        assertFalse(restored.storageUnavailable)
+        assertTrue(restored.snapshot.objects.isEmpty())
+        assertEquals(null, restored.snapshot.selectedObjectId)
+        assertTrue(restored.sliceOptions != null)
+    }
+
+    @Test
     fun projectRoundTripsAndPrunesOnlyUnreferencedPrivateModels() = withStore { root, store ->
         val modelFile = store.createModelDestination("오리 모형.stl").apply { writeText("solid duck") }
         val orphan = store.createModelDestination("old.stl").apply { writeText("solid old") }
@@ -61,6 +73,8 @@ class ProjectStoreTest {
         assertEquals("part", restored.selectedObjectId)
         assertEquals(1, restored.objects.size)
         assertTrue(modelFile.isFile)
+        assertTrue(File(root, "current_project.json").readText().startsWith("{"))
+        assertFalse(File(root, "current_project.json").readText().contains("broken"))
     }
 
     @Test
@@ -145,6 +159,27 @@ class ProjectStoreTest {
         File(root, "current_project.json").writeText("{broken")
         assertTrue(store.load().objects.isEmpty())
         assertTrue(modelFile.isFile)
+    }
+
+    @Test
+    fun unreadablePrimaryAndBackupBlockAutosaveWithoutChangingEither() = withStore { root, store ->
+        val primary = File(root, "current_project.json").apply {
+            parentFile?.mkdirs()
+            writeText("{broken-primary")
+        }
+        val backup = File(root, "current_project.json.bak").apply { writeText("{broken-backup") }
+        val primaryBytes = primary.readBytes()
+        val backupBytes = backup.readBytes()
+
+        val restored = store.loadProject()
+
+        assertTrue(restored.storageUnavailable)
+        assertTrue(restored.snapshot.objects.isEmpty())
+        assertThrows(IllegalStateException::class.java) {
+            store.save(ProjectSnapshot())
+        }
+        assertTrue(primaryBytes.contentEquals(primary.readBytes()))
+        assertTrue(backupBytes.contentEquals(backup.readBytes()))
     }
 
     private fun withStore(block: (File, ProjectStore) -> Unit) {

@@ -6,6 +6,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -39,6 +40,63 @@ class ProfileStoreMigrationTest {
             assertEquals("V3 Slicing", restoredSlicing.name)
         } finally {
             file.delete()
+        }
+    }
+
+    @Test
+    fun corruptPrimaryRecoversLastKnownGoodProfiles() {
+        val directory = Files.createTempDirectory("duckyslicer-profile-recovery-").toFile()
+        val file = directory.resolve("user_profiles.json")
+        try {
+            val profile = PrinterProfile.CUSTOM_CARTESIAN.copy(id = "saved", name = "Saved Printer")
+            file.writeText(
+                JSONObject()
+                    .put("schemaVersion", 14)
+                    .put("printers", JSONArray().put(profile.toProfileJson()))
+                    .toString(),
+            )
+            assertTrue(ProfileStore(file).load().printers.any { it.id == "saved" })
+            assertTrue(directory.resolve("user_profiles.json.bak").isFile)
+            file.writeText("{broken")
+
+            val recoveredStore = ProfileStore(file)
+            val recovered = recoveredStore.load()
+
+            assertTrue(recovered.printers.any { it.id == "saved" })
+            assertFalse(recoveredStore.storageUnavailable)
+            assertTrue(JSONObject(file.readText()).getJSONArray("printers").length() == 1)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun unreadableOrFutureProfilesAreNotOverwrittenBySave() {
+        val semanticallyInvalid = JSONObject()
+            .put("schemaVersion", 14)
+            .put("printers", JSONArray().put(JSONObject().put("id", "incomplete")))
+            .toString()
+        for (contents in listOf(
+            "{broken",
+            """{"schemaVersion":999,"printers":[]}""",
+            semanticallyInvalid,
+        )) {
+            val directory = Files.createTempDirectory("duckyslicer-profile-block-").toFile()
+            val file = directory.resolve("user_profiles.json").apply { writeText(contents) }
+            try {
+                val original = file.readBytes()
+                val store = ProfileStore(file)
+
+                store.load()
+
+                assertTrue(store.storageUnavailable)
+                assertThrows(IllegalStateException::class.java) {
+                    store.savePrinter("Must not overwrite", SliceOptions())
+                }
+                assertTrue(original.contentEquals(file.readBytes()))
+            } finally {
+                directory.deleteRecursively()
+            }
         }
     }
 

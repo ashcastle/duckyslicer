@@ -4,7 +4,6 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.io.FileOutputStream
 import java.util.UUID
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -12,6 +11,12 @@ class ProfileStore private constructor(
     private val file: File,
     private val systemCatalogProvider: () -> ProfileCatalog,
 ) {
+    private val durableProfiles = DurableJsonFile(file, MAX_USER_PROFILE_BYTES)
+
+    @Volatile
+    var storageUnavailable: Boolean = false
+        private set
+
     constructor(file: File) : this(file, { ProfileCatalog() })
     constructor(context: Context) : this(
         File(context.filesDir, "profiles/user_profiles.json"),
@@ -273,31 +278,48 @@ class ProfileStore private constructor(
     }
 
     private fun append(key: String, value: JSONObject) {
-        val root = readRoot()
+        val root = readRoot(forMutation = true)
         root.put("schemaVersion", USER_PROFILE_SCHEMA_VERSION)
         val values = root.optJSONArray(key) ?: JSONArray().also { root.put(key, it) }
         values.put(value)
         writeRoot(root)
     }
 
-    private fun readRoot(): JSONObject = runCatching {
-        val root = if (file.isFile) JSONObject(file.readText()) else JSONObject()
-        if (root.optInt("schemaVersion", 1) > USER_PROFILE_SCHEMA_VERSION) JSONObject() else root
-    }.getOrDefault(JSONObject())
+    private fun readRoot(forMutation: Boolean = false): JSONObject {
+        val stored = durableProfiles.read(::validateRoot, ::isCompatibleRoot)
+        storageUnavailable = stored.status in setOf(
+            DurableJsonStatus.UNREADABLE,
+            DurableJsonStatus.INCOMPATIBLE,
+        )
+        if (forMutation) check(!storageUnavailable) { "saved_data_unreadable" }
+        return stored.value ?: JSONObject()
+    }
 
     private fun writeRoot(root: JSONObject) {
-        file.parentFile?.mkdirs()
-        val temporary = File(file.parentFile, "${file.name}.tmp")
-        FileOutputStream(temporary).use { output ->
-            output.write(root.toString(2).toByteArray(Charsets.UTF_8))
-            output.flush()
-            output.fd.sync()
-        }
-        check(temporary.renameTo(file) || runCatching {
-            temporary.copyTo(file, overwrite = true)
-            temporary.delete()
-        }.isSuccess) { "Profile could not be saved" }
+        durableProfiles.write(root, ::validateRoot, ::isCompatibleRoot)
+        storageUnavailable = false
     }
+
+    private fun validateRoot(root: JSONObject): JSONObject? {
+        val schemaVersion = root.optInt("schemaVersion", 1)
+        if (schemaVersion !in 1..USER_PROFILE_SCHEMA_VERSION) return null
+        var total = 0
+        for ((key, parseId) in PROFILE_ARRAY_PARSERS) {
+            if (root.has(key) && root.optJSONArray(key) == null) return null
+            val values = root.optJSONArray(key) ?: continue
+            total += values.length()
+            val ids = HashSet<String>()
+            for (index in 0 until values.length()) {
+                val value = values.optJSONObject(index) ?: return null
+                val id = parseId(value) ?: return null
+                if (!ids.add(id)) return null
+            }
+        }
+        return root.takeIf { total <= MAX_USER_PROFILES }
+    }
+
+    private fun isCompatibleRoot(root: JSONObject): Boolean =
+        root.optInt("schemaVersion", 1) <= USER_PROFILE_SCHEMA_VERSION
 
     private fun userId() = "user-${UUID.randomUUID()}"
 
@@ -306,6 +328,19 @@ class ProfileStore private constructor(
 
     private companion object {
         const val USER_PROFILE_SCHEMA_VERSION = 14
+        const val MAX_USER_PROFILE_BYTES = 16 * 1_024 * 1_024
+        const val MAX_USER_PROFILES = 4_096
+        val PROFILE_ARRAY_PARSERS: Map<String, (JSONObject) -> String?> = mapOf(
+            "printers" to { value ->
+                value.toPrinterProfileOrNull()?.takeIf(ProfileValidation::printer)?.id
+            },
+            "filaments" to { value ->
+                value.toFilamentProfileOrNull()?.takeIf(ProfileValidation::filament)?.id
+            },
+            "slicing" to { value ->
+                value.toQualityProfileOrNull()?.takeIf(ProfileValidation::slicing)?.id
+            },
+        )
     }
 }
 

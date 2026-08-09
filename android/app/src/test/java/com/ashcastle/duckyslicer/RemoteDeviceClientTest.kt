@@ -2,6 +2,7 @@ package com.ashcastle.duckyslicer
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.BufferedInputStream
@@ -114,6 +115,61 @@ class RemoteDeviceClientTest {
         )
     }
 
+    @Test
+    fun redirectsOversizedResponsesAndDeepJsonFailClosed() {
+        withRawServer(
+            "HTTP/1.1 302 Found\r\nLocation: http://203.0.113.10/steal\r\n" +
+                "Content-Length: 0\r\nConnection: close\r\n\r\n",
+        ) { baseUrl ->
+            val failure = assertThrows(RemoteDeviceException::class.java) {
+                RemoteDeviceClient(2_000).status(
+                    RemoteDeviceProfile("redirect", "Redirect", RemoteDeviceKind.OCTOPRINT, baseUrl),
+                    "must-not-follow",
+                )
+            }
+            assertEquals(302, failure.statusCode)
+        }
+
+        withRawServer(
+            "HTTP/1.1 200 OK\r\nContent-Length: 1048577\r\nConnection: close\r\n\r\n",
+        ) { baseUrl ->
+            assertThrows(IllegalArgumentException::class.java) {
+                RemoteDeviceClient(2_000).status(
+                    RemoteDeviceProfile("large", "Large", RemoteDeviceKind.OCTOPRINT, baseUrl),
+                    "",
+                )
+            }
+        }
+
+        val deep = "{\"state\":" + "[".repeat(65) + "0" + "]".repeat(65) + "}"
+        withServer(deep) { baseUrl, _ ->
+            assertThrows(IllegalArgumentException::class.java) {
+                RemoteDeviceClient(2_000).status(
+                    RemoteDeviceProfile("deep", "Deep", RemoteDeviceKind.OCTOPRINT, baseUrl),
+                    "",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun unsafeServerUploadPathIsRejected() {
+        val gcode = File.createTempFile("ducky-path-", ".gcode").apply { writeText("G28\n") }
+        try {
+            withServer("""{"files":{"local":{"path":"../other/duck.gcode"}}}""") { baseUrl, _ ->
+                assertThrows(IllegalArgumentException::class.java) {
+                    RemoteDeviceClient(2_000).upload(
+                        RemoteDeviceProfile("path", "Path", RemoteDeviceKind.OCTOPRINT, baseUrl),
+                        "",
+                        gcode,
+                    )
+                }
+            }
+        } finally {
+            gcode.delete()
+        }
+    }
+
     private fun withServer(
         responseBody: String,
         block: (String, AtomicReference<String>) -> Unit,
@@ -152,6 +208,35 @@ class RemoteDeviceClientTest {
 
         try {
             block("http://127.0.0.1:${server.localPort}", request)
+        } finally {
+            worker.join(3_000)
+            server.close()
+        }
+        failure.get()?.let { throw AssertionError("Local printer server failed", it) }
+        assertFalse("The client did not reach the local printer server", worker.isAlive)
+    }
+
+    private fun withRawServer(response: String, block: (String) -> Unit) {
+        val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        val failure = AtomicReference<Throwable?>(null)
+        val worker = Thread {
+            runCatching {
+                server.accept().use { socket ->
+                    val input = BufferedInputStream(socket.getInputStream())
+                    val received = StringBuilder()
+                    var current: Int
+                    while (input.read().also { current = it } >= 0) {
+                        received.append(current.toChar())
+                        if (received.endsWith("\r\n\r\n")) break
+                    }
+                    socket.getOutputStream().use { output ->
+                        output.write(response.toByteArray(StandardCharsets.UTF_8))
+                    }
+                }
+            }.onFailure { failure.set(it) }
+        }.apply { start() }
+        try {
+            block("http://127.0.0.1:${server.localPort}")
         } finally {
             worker.join(3_000)
             server.close()
