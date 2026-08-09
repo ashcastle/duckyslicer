@@ -50,9 +50,18 @@ def valid_sources() -> dict[str, str]:
             "var previewControlsExpanded by rememberSaveable PreviewSummaryHeader( "
             "Icons.Default.ExpandLess Icons.Default.ExpandMore "
             "summary.filamentGrams summary.filamentMeters"
+            " private fun TransformSlider( modifier = Modifier.semantics "
+            "contentDescription = label stateDescription = valueText @Composable"
             " private fun PreviewExportSplitButton( .width(48.dp) .height(50.dp) "
             ".clickable( role = Role.Button modifier = Modifier.width(34.dp).height(50.dp) "
-            "@Composable private fun PreviewControls( .heightIn(min = 48.dp) .toggleable( "
+            "@Composable internal fun PreviewControls( .heightIn(min = 48.dp) .toggleable( "
+            "Modifier.clearAndSetSemantics { } ProgressBarRangeInfo( "
+            "setProgress { requestedValue -> setProgress { requestedValue -> "
+            "R.string.first_visible_layer R.string.last_visible_layer "
+            "contentDescription = startLayerLabel contentDescription = endLayerLabel "
+            "stateDescription = startLayerState stateDescription = endLayerState "
+            "contentDescription = toolpathVisibilityLabel contentDescription = toolpathDepthLabel "
+            "stateDescription = toolpathVisibilityState stateDescription = toolpathDepthState "
             "@Composable private const val TabletShortestSideDp = 600f "
             "useWorkspaceNavigationRail(maxWidth.value, maxHeight.value) "
             "minOf(widthDp, heightDp) >= TabletShortestSideDp "
@@ -143,11 +152,15 @@ def valid_sources() -> dict[str, str]:
         ),
         "strings.xml": (
             'name="estimated_print_time" name="filament_usage_compact" '
-            'name="expand_preview_controls" name="collapse_preview_controls"'
+            'name="expand_preview_controls" name="collapse_preview_controls" '
+            'name="first_visible_layer" name="last_visible_layer" '
+            'name="toolpath_visibility_control" name="toolpath_depth_contrast_control"'
         ),
         "strings-ko.xml": (
             'name="estimated_print_time" name="filament_usage_compact" '
-            'name="expand_preview_controls" name="collapse_preview_controls"'
+            'name="expand_preview_controls" name="collapse_preview_controls" '
+            'name="first_visible_layer" name="last_visible_layer" '
+            'name="toolpath_visibility_control" name="toolpath_depth_contrast_control"'
         ),
         "CONTRIBUTING.md": "Preview FloatArray VBO Automatic",
     }
@@ -156,6 +169,23 @@ def valid_sources() -> dict[str, str]:
 class VerifyPreviewBoundaryTest(unittest.TestCase):
     def test_accepts_primitive_bounded_preview_contract(self) -> None:
         verify_preview_boundary(valid_sources())
+
+    def test_rejects_unnamed_preview_slider(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            "contentDescription = toolpathVisibilityLabel",
+            "missingDescription = toolpathVisibilityLabel",
+        )
+        with self.assertRaisesRegex(VerificationError, "preview slider accessibility"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_unnamed_transform_slider(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            "stateDescription = valueText", "missingState = valueText"
+        )
+        with self.assertRaisesRegex(VerificationError, "transform slider accessibility"):
+            verify_preview_boundary(sources)
 
     def test_rejects_android_json_decoder(self) -> None:
         sources = valid_sources()

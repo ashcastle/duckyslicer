@@ -140,11 +140,41 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     if export_controls.find(".width(48.dp)") > export_controls.find(".width(34.dp)"):
         raise VerificationError("preview export hit target must wrap the compact visual control")
 
-    preview_controls = workspace.split("private fun PreviewControls(", 1)[-1].split(
+    preview_controls = workspace.split("internal fun PreviewControls(", 1)[-1].split(
         "@Composable", 1
     )[0]
     if ".heightIn(min = 48.dp)" not in preview_controls or ".toggleable(" not in preview_controls:
         raise VerificationError("preview role toggles need a 48 dp minimum touch target")
+    for marker in (
+        "Modifier.clearAndSetSemantics { }",
+        "ProgressBarRangeInfo(",
+        "setProgress { requestedValue ->",
+        "R.string.first_visible_layer",
+        "R.string.last_visible_layer",
+        "contentDescription = startLayerLabel",
+        "contentDescription = endLayerLabel",
+        "stateDescription = startLayerState",
+        "stateDescription = endLayerState",
+        "contentDescription = toolpathVisibilityLabel",
+        "contentDescription = toolpathDepthLabel",
+        "stateDescription = toolpathVisibilityState",
+        "stateDescription = toolpathDepthState",
+    ):
+        if marker not in preview_controls:
+            raise VerificationError(f"preview slider accessibility is missing: {marker}")
+    if preview_controls.count("setProgress { requestedValue ->") != 2:
+        raise VerificationError("both layer range thumbs need independent accessibility adjustment")
+
+    transform_slider = workspace.split("private fun TransformSlider(", 1)[-1].split(
+        "@Composable", 1
+    )[0]
+    for marker in (
+        "modifier = Modifier.semantics",
+        "contentDescription = label",
+        "stateDescription = valueText",
+    ):
+        if marker not in transform_slider:
+            raise VerificationError(f"transform slider accessibility is missing: {marker}")
 
     for marker in (
         "TabletShortestSideDp = 600f",
@@ -241,6 +271,10 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
             'name="filament_usage_compact"',
             'name="expand_preview_controls"',
             'name="collapse_preview_controls"',
+            'name="first_visible_layer"',
+            'name="last_visible_layer"',
+            'name="toolpath_visibility_control"',
+            'name="toolpath_depth_contrast_control"',
         ):
             if resource not in strings:
                 raise VerificationError(

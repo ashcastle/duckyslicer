@@ -25,7 +25,16 @@ def valid_sources() -> dict[str, str]:
             ".selectable( role = Role.RadioButton onClick = null "
             ".selectable( role = Role.RadioButton onClick = null "
             ".semantics { stateDescription = groupState }"
+            " internal fun SettingsSwitch( .heightIn(min = 48.dp) .toggleable( "
+            "role = Role.Switch .semantics(mergeDescendants = true) "
+            "contentDescription = label Switch(checked = checked, onCheckedChange = null) "
+            "@Composable internal fun SettingSlider( modifier = Modifier.semantics "
+            "contentDescription = label stateDescription = valueText @Composable"
             " LocalWindowInfo.current.containerSize.height.toDp()"
+        ),
+        "DeviceSheet.kt": (
+            "profiles.forEach .selectable( role = Role.RadioButton "
+            "RadioButton(selected = isSelected, onClick = null) if (selected != null)"
         ),
         "ProfileRecents.kt": (
             "data class ProfileRecents( MAX_RECENT_PROFILES = 5 class ProfileRecentStore "
@@ -113,7 +122,7 @@ class VerifyProfileEditorTest(unittest.TestCase):
     def test_rejects_missing_profile_touch_target_minimum(self) -> None:
         sources = valid_sources()
         sources["ProfileSettingsSheet.kt"] = sources["ProfileSettingsSheet.kt"].replace(
-            ".heightIn(min = 48.dp)", ".heightIn(min = 32.dp)", 1
+            ".heightIn(min = 48.dp)", ".heightIn(min = 32.dp)"
         )
         with self.assertRaisesRegex(VerificationError, r"heightIn\(min = 48\.dp\)"):
             verify_profile_editor(sources)
@@ -125,6 +134,32 @@ class VerifyProfileEditorTest(unittest.TestCase):
             "LocalConfiguration.current.screenHeightDp.dp",
         )
         with self.assertRaisesRegex(VerificationError, "LocalWindowInfo"):
+            verify_profile_editor(sources)
+
+    def test_rejects_unnamed_profile_slider(self) -> None:
+        sources = valid_sources()
+        sources["ProfileSettingsSheet.kt"] = sources["ProfileSettingsSheet.kt"].replace(
+            "stateDescription = valueText", "missingState = valueText"
+        )
+        with self.assertRaisesRegex(VerificationError, "profile slider accessibility"):
+            verify_profile_editor(sources)
+
+    def test_rejects_switch_with_duplicate_nested_action(self) -> None:
+        sources = valid_sources()
+        sources["ProfileSettingsSheet.kt"] = sources["ProfileSettingsSheet.kt"].replace(
+            "Switch(checked = checked, onCheckedChange = null)",
+            "Switch(checked = checked, onCheckedChange = onCheckedChange)",
+        )
+        with self.assertRaisesRegex(VerificationError, "profile switch accessibility"):
+            verify_profile_editor(sources)
+
+    def test_rejects_duplicate_remote_device_radio_action(self) -> None:
+        sources = valid_sources()
+        sources["DeviceSheet.kt"] = sources["DeviceSheet.kt"].replace(
+            "RadioButton(selected = isSelected, onClick = null)",
+            "RadioButton(selected = isSelected, onClick = { onSelect(profile.id) })",
+        )
+        with self.assertRaisesRegex(VerificationError, "remote device selection accessibility"):
             verify_profile_editor(sources)
 
 

@@ -300,9 +300,13 @@
     <string name="expand_preview_controls">Expand preview controls</string>
     <string name="collapse_preview_controls">Collapse preview controls</string>
     <string name="layer_range">Layers %1$d–%2$d of %3$d</string>
+    <string name="first_visible_layer">First visible layer</string>
+    <string name="last_visible_layer">Last visible layer</string>
     <string name="z_range">Z %1$.2f–%2$.2f mm</string>
     <string name="toolpath_opacity">Toolpath visibility · %1$d%%</string>
     <string name="toolpath_depth_contrast">Height contrast · %1$d%%</string>
+    <string name="toolpath_visibility_control">Toolpath visibility</string>
+    <string name="toolpath_depth_contrast_control">Height contrast</string>
     <string name="toolpath_outer_wall">Outer wall</string>
     <string name="toolpath_inner_wall">Inner wall</string>
     <string name="toolpath_infill">Infill</string>
