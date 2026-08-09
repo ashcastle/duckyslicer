@@ -22,11 +22,15 @@ import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import org.json.JSONObject
 
 internal object SlicerProcessClient {
     @Volatile
     private var latestWorkerPid = 0
+
+    private val activeRequestId = AtomicReference<String?>(null)
+    private val cancelledRequestId = AtomicReference<String?>(null)
 
     private val replyThread by lazy {
         HandlerThread("DuckySlicer replies").apply { start() }
@@ -41,37 +45,77 @@ internal object SlicerProcessClient {
             "Slicing must run outside the application main thread"
         }
         val context = DuckySlicerApplication.context()
+        val requestId = UUID.randomUUID().toString()
         val modelPaths = transformedModels.map(File::getAbsolutePath)
         val optionsText = options.toProjectJson().toString()
         require(encodedRequestBytes(modelPaths, optionsText) <= SlicerProcessContract.MAX_REQUEST_BYTES) {
             "Slice request is too large"
         }
         val request = Bundle().apply {
+            putString(SlicerProcessContract.KEY_REQUEST_ID, requestId)
             putStringArrayList(
                 SlicerProcessContract.KEY_MODEL_PATHS,
                 ArrayList(modelPaths),
             )
             putString(SlicerProcessContract.KEY_OPTIONS, optionsText)
         }
-        val response = withWorker(context) { worker ->
-            worker.request(
-                what = SlicerProcessContract.MESSAGE_SLICE,
-                data = request,
-                timeoutSeconds = SLICE_TIMEOUT_SECONDS,
-                onProgress = onProgress,
+        check(activeRequestId.compareAndSet(null, requestId)) {
+            "Another slice is already running"
+        }
+        try {
+            val response = withWorker(context) { worker ->
+                worker.request(
+                    what = SlicerProcessContract.MESSAGE_SLICE,
+                    data = request,
+                    timeoutSeconds = SLICE_TIMEOUT_SECONDS,
+                    onProgress = onProgress,
+                )
+            }
+            check(response.getBoolean(SlicerProcessContract.KEY_OK)) {
+                response.getString(SlicerProcessContract.KEY_ERROR)
+                    ?: "Slicer process returned no result"
+            }
+            latestWorkerPid = response.getInt(SlicerProcessContract.KEY_PID)
+            val output = validateOutput(context, response.getString(SlicerProcessContract.KEY_OUTPUT_PATH))
+            return SliceOutcome(
+                output = output,
+                layers = response.getInt(SlicerProcessContract.KEY_LAYERS),
+                estimatedSeconds = response.getFloat(SlicerProcessContract.KEY_ESTIMATED_SECONDS),
+                filamentGrams = response.getFloat(SlicerProcessContract.KEY_FILAMENT_GRAMS),
             )
+        } catch (failure: Exception) {
+            if (cancelledRequestId.get() == requestId) throw SlicingCancelledException()
+            throw failure
+        } finally {
+            activeRequestId.compareAndSet(requestId, null)
+            cancelledRequestId.compareAndSet(requestId, null)
         }
-        check(response.getBoolean(SlicerProcessContract.KEY_OK)) {
-            response.getString(SlicerProcessContract.KEY_ERROR) ?: "Slicer process returned no result"
+    }
+
+    /** Cancels only the currently active request by terminating its isolated worker. */
+    fun cancelActiveSlice(): Boolean {
+        val requestId = activeRequestId.get() ?: return false
+        cancelledRequestId.set(requestId)
+        return runCatching {
+            val response = withWorker(DuckySlicerApplication.context()) { worker ->
+                worker.request(
+                    what = SlicerProcessContract.MESSAGE_CANCEL,
+                    data = Bundle().apply {
+                        putString(SlicerProcessContract.KEY_REQUEST_ID, requestId)
+                    },
+                    timeoutSeconds = CONNECTION_TIMEOUT_SECONDS,
+                )
+            }
+            response.getBoolean(SlicerProcessContract.KEY_OK)
+        }.getOrDefault(activeRequestId.get() != requestId)
+    }
+
+    fun cancelActiveSliceAsync() {
+        if (activeRequestId.get() == null) return
+        Thread({ cancelActiveSlice() }, "DuckySlicer cancellation").apply {
+            isDaemon = true
+            start()
         }
-        latestWorkerPid = response.getInt(SlicerProcessContract.KEY_PID)
-        val output = validateOutput(context, response.getString(SlicerProcessContract.KEY_OUTPUT_PATH))
-        return SliceOutcome(
-            output = output,
-            layers = response.getInt(SlicerProcessContract.KEY_LAYERS),
-            estimatedSeconds = response.getFloat(SlicerProcessContract.KEY_ESTIMATED_SECONDS),
-            filamentGrams = response.getFloat(SlicerProcessContract.KEY_FILAMENT_GRAMS),
-        )
     }
 
     internal fun lastWorkerPid(): Int = latestWorkerPid
@@ -92,6 +136,45 @@ internal object SlicerProcessClient {
         } finally {
             worker.close()
         }
+    }
+
+    internal fun cancellationProbeForTest(onStarted: () -> Unit) {
+        check(BuildConfig.DEBUG) { "Cancellation probe is available only in debug builds" }
+        val requestId = UUID.randomUUID().toString()
+        check(activeRequestId.compareAndSet(null, requestId)) {
+            "Another slice is already running"
+        }
+        try {
+            withWorker(DuckySlicerApplication.context()) { worker ->
+                worker.request(
+                    what = SlicerProcessContract.MESSAGE_BLOCK_FOR_TEST,
+                    data = Bundle().apply {
+                        putString(SlicerProcessContract.KEY_REQUEST_ID, requestId)
+                    },
+                    timeoutSeconds = TEST_PROBE_TIMEOUT_SECONDS,
+                    onProgress = { progress -> if (progress > 0) onStarted() },
+                )
+            }
+            error("Cancellation probe completed unexpectedly")
+        } catch (failure: Exception) {
+            if (cancelledRequestId.get() == requestId) throw SlicingCancelledException()
+            throw failure
+        } finally {
+            activeRequestId.compareAndSet(requestId, null)
+            cancelledRequestId.compareAndSet(requestId, null)
+        }
+    }
+
+    internal fun workerHealthForTest(context: Context): Int {
+        check(BuildConfig.DEBUG) { "Worker health is available only in debug builds" }
+        val response = withWorker(context.applicationContext) { worker ->
+            worker.request(
+                what = SlicerProcessContract.MESSAGE_HEALTH,
+                timeoutSeconds = CONNECTION_TIMEOUT_SECONDS,
+            )
+        }
+        check(response.getBoolean(SlicerProcessContract.KEY_OK)) { "Slicer worker is unhealthy" }
+        return response.getInt(SlicerProcessContract.KEY_PID)
     }
 
     private inline fun <T> withWorker(context: Context, block: (BoundWorker) -> T): T {
@@ -196,8 +279,16 @@ internal object SlicerProcessClient {
                         replyTo = reply
                     },
                 )
-                check(completed.await(timeoutSeconds, TimeUnit.SECONDS)) {
-                    "Slicer service request timed out"
+                val finished = try {
+                    completed.await(timeoutSeconds, TimeUnit.SECONDS)
+                } catch (interrupted: InterruptedException) {
+                    cancelAbandonedWork(activeBinder, what, data)
+                    Thread.currentThread().interrupt()
+                    throw IllegalStateException("Slicer service request was interrupted", interrupted)
+                }
+                if (!finished) {
+                    cancelAbandonedWork(activeBinder, what, data)
+                    error("Slicer service request timed out")
                 }
                 check(!binderDied.get()) { "Slicer process stopped unexpectedly" }
                 return requireNotNull(response) { "Slicer service returned no result" }
@@ -207,6 +298,22 @@ internal object SlicerProcessClient {
                 if (activeBinder.isBinderAlive) {
                     activeBinder.unlinkToDeath(deathRecipient, 0)
                 }
+            }
+        }
+
+        private fun cancelAbandonedWork(activeBinder: IBinder, what: Int, data: Bundle) {
+            val cancellable = what == SlicerProcessContract.MESSAGE_SLICE ||
+                what == SlicerProcessContract.MESSAGE_BLOCK_FOR_TEST
+            if (!cancellable) return
+            val requestId = data.getString(SlicerProcessContract.KEY_REQUEST_ID) ?: return
+            runCatching {
+                Messenger(activeBinder).send(
+                    Message.obtain(null, SlicerProcessContract.MESSAGE_CANCEL).apply {
+                        this.data = Bundle().apply {
+                            putString(SlicerProcessContract.KEY_REQUEST_ID, requestId)
+                        }
+                    },
+                )
             }
         }
 
@@ -226,28 +333,52 @@ internal object SlicerProcessClient {
 
     private const val CONNECTION_TIMEOUT_SECONDS = 10L
     private const val SLICE_TIMEOUT_SECONDS = 30L * 60L
+    private const val TEST_PROBE_TIMEOUT_SECONDS = 60L
 }
 
+internal class SlicingCancelledException : Exception("Slicing was cancelled")
+
 class SlicerProcessService : Service() {
-    private val messenger by lazy {
-        Messenger(
-            Handler(Looper.getMainLooper()) { message ->
-                handleMessage(message)
-                true
-            },
-        )
+    private val activeRequestId = AtomicReference<String?>(null)
+    private val cancelledRequestId = AtomicReference<String?>(null)
+    private val sliceThreadDelegate = lazy {
+        HandlerThread("DuckySlicer Orca work").apply { start() }
     }
+    private val sliceThread by sliceThreadDelegate
+    private val sliceHandler by lazy { Handler(sliceThread.looper) }
+    private val mainHandler = Handler(Looper.getMainLooper()) { message ->
+        handleMessage(message)
+        true
+    }
+    private val messenger = Messenger(mainHandler)
 
     override fun onBind(intent: Intent?): IBinder = messenger.binder
 
+    override fun onUnbind(intent: Intent?): Boolean {
+        val abandonedRequestId = activeRequestId.get()
+        if (abandonedRequestId != null) {
+            mainHandler.post {
+                if (activeRequestId.get() == abandonedRequestId) {
+                    Process.killProcess(Process.myPid())
+                }
+            }
+        }
+        return false
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (activeRequestId.get() != null) {
+            Process.killProcess(Process.myPid())
+        } else if (sliceThreadDelegate.isInitialized()) {
+            sliceThread.quitSafely()
+        }
+    }
+
     private fun handleMessage(message: Message) {
         when (message.what) {
-            SlicerProcessContract.MESSAGE_SLICE -> {
-                val result = runSlice(message.data) { percent ->
-                    send(message.replyTo, SlicerProcessContract.MESSAGE_PROGRESS, percent)
-                }
-                send(message.replyTo, SlicerProcessContract.MESSAGE_RESULT, data = result)
-            }
+            SlicerProcessContract.MESSAGE_SLICE -> startWork(message, testProbe = false)
+            SlicerProcessContract.MESSAGE_CANCEL -> cancelWork(message)
             SlicerProcessContract.MESSAGE_HEALTH -> send(
                 message.replyTo,
                 SlicerProcessContract.MESSAGE_RESULT,
@@ -270,12 +401,102 @@ class SlicerProcessService : Service() {
                     Handler(Looper.getMainLooper()).post { Process.killProcess(Process.myPid()) }
                 }
             }
+            SlicerProcessContract.MESSAGE_BLOCK_FOR_TEST -> {
+                if (BuildConfig.DEBUG) {
+                    startWork(message, testProbe = true)
+                } else {
+                    send(
+                        message.replyTo,
+                        SlicerProcessContract.MESSAGE_RESULT,
+                        data = failure("Cancellation probe is unavailable"),
+                    )
+                }
+            }
             else -> send(
                 message.replyTo,
                 SlicerProcessContract.MESSAGE_RESULT,
                 data = failure("Unsupported slicer operation"),
             )
         }
+    }
+
+    private fun startWork(message: Message, testProbe: Boolean) {
+        val requestId = message.data.getString(SlicerProcessContract.KEY_REQUEST_ID)
+        if (requestId == null || requestId.length !in 1..MAX_REQUEST_ID_LENGTH) {
+            send(
+                message.replyTo,
+                SlicerProcessContract.MESSAGE_RESULT,
+                data = failure("Slice request id is invalid"),
+            )
+            return
+        }
+        if (!activeRequestId.compareAndSet(null, requestId)) {
+            send(
+                message.replyTo,
+                SlicerProcessContract.MESSAGE_RESULT,
+                data = failure("Another slice is already running"),
+            )
+            return
+        }
+        cancelledRequestId.set(null)
+        val requestData = Bundle(message.data)
+        val reply = message.replyTo
+        val accepted = sliceHandler.post {
+            val result = if (testProbe) {
+                runCancellationProbe(reply)
+            } else {
+                runSlice(requestData) { percent ->
+                    send(reply, SlicerProcessContract.MESSAGE_PROGRESS, percent)
+                }
+            }
+            if (cancelledRequestId.get() == requestId) return@post
+            if (activeRequestId.compareAndSet(requestId, null)) {
+                send(reply, SlicerProcessContract.MESSAGE_RESULT, data = result)
+            }
+        }
+        if (!accepted) {
+            activeRequestId.compareAndSet(requestId, null)
+            send(
+                reply,
+                SlicerProcessContract.MESSAGE_RESULT,
+                data = failure("Slicer worker thread is unavailable"),
+            )
+        }
+    }
+
+    private fun cancelWork(message: Message) {
+        val requestId = message.data.getString(SlicerProcessContract.KEY_REQUEST_ID)
+        if (requestId == null || activeRequestId.get() != requestId) {
+            send(
+                message.replyTo,
+                SlicerProcessContract.MESSAGE_RESULT,
+                data = failure("Slice request is no longer active"),
+            )
+            return
+        }
+        cancelledRequestId.set(requestId)
+        send(
+            message.replyTo,
+            SlicerProcessContract.MESSAGE_RESULT,
+            data = Bundle().apply {
+                putBoolean(SlicerProcessContract.KEY_OK, true)
+                putInt(SlicerProcessContract.KEY_PID, Process.myPid())
+            },
+        )
+        mainHandler.postDelayed(
+            {
+                if (cancelledRequestId.get() == requestId) {
+                    Process.killProcess(Process.myPid())
+                }
+            },
+            CANCEL_PROCESS_DELAY_MILLIS,
+        )
+    }
+
+    private fun runCancellationProbe(reply: Messenger?): Bundle {
+        send(reply, SlicerProcessContract.MESSAGE_PROGRESS, 1)
+        Thread.sleep(TEST_PROBE_DURATION_MILLIS)
+        return failure("Cancellation probe was not cancelled")
     }
 
     private fun runSlice(extras: Bundle, onProgress: (Int) -> Unit): Bundle = try {
@@ -403,6 +624,9 @@ class SlicerProcessService : Service() {
         const val MAX_MODEL_BYTES = 512L * 1_024 * 1_024
         const val MAX_RETAINED_OUTPUTS = 8
         const val MAX_ERROR_LENGTH = 500
+        const val MAX_REQUEST_ID_LENGTH = 128
+        const val CANCEL_PROCESS_DELAY_MILLIS = 50L
+        const val TEST_PROBE_DURATION_MILLIS = 30_000L
     }
 }
 
@@ -412,6 +636,9 @@ private object SlicerProcessContract {
     const val MESSAGE_TERMINATE_FOR_TEST = 3
     const val MESSAGE_PROGRESS = 4
     const val MESSAGE_RESULT = 5
+    const val MESSAGE_CANCEL = 6
+    const val MESSAGE_BLOCK_FOR_TEST = 7
+    const val KEY_REQUEST_ID = "requestId"
     const val KEY_MODEL_PATHS = "modelPaths"
     const val KEY_OPTIONS = "options"
     const val KEY_OK = "ok"

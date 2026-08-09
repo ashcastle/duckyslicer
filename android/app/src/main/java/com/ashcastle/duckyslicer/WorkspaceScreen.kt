@@ -156,6 +156,7 @@ fun WorkspaceScreen(
     layerPreview: GcodeLayerPreview?,
     importing: Boolean,
     slicing: Boolean,
+    sliceCancellationRequested: Boolean,
     sliceProgress: Int,
     previewLoading: Boolean,
     error: String?,
@@ -174,6 +175,7 @@ fun WorkspaceScreen(
     onArrange: () -> Unit,
     onRemoveModel: () -> Unit,
     onSlice: () -> Unit,
+    onCancelSlice: () -> Unit,
     onSave: () -> Unit,
     onSliceOptionsChanged: (SliceOptions) -> Unit,
     onSavePrinterProfile: (String) -> Unit,
@@ -292,10 +294,12 @@ fun WorkspaceScreen(
                     importing = importing,
                     previewLoading = previewLoading,
                     slicing = slicing,
+                    cancellationRequested = sliceCancellationRequested,
                     progress = sliceProgress,
                     error = error,
                     notice = notice,
                     onSlice = onSlice,
+                    onCancelSlice = onCancelSlice,
                     onOptionsChanged = onSliceOptionsChanged,
                     onSavePrinter = onSavePrinterProfile,
                     onSaveFilament = onSaveFilamentProfile,
@@ -1029,10 +1033,12 @@ private fun SliceSheet(
     importing: Boolean,
     previewLoading: Boolean,
     slicing: Boolean,
+    cancellationRequested: Boolean,
     progress: Int,
     error: String?,
     notice: String?,
     onSlice: () -> Unit,
+    onCancelSlice: () -> Unit,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSavePrinter: (String) -> Unit,
     onSaveFilament: (String) -> Unit,
@@ -1067,6 +1073,17 @@ private fun SliceSheet(
                 modifier = Modifier.fillMaxWidth(),
                 color = WorkspaceYellow,
             )
+            TextButton(
+                onClick = onCancelSlice,
+                enabled = !cancellationRequested,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    stringResource(
+                        if (cancellationRequested) R.string.canceling_slice else R.string.cancel,
+                    ),
+                )
+            }
         }
         if (model != null) {
             Button(

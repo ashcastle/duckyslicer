@@ -19,6 +19,9 @@ avoid introducing an account or cloud requirement.
 - Treat app-private JSON and LAN-printer responses as untrusted too. Preserve the
   last-known-good generation, never replace unreadable/future-schema data, keep
   response size and nesting bounded, and do not enable credential-bearing redirects.
+- Keep Orca work off every Android main thread. New long-running operations must
+  retain request-scoped cancellation, terminate only the isolated worker, and prove
+  a clean follow-up operation on ARM64.
 - Preserve the ARM64 imperfect-mesh corpus. Common repairable defects must still
   produce finite G-code, irreparable geometry must fail without terminating the app,
   and a valid model must slice immediately after every corpus entry.

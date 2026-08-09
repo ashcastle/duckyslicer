@@ -63,6 +63,8 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - No account, cloud dependency, analytics SDK, or Bambu network plug-in
 - Fail-closed STL and G-code handling with bounded text lines, finite coordinate checks, atomic transformed-model writes, and recoverable Rust-failure containment at the JNI boundary
 - A non-exported, restartable Android worker process for the inherited Orca C++ runtime, so a native signal ends the slice instead of the app
+- Cancelable on-device slicing on a dedicated worker thread; cancellation terminates
+  only the isolated Orca process and the next slice starts in a fresh worker
 - Distinct, synchronized G-code artifacts for successful slices instead of one shared output file being overwritten
 - 16 KB page-size-compatible ARM64 native libraries for current Android devices
 - Immutable GitHub Action pins and checksum-verified, version-locked Gradle artifacts;

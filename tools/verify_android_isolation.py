@@ -56,7 +56,9 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
     service_path = "com/ashcastle/duckyslicer/SlicerProcessService.kt"
     service = sources.get(service_path)
     orchestrator = sources.get("com/ashcastle/duckyslicer/OnDeviceSlicer.kt")
-    if service is None or orchestrator is None:
+    main = sources.get("com/ashcastle/duckyslicer/MainActivity.kt")
+    workspace = sources.get("com/ashcastle/duckyslicer/WorkspaceScreen.kt")
+    if service is None or orchestrator is None or main is None or workspace is None:
         raise VerificationError("required slicer process sources are missing")
 
     direct_calls = []
@@ -71,6 +73,11 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         )
     if "SlicerProcessClient.slice(" not in orchestrator:
         raise VerificationError("OnDeviceSlicer must delegate through the isolated process client")
+    if "SlicerProcessClient.cancelActiveSlice()" not in main or \
+            "SlicerProcessClient.cancelActiveSliceAsync()" not in main:
+        raise VerificationError("active slicing must be cancelable from the UI and on disposal")
+    if "onCancelSlice" not in workspace or "canceling_slice" not in workspace:
+        raise VerificationError("the Slice workspace must expose cancellation progress")
     required_service_markers = {
         "bound service connection": "bindService(",
         "Binder death handling": "IBinder.DeathRecipient",
@@ -79,6 +86,10 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         "atomic G-code durability": "output.fd.sync()",
         "bounded output retention": "MAX_RETAINED_OUTPUTS",
         "debug worker termination": "MESSAGE_TERMINATE_FOR_TEST",
+        "dedicated Orca thread": "HandlerThread(\"DuckySlicer Orca work\")",
+        "request-scoped cancellation": "MESSAGE_CANCEL",
+        "cancellation process containment": "Process.killProcess(Process.myPid())",
+        "abandoned-client containment": "override fun onUnbind",
     }
     missing = [description for description, marker in required_service_markers.items() if marker not in service]
     if missing:
@@ -87,6 +98,8 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         raise VerificationError("ARM64 worker-crash recovery regression is missing")
     if "imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp" not in device_test:
         raise VerificationError("ARM64 imperfect-mesh recovery corpus is missing")
+    if "activeSliceCancellationKeepsServiceResponsiveAndRestartsCleanly" not in device_test:
+        raise VerificationError("ARM64 active-slice cancellation regression is missing")
     return len(direct_calls)
 
 
@@ -108,7 +121,8 @@ def main() -> None:
         raise SystemExit(f"Android isolation verification failed: {error}") from error
     print(
         "Verified Android slicer isolation: private :slicer service, "
-        f"{native_call_count} confined NativeLibrary construction, crash recovery regression"
+        f"{native_call_count} confined NativeLibrary construction, "
+        "crash and cancellation recovery regressions"
     )
 
 

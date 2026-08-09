@@ -103,6 +103,7 @@ private fun DuckySlicerScreen() {
     val modelReadError = stringResource(R.string.model_read_error)
     val modelTooLargeError = stringResource(R.string.model_too_large_error)
     val sliceError = stringResource(R.string.slice_error)
+    val sliceCanceledNotice = stringResource(R.string.slice_canceled)
     val saveError = stringResource(R.string.save_error)
     val savedNotice = stringResource(R.string.gcode_saved)
     val profileSavedNotice = stringResource(R.string.profile_saved)
@@ -130,6 +131,7 @@ private fun DuckySlicerScreen() {
     var notice by remember { mutableStateOf<String?>(null) }
     var importing by remember { mutableStateOf(false) }
     var slicing by remember { mutableStateOf(false) }
+    var sliceCancellationRequested by remember { mutableStateOf(false) }
     var sliceProgress by remember { mutableIntStateOf(0) }
     var sliceOutcome by remember { mutableStateOf<SliceOutcome?>(null) }
     var selectedTab by remember { mutableStateOf(WorkspaceTab.SLICE) }
@@ -201,6 +203,9 @@ private fun DuckySlicerScreen() {
         val window = (context as? MainActivity)?.window
         if (keepScreenAwake) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+    }
+    DisposableEffect(Unit) {
+        onDispose { SlicerProcessClient.cancelActiveSliceAsync() }
     }
 
     fun applyOptions(options: SliceOptions) {
@@ -314,6 +319,7 @@ private fun DuckySlicerScreen() {
         val objects = projectObjects
         if (objects.isNotEmpty() && !slicing && !importing && !previewLoading) {
             slicing = true
+            sliceCancellationRequested = false
             sliceProgress = 0
             sliceOutcome = null
             layerPreview = null
@@ -351,10 +357,29 @@ private fun DuckySlicerScreen() {
                             .onFailure { error = previewError }
                         previewLoading = false
                     }
-                }.onFailure {
-                    error = sliceError
+                }.onFailure { failure ->
+                    if (failure is SlicingCancelledException) {
+                        notice = sliceCanceledNotice
+                        error = null
+                        sliceProgress = 0
+                    } else {
+                        error = sliceError
+                    }
                 }
                 slicing = false
+                sliceCancellationRequested = false
+            }
+        }
+    }
+
+    val cancelSlice = {
+        if (slicing && !sliceCancellationRequested) {
+            sliceCancellationRequested = true
+            scope.launch {
+                val accepted = withContext(Dispatchers.IO) {
+                    SlicerProcessClient.cancelActiveSlice()
+                }
+                if (!accepted && slicing) sliceCancellationRequested = false
             }
         }
     }
@@ -436,6 +461,7 @@ private fun DuckySlicerScreen() {
         layerPreview = layerPreview,
         importing = importing || !projectRestored,
         slicing = slicing,
+        sliceCancellationRequested = sliceCancellationRequested,
         sliceProgress = sliceProgress,
         previewLoading = previewLoading,
         error = error,
@@ -494,6 +520,7 @@ private fun DuckySlicerScreen() {
             selectedTab = WorkspaceTab.SLICE
         },
         onSlice = startSlice,
+        onCancelSlice = cancelSlice,
         onSave = saveGcode,
         onSliceOptionsChanged = ::applyOptions,
         onSavePrinterProfile = { name ->
