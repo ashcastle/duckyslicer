@@ -77,6 +77,7 @@ jobs:
       - name: Verify build supply chain
         run: |
           python3 tools/verify_workflows.py
+          python3 tools/verify_no_embedded_credentials.py
           python3 tools/verify_gradle_supply_chain.py
           python3 tools/verify_native_safety.py
           python3 tools/verify_android_isolation.py
