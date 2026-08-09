@@ -83,4 +83,40 @@ class ProjectStateTest {
         state = state.undo()
         assertEquals(12f, state.current.selectedObject!!.transform.offsetXmm)
     }
+
+    @Test
+    fun asynchronousPlacementUpdatesTheRequestedObjectEvenIfSelectionChanges() {
+        var state = ProjectHistoryState()
+            .add(projectObject("first"))
+            .add(projectObject("second"))
+            .select("second")
+
+        state = state.updateTransform("first", ModelTransform(rotationXdeg = 90f))
+
+        assertEquals("second", state.current.selectedObjectId)
+        assertEquals(90f, state.current.objects.first { it.id == "first" }.transform.rotationXdeg)
+        assertEquals(0f, state.current.objects.first { it.id == "second" }.transform.rotationXdeg)
+        state = state.undo()
+        assertEquals(0f, state.current.objects.first { it.id == "first" }.transform.rotationXdeg)
+    }
+
+    @Test
+    fun supportPaintingIsObjectScopedAndUndoable() {
+        var state = ProjectHistoryState().add(projectObject("part"))
+        state = state.updateSupportPaint(
+            "part",
+            SupportPaint().paint(0, SupportPaintState.ENFORCE),
+            recordHistory = false,
+        )
+        state = state.updateSupportPaint(
+            "part",
+            state.current.selectedObject!!.supportPaint.paint(0, SupportPaintState.BLOCK),
+            recordHistory = false,
+        )
+        state = state.commitSupportPaint("part", SupportPaint())
+
+        assertEquals(SupportPaintState.BLOCK, state.current.selectedObject!!.supportPaint.facets[0])
+        state = state.undo()
+        assertTrue(state.current.selectedObject!!.supportPaint.facets.isEmpty())
+    }
 }

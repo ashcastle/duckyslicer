@@ -63,6 +63,15 @@
     <string name="degrees_value">%1$.0f°</string>
     <string name="center_model">가운데</string>
     <string name="rotate_90">90° 회전</string>
+    <string name="auto_lay">자동으로 눕히기</string>
+    <string name="auto_lay_working">안정적인 면을 찾는 중…</string>
+    <string name="auto_lay_done">안정적인 면을 바닥에 놓았습니다.</string>
+    <string name="auto_lay_error">이 모델을 자동으로 놓지 못했습니다.</string>
+    <string name="paint_support">서포트 채색</string>
+    <string name="support_enforce">서포트 추가</string>
+    <string name="support_block">서포트 차단</string>
+    <string name="support_erase">지우기</string>
+    <string name="support_paint_hint">모델 위를 칠하세요. 두 손가락으로 이동·확대할 수 있습니다.</string>
     <string name="reset">초기화</string>
     <string name="remove_model">모델 제거</string>
     <string name="no_gcode">아직 G-code 없음</string>

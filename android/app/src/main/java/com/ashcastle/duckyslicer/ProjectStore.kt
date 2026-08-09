@@ -152,10 +152,15 @@ internal class ProjectStore(
             .takeIf { it.endsWith(".stl", ignoreCase = true) }
             ?: "model.stl"
         val transform = value.getJSONObject("transform").toModelTransform()
+        val model = inspectModel(modelFile).copy(fileName = displayName)
+        val supportPaint = value.optJSONArray("supportPaint")
+            ?.toSupportPaint(model.triangles)
+            ?: SupportPaint()
         return ProjectObject(
             id = id,
-            model = inspectModel(modelFile).copy(fileName = displayName),
+            model = model,
             transform = transform,
+            supportPaint = supportPaint,
         )
     }
 
@@ -184,6 +189,9 @@ internal class ProjectStore(
             val model = requireNotNull(resolveStoredModel(storedName))
             require(model.length() in 1..MAX_MODEL_IMPORT_BYTES)
             value.getJSONObject("transform").toModelTransform()
+            if (schemaVersion >= 3) {
+                require(value.optJSONArray("supportPaint")?.isValidSupportPaintArray() == true)
+            }
         }
         val selected = root.takeUnless { it.isNull("selectedObjectId") }
             ?.optString("selectedObjectId")?.takeIf(String::isNotBlank)
@@ -208,6 +216,7 @@ internal class ProjectStore(
             .put("displayName", model.fileName.take(MAX_DISPLAY_NAME_LENGTH))
             .put("modelFile", modelFile.name)
             .put("transform", transform.toStoredJson())
+            .put("supportPaint", supportPaint.toStoredJson())
     }
 
     private fun ModelTransform.toStoredJson() = JSONObject()
@@ -227,6 +236,41 @@ internal class ProjectStore(
         scale = checkedFloat("scale", MIN_SCALE, MAX_SCALE),
     )
 
+    private fun SupportPaint.toStoredJson() = JSONArray().also { values ->
+        require(facets.size <= SupportPaint.MAX_PAINTED_FACETS) { "Support paint is too large" }
+        facets.toSortedMap().forEach { (facetIndex, state) ->
+            values.put(facetIndex)
+            values.put(state.code)
+        }
+    }
+
+    private fun JSONArray.toSupportPaint(triangleCount: Int): SupportPaint {
+        require(isValidSupportPaintArray()) { "Invalid support paint" }
+        val facets = LinkedHashMap<Int, SupportPaintState>(length() / 2)
+        var previousIndex = -1
+        for (offset in 0 until length() step 2) {
+            val facetIndex = getInt(offset)
+            val state = requireNotNull(SupportPaintState.fromCode(getInt(offset + 1)))
+            require(facetIndex in 0 until triangleCount && facetIndex > previousIndex) {
+                "Invalid support paint facet"
+            }
+            facets[facetIndex] = state
+            previousIndex = facetIndex
+        }
+        return SupportPaint(facets)
+    }
+
+    private fun JSONArray.isValidSupportPaintArray(): Boolean = runCatching {
+        require(length() % 2 == 0 && length() / 2 <= SupportPaint.MAX_PAINTED_FACETS)
+        var previousIndex = -1
+        for (offset in 0 until length() step 2) {
+            val facetIndex = getInt(offset)
+            require(facetIndex >= 0 && facetIndex > previousIndex)
+            require(SupportPaintState.fromCode(getInt(offset + 1)) != null)
+            previousIndex = facetIndex
+        }
+    }.isSuccess
+
     private fun JSONObject.checkedFloat(
         key: String,
         minimum: Float,
@@ -240,7 +284,7 @@ internal class ProjectStore(
         internal fun modelStorageRoot(filesRoot: File): File =
             File(File(filesRoot, PROJECT_DIRECTORY), MODELS_DIRECTORY)
 
-        const val SCHEMA_VERSION = 2
+        const val SCHEMA_VERSION = 3
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODELS_DIRECTORY = "models"

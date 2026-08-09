@@ -16,6 +16,7 @@ import android.os.Process
 import android.os.RemoteException
 import android.util.Log
 import com.u1.slicer.NativeLibrary
+import java.io.DataInputStream
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -39,7 +40,20 @@ internal object SlicerProcessClient {
         transformedModels: List<File>,
         options: SliceOptions,
         onProgress: (Int) -> Unit,
-    ): SliceOutcome = sliceInternal(transformedModels, options, null, onProgress)
+    ): SliceOutcome = sliceInternal(
+        transformedModels,
+        List(transformedModels.size) { null },
+        options,
+        null,
+        onProgress,
+    )
+
+    fun slice(
+        transformedModels: List<File>,
+        supportPaintFiles: List<File?>,
+        options: SliceOptions,
+        onProgress: (Int) -> Unit,
+    ): SliceOutcome = sliceInternal(transformedModels, supportPaintFiles, options, null, onProgress)
 
     internal fun sliceWithOutputLimitForTest(
         transformedModels: List<File>,
@@ -51,11 +65,54 @@ internal object SlicerProcessClient {
         require(maximumGcodeBytes in TEST_MINIMUM_GCODE_BYTES..PRODUCTION_MAXIMUM_GCODE_BYTES) {
             "Invalid test G-code output limit"
         }
-        return sliceInternal(transformedModels, options, maximumGcodeBytes, onProgress)
+        return sliceInternal(
+            transformedModels,
+            List(transformedModels.size) { null },
+            options,
+            maximumGcodeBytes,
+            onProgress,
+        )
+    }
+
+    /** Uses OrcaSlicer's inherited orientation::orient implementation in the isolated worker. */
+    fun autoOrient(model: File): OrcaOrientation {
+        check(Looper.myLooper() != Looper.getMainLooper()) {
+            "Automatic orientation must run outside the application main thread"
+        }
+        val requestId = UUID.randomUUID().toString()
+        check(activeRequestId.compareAndSet(null, requestId)) {
+            "Another slicer operation is already running"
+        }
+        return try {
+            val response = withWorker(DuckySlicerApplication.context()) { worker ->
+                worker.request(
+                    what = SlicerProcessContract.MESSAGE_AUTO_ORIENT,
+                    data = Bundle().apply {
+                        putString(SlicerProcessContract.KEY_REQUEST_ID, requestId)
+                        putString(SlicerProcessContract.KEY_MODEL_PATH, model.absolutePath)
+                    },
+                    timeoutSeconds = ORIENTATION_TIMEOUT_SECONDS,
+                )
+            }
+            check(response.getBoolean(SlicerProcessContract.KEY_OK)) {
+                response.getString(SlicerProcessContract.KEY_ERROR)
+                    ?: "OrcaSlicer could not orient the model"
+            }
+            latestWorkerPid = response.getInt(SlicerProcessContract.KEY_PID)
+            OrcaOrientation(
+                requireNotNull(response.getDoubleArray(SlicerProcessContract.KEY_ROTATION_RADIANS)) {
+                    "OrcaSlicer returned no orientation"
+                },
+            )
+        } finally {
+            activeRequestId.compareAndSet(requestId, null)
+            cancelledRequestId.compareAndSet(requestId, null)
+        }
     }
 
     private fun sliceInternal(
         transformedModels: List<File>,
+        supportPaintFiles: List<File?>,
         options: SliceOptions,
         maximumGcodeBytesForTest: Int?,
         onProgress: (Int) -> Unit,
@@ -66,8 +123,13 @@ internal object SlicerProcessClient {
         val context = DuckySlicerApplication.context()
         val requestId = UUID.randomUUID().toString()
         val modelPaths = transformedModels.map(File::getAbsolutePath)
+        require(supportPaintFiles.size == transformedModels.size) { "Support paint count does not match models" }
+        val supportPaintPaths = supportPaintFiles.map { it?.absolutePath.orEmpty() }
         val optionsText = options.toProjectJson().toString()
-        require(encodedRequestBytes(modelPaths, optionsText) <= SlicerProcessContract.MAX_REQUEST_BYTES) {
+        require(
+            encodedRequestBytes(modelPaths + supportPaintPaths, optionsText) <=
+                SlicerProcessContract.MAX_REQUEST_BYTES,
+        ) {
             "Slice request is too large"
         }
         val request = Bundle().apply {
@@ -75,6 +137,10 @@ internal object SlicerProcessClient {
             putStringArrayList(
                 SlicerProcessContract.KEY_MODEL_PATHS,
                 ArrayList(modelPaths),
+            )
+            putStringArrayList(
+                SlicerProcessContract.KEY_SUPPORT_PAINT_PATHS,
+                ArrayList(supportPaintPaths),
             )
             putString(SlicerProcessContract.KEY_OPTIONS, optionsText)
             maximumGcodeBytesForTest?.let {
@@ -325,6 +391,7 @@ internal object SlicerProcessClient {
 
         private fun cancelAbandonedWork(activeBinder: IBinder, what: Int, data: Bundle) {
             val cancellable = what == SlicerProcessContract.MESSAGE_SLICE ||
+                what == SlicerProcessContract.MESSAGE_AUTO_ORIENT ||
                 what == SlicerProcessContract.MESSAGE_BLOCK_FOR_TEST
             if (!cancellable) return
             val requestId = data.getString(SlicerProcessContract.KEY_REQUEST_ID) ?: return
@@ -354,6 +421,7 @@ internal object SlicerProcessClient {
     }
 
     private const val CONNECTION_TIMEOUT_SECONDS = 10L
+    private const val ORIENTATION_TIMEOUT_SECONDS = 5L * 60L
     private const val SLICE_TIMEOUT_SECONDS = 30L * 60L
     private const val TEST_PROBE_TIMEOUT_SECONDS = 60L
     private const val TEST_MINIMUM_GCODE_BYTES = 16 * 1_024
@@ -417,6 +485,11 @@ class SlicerProcessService : Service() {
     private fun handleMessage(message: Message) {
         when (message.what) {
             SlicerProcessContract.MESSAGE_SLICE -> startWork(message, testProbe = false)
+            SlicerProcessContract.MESSAGE_AUTO_ORIENT -> startWork(
+                message,
+                testProbe = false,
+                autoOrient = true,
+            )
             SlicerProcessContract.MESSAGE_CANCEL -> cancelWork(message)
             SlicerProcessContract.MESSAGE_HEALTH -> send(
                 message.replyTo,
@@ -459,13 +532,13 @@ class SlicerProcessService : Service() {
         }
     }
 
-    private fun startWork(message: Message, testProbe: Boolean) {
+    private fun startWork(message: Message, testProbe: Boolean, autoOrient: Boolean = false) {
         val requestId = message.data.getString(SlicerProcessContract.KEY_REQUEST_ID)
         if (requestId == null || requestId.length !in 1..MAX_REQUEST_ID_LENGTH) {
             send(
                 message.replyTo,
                 SlicerProcessContract.MESSAGE_RESULT,
-                data = failure("Slice request id is invalid"),
+                data = failure("Slicer request id is invalid"),
             )
             return
         }
@@ -473,7 +546,7 @@ class SlicerProcessService : Service() {
             send(
                 message.replyTo,
                 SlicerProcessContract.MESSAGE_RESULT,
-                data = failure("Another slice is already running"),
+                data = failure("Another slicer operation is already running"),
             )
             return
         }
@@ -481,10 +554,10 @@ class SlicerProcessService : Service() {
         val requestData = Bundle(message.data)
         val reply = message.replyTo
         val accepted = sliceHandler.post {
-            val result = if (testProbe) {
-                runCancellationProbe(reply)
-            } else {
-                runSlice(requestData) { percent ->
+            val result = when {
+                testProbe -> runCancellationProbe(reply)
+                autoOrient -> runAutoOrient(requestData)
+                else -> runSlice(requestData) { percent ->
                     send(reply, SlicerProcessContract.MESSAGE_PROGRESS, percent)
                 }
             }
@@ -493,7 +566,7 @@ class SlicerProcessService : Service() {
                 send(reply, SlicerProcessContract.MESSAGE_RESULT, data = result)
             }
         }
-        if (accepted && !testProbe) scheduleStorageGuard(requestId)
+        if (accepted && !testProbe && !autoOrient) scheduleStorageGuard(requestId)
         if (!accepted) {
             activeRequestId.compareAndSet(requestId, null)
             send(
@@ -563,13 +636,23 @@ class SlicerProcessService : Service() {
         }
         require(paths.size in 1..MAX_OBJECTS) { "Invalid model count" }
         val models = paths.map(::validateModel)
+        val supportPaintPaths = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_SUPPORT_PAINT_PATHS),
+        ) { "Support paint paths are unavailable" }
+        require(supportPaintPaths.size == models.size) { "Support paint count does not match models" }
+        val supportPaintFiles = supportPaintPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let(::validateSupportPaint)
+        }
         val optionsText = requireNotNull(extras.getString(SlicerProcessContract.KEY_OPTIONS)) {
             "Slice settings are unavailable"
         }
         require(optionsText.toByteArray(Charsets.UTF_8).size <= SlicerProcessContract.MAX_OPTIONS_BYTES) {
             "Slice settings are too large"
         }
-        require(encodedRequestBytes(paths, optionsText) <= SlicerProcessContract.MAX_REQUEST_BYTES) {
+        require(
+            encodedRequestBytes(paths + supportPaintPaths, optionsText) <=
+                SlicerProcessContract.MAX_REQUEST_BYTES,
+        ) {
             "Slice request is too large"
         }
         val options = requireNotNull(JSONObject(optionsText).toProjectSliceOptionsOrNull()) {
@@ -587,20 +670,48 @@ class SlicerProcessService : Service() {
         } else {
             PRODUCTION_MAXIMUM_GCODE_BYTES
         }
-        success(runNativeSlice(models, options, maximumGcodeBytes, onProgress))
+        success(runNativeSlice(models, supportPaintFiles, options, maximumGcodeBytes, onProgress))
     } catch (error: Exception) {
         if (BuildConfig.DEBUG) Log.e(LOG_TAG, "On-device slicing failed", error)
         failure(error.message ?: "Slicer operation failed")
     }
 
+    private fun runAutoOrient(extras: Bundle): Bundle = try {
+        val path = requireNotNull(extras.getString(SlicerProcessContract.KEY_MODEL_PATH)) {
+            "Model path is unavailable"
+        }
+        val model = validateModel(path)
+        val runtime = createNativeRuntime()
+        try {
+            check(runtime.loadModel(model.absolutePath)) { "Model could not be prepared" }
+            val rotation = requireNotNull(runtime.nativeAutoOrientObject(0)) {
+                "OrcaSlicer could not orient the model"
+            }
+            require(rotation.size == 3 && rotation.all { it.isFinite() }) {
+                "OrcaSlicer returned an invalid orientation"
+            }
+            Bundle().apply {
+                putBoolean(SlicerProcessContract.KEY_OK, true)
+                putInt(SlicerProcessContract.KEY_PID, Process.myPid())
+                putDoubleArray(SlicerProcessContract.KEY_ROTATION_RADIANS, rotation)
+            }
+        } finally {
+            runtime.clearModel()
+        }
+    } catch (error: Exception) {
+        if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Automatic orientation failed", error)
+        failure(error.message ?: "OrcaSlicer could not orient the model")
+    }
+
     private fun runNativeSlice(
         models: List<File>,
+        supportPaintFiles: List<ValidatedSupportPaint?>,
         options: SliceOptions,
         maximumGcodeBytes: Int,
         onProgress: (Int) -> Unit,
     ): SliceOutcome {
         artifactStore.prepareForSlice()
-        val runtime = NativeLibrary(onProgress)
+        val runtime = createNativeRuntime(onProgress)
         return try {
             check(runtime.loadModel(models.first().absolutePath)) { "Model could not be prepared" }
             models.drop(1).forEach { model ->
@@ -609,8 +720,23 @@ class SlicerProcessService : Service() {
             check(runtime.getObjectBoundingBoxes().size == models.size * 3) {
                 "Native model count does not match the request"
             }
+            supportPaintFiles.forEachIndexed { objectIndex, supportPaint ->
+                if (supportPaint != null) {
+                    check(runtime.applySupportPaint(objectIndex, supportPaint.file.absolutePath)) {
+                        "Support paint could not be applied"
+                    }
+                }
+            }
             val nativeConfig = options.toNativeConfig().apply {
                 this.maximumGcodeBytes = maximumGcodeBytes
+                if (supportPaintFiles.any { it?.hasEnforcer == true }) {
+                    this.supportEnabled = true
+                    this.supportType = if (options.supportType == "tree") {
+                        "tree(manual)"
+                    } else {
+                        "normal(manual)"
+                    }
+                }
             }
             val result = requireNotNull(runtime.slice(nativeConfig)) {
                 "Slicer returned no output"
@@ -643,6 +769,41 @@ class SlicerProcessService : Service() {
         require(allowedRoots.any(model::isInside)) { "Model is outside private storage" }
         require(model.isFile && model.length() in 1..MAX_MODEL_BYTES) { "Model is unavailable" }
         return model
+    }
+
+    private fun createNativeRuntime(onProgress: (Int) -> Unit = {}): NativeLibrary =
+        NativeLibrary(onProgress)
+
+    private fun validateSupportPaint(path: String): ValidatedSupportPaint {
+        require(path.length in 1..MAX_PATH_LENGTH) { "Invalid support paint path" }
+        val sidecar = File(path).canonicalFile
+        val allowedRoots = listOf(filesDir.canonicalFile, cacheDir.canonicalFile)
+        require(allowedRoots.any(sidecar::isInside)) { "Support paint is outside private storage" }
+        require(sidecar.isFile && sidecar.length() in SupportPaint.HEADER_BYTES..SupportPaint.MAX_SIDECAR_BYTES) {
+            "Support paint is unavailable"
+        }
+        var hasEnforcer = false
+        DataInputStream(sidecar.inputStream().buffered()).use { reader ->
+            val magic = ByteArray(SupportPaint.MAGIC.size)
+            reader.readFully(magic)
+            require(magic.contentEquals(SupportPaint.MAGIC)) { "Support paint format is invalid" }
+            val count = reader.readInt()
+            require(count in 0..SupportPaint.MAX_PAINTED_FACETS) { "Support paint count is invalid" }
+            require(sidecar.length() == SupportPaint.HEADER_BYTES + count.toLong() * SupportPaint.ENTRY_BYTES) {
+                "Support paint size is invalid"
+            }
+            var previousIndex = -1
+            repeat(count) {
+                val facetIndex = reader.readInt()
+                val state = reader.readUnsignedByte()
+                require(facetIndex > previousIndex && SupportPaintState.fromCode(state) != null) {
+                    "Support paint entry is invalid"
+                }
+                if (state == SupportPaintState.ENFORCE.code) hasEnforcer = true
+                previousIndex = facetIndex
+            }
+        }
+        return ValidatedSupportPaint(sidecar, hasEnforcer)
     }
 
     private fun success(outcome: SliceOutcome) = Bundle().apply {
@@ -682,6 +843,11 @@ class SlicerProcessService : Service() {
         const val PRODUCTION_MAXIMUM_GCODE_BYTES = 1_073_741_824
         const val LOG_TAG = "DuckySlicer"
     }
+
+    private data class ValidatedSupportPaint(
+        val file: File,
+        val hasEnforcer: Boolean,
+    )
 }
 
 private object SlicerProcessContract {
@@ -692,8 +858,11 @@ private object SlicerProcessContract {
     const val MESSAGE_RESULT = 5
     const val MESSAGE_CANCEL = 6
     const val MESSAGE_BLOCK_FOR_TEST = 7
+    const val MESSAGE_AUTO_ORIENT = 8
     const val KEY_REQUEST_ID = "requestId"
+    const val KEY_MODEL_PATH = "modelPath"
     const val KEY_MODEL_PATHS = "modelPaths"
+    const val KEY_SUPPORT_PAINT_PATHS = "supportPaintPaths"
     const val KEY_OPTIONS = "options"
     const val KEY_MAXIMUM_GCODE_BYTES_FOR_TEST = "maximumGcodeBytesForTest"
     const val KEY_OK = "ok"
@@ -703,6 +872,7 @@ private object SlicerProcessContract {
     const val KEY_LAYERS = "layers"
     const val KEY_ESTIMATED_SECONDS = "estimatedSeconds"
     const val KEY_FILAMENT_GRAMS = "filamentGrams"
+    const val KEY_ROTATION_RADIANS = "rotationRadians"
     const val OUTPUT_DIRECTORY = SliceArtifactStore.OUTPUT_DIRECTORY
     const val MAX_OPTIONS_BYTES = 384 * 1_024
     const val MAX_REQUEST_BYTES = 640 * 1_024

@@ -39,6 +39,7 @@ class ProjectStoreTest {
                         rotationZdeg = 45f,
                         scale = 1.25f,
                     ),
+                    supportPaint = SupportPaint().paint(0, SupportPaintState.ENFORCE),
                 ),
             ),
             selectedObjectId = "duck",
@@ -51,6 +52,7 @@ class ProjectStoreTest {
         assertEquals("오리 모형.stl", restored.selectedObject!!.model.fileName)
         assertEquals(modelFile.canonicalPath, restored.selectedObject!!.model.localPath)
         assertEquals(snapshot.selectedObject!!.transform, restored.selectedObject!!.transform)
+        assertEquals(snapshot.selectedObject!!.supportPaint, restored.selectedObject!!.supportPaint)
         assertTrue(modelFile.isFile)
         assertFalse(orphan.exists())
         assertTrue(outside.isFile)
@@ -78,7 +80,7 @@ class ProjectStoreTest {
     }
 
     @Test
-    fun schemaTwoRestoresEffectiveSliceSettingsAndSchemaOneRemainsReadable() = withStore { root, store ->
+    fun schemaThreeRestoresProjectSettingsAndSchemaOneRemainsReadable() = withStore { root, store ->
         val modelFile = store.createModelDestination("settings.stl").apply { writeText("solid part") }
         val snapshot = ProjectSnapshot(
             listOf(ProjectObject("settings", inspectedModel(modelFile))),
@@ -89,7 +91,7 @@ class ProjectStoreTest {
 
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
-        assertEquals(2, JSONObject(File(root, "current_project.json").readText()).getInt("schemaVersion"))
+        assertEquals(3, JSONObject(File(root, "current_project.json").readText()).getInt("schemaVersion"))
         assertEquals(snapshot.selectedObjectId, restored.snapshot.selectedObjectId)
         assertEquals(snapshot.objects.single().id, restored.snapshot.objects.single().id)
         assertEquals(snapshot.objects.single().transform, restored.snapshot.objects.single().transform)

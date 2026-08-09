@@ -121,7 +121,8 @@ Jetpack Compose mobile UI
         │                               G-code role/range parsing, preview data
         │
         └── Private Binder worker process (:slicer)
-                    └── Native Orca runtime: model loading, slicing,
+                    └── Native Orca runtime: model loading, automatic orientation,
+                                             support-facet selection, slicing,
                                              G-code generation
 ```
 
