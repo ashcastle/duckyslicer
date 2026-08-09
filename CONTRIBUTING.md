@@ -16,6 +16,9 @@ avoid introducing an account or cloud requirement.
 - Treat imported STL and G-code as untrusted. Avoid unbounded line reads or unchecked
   coordinate arithmetic, preserve atomic outputs, and add both host corpus coverage
   and a JNI recovery assertion for new parser failure modes.
+- Treat app-private JSON and LAN-printer responses as untrusted too. Preserve the
+  last-known-good generation, never replace unreadable/future-schema data, keep
+  response size and nesting bounded, and do not enable credential-bearing redirects.
 - Preserve the ARM64 imperfect-mesh corpus. Common repairable defects must still
   produce finite G-code, irreparable geometry must fail without terminating the app,
   and a valid model must slice immediately after every corpus entry.
@@ -56,12 +59,13 @@ cd ../../android
   :app:assembleDebugAndroidTest :app:lintDebug
 
 cd ..
-python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_open_source_distribution tools.test_generate_source_bundle tools.test_verify_reproducible_release
+python3 -m unittest tools.test_verify_apk tools.test_verify_gradle_supply_chain tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_open_source_distribution tools.test_verify_runtime_resilience tools.test_generate_source_bundle tools.test_verify_reproducible_release
 python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
 python3 tools/verify_gradle_supply_chain.py
 python3 tools/verify_native_safety.py
 python3 tools/verify_android_isolation.py
 python3 tools/verify_open_source_distribution.py
+python3 tools/verify_runtime_resilience.py
 python3 tools/verify_workflows.py
 ```
 

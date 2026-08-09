@@ -7,7 +7,9 @@ import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedOutputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.URI
@@ -19,6 +21,11 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+
+private const val MAX_REMOTE_CREDENTIAL_BYTES = 8 * 1_024
+private const val MAX_REMOTE_RESPONSE_BYTES = 1 * 1_024 * 1_024
+private const val MAX_REMOTE_GCODE_BYTES = 2L * 1_024 * 1_024 * 1_024
+private const val MAX_REMOTE_PATH_LENGTH = 1_024
 
 enum class RemoteDeviceKind {
     OCTOPRINT,
@@ -38,7 +45,9 @@ data class RemoteDeviceProfile(
     )
 
     fun validate(): String? {
+        if (id.length !in 1..128) return "address_invalid"
         if (name.trim().isEmpty()) return "name_required"
+        if (name.length > 200 || baseUrl.length > 2_048) return "address_invalid"
         val uri = runCatching { URI(normalizeRemoteBaseUrl(baseUrl)) }.getOrNull()
             ?: return "address_invalid"
         if (uri.scheme !in setOf("http", "https") || uri.host.isNullOrBlank()) {
@@ -95,33 +104,28 @@ private fun isCarrierGradeNat(bytes: ByteArray): Boolean =
 
 class RemoteDeviceStore(context: Context) {
     private val file = File(context.filesDir, "remote_devices.json")
+    private val durableDevices = DurableJsonFile(file, MAX_REMOTE_DEVICE_BYTES)
     private val secrets = SecureCredentialStore(context.applicationContext)
 
+    @Volatile
+    var storageUnavailable: Boolean = false
+        private set
+
+    @Synchronized
     fun load(): List<RemoteDeviceProfile> {
-        if (!file.isFile) return emptyList()
-        return runCatching {
-            val values = JSONObject(file.readText()).optJSONArray("devices") ?: JSONArray()
-            buildList {
-                repeat(values.length()) { index ->
-                    val value = values.optJSONObject(index) ?: return@repeat
-                    val id = value.optString("id")
-                    val kind = runCatching {
-                        RemoteDeviceKind.valueOf(value.optString("kind"))
-                    }.getOrNull() ?: return@repeat
-                    val profile = RemoteDeviceProfile(
-                        id = id,
-                        name = value.optString("name"),
-                        kind = kind,
-                        baseUrl = value.optString("baseUrl"),
-                        hasCredential = secrets.contains(id),
-                    ).normalized()
-                    if (profile.validate() == null) add(profile)
-                }
-            }
-        }.getOrDefault(emptyList())
+        val stored = durableDevices.read(::parseProfiles, ::isCompatibleRoot)
+        storageUnavailable = stored.status in setOf(
+            DurableJsonStatus.UNREADABLE,
+            DurableJsonStatus.INCOMPATIBLE,
+        )
+        return stored.value.orEmpty()
     }
 
+    @Synchronized
     fun save(draft: RemoteDeviceDraft): RemoteDeviceProfile {
+        require(draft.credential.toByteArray(StandardCharsets.UTF_8).size <= MAX_REMOTE_CREDENTIAL_BYTES) {
+            "credential_too_large"
+        }
         val profile = RemoteDeviceProfile(
             id = draft.id ?: UUID.randomUUID().toString(),
             name = draft.name,
@@ -131,14 +135,20 @@ class RemoteDeviceStore(context: Context) {
         ).normalized()
         profile.validate()?.let { throw IllegalArgumentException(it) }
 
-        val profiles = load().filterNot { it.id == profile.id } + profile
+        val existing = load()
+        check(!storageUnavailable) { "saved_data_unreadable" }
+        val profiles = existing.filterNot { it.id == profile.id } + profile
+        require(profiles.size <= MAX_REMOTE_DEVICES) { "too_many_remote_devices" }
         write(profiles.sortedBy { it.name.lowercase() })
         if (draft.credential.isNotBlank()) secrets.put(profile.id, draft.credential.trim())
         return profile.copy(hasCredential = secrets.contains(profile.id))
     }
 
+    @Synchronized
     fun delete(profileId: String) {
-        write(load().filterNot { it.id == profileId })
+        val existing = load()
+        check(!storageUnavailable) { "saved_data_unreadable" }
+        write(existing.filterNot { it.id == profileId })
         secrets.remove(profileId)
     }
 
@@ -155,12 +165,46 @@ class RemoteDeviceStore(context: Context) {
                     .put("baseUrl", profile.baseUrl),
             )
         }
-        val temporary = File(file.parentFile, "${file.name}.tmp")
-        temporary.writeText(JSONObject().put("version", 1).put("devices", values).toString())
-        check(temporary.renameTo(file) || runCatching {
-            temporary.copyTo(file, overwrite = true)
-            temporary.delete()
-        }.isSuccess) { "remote_profile_write_failed" }
+        durableDevices.write(
+            JSONObject().put("version", REMOTE_DEVICE_SCHEMA_VERSION).put("devices", values),
+            ::parseProfiles,
+            ::isCompatibleRoot,
+        )
+        storageUnavailable = false
+    }
+
+    private fun parseProfiles(root: JSONObject): List<RemoteDeviceProfile>? {
+        if (root.optInt("version", 0) != REMOTE_DEVICE_SCHEMA_VERSION) return null
+        val values = root.optJSONArray("devices") ?: return null
+        if (values.length() > MAX_REMOTE_DEVICES) return null
+        val ids = HashSet<String>()
+        val profiles = ArrayList<RemoteDeviceProfile>(values.length())
+        for (index in 0 until values.length()) {
+            val value = values.optJSONObject(index) ?: return null
+            val id = value.optString("id")
+            val kind = runCatching {
+                RemoteDeviceKind.valueOf(value.optString("kind"))
+            }.getOrNull() ?: return null
+            val profile = RemoteDeviceProfile(
+                id = id,
+                name = value.optString("name"),
+                kind = kind,
+                baseUrl = value.optString("baseUrl"),
+                hasCredential = secrets.contains(id),
+            ).normalized()
+            if (!ids.add(id) || profile.validate() != null) return null
+            profiles += profile
+        }
+        return profiles
+    }
+
+    private fun isCompatibleRoot(root: JSONObject): Boolean =
+        root.optInt("version", 0) <= REMOTE_DEVICE_SCHEMA_VERSION
+
+    private companion object {
+        const val REMOTE_DEVICE_SCHEMA_VERSION = 1
+        const val MAX_REMOTE_DEVICE_BYTES = 256 * 1_024
+        const val MAX_REMOTE_DEVICES = 128
     }
 }
 
@@ -170,6 +214,9 @@ private class SecureCredentialStore(context: Context) {
     fun contains(id: String): Boolean = preferences.contains(id)
 
     fun put(id: String, value: String) {
+        require(value.toByteArray(StandardCharsets.UTF_8).size <= MAX_REMOTE_CREDENTIAL_BYTES) {
+            "credential_too_large"
+        }
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
         val payload = cipher.doFinal(value.toByteArray(StandardCharsets.UTF_8))
@@ -182,6 +229,7 @@ private class SecureCredentialStore(context: Context) {
 
     fun get(id: String): String? {
         val encoded = preferences.getString(id, null) ?: return null
+        if (encoded.length > MAX_REMOTE_CREDENTIAL_BYTES * 4) return null
         return runCatching {
             val combined = Base64.decode(encoded, Base64.NO_WRAP)
             require(combined.isNotEmpty())
@@ -194,12 +242,14 @@ private class SecureCredentialStore(context: Context) {
                 getOrCreateKey(),
                 GCMParameterSpec(TAG_BITS, combined.copyOfRange(1, payloadOffset)),
             )
-            String(cipher.doFinal(combined.copyOfRange(payloadOffset, combined.size)), StandardCharsets.UTF_8)
+            val plaintext = cipher.doFinal(combined.copyOfRange(payloadOffset, combined.size))
+            require(plaintext.size <= MAX_REMOTE_CREDENTIAL_BYTES)
+            String(plaintext, StandardCharsets.UTF_8)
         }.getOrNull()
     }
 
     fun remove(id: String) {
-        preferences.edit().remove(id).apply()
+        check(preferences.edit().remove(id).commit()) { "credential_delete_failed" }
     }
 
     private fun getOrCreateKey(): SecretKey {
@@ -242,6 +292,7 @@ class RemoteDeviceClient(private val timeoutMillis: Int) {
         onProgress: (Int) -> Unit = {},
     ): RemoteUpload {
         require(gcode.isFile) { "gcode_missing" }
+        require(gcode.length() in 1..MAX_REMOTE_GCODE_BYTES) { "gcode_size_invalid" }
         val endpoint = when (profile.kind) {
             RemoteDeviceKind.OCTOPRINT -> "/api/files/local"
             RemoteDeviceKind.KLIPPER -> "/server/files/upload"
@@ -256,25 +307,26 @@ class RemoteDeviceClient(private val timeoutMillis: Int) {
                 ?.optJSONObject("local")?.optString("path")
             RemoteDeviceKind.KLIPPER -> response.optJSONObject("result")
                 ?.optJSONObject("item")?.optString("path")
-        }.orEmpty().ifBlank { gcode.name }
+        }.orEmpty().ifBlank { gcode.name }.let(::safeRemotePath)
         return RemoteUpload(profile.id, remotePath, gcode.name)
     }
 
     fun start(profile: RemoteDeviceProfile, credential: String, upload: RemoteUpload) {
         require(upload.profileId == profile.id) { "upload_device_mismatch" }
+        val remotePath = safeRemotePath(upload.remotePath)
         when (profile.kind) {
             RemoteDeviceKind.OCTOPRINT -> request(
                 profile,
                 credential,
                 "POST",
-                "/api/files/local/${encodePath(upload.remotePath)}",
+                "/api/files/local/${encodePath(remotePath)}",
                 "{\"command\":\"select\",\"print\":true}",
             )
             RemoteDeviceKind.KLIPPER -> request(
                 profile,
                 credential,
                 "POST",
-                "/printer/print/start?filename=${encodeQuery(upload.remotePath)}",
+                "/printer/print/start?filename=${encodeQuery(remotePath)}",
             )
         }
     }
@@ -305,11 +357,11 @@ class RemoteDeviceClient(private val timeoutMillis: Int) {
     private fun octoPrintStatus(profile: RemoteDeviceProfile, credential: String): RemoteDeviceStatus {
         val response = request(profile, credential, "GET", "/api/job")
         return RemoteDeviceStatus(
-            state = response.optString("state", "Unknown"),
+            state = response.optString("state", "Unknown").take(200),
             fileName = response.optJSONObject("job")?.optJSONObject("file")?.optString("name")
-                ?.takeIf(String::isNotBlank),
+                ?.take(MAX_REMOTE_PATH_LENGTH)?.takeIf(String::isNotBlank),
             progressPercent = response.optJSONObject("progress")?.optDouble("completion")
-                ?.takeUnless(Double::isNaN)?.toInt()?.coerceIn(0, 100),
+                ?.takeIf(Double::isFinite)?.toInt()?.coerceIn(0, 100),
         )
     }
 
@@ -324,9 +376,11 @@ class RemoteDeviceClient(private val timeoutMillis: Int) {
         val printStats = status?.optJSONObject("print_stats")
         val progress = status?.optJSONObject("virtual_sdcard")?.optDouble("progress")
         return RemoteDeviceStatus(
-            state = printStats?.optString("state", "unknown") ?: "unknown",
-            fileName = printStats?.optString("filename")?.takeIf(String::isNotBlank),
-            progressPercent = progress?.takeUnless(Double::isNaN)?.times(100)?.toInt()?.coerceIn(0, 100),
+            state = printStats?.optString("state", "unknown")?.take(200) ?: "unknown",
+            fileName = printStats?.optString("filename")?.take(MAX_REMOTE_PATH_LENGTH)
+                ?.takeIf(String::isNotBlank),
+            progressPercent = progress?.takeIf(Double::isFinite)?.times(100)?.toInt()
+                ?.coerceIn(0, 100),
         )
     }
 
@@ -337,15 +391,19 @@ class RemoteDeviceClient(private val timeoutMillis: Int) {
         path: String,
         body: String? = null,
     ): JSONObject {
-        val connection = open(profile, credential, path).apply {
-            requestMethod = method
+        val connection = open(profile, credential, path)
+        return try {
+            connection.requestMethod = method
             if (body != null) {
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json")
-                outputStream.bufferedWriter().use { it.write(body) }
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.outputStream.bufferedWriter().use { it.write(body) }
             }
+            connection.readJsonResponse()
+        } catch (failure: Throwable) {
+            connection.disconnect()
+            throw failure
         }
-        return connection.readJsonResponse()
     }
 
     private fun multipart(
@@ -378,28 +436,33 @@ class RemoteDeviceClient(private val timeoutMillis: Int) {
             setFixedLengthStreamingMode(preamble.size.toLong() + file.length() + closing.size)
             setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
         }
-        BufferedOutputStream(connection.outputStream).use { output ->
-            output.write(preamble)
-            var sent = 0L
-            var lastProgress = -1
-            file.inputStream().buffered().use { input ->
-                val buffer = ByteArray(64 * 1024)
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count < 0) break
-                    output.write(buffer, 0, count)
-                    sent += count
-                    val progress = ((sent * 100) / file.length().coerceAtLeast(1L))
-                        .toInt().coerceIn(0, 100)
-                    if (progress != lastProgress) {
-                        lastProgress = progress
-                        onProgress(progress)
+        return try {
+            BufferedOutputStream(connection.outputStream).use { output ->
+                output.write(preamble)
+                var sent = 0L
+                var lastProgress = -1
+                file.inputStream().buffered().use { input ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        output.write(buffer, 0, count)
+                        sent += count
+                        val progress = ((sent * 100) / file.length().coerceAtLeast(1L))
+                            .toInt().coerceIn(0, 100)
+                        if (progress != lastProgress) {
+                            lastProgress = progress
+                            onProgress(progress)
+                        }
                     }
                 }
+                output.write(closing)
             }
-            output.write(closing)
+            connection.readJsonResponse()
+        } catch (failure: Throwable) {
+            connection.disconnect()
+            throw failure
         }
-        return connection.readJsonResponse()
     }
 
     private fun open(
@@ -407,10 +470,15 @@ class RemoteDeviceClient(private val timeoutMillis: Int) {
         credential: String,
         path: String,
     ): HttpURLConnection {
+        profile.validate()?.let { throw IllegalArgumentException(it) }
+        require(credential.toByteArray(StandardCharsets.UTF_8).size <= MAX_REMOTE_CREDENTIAL_BYTES) {
+            "credential_too_large"
+        }
         val connection = URI(profile.baseUrl + path).toURL().openConnection() as HttpURLConnection
         connection.connectTimeout = timeoutMillis
         connection.readTimeout = timeoutMillis
         connection.useCaches = false
+        connection.instanceFollowRedirects = false
         connection.setRequestProperty("Accept", "application/json")
         if (credential.isNotBlank()) {
             when (profile.kind) {
@@ -431,19 +499,51 @@ class RemoteDeviceClient(private val timeoutMillis: Int) {
 private fun HttpURLConnection.readJsonResponse(): JSONObject {
     return try {
         val code = responseCode
-        val raw = (if (code in 200..299) inputStream else errorStream)
-            ?.bufferedReader()?.use { it.readText() }.orEmpty()
         if (code !in 200..299) throw RemoteDeviceException(code)
-        if (raw.isBlank()) JSONObject() else JSONObject(raw)
+        val reportedLength = contentLengthLong
+        require(reportedLength < 0 || reportedLength <= MAX_REMOTE_RESPONSE_BYTES) {
+            "remote_response_too_large"
+        }
+        val bytes = inputStream?.use { it.readBoundedBytes(MAX_REMOTE_RESPONSE_BYTES) }
+            ?: ByteArray(0)
+        if (bytes.isEmpty()) JSONObject() else {
+            parseBoundedJsonObject(bytes, MAX_REMOTE_RESPONSE_BYTES)
+        }
     } finally {
         disconnect()
     }
+}
+
+private fun InputStream.readBoundedBytes(maximumBytes: Int): ByteArray {
+    val output = ByteArrayOutputStream(minOf(maximumBytes, 16 * 1_024))
+    val buffer = ByteArray(16 * 1_024)
+    var total = 0
+    while (true) {
+        val count = read(buffer)
+        if (count < 0) break
+        total += count
+        require(total <= maximumBytes) { "remote_response_too_large" }
+        output.write(buffer, 0, count)
+    }
+    return output.toByteArray()
 }
 
 class RemoteDeviceException(val statusCode: Int) : Exception("remote_request_failed_$statusCode")
 
 private fun safeHeaderFileName(value: String): String =
     value.replace(Regex("[\\r\\n\\\"]"), "_")
+
+private fun safeRemotePath(value: String): String {
+    val normalized = value.trim().replace('\\', '/')
+    require(normalized.length in 1..MAX_REMOTE_PATH_LENGTH) { "remote_path_invalid" }
+    require(!normalized.startsWith('/') && normalized.none(Char::isISOControl)) {
+        "remote_path_invalid"
+    }
+    require(normalized.split('/').none { it.isBlank() || it == "." || it == ".." }) {
+        "remote_path_invalid"
+    }
+    return normalized
+}
 
 private fun encodeQuery(value: String): String =
     URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20")

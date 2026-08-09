@@ -108,6 +108,7 @@ private fun DuckySlicerScreen() {
     val profileSavedNotice = stringResource(R.string.profile_saved)
     val profileSaveError = stringResource(R.string.profile_save_error)
     val projectSaveError = stringResource(R.string.project_save_error)
+    val savedDataUnavailable = stringResource(R.string.saved_data_unavailable)
     val previewError = stringResource(R.string.preview_error)
     val remoteSavedNotice = stringResource(R.string.device_saved)
     val remoteDeletedNotice = stringResource(R.string.device_deleted)
@@ -124,6 +125,7 @@ private fun DuckySlicerScreen() {
 
     var projectHistory by remember { mutableStateOf(ProjectHistoryState()) }
     var projectRestored by remember { mutableStateOf(false) }
+    var projectPersistenceBlocked by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var importing by remember { mutableStateOf(false) }
@@ -159,15 +161,18 @@ private fun DuckySlicerScreen() {
 
     LaunchedEffect(profileStore) {
         profileCatalog = withContext(Dispatchers.IO) { profileStore.load() }
+        if (profileStore.storageUnavailable) error = savedDataUnavailable
     }
     LaunchedEffect(projectStore) {
         val restored = withContext(Dispatchers.IO) { projectStore.loadProject() }
         projectHistory = ProjectHistoryState(current = restored.snapshot)
         restored.sliceOptions?.let { sliceOptions = it }
+        projectPersistenceBlocked = restored.storageUnavailable
+        if (restored.storageUnavailable) error = savedDataUnavailable
         projectRestored = true
     }
     LaunchedEffect(projectHistory.current, sliceOptions, projectRestored) {
-        if (!projectRestored) return@LaunchedEffect
+        if (!projectRestored || projectPersistenceBlocked) return@LaunchedEffect
         delay(400)
         runCatching {
             withContext(Dispatchers.IO) {
@@ -180,6 +185,7 @@ private fun DuckySlicerScreen() {
     }
     LaunchedEffect(remoteDeviceStore) {
         remoteDevices = withContext(Dispatchers.IO) { remoteDeviceStore.load() }
+        if (remoteDeviceStore.storageUnavailable) error = savedDataUnavailable
         selectedRemoteDeviceId = selectedRemoteDeviceId
             ?.takeIf { selected -> remoteDevices.any { it.id == selected } }
             ?: remoteDevices.firstOrNull()?.id

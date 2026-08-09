@@ -72,6 +72,9 @@ def main() -> None:
         "offline open-source distribution is verified": (
             "python3 tools/verify_open_source_distribution.py"
         ),
+        "runtime persistence and LAN inputs are bounded": (
+            "python3 tools/verify_runtime_resilience.py"
+        ),
         "component license inventory is generated": (
             "python3 tools/generate_license_inventory.py"
         ),
@@ -79,6 +82,9 @@ def main() -> None:
         "source bundle policy is unit tested": "tools.test_generate_source_bundle",
         "release reproducibility policy is unit tested": (
             "tools.test_verify_reproducible_release"
+        ),
+        "runtime resilience policy is unit tested": (
+            "tools.test_verify_runtime_resilience"
         ),
     }
     for description, marker in required_android_gates.items():
@@ -120,6 +126,9 @@ def main() -> None:
         "offline open-source distribution is verified": (
             "python3 tools/verify_open_source_distribution.py"
         ),
+        "runtime persistence and LAN inputs are bounded": (
+            "python3 tools/verify_runtime_resilience.py"
+        ),
         "component license inventory is generated": (
             "python3 tools/generate_license_inventory.py"
         ),
@@ -127,6 +136,9 @@ def main() -> None:
         "source bundle policy is unit tested": "tools.test_generate_source_bundle",
         "release reproducibility policy is unit tested": (
             "tools.test_verify_reproducible_release"
+        ),
+        "runtime resilience policy is unit tested": (
+            "tools.test_verify_runtime_resilience"
         ),
         "unsigned release is rebuilt without the build cache": (
             "Rebuild and verify reproducible unsigned release"
