@@ -63,6 +63,7 @@ def main() -> None:
 
     android_source = (WORKFLOW_ROOT / "android.yml").read_text(encoding="utf-8")
     release_source = (WORKFLOW_ROOT / "release.yml").read_text(encoding="utf-8")
+    play_source = (WORKFLOW_ROOT / "play-bundle.yml").read_text(encoding="utf-8")
     android_jobs = job_sections(android_source)
     release_jobs = job_sections(release_source)
     expected_release_jobs = {"build", "sign", "publish"}
@@ -111,6 +112,12 @@ def main() -> None:
         ),
         "release publication contract is unit tested": (
             "tools.test_verify_release_contract"
+        ),
+        "Play bundle isolation is verified": (
+            "python3 tools/verify_play_bundle_workflow.py"
+        ),
+        "Play bundle isolation is unit tested": (
+            "tools.test_verify_play_bundle_workflow"
         ),
         "generated G-code storage policy is verified": (
             "python3 tools/verify_slice_storage.py"
@@ -200,6 +207,12 @@ def main() -> None:
         "release publication contract is unit tested": (
             "tools.test_verify_release_contract"
         ),
+        "Play bundle isolation is verified": (
+            "python3 tools/verify_play_bundle_workflow.py"
+        ),
+        "Play bundle isolation is unit tested": (
+            "tools.test_verify_play_bundle_workflow"
+        ),
         "generated G-code storage policy is verified": (
             "python3 tools/verify_slice_storage.py"
         ),
@@ -225,6 +238,18 @@ def main() -> None:
     for description, marker in required_release_gates.items():
         if marker not in release_source:
             errors.append(f"release.yml: missing gate: {description}")
+
+    required_play_gates = {
+        "manual dispatch only": "  workflow_dispatch:\n",
+        "strict Gradle verification": "./gradlew --dependency-verification=strict",
+        "Play isolation verifier runs before build": (
+            "python3 tools/verify_play_bundle_workflow.py"
+        ),
+        "signed Play artifact is retained": "name: duckyslicer-play-signed",
+    }
+    for description, marker in required_play_gates.items():
+        if marker not in play_source:
+            errors.append(f"play-bundle.yml: missing gate: {description}")
 
     build = release_jobs.get("build", "")
     signer = release_jobs.get("sign", "")
