@@ -90,8 +90,12 @@ accept only bounded settings and canonical files inside app-private storage, and
 successful G-code is synchronized before being atomically retained under a unique
 name. A retained slice may contain at most 1 GiB of G-code, retained outputs share a
 1 GiB budget, and slicing starts only with at least 512 MiB of free app-storage space.
-The worker also terminates itself if its periodic guard observes an active native
-output over the limit or free space below the 64 MiB emergency threshold. Old
+Before Orca exports, the worker applies a 1 GiB `RLIMIT_FSIZE` soft limit; a write that
+reaches it fails or terminates only the isolated worker, and the next request restores
+the production limit. The inherited compatibility preview cache reads at most 256 KiB
+instead of duplicating the complete output in memory. As a secondary defence, the worker
+terminates itself if its periodic guard observes an active native output over the limit
+or free space below the 64 MiB emergency threshold. Old
 outputs are removed oldest first, while cross-process shared reader leases prevent
 cleanup from deleting G-code
 being previewed, exported, or uploaded. Stale native output and interrupted temporary
@@ -99,7 +103,9 @@ files are recovered on the next worker start. This is crash/address-space isolat
 not a permission sandbox: both processes run under the same Android UID and share the
 app's private storage.
 
-The ARM64 device corpus also passes open shells, reversed and duplicate facets,
+The ARM64 suite additionally forces a small native file-size limit, verifies that disk
+growth stops at that boundary, and requires a normal recovery slice. Its mesh corpus
+also passes open shells, reversed and duplicate facets,
 degenerate attachments, intersecting closed shells, and fully degenerate input
 through the production boundary. Repairable geometry must emit finite G-code;
 irreparable geometry must fail cleanly; a known-good model must slice afterward.

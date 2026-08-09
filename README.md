@@ -70,9 +70,11 @@ finished G-code file to OctoPrint or Klipper/Moonraker.
 - Cancelable on-device slicing on a dedicated worker thread; cancellation terminates
   only the isolated Orca process and the next slice starts in a fresh worker
 - Distinct, synchronized G-code artifacts for successful slices instead of one shared output file being overwritten
+- Native G-code writes hard-limited to 1 GiB with `RLIMIT_FSIZE` inside the isolated worker, with only a
+  256 KiB compatibility preview cache instead of a second full in-memory copy
 - Retained G-code limited to 1 GiB per slice and 1 GiB in total, with a 512 MiB
-  free-space reserve, active-generation emergency monitoring, and cross-process
-  reader leases protecting preview, export, and printer upload from cleanup
+  free-space reserve, secondary active-generation emergency monitoring, and
+  cross-process reader leases protecting preview, export, and printer upload from cleanup
 - 16 KB page-size-compatible ARM64 native libraries for current Android devices
 - Immutable GitHub Action pins and checksum-verified, version-locked Gradle artifacts;
   releases publish only after the full ARM64 device suite passes

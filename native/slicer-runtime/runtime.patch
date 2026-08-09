@@ -256,6 +256,16 @@ index 116a4a85..ca1789ea 100644
  
      // F91 (2026-05-25): per-extruder filament tuning sourced from the user's filament
      // library on the Kotlin side at slice time. Empty vector = "user has not set this
+@@ -124,6 +294,9 @@ struct SliceConfig {
+ 
+     // Full-spectrum mixed-filament recipe (stage 2; serialized MixedFilamentManager output)
+     std::string mixed_filament_definitions = "";
++
++    // Process-local output ceiling. The Android worker sets RLIMIT_FSIZE before export.
++    unsigned long long maximum_gcode_bytes = 1024ULL * 1024ULL * 1024ULL;
+ };
+ 
+ // ---- Model Info ----
 Submodule app/src/main/cpp/orcaslicer contains modified content
 diff --git a/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp b/app/src/main/cpp/orcaslicer/src/libslic3r/PerimeterGenerator.cpp
 index 4e0ddd0f3f..4e8e2b2ef3 100644
@@ -541,6 +551,17 @@ index d93efb7d..5601bc4d 100644
  
      // F91: per-extruder filament tuning from the user's filament library.
      config.filament_flow_ratios = getFloatArray("filamentFlowRatios");
+@@ -156,6 +319,10 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.filament_bed_temp_initial_layers = getIntArray("filamentBedTempInitialLayers");
+     config.filament_costs = getFloatArray("filamentCosts");
+     config.mixed_filament_definitions = getString("mixedFilamentDefinitions");
++    const int maximum_gcode_bytes = getInt("maximumGcodeBytes");
++    config.maximum_gcode_bytes = maximum_gcode_bytes > 0
++        ? static_cast<unsigned long long>(maximum_gcode_bytes)
++        : 0ULL;
+ 
+     env->DeleteLocalRef(cls);
+     return config;
 @@ -235,9 +398,79 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setInt("perimeters", config.perimeters);
      setInt("topSolidLayers", config.top_solid_layers);
@@ -710,7 +731,7 @@ index d93efb7d..5601bc4d 100644
      setFloat("bedSizeX", config.bed_size_x);
      setFloat("bedSizeY", config.bed_size_y);
      setFloat("maxPrintHeight", config.max_print_height);
-@@ -271,6 +581,22 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -271,6 +581,23 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setFloat("wipeTowerWidth", config.wipe_tower_width);
      setString("machineStartGcode", config.machine_start_gcode);
      setString("machineEndGcode", config.machine_end_gcode);
@@ -730,6 +751,7 @@ index d93efb7d..5601bc4d 100644
 +    setFloat("machineMaxJerkY", config.machine_max_jerk_y);
 +    setFloat("machineMaxJerkZ", config.machine_max_jerk_z);
 +    setFloat("machineMaxJerkE", config.machine_max_jerk_e);
++    setInt("maximumGcodeBytes", static_cast<int>(config.maximum_gcode_bytes));
  
      env->DeleteLocalRef(cls);
      return obj;
@@ -737,6 +759,15 @@ diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_p
 index 8d61c9cf..bccf9dd0 100644
 --- a/app/src/main/cpp/src/sapil_print.cpp
 +++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -6,6 +6,8 @@
+ #include <chrono>
+ #include <fstream>
+ #include <sstream>
++#include <stdexcept>
++#include <sys/resource.h>
+ 
+ // Slicer includes
+ #include "libslic3r/Print.hpp"
 @@ -183,84 +183,148 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
      dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
@@ -1156,3 +1187,51 @@ index 8d61c9cf..bccf9dd0 100644
                      // Retraction reduction for infill moves
                      "reduce_infill_retraction",
                      // Line widths (from embedded profile)
+@@ -1375,6 +1513,28 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+         // Generate G-code — use the same directory as the loaded model
+         extern std::string getFilesDir();
+         std::string output_path = getFilesDir() + "/output.gcode";
++
++        // The periodic Kotlin storage guard is intentionally only a secondary
++        // defence. Constrain the writer in the isolated process before Orca can
++        // emit a byte so fast output cannot race beyond the retained-file policy.
++        constexpr rlim_t MAXIMUM_GCODE_BYTES = 1024ULL * 1024ULL * 1024ULL;
++        if (config.maximum_gcode_bytes == 0 ||
++            config.maximum_gcode_bytes > MAXIMUM_GCODE_BYTES) {
++            throw std::invalid_argument("Invalid G-code output limit");
++        }
++        struct rlimit file_size_limit {};
++        if (getrlimit(RLIMIT_FSIZE, &file_size_limit) != 0) {
++            throw std::runtime_error("Could not inspect G-code output limit");
++        }
++        const rlim_t requested_limit = static_cast<rlim_t>(config.maximum_gcode_bytes);
++        if (file_size_limit.rlim_max != RLIM_INFINITY && requested_limit > file_size_limit.rlim_max) {
++            throw std::runtime_error("G-code output limit exceeds the process hard limit");
++        }
++        file_size_limit.rlim_cur = requested_limit;
++        if (setrlimit(RLIMIT_FSIZE, &file_size_limit) != 0) {
++            throw std::runtime_error("Could not apply G-code output limit");
++        }
++
+         // OrcaSlicer dereferences result without null check, so provide a real object
+         Slic3r::GCodeProcessorResult gcode_result;
+         g_active_print.store(&print, std::memory_order_release);
+@@ -1383,11 +1543,14 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+ 
+         if (progress) progress(95, "Reading results");
+ 
+-        // Read the G-code for preview
++        // Retain only a bounded compatibility preview. Android's real preview
++        // parser streams the persisted G-code and does not need a second full copy.
++        constexpr std::size_t LEGACY_GCODE_PREVIEW_BYTES = 256 * 1024;
+         std::ifstream gcode_file(output_path);
+         if (gcode_file.good()) {
+-            std::ostringstream ss;
+-            ss << gcode_file.rdbuf();
+-            pImpl->last_gcode_content = ss.str();
++            std::string preview(LEGACY_GCODE_PREVIEW_BYTES, '\0');
++            gcode_file.read(preview.data(), static_cast<std::streamsize>(preview.size()));
++            preview.resize(static_cast<std::size_t>(gcode_file.gcount()));
++            pImpl->last_gcode_content = std::move(preview);
+             pImpl->last_gcode_path = output_path;
+         }

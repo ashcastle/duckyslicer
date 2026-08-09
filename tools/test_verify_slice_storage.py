@@ -12,10 +12,17 @@ def valid_sources() -> dict[str, str]:
             "EMERGENCY_FREE_BYTES MAXIMUM_RETAINED_OUTPUTS StandardCopyOption.ATOMIC_MOVE "
             "output.fd.sync() copyBounded tryLock() SliceArtifactLease activeOutputIsUnsafe"
         ),
+        "SliceConfig.kt": "maximumGcodeBytes: Int = 1_073_741_824",
         "SlicerProcessService.kt": (
             "artifactStore.prepareForSlice() artifactStore.persist( scheduleStorageGuard "
             "artifactStore.activeOutputIsUnsafe() estimatedTimeSeconds.isFinite() "
-            "estimatedFilamentGrams.isFinite() transientRoots = listOf(filesDir, cacheDir)"
+            "estimatedFilamentGrams.isFinite() transientRoots = listOf(filesDir, cacheDir) "
+            "sliceWithOutputLimitForTest KEY_MAXIMUM_GCODE_BYTES_FOR_TEST "
+            "PRODUCTION_MAXIMUM_GCODE_BYTES this.maximumGcodeBytes = maximumGcodeBytes"
+        ),
+        "runtime.patch": (
+            "+maximum_gcode_bytes\n+RLIMIT_FSIZE\n+getrlimit\n+setrlimit\n"
+            "+MAXIMUM_GCODE_BYTES\n+LEGACY_GCODE_PREVIEW_BYTES\n+gcode_file.read"
         ),
         "MainActivity.kt": " ".join(["SliceArtifactLease.acquire"] * 3),
         "RemoteDevice.kt": "SliceArtifactLease.acquire(gcode)",
@@ -28,11 +35,12 @@ def valid_sources() -> dict[str, str]:
             "privateCacheOutputIsAcceptedAndRecovered"
         ),
         "NativeEngineInstrumentedTest.kt": (
-            "sliceArtifactLeaseProtectsConcurrentReadersAcrossProcesses"
+            "sliceArtifactLeaseProtectsConcurrentReadersAcrossProcesses "
+            "nativeGcodeWriterHardLimitContainsDiskGrowthAndRecovers"
         ),
-        "README.md": "G-code reader lease",
-        "SECURITY.md": "G-code reader lease",
-        "CONTRIBUTING.md": "G-code reader lease",
+        "README.md": "G-code reader lease RLIMIT_FSIZE",
+        "SECURITY.md": "G-code reader lease RLIMIT_FSIZE",
+        "CONTRIBUTING.md": "G-code reader lease RLIMIT_FSIZE",
     }
 
 
@@ -50,6 +58,18 @@ class VerifySliceStorageTest(unittest.TestCase):
         sources = valid_sources()
         sources["RemoteDevice.kt"] = "upload without a lease"
         with self.assertRaisesRegex(VerificationError, "remote upload"):
+            verify_slice_storage(sources)
+
+    def test_rejects_missing_native_file_size_limit(self) -> None:
+        sources = valid_sources()
+        sources["runtime.patch"] = sources["runtime.patch"].replace("+RLIMIT_FSIZE", "+limit")
+        with self.assertRaisesRegex(VerificationError, "RLIMIT_FSIZE"):
+            verify_slice_storage(sources)
+
+    def test_rejects_unbounded_native_preview_read(self) -> None:
+        sources = valid_sources()
+        sources["runtime.patch"] += "\n+gcode_file.rdbuf()"
+        with self.assertRaisesRegex(VerificationError, "complete G-code"):
             verify_slice_storage(sources)
 
 
