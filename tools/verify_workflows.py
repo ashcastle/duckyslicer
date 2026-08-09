@@ -50,10 +50,10 @@ def main() -> None:
     release_source = (WORKFLOW_ROOT / "release.yml").read_text(encoding="utf-8")
     android_jobs = job_sections(android_source)
     release_jobs = job_sections(release_source)
-    expected_release_jobs = {"build", "sign", "device-tests", "publish"}
+    expected_release_jobs = {"build", "sign", "publish"}
     if set(release_jobs) != expected_release_jobs:
         errors.append(
-            "release.yml: expected build, sign, device-tests, and publish jobs; "
+            "release.yml: expected build, sign, and publish jobs; "
             f"found {sorted(release_jobs)}"
         )
     required_android_gates = {
@@ -104,44 +104,16 @@ def main() -> None:
         if marker not in android_source:
             errors.append(f"android.yml: missing gate: {description}")
 
-    android_device_tests = android_jobs.get("device-tests", "")
-    arm64_device_rules = {
-        "Android device tests use a supported Apple Silicon host": (
-            "runs-on: macos-14" in android_device_tests
-        ),
-        "Android device tests install the 16 KB ARM64 image": (
-            "system-images;android-35;google_apis_ps16k;arm64-v8a" in android_device_tests
-        ),
-        "Android device tests verify the guest ABI": (
-            "ro.product.cpu.abi" in android_device_tests and "arm64-v8a" in android_device_tests
-        ),
-        "Android device tests verify the runtime page size": (
-            "adb shell getconf PAGE_SIZE" in android_device_tests and "16384" in android_device_tests
-        ),
-        "Android device tests account for unavailable nested virtualization": (
-            "-accel off" in android_device_tests
-        ),
-    }
-    for description, valid in arm64_device_rules.items():
-        if not valid:
-            errors.append(f"android.yml: ARM64 device invariant failed: {description}")
+    if "device-tests" in android_jobs or "runs-on: macos-14" in android_source:
+        errors.append("android.yml: hosted emulator jobs are not allowed")
 
     required_release_gates = {
         "sign depends on build": "  sign:\n    needs: build\n",
-        "device tests depend on build and signer": (
-            "  device-tests:\n    needs: [build, sign]\n"
-        ),
-        "publish depends on build, signer, and device tests": (
-            "  publish:\n    needs: [build, sign, device-tests]\n"
+        "publish depends on build and signer": (
+            "  publish:\n    needs: [build, sign]\n"
         ),
         "publish has attestation permission": "      attestations: write\n",
         "publish has release permission": "      contents: write\n",
-        "release candidate runs instrumentation": "Run release-candidate device tests",
-        "signed minified APK cold-launches": "Smoke test signed minified release APK",
-        "signed APK activity launch is authoritative": (
-            "adb shell am start -W \\\n"
-            "            -n com.ashcastle.duckyslicer/.MainActivity"
-        ),
         "signed release APK runs structural verifier": (
             'python3 tools/verify_apk.py "${release_apks[0]}"'
         ),
@@ -203,7 +175,6 @@ def main() -> None:
 
     build = release_jobs.get("build", "")
     signer = release_jobs.get("sign", "")
-    device_tests = release_jobs.get("device-tests", "")
     publish = release_jobs.get("publish", "")
     isolated_signing_rules = {
         "build produces an unsigned release": (
@@ -219,9 +190,7 @@ def main() -> None:
             and "attestations:" not in signer
         ),
         "signer receives all secrets only in its own section": (
-            signer.count("${{ secrets.") == 4
-            and "${{ secrets." not in device_tests
-            and "${{ secrets." not in publish
+            signer.count("${{ secrets.") == 4 and "${{ secrets." not in publish
         ),
         "signer does not checkout or execute project build code": (
             "actions/checkout@" not in signer
@@ -236,16 +205,10 @@ def main() -> None:
         "signer removes its temporary keystore before later actions": (
             "trap 'rm -f \"$key_file\"' EXIT" in signer
         ),
-        "device tests install the isolated signed artifact": (
-            "duckyslicer-release-signed" in device_tests
-        ),
-        "release device tests use a supported Apple Silicon host": (
-            "runs-on: macos-14" in device_tests
-        ),
-        "release device tests run on an ARM64 16 KB guest": (
-            "system-images;android-35;google_apis_ps16k;arm64-v8a" in device_tests
-            and "adb shell getconf PAGE_SIZE" in device_tests
-            and "16384" in device_tests
+        "hosted emulator jobs are absent": (
+            "device-tests" not in release_jobs
+            and "runs-on: macos-14" not in release_source
+            and "system-images;android-35;google_apis_ps16k" not in release_source
         ),
         "publish regenerates the SBOM from the signed artifact": (
             "tools/generate_sbom.py" in publish
@@ -298,7 +261,7 @@ def main() -> None:
         raise SystemExit("Workflow verification failed:\n- " + "\n- ".join(errors))
     print(
         f"Verified {len(workflows)} workflows and {action_count} immutable Action references; "
-        "isolated signing and ARM64 device tests gate release publication"
+        "isolated signing and static ARM64 16 KB checks gate release publication"
     )
 
 
