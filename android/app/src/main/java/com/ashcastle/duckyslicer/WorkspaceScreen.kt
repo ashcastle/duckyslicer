@@ -242,6 +242,8 @@ fun WorkspaceScreen(
                     preview = if (selectedTab == WorkspaceTab.PREVIEW) layerPreview else null,
                     bedSizeX = sliceOptions.bedSizeX,
                     bedSizeY = sliceOptions.bedSizeY,
+                    bedOriginX = sliceOptions.bedOriginX,
+                    bedOriginY = sliceOptions.bedOriginY,
                     bedPolygon = sliceOptions.bedPolygon,
                     toolpathOpacity = appSettings.toolpathOpacity,
                     toolpathDepthContrast = appSettings.toolpathDepthContrast,
@@ -736,6 +738,8 @@ private fun BedScene(
     preview: GcodeLayerPreview?,
     bedSizeX: Float,
     bedSizeY: Float,
+    bedOriginX: Float,
+    bedOriginY: Float,
     bedPolygon: List<Float>,
     toolpathOpacity: Float,
     toolpathDepthContrast: Float,
@@ -767,6 +771,8 @@ private fun BedScene(
             preview = preview,
             bedSizeX = bedSizeX,
             bedSizeY = bedSizeY,
+            bedOriginX = bedOriginX,
+            bedOriginY = bedOriginY,
             bedPolygon = bedPolygon,
             opacity = toolpathOpacity,
             depthContrast = toolpathDepthContrast,
@@ -1003,8 +1009,8 @@ private fun BedScene(
                 val role = preview.segments[segmentIndex + 5].roundToInt()
                     .coerceIn(0, ToolpathStyles.lastIndex)
                 if (role !in visibleToolpathRoles) return@forEachIndexed
-                val startX = preview.segments[segmentIndex]
-                val startY = preview.segments[segmentIndex + 1]
+                val startX = preview.segments[segmentIndex] - bedOriginX
+                val startY = preview.segments[segmentIndex + 1] - bedOriginY
                 val z = preview.segments[segmentIndex + 4]
                 val normalizedHeight = ((z - preview.minZMm) / zSpan).coerceIn(0f, 1f)
                 val depthBand = (normalizedHeight * (PreviewDepthBands - 1))
@@ -1012,8 +1018,8 @@ private fun BedScene(
                     .coerceIn(0, PreviewDepthBands - 1)
                 val rolePath = previewPaths[depthBand][role]
                 val end = project(
-                    preview.segments[segmentIndex + 2],
-                    preview.segments[segmentIndex + 3],
+                    preview.segments[segmentIndex + 2] - bedOriginX,
+                    preview.segments[segmentIndex + 3] - bedOriginY,
                     z,
                 )
                 if (renderPlan.connectsToPrevious[selectedIndex]) {

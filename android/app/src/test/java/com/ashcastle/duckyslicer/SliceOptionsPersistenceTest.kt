@@ -18,6 +18,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(options.printerProfile.id, restored.printerProfile.id)
         assertEquals(options.printerProfile.brand, restored.printerProfile.brand)
         assertEquals(options.printerProfile.builtIn, restored.printerProfile.builtIn)
+        assertEquals(options.bedOriginX, restored.bedOriginX)
+        assertEquals(options.bedOriginY, restored.bedOriginY)
         assertEquals(options.bedPolygon, restored.bedPolygon)
         assertEquals(options.filamentProfile.compatiblePrinters, restored.filamentProfile.compatiblePrinters)
         assertEquals(options.quality.compatiblePrinters, restored.quality.compatiblePrinters)
@@ -194,6 +196,8 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
     .copy(
         bedSizeX = 278f,
         bedSizeY = 282f,
+        bedOriginX = -139f,
+        bedOriginY = -141f,
         bedPolygon = listOf(139f, 0f, 278f, 141f, 139f, 282f, 0f, 141f),
         maxPrintHeight = 290f,
         nozzleTemp = 248,

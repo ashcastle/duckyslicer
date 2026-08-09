@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
     "monotonic", "monotonicline", "rectilinear", "alignedrectilinear",
@@ -117,7 +117,7 @@ class Resolver:
         return result
 
 
-def printable_geometry(area: Any) -> tuple[float, float, list[float]]:
+def printable_geometry(area: Any) -> tuple[float, float, float, float, list[float]]:
     points: list[tuple[float, float]] = []
     for item in values(area):
         try:
@@ -145,12 +145,12 @@ def printable_geometry(area: Any) -> tuple[float, float, list[float]]:
     )
     if not all(math.isfinite(value) for value in normalized) or abs(signed_double_area) < 2.0:
         raise ValueError("degenerate printable area")
-    return width, depth, normalized
+    return width, depth, minimum_x, minimum_y, normalized
 
 
 def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     name = str(raw["name"])
-    width, depth, bed_polygon = printable_geometry(raw.get("printable_area"))
+    width, depth, bed_origin_x, bed_origin_y, bed_polygon = printable_geometry(raw.get("printable_area"))
     height = number(raw.get("printable_height"), 0)
     nozzle = number(raw.get("nozzle_diameter"), 0)
     flavor = str(scalar(raw.get("gcode_flavor"), "")).lower()
@@ -169,6 +169,8 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "brand": brand,
         "bedSizeX": width,
         "bedSizeY": depth,
+        "bedOriginX": bed_origin_x,
+        "bedOriginY": bed_origin_y,
         "bedPolygon": bed_polygon,
         "maxPrintHeight": height,
         "nozzleDiameter": nozzle,

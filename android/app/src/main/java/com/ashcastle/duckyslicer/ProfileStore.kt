@@ -47,6 +47,8 @@ class ProfileStore private constructor(
             name = requireName(name),
             bedSizeX = options.bedSizeX,
             bedSizeY = options.bedSizeY,
+            bedOriginX = options.bedOriginX,
+            bedOriginY = options.bedOriginY,
             bedPolygon = options.bedPolygon,
             maxPrintHeight = options.maxPrintHeight,
             nozzleDiameter = options.nozzleDiameter,
@@ -328,7 +330,7 @@ class ProfileStore private constructor(
         ?: throw IllegalArgumentException("Profile name is required")
 
     private companion object {
-        const val USER_PROFILE_SCHEMA_VERSION = 15
+        const val USER_PROFILE_SCHEMA_VERSION = 16
         const val MAX_USER_PROFILE_BYTES = 16 * 1_024 * 1_024
         const val MAX_USER_PROFILES = 4_096
         val PROFILE_ARRAY_PARSERS: Map<String, (JSONObject) -> String?> = mapOf(
@@ -348,6 +350,7 @@ class ProfileStore private constructor(
 internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("id", id).put("name", name)
     .put("bedSizeX", bedSizeX).put("bedSizeY", bedSizeY)
+    .put("bedOriginX", bedOriginX).put("bedOriginY", bedOriginY)
     .put("bedPolygon", JSONArray(bedPolygon))
     .put("maxPrintHeight", maxPrintHeight).put("nozzleDiameter", nozzleDiameter)
     .put("machineStartGcode", machineStartGcode).put("machineEndGcode", machineEndGcode)
@@ -565,6 +568,8 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         maxJerkY = optDouble("maxJerkY", 9.0).toFloat(),
         maxJerkZ = optDouble("maxJerkZ", 3.0).toFloat(),
         maxJerkE = optDouble("maxJerkE", 2.5).toFloat(),
+        bedOriginX = optDouble("bedOriginX", 0.0).toFloat(),
+        bedOriginY = optDouble("bedOriginY", 0.0).toFloat(),
         bedPolygon = if (has("bedPolygon")) {
             requireNotNull(floatList("bedPolygon")) { "Invalid bed polygon" }
         } else {

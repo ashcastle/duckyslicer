@@ -39,6 +39,8 @@ data class PrinterProfile(
     val maxJerkY: Float = 9f,
     val maxJerkZ: Float = 3f,
     val maxJerkE: Float = 2.5f,
+    val bedOriginX: Float = 0f,
+    val bedOriginY: Float = 0f,
     val bedPolygon: List<Float> = rectangularBedPolygon(bedSizeX, bedSizeY),
 ) {
     companion object {
@@ -419,7 +421,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 13,
+    val schemaVersion: Int = 14,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -430,6 +432,8 @@ data class SliceOptions(
     val quality: QualityProfile = QualityProfile.STANDARD,
     val bedSizeX: Float = printerProfile.bedSizeX,
     val bedSizeY: Float = printerProfile.bedSizeY,
+    val bedOriginX: Float = printerProfile.bedOriginX,
+    val bedOriginY: Float = printerProfile.bedOriginY,
     val bedPolygon: List<Float> = printerProfile.bedPolygon,
     val maxPrintHeight: Float = printerProfile.maxPrintHeight,
     val nozzleDiameter: Float = printerProfile.nozzleDiameter,
@@ -646,6 +650,8 @@ data class SliceOptions(
             printerProfile = profile,
             bedSizeX = profile.bedSizeX,
             bedSizeY = profile.bedSizeY,
+            bedOriginX = profile.bedOriginX,
+            bedOriginY = profile.bedOriginY,
             bedPolygon = profile.bedPolygon,
             maxPrintHeight = profile.maxPrintHeight,
             nozzleDiameter = profile.nozzleDiameter,
@@ -1040,6 +1046,8 @@ data class SliceOptions(
         preciseOuterWalls = preciseOuterWalls,
         bedSizeX = bedSizeX,
         bedSizeY = bedSizeY,
+        bedOriginX = bedOriginX,
+        bedOriginY = bedOriginY,
         bedPolygon = bedPolygon.toFloatArray(),
         maxPrintHeight = maxPrintHeight,
         nozzleDiameter = nozzleDiameter,
@@ -1142,6 +1150,8 @@ object OnDeviceSlicer {
                 transformedModels,
                 options.bedSizeX,
                 options.bedSizeY,
+                options.bedOriginX,
+                options.bedOriginY,
                 options.bedPolygon,
                 minimumGap,
             )
@@ -1163,7 +1173,12 @@ object OnDeviceSlicer {
                 val transformedModel = File.createTempFile("slicer-input-$index-", ".stl", modelRoot)
                 transformedModels += transformedModel
                 val transform = if (includePlacement) {
-                    projectObject.transform.toJson(options.bedSizeX, options.bedSizeY)
+                    projectObject.transform.toJson(
+                        options.bedSizeX,
+                        options.bedSizeY,
+                        options.bedOriginX,
+                        options.bedOriginY,
+                    )
                 } else {
                     projectObject.transform
                         .copy(offsetXmm = 0f, offsetYmm = 0f)

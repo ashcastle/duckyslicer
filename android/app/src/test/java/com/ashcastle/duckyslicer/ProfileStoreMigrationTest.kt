@@ -77,11 +77,18 @@ class ProfileStoreMigrationTest {
         val polygon = listOf(110f, 0f, 220f, 110f, 110f, 220f, 0f, 110f)
         try {
             val options = SliceOptions().selectPrinter(
-                PrinterProfile.CUSTOM_CARTESIAN.copy(bedPolygon = polygon),
+                PrinterProfile.CUSTOM_CARTESIAN.copy(
+                    bedOriginX = -110f,
+                    bedOriginY = -110f,
+                    bedPolygon = polygon,
+                ),
             )
             val saved = ProfileStore(file).savePrinter("Delta bed", options)
             assertEquals(polygon, saved.bedPolygon)
-            assertEquals(polygon, ProfileStore(file).load().printers.single { it.id == saved.id }.bedPolygon)
+            val restored = ProfileStore(file).load().printers.single { it.id == saved.id }
+            assertEquals(polygon, restored.bedPolygon)
+            assertEquals(-110f, restored.bedOriginX)
+            assertEquals(-110f, restored.bedOriginY)
 
             val root = JSONObject(file.readText())
             root.getJSONArray("printers").getJSONObject(0)

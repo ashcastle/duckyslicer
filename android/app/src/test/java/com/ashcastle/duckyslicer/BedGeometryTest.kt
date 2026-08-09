@@ -26,6 +26,15 @@ class BedGeometryTest {
     }
 
     @Test
+    fun preservesMachineOriginSeparatelyFromDisplayGeometry() {
+        assertEquals(-200f, scaledBedOrigin(-150f, 300f, 400f), 0.001f)
+        assertEquals(
+            listOf(0f, -50f, 50f, 0f, 0f, 50f, -50f, 0f),
+            machineBedPolygon(diamond, -50f, -50f),
+        )
+    }
+
+    @Test
     fun triangulatesConvexAndConcaveBedsWithoutFillingOutsideCorners() {
         assertEquals(6, triangulateBedPolygon(diamond).size)
         val concave = listOf(0f, 0f, 100f, 0f, 100f, 40f, 40f, 40f, 40f, 100f, 0f, 100f)
