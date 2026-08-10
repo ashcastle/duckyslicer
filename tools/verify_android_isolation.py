@@ -176,6 +176,9 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         raise VerificationError(f"slicer service safety markers are missing: {missing}")
     for description, marker in {
         "explicit notification content intent": "Intent(this, MainActivity::class.java)",
+        "filter-matched notification content action": "action = Intent.ACTION_MAIN",
+        "filter-matched notification content category":
+            "addCategory(Intent.CATEGORY_LAUNCHER)",
         "explicit notification cancel intent":
             "Intent(context, SlicerProcessService::class.java)",
         "request-scoped notification cancel identity": "data = Uri.Builder()",
@@ -224,6 +227,8 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
 def verify_process_reattachment_harness(source: str) -> None:
     for marker in (
         'page_size != "16384"',
+        '"android.intent.action.MAIN"',
+        '"android.intent.category.LAUNCHER"',
         'run_as(serial, "kill", "-9", str(old_ui_pid))',
         "surviving_service_pid != old_service_pid",
         "current_boot_id != boot_id",

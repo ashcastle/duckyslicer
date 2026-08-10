@@ -46,6 +46,8 @@ class SlicerProcessService {
   }
   fun safePendingIntents(context: Context) {
     Intent(this, MainActivity::class.java)
+    action = Intent.ACTION_MAIN
+    addCategory(Intent.CATEGORY_LAUNCHER)
     Intent(context, SlicerProcessService::class.java)
     data = Uri.Builder()
     PendingIntent.FLAG_IMMUTABLE
@@ -77,6 +79,8 @@ Configuration recreation must retain the operation
 
 VALID_PROCESS_REATTACHMENT_HARNESS = """
 page_size != "16384"
+"android.intent.action.MAIN"
+"android.intent.category.LAUNCHER"
 run_as(serial, "kill", "-9", str(old_ui_pid))
 surviving_service_pid != old_service_pid
 current_boot_id != boot_id

@@ -71,7 +71,10 @@ class SliceLifecycleInstrumentedTest {
 
         try {
             var retainedModel: SliceOperationViewModel? = null
-            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            val launchIntent = Intent(Intent.ACTION_MAIN)
+                .setClass(context, MainActivity::class.java)
+                .addCategory(Intent.CATEGORY_LAUNCHER)
+            ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
                 scenario.onActivity { activity ->
                     val initial = ViewModelProvider(activity)[SliceOperationViewModel::class.java]
                     retainedModel = initial

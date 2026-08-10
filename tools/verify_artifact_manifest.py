@@ -16,6 +16,7 @@ from pathlib import Path
 PACKAGE_NAME = "com.ashcastle.duckyslicer"
 MIN_SDK = 26
 TARGET_SDK = 36
+ENFORCE_INTENT_FILTER = 2
 DYNAMIC_RECEIVER_PERMISSION = f"{PACKAGE_NAME}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
 EXPECTED_PERMISSIONS = frozenset(
     {
@@ -295,7 +296,16 @@ def verify_manifest(root: ManifestNode, variant: str) -> None:
         for node in application.direct("activity")
         if node.attributes.get("name") == f"{PACKAGE_NAME}.MainActivity"
     ]
-    main_filter_nodes = main_activities[0].direct("intent-filter")
+    main_activity = main_activities[0]
+    try:
+        intent_matching_flags = _integer(main_activity, "intentMatchingFlags")
+    except VerificationError as error:
+        raise VerificationError(
+            "MainActivity must enforce incoming intent-filter matching"
+        ) from error
+    if intent_matching_flags != ENFORCE_INTENT_FILTER:
+        raise VerificationError("MainActivity must enforce incoming intent-filter matching")
+    main_filter_nodes = main_activity.direct("intent-filter")
     main_filters = {_filter_signature(node) for node in main_filter_nodes}
     if main_filters != _expected_main_filters() or len(main_filter_nodes) != len(main_filters):
         raise VerificationError("MainActivity external intent allowlist changed")

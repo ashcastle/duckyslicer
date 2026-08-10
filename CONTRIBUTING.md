@@ -27,6 +27,9 @@ avoid introducing an account or cloud requirement.
 - Keep Orca work off every Android main thread. New long-running operations must
   retain request-scoped cancellation, terminate only the isolated worker, and prove
   a clean follow-up operation on ARM64.
+- Keep every external activity intent inside the reviewed Manifest allowlist. Explicit
+  notification and test launches must match the activity's declared action and
+  category so strict intent matching can remain enabled.
 - Preserve the ARM64 imperfect-mesh corpus. Common repairable defects must still
   produce finite G-code, irreparable geometry must fail without terminating the app,
   and a valid model must slice immediately after every corpus entry.

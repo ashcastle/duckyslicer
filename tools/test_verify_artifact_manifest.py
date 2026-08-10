@@ -68,6 +68,7 @@ def valid_manifest(*, debug: bool = False) -> str:
       E: activity (line=45)
         A: android:name(0x01010003)="com.ashcastle.duckyslicer.MainActivity" (Raw: "com.ashcastle.duckyslicer.MainActivity")
         A: android:exported(0x01010010)=(type 0x12)0xffffffff
+        A: android:intentMatchingFlags=(type 0x11)0x2
         E: intent-filter (line=47)
           E: action (line=48)
             A: android:name(0x01010003)="android.intent.action.MAIN" (Raw: "android.intent.action.MAIN")
@@ -174,6 +175,14 @@ class VerifyArtifactManifestTest(unittest.TestCase):
             1,
         )
         with self.assertRaisesRegex(VerificationError, "external intent"):
+            verify_aapt_output(source, "release")
+
+    def test_rejects_relaxed_incoming_intent_matching(self) -> None:
+        source = valid_manifest().replace(
+            "        A: android:intentMatchingFlags=(type 0x11)0x2\n",
+            "",
+        )
+        with self.assertRaisesRegex(VerificationError, "intent-filter matching"):
             verify_aapt_output(source, "release")
 
     def test_rejects_enabled_backup(self) -> None:

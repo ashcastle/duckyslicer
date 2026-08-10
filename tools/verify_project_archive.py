@@ -186,6 +186,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         raise VerificationError("AndroidManifest.xml does not declare MainActivity")
     if main_activity.attrib.get(f"{ANDROID_NAMESPACE}launchMode") != "singleTop":
         raise VerificationError("MainActivity must receive a second project through onNewIntent")
+    if main_activity.attrib.get(f"{ANDROID_NAMESPACE}intentMatchingFlags") != "enforceIntentFilter":
+        raise VerificationError("MainActivity must enforce its external intent allowlist")
     view_filters: list[tuple[set[str], set[str], set[str], set[str], set[str]]] = []
     for intent_filter in main_activity.findall("intent-filter"):
         actions = {

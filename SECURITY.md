@@ -112,6 +112,9 @@ before JSON parsing. Each store maintains a synced last-known-good generation,
 repairs a damaged primary from that generation, and refuses to overwrite the files
 when neither copy is readable or when a newer schema is encountered. The UI blocks
 project autosave and reports that the original files were left unchanged.
+The exported launcher activity enforces its declared intent filters. External project
+opening accepts only the reviewed `content://` project types, while notification
+launches use the matching launcher action and category.
 
 Long-running Orca work never runs on the isolated service's main thread. Each slice
 has an unpredictable request identifier and only its matching cancellation request

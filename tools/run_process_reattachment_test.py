@@ -189,7 +189,19 @@ def run_test(serial: str) -> None:
         if current_boot_id != boot_id:
             raise VerificationError("The Android guest rebooted during process-death recovery")
 
-        adb(serial, "shell", "am", "start", "-W", "-n", f"{PACKAGE}/.MainActivity")
+        adb(
+            serial,
+            "shell",
+            "am",
+            "start",
+            "-W",
+            "-a",
+            "android.intent.action.MAIN",
+            "-c",
+            "android.intent.category.LAUNCHER",
+            "-n",
+            f"{PACKAGE}/.MainActivity",
+        )
         new_ui_pid = wait_for(
             "a replacement UI process",
             lambda: process_id(serial, PACKAGE),

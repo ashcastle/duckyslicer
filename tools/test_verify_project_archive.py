@@ -114,7 +114,9 @@ def valid_sources() -> dict[str, str]:
         "strings-ko.xml": string_resources(),
         "AndroidManifest.xml": (
             '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
-            '<application><activity android:name=".MainActivity" android:launchMode="singleTop">'
+            '<application><activity android:name=".MainActivity" '
+            'android:launchMode="singleTop" '
+            'android:intentMatchingFlags="enforceIntentFilter">'
             '<intent-filter><action android:name="android.intent.action.VIEW" />'
             '<category android:name="android.intent.category.DEFAULT" />'
             '<data android:mimeType="application/vnd.duckyslicer.project+zip" />'
@@ -217,6 +219,14 @@ class VerifyProjectArchiveTest(unittest.TestCase):
             ' android:launchMode="singleTop"', ""
         )
         with self.assertRaisesRegex(VerificationError, "onNewIntent"):
+            verify_project_archive(sources)
+
+    def test_rejects_relaxed_external_intent_matching(self) -> None:
+        sources = valid_sources()
+        sources["AndroidManifest.xml"] = sources["AndroidManifest.xml"].replace(
+            ' android:intentMatchingFlags="enforceIntentFilter"', ""
+        )
+        with self.assertRaisesRegex(VerificationError, "external intent allowlist"):
             verify_project_archive(sources)
 
     def test_rejects_activity_scoped_transfer(self) -> None:

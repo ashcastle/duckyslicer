@@ -1067,6 +1067,8 @@ class SlicerProcessService : Service() {
             this,
             OPEN_APP_REQUEST_CODE,
             Intent(this, MainActivity::class.java).apply {
+                action = Intent.ACTION_MAIN
+                addCategory(Intent.CATEGORY_LAUNCHER)
                 flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             },
             PendingIntent.FLAG_IMMUTABLE,
