@@ -126,6 +126,9 @@ class GenerateSourceBundleTest(unittest.TestCase):
             self.assertFalse(any(name.endswith("/AGENTS.md") for name in names))
             build_inputs = {entry["path"] for entry in verified["source"]["buildInputs"]}
             self.assertIn("tools/verify_artifact_manifest.py", build_inputs)
+            self.assertIn("tools/generate_android_translations.py", build_inputs)
+            self.assertIn("tools/verify_artifact_localization.py", build_inputs)
+            self.assertIn("localization/i18n/zh_TW/OrcaSlicer_zh_TW.po", build_inputs)
 
     def test_verifier_rejects_changed_detached_manifest(self) -> None:
         with TemporaryDirectory() as directory:
