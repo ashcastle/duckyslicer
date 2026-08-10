@@ -60,7 +60,7 @@ class PrepareLocalReleaseTest(unittest.TestCase):
             self.assertIn(":app:assembleRelease", command)
         self.assertIn(":app:lintRelease", first)
         self.assertIn(":app:clean", first)
-        self.assertNotIn("--no-build-cache", first)
+        self.assertIn("--no-build-cache", first)
         self.assertIn("--no-build-cache", second)
         self.assertIn(":app:clean", second)
 
