@@ -22,7 +22,7 @@ def valid_sources() -> dict[str, str]:
                 "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_OBJECTS + 1",
                 'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
                 "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-                "PROJECT_ARCHIVE_SCHEMA_VERSION = 5",
+                "PROJECT_ARCHIVE_SCHEMA_VERSION = 6",
                 'Regex("models/[0-9]{3}\\\\.stl")',
                 "require(!entry.isDirectory require(entries.add(entry.name))",
                 "entry.method == ZipEntry.DEFLATED || entry.method == ZipEntry.STORED",
@@ -31,6 +31,7 @@ def valid_sources() -> dict[str, str]:
                 "require(referencedEntries == models.keys)",
                 "output.fd.sync() parseBoundedJsonObject require(info.triangles > 0)",
                 "supportPaint.facets.keys.all",
+                "requireAxisScales = schemaVersion >= 6",
                 "seamPaint.facets.keys.all",
                 "multiColorPaint.facets.keys.all",
                 'getJSONArray("multiColorPaint").toArchiveMultiColorPaint()',
@@ -137,8 +138,9 @@ def valid_sources() -> dict[str, str]:
         ),
         "SUPPORT.md": "`.duckyproject` model geometry include saved printer addresses, access keys, or G-code",
         "PROJECT_FORMAT.md": (
-            "manifest.json models/000.stl schema version `5` "
-            "Schema 1 through 4 projects remain readable multi-color painting variable layer-height ranges "
+            "manifest.json models/000.stl schema version `6` "
+            "Schema 1 through 5 projects remain readable independent X, Y, and Z scale "
+            "multi-color painting variable layer-height ranges "
             "rejects duplicate, directory, traversal, and unknown entries "
             "A failed import leaves the current project unchanged and removes staged data "
             "it in Files. External opening accepts only a granted `content://` URI "
