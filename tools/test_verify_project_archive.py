@@ -42,6 +42,30 @@ def valid_sources() -> dict[str, str]:
                 "installed.forEach(File::delete) staging.deleteRecursively()",
                 "modelFile.parentFile == modelRoot && modelFile.isFile",
                 "StandardCopyOption.ATOMIC_MOVE",
+                "recoverAbandonedArchiveStaging removePrefix(\".archive-\")",
+                "UUID.fromString(identifier) !Files.isSymbolicLink(candidate.toPath())",
+            )
+        ),
+        "ProjectOpenRequest.kt": " ".join(
+            (
+                "intent.action != Intent.ACTION_VIEW",
+                "ContentResolver.SCHEME_CONTENT",
+                "PROJECT_ARCHIVE_MIME_TYPE PROJECT_ARCHIVE_FILE_EXTENSION",
+                "PROJECT_ARCHIVE_COMPATIBLE_MIME_TYPES",
+                '"application/zip" "application/x-zip-compressed" "application/octet-stream"',
+                "SavedStateHandle StateFlow<ExternalProjectRequest?>",
+            )
+        ),
+        "ProjectTransfer.kt": " ".join(
+            (
+                "AndroidViewModel(application)",
+                "viewModelScope.launch(Dispatchers.IO)",
+                "ProjectStore.recoverAbandonedArchiveStaging",
+                "ProjectTransferState(busy = true)",
+                "mutableState.value.completion != null",
+                "openInputStream(uri) projectStore.importArchive",
+                "openOutputStream(uri) projectStore.exportArchive",
+                "catch (failure: CancellationException) consumeCompletion",
             )
         ),
         "MainActivity.kt": " ".join(
@@ -50,10 +74,11 @@ def valid_sources() -> dict[str, str]:
                 "ActivityResultContracts.OpenDocument()",
                 "projectSavePicker = rememberLauncherForActivityResult",
                 "ActivityResultContracts.CreateDocument(PROJECT_ARCHIVE_MIME_TYPE)",
-                "openInputStream(uri) projectStore.importArchive",
-                "openOutputStream(uri) projectStore.exportArchive",
                 "SupportEvent.PROJECT_ARCHIVE_IMPORT_FAILED",
                 "SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED",
+                "override fun onNewIntent(intent: Intent)",
+                "externalProjectModel.enqueue(intent)",
+                "ProjectTransferViewModel projectTransferState.completion ProjectReplacementDialog(",
             )
         ),
         "WorkspaceScreen.kt": (
@@ -63,7 +88,15 @@ def valid_sources() -> dict[str, str]:
         "ProjectArchiveTest.kt": (
             "projectArchiveRoundTripsModelsTransformsPaintAndResolvedProfilesDeterministically "
             "invalidArchiveCannotEscapeStagingOrReplaceTheCurrentProject "
-            "oversizedManifestIsRejectedBeforeProjectStateChanges"
+            "oversizedManifestIsRejectedBeforeProjectStateChanges "
+            "startupRecoveryRemovesOnlyExactAbandonedArchiveDirectories"
+        ),
+        "ProjectArchiveIntentInstrumentedTest.kt": (
+            "customProjectIntentSurvivesRecreationRestoresAndSlices "
+            "compatibleZipIntentConfirmsBeforeReplacingTheCurrentProject "
+            "projectViewIntentRejectsNetworkAndUnrelatedBinaryUris "
+            "Intent.ACTION_VIEW Intent.FLAG_GRANT_READ_URI_PERMISSION "
+            "scenario.recreate() OnDeviceSlicer.slice("
         ),
         "NativeEngineInstrumentedTest.kt": (
             "projectArchiveRoundTripReinspectsAndSlicesOnArm64 "
@@ -71,6 +104,23 @@ def valid_sources() -> dict[str, str]:
         ),
         "strings.xml": string_resources(),
         "strings-ko.xml": string_resources(),
+        "AndroidManifest.xml": (
+            '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
+            '<application><activity android:name=".MainActivity" android:launchMode="singleTop">'
+            '<intent-filter><action android:name="android.intent.action.VIEW" />'
+            '<category android:name="android.intent.category.DEFAULT" />'
+            '<data android:mimeType="application/vnd.duckyslicer.project+zip" />'
+            '<data android:scheme="content" /></intent-filter>'
+            '<intent-filter><action android:name="android.intent.action.VIEW" />'
+            '<category android:name="android.intent.category.DEFAULT" />'
+            '<data android:mimeType="application/zip" />'
+            '<data android:mimeType="application/x-zip-compressed" />'
+            '<data android:mimeType="application/octet-stream" />'
+            '<data android:host="*" />'
+            '<data android:pathPattern=".*\\.duckyproject" />'
+            '<data android:scheme="content" /></intent-filter>'
+            "</activity></application></manifest>"
+        ),
         "PRIVACY.md": (
             "Exported DuckySlicer project files contain the model geometry\n"
             "support painting, and active printer, filament, and slicing settings\n"
@@ -83,6 +133,9 @@ def valid_sources() -> dict[str, str]:
             "manifest.json models/000.stl schema version `1` "
             "rejects duplicate, directory, traversal, and unknown entries "
             "A failed import leaves the current project unchanged and removes staged data "
+            "it in Files. External opening accepts only a granted `content://` URI "
+            "requires confirmation before the current project is replaced "
+            "the transfer. If Android terminates the process exact generated UUID form "
             "1 GiB total uncompressed content"
         ),
     }
@@ -125,6 +178,33 @@ class VerifyProjectArchiveTest(unittest.TestCase):
     def test_rejects_missing_privacy_disclosure(self) -> None:
         sources = valid_sources()
         sources["PRIVACY.md"] = ""
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_broad_network_view_filter(self) -> None:
+        sources = valid_sources()
+        sources["AndroidManifest.xml"] = sources["AndroidManifest.xml"].replace(
+            "</activity>",
+            '<intent-filter><action android:name="android.intent.action.VIEW" />'
+            '<category android:name="android.intent.category.DEFAULT" />'
+            '<data android:scheme="https" /></intent-filter></activity>',
+        )
+        with self.assertRaisesRegex(VerificationError, "content project"):
+            verify_project_archive(sources)
+
+    def test_rejects_missing_single_top_delivery(self) -> None:
+        sources = valid_sources()
+        sources["AndroidManifest.xml"] = sources["AndroidManifest.xml"].replace(
+            ' android:launchMode="singleTop"', ""
+        )
+        with self.assertRaisesRegex(VerificationError, "onNewIntent"):
+            verify_project_archive(sources)
+
+    def test_rejects_activity_scoped_transfer(self) -> None:
+        sources = valid_sources()
+        sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
+            "viewModelScope.launch(Dispatchers.IO)", "scope.launch(Dispatchers.IO)"
+        )
         with self.assertRaisesRegex(VerificationError, "safeguards"):
             verify_project_archive(sources)
 

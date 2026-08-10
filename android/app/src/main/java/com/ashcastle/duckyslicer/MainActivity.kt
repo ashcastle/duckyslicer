@@ -2,6 +2,7 @@ package com.ashcastle.duckyslicer
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color as AndroidColor
 import android.net.Uri
@@ -101,23 +102,47 @@ data class ModelInfo(
 }
 
 class MainActivity : ComponentActivity() {
+    private lateinit var externalProjectModel: ExternalProjectRequestViewModel
+    private lateinit var projectTransferModel: ProjectTransferViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val sliceOperationModel = ViewModelProvider(this)[SliceOperationViewModel::class.java]
+        externalProjectModel = ViewModelProvider(this)[ExternalProjectRequestViewModel::class.java]
+        projectTransferModel = ViewModelProvider(this)[ProjectTransferViewModel::class.java]
+        if (savedInstanceState == null) externalProjectModel.enqueue(intent)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
         )
         setContent {
             MaterialTheme(colorScheme = DuckyColors) {
-                DuckySlicerScreen(sliceOperationModel)
+                val externalProjectRequest by
+                    externalProjectModel.request.collectAsStateWithLifecycle()
+                DuckySlicerScreen(
+                    sliceOperationModel = sliceOperationModel,
+                    projectTransferModel = projectTransferModel,
+                    externalProjectRequest = externalProjectRequest,
+                    onExternalProjectRequestConsumed = externalProjectModel::consume,
+                )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        externalProjectModel.enqueue(intent)
     }
 }
 
 @Composable
-private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
+private fun DuckySlicerScreen(
+    sliceOperationModel: SliceOperationViewModel,
+    projectTransferModel: ProjectTransferViewModel,
+    externalProjectRequest: ExternalProjectRequest?,
+    onExternalProjectRequestConsumed: (Long) -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val modelReadError = stringResource(R.string.model_read_error)
@@ -158,7 +183,7 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var importing by remember { mutableStateOf(false) }
-    var projectTransferBusy by remember { mutableStateOf(false) }
+    var externalProjectConfirmation by remember { mutableStateOf<ExternalProjectRequest?>(null) }
     var autoLaying by remember { mutableStateOf(false) }
     var arranging by remember { mutableStateOf(false) }
     var sliceOutcome by rememberSaveable { mutableStateOf<SliceOutcome?>(null) }
@@ -169,6 +194,8 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
     val sliceCancellationRequested = sliceOperationState.cancellationRequested
     val sliceProgress = sliceOperationState.progress
     val previewLoading = sliceOperationState.previewLoading
+    val projectTransferState by projectTransferModel.state.collectAsStateWithLifecycle()
+    val projectTransferBusy = projectTransferState.busy
     var sliceOptions by remember { mutableStateOf(SliceOptions()) }
     val projectObjects = projectHistory.current.objects
     val selectedProjectObject = projectHistory.current.selectedObject
@@ -205,6 +232,44 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
         sliceOperationModel.clearCompleted()
         sliceOutcome = null
         layerPreview = null
+    }
+
+    LaunchedEffect(projectTransferState.completion?.id) {
+        val completion = projectTransferState.completion ?: return@LaunchedEffect
+        when (completion) {
+            is ProjectTransferCompletion.Imported -> {
+                projectHistory = ProjectHistoryState(current = completion.document.snapshot)
+                completion.document.sliceOptions?.let { sliceOptions = it }
+                projectPersistenceBlocked = false
+                clearCompletedSlice()
+                remoteUpload = null
+                externalProjectConfirmation = null
+                notice = projectOpenedNotice
+                error = null
+                if (externalProjectRequest?.uri == completion.uri) {
+                    onExternalProjectRequestConsumed(externalProjectRequest.id)
+                }
+            }
+            is ProjectTransferCompletion.Exported -> {
+                notice = projectSavedNotice
+                error = null
+            }
+            is ProjectTransferCompletion.Failed -> {
+                if (completion.direction == ProjectTransferDirection.IMPORT) {
+                    supportEvents.record(SupportEvent.PROJECT_ARCHIVE_IMPORT_FAILED)
+                    error = projectOpenError
+                    if (externalProjectRequest?.uri == completion.uri) {
+                        onExternalProjectRequestConsumed(externalProjectRequest.id)
+                    }
+                } else {
+                    supportEvents.record(SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED)
+                    error = projectExportError
+                }
+                externalProjectConfirmation = null
+                notice = null
+            }
+        }
+        projectTransferModel.consumeCompletion(completion.id)
     }
 
     LaunchedEffect(profileStore) {
@@ -497,38 +562,47 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
         }
     }
 
+    fun importProject(uri: Uri): Boolean {
+        if (
+            projectRestored && !projectTransferBusy && !importing && !autoLaying &&
+            !arranging && !slicing && !previewLoading && projectTransferState.completion == null
+        ) {
+            if (projectTransferModel.importProject(uri)) {
+                error = null
+                notice = null
+                return true
+            }
+        }
+        return false
+    }
+
     val projectOpenPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
+        uri?.let(::importProject)
+    }
+
+    LaunchedEffect(
+        externalProjectRequest?.id,
+        projectRestored,
+        projectObjects.isNotEmpty(),
+        projectTransferBusy,
+        projectTransferState.completion?.id,
+        importing,
+        autoLaying,
+        arranging,
+        slicing,
+        previewLoading,
+    ) {
+        val request = externalProjectRequest ?: return@LaunchedEffect
         if (
-            uri != null && projectRestored && !projectTransferBusy && !importing &&
-            !autoLaying && !arranging && !slicing && !previewLoading
-        ) {
-            projectTransferBusy = true
-            error = null
-            notice = null
-            scope.launch {
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        context.contentResolver.openInputStream(uri).use { input ->
-                            projectStore.importArchive(requireNotNull(input) { "input_unavailable" })
-                        }
-                    }
-                }.onSuccess { document ->
-                    projectHistory = ProjectHistoryState(current = document.snapshot)
-                    document.sliceOptions?.let { sliceOptions = it }
-                    projectPersistenceBlocked = false
-                    clearCompletedSlice()
-                    remoteUpload = null
-                    notice = projectOpenedNotice
-                    error = null
-                }.onFailure {
-                    supportEvents.record(SupportEvent.PROJECT_ARCHIVE_IMPORT_FAILED)
-                    error = projectOpenError
-                    notice = null
-                }
-                projectTransferBusy = false
-            }
+            !projectRestored || projectTransferBusy || importing || autoLaying ||
+            arranging || slicing || previewLoading || projectTransferState.completion != null
+        ) return@LaunchedEffect
+        if (projectObjects.isEmpty()) {
+            importProject(request.uri)
+        } else {
+            externalProjectConfirmation = request
         }
     }
 
@@ -539,29 +613,9 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
             uri != null && projectRestored && !projectTransferBusy && !importing &&
             !autoLaying && !arranging && !slicing && !previewLoading
         ) {
-            projectTransferBusy = true
-            error = null
-            notice = null
-            scope.launch {
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        context.contentResolver.openOutputStream(uri).use { output ->
-                            projectStore.exportArchive(
-                                projectHistory.current,
-                                sliceOptions,
-                                requireNotNull(output) { "output_unavailable" },
-                            )
-                        }
-                    }
-                }.onSuccess {
-                    notice = projectSavedNotice
-                    error = null
-                }.onFailure {
-                    supportEvents.record(SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED)
-                    error = projectExportError
-                    notice = null
-                }
-                projectTransferBusy = false
+            if (projectTransferModel.exportProject(uri, projectHistory.current, sliceOptions)) {
+                error = null
+                notice = null
             }
         }
     }
@@ -1024,6 +1078,18 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
             }
         },
     )
+    externalProjectConfirmation?.let { request ->
+        ProjectReplacementDialog(
+            onConfirm = {
+                externalProjectConfirmation = null
+                importProject(request.uri)
+            },
+            onDismiss = {
+                externalProjectConfirmation = null
+                onExternalProjectRequestConsumed(request.id)
+            },
+        )
+    }
 }
 
 private suspend fun importAndInspect(
