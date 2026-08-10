@@ -171,6 +171,25 @@ class ProjectStateTest {
     }
 
     @Test
+    fun multiColorPaintingIsObjectScopedUndoableAndConstrainedWithFilaments() {
+        var state = ProjectHistoryState().add(projectObject("part"))
+        state = state.updateMultiColorPaint(
+            "part",
+            MultiColorPaint().paint(0, 1),
+            recordHistory = false,
+        )
+        state = state.commitMultiColorPaint("part", MultiColorPaint())
+
+        assertEquals(1, state.current.selectedObject!!.multiColorPaint.facets[0])
+        state = state.undo()
+        assertTrue(state.current.selectedObject!!.multiColorPaint.facets.isEmpty())
+        state = state.redo().constrainFilamentSlots(1)
+        assertTrue(state.current.selectedObject!!.multiColorPaint.facets.isEmpty())
+        state = state.undo()
+        assertEquals(1, state.current.selectedObject!!.multiColorPaint.facets[0])
+    }
+
+    @Test
     fun variableLayerHeightsAreObjectScopedAndUndoable() {
         var state = ProjectHistoryState().add(projectObject("part"))
         val variableLayers = VariableLayerHeights(

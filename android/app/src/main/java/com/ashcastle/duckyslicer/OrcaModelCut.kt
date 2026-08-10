@@ -103,6 +103,7 @@ internal suspend fun cutProjectObject(
             objects = objects,
             clearedObjectSettings = projectObject.supportPaint.facets.isNotEmpty() ||
                 projectObject.seamPaint.facets.isNotEmpty() ||
+                projectObject.multiColorPaint.facets.isNotEmpty() ||
                 projectObject.variableLayerHeights.ranges.isNotEmpty(),
         )
     } catch (failure: Throwable) {
