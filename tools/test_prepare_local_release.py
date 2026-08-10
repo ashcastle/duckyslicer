@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import os
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from tools.prepare_local_release import (
     MAX_VERSION_CODE,
@@ -10,6 +14,7 @@ from tools.prepare_local_release import (
     gradle_release_command,
     mismatched_submodules,
     parse_badging,
+    prepare_release,
     signing_variables,
     validate_release_inputs,
 )
@@ -94,6 +99,34 @@ class PrepareLocalReleaseTest(unittest.TestCase):
             },
             identity.document(),
         )
+
+    def test_failed_metadata_commit_removes_partial_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            release_apk = root / "app-release-unsigned.apk"
+            output = root / "output"
+            release_apk.write_bytes(b"reproducible release")
+            with (
+                patch.dict(os.environ, {}, clear=True),
+                patch("tools.prepare_local_release.RELEASE_APK", release_apk),
+                patch(
+                    "tools.prepare_local_release.verify_checkout",
+                    return_value="a" * 40,
+                ),
+                patch(
+                    "tools.prepare_local_release.android_build_tools",
+                    return_value=root,
+                ),
+                patch("tools.prepare_local_release.run"),
+                patch("tools.prepare_local_release.verify_unsigned_apk"),
+                patch(
+                    "tools.prepare_local_release.write_metadata",
+                    side_effect=OSError("disk full"),
+                ),
+            ):
+                with self.assertRaisesRegex(OSError, "disk full"):
+                    prepare_release("1.2.3", 42, output)
+            self.assertEqual([], list(output.iterdir()))
 
 
 if __name__ == "__main__":

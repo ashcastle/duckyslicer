@@ -233,6 +233,15 @@ def verify_unsigned_apk(
     if not apk.is_file() or apk.stat().st_size <= 0:
         raise ReleasePreparationError(f"Unsigned release APK is missing: {apk}")
     run((sys.executable, str(ROOT / "tools/verify_apk.py"), str(apk)))
+    run(
+        (
+            sys.executable,
+            str(ROOT / "tools/verify_artifact_manifest.py"),
+            "--variant",
+            "release",
+            str(apk),
+        )
+    )
     run((str(build_tools / "zipalign"), "-c", "-P", "16", "-v", "4", str(apk)))
     badging = captured((str(build_tools / "aapt"), "dump", "badging", str(apk)))
     package, actual_code, actual_version = parse_badging(badging)
@@ -290,12 +299,13 @@ def prepare_release(version_name: str, version_code: int, output_root: Path) -> 
             "Refusing to overwrite release output: " + ", ".join(map(str, collisions))
         )
 
-    run((sys.executable, str(ROOT / "tools/run_local_gate.py")))
-    run(gradle_release_command(version_name, version_code, rebuild=False), cwd=ANDROID)
-    verify_unsigned_apk(RELEASE_APK, version_name, version_code, build_tools)
-    shutil.copyfile(RELEASE_APK, candidate_output)
-
+    completed = False
     try:
+        run((sys.executable, str(ROOT / "tools/run_local_gate.py")))
+        run(gradle_release_command(version_name, version_code, rebuild=False), cwd=ANDROID)
+        verify_unsigned_apk(RELEASE_APK, version_name, version_code, build_tools)
+        shutil.copyfile(RELEASE_APK, candidate_output)
+
         run(gradle_release_command(version_name, version_code, rebuild=True), cwd=ANDROID)
         verify_unsigned_apk(RELEASE_APK, version_name, version_code, build_tools)
         verify_reproducible(candidate_output, RELEASE_APK)
@@ -309,9 +319,16 @@ def prepare_release(version_name: str, version_code: int, output_root: Path) -> 
         )
         os.replace(candidate_output, unsigned_output)
         write_metadata(metadata_output, identity)
+        completed = True
         return identity
     finally:
         candidate_output.unlink(missing_ok=True)
+        if not completed:
+            unsigned_output.unlink(missing_ok=True)
+            metadata_output.unlink(missing_ok=True)
+            metadata_output.with_suffix(metadata_output.suffix + ".tmp").unlink(
+                missing_ok=True
+            )
 
 
 def main(arguments: Sequence[str] | None = None) -> int:
