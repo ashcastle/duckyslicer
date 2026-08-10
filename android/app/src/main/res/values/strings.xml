@@ -64,6 +64,10 @@
     <string name="rotate_y">Rotate Y</string>
     <string name="rotate_z">Rotate Z</string>
     <string name="scale">Scale</string>
+    <string name="scale_x">Size X</string>
+    <string name="scale_y">Size Y</string>
+    <string name="scale_z">Size Z</string>
+    <string name="keep_proportions">Keep proportions</string>
     <string name="mirror_x">Mirror X</string>
     <string name="mirror_y">Mirror Y</string>
     <string name="mirror_z">Mirror Z</string>

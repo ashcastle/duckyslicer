@@ -215,7 +215,9 @@ internal object ProjectArchiveCodec {
                 displayName = checkedArchiveDisplayName(value.getString("displayName")),
                 modelEntry = value.getString("modelEntry").takeIf(PROJECT_ARCHIVE_MODEL_ENTRY::matches)
                     ?: throw ProjectArchiveException(),
-                transform = value.getJSONObject("transform").toArchiveTransform(),
+                transform = value.getJSONObject("transform").toArchiveTransform(
+                    requireAxisScales = schemaVersion >= 6,
+                ),
                 supportPaint = value.getJSONArray("supportPaint").toArchiveSupportPaint(),
                 seamPaint = if (schemaVersion >= 2) {
                     value.getJSONArray("seamPaint").toArchiveSeamPaint()
@@ -264,22 +266,40 @@ private fun ModelTransform.toArchiveJson() = JSONObject()
     .put("rotationYdeg", rotationYdeg.checkedArchiveTransform(-ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG))
     .put("rotationZdeg", rotationZdeg.checkedArchiveTransform(-ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG))
     .put("scale", scale.checkedArchiveTransform(ProjectStore.MIN_SCALE, ProjectStore.MAX_SCALE))
+    .put("scaleY", scaleY.checkedArchiveTransform(ProjectStore.MIN_SCALE, ProjectStore.MAX_SCALE))
+    .put("scaleZ", scaleZ.checkedArchiveTransform(ProjectStore.MIN_SCALE, ProjectStore.MAX_SCALE))
     .put("mirrorX", mirrorX)
     .put("mirrorY", mirrorY)
     .put("mirrorZ", mirrorZ)
 
-private fun JSONObject.toArchiveTransform() = ModelTransform(
-    offsetXmm = checkedArchiveFloat("offsetXmm", -ProjectStore.MAX_OFFSET_MM, ProjectStore.MAX_OFFSET_MM),
-    offsetYmm = checkedArchiveFloat("offsetYmm", -ProjectStore.MAX_OFFSET_MM, ProjectStore.MAX_OFFSET_MM),
-    offsetZmm = checkedOptionalArchiveFloat("offsetZmm", -ProjectStore.MAX_OFFSET_MM, ProjectStore.MAX_OFFSET_MM),
-    rotationXdeg = checkedArchiveFloat("rotationXdeg", -ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG),
-    rotationYdeg = checkedArchiveFloat("rotationYdeg", -ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG),
-    rotationZdeg = checkedArchiveFloat("rotationZdeg", -ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG),
-    scale = checkedArchiveFloat("scale", ProjectStore.MIN_SCALE, ProjectStore.MAX_SCALE),
-    mirrorX = checkedArchiveBoolean("mirrorX"),
-    mirrorY = checkedArchiveBoolean("mirrorY"),
-    mirrorZ = checkedArchiveBoolean("mirrorZ"),
-)
+private fun JSONObject.toArchiveTransform(requireAxisScales: Boolean): ModelTransform {
+    val uniformScale = checkedArchiveFloat("scale", ProjectStore.MIN_SCALE, ProjectStore.MAX_SCALE)
+    if (requireAxisScales) require(has("scaleY") && has("scaleZ"))
+    return ModelTransform(
+        offsetXmm = checkedArchiveFloat("offsetXmm", -ProjectStore.MAX_OFFSET_MM, ProjectStore.MAX_OFFSET_MM),
+        offsetYmm = checkedArchiveFloat("offsetYmm", -ProjectStore.MAX_OFFSET_MM, ProjectStore.MAX_OFFSET_MM),
+        offsetZmm = checkedOptionalArchiveFloat("offsetZmm", -ProjectStore.MAX_OFFSET_MM, ProjectStore.MAX_OFFSET_MM),
+        rotationXdeg = checkedArchiveFloat("rotationXdeg", -ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG),
+        rotationYdeg = checkedArchiveFloat("rotationYdeg", -ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG),
+        rotationZdeg = checkedArchiveFloat("rotationZdeg", -ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG),
+        scale = uniformScale,
+        scaleY = checkedOptionalArchiveFloat(
+            "scaleY",
+            ProjectStore.MIN_SCALE,
+            ProjectStore.MAX_SCALE,
+            uniformScale,
+        ),
+        scaleZ = checkedOptionalArchiveFloat(
+            "scaleZ",
+            ProjectStore.MIN_SCALE,
+            ProjectStore.MAX_SCALE,
+            uniformScale,
+        ),
+        mirrorX = checkedArchiveBoolean("mirrorX"),
+        mirrorY = checkedArchiveBoolean("mirrorY"),
+        mirrorZ = checkedArchiveBoolean("mirrorZ"),
+    )
+}
 
 private fun JSONObject.checkedArchiveBoolean(name: String): Boolean {
     if (!has(name)) return false
@@ -290,7 +310,8 @@ private fun JSONObject.checkedOptionalArchiveFloat(
     name: String,
     minimum: Float,
     maximum: Float,
-): Float = if (has(name)) checkedArchiveFloat(name, minimum, maximum) else 0f
+    default: Float = 0f,
+): Float = if (has(name)) checkedArchiveFloat(name, minimum, maximum) else default
 
 private fun SupportPaint.toArchiveJson() = JSONArray().also { values ->
     require(facets.size <= SupportPaint.MAX_PAINTED_FACETS)
@@ -485,6 +506,6 @@ private const val MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_OBJECTS
 private const val MAX_PROJECT_ARCHIVE_ENTRY_NAME = 128
 private const val PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"
 private const val MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1
-private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 5
+private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 6
 private const val PROJECT_ARCHIVE_MANIFEST = "manifest.json"
 private val PROJECT_ARCHIVE_MODEL_ENTRY = Regex("models/[0-9]{3}\\.stl")

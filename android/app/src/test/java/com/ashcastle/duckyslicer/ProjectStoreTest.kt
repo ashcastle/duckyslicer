@@ -39,6 +39,8 @@ class ProjectStoreTest {
                         offsetZmm = 9f,
                         rotationZdeg = 45f,
                         scale = 1.25f,
+                        scaleY = 1.5f,
+                        scaleZ = 0.8f,
                         mirrorX = true,
                         mirrorZ = true,
                     ),
@@ -101,7 +103,7 @@ class ProjectStoreTest {
     }
 
     @Test
-    fun schemaSevenRestoresProjectSettingsAndSchemaOneRemainsReadable() = withStore { root, store ->
+    fun schemaEightRestoresAxisScalesAndSchemaOneRemainsReadable() = withStore { root, store ->
         val modelFile = store.createModelDestination("settings.stl").apply { writeText("solid part") }
         val options = multiFilamentSettingsFixture()
         val snapshot = ProjectSnapshot(
@@ -112,7 +114,7 @@ class ProjectStoreTest {
 
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
-        assertEquals(7, JSONObject(File(root, "current_project.json").readText()).getInt("schemaVersion"))
+        assertEquals(8, JSONObject(File(root, "current_project.json").readText()).getInt("schemaVersion"))
         assertEquals(snapshot.selectedObjectId, restored.snapshot.selectedObjectId)
         assertEquals(snapshot.objects.single().id, restored.snapshot.objects.single().id)
         assertEquals(snapshot.objects.single().transform, restored.snapshot.objects.single().transform)
@@ -130,6 +132,10 @@ class ProjectStoreTest {
             remove("multiColorPaint")
             remove("variableLayerHeights")
             remove("processOverrides")
+            getJSONObject("transform").apply {
+                remove("scaleY")
+                remove("scaleZ")
+            }
         }
         File(root, "current_project.json").writeText(current.toString())
         val migrated = ProjectStore(root, ::inspectedModel).loadProject()
@@ -139,6 +145,7 @@ class ProjectStoreTest {
         assertTrue(migrated.snapshot.selectedObject!!.multiColorPaint.facets.isEmpty())
         assertTrue(migrated.snapshot.selectedObject!!.variableLayerHeights.ranges.isEmpty())
         assertTrue(migrated.snapshot.selectedObject!!.processOverrides.isEmpty)
+        assertTrue(migrated.snapshot.selectedObject!!.transform.hasUniformScale())
     }
 
     @Test
