@@ -38,6 +38,8 @@ class ProjectStoreTest {
                         offsetYmm = -7f,
                         rotationZdeg = 45f,
                         scale = 1.25f,
+                        mirrorX = true,
+                        mirrorZ = true,
                     ),
                     supportPaint = SupportPaint().paint(0, SupportPaintState.ENFORCE),
                 ),
