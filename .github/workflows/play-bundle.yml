@@ -1,14 +1,30 @@
-name: Play Bundle
+name: Sign Local Play Bundle
 
 on:
   workflow_dispatch:
     inputs:
       version_name:
-        description: SemVer shown to users, for example 0.2.0-rc.1
+        description: SemVer from the local Play metadata
         required: true
         type: string
       version_code:
-        description: New Play versionCode (1 through 2100000000)
+        description: Play versionCode from the local Play metadata
+        required: true
+        type: string
+      source_commit:
+        description: Exact main commit recorded by the local Play metadata
+        required: true
+        type: string
+      transport_tag:
+        description: Private draft transport tag, for example play-v0.2.0-5
+        required: true
+        type: string
+      unsigned_asset:
+        description: Exact unsigned AAB filename in the private draft
+        required: true
+        type: string
+      unsigned_sha256:
+        description: SHA-256 recorded by the local Play metadata
         required: true
         type: string
 
@@ -16,134 +32,125 @@ permissions:
   contents: read
 
 concurrency:
-  group: play-bundle-${{ github.ref }}
+  group: play-bundle-${{ inputs.transport_tag }}
   cancel-in-progress: false
 
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 10
+    permissions:
+      contents: write
     env:
-      DUCKYSLICER_NATIVE_JOBS: "4"
+      GH_TOKEN: ${{ github.token }}
+      PLAY_VERSION_NAME: ${{ inputs.version_name }}
+      PLAY_VERSION_CODE: ${{ inputs.version_code }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      TRANSPORT_TAG: ${{ inputs.transport_tag }}
+      UNSIGNED_ASSET: ${{ inputs.unsigned_asset }}
+      UNSIGNED_SHA256: ${{ inputs.unsigned_sha256 }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          submodules: recursive
-
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
-
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
-        with:
-          packages: platform-tools
-
-      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
-        with:
-          toolchain: 1.91.1
-          components: clippy, rustfmt
-          targets: aarch64-linux-android
-
-      - name: Validate Play version inputs
-        env:
-          PLAY_VERSION_NAME_INPUT: ${{ inputs.version_name }}
-          PLAY_VERSION_CODE_INPUT: ${{ inputs.version_code }}
+      - name: Validate local Play identity and private draft
         run: |
+          set -euo pipefail
           if [ "$GITHUB_REF" != "refs/heads/main" ]; then
-            echo "Play bundles must be built from main" >&2
+            echo "Play signing must be dispatched from main" >&2
             exit 1
           fi
-          if [ "${#PLAY_VERSION_NAME_INPUT}" -gt 64 ] || \
-            [[ ! "$PLAY_VERSION_NAME_INPUT" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+          if [ "${#PLAY_VERSION_NAME}" -gt 64 ] || \
+            [[ ! "$PLAY_VERSION_NAME" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
             echo "version_name must be SemVer" >&2
             exit 1
           fi
-          if [ "${#PLAY_VERSION_CODE_INPUT}" -gt 10 ] || \
-            [[ ! "$PLAY_VERSION_CODE_INPUT" =~ ^[1-9][0-9]*$ ]] || \
-            [ "$PLAY_VERSION_CODE_INPUT" -gt 2100000000 ]; then
+          if [ "${#PLAY_VERSION_CODE}" -gt 10 ] || \
+            [[ ! "$PLAY_VERSION_CODE" =~ ^[1-9][0-9]*$ ]] || \
+            [ "$PLAY_VERSION_CODE" -gt 2100000000 ]; then
             echo "version_code must be between 1 and 2100000000" >&2
             exit 1
           fi
-          echo "DUCKYSLICER_PLAY_VERSION_NAME=$PLAY_VERSION_NAME_INPUT" >> "$GITHUB_ENV"
-          echo "DUCKYSLICER_PLAY_VERSION_CODE=$PLAY_VERSION_CODE_INPUT" >> "$GITHUB_ENV"
-
-      - name: Install Android build inputs
-        run: |
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
-          cargo install cargo-ndk --version 4.1.2 --locked
-
-      - name: Verify build supply chain
-        run: |
-          python3 tools/verify_workflows.py
-          python3 tools/verify_no_embedded_credentials.py
-          python3 tools/verify_gradle_supply_chain.py
-          python3 tools/verify_native_safety.py
-          python3 tools/verify_android_isolation.py
-          python3 tools/verify_profile_editor.py
-          python3 tools/verify_open_source_distribution.py
-          python3 tools/verify_runtime_resilience.py
-          python3 tools/verify_data_practices.py
-          python3 tools/verify_support_diagnostics.py
-          python3 tools/verify_project_archive.py
-          python3 tools/verify_release_contract.py
-          python3 tools/verify_play_bundle_workflow.py
-
-      - name: Restore native build cache
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
-        with:
-          path: |
-            build/native-slicer/dependency-sources
-            build/native-slicer/build
-          key: android-native-${{ runner.os }}-${{ hashFiles('native/slicer-runtime/versions.env', 'native/slicer-runtime/runtime.patch') }}
-
-      - name: Check Rust boundary
-        working-directory: rust/duckyslicer-jni
-        run: |
-          cargo fmt --check
-          cargo test --locked
-          cargo test --release --locked
-          cargo clippy --locked -- -D warnings
-
-      - name: Build unsigned Play bundle
-        working-directory: android
-        run: |
-          ./gradlew --dependency-verification=strict \
-            :app:testDebugUnitTest :app:lintRelease \
-            :app:bundleRelease :app:packageReleaseUniversalApk \
-            -Pduckyslicer.versionName="$DUCKYSLICER_PLAY_VERSION_NAME" \
-            -Pduckyslicer.versionCode="$DUCKYSLICER_PLAY_VERSION_CODE"
-
-      - name: Verify Play delivery contents
-        run: |
-          bundle="android/app/build/outputs/bundle/release/app-release.aab"
-          delivery_apk="android/app/build/outputs/apk_from_bundle/release/app-release-universal-unsigned.apk"
-          test -s "$bundle"
-          if unzip -Z1 "$bundle" | grep -Eq '^META-INF/[^/]+\.(RSA|DSA|EC)$'; then
-            echo "Play build job unexpectedly produced a signed bundle" >&2
+          if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "source_commit must be a full lowercase commit SHA" >&2
             exit 1
           fi
-          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$delivery_apk"
-          badging=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$delivery_apk")
-          printf '%s\n' "$badging" | grep -F "versionCode='$DUCKYSLICER_PLAY_VERSION_CODE'"
-          printf '%s\n' "$badging" | grep -F "versionName='$DUCKYSLICER_PLAY_VERSION_NAME'"
-          python3 -m unittest discover -s tools -p 'test_*.py'
-          python3 tools/verify_apk.py "$delivery_apk"
-          candidate="$RUNNER_TEMP/duckyslicer-play-candidate"
-          mkdir -p "$candidate"
-          cp "$bundle" \
-            "$candidate/DuckySlicer-$DUCKYSLICER_PLAY_VERSION_NAME-play-unsigned.aab"
+          expected_tag="play-v$PLAY_VERSION_NAME-$PLAY_VERSION_CODE"
+          expected_asset="DuckySlicer-$PLAY_VERSION_NAME-play-unsigned.aab"
+          if [ "$TRANSPORT_TAG" != "$expected_tag" ]; then
+            echo "transport_tag does not match the local Play identity" >&2
+            exit 1
+          fi
+          if [ "$UNSIGNED_ASSET" != "$expected_asset" ]; then
+            echo "unsigned_asset does not match the local Play identity" >&2
+            exit 1
+          fi
+          normalized_sha=$(printf '%s' "$UNSIGNED_SHA256" \
+            | tr '[:upper:]' '[:lower:]')
+          if [[ ! "$normalized_sha" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "unsigned_sha256 must be a SHA-256 digest" >&2
+            exit 1
+          fi
+
+          tag_commit=$(gh api \
+            "repos/$GITHUB_REPOSITORY/commits/$TRANSPORT_TAG" --jq .sha)
+          if [ "$tag_commit" != "$SOURCE_COMMIT" ]; then
+            echo "Play transport tag does not match source_commit" >&2
+            exit 1
+          fi
+          release_json=$(gh api \
+            "repos/$GITHUB_REPOSITORY/releases/tags/$TRANSPORT_TAG")
+          if [ "$(jq -r .draft <<<"$release_json")" != "true" ]; then
+            echo "Play transport release must remain a private draft" >&2
+            exit 1
+          fi
+          if [ "$(jq -r .prerelease <<<"$release_json")" != "false" ]; then
+            echo "Play transport draft must not be marked as a prerelease" >&2
+            exit 1
+          fi
+          asset_count=$(jq --arg name "$UNSIGNED_ASSET" \
+            '[.assets[] | select(.name == $name)] | length' <<<"$release_json")
+          total_assets=$(jq '.assets | length' <<<"$release_json")
+          if [ "$total_assets" -ne 1 ] || [ "$asset_count" -ne 1 ]; then
+            echo "Play transport draft must contain exactly the named unsigned AAB" >&2
+            exit 1
+          fi
+
+          mkdir -p unsigned
+          gh release download "$TRANSPORT_TAG" \
+            --pattern "$UNSIGNED_ASSET" --dir unsigned
+          unsigned_aab="unsigned/$UNSIGNED_ASSET"
+          test -s "$unsigned_aab"
+          actual_sha256=$(sha256sum "$unsigned_aab" | awk '{print $1}')
+          if [ "$actual_sha256" != "$normalized_sha" ]; then
+            echo "Private draft AAB does not match the local SHA-256" >&2
+            exit 1
+          fi
+          if unzip -Z1 "$unsigned_aab" | \
+            grep -E '^META-INF/[^/]+\.(RSA|DSA|EC)$' >/dev/null; then
+            echo "Local Play input must remain unsigned" >&2
+            exit 1
+          fi
+          unzip -t "$unsigned_aab" >/dev/null
+          unzip -Z1 "$unsigned_aab" | grep -Fx 'BundleConfig.pb'
+          unzip -Z1 "$unsigned_aab" | \
+            grep -Fx 'base/manifest/AndroidManifest.xml'
+          cat > expected-native-entries.txt <<'EOF'
+          base/lib/arm64-v8a/libandroidx.graphics.path.so
+          base/lib/arm64-v8a/libc++_shared.so
+          base/lib/arm64-v8a/libduckyslicer.so
+          base/lib/arm64-v8a/libprusaslicer-jni.so
+          EOF
+          unzip -Z1 "$unsigned_aab" | grep '^base/lib/' | sort \
+            > actual-native-entries.txt
+          diff -u expected-native-entries.txt actual-native-entries.txt
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: duckyslicer-play-unsigned
-          path: ${{ runner.temp }}/duckyslicer-play-candidate/DuckySlicer-*-play-unsigned.aab
+          name: duckyslicer-play-unsigned-${{ github.run_id }}
+          path: unsigned/${{ inputs.unsigned_asset }}
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1
 
   sign:
-    needs: build
+    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: play
@@ -157,65 +164,80 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: duckyslicer-play-unsigned
+          name: duckyslicer-play-unsigned-${{ github.run_id }}
           path: unsigned
 
-      - name: Sign and verify Play bundle
+      - name: Sign the exact locally built Play bundle
         env:
           DUCKYSLICER_PLAY_KEYSTORE_BASE64: ${{ secrets.DUCKYSLICER_PLAY_KEYSTORE_BASE64 }}
           DUCKYSLICER_PLAY_STORE_PASSWORD: ${{ secrets.DUCKYSLICER_PLAY_STORE_PASSWORD }}
           DUCKYSLICER_PLAY_KEY_ALIAS: ${{ secrets.DUCKYSLICER_PLAY_KEY_ALIAS }}
           DUCKYSLICER_PLAY_KEY_PASSWORD: ${{ secrets.DUCKYSLICER_PLAY_KEY_PASSWORD }}
           DUCKYSLICER_PLAY_CERT_SHA256: ${{ vars.DUCKYSLICER_PLAY_CERT_SHA256 }}
-          DUCKYSLICER_PLAY_VERSION_NAME: ${{ inputs.version_name }}
+          PLAY_VERSION_NAME: ${{ inputs.version_name }}
+          UNSIGNED_ASSET: ${{ inputs.unsigned_asset }}
+          UNSIGNED_SHA256: ${{ inputs.unsigned_sha256 }}
         run: |
+          set -euo pipefail
           test -n "$DUCKYSLICER_PLAY_KEYSTORE_BASE64"
           test -n "$DUCKYSLICER_PLAY_STORE_PASSWORD"
           test -n "$DUCKYSLICER_PLAY_KEY_ALIAS"
           test -n "$DUCKYSLICER_PLAY_KEY_PASSWORD"
+          unsigned_aab="unsigned/$UNSIGNED_ASSET"
+          test -s "$unsigned_aab"
+          normalized_sha=$(printf '%s' "$UNSIGNED_SHA256" \
+            | tr '[:upper:]' '[:lower:]')
+          actual_sha256=$(sha256sum "$unsigned_aab" | awk '{print $1}')
+          if [ "$actual_sha256" != "$normalized_sha" ]; then
+            echo "Signer input differs from the locally verified SHA-256" >&2
+            exit 1
+          fi
+          if unzip -Z1 "$unsigned_aab" | \
+            grep -E '^META-INF/[^/]+\.(RSA|DSA|EC)$' >/dev/null; then
+            echo "Signer input is already signed" >&2
+            exit 1
+          fi
+
           expected_fingerprint=$(printf '%s' "$DUCKYSLICER_PLAY_CERT_SHA256" \
             | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')
           if [[ ! "$expected_fingerprint" =~ ^[0-9a-f]{64}$ ]]; then
             echo "DUCKYSLICER_PLAY_CERT_SHA256 must be a SHA-256 fingerprint" >&2
             exit 1
           fi
-
           key_file="$RUNNER_TEMP/duckyslicer-play-upload.jks"
           cert_file="$RUNNER_TEMP/duckyslicer-play-upload.der"
           trap 'rm -f "$key_file" "$cert_file"' EXIT
-          printf '%s' "$DUCKYSLICER_PLAY_KEYSTORE_BASE64" | base64 --decode > "$key_file"
+          printf '%s' "$DUCKYSLICER_PLAY_KEYSTORE_BASE64" | \
+            base64 --decode > "$key_file"
           chmod 600 "$key_file"
           keytool -exportcert \
             -keystore "$key_file" \
             -storepass:env DUCKYSLICER_PLAY_STORE_PASSWORD \
             -alias "$DUCKYSLICER_PLAY_KEY_ALIAS" \
             -file "$cert_file"
-          certificate_text=$(openssl x509 -inform DER -in "$cert_file" -noout -text)
+          certificate_text=$(openssl x509 -inform DER -in "$cert_file" \
+            -noout -text)
           if ! printf '%s\n' "$certificate_text" | \
             grep -q "Public Key Algorithm: rsaEncryption"; then
             echo "Play upload key must use RSA" >&2
             exit 1
           fi
           key_bits=$(printf '%s\n' "$certificate_text" \
-            | sed -n 's/.*Public-Key: (\([0-9][0-9]*\) bit).*/\1/p' | head -1)
+            | sed -n 's/.*Public-Key: (\([0-9][0-9]*\) bit).*/\1/p' \
+            | head -1)
           if [[ ! "$key_bits" =~ ^[0-9]+$ ]] || [ "$key_bits" -lt 2048 ]; then
             echo "Play upload RSA key must be at least 2048 bits" >&2
             exit 1
           fi
-          actual_fingerprint=$(openssl dgst -sha256 "$cert_file" | sed 's/^.*= //')
+          actual_fingerprint=$(openssl dgst -sha256 "$cert_file" \
+            | sed 's/^.*= //')
           if [ "$actual_fingerprint" != "$expected_fingerprint" ]; then
             echo "Play upload certificate does not match the pinned fingerprint" >&2
             exit 1
           fi
 
-          shopt -s nullglob
-          unsigned_bundles=(unsigned/DuckySlicer-*-play-unsigned.aab)
-          if [ "${#unsigned_bundles[@]}" -ne 1 ]; then
-            echo "Expected exactly one unsigned Play bundle" >&2
-            exit 1
-          fi
           mkdir -p signed
-          signed_aab="signed/DuckySlicer-$DUCKYSLICER_PLAY_VERSION_NAME-play.aab"
+          signed_aab="signed/DuckySlicer-$PLAY_VERSION_NAME-play.aab"
           jarsigner \
             -keystore "$key_file" \
             -storepass:env DUCKYSLICER_PLAY_STORE_PASSWORD \
@@ -223,7 +245,7 @@ jobs:
             -sigalg SHA256withRSA \
             -digestalg SHA-256 \
             -signedjar "$signed_aab" \
-            "${unsigned_bundles[0]}" \
+            "$unsigned_aab" \
             "$DUCKYSLICER_PLAY_KEY_ALIAS"
           verify_report="$RUNNER_TEMP/duckyslicer-play-jarsigner.txt"
           jarsigner -verify -strict -verbose -certs \
@@ -250,10 +272,10 @@ jobs:
           fi
           (
             cd signed
-            sha256sum "DuckySlicer-$DUCKYSLICER_PLAY_VERSION_NAME-play.aab" \
-              > "DuckySlicer-$DUCKYSLICER_PLAY_VERSION_NAME-play.aab.sha256"
+            sha256sum "DuckySlicer-$PLAY_VERSION_NAME-play.aab" \
+              > "DuckySlicer-$PLAY_VERSION_NAME-play.aab.sha256"
             sha256sum --check \
-              "DuckySlicer-$DUCKYSLICER_PLAY_VERSION_NAME-play.aab.sha256"
+              "DuckySlicer-$PLAY_VERSION_NAME-play.aab.sha256"
           )
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -264,3 +286,50 @@ jobs:
             signed/DuckySlicer-*-play.aab.sha256
           if-no-files-found: error
           retention-days: 30
+
+  cleanup:
+    needs: [validate, sign]
+    if: ${{ always() && needs.validate.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      TRANSPORT_TAG: ${{ inputs.transport_tag }}
+      UNSIGNED_ASSET: ${{ inputs.unsigned_asset }}
+      UNSIGNED_SHA256: ${{ inputs.unsigned_sha256 }}
+    steps:
+      - name: Remove the private draft but retain its source tag
+        run: |
+          set -euo pipefail
+          tag_commit=$(gh api \
+            "repos/$GITHUB_REPOSITORY/commits/$TRANSPORT_TAG" --jq .sha)
+          if [ "$tag_commit" != "$SOURCE_COMMIT" ]; then
+            echo "Refusing cleanup because the transport tag changed" >&2
+            exit 1
+          fi
+          release_json=$(gh api \
+            "repos/$GITHUB_REPOSITORY/releases/tags/$TRANSPORT_TAG")
+          if [ "$(jq -r .draft <<<"$release_json")" != "true" ]; then
+            echo "Refusing cleanup because the release is not a draft" >&2
+            exit 1
+          fi
+          asset_id=$(jq --arg name "$UNSIGNED_ASSET" \
+            -r '.assets[] | select(.name == $name) | .id' <<<"$release_json")
+          if [[ ! "$asset_id" =~ ^[0-9]+$ ]]; then
+            echo "Refusing cleanup because the unsigned asset changed" >&2
+            exit 1
+          fi
+          asset_sha=$(gh api \
+            -H 'Accept: application/octet-stream' \
+            "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
+            | sha256sum | awk '{print $1}')
+          normalized_sha=$(printf '%s' "$UNSIGNED_SHA256" \
+            | tr '[:upper:]' '[:lower:]')
+          if [ "$asset_sha" != "$normalized_sha" ]; then
+            echo "Refusing cleanup because the unsigned asset digest changed" >&2
+            exit 1
+          fi
+          gh release delete "$TRANSPORT_TAG" --yes

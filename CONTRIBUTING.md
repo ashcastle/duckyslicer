@@ -114,6 +114,14 @@ the `sign` job may receive signing secrets; it must not check out source, execut
 Gradle or repository scripts, or write the Release. Only `publish` may write the
 Release. The GitHub Release must contain only the signed ARM64 APK. The tag and
 recursive submodule pins remain the corresponding-source identity.
+Play AABs follow the same local-only rule. Build them with
+`python3 tools/prepare_local_play_bundle.py`; the local command runs the full gate,
+builds both Play artifacts twice, checks the universal delivery APK at 16 KB, and
+rejects byte differences. GitHub never builds the Play AAB. Its manual workflow may
+only validate the private draft, sign the exact digest in the protected `play`
+environment, retain the signed AAB plus checksum as an Actions artifact, and remove
+the draft without deleting its source tag. It must use a separate Play upload key and
+never uploads to Play Console.
 
 ## Updating Android dependencies
 

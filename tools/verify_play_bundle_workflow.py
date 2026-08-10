@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enforce isolated, manual signing for Play App Bundles."""
+"""Enforce local-only Play builds and isolated upload-key signing."""
 
 from __future__ import annotations
 
@@ -22,14 +22,42 @@ def _job_sections(workflow: str) -> dict[str, str]:
     matches = list(JOB.finditer(jobs_source))
     return {
         match.group(1): jobs_source[
-            match.start() : matches[index + 1].start() if index + 1 < len(matches) else None
+            match.start() : matches[index + 1].start()
+            if index + 1 < len(matches)
+            else None
         ]
         for index, match in enumerate(matches)
     }
 
 
+def _require(section: str, markers: tuple[str, ...], label: str) -> None:
+    for marker in markers:
+        if marker not in section:
+            raise VerificationError(f"{label} is missing: {marker}")
+
+
+def _reject_repository_execution(section: str, label: str) -> None:
+    for marker in (
+        "actions/checkout@",
+        "./gradlew",
+        "gradlew ",
+        "cargo ",
+        "python3 tools/",
+        "prepare_local_play_bundle.py",
+    ):
+        if marker in section:
+            raise VerificationError(f"{label} must not build or execute repository code")
+
+
 def verify_play_bundle_workflow(sources: dict[str, str]) -> None:
-    required_files = {"play-bundle.yml", "sign-local-release.yml", "RELEASING.md"}
+    required_files = {
+        "play-bundle.yml",
+        "sign-local-release.yml",
+        "prepare_local_play_bundle.py",
+        "RELEASING.md",
+        "SECURITY.md",
+        "CONTRIBUTING.md",
+    }
     missing_files = sorted(required_files - sources.keys())
     if missing_files:
         raise VerificationError(f"Play workflow sources are missing: {missing_files}")
@@ -37,46 +65,77 @@ def verify_play_bundle_workflow(sources: dict[str, str]) -> None:
     workflow = sources["play-bundle.yml"]
     header, separator, _ = workflow.partition("\njobs:\n")
     if not separator or "workflow_dispatch:" not in header:
-        raise VerificationError("Play bundle workflow must be manually dispatched")
+        raise VerificationError("Play signing workflow must be manually dispatched")
     for automatic_trigger in ("pull_request:", "push:", "schedule:"):
         if automatic_trigger in header:
             raise VerificationError(
-                f"Play bundle workflow must not use automatic trigger: {automatic_trigger}"
+                f"Play signing workflow must not use automatic trigger: {automatic_trigger}"
             )
+    _require(
+        header,
+        (
+            "version_name:",
+            "version_code:",
+            "source_commit:",
+            "transport_tag:",
+            "unsigned_asset:",
+            "unsigned_sha256:",
+        ),
+        "Play dispatch identity",
+    )
 
     jobs = _job_sections(workflow)
-    if set(jobs) != {"build", "sign"}:
+    if set(jobs) != {"validate", "sign", "cleanup"}:
         raise VerificationError(
-            f"Play workflow must contain only isolated build and sign jobs: {sorted(jobs)}"
+            "Play workflow must contain only validate, sign, and cleanup jobs: "
+            f"{sorted(jobs)}"
         )
-    build = jobs["build"]
+    validate = jobs["validate"]
     signer = jobs["sign"]
+    cleanup = jobs["cleanup"]
 
-    build_markers = (
-        ":app:bundleRelease :app:packageReleaseUniversalApk",
-        "app-release.aab",
-        "app-release-universal-unsigned.apk",
-        'zipalign" -c -P 16 -v 4 "$delivery_apk"',
-        'python3 tools/verify_apk.py "$delivery_apk"',
-        "duckyslicer-play-unsigned",
-        "2100000000",
-        "DUCKYSLICER_PLAY_VERSION_NAME",
-        "DUCKYSLICER_PLAY_VERSION_CODE",
-        '"refs/heads/main"',
-        '${#PLAY_VERSION_NAME_INPUT}" -gt 64',
-        '${#PLAY_VERSION_CODE_INPUT}" -gt 10',
-        "aapt\" dump badging",
-        "versionCode='$DUCKYSLICER_PLAY_VERSION_CODE'",
-        "versionName='$DUCKYSLICER_PLAY_VERSION_NAME'",
-        "unexpectedly produced a signed bundle",
+    _reject_repository_execution(validate, "Play validator")
+    if "${{ secrets." in validate or "environment: play" in validate:
+        raise VerificationError("Play validator must not receive signing material")
+    if "permissions:\n      contents: write" not in validate:
+        raise VerificationError("Play validator needs draft-release visibility")
+    for mutation in (
+        "gh release create",
+        "gh release edit",
+        "gh release upload",
+        "gh release delete",
+        "--method POST",
+        "--method PATCH",
+        "--method DELETE",
+    ):
+        if mutation in validate:
+            raise VerificationError("Play validator must remain release-read-only")
+    _require(
+        validate,
+        (
+            '"refs/heads/main"',
+            "2100000000",
+            'expected_tag="play-v$PLAY_VERSION_NAME-$PLAY_VERSION_CODE"',
+            'expected_asset="DuckySlicer-$PLAY_VERSION_NAME-play-unsigned.aab"',
+            'commits/$TRANSPORT_TAG" --jq .sha',
+            'releases/tags/$TRANSPORT_TAG"',
+            'jq -r .draft <<<"$release_json"',
+            'if [ "$total_assets" -ne 1 ] || [ "$asset_count" -ne 1 ]',
+            'if [ "$actual_sha256" != "$normalized_sha" ]',
+            "Local Play input must remain unsigned",
+            "BundleConfig.pb",
+            "base/manifest/AndroidManifest.xml",
+            "base/lib/arm64-v8a/libduckyslicer.so",
+            "base/lib/arm64-v8a/libprusaslicer-jni.so",
+            "diff -u expected-native-entries.txt actual-native-entries.txt",
+            "name: duckyslicer-play-unsigned-${{ github.run_id }}",
+        ),
+        "Play local-artifact validation",
     )
-    for marker in build_markers:
-        if marker not in build:
-            raise VerificationError(f"Play build gate is missing: {marker}")
-    if "${{ secrets." in build or "jarsigner" in build:
-        raise VerificationError("Play build job must not receive keys or sign artifacts")
 
+    _reject_repository_execution(signer, "Play signer")
     signer_rules = {
+        "depends on validation": "needs: validate" in signer,
         "uses protected play environment": "environment: play" in signer,
         "has artifact-read permission only": (
             "permissions:\n      actions: read" in signer
@@ -84,16 +143,15 @@ def verify_play_bundle_workflow(sources: dict[str, str]) -> None:
             and "id-token:" not in signer
             and "attestations:" not in signer
         ),
-        "receives four upload-key secrets": signer.count("${{ secrets.") == 4,
+        "receives exactly four upload-key secrets": signer.count("${{ secrets.") == 4,
         "pins the upload certificate": (
             "DUCKYSLICER_PLAY_CERT_SHA256" in signer
             and "actual_fingerprint" in signer
             and "expected_fingerprint" in signer
         ),
-        "does not execute repository code": (
-            "actions/checkout@" not in signer
-            and "./gradlew" not in signer
-            and "python3 tools/" not in signer
+        "rechecks the exact local digest": (
+            'if [ "$actual_sha256" != "$normalized_sha" ]' in signer
+            and "Signer input differs from the locally verified SHA-256" in signer
         ),
         "removes the temporary upload key": (
             "trap 'rm -f \"$key_file\" \"$cert_file\"' EXIT" in signer
@@ -104,53 +162,94 @@ def verify_play_bundle_workflow(sources: dict[str, str]) -> None:
         ),
         "signs and verifies the bundle": (
             "jarsigner" in signer
-            and (
-                "jarsigner -verify -strict -verbose -certs \\\n"
-                '            -keystore "$key_file" \\\n'
-                "            -storepass:env DUCKYSLICER_PLAY_STORE_PASSWORD"
-            )
-            in signer
+            and "jarsigner -verify -strict -verbose -certs" in signer
             and "jar verified" in signer
             and "jar is unsigned" in signer
             and "signature_block_count" in signer
             and "bundle_fingerprint" in signer
-            and "duckyslicer-play-signed" in signer
         ),
-        "retains a checksum": (
-            "sha256sum --check" in signer and "play.aab.sha256" in signer
+        "retains only signed output and checksum": (
+            "name: duckyslicer-play-signed" in signer
+            and "sha256sum --check" in signer
+            and "play.aab.sha256" in signer
         ),
     }
     for description, valid in signer_rules.items():
         if not valid:
             raise VerificationError(f"Play signer isolation failed: {description}")
 
-    forbidden_delivery_markers = (
-        "action-gh-release",
+    _reject_repository_execution(cleanup, "Play cleanup")
+    if "${{ secrets." in cleanup or "environment: play" in cleanup:
+        raise VerificationError("Play cleanup must not receive signing material")
+    _require(
+        cleanup,
+        (
+            "needs: [validate, sign]",
+            "always() && needs.validate.result == 'success'",
+            "permissions:\n      contents: write",
+            'commits/$TRANSPORT_TAG" --jq .sha',
+            'jq -r .draft <<<"$release_json"',
+            'if [ "$asset_sha" != "$normalized_sha" ]',
+            'gh release delete "$TRANSPORT_TAG" --yes',
+        ),
+        "Play private-draft cleanup",
+    )
+    if "--cleanup-tag" in cleanup:
+        raise VerificationError("Play cleanup must retain the durable source tag")
+
+    for marker in (
         "androidpublisher",
         "gradle-play-publisher",
         "service_account",
         "upload-google-play",
-        "contents: write",
         "runs-on: macos-14",
         "device-tests",
-    )
-    for marker in forbidden_delivery_markers:
+    ):
         if marker in workflow.lower():
             raise VerificationError(
                 f"Play workflow must stop at a signed Actions artifact: {marker}"
             )
 
-    release_publish = _job_sections(sources["sign-local-release.yml"]).get("publish", "")
+    local_preparer = sources["prepare_local_play_bundle.py"]
+    _require(
+        local_preparer,
+        (
+            "run_local_gate.py",
+            "--no-build-cache",
+            ":app:clean",
+            ":app:bundleRelease",
+            ":app:packageReleaseUniversalApk",
+            "verify_reproducible(candidate_bundle, RELEASE_AAB)",
+            "verify_reproducible(candidate_delivery, DELIVERY_APK)",
+            "verify_unsigned_apk(delivery_apk",
+            "SIGNING_ENVIRONMENT",
+            "play_transport_tag",
+        ),
+        "Local Play preparer",
+    )
+
+    release_publish = _job_sections(sources["sign-local-release.yml"]).get(
+        "publish", ""
+    )
     if ".aab" in release_publish.lower():
         raise VerificationError("GitHub Release publish job must remain free of AAB files")
 
-    releasing = " ".join(sources["RELEASING.md"].lower().split())
+    documentation = " ".join(
+        (
+            sources["RELEASING.md"],
+            sources["SECURITY.md"],
+            sources["CONTRIBUTING.md"],
+        )
+    ).lower()
     for marker in (
+        "prepare_local_play_bundle.py",
+        "built twice",
+        "never builds the play aab",
         "separate play upload key",
         "never uploads to play console",
         "duckyslicer-play-signed",
     ):
-        if marker not in releasing:
+        if marker not in documentation:
             raise VerificationError(f"Play handoff documentation is missing: {marker}")
 
 
@@ -162,7 +261,12 @@ def read_sources() -> dict[str, str]:
         "sign-local-release.yml": (
             ROOT / ".github/workflows/sign-local-release.yml"
         ).read_text(encoding="utf-8"),
+        "prepare_local_play_bundle.py": (
+            ROOT / "tools/prepare_local_play_bundle.py"
+        ).read_text(encoding="utf-8"),
         "RELEASING.md": (ROOT / "docs/RELEASING.md").read_text(encoding="utf-8"),
+        "SECURITY.md": (ROOT / "SECURITY.md").read_text(encoding="utf-8"),
+        "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),
     }
 
 
@@ -171,7 +275,7 @@ def main() -> None:
         verify_play_bundle_workflow(read_sources())
     except (OSError, VerificationError) as error:
         raise SystemExit(f"Play workflow verification failed: {error}") from error
-    print("Verified manual Play AAB build and isolated upload-key signing")
+    print("Verified local-only Play AAB preparation and isolated upload-key signing")
 
 
 if __name__ == "__main__":

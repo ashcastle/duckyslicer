@@ -59,7 +59,7 @@ key prevents publishing a compatible update under the same Android identity.
    ```shell
    python3 tools/prepare_local_release.py \
      --version 0.2.0-rc.1 \
-     --version-code 4
+     --version-code 5
    ```
 
 3. Review the generated `LOCAL-RELEASE.json`, source diff, dependency changes, license
@@ -83,12 +83,19 @@ key prevents publishing a compatible update under the same Android identity.
 ## Play Console bundle handoff
 
 Google Play receives an Android App Bundle, but the public GitHub Release remains
-APK-only. The manually dispatched **Play Bundle** workflow builds an unsigned AAB
-from the selected commit and signs it in a separate `play` environment. It uses a
-separate Play upload key instead of the GitHub APK release key and never uploads to
-Play Console. The operator downloads the `duckyslicer-play-signed` Actions artifact,
-checks its SHA-256 file, and uploads the AAB manually after completing the local
-16 KB AVD release gate.
+APK-only. `tools/prepare_local_play_bundle.py` runs the complete local ARM64 16 KB
+gate, builds the unsigned AAB and its universal delivery APK twice from clean inputs
+with the Gradle build cache disabled, and rejects any byte difference. The delivery
+APK is checked for package and version identity, unsigned state, ARM64-only native
+libraries, and 16 KB alignment. It remains local and is never uploaded.
+
+GitHub never builds the Play AAB. The manually dispatched **Sign Local Play Bundle**
+workflow only downloads a digest-pinned AAB from a private draft, validates its source
+tag and native structure, signs it in the protected `play` environment, and removes
+the private draft while retaining the source tag. It uses a separate Play upload key
+instead of the GitHub APK release key and never uploads to Play Console. The operator
+downloads the `duckyslicer-play-signed` Actions artifact, checks its SHA-256 file, and
+uploads the AAB manually.
 
 Create an RSA 2048-bit-or-stronger upload key outside the repository, register its
 public certificate in Play Console, and protect the `play` environment with required
@@ -103,11 +110,46 @@ Add the normalized 64-character upload-certificate fingerprint as the public
 `DUCKYSLICER_PLAY_CERT_SHA256` environment variable. Keep the upload key separate
 from the Play-managed app signing key and the GitHub APK signing key.
 
-When dispatching the workflow, provide a SemVer `version_name` and a positive,
-previously unused `version_code` that is greater than every version already uploaded
-to Play and no greater than `2100000000`. The workflow stops after producing the
-signed Actions artifact; Play track selection, release notes, review, and rollout
-remain explicit Console actions.
+For each Play candidate:
+
+1. From a clean, synchronized `main`, choose a SemVer and a positive, previously
+   unused `versionCode` greater than every version already uploaded to Play and no
+   greater than `2100000000`. Prepare the candidate locally:
+
+   ```shell
+   python3 tools/prepare_local_play_bundle.py \
+     --version 0.2.0-rc.1 \
+     --version-code 5
+   ```
+
+2. Review
+   `build/local-play/0.2.0-rc.1-5/DuckySlicer-0.2.0-rc.1-LOCAL-PLAY.json`. Create and push the exact
+   `transportTag` at its `sourceCommit`, then create an unpublished draft containing
+   exactly its `unsignedAsset`:
+
+   ```shell
+   git tag -a play-v0.2.0-rc.1-5 <sourceCommit> \
+     -m "DuckySlicer Play 0.2.0-rc.1 source"
+   git push origin play-v0.2.0-rc.1-5
+   gh release create play-v0.2.0-rc.1-5 \
+     build/local-play/0.2.0-rc.1-5/DuckySlicer-0.2.0-rc.1-play-unsigned.aab \
+     --draft --verify-tag \
+     --title "Private Play transport 0.2.0-rc.1 (5)" \
+     --notes "Temporary unsigned Play signing input."
+   ```
+
+3. Dispatch `play-bundle.yml` from `main` with the six exact metadata values:
+   `versionName`, `versionCode`, `sourceCommit`, `transportTag`, `unsignedAsset`, and
+   `unsignedSha256`. Approve the protected `play` environment. The validator and
+   signer each recheck the unsigned digest; neither checks out or executes repository
+   code.
+4. Download `duckyslicer-play-signed`, verify its `.sha256` file, and retain the
+   workflow run URL with the release record. The cleanup job removes the private
+   draft even when signing fails after validation, but deliberately keeps the tag as
+   durable corresponding-source identity.
+5. Install the locally verified universal delivery APK for the final offline smoke
+   test. Upload only the signed AAB to Play Console. Track selection, release notes,
+   review, staged rollout, and rollback remain explicit Console actions.
 
 Before each Play upload, verify the public privacy-policy URL is reachable:
 `https://github.com/ashcastle/duckyslicer/blob/main/PRIVACY.md`. The same bilingual
@@ -137,6 +179,14 @@ than `main`, a mismatch with `origin/main`, unpinned recursive submodules, exist
 output files, or any local or hosted signing variable. It never reads a keystore and
 never uploads or publishes.
 The unsigned draft asset is temporary; the public Release must never expose it.
+
+The Play preparation output is `build/local-play/<version>-<versionCode>/`. It
+contains the reproducible unsigned AAB, the reproducible universal unsigned delivery
+APK, and `DuckySlicer-<version>-LOCAL-PLAY.json`. The metadata pins the package,
+version, source commit,
+transport tag, filenames, and both SHA-256 values. These files are ignored by Git.
+The Play command applies the same clean-checkout and signing-variable refusal rules
+as the APK command and never creates a tag, draft, workflow run, or Console release.
 
 To obtain the complete corresponding source, clone the tagged repository with
 `--recurse-submodules`. Local AI instruction files are not build inputs and remain
