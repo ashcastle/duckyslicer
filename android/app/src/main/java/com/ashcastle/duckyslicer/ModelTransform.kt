@@ -8,6 +8,7 @@ import org.json.JSONObject
 data class ModelTransform(
     val offsetXmm: Float = 0f,
     val offsetYmm: Float = 0f,
+    val offsetZmm: Float = 0f,
     val rotationXdeg: Float = 0f,
     val rotationYdeg: Float = 0f,
     val rotationZdeg: Float = 0f,
@@ -27,6 +28,7 @@ data class ModelTransform(
             JSONArray(listOf(bedOriginX + bedSizeX / 2f, bedOriginY + bedSizeY / 2f)),
         )
         .put("offsetMm", JSONArray(listOf(offsetXmm, offsetYmm)))
+        .put("offsetZmm", offsetZmm)
         .put("rotationDeg", JSONArray(listOf(rotationXdeg, rotationYdeg, rotationZdeg)))
         .put("scale", scale)
         .put("mirror", JSONArray(listOf(mirrorX, mirrorY, mirrorZ)))
@@ -168,6 +170,6 @@ internal fun ModelTransform.placeVertex(
     return floatArrayOf(
         rotated[0] + bedSizeX / 2f + offsetXmm,
         rotated[1] + bedSizeY / 2f + offsetYmm,
-        rotated[2] - minimumRotatedZ,
+        rotated[2] - minimumRotatedZ + offsetZmm,
     )
 }

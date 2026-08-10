@@ -45,6 +45,31 @@ data class ProjectHistoryState(
         )
     }
 
+    fun replaceSelected(replacements: List<ProjectObject>): ProjectHistoryState {
+        val selectedId = current.selectedObjectId ?: return this
+        require(replacements.isNotEmpty()) { "Replacement objects are empty" }
+        val selectedIndex = current.objects.indexOfFirst { it.id == selectedId }
+        if (selectedIndex < 0) return this
+        require(current.objects.size - 1 + replacements.size <= ProjectStore.MAX_PROJECT_OBJECTS) {
+            "Project has too many objects"
+        }
+        val ids = current.objects
+            .asSequence()
+            .filterNot { it.id == selectedId }
+            .mapTo(HashSet(), ProjectObject::id)
+        require(replacements.all { ids.add(it.id) }) { "Duplicate project object id" }
+        val nextObjects = current.objects.toMutableList().apply {
+            removeAt(selectedIndex)
+            addAll(selectedIndex, replacements)
+        }
+        return record(
+            current.copy(
+                objects = nextObjects,
+                selectedObjectId = replacements.first().id,
+            ),
+        )
+    }
+
     fun removeSelected(): ProjectHistoryState {
         val selected = current.selectedObject ?: return this
         val remaining = current.objects.filterNot { it.id == selected.id }

@@ -25,6 +25,8 @@ class NativeLibrary(
         bedPolygon: FloatArray,
         minimumGap: Float,
     ): FloatArray?
+    external fun nativeSplitObject(objectIndex: Int): IntArray?
+    external fun nativeIsObjectSplittable(objectIndex: Int): Boolean
     external fun applySupportPaint(objectIndex: Int, sidecarPath: String): Boolean
     external fun getObjectBoundingBoxes(): FloatArray
     external fun nativeGetObjectWorldAABBMins(): FloatArray

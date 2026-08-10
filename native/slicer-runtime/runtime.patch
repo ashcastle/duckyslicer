@@ -1508,3 +1508,22 @@ index 1158e2c4..94d6147e 100644
  // ---- Cancellation ----
  JNIEXPORT void JNICALL
  Java_com_u1_slicer_NativeLibrary_cancelPreviewMesh(JNIEnv*, jobject) {
+diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil_arrange.cpp
+--- a/app/src/main/cpp/src/sapil_arrange.cpp
++++ b/app/src/main/cpp/src/sapil_arrange.cpp
+@@ -565,10 +565,14 @@ static bool f66_volIdxValid(int objIdx, int volIdx) {
+ }
+ 
+ bool SlicerEngine::isObjectSplittable(int objIdx) const {
+     if (!f66_objIdxValid(objIdx)) return false;
+     auto* obj = getGlobalModel().objects[objIdx];
+-    return obj->parts_count() > 1;
++    // Match OrcaSlicer's ObjectList::is_splittable(to_objects=true): a
++    // multi-volume object can be separated by volume, while a single-volume
++    // object is splittable when its mesh contains disconnected islands.
++    return obj->volumes.size() > 1 ||
++           (obj->volumes.size() == 1 && obj->volumes[0]->is_splittable());
+ }
+ 
+ bool SlicerEngine::isVolumeSplittable(int objIdx, int volIdx) const {
+     if (!f66_volIdxValid(objIdx, volIdx)) return false;
