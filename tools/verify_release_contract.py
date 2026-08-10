@@ -97,6 +97,7 @@ def verify_release_contract(sources: dict[str, str]) -> None:
             "local arm64 16 kb avd",
         ),
         "CONTRIBUTING.md": (
+            "python3 tools/run_local_gate.py",
             "local arm64 16 kb avd is the authoritative functional gate",
             "hosted emulator jobs must remain absent",
             "github release must contain only the signed arm64 apk",
