@@ -4,6 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -42,18 +43,52 @@ class OrcaPrimitiveInstrumentedTest {
                             generated.file,
                             "cube.stl",
                         )
+                        val sliceOptions = SliceOptions().copy(
+                            layerHeight = 0.2f,
+                            firstLayerHeight = 0.2f,
+                            bedSizeX = 100f,
+                            bedSizeY = 100f,
+                            bedPolygon = rectangularBedPolygon(100f, 100f),
+                        )
                         val sliced = OnDeviceSlicer.slice(
                             File(installed.localPath),
-                            SliceOptions().copy(
-                                layerHeight = 0.2f,
-                                firstLayerHeight = 0.2f,
-                                bedSizeX = 100f,
-                                bedSizeY = 100f,
-                                bedPolygon = rectangularBedPolygon(100f, 100f),
-                            ),
+                            sliceOptions,
                         )
                         assertTrue("layers=${sliced.layers}", sliced.layers in 90..110)
                         assertTrue(sliced.output.length() > 10_000L)
+
+                        val axisTransform = ModelTransform(
+                            scale = 1f,
+                            scaleY = 1.5f,
+                            scaleZ = 2f,
+                        )
+                        val transformed = File(staging, "cube-axis-scaled.stl")
+                        val transformResult = JSONObject(
+                            NativeEngine.transformStl(
+                                installed.localPath,
+                                transformed.absolutePath,
+                                axisTransform.toJson(0f, 0f),
+                            ),
+                        )
+                        assertTrue(
+                            "Independent-axis STL transform failed: ${transformResult.optString("error")}",
+                            transformResult.optBoolean("ok"),
+                        )
+                        val transformedInfo = ModelInfo.fromJson(
+                            NativeEngine.inspectStl(transformed.absolutePath),
+                            transformed.absolutePath,
+                        )
+                        assertEquals(20.0, transformedInfo.dimensions[0], 0.25)
+                        assertEquals(30.0, transformedInfo.dimensions[1], 0.25)
+                        assertEquals(40.0, transformedInfo.dimensions[2], 0.25)
+
+                        val axisSliced = OnDeviceSlicer.slice(
+                            File(installed.localPath),
+                            sliceOptions,
+                            axisTransform,
+                        )
+                        assertTrue("axis layers=${axisSliced.layers}", axisSliced.layers in 190..210)
+                        assertTrue(axisSliced.output.length() > 10_000L)
                     }
                 } finally {
                     staging.deleteRecursively()

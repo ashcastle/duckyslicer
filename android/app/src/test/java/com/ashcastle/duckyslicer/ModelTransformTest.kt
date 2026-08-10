@@ -9,10 +9,16 @@ import org.json.JSONObject
 class ModelTransformTest {
     @Test
     fun nativeTransformJsonUsesRustOffsetZFieldName() {
-        val json = JSONObject(ModelTransform(offsetZmm = 7f).toJson(100f, 100f))
+        val json = JSONObject(
+            ModelTransform(offsetZmm = 7f, scale = 1.2f, scaleY = 1.4f, scaleZ = 1.6f)
+                .toJson(100f, 100f),
+        )
 
         assertEquals(7.0, json.getDouble("offsetZMm"), 0.0001)
         assertFalse(json.has("offsetZmm"))
+        assertEquals(1.2, json.getJSONArray("scaleAxes").getDouble(0), 0.0001)
+        assertEquals(1.4, json.getJSONArray("scaleAxes").getDouble(1), 0.0001)
+        assertEquals(1.6, json.getJSONArray("scaleAxes").getDouble(2), 0.0001)
     }
 
     @Test
@@ -59,13 +65,27 @@ class ModelTransformTest {
     fun localPreviewTransformMirrorsBeforeRotation() {
         val transformed = ModelTransform(
             scale = 2f,
+            scaleY = 3f,
+            scaleZ = 4f,
             mirrorX = true,
             mirrorZ = true,
         ).transformLocal(floatArrayOf(1f, 2f, 3f))
 
         assertEquals(-2f, transformed[0], 0.0001f)
-        assertEquals(4f, transformed[1], 0.0001f)
-        assertEquals(-6f, transformed[2], 0.0001f)
+        assertEquals(6f, transformed[1], 0.0001f)
+        assertEquals(-12f, transformed[2], 0.0001f)
+    }
+
+    @Test
+    fun axisScaleCanPreserveOrReleaseCurrentProportions() {
+        val current = ModelTransform(scale = 1f, scaleY = 2f, scaleZ = 4f)
+        val locked = current.withAxisScale(ModelScaleAxis.Y, 3f, true, 0.05f..10f)
+        val unlocked = current.withAxisScale(ModelScaleAxis.Y, 3f, false, 0.05f..10f)
+
+        assertEquals(ModelTransform(scale = 1.5f, scaleY = 3f, scaleZ = 6f), locked)
+        assertEquals(ModelTransform(scale = 1f, scaleY = 3f, scaleZ = 4f), unlocked)
+        assertFalse(current.hasUniformScale())
+        assertTrue(ModelTransform(scale = 1.5f).hasUniformScale())
     }
 
     @Test

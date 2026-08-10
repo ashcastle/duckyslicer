@@ -1,5 +1,6 @@
 package com.ashcastle.duckyslicer
 
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 import org.json.JSONArray
@@ -13,6 +14,8 @@ data class ModelTransform(
     val rotationYdeg: Float = 0f,
     val rotationZdeg: Float = 0f,
     val scale: Float = 1f,
+    val scaleY: Float = scale,
+    val scaleZ: Float = scale,
     val mirrorX: Boolean = false,
     val mirrorY: Boolean = false,
     val mirrorZ: Boolean = false,
@@ -31,6 +34,7 @@ data class ModelTransform(
         .put("offsetZMm", offsetZmm)
         .put("rotationDeg", JSONArray(listOf(rotationXdeg, rotationYdeg, rotationZdeg)))
         .put("scale", scale)
+        .put("scaleAxes", JSONArray(listOf(scale, scaleY, scaleZ)))
         .put("mirror", JSONArray(listOf(mirrorX, mirrorY, mirrorZ)))
         .toString()
 
@@ -38,6 +42,41 @@ data class ModelTransform(
         rotationXdeg = Math.toDegrees(orientation.rotationRadians[0]).toFloat(),
         rotationYdeg = Math.toDegrees(orientation.rotationRadians[1]).toFloat(),
         rotationZdeg = Math.toDegrees(orientation.rotationRadians[2]).toFloat(),
+    )
+}
+
+internal enum class ModelScaleAxis { X, Y, Z }
+
+internal fun ModelTransform.hasUniformScale(tolerance: Float = 0.0001f): Boolean =
+    abs(scale - scaleY) <= tolerance && abs(scale - scaleZ) <= tolerance
+
+internal fun ModelTransform.withAxisScale(
+    axis: ModelScaleAxis,
+    requested: Float,
+    keepProportions: Boolean,
+    range: ClosedFloatingPointRange<Float>,
+): ModelTransform {
+    require(requested.isFinite() && range.start > 0f && range.endInclusive >= range.start) {
+        "Axis scale is invalid"
+    }
+    val bounded = requested.coerceIn(range)
+    if (!keepProportions) {
+        return when (axis) {
+            ModelScaleAxis.X -> copy(scale = bounded)
+            ModelScaleAxis.Y -> copy(scaleY = bounded)
+            ModelScaleAxis.Z -> copy(scaleZ = bounded)
+        }
+    }
+    val scales = floatArrayOf(scale, scaleY, scaleZ)
+    require(scales.all { it.isFinite() && it > 0f }) { "Current axis scale is invalid" }
+    val current = scales[axis.ordinal]
+    val minimumFactor = scales.maxOf { range.start / it }
+    val maximumFactor = scales.minOf { range.endInclusive / it }
+    val factor = (bounded / current).coerceIn(minimumFactor, maximumFactor)
+    return copy(
+        scale = scale * factor,
+        scaleY = scaleY * factor,
+        scaleZ = scaleZ * factor,
     )
 }
 
@@ -123,8 +162,8 @@ internal fun ModelTransform.rotate(point: FloatArray): FloatArray {
 internal fun ModelTransform.transformLocal(point: FloatArray): FloatArray = rotate(
     floatArrayOf(
         point[0] * scale * if (mirrorX) -1f else 1f,
-        point[1] * scale * if (mirrorY) -1f else 1f,
-        point[2] * scale * if (mirrorZ) -1f else 1f,
+        point[1] * scaleY * if (mirrorY) -1f else 1f,
+        point[2] * scaleZ * if (mirrorZ) -1f else 1f,
     ),
 )
 

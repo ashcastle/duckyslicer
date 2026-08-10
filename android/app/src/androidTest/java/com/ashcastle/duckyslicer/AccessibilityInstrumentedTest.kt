@@ -310,6 +310,41 @@ class AccessibilityInstrumentedTest {
         }
     }
 
+    @Test
+    fun modelTransformExposesIndependentAxesAndProportionLock() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val more = context.getString(R.string.more_settings)
+        val keepProportions = context.getString(R.string.keep_proportions)
+        val axisLabels = listOf(
+            context.getString(R.string.scale_x),
+            context.getString(R.string.scale_y),
+            context.getString(R.string.scale_z),
+        )
+        launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use {
+            val workspaceNodes = waitForNodes(setOf(more))
+            val moreButton = workspaceNodes.firstOrNull {
+                it.isClickable && it.effectiveLabel().contains(more)
+            }
+            assertNotNull("A selected object must expose the model tools", moreButton)
+            tapCenter(checkNotNull(moreButton))
+
+            val proportionLock = scrollUntilClickable(keepProportions)
+            assertTrue(
+                "The proportion lock must expose one switch action",
+                proportionLock.isCheckable,
+            )
+            axisLabels.forEach { label ->
+                val axisControl = scrollUntilNode(label) {
+                    it.className?.toString() == SEEK_BAR_CLASS
+                }
+                assertTrue(
+                    "$label must remain visible and adjustable after scrolling",
+                    axisControl.isVisibleToUser,
+                )
+            }
+        }
+    }
+
     private fun launchHarness(screen: String): ActivityScenario<AccessibilityHarnessActivity> {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         return ActivityScenario.launch(
@@ -341,12 +376,19 @@ class AccessibilityInstrumentedTest {
     }
 
     private fun scrollUntilClickable(label: String): AccessibilityNodeInfo {
+        return scrollUntilNode(label) { it.isClickable }
+    }
+
+    private fun scrollUntilNode(
+        label: String,
+        matches: (AccessibilityNodeInfo) -> Boolean,
+    ): AccessibilityNodeInfo {
         val deadline = SystemClock.elapsedRealtime() + NODE_TIMEOUT_MILLIS
         do {
             InstrumentationRegistry.getInstrumentation().waitForIdleSync()
             val nodes = currentNodes()
             nodes.firstOrNull { node ->
-                node.isClickable && node.isVisibleToUser && node.effectiveLabel().contains(label)
+                matches(node) && node.isVisibleToUser && node.effectiveLabel().contains(label)
             }?.let { return it }
             val scrollable = nodes.firstOrNull { node ->
                 node.actionList.any { action ->
