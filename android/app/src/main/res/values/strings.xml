@@ -63,6 +63,9 @@
     <string name="rotate_y">Rotate Y</string>
     <string name="rotate_z">Rotate Z</string>
     <string name="scale">Scale</string>
+    <string name="mirror_x">Mirror X</string>
+    <string name="mirror_y">Mirror Y</string>
+    <string name="mirror_z">Mirror Z</string>
     <string name="degrees_value">%1$.0f°</string>
     <string name="center_model">Center</string>
     <string name="rotate_90">Rotate 90°</string>

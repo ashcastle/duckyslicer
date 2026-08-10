@@ -12,6 +12,9 @@ data class ModelTransform(
     val rotationYdeg: Float = 0f,
     val rotationZdeg: Float = 0f,
     val scale: Float = 1f,
+    val mirrorX: Boolean = false,
+    val mirrorY: Boolean = false,
+    val mirrorZ: Boolean = false,
 ) {
     fun toJson(
         bedSizeX: Float,
@@ -26,6 +29,7 @@ data class ModelTransform(
         .put("offsetMm", JSONArray(listOf(offsetXmm, offsetYmm)))
         .put("rotationDeg", JSONArray(listOf(rotationXdeg, rotationYdeg, rotationZdeg)))
         .put("scale", scale)
+        .put("mirror", JSONArray(listOf(mirrorX, mirrorY, mirrorZ)))
         .toString()
 
     internal fun withOrcaOrientation(orientation: OrcaOrientation): ModelTransform = copy(
@@ -114,6 +118,14 @@ internal fun ModelTransform.rotate(point: FloatArray): FloatArray {
     )
 }
 
+internal fun ModelTransform.transformLocal(point: FloatArray): FloatArray = rotate(
+    floatArrayOf(
+        point[0] * scale * if (mirrorX) -1f else 1f,
+        point[1] * scale * if (mirrorY) -1f else 1f,
+        point[2] * scale * if (mirrorZ) -1f else 1f,
+    ),
+)
+
 internal fun ModelTransform.minimumRotatedZ(model: ModelInfo): Float {
     val center = FloatArray(3) { axis ->
         ((model.minMm[axis] + model.maxMm[axis]) / 2.0).toFloat()
@@ -121,11 +133,11 @@ internal fun ModelTransform.minimumRotatedZ(model: ModelInfo): Float {
     var minimum = Float.POSITIVE_INFINITY
     var index = 0
     while (index + 2 < model.previewTriangles.size) {
-        val rotated = rotate(
+        val rotated = transformLocal(
             floatArrayOf(
-                (model.previewTriangles[index] - center[0]) * scale,
-                (model.previewTriangles[index + 1] - center[1]) * scale,
-                (model.previewTriangles[index + 2] - center[2]) * scale,
+                model.previewTriangles[index] - center[0],
+                model.previewTriangles[index + 1] - center[1],
+                model.previewTriangles[index + 2] - center[2],
             ),
         )
         minimum = minOf(minimum, rotated[2])
@@ -146,11 +158,11 @@ internal fun ModelTransform.placeVertex(
     val center = FloatArray(3) { axis ->
         ((model.minMm[axis] + model.maxMm[axis]) / 2.0).toFloat()
     }
-    val rotated = rotate(
+    val rotated = transformLocal(
         floatArrayOf(
-            (x - center[0]) * scale,
-            (y - center[1]) * scale,
-            (z - center[2]) * scale,
+            x - center[0],
+            y - center[1],
+            z - center[2],
         ),
     )
     return floatArrayOf(

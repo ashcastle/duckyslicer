@@ -42,7 +42,8 @@ def valid_sources() -> dict[str, str]:
                 "installed.forEach(File::delete) staging.deleteRecursively()",
                 "modelFile.parentFile == modelRoot && modelFile.isFile",
                 "StandardCopyOption.ATOMIC_MOVE",
-                "recoverAbandonedArchiveStaging removePrefix(\".archive-\")",
+                "recoverAbandonedArchiveStaging recoverGeneratedStaging(projectRoot, \".archive-\")",
+                "private fun recoverGeneratedStaging removePrefix(prefix)",
                 "UUID.fromString(identifier) !Files.isSymbolicLink(candidate.toPath())",
             )
         ),
@@ -165,6 +166,15 @@ class VerifyProjectArchiveTest(unittest.TestCase):
         sources = valid_sources()
         sources["ProjectStore.kt"] = sources["ProjectStore.kt"].replace(
             'File(projectRoot, ".archive-${UUID.randomUUID()}")', "File(projectRoot, PROJECT_FILE)"
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_broad_archive_staging_recovery(self) -> None:
+        sources = valid_sources()
+        sources["ProjectStore.kt"] = sources["ProjectStore.kt"].replace(
+            'recoverGeneratedStaging(projectRoot, ".archive-")',
+            'recoverGeneratedStaging(projectRoot, "")',
         )
         with self.assertRaisesRegex(VerificationError, "safeguards"):
             verify_project_archive(sources)

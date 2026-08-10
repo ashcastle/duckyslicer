@@ -108,6 +108,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -590,6 +591,32 @@ private fun ModelTransformSheet(
                 enabled = !autoLaying,
                 onValueChange = { onTransformChanged(transform.copy(scale = it)) },
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                MirrorAxisButton(
+                    label = stringResource(R.string.mirror_x),
+                    mirrored = transform.mirrorX,
+                    enabled = !autoLaying,
+                    onClick = { onTransformChanged(transform.copy(mirrorX = !transform.mirrorX)) },
+                    modifier = Modifier.weight(1f),
+                )
+                MirrorAxisButton(
+                    label = stringResource(R.string.mirror_y),
+                    mirrored = transform.mirrorY,
+                    enabled = !autoLaying,
+                    onClick = { onTransformChanged(transform.copy(mirrorY = !transform.mirrorY)) },
+                    modifier = Modifier.weight(1f),
+                )
+                MirrorAxisButton(
+                    label = stringResource(R.string.mirror_z),
+                    mirrored = transform.mirrorZ,
+                    enabled = !autoLaying,
+                    onClick = { onTransformChanged(transform.copy(mirrorZ = !transform.mirrorZ)) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
             Button(
                 onClick = onAutoLay,
                 enabled = !autoLaying,
@@ -652,6 +679,28 @@ private fun ModelTransformSheet(
                 Text(stringResource(R.string.remove_model), color = Color(0xFFFF8A80))
             }
         }
+    }
+}
+
+@Composable
+private fun MirrorAxisButton(
+    label: String,
+    mirrored: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.semantics { selected = mirrored },
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (mirrored) WorkspaceYellow else Color(0xFF3A3B37),
+            contentColor = if (mirrored) WorkspaceBlack else Color(0xFFF4F4EE),
+        ),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+    ) {
+        Text(label, maxLines = 1)
     }
 }
 
