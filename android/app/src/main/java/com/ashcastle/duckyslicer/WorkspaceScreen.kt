@@ -633,6 +633,8 @@ internal fun WorkspaceScreen(
                 showFilamentPicker = true
             },
             onTransformChanged = onModelTransformChanged,
+            onTransformPreview = onModelTransformPreview,
+            onTransformCommitted = onModelTransformCommitted,
             onRemoveModel = {
                 showModelTools = false
                 onRemoveModel()
@@ -818,11 +820,26 @@ private fun ModelTransformSheet(
     onObjectSettings: () -> Unit,
     onChooseFilament: () -> Unit,
     onTransformChanged: (ModelTransform) -> Unit,
+    onTransformPreview: (ModelTransform) -> Unit,
+    onTransformCommitted: (ModelTransform) -> Unit,
     onRemoveModel: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val effectiveBedPolygon = bedPolygon.takeIf { bedPolygonIsValid(it, bedSizeX, bedSizeY) }
         ?: rectangularBedPolygon(bedSizeX, bedSizeY)
+    val scaleRange = ProjectStore.MIN_SCALE..ProjectStore.MAX_SCALE
+    var keepProportions by rememberSaveable { mutableStateOf(transform.hasUniformScale()) }
+    var transformGestureStart by remember { mutableStateOf<ModelTransform?>(null) }
+
+    fun previewTransform(next: ModelTransform) {
+        if (transformGestureStart == null) transformGestureStart = transform
+        onTransformPreview(next)
+    }
+
+    fun commitTransformGesture() {
+        transformGestureStart?.let(onTransformCommitted)
+        transformGestureStart = null
+    }
 
     fun constrainedTransform(offsetX: Float, offsetY: Float): ModelTransform {
         val center = coercePointToBedPolygon(
@@ -837,7 +854,10 @@ private fun ModelTransformSheet(
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            commitTransformGesture()
+            onDismiss()
+        },
         containerColor = Color(0xFF282925),
         contentColor = Color(0xFFF4F4EE),
     ) {
@@ -860,7 +880,8 @@ private fun ModelTransformSheet(
                 value = transform.offsetXmm,
                 range = -bedSizeX / 2f..bedSizeX / 2f,
                 enabled = !autoLaying,
-                onValueChange = { onTransformChanged(constrainedTransform(it, transform.offsetYmm)) },
+                onValueChange = { previewTransform(constrainedTransform(it, transform.offsetYmm)) },
+                onValueChangeFinished = ::commitTransformGesture,
             )
             TransformSlider(
                 label = stringResource(R.string.move_y),
@@ -868,7 +889,8 @@ private fun ModelTransformSheet(
                 value = transform.offsetYmm,
                 range = -bedSizeY / 2f..bedSizeY / 2f,
                 enabled = !autoLaying,
-                onValueChange = { onTransformChanged(constrainedTransform(transform.offsetXmm, it)) },
+                onValueChange = { previewTransform(constrainedTransform(transform.offsetXmm, it)) },
+                onValueChangeFinished = ::commitTransformGesture,
             )
             TransformSlider(
                 label = stringResource(R.string.move_z),
@@ -876,7 +898,8 @@ private fun ModelTransformSheet(
                 value = transform.offsetZmm,
                 range = -maxPrintHeight..maxPrintHeight,
                 enabled = !autoLaying,
-                onValueChange = { onTransformChanged(transform.copy(offsetZmm = it)) },
+                onValueChange = { previewTransform(transform.copy(offsetZmm = it)) },
+                onValueChangeFinished = ::commitTransformGesture,
             )
             TransformSlider(
                 label = stringResource(R.string.rotate_x),
@@ -884,7 +907,8 @@ private fun ModelTransformSheet(
                 value = transform.rotationXdeg,
                 range = -180f..180f,
                 enabled = !autoLaying,
-                onValueChange = { onTransformChanged(transform.copy(rotationXdeg = it)) },
+                onValueChange = { previewTransform(transform.copy(rotationXdeg = it)) },
+                onValueChangeFinished = ::commitTransformGesture,
             )
             TransformSlider(
                 label = stringResource(R.string.rotate_y),
@@ -892,7 +916,8 @@ private fun ModelTransformSheet(
                 value = transform.rotationYdeg,
                 range = -180f..180f,
                 enabled = !autoLaying,
-                onValueChange = { onTransformChanged(transform.copy(rotationYdeg = it)) },
+                onValueChange = { previewTransform(transform.copy(rotationYdeg = it)) },
+                onValueChangeFinished = ::commitTransformGesture,
             )
             TransformSlider(
                 label = stringResource(R.string.rotate_z),
@@ -900,15 +925,85 @@ private fun ModelTransformSheet(
                 value = transform.rotationZdeg,
                 range = -180f..180f,
                 enabled = !autoLaying,
-                onValueChange = { onTransformChanged(transform.copy(rotationZdeg = it)) },
+                onValueChange = { previewTransform(transform.copy(rotationZdeg = it)) },
+                onValueChangeFinished = ::commitTransformGesture,
             )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = keepProportions,
+                        enabled = !autoLaying,
+                        role = Role.Switch,
+                        onValueChange = { keepProportions = it },
+                    )
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(stringResource(R.string.keep_proportions), fontWeight = FontWeight.SemiBold)
+                Switch(
+                    checked = keepProportions,
+                    enabled = !autoLaying,
+                    onCheckedChange = null,
+                )
+            }
             TransformSlider(
-                label = stringResource(R.string.scale),
+                label = stringResource(R.string.scale_x),
                 valueText = stringResource(R.string.percent_value, (transform.scale * 100).roundToInt()),
                 value = transform.scale,
-                range = 0.25f..3f,
+                range = scaleRange,
+                steps = 198,
                 enabled = !autoLaying,
-                onValueChange = { onTransformChanged(transform.copy(scale = it)) },
+                onValueChange = {
+                    previewTransform(
+                        transform.withAxisScale(
+                            ModelScaleAxis.X,
+                            it,
+                            keepProportions,
+                            scaleRange,
+                        ),
+                    )
+                },
+                onValueChangeFinished = ::commitTransformGesture,
+            )
+            TransformSlider(
+                label = stringResource(R.string.scale_y),
+                valueText = stringResource(R.string.percent_value, (transform.scaleY * 100).roundToInt()),
+                value = transform.scaleY,
+                range = scaleRange,
+                steps = 198,
+                enabled = !autoLaying,
+                onValueChange = {
+                    previewTransform(
+                        transform.withAxisScale(
+                            ModelScaleAxis.Y,
+                            it,
+                            keepProportions,
+                            scaleRange,
+                        ),
+                    )
+                },
+                onValueChangeFinished = ::commitTransformGesture,
+            )
+            TransformSlider(
+                label = stringResource(R.string.scale_z),
+                valueText = stringResource(R.string.percent_value, (transform.scaleZ * 100).roundToInt()),
+                value = transform.scaleZ,
+                range = scaleRange,
+                steps = 198,
+                enabled = !autoLaying,
+                onValueChange = {
+                    previewTransform(
+                        transform.withAxisScale(
+                            ModelScaleAxis.Z,
+                            it,
+                            keepProportions,
+                            scaleRange,
+                        ),
+                    )
+                },
+                onValueChangeFinished = ::commitTransformGesture,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1488,6 +1583,7 @@ private fun TransformSlider(
     steps: Int = 0,
     enabled: Boolean = true,
     onValueChange: (Float) -> Unit,
+    onValueChangeFinished: (() -> Unit)? = null,
 ) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, fontWeight = FontWeight.SemiBold)
@@ -1497,6 +1593,7 @@ private fun TransformSlider(
         value = value,
         enabled = enabled,
         onValueChange = onValueChange,
+        onValueChangeFinished = onValueChangeFinished,
         modifier = Modifier.semantics {
             contentDescription = label
             stateDescription = valueText

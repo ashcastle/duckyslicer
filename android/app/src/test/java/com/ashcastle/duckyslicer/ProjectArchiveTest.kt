@@ -56,6 +56,8 @@ class ProjectArchiveTest {
                     offsetZmm = 4f,
                     rotationZdeg = 35f,
                     scale = 1.2f,
+                    scaleY = 0.8f,
+                    scaleZ = 1.6f,
                     mirrorX = true,
                     mirrorY = true,
                 ),
@@ -104,12 +106,22 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedObjectId", "sliceOptions", "objects"),
                 manifest.keys().asSequence().toSet(),
             )
+            assertEquals(6, manifest.getInt("schemaVersion"))
             assertEquals(
                 setOf(
                     "id", "displayName", "modelEntry", "transform", "supportPaint", "seamPaint",
                     "multiColorPaint", "variableLayerHeights", "processOverrides", "filamentSlot",
                 ),
                 manifest.getJSONArray("objects").getJSONObject(0).keys().asSequence().toSet(),
+            )
+            assertEquals(
+                setOf(
+                    "offsetXmm", "offsetYmm", "offsetZmm", "rotationXdeg", "rotationYdeg",
+                    "rotationZdeg", "scale", "scaleY", "scaleZ", "mirrorX", "mirrorY",
+                    "mirrorZ",
+                ),
+                manifest.getJSONArray("objects").getJSONObject(0)
+                    .getJSONObject("transform").keys().asSequence().toSet(),
             )
 
             val destination = ProjectStore(destinationRoot, ::inspectedModel)
@@ -153,10 +165,16 @@ class ProjectArchiveTest {
                 put("schemaVersion", 1)
                 val objects = getJSONArray("objects")
                 for (index in 0 until objects.length()) {
-                    objects.getJSONObject(index).remove("seamPaint")
-                    objects.getJSONObject(index).remove("multiColorPaint")
-                    objects.getJSONObject(index).remove("variableLayerHeights")
-                    objects.getJSONObject(index).remove("processOverrides")
+                    objects.getJSONObject(index).apply {
+                        remove("seamPaint")
+                        remove("multiColorPaint")
+                        remove("variableLayerHeights")
+                        remove("processOverrides")
+                        getJSONObject("transform").apply {
+                            remove("scaleY")
+                            remove("scaleZ")
+                        }
+                    }
                 }
             }
             val legacyArchive = zipOf(

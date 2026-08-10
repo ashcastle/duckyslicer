@@ -359,6 +359,10 @@ internal class ProjectStore(
             if (schemaVersion >= 7) {
                 require(value.optJSONObject("processOverrides")?.toObjectProcessOverrides() != null)
             }
+            if (schemaVersion >= 8) {
+                val transform = value.getJSONObject("transform")
+                require(transform.has("scaleY") && transform.has("scaleZ"))
+            }
             require(value.optInt("filamentSlot", 0) in 0 until MAX_FILAMENT_SLOTS)
         }
         val selected = root.takeUnless { it.isNull("selectedObjectId") }
@@ -401,22 +405,29 @@ internal class ProjectStore(
         .put("rotationYdeg", rotationYdeg.checkedTransformValue(-MAX_ROTATION_DEG, MAX_ROTATION_DEG))
         .put("rotationZdeg", rotationZdeg.checkedTransformValue(-MAX_ROTATION_DEG, MAX_ROTATION_DEG))
         .put("scale", scale.checkedTransformValue(MIN_SCALE, MAX_SCALE))
+        .put("scaleY", scaleY.checkedTransformValue(MIN_SCALE, MAX_SCALE))
+        .put("scaleZ", scaleZ.checkedTransformValue(MIN_SCALE, MAX_SCALE))
         .put("mirrorX", mirrorX)
         .put("mirrorY", mirrorY)
         .put("mirrorZ", mirrorZ)
 
-    private fun JSONObject.toModelTransform() = ModelTransform(
-        offsetXmm = checkedFloat("offsetXmm", -MAX_OFFSET_MM, MAX_OFFSET_MM),
-        offsetYmm = checkedFloat("offsetYmm", -MAX_OFFSET_MM, MAX_OFFSET_MM),
-        offsetZmm = checkedOptionalFloat("offsetZmm", -MAX_OFFSET_MM, MAX_OFFSET_MM),
-        rotationXdeg = checkedFloat("rotationXdeg", -MAX_ROTATION_DEG, MAX_ROTATION_DEG),
-        rotationYdeg = checkedFloat("rotationYdeg", -MAX_ROTATION_DEG, MAX_ROTATION_DEG),
-        rotationZdeg = checkedFloat("rotationZdeg", -MAX_ROTATION_DEG, MAX_ROTATION_DEG),
-        scale = checkedFloat("scale", MIN_SCALE, MAX_SCALE),
-        mirrorX = checkedOptionalBoolean("mirrorX"),
-        mirrorY = checkedOptionalBoolean("mirrorY"),
-        mirrorZ = checkedOptionalBoolean("mirrorZ"),
-    )
+    private fun JSONObject.toModelTransform(): ModelTransform {
+        val uniformScale = checkedFloat("scale", MIN_SCALE, MAX_SCALE)
+        return ModelTransform(
+            offsetXmm = checkedFloat("offsetXmm", -MAX_OFFSET_MM, MAX_OFFSET_MM),
+            offsetYmm = checkedFloat("offsetYmm", -MAX_OFFSET_MM, MAX_OFFSET_MM),
+            offsetZmm = checkedOptionalFloat("offsetZmm", -MAX_OFFSET_MM, MAX_OFFSET_MM),
+            rotationXdeg = checkedFloat("rotationXdeg", -MAX_ROTATION_DEG, MAX_ROTATION_DEG),
+            rotationYdeg = checkedFloat("rotationYdeg", -MAX_ROTATION_DEG, MAX_ROTATION_DEG),
+            rotationZdeg = checkedFloat("rotationZdeg", -MAX_ROTATION_DEG, MAX_ROTATION_DEG),
+            scale = uniformScale,
+            scaleY = checkedOptionalFloat("scaleY", MIN_SCALE, MAX_SCALE, uniformScale),
+            scaleZ = checkedOptionalFloat("scaleZ", MIN_SCALE, MAX_SCALE, uniformScale),
+            mirrorX = checkedOptionalBoolean("mirrorX"),
+            mirrorY = checkedOptionalBoolean("mirrorY"),
+            mirrorZ = checkedOptionalBoolean("mirrorZ"),
+        )
+    }
 
     private fun JSONObject.checkedOptionalBoolean(name: String): Boolean {
         if (!has(name)) return false
@@ -427,7 +438,8 @@ internal class ProjectStore(
         name: String,
         minimum: Float,
         maximum: Float,
-    ): Float = if (has(name)) checkedFloat(name, minimum, maximum) else 0f
+        default: Float = 0f,
+    ): Float = if (has(name)) checkedFloat(name, minimum, maximum) else default
 
     private fun SupportPaint.toStoredJson() = JSONArray().also { values ->
         require(facets.size <= SupportPaint.MAX_PAINTED_FACETS) { "Support paint is too large" }
@@ -599,7 +611,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 7
+        const val SCHEMA_VERSION = 8
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"

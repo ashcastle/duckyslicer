@@ -512,6 +512,8 @@ class NativeEngineInstrumentedTest {
                                 offsetYmm = -11f,
                                 rotationZdeg = 30f,
                                 scale = 1.4f,
+                                scaleY = 0.9f,
+                                scaleZ = 1.8f,
                             ),
                         ),
                     ),
@@ -529,6 +531,8 @@ class NativeEngineInstrumentedTest {
             assertEquals(-11f, restored.selectedObject!!.transform.offsetYmm)
             assertEquals(30f, restored.selectedObject!!.transform.rotationZdeg)
             assertEquals(1.4f, restored.selectedObject!!.transform.scale)
+            assertEquals(0.9f, restored.selectedObject!!.transform.scaleY)
+            assertEquals(1.8f, restored.selectedObject!!.transform.scaleZ)
             assertTrue(restored.selectedObject!!.model.previewTriangles.isNotEmpty())
             assertEquals(247, restoredDocument.sliceOptions?.nozzleTemp)
             assertEquals(0.23f, restoredDocument.sliceOptions?.fillDensity)
