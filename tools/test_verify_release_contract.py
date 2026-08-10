@@ -65,8 +65,8 @@ jobs:
         "prepare_local_release.py": " ".join(
             (
                 'run((sys.executable, str(ROOT / "tools/run_local_gate.py")))',
-                'command.append("--no-build-cache")',
-                'command.append(":app:clean")',
+                '"--no-build-cache",',
+                '":app:clean",',
                 'command.append(":app:assembleRelease")',
                 "verify_reproducible(candidate_output, RELEASE_APK)",
                 'ROOT / "tools/verify_apk.py"',
