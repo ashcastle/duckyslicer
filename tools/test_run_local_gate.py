@@ -74,13 +74,27 @@ physical unauthorized transport_id:3
                 for command in commands
             )
         )
+        self.assertTrue(
+            any(
+                len(command) > 3
+                and command[1].endswith("verify_artifact_manifest.py")
+                and command[2:4] == ("--variant", "debug")
+                and command[-1] == str(DEBUG_APK)
+                for command in commands
+            )
+        )
         self.assertEqual(str(DEBUG_APK), commands[-1][-1])
 
     def test_host_plan_contains_every_standalone_static_verifier(self) -> None:
         standalone = {
             path.name
             for path in (ROOT / "tools").glob("verify_*.py")
-            if path.name not in {"verify_apk.py", "verify_reproducible_release.py"}
+            if path.name
+            not in {
+                "verify_apk.py",
+                "verify_artifact_manifest.py",
+                "verify_reproducible_release.py",
+            }
         }
         self.assertEqual(standalone, set(STATIC_VERIFIERS))
 
