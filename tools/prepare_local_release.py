@@ -89,10 +89,12 @@ def gradle_release_command(
     *,
     rebuild: bool,
 ) -> tuple[str, ...]:
-    command = ["./gradlew", "--dependency-verification=strict"]
-    if rebuild:
-        command.append("--no-build-cache")
-    command.append(":app:clean")
+    command = [
+        "./gradlew",
+        "--dependency-verification=strict",
+        "--no-build-cache",
+        ":app:clean",
+    ]
     if rebuild:
         command.append(":app:assembleRelease")
     else:
