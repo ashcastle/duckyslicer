@@ -926,7 +926,7 @@ private fun DuckySlicerScreen(
         scope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    val credential = remoteDeviceStore.credential(profile.id)
+                    val credential = remoteDeviceStore.credential(profile)
                     operation(
                         RemoteDeviceClient(settingsSnapshot.connectionTimeoutSeconds * 1_000),
                         profile,
@@ -1297,7 +1297,7 @@ private fun DuckySlicerScreen(
                         withContext(Dispatchers.IO) {
                             RemoteDeviceClient(settingsSnapshot.connectionTimeoutSeconds * 1_000).status(
                                 profile,
-                                remoteDeviceStore.credential(profile.id),
+                                remoteDeviceStore.credential(profile),
                             )
                         }
                     }.onSuccess { status ->
@@ -1338,7 +1338,7 @@ private fun DuckySlicerScreen(
                         withContext(Dispatchers.IO) {
                             RemoteDeviceClient(settingsSnapshot.connectionTimeoutSeconds * 1_000).upload(
                                 profile,
-                                remoteDeviceStore.credential(profile.id),
+                                remoteDeviceStore.credential(profile),
                                 output,
                             ) { progress -> scope.launch { remoteUploadProgress = progress } }
                         }

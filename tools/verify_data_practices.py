@@ -177,7 +177,7 @@ def verify_data_practices(sources: dict[str, str]) -> None:
     remote = sources["RemoteDevice.kt"]
     for marker in (
         'KeyStore.getInstance("AndroidKeyStore")',
-        "secrets.remove(profileId)",
+        "removedCredentialKey?.let(secrets::remove)",
         '"print" to "false"',
         "instanceFollowRedirects = false",
     ):

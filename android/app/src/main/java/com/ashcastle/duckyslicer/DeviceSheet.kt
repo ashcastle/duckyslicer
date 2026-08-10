@@ -304,6 +304,10 @@ private fun DeviceEditorDialog(
 ) {
     var draft by remember(initial) { mutableStateOf(initial) }
     var validation by remember { mutableStateOf<String?>(null) }
+    val connectionChanged = initial.id != null && (
+        draft.kind != initial.kind ||
+            normalizeRemoteBaseUrl(draft.baseUrl) != normalizeRemoteBaseUrl(initial.baseUrl)
+    )
     val profile = RemoteDeviceProfile(
         id = draft.id.orEmpty().ifBlank { "new" },
         name = draft.name,
@@ -354,7 +358,17 @@ private fun DeviceEditorDialog(
                     onValueChange = { draft = draft.copy(credential = it) },
                     label = { Text(stringResource(R.string.access_key)) },
                     supportingText = {
-                        if (initial.id != null) Text(stringResource(R.string.access_key_keep_hint))
+                        if (initial.id != null) {
+                            Text(
+                                stringResource(
+                                    if (connectionChanged) {
+                                        R.string.access_key_connection_change_hint
+                                    } else {
+                                        R.string.access_key_keep_hint
+                                    },
+                                ),
+                            )
+                        }
                     },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,

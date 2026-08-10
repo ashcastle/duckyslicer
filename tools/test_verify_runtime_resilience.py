@@ -20,7 +20,14 @@ def valid_sources() -> dict[str, str]:
             "instanceFollowRedirects = false resolveRemoteEndpoint "
             "addresses.all(::isPrivateOrLocalAddress) val url = endpoint.uri.toURL() "
             "url.openConnection(Proxy.NO_PROXY) "
-            "endpoint.hostHeader?.let isUniqueLocalIpv6 safeRemotePath connection.disconnect()"
+            "endpoint.hostHeader?.let isUniqueLocalIpv6 safeRemotePath connection.disconnect() "
+            "fun save(draft: RemoteDeviceDraft) endpointChanged stagedCredential "
+            "credentialKey = credentialKey stagedCredential?.let write(profiles.sortedBy "
+            "secrets.remove(stagedCredentialKey) return load().first "
+            "fun delete(profileId: String) removedCredentialKey "
+            'write(existing.filterNot load() check(!storageUnavailable) { "saved_data_unreadable" } '
+            "removedCredentialKey?.let(secrets::remove) "
+            "fun credential(profile: RemoteDeviceProfile) REMOTE_DEVICE_SCHEMA_VERSION = 2"
         ),
         "MainActivity.kt": "projectPersistenceBlocked saved_data_unavailable",
         "DurableJsonFileTest.kt": (
@@ -34,14 +41,27 @@ def valid_sources() -> dict[str, str]:
             "cleartextDnsResultsAreValidatedAndPinnedBeforeCredentialsAreAttached "
             "cleartextHostnameRequestUsesThePinnedResolverAddress"
         ),
+        "RemoteDeviceStoreTest.kt": (
+            "credentialsUseGenerationsAndDoNotFollowAChangedEndpoint "
+            "legacyProfileCredentialsMigrateWithoutEnteringPlaintextMetadata "
+            "failedMetadataCommitCannotBindAStagedCredentialToTheOldProfile "
+            "deletingAProfileRemovesItsExactCredentialAfterMetadataIsDurable "
+            "deleteRetainsCredentialWhenBackupRefreshFailsAfterMetadataCommit "
+            "orphanCleanupFailureKeepsProfilesVisibleAndRetriesLater"
+        ),
         "RemoteDeviceInstrumentedTest.kt": (
             "remoteDeviceMetadataRecoversFromLastKnownGoodBackup "
             "cleartextHostnameRequestUsesOneValidatedPinnedAddress"
         ),
-        "CONTRIBUTING.md": "pin the connection target and bypass system proxies",
+        "CONTRIBUTING.md": (
+            "pin the connection target and bypass system proxies "
+            "bind a replacement printer credential generation"
+        ),
         "SECURITY.md": (
             "every current DNS answer DNS rebinding bypass system proxies "
-            "platform certificate verifier remains authoritative"
+            "platform certificate verifier remains authoritative "
+            "Credential updates are staged under a new generation "
+            "never carried to a changed connection type or address"
         ),
         "strings.xml": "saved_data_unavailable",
         "strings-ko.xml": "saved_data_unavailable",
@@ -73,6 +93,44 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
             "url.openConnection()",
         )
         with self.assertRaisesRegex(VerificationError, "remote input containment"):
+            verify_resilience(sources)
+
+    def test_rejects_metadata_commit_before_credential_staging(self) -> None:
+        sources = valid_sources()
+        sources["RemoteDevice.kt"] = sources["RemoteDevice.kt"].replace(
+            "stagedCredential?.let write(profiles.sortedBy",
+            "write(profiles.sortedBy stagedCredential?.let",
+        )
+        with self.assertRaisesRegex(VerificationError, "commit out of order"):
+            verify_resilience(sources)
+
+    def test_rejects_credential_delete_before_backup_refresh(self) -> None:
+        sources = valid_sources()
+        sources["RemoteDevice.kt"] = sources["RemoteDevice.kt"].replace(
+            'write(existing.filterNot load() check(!storageUnavailable) { "saved_data_unreadable" } '
+            "removedCredentialKey?.let(secrets::remove)",
+            'removedCredentialKey?.let(secrets::remove) write(existing.filterNot load() '
+            'check(!storageUnavailable) { "saved_data_unreadable" }',
+        )
+        with self.assertRaisesRegex(VerificationError, "precedes durable metadata backup"):
+            verify_resilience(sources)
+
+    def test_rejects_credential_delete_without_post_backup_guard(self) -> None:
+        sources = valid_sources()
+        source = sources["RemoteDevice.kt"]
+        guard = 'check(!storageUnavailable) { "saved_data_unreadable" }'
+        sources["RemoteDevice.kt"] = source[: source.rfind(guard)] + source[
+            source.rfind(guard) + len(guard) :
+        ]
+        with self.assertRaisesRegex(VerificationError, "precedes durable metadata backup"):
+            verify_resilience(sources)
+
+    def test_rejects_credential_delete_without_metadata_commit(self) -> None:
+        sources = valid_sources()
+        sources["RemoteDevice.kt"] = sources["RemoteDevice.kt"].replace(
+            "write(existing.filterNot", "metadataCommitRemoved",
+        )
+        with self.assertRaisesRegex(VerificationError, "precedes durable metadata backup"):
             verify_resilience(sources)
 
 

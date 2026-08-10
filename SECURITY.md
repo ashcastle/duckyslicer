@@ -92,6 +92,10 @@ are not written to the device-profile JSON file. HTTPS is accepted for any valid
 host; unencrypted HTTP profiles are restricted to loopback, link-local, private,
 carrier-grade NAT, and `.local` addresses. Remote printing always requires a
 separate user action after upload, with confirmation enabled by default.
+Credential updates are staged under a new generation before profile metadata is
+committed. A saved key is never carried to a changed connection type or address
+unless the user supplies it again, and obsolete generations are removed only after
+the durable metadata backup has caught up.
 Before a cleartext request receives any access key, every current DNS answer must
 still be local and the connection URL is pinned to one validated address. This keeps
 a saved `.local` name from redirecting credentials through DNS rebinding. Cleartext

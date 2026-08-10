@@ -146,10 +146,48 @@ class RemoteDeviceInstrumentedTest {
             )
 
             assertTrue(saved.hasCredential)
-            assertEquals("not-plain-text", store.credential(id))
+            assertTrue(saved.credentialKey != null && saved.credentialKey != id)
+            assertEquals("not-plain-text", store.credential(saved))
             val profileFile = context.filesDir.resolve("remote_devices.json")
             assertFalse(profileFile.readText().contains("not-plain-text"))
-            assertTrue(store.load().any { it.id == id && it.hasCredential })
+            val restored = store.load().single { it.id == id }
+            assertTrue(restored.hasCredential)
+            assertEquals("not-plain-text", store.credential(restored))
+            assertEquals(2, JSONObject(profileFile.readText()).getInt("version"))
+        } finally {
+            store.delete(id)
+        }
+    }
+
+    @Test
+    fun changingPrinterAddressWithoutANewKeyCannotReuseTheOldCredential() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val store = RemoteDeviceStore(context)
+        val id = "rebind-${UUID.randomUUID()}"
+        try {
+            val original = store.save(
+                RemoteDeviceDraft(
+                    id = id,
+                    name = "Original printer",
+                    kind = RemoteDeviceKind.OCTOPRINT,
+                    baseUrl = "http://127.0.0.1:5000",
+                    credential = "old-server-secret",
+                ),
+            )
+            assertEquals("old-server-secret", store.credential(original))
+
+            val rebound = store.save(
+                RemoteDeviceDraft(
+                    id = id,
+                    name = "Replacement printer",
+                    kind = RemoteDeviceKind.KLIPPER,
+                    baseUrl = "http://127.0.0.1:7125",
+                ),
+            )
+
+            assertFalse(rebound.hasCredential)
+            assertEquals(null, rebound.credentialKey)
+            assertEquals("", store.credential(rebound))
         } finally {
             store.delete(id)
         }
@@ -179,7 +217,7 @@ class RemoteDeviceInstrumentedTest {
 
             assertTrue(recovered.any { it.id == id })
             assertFalse(recoveredStore.storageUnavailable)
-            assertEquals(1, JSONObject(profileFile.readText()).getInt("version"))
+            assertEquals(2, JSONObject(profileFile.readText()).getInt("version"))
         } finally {
             runCatching { RemoteDeviceStore(context).delete(id) }
         }

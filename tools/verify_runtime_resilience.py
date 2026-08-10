@@ -25,6 +25,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "ProjectStoreTest.kt",
         "ProfileStoreMigrationTest.kt",
         "RemoteDeviceClientTest.kt",
+        "RemoteDeviceStoreTest.kt",
         "RemoteDeviceInstrumentedTest.kt",
         "CONTRIBUTING.md",
         "SECURITY.md",
@@ -87,6 +88,45 @@ def verify_resilience(sources: dict[str, str]) -> None:
     if "bufferedReader()?.use { it.readText() }" in remote:
         raise VerificationError("remote response uses an unbounded text read")
 
+    save_start = remote.find("fun save(draft: RemoteDeviceDraft)")
+    save_end = remote.find("fun delete(profileId: String)", save_start)
+    if save_start < 0 or save_end < 0:
+        raise VerificationError("remote credential save boundary is missing")
+    save = remote[save_start:save_end]
+    for marker in (
+        "endpointChanged",
+        "stagedCredential",
+        "credentialKey = credentialKey",
+        "secrets.remove(stagedCredentialKey)",
+        "return load().first",
+    ):
+        if marker not in save:
+            raise VerificationError(f"credential generation contract is missing: {marker}")
+    if not (
+        save.find("stagedCredential?.let")
+        < save.find("write(profiles.sortedBy")
+        < save.find("return load().first")
+    ):
+        raise VerificationError("credential and metadata generations commit out of order")
+    if "REMOTE_DEVICE_SCHEMA_VERSION = 2" not in remote:
+        raise VerificationError("credential generation schema is not active")
+
+    delete_start = remote.find("fun delete(profileId: String)")
+    delete_end = remote.find("fun credential(profile: RemoteDeviceProfile)", delete_start)
+    if delete_start < 0 or delete_end < 0:
+        raise VerificationError("remote credential deletion boundary is missing")
+    delete = remote[delete_start:delete_end]
+    delete_order = (
+        delete.find("write(existing.filterNot"),
+        delete.rfind("load()"),
+        delete.rfind('check(!storageUnavailable) { "saved_data_unreadable" }'),
+        delete.find("removedCredentialKey?.let(secrets::remove)"),
+    )
+    if any(position < 0 for position in delete_order) or not (
+        delete_order[0] < delete_order[1] < delete_order[2] < delete_order[3]
+    ):
+        raise VerificationError("credential deletion precedes durable metadata backup")
+
     test_markers = {
         "DurableJsonFileTest.kt": (
             "validPrimaryCreatesBackupAndCorruptionRecoversIt",
@@ -99,6 +139,14 @@ def verify_resilience(sources: dict[str, str]) -> None:
             "unsafeServerUploadPathIsRejected",
             "cleartextDnsResultsAreValidatedAndPinnedBeforeCredentialsAreAttached",
             "cleartextHostnameRequestUsesThePinnedResolverAddress",
+        ),
+        "RemoteDeviceStoreTest.kt": (
+            "credentialsUseGenerationsAndDoNotFollowAChangedEndpoint",
+            "legacyProfileCredentialsMigrateWithoutEnteringPlaintextMetadata",
+            "failedMetadataCommitCannotBindAStagedCredentialToTheOldProfile",
+            "deletingAProfileRemovesItsExactCredentialAfterMetadataIsDurable",
+            "deleteRetainsCredentialWhenBackupRefreshFailsAfterMetadataCommit",
+            "orphanCleanupFailureKeepsProfilesVisibleAndRetriesLater",
         ),
         "RemoteDeviceInstrumentedTest.kt": (
             "remoteDeviceMetadataRecoversFromLastKnownGoodBackup",
@@ -116,15 +164,19 @@ def verify_resilience(sources: dict[str, str]) -> None:
 
     if "pin the connection target and bypass system proxies" not in sources["CONTRIBUTING.md"]:
         raise VerificationError("contributor guidance does not preserve cleartext DNS pinning")
+    if "bind a replacement printer credential generation" not in sources["CONTRIBUTING.md"]:
+        raise VerificationError("contributor guidance does not preserve credential generations")
     security = sources["SECURITY.md"]
     for marker in (
         "every current DNS answer",
         "DNS rebinding",
         "bypass system proxies",
         "platform certificate verifier remains authoritative",
+        "Credential updates are staged under a new generation",
+        "never carried to a changed connection type or address",
     ):
         if marker not in security:
-            raise VerificationError(f"security guidance is missing DNS containment: {marker}")
+            raise VerificationError(f"security guidance is missing: {marker}")
 
 
 def read_sources() -> dict[str, str]:
@@ -144,6 +196,9 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "RemoteDeviceClientTest.kt": (tests / "RemoteDeviceClientTest.kt").read_text(
+            encoding="utf-8"
+        ),
+        "RemoteDeviceStoreTest.kt": (tests / "RemoteDeviceStoreTest.kt").read_text(
             encoding="utf-8"
         ),
         "RemoteDeviceInstrumentedTest.kt": (

@@ -39,6 +39,7 @@ data class RemoteDeviceProfile(
     val kind: RemoteDeviceKind,
     val baseUrl: String,
     val hasCredential: Boolean = false,
+    val credentialKey: String? = null,
 ) {
     fun normalized(): RemoteDeviceProfile = copy(
         name = name.trim(),
@@ -84,7 +85,7 @@ data class RemoteUpload(
     val displayName: String,
 )
 
-private fun normalizeRemoteBaseUrl(raw: String): String {
+internal fun normalizeRemoteBaseUrl(raw: String): String {
     val trimmed = raw.trim().trimEnd('/')
     return if (trimmed.contains("://")) trimmed else "http://$trimmed"
 }
@@ -153,20 +154,49 @@ private fun String.asAuthorityHost(): String =
 private fun resolveRemoteAddresses(host: String): List<InetAddress> =
     InetAddress.getAllByName(host).toList()
 
-class RemoteDeviceStore(context: Context) {
-    private val file = File(context.filesDir, "remote_devices.json")
+internal interface RemoteCredentialStore {
+    fun contains(key: String): Boolean
+    fun put(key: String, value: String)
+    fun get(key: String): String?
+    fun remove(key: String)
+    fun prune(allowedKeys: Set<String>)
+}
+
+class RemoteDeviceStore internal constructor(
+    private val file: File,
+    private val secrets: RemoteCredentialStore,
+) {
     private val durableDevices = DurableJsonFile(file, MAX_REMOTE_DEVICE_BYTES)
-    private val secrets = SecureCredentialStore(context.applicationContext)
+
+    constructor(context: Context) : this(
+        File(context.filesDir, "remote_devices.json"),
+        SecureCredentialStore(context.applicationContext),
+    )
 
     @Volatile
     var storageUnavailable: Boolean = false
+        private set
+
+    @Volatile
+    var credentialCleanupPending: Boolean = false
         private set
 
     @Synchronized
     fun load(): List<RemoteDeviceProfile> {
         val stored = durableDevices.read(::parseProfiles, ::isCompatibleRoot)
         storageUnavailable = !stored.status.mutationSafe
-        return stored.value.orEmpty()
+        val profiles = stored.value.orEmpty()
+        credentialCleanupPending = false
+        if (!storageUnavailable) {
+            try {
+                secrets.prune(profiles.mapNotNullTo(HashSet(), RemoteDeviceProfile::credentialKey))
+            } catch (_: Exception) {
+                // Metadata remains usable and every referenced credential is intact.
+                // Retry orphan cleanup on the next successful load.
+                credentialCleanupPending = true
+            }
+        }
+        return profiles
     }
 
     @Synchronized
@@ -174,33 +204,64 @@ class RemoteDeviceStore(context: Context) {
         require(draft.credential.toByteArray(StandardCharsets.UTF_8).size <= MAX_REMOTE_CREDENTIAL_BYTES) {
             "credential_too_large"
         }
-        val profile = RemoteDeviceProfile(
+        val candidate = RemoteDeviceProfile(
             id = draft.id ?: UUID.randomUUID().toString(),
             name = draft.name,
             kind = draft.kind,
             baseUrl = draft.baseUrl,
-            hasCredential = draft.credential.isNotBlank() || draft.id?.let(secrets::contains) == true,
         ).normalized()
-        profile.validate()?.let { throw IllegalArgumentException(it) }
+        candidate.validate()?.let { throw IllegalArgumentException(it) }
 
         val existing = load()
         check(!storageUnavailable) { "saved_data_unreadable" }
+        val previous = existing.firstOrNull { it.id == candidate.id }
+        val endpointChanged = previous != null && (
+            previous.kind != candidate.kind || previous.baseUrl != candidate.baseUrl
+        )
+        val suppliedCredential = draft.credential.trim().takeIf(String::isNotEmpty)
+        val stagedCredential = suppliedCredential?.let { newCredentialKey() to it }
+        val stagedCredentialKey = stagedCredential?.first
+        val retainedCredentialKey = previous?.credentialKey
+            ?.takeIf { !endpointChanged && secrets.contains(it) }
+        val credentialKey = stagedCredentialKey ?: retainedCredentialKey
+        val profile = candidate.copy(
+            hasCredential = credentialKey != null,
+            credentialKey = credentialKey,
+        )
         val profiles = existing.filterNot { it.id == profile.id } + profile
         require(profiles.size <= MAX_REMOTE_DEVICES) { "too_many_remote_devices" }
-        write(profiles.sortedBy { it.name.lowercase() })
-        if (draft.credential.isNotBlank()) secrets.put(profile.id, draft.credential.trim())
-        return profile.copy(hasCredential = secrets.contains(profile.id))
+        stagedCredential?.let { (key, value) -> secrets.put(key, value) }
+        try {
+            write(profiles.sortedBy { it.name.lowercase() })
+        } catch (failure: Exception) {
+            if (stagedCredentialKey != null) {
+                try {
+                    secrets.remove(stagedCredentialKey)
+                } catch (rollbackFailure: Exception) {
+                    failure.addSuppressed(rollbackFailure)
+                }
+            }
+            throw failure
+        }
+        return load().first { it.id == profile.id }
     }
 
     @Synchronized
     fun delete(profileId: String) {
         val existing = load()
         check(!storageUnavailable) { "saved_data_unreadable" }
+        val removedCredentialKey = existing.firstOrNull { it.id == profileId }?.credentialKey
         write(existing.filterNot { it.id == profileId })
-        secrets.remove(profileId)
+        // Refresh the metadata backup before pruning the deleted profile's key.
+        // A crash on either side therefore leaves one complete generation.
+        load()
+        check(!storageUnavailable) { "saved_data_unreadable" }
+        removedCredentialKey?.let(secrets::remove)
     }
 
-    fun credential(profileId: String): String = secrets.get(profileId).orEmpty()
+    fun credential(profile: RemoteDeviceProfile): String = profile.credentialKey
+        ?.let(secrets::get)
+        .orEmpty()
 
     private fun write(profiles: List<RemoteDeviceProfile>) {
         val values = JSONArray()
@@ -210,7 +271,10 @@ class RemoteDeviceStore(context: Context) {
                     .put("id", profile.id)
                     .put("name", profile.name)
                     .put("kind", profile.kind.name)
-                    .put("baseUrl", profile.baseUrl),
+                    .put("baseUrl", profile.baseUrl)
+                    .apply {
+                        profile.credentialKey?.let { put("credentialKey", it) }
+                    },
             )
         }
         durableDevices.write(
@@ -222,10 +286,12 @@ class RemoteDeviceStore(context: Context) {
     }
 
     private fun parseProfiles(root: JSONObject): List<RemoteDeviceProfile>? {
-        if (root.optInt("version", 0) != REMOTE_DEVICE_SCHEMA_VERSION) return null
+        val schemaVersion = root.optInt("version", 0)
+        if (schemaVersion !in 1..REMOTE_DEVICE_SCHEMA_VERSION) return null
         val values = root.optJSONArray("devices") ?: return null
         if (values.length() > MAX_REMOTE_DEVICES) return null
         val ids = HashSet<String>()
+        val credentialKeys = HashSet<String>()
         val profiles = ArrayList<RemoteDeviceProfile>(values.length())
         for (index in 0 until values.length()) {
             val value = values.optJSONObject(index) ?: return null
@@ -233,15 +299,27 @@ class RemoteDeviceStore(context: Context) {
             val kind = runCatching {
                 RemoteDeviceKind.valueOf(value.optString("kind"))
             }.getOrNull() ?: return null
-            val profile = RemoteDeviceProfile(
+            val candidate = RemoteDeviceProfile(
                 id = id,
                 name = value.optString("name"),
                 kind = kind,
                 baseUrl = value.optString("baseUrl"),
-                hasCredential = secrets.contains(id),
             ).normalized()
-            if (!ids.add(id) || profile.validate() != null) return null
-            profiles += profile
+            if (!ids.add(id) || candidate.validate() != null) return null
+            val credentialKey = if (schemaVersion == 1) {
+                id.takeIf(secrets::contains)
+            } else if (!value.has("credentialKey") || value.isNull("credentialKey")) {
+                null
+            } else {
+                value.optString("credentialKey")
+                    .takeIf { it == id || GENERATED_CREDENTIAL_KEY.matches(it) }
+                    ?: return null
+            }
+            if (credentialKey != null && !credentialKeys.add(credentialKey)) return null
+            profiles += candidate.copy(
+                hasCredential = credentialKey?.let(secrets::contains) == true,
+                credentialKey = credentialKey,
+            )
         }
         return profiles
     }
@@ -249,19 +327,28 @@ class RemoteDeviceStore(context: Context) {
     private fun isCompatibleRoot(root: JSONObject): Boolean =
         root.optInt("version", 0) <= REMOTE_DEVICE_SCHEMA_VERSION
 
+    private fun newCredentialKey(): String = "credential-${UUID.randomUUID()}"
+
     private companion object {
-        const val REMOTE_DEVICE_SCHEMA_VERSION = 1
+        const val REMOTE_DEVICE_SCHEMA_VERSION = 2
         const val MAX_REMOTE_DEVICE_BYTES = 256 * 1_024
         const val MAX_REMOTE_DEVICES = 128
+        val GENERATED_CREDENTIAL_KEY = Regex(
+            "credential-[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
+        )
     }
 }
 
-private class SecureCredentialStore(context: Context) {
+private class SecureCredentialStore(context: Context) : RemoteCredentialStore {
     private val preferences = context.getSharedPreferences("remote_device_credentials", Context.MODE_PRIVATE)
 
-    fun contains(id: String): Boolean = preferences.contains(id)
+    override fun contains(key: String): Boolean {
+        requireCredentialKey(key)
+        return preferences.contains(key)
+    }
 
-    fun put(id: String, value: String) {
+    override fun put(key: String, value: String) {
+        requireCredentialKey(key)
         require(value.toByteArray(StandardCharsets.UTF_8).size <= MAX_REMOTE_CREDENTIAL_BYTES) {
             "credential_too_large"
         }
@@ -272,11 +359,12 @@ private class SecureCredentialStore(context: Context) {
             byteArrayOf(cipher.iv.size.toByte()) + cipher.iv + payload,
             Base64.NO_WRAP,
         )
-        check(preferences.edit().putString(id, encoded).commit()) { "credential_write_failed" }
+        check(preferences.edit().putString(key, encoded).commit()) { "credential_write_failed" }
     }
 
-    fun get(id: String): String? {
-        val encoded = preferences.getString(id, null) ?: return null
+    override fun get(key: String): String? {
+        requireCredentialKey(key)
+        val encoded = preferences.getString(key, null) ?: return null
         if (encoded.length > MAX_REMOTE_CREDENTIAL_BYTES * 4) return null
         return runCatching {
             val combined = Base64.decode(encoded, Base64.NO_WRAP)
@@ -296,8 +384,23 @@ private class SecureCredentialStore(context: Context) {
         }.getOrNull()
     }
 
-    fun remove(id: String) {
-        check(preferences.edit().remove(id).commit()) { "credential_delete_failed" }
+    override fun remove(key: String) {
+        requireCredentialKey(key)
+        check(preferences.edit().remove(key).commit()) { "credential_delete_failed" }
+    }
+
+    override fun prune(allowedKeys: Set<String>) {
+        val stale = preferences.all.keys - allowedKeys
+        if (stale.isEmpty()) return
+        val editor = preferences.edit()
+        stale.forEach(editor::remove)
+        check(editor.commit()) { "credential_delete_failed" }
+    }
+
+    private fun requireCredentialKey(key: String) {
+        require(key.length in 1..MAX_REMOTE_CREDENTIAL_KEY_LENGTH && key.none(Char::isISOControl)) {
+            "credential_key_invalid"
+        }
     }
 
     private fun getOrCreateKey(): SecretKey {
@@ -321,6 +424,7 @@ private class SecureCredentialStore(context: Context) {
         private const val KEY_ALIAS = "duckyslicer.remote-device.v1"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val TAG_BITS = 128
+        private const val MAX_REMOTE_CREDENTIAL_KEY_LENGTH = 200
     }
 }
 

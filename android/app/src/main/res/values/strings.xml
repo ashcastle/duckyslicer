@@ -402,6 +402,7 @@
     <string name="device_address_hint">For example, http://octopi.local</string>
     <string name="access_key">Access key</string>
     <string name="access_key_keep_hint">Leave blank to keep the saved key.</string>
+    <string name="access_key_connection_change_hint">Changing the connection type or address removes the saved key. Enter a key to replace it.</string>
     <string name="device_name_required">Enter a name.</string>
     <string name="device_address_invalid">Enter a valid address.</string>
     <string name="local_http_only">Addresses outside your local network must use HTTPS.</string>

@@ -41,7 +41,8 @@ def valid_sources() -> dict[str, str]:
             ".putBoolean(SLICE_NOTIFICATION_PERMISSION_ASKED, true)"
         ),
         "RemoteDevice.kt": (
-            'KeyStore.getInstance("AndroidKeyStore") secrets.remove(profileId) '
+            'KeyStore.getInstance("AndroidKeyStore") '
+            "removedCredentialKey?.let(secrets::remove) "
             '"print" to "false" instanceFollowRedirects = false'
         ),
         "AndroidManifest.xml": (
@@ -122,7 +123,7 @@ class VerifyDataPracticesTest(unittest.TestCase):
     def test_rejects_missing_credential_removal(self) -> None:
         sources = valid_sources()
         sources["RemoteDevice.kt"] = sources["RemoteDevice.kt"].replace(
-            "secrets.remove(profileId)", ""
+            "removedCredentialKey?.let(secrets::remove)", ""
         )
         with self.assertRaisesRegex(VerificationError, "connection behavior"):
             verify_data_practices(sources)
