@@ -13,7 +13,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
+MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
     "monotonic", "monotonicline", "rectilinear", "alignedrectilinear",
@@ -153,8 +154,17 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     width, depth, bed_origin_x, bed_origin_y, bed_polygon = printable_geometry(raw.get("printable_area"))
     height = number(raw.get("printable_height"), 0)
     nozzle = number(raw.get("nozzle_diameter"), 0)
+    physical_extruder_count = len(values(raw.get("nozzle_diameter")))
+    supports_multi_material = str(
+        scalar(raw.get("single_extruder_multi_material"), "0")
+    ).lower() in {"1", "true"}
+    extruder_count = MAX_FILAMENT_SLOTS if supports_multi_material else physical_extruder_count
     flavor = str(scalar(raw.get("gcode_flavor"), "")).lower()
-    if not (50 <= height <= 1_500 and 0.1 <= nozzle <= 2.0):
+    if not (
+        50 <= height <= 1_500 and
+        0.1 <= nozzle <= 2.0 and
+        1 <= physical_extruder_count <= MAX_FILAMENT_SLOTS
+    ):
         raise ValueError("unsafe printer dimensions")
     if flavor not in SUPPORTED_GCODE_FLAVORS:
         raise ValueError(f"unsupported G-code flavor: {flavor}")
@@ -174,6 +184,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "bedPolygon": bed_polygon,
         "maxPrintHeight": height,
         "nozzleDiameter": nozzle,
+        "extruderCount": extruder_count,
         "machineStartGcode": str(raw.get("machine_start_gcode", "")),
         "machineEndGcode": str(raw.get("machine_end_gcode", "")),
         "gcodeFlavor": flavor,

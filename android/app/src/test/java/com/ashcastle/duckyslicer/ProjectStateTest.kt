@@ -149,4 +149,22 @@ class ProjectStateTest {
         state = state.undo()
         assertTrue(state.current.selectedObject!!.supportPaint.facets.isEmpty())
     }
+
+    @Test
+    fun filamentAssignmentIsObjectScopedUndoableAndConstrainedWhenSlotsShrink() {
+        var state = ProjectHistoryState()
+            .add(projectObject("first"))
+            .add(projectObject("second"))
+
+        state = state.updateSelectedFilamentSlot(1)
+        assertEquals(0, state.current.objects.first().filamentSlot)
+        assertEquals(1, state.current.selectedObject!!.filamentSlot)
+
+        state = state.undo()
+        assertEquals(0, state.current.selectedObject!!.filamentSlot)
+        state = state.redo().constrainFilamentSlots(1)
+        assertEquals(0, state.current.selectedObject!!.filamentSlot)
+        state = state.undo()
+        assertEquals(1, state.current.selectedObject!!.filamentSlot)
+    }
 }

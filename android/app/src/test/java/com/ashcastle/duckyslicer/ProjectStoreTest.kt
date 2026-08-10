@@ -85,11 +85,11 @@ class ProjectStoreTest {
     @Test
     fun schemaThreeRestoresProjectSettingsAndSchemaOneRemainsReadable() = withStore { root, store ->
         val modelFile = store.createModelDestination("settings.stl").apply { writeText("solid part") }
+        val options = multiFilamentSettingsFixture()
         val snapshot = ProjectSnapshot(
-            listOf(ProjectObject("settings", inspectedModel(modelFile))),
+            listOf(ProjectObject("settings", inspectedModel(modelFile), filamentSlot = 1)),
             "settings",
         )
-        val options = restoredSettingsFixture()
         store.save(snapshot, options)
 
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
@@ -98,6 +98,7 @@ class ProjectStoreTest {
         assertEquals(snapshot.selectedObjectId, restored.snapshot.selectedObjectId)
         assertEquals(snapshot.objects.single().id, restored.snapshot.objects.single().id)
         assertEquals(snapshot.objects.single().transform, restored.snapshot.objects.single().transform)
+        assertEquals(1, restored.snapshot.objects.single().filamentSlot)
         assertEquals(
             options.toProjectJson().toString(),
             restored.sliceOptions?.toProjectJson()?.toString(),
@@ -105,6 +106,7 @@ class ProjectStoreTest {
 
         val current = JSONObject(File(root, "current_project.json").readText())
         current.put("schemaVersion", 1).remove("sliceOptions")
+        current.getJSONArray("objects").getJSONObject(0).remove("filamentSlot")
         File(root, "current_project.json").writeText(current.toString())
         val migrated = ProjectStore(root, ::inspectedModel).loadProject()
         assertEquals("settings", migrated.snapshot.selectedObjectId)
@@ -205,4 +207,12 @@ class ProjectStoreTest {
         maxMm = listOf(1.0, 1.0, 1.0),
         previewTriangles = floatArrayOf(0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f),
     )
+}
+
+internal fun multiFilamentSettingsFixture(): SliceOptions {
+    val options = restoredSettingsFixture()
+    val secondary = FilamentProfile.GENERIC_PLA.copy(
+        compatiblePrinters = listOf(options.printerProfile.name),
+    )
+    return options.copy(filamentSlots = listOf(options.filamentProfile, secondary))
 }

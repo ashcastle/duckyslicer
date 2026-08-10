@@ -7,6 +7,29 @@ import org.junit.Test
 
 class SliceOptionsPersistenceTest {
     @Test
+    fun filamentSlotsRoundTripAndReachTheNativeExtruderConfiguration() {
+        val primary = FilamentProfile.GENERIC_PLA.copy(
+            compatiblePrinters = listOf(PrinterProfile.U1_04.name),
+        )
+        val secondary = FilamentProfile.PETG.copy(
+            compatiblePrinters = listOf(PrinterProfile.U1_04.name),
+        )
+        val options = SliceOptions()
+            .selectPrinter(PrinterProfile.U1_04)
+            .selectFilament(primary)
+            .copy(filamentSlots = listOf(primary, secondary))
+
+        val restored = requireNotNull(options.toProjectJson().toProjectSliceOptionsOrNull())
+        val native = restored.toNativeConfig()
+
+        assertEquals(listOf(primary.id, secondary.id), restored.resolvedFilamentSlots().map { it.id })
+        assertEquals(2, native.extruderCount)
+        assertEquals(listOf("PLA", "PETG"), native.filamentTypes.toList())
+        assertEquals(listOf(primary.nozzleTemp, secondary.nozzleTemp), native.extruderTemps.toList())
+        assertEquals(listOf(primary.flowRatio, secondary.flowRatio), native.filamentFlowRatios.toList())
+    }
+
+    @Test
     fun effectivePrinterFilamentAndSlicingOverridesRoundTripCanonically() {
         val options = restoredSettingsFixture()
         val stored = options.toProjectJson()

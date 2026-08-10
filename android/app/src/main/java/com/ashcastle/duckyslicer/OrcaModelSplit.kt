@@ -71,6 +71,7 @@ internal suspend fun splitProjectObject(
                     offsetYmm = centerY - bedCenterY,
                     offsetZmm = minimumZ,
                 ),
+                filamentSlot = projectObject.filamentSlot,
             )
         }
         SplitProjectResult(

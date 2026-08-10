@@ -50,6 +50,7 @@ internal object SlicerProcessClient {
     fun slice(
         transformedModels: List<File>,
         options: SliceOptions,
+        filamentSlots: IntArray = IntArray(transformedModels.size),
         foregroundSession: ForegroundSliceSession? = null,
         cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit,
@@ -57,6 +58,7 @@ internal object SlicerProcessClient {
         transformedModels,
         List(transformedModels.size) { null },
         options,
+        filamentSlots,
         foregroundSession,
         cancellationRequested,
         null,
@@ -67,6 +69,7 @@ internal object SlicerProcessClient {
         transformedModels: List<File>,
         supportPaintFiles: List<File?>,
         options: SliceOptions,
+        filamentSlots: IntArray = IntArray(transformedModels.size),
         foregroundSession: ForegroundSliceSession? = null,
         cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit,
@@ -74,6 +77,7 @@ internal object SlicerProcessClient {
         transformedModels,
         supportPaintFiles,
         options,
+        filamentSlots,
         foregroundSession,
         cancellationRequested,
         null,
@@ -94,6 +98,7 @@ internal object SlicerProcessClient {
             transformedModels,
             List(transformedModels.size) { null },
             options,
+            IntArray(transformedModels.size),
             null,
             { false },
             maximumGcodeBytes,
@@ -290,6 +295,7 @@ internal object SlicerProcessClient {
         transformedModels: List<File>,
         supportPaintFiles: List<File?>,
         options: SliceOptions,
+        filamentSlots: IntArray,
         foregroundSession: ForegroundSliceSession?,
         cancellationRequested: () -> Boolean,
         maximumGcodeBytesForTest: Int?,
@@ -302,6 +308,7 @@ internal object SlicerProcessClient {
         val requestId = foregroundSession?.requestId ?: UUID.randomUUID().toString()
         val modelPaths = transformedModels.map(File::getAbsolutePath)
         require(supportPaintFiles.size == transformedModels.size) { "Support paint count does not match models" }
+        require(filamentSlots.size == transformedModels.size) { "Filament slot count does not match models" }
         val supportPaintPaths = supportPaintFiles.map { it?.absolutePath.orEmpty() }
         val optionsText = options.toProjectJson().toString()
         require(
@@ -321,6 +328,7 @@ internal object SlicerProcessClient {
                 ArrayList(supportPaintPaths),
             )
             putString(SlicerProcessContract.KEY_OPTIONS, optionsText)
+            putIntArray(SlicerProcessContract.KEY_FILAMENT_SLOTS, filamentSlots)
             maximumGcodeBytesForTest?.let {
                 putInt(SlicerProcessContract.KEY_MAXIMUM_GCODE_BYTES_FOR_TEST, it)
             }
@@ -1403,6 +1411,14 @@ class SlicerProcessService : Service() {
         val options = requireNotNull(JSONObject(optionsText).toProjectSliceOptionsOrNull()) {
             "Slice settings are invalid"
         }
+        val filamentSlots = requireNotNull(
+            extras.getIntArray(SlicerProcessContract.KEY_FILAMENT_SLOTS),
+        ) { "Filament assignments are unavailable" }
+        val availableFilaments = options.resolvedFilamentSlots()
+        require(
+            filamentSlots.size == models.size &&
+                filamentSlots.all { it in availableFilaments.indices },
+        ) { "Filament assignments are invalid" }
         val maximumGcodeBytes = if (
             BuildConfig.DEBUG &&
             extras.containsKey(SlicerProcessContract.KEY_MAXIMUM_GCODE_BYTES_FOR_TEST)
@@ -1415,7 +1431,16 @@ class SlicerProcessService : Service() {
         } else {
             PRODUCTION_MAXIMUM_GCODE_BYTES
         }
-        success(runNativeSlice(models, supportPaintFiles, options, maximumGcodeBytes, onProgress))
+        success(
+            runNativeSlice(
+                models,
+                supportPaintFiles,
+                filamentSlots,
+                options,
+                maximumGcodeBytes,
+                onProgress,
+            ),
+        )
     } catch (error: Exception) {
         if (BuildConfig.DEBUG) Log.e(LOG_TAG, "On-device slicing failed", error)
         failure(error.message ?: "Slicer operation failed")
@@ -1607,6 +1632,7 @@ class SlicerProcessService : Service() {
     private fun runNativeSlice(
         models: List<File>,
         supportPaintFiles: List<ValidatedSupportPaint?>,
+        filamentSlots: IntArray,
         options: SliceOptions,
         maximumGcodeBytes: Int,
         onProgress: (Int) -> Unit,
@@ -1620,6 +1646,11 @@ class SlicerProcessService : Service() {
             }
             check(runtime.getObjectBoundingBoxes().size == models.size * 3) {
                 "Native model count does not match the request"
+            }
+            filamentSlots.forEachIndexed { objectIndex, slot ->
+                check(runtime.nativeSetVolumeExtruder(objectIndex, 0, slot + 1)) {
+                    "Object filament could not be applied"
+                }
             }
             supportPaintFiles.forEachIndexed { objectIndex, supportPaint ->
                 if (supportPaint != null) {
@@ -1838,6 +1869,7 @@ private object SlicerProcessContract {
     const val KEY_MODEL_PATHS = "modelPaths"
     const val KEY_MODEL_OUTPUT_DIRECTORY = "modelOutputDirectory"
     const val KEY_NORMALIZED_MODELS = "normalizedModels"
+    const val KEY_FILAMENT_SLOTS = "filamentSlots"
     const val KEY_MODEL_NOT_SPLITTABLE = "modelNotSplittable"
     const val KEY_SUPPORT_PAINT_PATHS = "supportPaintPaths"
     const val KEY_OPTIONS = "options"

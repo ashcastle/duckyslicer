@@ -66,9 +66,10 @@ class ProjectArchiveTest {
                 model = first.model.copy(fileName = "duck-copy.stl"),
                 transform = ModelTransform(offsetXmm = -18f, rotationXdeg = 90f),
                 supportPaint = SupportPaint().paint(0, SupportPaintState.BLOCK),
+                filamentSlot = 1,
             )
             val snapshot = ProjectSnapshot(listOf(first, second), selectedObjectId = second.id)
-            val options = restoredSettingsFixture()
+            val options = multiFilamentSettingsFixture()
 
             val firstArchive = ByteArrayOutputStream().also {
                 source.exportArchive(snapshot, options, it)
@@ -87,7 +88,7 @@ class ProjectArchiveTest {
                 manifest.keys().asSequence().toSet(),
             )
             assertEquals(
-                setOf("id", "displayName", "modelEntry", "transform", "supportPaint"),
+                setOf("id", "displayName", "modelEntry", "transform", "supportPaint", "filamentSlot"),
                 manifest.getJSONArray("objects").getJSONObject(0).keys().asSequence().toSet(),
             )
 
@@ -102,6 +103,8 @@ class ProjectArchiveTest {
             assertEquals(second.transform, imported.snapshot.objects[1].transform)
             assertEquals(first.supportPaint, imported.snapshot.objects[0].supportPaint)
             assertEquals(second.supportPaint, imported.snapshot.objects[1].supportPaint)
+            assertEquals(0, imported.snapshot.objects[0].filamentSlot)
+            assertEquals(1, imported.snapshot.objects[1].filamentSlot)
             assertEquals(
                 imported.snapshot.objects[0].model.localPath,
                 imported.snapshot.objects[1].model.localPath,
