@@ -4,7 +4,7 @@ DuckySlicer saves portable projects with the `.duckyproject` extension and the M
 type `application/vnd.duckyslicer.project+zip`. The format is a versioned ZIP archive
 so a project can be inspected and recovered with standard tools.
 
-## Schema 5
+## Schema 6
 
 An archive contains exactly:
 
@@ -16,12 +16,13 @@ models/001.stl
 ```
 
 `manifest.json` identifies the format as `com.ashcastle.duckyslicer.project`, declares
-schema version `5`, and stores the selected object, resolved printer, filament, and
-slicing settings, object transforms, object-specific process overrides, support, seam,
-multi-color painting, variable layer-height ranges, display names, and model-entry
-references. Objects that share one
-source model also share one model entry. Schema 1 through 4 projects remain readable
-and default missing object-specific settings safely.
+schema version `6`, and stores the selected object, resolved printer, filament, and
+slicing settings, object transforms (including independent X, Y, and Z scale),
+object-specific process overrides, support, seam, multi-color painting, variable layer-height
+ranges, display names, and model-entry references. Objects that share one
+source model also share one model entry. Schema 1 through 5 projects remain readable;
+older uniform-scale transforms and missing object-specific settings receive safe
+defaults.
 
 The archive intentionally does not contain G-code, remote-printer profiles, printer
 addresses, access keys, support reports, or other app state. A project therefore

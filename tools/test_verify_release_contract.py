@@ -36,7 +36,8 @@ jobs:
             "Use the local ARM64 16 KB AVD."
         ),
         "CONTRIBUTING.md": (
-            "The local ARM64 16 KB AVD is the authoritative functional gate. "
+            "Run python3 tools/run_local_gate.py. The local ARM64 16 KB AVD is the "
+            "authoritative functional gate. "
             "Hosted emulator jobs must remain absent. The GitHub Release must contain only "
             "the signed ARM64 APK."
         ),
@@ -89,6 +90,14 @@ class VerifyReleaseContractTest(unittest.TestCase):
             "GitHub Actions does not run an Android emulator.", ""
         )
         with self.assertRaisesRegex(VerificationError, "RELEASING.md"):
+            verify_release_contract(sources)
+
+    def test_rejects_missing_local_gate_entry_point(self) -> None:
+        sources = valid_sources()
+        sources["CONTRIBUTING.md"] = sources["CONTRIBUTING.md"].replace(
+            "Run python3 tools/run_local_gate.py. ", ""
+        )
+        with self.assertRaisesRegex(VerificationError, "run_local_gate"):
             verify_release_contract(sources)
 
 

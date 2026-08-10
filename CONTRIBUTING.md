@@ -53,43 +53,21 @@ Run the narrow checks that cover your change, then the full local gate before a
 pull request:
 
 ```shell
-cd rust/duckyslicer-jni
-cargo fmt --check
-cargo test --locked
-cargo test --release --locked
-cargo clippy --locked -- -D warnings
-
-cd ../../android
-./gradlew --dependency-verification=strict \
-  :app:testDebugUnitTest :app:assembleDebug \
-  :app:assembleDebugAndroidTest :app:lintDebug
-
-cd ..
-python3 -m unittest discover -s tools -p 'test_*.py'
-python3 tools/verify_apk.py android/app/build/outputs/apk/debug/app-debug.apk
-python3 tools/verify_gradle_supply_chain.py
-python3 tools/verify_native_safety.py
-python3 tools/verify_android_isolation.py
-python3 tools/verify_slice_storage.py
-python3 tools/verify_preview_boundary.py
-python3 tools/verify_profile_editor.py
-python3 tools/verify_open_source_distribution.py
-python3 tools/verify_runtime_resilience.py
-python3 tools/verify_data_practices.py
-python3 tools/verify_support_diagnostics.py
-python3 tools/verify_project_archive.py
-python3 tools/verify_release_contract.py
-python3 tools/verify_play_bundle_workflow.py
-python3 tools/verify_workflows.py
+python3 tools/run_local_gate.py
 ```
 
-The local ARM64 16 KB AVD is the authoritative functional gate. With
-`DuckySlicer_16KB_API35` running:
+The command runs the Rust, Android host, policy, APK, connected-device, and
+UI-process recovery checks in fail-fast order. It automatically selects the only
+online API 35+ ARM64 device using 16,384-byte pages. If more than one eligible
+device is connected, choose one explicitly:
 
 ```shell
-cd android
-ANDROID_SERIAL=emulator-5556 ./gradlew :app:connectedDebugAndroidTest
+python3 tools/run_local_gate.py --serial <adb-serial>
 ```
+
+`python3 tools/run_local_gate.py --host-only` is useful while iterating, but it is
+not the authoritative full gate. The local ARM64 16 KB AVD is the authoritative
+functional gate.
 
 Preview changes should be checked with outer walls, inner walls, sparse infill,
 solid surfaces, support, bridges, multiple layer heights, and a dense model. The
