@@ -8,6 +8,12 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
+ANDROID_NAMESPACE = "{http://schemas.android.com/apk/res/android}"
+COMPATIBLE_MIME_TYPES = {
+    "application/zip",
+    "application/x-zip-compressed",
+    "application/octet-stream",
+}
 REQUIRED_STRINGS = {
     "open_project",
     "save_project",
@@ -46,9 +52,13 @@ def verify_project_archive(sources: dict[str, str]) -> None:
     required_files = {
         "ProjectArchive.kt",
         "ProjectStore.kt",
+        "ProjectOpenRequest.kt",
+        "ProjectTransfer.kt",
         "MainActivity.kt",
         "WorkspaceScreen.kt",
+        "AndroidManifest.xml",
         "ProjectArchiveTest.kt",
+        "ProjectArchiveIntentInstrumentedTest.kt",
         "NativeEngineInstrumentedTest.kt",
         "strings.xml",
         "strings-ko.xml",
@@ -102,12 +112,129 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "staging.deleteRecursively()",
             "modelFile.parentFile == modelRoot && modelFile.isFile",
             "StandardCopyOption.ATOMIC_MOVE",
+            "recoverAbandonedArchiveStaging",
+            'removePrefix(".archive-")',
+            "UUID.fromString(identifier)",
+            "!Files.isSymbolicLink(candidate.toPath())",
         ),
     )
     if store.index("save(snapshot, decoded.sliceOptions)") > store.index(
         "pruneUnreferencedModels(snapshot)"
     ):
         raise VerificationError("ProjectStore.kt must commit imported metadata before pruning")
+
+    _require_markers(
+        "ProjectOpenRequest.kt",
+        sources["ProjectOpenRequest.kt"],
+        (
+            "intent.action != Intent.ACTION_VIEW",
+            "ContentResolver.SCHEME_CONTENT",
+            "PROJECT_ARCHIVE_MIME_TYPE",
+            "PROJECT_ARCHIVE_FILE_EXTENSION",
+            "PROJECT_ARCHIVE_COMPATIBLE_MIME_TYPES",
+            '"application/zip"',
+            '"application/x-zip-compressed"',
+            '"application/octet-stream"',
+            "SavedStateHandle",
+            "StateFlow<ExternalProjectRequest?>",
+        ),
+    )
+
+    transfer = sources["ProjectTransfer.kt"]
+    _require_markers(
+        "ProjectTransfer.kt",
+        transfer,
+        (
+            "AndroidViewModel(application)",
+            "viewModelScope.launch(Dispatchers.IO)",
+            "ProjectStore.recoverAbandonedArchiveStaging",
+            "ProjectTransferState(busy = true)",
+            "mutableState.value.completion != null",
+            "openInputStream(uri)",
+            "projectStore.importArchive",
+            "openOutputStream(uri)",
+            "projectStore.exportArchive",
+            "catch (failure: CancellationException)",
+            "consumeCompletion",
+        ),
+    )
+    if "catch (_: Throwable)" in transfer or "catch (failure: Throwable)" in transfer:
+        raise VerificationError("ProjectTransfer.kt must not swallow process-level failures")
+
+    try:
+        manifest = ElementTree.fromstring(sources["AndroidManifest.xml"])
+    except ElementTree.ParseError as error:
+        raise VerificationError(f"AndroidManifest.xml is not valid XML: {error}") from error
+    main_activity = next(
+        (
+            activity
+            for activity in manifest.findall("./application/activity")
+            if activity.attrib.get(f"{ANDROID_NAMESPACE}name") == ".MainActivity"
+        ),
+        None,
+    )
+    if main_activity is None:
+        raise VerificationError("AndroidManifest.xml does not declare MainActivity")
+    if main_activity.attrib.get(f"{ANDROID_NAMESPACE}launchMode") != "singleTop":
+        raise VerificationError("MainActivity must receive a second project through onNewIntent")
+    view_filters: list[tuple[set[str], set[str], set[str], set[str], set[str]]] = []
+    for intent_filter in main_activity.findall("intent-filter"):
+        actions = {
+            value
+            for action in intent_filter.findall("action")
+            if (value := action.attrib.get(f"{ANDROID_NAMESPACE}name"))
+        }
+        if "android.intent.action.VIEW" not in actions:
+            continue
+        categories = {
+            value
+            for category in intent_filter.findall("category")
+            if (value := category.attrib.get(f"{ANDROID_NAMESPACE}name"))
+        }
+        schemes = {
+            value
+            for data in intent_filter.findall("data")
+            if (value := data.attrib.get(f"{ANDROID_NAMESPACE}scheme"))
+        }
+        mime_types = {
+            value
+            for data in intent_filter.findall("data")
+            if (value := data.attrib.get(f"{ANDROID_NAMESPACE}mimeType"))
+        }
+        hosts = {
+            value
+            for data in intent_filter.findall("data")
+            if (value := data.attrib.get(f"{ANDROID_NAMESPACE}host"))
+        }
+        paths = {
+            value
+            for data in intent_filter.findall("data")
+            if (value := data.attrib.get(f"{ANDROID_NAMESPACE}pathPattern"))
+        }
+        view_filters.append((categories, schemes, mime_types, hosts, paths))
+    expected_category = {"android.intent.category.DEFAULT"}
+    custom_filter = (
+        expected_category,
+        {"content"},
+        {"application/vnd.duckyslicer.project+zip"},
+        set(),
+        set(),
+    )
+    compatible_filter = (
+        expected_category,
+        {"content"},
+        COMPATIBLE_MIME_TYPES,
+        {"*"},
+        {r".*\.duckyproject"},
+    )
+    if (
+        len(view_filters) != 2
+        or custom_filter not in view_filters
+        or compatible_filter not in view_filters
+    ):
+        raise VerificationError(
+            "AndroidManifest.xml must expose only content project MIME/extension VIEW filters"
+        )
 
     main = sources["MainActivity.kt"]
     _require_markers(
@@ -118,12 +245,13 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "ActivityResultContracts.OpenDocument()",
             "projectSavePicker = rememberLauncherForActivityResult",
             "ActivityResultContracts.CreateDocument(PROJECT_ARCHIVE_MIME_TYPE)",
-            "openInputStream(uri)",
-            "projectStore.importArchive",
-            "openOutputStream(uri)",
-            "projectStore.exportArchive",
             "SupportEvent.PROJECT_ARCHIVE_IMPORT_FAILED",
             "SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED",
+            "override fun onNewIntent(intent: Intent)",
+            "externalProjectModel.enqueue(intent)",
+            "ProjectTransferViewModel",
+            "projectTransferState.completion",
+            "ProjectReplacementDialog(",
         ),
     )
     if "ACTION_SEND" in main or "HttpURLConnection" in main:
@@ -177,6 +305,11 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "rejects duplicate, directory, traversal, and unknown entries",
             "A failed import leaves the",
             "current project unchanged and removes staged data",
+            "it in Files. External opening",
+            "accepts only a granted `content://` URI",
+            "requires confirmation before the current project is replaced",
+            "the transfer. If Android terminates the process",
+            "exact generated UUID form",
             "1 GiB total uncompressed content",
         ),
     )
@@ -187,6 +320,20 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "projectArchiveRoundTripsModelsTransformsPaintAndResolvedProfilesDeterministically",
             "invalidArchiveCannotEscapeStagingOrReplaceTheCurrentProject",
             "oversizedManifestIsRejectedBeforeProjectStateChanges",
+            "startupRecoveryRemovesOnlyExactAbandonedArchiveDirectories",
+        ),
+    )
+    _require_markers(
+        "ProjectArchiveIntentInstrumentedTest.kt",
+        sources["ProjectArchiveIntentInstrumentedTest.kt"],
+        (
+            "customProjectIntentSurvivesRecreationRestoresAndSlices",
+            "compatibleZipIntentConfirmsBeforeReplacingTheCurrentProject",
+            "projectViewIntentRejectsNetworkAndUnrelatedBinaryUris",
+            "Intent.ACTION_VIEW",
+            "Intent.FLAG_GRANT_READ_URI_PERMISSION",
+            "scenario.recreate()",
+            "OnDeviceSlicer.slice(",
         ),
     )
     _require_markers(
@@ -206,10 +353,17 @@ def read_sources() -> dict[str, str]:
     return {
         "ProjectArchive.kt": (package / "ProjectArchive.kt").read_text(encoding="utf-8"),
         "ProjectStore.kt": (package / "ProjectStore.kt").read_text(encoding="utf-8"),
+        "ProjectOpenRequest.kt": (package / "ProjectOpenRequest.kt").read_text(encoding="utf-8"),
+        "ProjectTransfer.kt": (package / "ProjectTransfer.kt").read_text(encoding="utf-8"),
         "MainActivity.kt": (package / "MainActivity.kt").read_text(encoding="utf-8"),
         "WorkspaceScreen.kt": (package / "WorkspaceScreen.kt").read_text(encoding="utf-8"),
+        "AndroidManifest.xml": (tests / "main/AndroidManifest.xml").read_text(encoding="utf-8"),
         "ProjectArchiveTest.kt": (
             tests / "test/java/com/ashcastle/duckyslicer/ProjectArchiveTest.kt"
+        ).read_text(encoding="utf-8"),
+        "ProjectArchiveIntentInstrumentedTest.kt": (
+            tests
+            / "androidTest/java/com/ashcastle/duckyslicer/ProjectArchiveIntentInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "NativeEngineInstrumentedTest.kt": (
             tests / "androidTest/java/com/ashcastle/duckyslicer/NativeEngineInstrumentedTest.kt"

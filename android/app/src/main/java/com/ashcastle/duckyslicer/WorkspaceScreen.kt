@@ -2003,28 +2003,36 @@ private fun ProjectSheet(
         }
     }
     if (confirmReplacement) {
-        AlertDialog(
-            onDismissRequest = { confirmReplacement = false },
-            title = { Text(stringResource(R.string.replace_project_title)) },
-            text = { Text(stringResource(R.string.replace_project_body)) },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        confirmReplacement = false
-                        onOpenProject()
-                    },
-                    colors = primaryButtonColors(),
-                ) {
-                    Text(stringResource(R.string.open_project))
-                }
+        ProjectReplacementDialog(
+            onConfirm = {
+                confirmReplacement = false
+                onOpenProject()
             },
-            dismissButton = {
-                TextButton(onClick = { confirmReplacement = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
+            onDismiss = { confirmReplacement = false },
         )
     }
+}
+
+@Composable
+internal fun ProjectReplacementDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.replace_project_title)) },
+        text = { Text(stringResource(R.string.replace_project_body)) },
+        confirmButton = {
+            Button(onClick = onConfirm, colors = primaryButtonColors()) {
+                Text(stringResource(R.string.open_project))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
 }
 
 @Composable
