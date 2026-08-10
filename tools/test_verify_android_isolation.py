@@ -44,6 +44,13 @@ class SlicerProcessService {
     ForegroundSliceSession.markCanceled()
     ForegroundSliceSession.wasCanceled(this, requestId)
   }
+  fun safePendingIntents(context: Context) {
+    Intent(this, MainActivity::class.java)
+    Intent(context, SlicerProcessService::class.java)
+    data = Uri.Builder()
+    PendingIntent.FLAG_IMMUTABLE
+    PendingIntent.FLAG_IMMUTABLE
+  }
   override fun onTimeout(startId: Int, fgsType: Int) = Unit
   override fun onUnbind() = foregroundRequestId.get() != abandonedRequestId
 }
@@ -303,6 +310,43 @@ class VerifyAndroidIsolationTest(unittest.TestCase):
             service_path = "com/ashcastle/duckyslicer/SlicerProcessService.kt"
             sources[service_path] = sources[service_path].replace(marker, "")
             with self.assertRaisesRegex(VerificationError, "foreground|notification"):
+                verify_sources(sources, VALID_DEVICE_TEST)
+
+    def test_requires_explicit_immutable_notification_pending_intents(self) -> None:
+        service_path = "com/ashcastle/duckyslicer/SlicerProcessService.kt"
+        mutations = (
+            lambda source: source.replace(
+                "Intent(this, MainActivity::class.java)",
+                "Intent()",
+            ),
+            lambda source: source.replace(
+                "Intent(context, SlicerProcessService::class.java)",
+                "Intent(ACTION_CANCEL_SLICE)",
+            ),
+            lambda source: source.replace(
+                "PendingIntent.FLAG_IMMUTABLE",
+                "PendingIntent.FLAG_MUTABLE",
+                1,
+            ),
+            lambda source: source.replace(
+                "PendingIntent.FLAG_IMMUTABLE",
+                "",
+                1,
+            ),
+            lambda source: source.replace(
+                "data = Uri.Builder()",
+                "",
+            ),
+            lambda source: source.replace(
+                "PendingIntent.FLAG_IMMUTABLE",
+                "PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE",
+                1,
+            ),
+        )
+        for mutate in mutations:
+            sources = valid_sources()
+            sources[service_path] = mutate(sources[service_path])
+            with self.assertRaisesRegex(VerificationError, "PendingIntent"):
                 verify_sources(sources, VALID_DEVICE_TEST)
 
 

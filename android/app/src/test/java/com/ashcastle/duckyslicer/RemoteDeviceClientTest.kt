@@ -11,6 +11,7 @@ import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.URI
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicReference
 
 class RemoteDeviceClientTest {
@@ -27,7 +28,9 @@ class RemoteDeviceClientTest {
             assertTrue(request.get().contains("X-Api-Key: octo-secret", ignoreCase = true))
         }
 
-        val gcode = File.createTempFile("ducky-octo-", ".gcode").apply { writeText("G28\nG1 X10\n") }
+        val gcode = Files.createTempFile("ducky-octo-", ".gcode").toFile().apply {
+            writeText("G28\nG1 X10\n")
+        }
         try {
             withServer("""{"files":{"local":{"path":"duck.gcode"}}}""") { baseUrl, request ->
                 val profile = RemoteDeviceProfile("octo", "Workshop", RemoteDeviceKind.OCTOPRINT, baseUrl)
@@ -66,7 +69,9 @@ class RemoteDeviceClientTest {
             assertTrue(request.get().contains("X-Api-Key: moonraker-secret", ignoreCase = true))
         }
 
-        val gcode = File.createTempFile("ducky-moonraker-", ".gcode").apply { writeText("G28\n") }
+        val gcode = Files.createTempFile("ducky-moonraker-", ".gcode").toFile().apply {
+            writeText("G28\n")
+        }
         try {
             withServer("""{"result":{"item":{"path":"duck.gcode"}}}""") { baseUrl, request ->
                 val profile = RemoteDeviceProfile("klipper", "Workshop", RemoteDeviceKind.KLIPPER, baseUrl)
@@ -217,7 +222,9 @@ class RemoteDeviceClientTest {
 
     @Test
     fun unsafeServerUploadPathIsRejected() {
-        val gcode = File.createTempFile("ducky-path-", ".gcode").apply { writeText("G28\n") }
+        val gcode = Files.createTempFile("ducky-path-", ".gcode").toFile().apply {
+            writeText("G28\n")
+        }
         try {
             withServer("""{"files":{"local":{"path":"../other/duck.gcode"}}}""") { baseUrl, _ ->
                 assertThrows(IllegalArgumentException::class.java) {
