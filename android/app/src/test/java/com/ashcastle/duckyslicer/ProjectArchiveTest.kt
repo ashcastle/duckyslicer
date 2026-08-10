@@ -53,6 +53,7 @@ class ProjectArchiveTest {
                 model = inspectedModel(model).copy(fileName = "오리 모델.stl"),
                 transform = ModelTransform(
                     offsetXmm = 12f,
+                    offsetZmm = 4f,
                     rotationZdeg = 35f,
                     scale = 1.2f,
                     mirrorX = true,

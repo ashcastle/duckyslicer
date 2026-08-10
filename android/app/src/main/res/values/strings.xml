@@ -59,6 +59,7 @@
     <string name="model_placement">Model placement</string>
     <string name="move_x">Move X</string>
     <string name="move_y">Move Y</string>
+    <string name="move_z">Move Z</string>
     <string name="rotate_x">Rotate X</string>
     <string name="rotate_y">Rotate Y</string>
     <string name="rotate_z">Rotate Z</string>
@@ -73,6 +74,11 @@
     <string name="auto_lay_working">Finding a stable side…</string>
     <string name="auto_lay_done">Model placed on a stable side.</string>
     <string name="auto_lay_error">Couldn’t place this model automatically.</string>
+    <string name="split_to_objects">Split to objects</string>
+    <string name="split_done">%1$d objects created.</string>
+    <string name="split_done_paint_cleared">%1$d objects created. Support painting was cleared.</string>
+    <string name="split_not_possible">This model has no separate objects.</string>
+    <string name="split_error">Couldn’t split this model.</string>
     <string name="paint_support">Paint support</string>
     <string name="support_enforce">Add support</string>
     <string name="support_block">Block support</string>

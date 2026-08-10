@@ -1211,7 +1211,7 @@ object OnDeviceSlicer {
                     )
                 } else {
                     projectObject.transform
-                        .copy(offsetXmm = 0f, offsetYmm = 0f)
+                        .copy(offsetXmm = 0f, offsetYmm = 0f, offsetZmm = 0f)
                         .toJson(0f, 0f)
                 }
                 val transformed = JSONObject(

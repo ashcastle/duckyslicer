@@ -58,6 +58,8 @@ struct StlInspection {
 struct StlTransform {
     bed_center_mm: [f32; 2],
     offset_mm: [f32; 2],
+    #[serde(default)]
+    offset_z_mm: f32,
     rotation_deg: [f32; 3],
     scale: f32,
     #[serde(default)]
@@ -371,7 +373,7 @@ fn transformed_vertex(
     [
         rotated[0] + transform.bed_center_mm[0] + transform.offset_mm[0],
         rotated[1] + transform.bed_center_mm[1] + transform.offset_mm[1],
-        rotated[2] - transformed_min_z,
+        rotated[2] - transformed_min_z + transform.offset_z_mm,
     ]
 }
 
@@ -444,6 +446,7 @@ fn transform_stl(
         .bed_center_mm
         .iter()
         .chain(transform.offset_mm.iter())
+        .chain(std::iter::once(&transform.offset_z_mm))
         .chain(transform.rotation_deg.iter())
         .any(|value| !value.is_finite() || value.abs() > MAX_STL_COORDINATE_ABS_MM)
     {
@@ -1127,6 +1130,7 @@ mod tests {
         let transform = StlTransform {
             bed_center_mm: [100.0, 100.0],
             offset_mm: [5.0, -3.0],
+            offset_z_mm: 7.0,
             rotation_deg: [0.0, 0.0, 90.0],
             scale: 2.0,
             mirror: [false; 3],
@@ -1145,7 +1149,7 @@ mod tests {
         assert!((inspection.dimensions_mm[1] - 4.0).abs() < 0.001);
         assert!((inspection.min_mm[0] - 101.0).abs() < 0.001);
         assert!((inspection.max_mm[1] - 99.0).abs() < 0.001);
-        assert_eq!(inspection.min_mm[2], 0.0);
+        assert_eq!(inspection.min_mm[2], 7.0);
     }
 
     #[test]
@@ -1153,6 +1157,7 @@ mod tests {
         let transform = StlTransform {
             bed_center_mm: [0.0, 0.0],
             offset_mm: [0.0, 0.0],
+            offset_z_mm: 0.0,
             rotation_deg: [0.0; 3],
             scale: 2.0,
             mirror: [true, false, true],
@@ -1185,6 +1190,7 @@ mod tests {
             &StlTransform {
                 bed_center_mm: [100.0, 100.0],
                 offset_mm: [0.0, 0.0],
+                offset_z_mm: 0.0,
                 rotation_deg: [0.0, 0.0, 0.0],
                 scale: 1.0,
                 mirror: [false; 3],
@@ -1214,6 +1220,7 @@ mod tests {
             &StlTransform {
                 bed_center_mm: [100.0, 100.0],
                 offset_mm: [0.0, 0.0],
+                offset_z_mm: 0.0,
                 rotation_deg: [0.0, 0.0, 0.0],
                 scale: 1.0,
                 mirror: [false; 3],

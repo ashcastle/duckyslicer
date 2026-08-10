@@ -138,9 +138,31 @@ internal object SlicerProcessClient {
     }
 
     /** Loads STL, 3MF, or OBJ through Orca and exports bounded project-owned STL objects. */
-    fun normalizeModel(model: File, stagingDirectory: File): List<OrcaImportedObject> {
+    fun normalizeModel(model: File, stagingDirectory: File): List<OrcaImportedObject> =
+        runModelOperation(
+            message = SlicerProcessContract.MESSAGE_NORMALIZE_MODEL,
+            model = model,
+            stagingDirectory = stagingDirectory,
+            fallbackError = "OrcaSlicer could not import the model",
+        )
+
+    /** Uses Orca's inherited ModelObject::split and exports each resulting object. */
+    fun splitModel(model: File, stagingDirectory: File): List<OrcaImportedObject> =
+        runModelOperation(
+            message = SlicerProcessContract.MESSAGE_SPLIT_MODEL,
+            model = model,
+            stagingDirectory = stagingDirectory,
+            fallbackError = "OrcaSlicer could not split the model",
+        )
+
+    private fun runModelOperation(
+        message: Int,
+        model: File,
+        stagingDirectory: File,
+        fallbackError: String,
+    ): List<OrcaImportedObject> {
         check(Looper.myLooper() != Looper.getMainLooper()) {
-            "Model normalization must run outside the application main thread"
+            "Model operations must run outside the application main thread"
         }
         val requestId = UUID.randomUUID().toString()
         check(activeRequestId.compareAndSet(null, requestId)) {
@@ -149,7 +171,7 @@ internal object SlicerProcessClient {
         return try {
             val response = withWorker(DuckySlicerApplication.context()) { worker ->
                 worker.request(
-                    what = SlicerProcessContract.MESSAGE_NORMALIZE_MODEL,
+                    what = message,
                     data = Bundle().apply {
                         putString(SlicerProcessContract.KEY_REQUEST_ID, requestId)
                         putString(SlicerProcessContract.KEY_MODEL_PATH, model.absolutePath)
@@ -161,9 +183,11 @@ internal object SlicerProcessClient {
                     timeoutSeconds = MODEL_NORMALIZATION_TIMEOUT_SECONDS,
                 )
             }
+            if (response.getBoolean(SlicerProcessContract.KEY_MODEL_NOT_SPLITTABLE)) {
+                throw ModelNotSplittableException()
+            }
             check(response.getBoolean(SlicerProcessContract.KEY_OK)) {
-                response.getString(SlicerProcessContract.KEY_ERROR)
-                    ?: "OrcaSlicer could not import the model"
+                response.getString(SlicerProcessContract.KEY_ERROR) ?: fallbackError
             }
             latestWorkerPid = response.getInt(SlicerProcessContract.KEY_PID)
             val records = requireNotNull(
@@ -682,6 +706,7 @@ internal object SlicerProcessClient {
                 what == SlicerProcessContract.MESSAGE_AUTO_ORIENT ||
                 what == SlicerProcessContract.MESSAGE_AUTO_ARRANGE ||
                 what == SlicerProcessContract.MESSAGE_NORMALIZE_MODEL ||
+                what == SlicerProcessContract.MESSAGE_SPLIT_MODEL ||
                 what == SlicerProcessContract.MESSAGE_BLOCK_FOR_TEST
             if (!cancellable) return
             val requestId = data.getString(SlicerProcessContract.KEY_REQUEST_ID) ?: return
@@ -775,6 +800,8 @@ internal class ForegroundSliceSession internal constructor(
 }
 
 internal class SlicingCancelledException : Exception("Slicing was cancelled")
+
+internal class ModelNotSplittableException : Exception("model_not_splittable")
 
 internal data class OrcaImportedObject(
     val file: File,
@@ -1017,6 +1044,8 @@ class SlicerProcessService : Service() {
             SlicerProcessContract.MESSAGE_AUTO_ARRANGE -> startWork(message, WorkOperation.AUTO_ARRANGE)
             SlicerProcessContract.MESSAGE_NORMALIZE_MODEL ->
                 startWork(message, WorkOperation.NORMALIZE_MODEL)
+            SlicerProcessContract.MESSAGE_SPLIT_MODEL ->
+                startWork(message, WorkOperation.SPLIT_MODEL)
             SlicerProcessContract.MESSAGE_ATTACH -> attachToForegroundSlice(message)
             SlicerProcessContract.MESSAGE_CANCEL -> cancelWork(message)
             SlicerProcessContract.MESSAGE_HEALTH -> send(
@@ -1177,6 +1206,7 @@ class SlicerProcessService : Service() {
                 WorkOperation.AUTO_ORIENT -> runAutoOrient(requestData)
                 WorkOperation.AUTO_ARRANGE -> runAutoArrange(requestData)
                 WorkOperation.NORMALIZE_MODEL -> runNormalizeModel(requestData)
+                WorkOperation.SPLIT_MODEL -> runSplitModel(requestData)
                 WorkOperation.SLICE -> runSlice(requestData) { percent ->
                     foregroundProgress = maxOf(foregroundProgress, percent.coerceIn(0, 100))
                     mainHandler.post { updateForegroundSlice(requestId, percent) }
@@ -1448,6 +1478,49 @@ class SlicerProcessService : Service() {
     } catch (error: Exception) {
         if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Model normalization failed", error)
         failure(error.message ?: "OrcaSlicer could not import the model")
+    }
+
+    private fun runSplitModel(extras: Bundle): Bundle = try {
+        val sourcePath = requireNotNull(extras.getString(SlicerProcessContract.KEY_MODEL_PATH)) {
+            "Model path is unavailable"
+        }
+        val outputPath = requireNotNull(
+            extras.getString(SlicerProcessContract.KEY_MODEL_OUTPUT_DIRECTORY),
+        ) { "Model output is unavailable" }
+        val source = validateModel(sourcePath)
+        val outputDirectory = validateModelImportDirectory(outputPath)
+        val runtime = createNativeRuntime()
+        try {
+            check(runtime.loadModel(source.absolutePath)) { "Model could not be prepared" }
+            if (!runtime.nativeIsObjectSplittable(0)) {
+                return failure("Model has no separate objects").apply {
+                    putBoolean(SlicerProcessContract.KEY_MODEL_NOT_SPLITTABLE, true)
+                }
+            }
+            val split = requireNotNull(runtime.nativeSplitObject(0)) {
+                "Model has no separate objects"
+            }
+            require(split.size == 2 && split[0] == 0 && split[1] in 2..MAX_OBJECTS) {
+                "Invalid split object count"
+            }
+            val records = requireNotNull(
+                runtime.nativeExportLoadedObjects(outputDirectory.absolutePath),
+            ) { "Split objects could not be exported" }
+            require(records.size == split[1]) { "Split object export count changed" }
+            Bundle().apply {
+                putBoolean(SlicerProcessContract.KEY_OK, true)
+                putInt(SlicerProcessContract.KEY_PID, Process.myPid())
+                putStringArrayList(
+                    SlicerProcessContract.KEY_NORMALIZED_MODELS,
+                    ArrayList(records.toList()),
+                )
+            }
+        } finally {
+            runtime.clearModel()
+        }
+    } catch (error: Exception) {
+        if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Model split failed", error)
+        failure(error.message ?: "OrcaSlicer could not split the model")
     }
 
     private fun runAutoArrange(extras: Bundle): Bundle = try {
@@ -1737,6 +1810,7 @@ class SlicerProcessService : Service() {
         AUTO_ORIENT,
         AUTO_ARRANGE,
         NORMALIZE_MODEL,
+        SPLIT_MODEL,
         TEST_PROBE,
     }
 
@@ -1758,11 +1832,13 @@ private object SlicerProcessContract {
     const val MESSAGE_AUTO_ARRANGE = 9
     const val MESSAGE_ATTACH = 10
     const val MESSAGE_NORMALIZE_MODEL = 11
+    const val MESSAGE_SPLIT_MODEL = 12
     const val KEY_REQUEST_ID = "requestId"
     const val KEY_MODEL_PATH = "modelPath"
     const val KEY_MODEL_PATHS = "modelPaths"
     const val KEY_MODEL_OUTPUT_DIRECTORY = "modelOutputDirectory"
     const val KEY_NORMALIZED_MODELS = "normalizedModels"
+    const val KEY_MODEL_NOT_SPLITTABLE = "modelNotSplittable"
     const val KEY_SUPPORT_PAINT_PATHS = "supportPaintPaths"
     const val KEY_OPTIONS = "options"
     const val KEY_MAXIMUM_GCODE_BYTES_FOR_TEST = "maximumGcodeBytesForTest"

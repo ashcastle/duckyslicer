@@ -210,6 +210,7 @@ internal object ProjectArchiveCodec {
 private fun ModelTransform.toArchiveJson() = JSONObject()
     .put("offsetXmm", offsetXmm.checkedArchiveTransform(-ProjectStore.MAX_OFFSET_MM, ProjectStore.MAX_OFFSET_MM))
     .put("offsetYmm", offsetYmm.checkedArchiveTransform(-ProjectStore.MAX_OFFSET_MM, ProjectStore.MAX_OFFSET_MM))
+    .put("offsetZmm", offsetZmm.checkedArchiveTransform(-ProjectStore.MAX_OFFSET_MM, ProjectStore.MAX_OFFSET_MM))
     .put("rotationXdeg", rotationXdeg.checkedArchiveTransform(-ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG))
     .put("rotationYdeg", rotationYdeg.checkedArchiveTransform(-ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG))
     .put("rotationZdeg", rotationZdeg.checkedArchiveTransform(-ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG))
@@ -221,6 +222,7 @@ private fun ModelTransform.toArchiveJson() = JSONObject()
 private fun JSONObject.toArchiveTransform() = ModelTransform(
     offsetXmm = checkedArchiveFloat("offsetXmm", -ProjectStore.MAX_OFFSET_MM, ProjectStore.MAX_OFFSET_MM),
     offsetYmm = checkedArchiveFloat("offsetYmm", -ProjectStore.MAX_OFFSET_MM, ProjectStore.MAX_OFFSET_MM),
+    offsetZmm = checkedOptionalArchiveFloat("offsetZmm", -ProjectStore.MAX_OFFSET_MM, ProjectStore.MAX_OFFSET_MM),
     rotationXdeg = checkedArchiveFloat("rotationXdeg", -ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG),
     rotationYdeg = checkedArchiveFloat("rotationYdeg", -ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG),
     rotationZdeg = checkedArchiveFloat("rotationZdeg", -ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG),
@@ -234,6 +236,12 @@ private fun JSONObject.checkedArchiveBoolean(name: String): Boolean {
     if (!has(name)) return false
     return get(name) as? Boolean ?: throw ProjectArchiveException()
 }
+
+private fun JSONObject.checkedOptionalArchiveFloat(
+    name: String,
+    minimum: Float,
+    maximum: Float,
+): Float = if (has(name)) checkedArchiveFloat(name, minimum, maximum) else 0f
 
 private fun SupportPaint.toArchiveJson() = JSONArray().also { values ->
     require(facets.size <= SupportPaint.MAX_PAINTED_FACETS)
