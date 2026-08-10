@@ -199,7 +199,7 @@ class SliceLifecycleInstrumentedTest {
                 val notificationCancelDeadline =
                     SystemClock.elapsedRealtime() + COMPLETION_TIMEOUT_MILLIS
                 while (
-                    retained.state.value.busy &&
+                    retained.state.value.terminalStatus != SliceTerminalStatus.CANCELED &&
                     SystemClock.elapsedRealtime() < notificationCancelDeadline
                 ) {
                     SystemClock.sleep(20)
