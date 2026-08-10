@@ -154,6 +154,8 @@ private fun DuckySlicerScreen(
     val arrangeError = stringResource(R.string.arrange_error)
     val splitNotPossible = stringResource(R.string.split_not_possible)
     val splitError = stringResource(R.string.split_error)
+    val cutNotPossible = stringResource(R.string.cut_not_possible)
+    val cutError = stringResource(R.string.cut_error)
     val sliceError = stringResource(R.string.slice_error)
     val sliceCanceledNotice = stringResource(R.string.slice_canceled)
     val saveError = stringResource(R.string.save_error)
@@ -191,6 +193,7 @@ private fun DuckySlicerScreen(
     var autoLaying by remember { mutableStateOf(false) }
     var arranging by remember { mutableStateOf(false) }
     var splitting by remember { mutableStateOf(false) }
+    var cutting by remember { mutableStateOf(false) }
     var sliceOutcome by rememberSaveable { mutableStateOf<SliceOutcome?>(null) }
     var selectedTab by rememberSaveable { mutableStateOf(WorkspaceTab.SLICE) }
     var layerPreview by remember { mutableStateOf<GcodeLayerPreview?>(null) }
@@ -381,7 +384,7 @@ private fun DuckySlicerScreen(
     }
 
     val keepScreenAwake = appSettings.keepScreenAwakeWhileWorking &&
-        (importing || projectTransferBusy || autoLaying || arranging || splitting || slicing ||
+        (importing || projectTransferBusy || autoLaying || arranging || splitting || cutting || slicing ||
             previewLoading || remoteBusy)
     DisposableEffect(keepScreenAwake) {
         val window = (context as? MainActivity)?.window
@@ -433,7 +436,7 @@ private fun DuckySlicerScreen(
 
     fun autoLaySelectedModel() {
         val target = projectHistory.current.selectedObject ?: return
-        if (autoLaying || arranging || splitting || importing || slicing || previewLoading) return
+        if (autoLaying || arranging || splitting || cutting || importing || slicing || previewLoading) return
         autoLaying = true
         error = null
         notice = null
@@ -469,7 +472,7 @@ private fun DuckySlicerScreen(
 
     fun arrangeProjectObjects() {
         val targets = projectHistory.current.objects
-        if (targets.size < 2 || arranging || autoLaying || splitting || importing || slicing || previewLoading) return
+        if (targets.size < 2 || arranging || autoLaying || splitting || cutting || importing || slicing || previewLoading) return
         arranging = true
         error = null
         notice = null
@@ -504,7 +507,7 @@ private fun DuckySlicerScreen(
 
     fun splitSelectedModel() {
         val target = projectHistory.current.selectedObject ?: return
-        if (splitting || arranging || autoLaying || importing || slicing || previewLoading) return
+        if (splitting || cutting || arranging || autoLaying || importing || slicing || previewLoading) return
         val maximumObjects = ProjectStore.MAX_PROJECT_OBJECTS - projectObjects.size + 1
         if (maximumObjects < 2) {
             error = splitError
@@ -551,8 +554,64 @@ private fun DuckySlicerScreen(
         }
     }
 
+    fun cutSelectedModel(heightRatio: Float, placeOnCut: Boolean) {
+        val target = projectHistory.current.selectedObject ?: return
+        if (cutting || splitting || arranging || autoLaying || importing || slicing || previewLoading) return
+        val maximumObjects = ProjectStore.MAX_PROJECT_OBJECTS - projectObjects.size + 1
+        if (maximumObjects < 2) {
+            error = cutError
+            notice = null
+            return
+        }
+        cutting = true
+        error = null
+        notice = null
+        clearCompletedSlice()
+        remoteUpload = null
+        val targetOptions = sliceOptions
+        scope.launch {
+            runCatching {
+                cutProjectObject(
+                    target,
+                    projectStore,
+                    targetOptions,
+                    heightRatio,
+                    placeOnCut,
+                    maximumObjects,
+                )
+            }.onSuccess { result ->
+                val currentTarget = projectHistory.current.selectedObject
+                if (
+                    currentTarget?.id == target.id &&
+                    currentTarget.model.localPath == target.model.localPath &&
+                    currentTarget.transform == target.transform &&
+                    currentTarget.supportPaint == target.supportPaint &&
+                    currentTarget.filamentSlot == target.filamentSlot
+                ) {
+                    projectHistory = projectHistory.replaceSelected(result.objects)
+                    notice = resources.getString(
+                        if (result.clearedSupportPaint) {
+                            R.string.cut_done_paint_cleared
+                        } else {
+                            R.string.cut_done
+                        },
+                    )
+                    error = null
+                    selectedTab = WorkspaceTab.SLICE
+                } else {
+                    result.objects.forEach { File(it.model.localPath).delete() }
+                }
+            }.onFailure { failure ->
+                if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Model cut failed", failure)
+                error = if (failure is ModelNotCuttableException) cutNotPossible else cutError
+                notice = null
+            }
+            cutting = false
+        }
+    }
+
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null && projectRestored && !autoLaying && !arranging && !splitting && !slicing && !previewLoading) {
+        if (uri != null && projectRestored && !autoLaying && !arranging && !splitting && !cutting && !slicing && !previewLoading) {
             importing = true
             error = null
             notice = null
@@ -622,7 +681,7 @@ private fun DuckySlicerScreen(
     fun importProject(uri: Uri): Boolean {
         if (
             projectRestored && !projectTransferBusy && !importing && !autoLaying &&
-            !arranging && !splitting && !slicing && !previewLoading &&
+            !arranging && !splitting && !cutting && !slicing && !previewLoading &&
             projectTransferState.completion == null
         ) {
             if (projectTransferModel.importProject(uri)) {
@@ -650,13 +709,14 @@ private fun DuckySlicerScreen(
         autoLaying,
         arranging,
         splitting,
+        cutting,
         slicing,
         previewLoading,
     ) {
         val request = externalProjectRequest ?: return@LaunchedEffect
         if (
             !projectRestored || projectTransferBusy || importing || autoLaying ||
-            arranging || splitting || slicing || previewLoading || projectTransferState.completion != null
+            arranging || splitting || cutting || slicing || previewLoading || projectTransferState.completion != null
         ) return@LaunchedEffect
         if (projectObjects.isEmpty()) {
             importProject(request.uri)
@@ -670,7 +730,7 @@ private fun DuckySlicerScreen(
     ) { uri ->
         if (
             uri != null && projectRestored && !projectTransferBusy && !importing &&
-            !autoLaying && !arranging && !splitting && !slicing && !previewLoading
+            !autoLaying && !arranging && !splitting && !cutting && !slicing && !previewLoading
         ) {
             if (projectTransferModel.exportProject(uri, projectHistory.current, sliceOptions)) {
                 error = null
@@ -681,7 +741,7 @@ private fun DuckySlicerScreen(
 
     val loadPreviewRange: (Int, Int) -> Unit = { startLayer, endLayer ->
         val completed = sliceOutcome
-        if (completed != null && !slicing && !autoLaying && !arranging && !splitting) {
+        if (completed != null && !slicing && !autoLaying && !arranging && !splitting && !cutting) {
             sliceOperationModel.loadPreview(completed, startLayer, endLayer)
         }
     }
@@ -701,7 +761,7 @@ private fun DuckySlicerScreen(
         if (
             objects.isNotEmpty() &&
             !slicing && !importing && !projectTransferBusy && !autoLaying && !arranging &&
-            !splitting && !previewLoading &&
+            !splitting && !cutting && !previewLoading &&
             sliceOperationModel.start(objects, sliceOptions)
         ) {
             sliceOutcome = null
@@ -832,6 +892,7 @@ private fun DuckySlicerScreen(
         autoLaying = autoLaying,
         arranging = arranging,
         splitting = splitting,
+        cutting = cutting,
         slicing = slicing,
         sliceCancellationRequested = sliceCancellationRequested,
         sliceProgress = sliceProgress,
@@ -908,6 +969,7 @@ private fun DuckySlicerScreen(
         onArrange = ::arrangeProjectObjects,
         onAutoLay = ::autoLaySelectedModel,
         onSplit = ::splitSelectedModel,
+        onCut = ::cutSelectedModel,
         onSupportPaintPreview = { objectId, facetIndex, state ->
             val projectObject = projectHistory.current.objects.firstOrNull { it.id == objectId }
             if (projectObject != null && facetIndex in 0 until projectObject.model.triangles) {

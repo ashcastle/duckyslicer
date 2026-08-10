@@ -28,7 +28,7 @@ data class ModelTransform(
             JSONArray(listOf(bedOriginX + bedSizeX / 2f, bedOriginY + bedSizeY / 2f)),
         )
         .put("offsetMm", JSONArray(listOf(offsetXmm, offsetYmm)))
-        .put("offsetZmm", offsetZmm)
+        .put("offsetZMm", offsetZmm)
         .put("rotationDeg", JSONArray(listOf(rotationXdeg, rotationYdeg, rotationZdeg)))
         .put("scale", scale)
         .put("mirror", JSONArray(listOf(mirrorX, mirrorY, mirrorZ)))

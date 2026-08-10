@@ -1,10 +1,20 @@
 package com.ashcastle.duckyslicer
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONObject
 
 class ModelTransformTest {
+    @Test
+    fun nativeTransformJsonUsesRustOffsetZFieldName() {
+        val json = JSONObject(ModelTransform(offsetZmm = 7f).toJson(100f, 100f))
+
+        assertEquals(7.0, json.getDouble("offsetZMm"), 0.0001)
+        assertFalse(json.has("offsetZmm"))
+    }
+
     @Test
     fun orcaOrientationPreservesPositionAndScaleWhileReplacingRotation() {
         val transform = ModelTransform(
