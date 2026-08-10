@@ -69,6 +69,11 @@ are not written to the device-profile JSON file. HTTPS is accepted for any valid
 host; unencrypted HTTP profiles are restricted to loopback, link-local, private,
 carrier-grade NAT, and `.local` addresses. Remote printing always requires a
 separate user action after upload, with confirmation enabled by default.
+Before a cleartext request receives any access key, every current DNS answer must
+still be local and the connection URL is pinned to one validated address. This keeps
+a saved `.local` name from redirecting credentials through DNS rebinding. Cleartext
+printer requests also bypass system proxies. HTTPS keeps its original hostname so the
+platform certificate verifier remains authoritative.
 
 OctoPrint and Moonraker responses have a one-MiB byte ceiling and a fixed nesting
 limit. Credential-bearing requests do not follow redirects. Credentials, uploaded

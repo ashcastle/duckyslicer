@@ -12,6 +12,7 @@ import java.io.File
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.InetAddress
+import java.net.Proxy
 import java.net.URI
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -94,13 +95,63 @@ internal fun isPrivateOrLocalHost(host: String): Boolean {
     val isAddressLiteral = normalized.contains(':') || normalized.all { it.isDigit() || it == '.' }
     if (!isAddressLiteral) return false
     val address = runCatching { InetAddress.getByName(normalized) }.getOrNull() ?: return false
-    return address.isAnyLocalAddress || address.isLoopbackAddress ||
-        address.isLinkLocalAddress || address.isSiteLocalAddress ||
-        isCarrierGradeNat(address.address)
+    return isPrivateOrLocalAddress(address)
 }
+
+private fun isPrivateOrLocalAddress(address: InetAddress): Boolean =
+    !address.isMulticastAddress && (
+        address.isLoopbackAddress || address.isLinkLocalAddress ||
+            address.isSiteLocalAddress || isCarrierGradeNat(address.address) ||
+            isUniqueLocalIpv6(address.address)
+        )
 
 private fun isCarrierGradeNat(bytes: ByteArray): Boolean =
     bytes.size == 4 && bytes[0].toInt() and 0xff == 100 && bytes[1].toInt() and 0xc0 == 0x40
+
+private fun isUniqueLocalIpv6(bytes: ByteArray): Boolean =
+    bytes.size == 16 && bytes[0].toInt() and 0xfe == 0xfc
+
+internal data class ResolvedRemoteEndpoint(
+    val uri: URI,
+    val hostHeader: String?,
+)
+
+internal fun resolveRemoteEndpoint(
+    endpoint: URI,
+    addressResolver: (String) -> List<InetAddress>,
+): ResolvedRemoteEndpoint {
+    if (!endpoint.scheme.equals("http", ignoreCase = true)) {
+        return ResolvedRemoteEndpoint(endpoint, null)
+    }
+    val originalHost = endpoint.host?.removePrefix("[")?.removeSuffix("]")
+        ?.takeIf(String::isNotBlank)
+        ?: throw IllegalArgumentException("cleartext_not_local")
+    val addresses = try {
+        addressResolver(originalHost)
+    } catch (failure: Exception) {
+        throw IllegalArgumentException("cleartext_not_local", failure)
+    }
+    require(addresses.isNotEmpty() && addresses.all(::isPrivateOrLocalAddress)) {
+        "cleartext_not_local"
+    }
+    val pinnedAddress = addresses.first()
+    val pinnedHost = requireNotNull(pinnedAddress.hostAddress)
+        .replace("%", "%25")
+        .asAuthorityHost()
+    val port = endpoint.port.takeIf { it >= 0 }?.let { ":$it" }.orEmpty()
+    val query = endpoint.rawQuery?.let { "?$it" }.orEmpty()
+    val pinnedUri = URI.create(
+        "${endpoint.scheme.lowercase()}://$pinnedHost$port${endpoint.rawPath.orEmpty()}$query",
+    )
+    val hostHeader = originalHost.asAuthorityHost() + port
+    return ResolvedRemoteEndpoint(pinnedUri, hostHeader)
+}
+
+private fun String.asAuthorityHost(): String =
+    if (contains(':') && !(startsWith('[') && endsWith(']'))) "[$this]" else this
+
+private fun resolveRemoteAddresses(host: String): List<InetAddress> =
+    InetAddress.getAllByName(host).toList()
 
 class RemoteDeviceStore(context: Context) {
     private val file = File(context.filesDir, "remote_devices.json")
@@ -276,7 +327,10 @@ private class SecureCredentialStore(context: Context) {
     }
 }
 
-class RemoteDeviceClient(private val timeoutMillis: Int) {
+class RemoteDeviceClient(
+    private val timeoutMillis: Int,
+    private val addressResolver: (String) -> List<InetAddress> = ::resolveRemoteAddresses,
+) {
     fun status(profile: RemoteDeviceProfile, credential: String): RemoteDeviceStatus {
         profile.validate()?.let { throw IllegalArgumentException(it) }
         return when (profile.kind) {
@@ -476,12 +530,19 @@ class RemoteDeviceClient(private val timeoutMillis: Int) {
         require(credential.toByteArray(StandardCharsets.UTF_8).size <= MAX_REMOTE_CREDENTIAL_BYTES) {
             "credential_too_large"
         }
-        val connection = URI(profile.baseUrl + path).toURL().openConnection() as HttpURLConnection
+        val endpoint = resolveRemoteEndpoint(URI(profile.baseUrl + path), addressResolver)
+        val url = endpoint.uri.toURL()
+        val connection = if (endpoint.hostHeader != null) {
+            url.openConnection(Proxy.NO_PROXY)
+        } else {
+            url.openConnection()
+        } as HttpURLConnection
         connection.connectTimeout = timeoutMillis
         connection.readTimeout = timeoutMillis
         connection.useCaches = false
         connection.instanceFollowRedirects = false
         connection.setRequestProperty("Accept", "application/json")
+        endpoint.hostHeader?.let { connection.setRequestProperty("Host", it) }
         if (credential.isNotBlank()) {
             when (profile.kind) {
                 RemoteDeviceKind.OCTOPRINT -> connection.setRequestProperty("X-Api-Key", credential)

@@ -26,6 +26,8 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "ProfileStoreMigrationTest.kt",
         "RemoteDeviceClientTest.kt",
         "RemoteDeviceInstrumentedTest.kt",
+        "CONTRIBUTING.md",
+        "SECURITY.md",
         "strings.xml",
         "strings-ko.xml",
     }
@@ -71,6 +73,12 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "readBoundedBytes",
         "parseBoundedJsonObject",
         "instanceFollowRedirects = false",
+        "resolveRemoteEndpoint",
+        "addresses.all(::isPrivateOrLocalAddress)",
+        "val url = endpoint.uri.toURL()",
+        "url.openConnection(Proxy.NO_PROXY)",
+        "endpoint.hostHeader?.let",
+        "isUniqueLocalIpv6",
         "safeRemotePath",
         "connection.disconnect()",
     ):
@@ -89,9 +97,12 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "RemoteDeviceClientTest.kt": (
             "redirectsOversizedResponsesAndDeepJsonFailClosed",
             "unsafeServerUploadPathIsRejected",
+            "cleartextDnsResultsAreValidatedAndPinnedBeforeCredentialsAreAttached",
+            "cleartextHostnameRequestUsesThePinnedResolverAddress",
         ),
         "RemoteDeviceInstrumentedTest.kt": (
             "remoteDeviceMetadataRecoversFromLastKnownGoodBackup",
+            "cleartextHostnameRequestUsesOneValidatedPinnedAddress",
         ),
     }
     for source_name, markers in test_markers.items():
@@ -102,6 +113,18 @@ def verify_resilience(sources: dict[str, str]) -> None:
     for strings in ("strings.xml", "strings-ko.xml"):
         if "saved_data_unavailable" not in sources[strings]:
             raise VerificationError(f"saved-data recovery copy is missing from {strings}")
+
+    if "pin the connection target and bypass system proxies" not in sources["CONTRIBUTING.md"]:
+        raise VerificationError("contributor guidance does not preserve cleartext DNS pinning")
+    security = sources["SECURITY.md"]
+    for marker in (
+        "every current DNS answer",
+        "DNS rebinding",
+        "bypass system proxies",
+        "platform certificate verifier remains authoritative",
+    ):
+        if marker not in security:
+            raise VerificationError(f"security guidance is missing DNS containment: {marker}")
 
 
 def read_sources() -> dict[str, str]:
@@ -126,6 +149,8 @@ def read_sources() -> dict[str, str]:
         "RemoteDeviceInstrumentedTest.kt": (
             device_tests / "RemoteDeviceInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
+        "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),
+        "SECURITY.md": (ROOT / "SECURITY.md").read_text(encoding="utf-8"),
         "strings.xml": (ROOT / "android/app/src/main/res/values/strings.xml").read_text(
             encoding="utf-8"
         ),

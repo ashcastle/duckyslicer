@@ -10,6 +10,7 @@ import org.junit.runner.RunWith
 import java.io.BufferedInputStream
 import java.net.InetAddress
 import java.net.ServerSocket
+import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
@@ -204,6 +205,27 @@ class RemoteDeviceInstrumentedTest {
                 "http://192.168.1.20",
             ).validate(),
         )
+    }
+
+    @Test
+    fun cleartextHostnameRequestUsesOneValidatedPinnedAddress() {
+        withServer("""{"state":"Operational"}""") { baseUrl, request ->
+            val port = URI(baseUrl).port
+            val profile = RemoteDeviceProfile(
+                "dns-pinned",
+                "Pinned printer",
+                RemoteDeviceKind.OCTOPRINT,
+                "http://printer.local:$port",
+            )
+            val client = RemoteDeviceClient(2_000) { host ->
+                assertEquals("printer.local", host)
+                listOf(InetAddress.getByName("127.0.0.1"))
+            }
+
+            assertEquals("Operational", client.status(profile, "pinned-secret").state)
+            assertTrue(request.get().contains("X-Api-Key: pinned-secret", ignoreCase = true))
+            assertTrue(request.get().contains("Host: printer.local:$port", ignoreCase = true))
+        }
     }
 
     private fun withServer(
