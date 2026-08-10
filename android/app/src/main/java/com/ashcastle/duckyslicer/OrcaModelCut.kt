@@ -96,6 +96,7 @@ internal suspend fun cutProjectObject(
                     offsetYmm = originalCenterY - bedCenterY,
                     offsetZmm = targetMinimumZ,
                 ),
+                processOverrides = projectObject.processOverrides,
                 filamentSlot = projectObject.filamentSlot,
             )
         }

@@ -271,6 +271,7 @@ internal fun WorkspaceScreen(
     onMultiColorPaintPreview: (String, Int, Int?) -> Unit,
     onMultiColorPaintCommitted: (String, MultiColorPaint) -> Unit,
     onVariableLayerHeightsChanged: (VariableLayerHeights) -> Unit,
+    onObjectProcessOverridesChanged: (ObjectProcessOverrides) -> Unit,
     onRemoveModel: () -> Unit,
     onSlice: () -> Unit,
     onCancelSlice: () -> Unit,
@@ -302,6 +303,7 @@ internal fun WorkspaceScreen(
     var showFilamentPicker by remember { mutableStateOf(false) }
     var showCutTool by remember { mutableStateOf(false) }
     var showVariableLayerHeightTool by remember { mutableStateOf(false) }
+    var showObjectProcessSettings by remember { mutableStateOf(false) }
     var supportPainting by remember { mutableStateOf(false) }
     var supportPaintTool by remember { mutableStateOf(SupportPaintTool.ENFORCE) }
     var seamPainting by remember { mutableStateOf(false) }
@@ -318,6 +320,7 @@ internal fun WorkspaceScreen(
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showCutTool = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) {
             showVariableLayerHeightTool = false
+            showObjectProcessSettings = false
         }
     }
     LaunchedEffect(availableFilaments.size) {
@@ -614,6 +617,10 @@ internal fun WorkspaceScreen(
                 showModelTools = false
                 showVariableLayerHeightTool = true
             },
+            onObjectSettings = {
+                showModelTools = false
+                showObjectProcessSettings = true
+            },
             onChooseFilament = {
                 showModelTools = false
                 showFilamentPicker = true
@@ -661,6 +668,17 @@ internal fun WorkspaceScreen(
             onDismiss = { showVariableLayerHeightTool = false },
         )
     }
+    if (showObjectProcessSettings && selectedObject != null) {
+        ObjectProcessSettingsSheet(
+            current = selectedObject.processOverrides,
+            options = sliceOptions,
+            onApply = {
+                showObjectProcessSettings = false
+                onObjectProcessOverridesChanged(it)
+            },
+            onDismiss = { showObjectProcessSettings = false },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -681,6 +699,7 @@ private fun ModelTransformSheet(
     onCut: () -> Unit,
     onSeamPaint: () -> Unit,
     onVariableLayerHeight: () -> Unit,
+    onObjectSettings: () -> Unit,
     onChooseFilament: () -> Unit,
     onTransformChanged: (ModelTransform) -> Unit,
     onRemoveModel: () -> Unit,
@@ -800,6 +819,19 @@ private fun ModelTransformSheet(
                     onClick = { onTransformChanged(transform.copy(mirrorZ = !transform.mirrorZ)) },
                     modifier = Modifier.weight(1f),
                 )
+            }
+            Button(
+                onClick = onObjectSettings,
+                enabled = !autoLaying && !splitting && !cutting,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF3A3B37),
+                    contentColor = Color(0xFFF4F4EE),
+                ),
+            ) {
+                Icon(Icons.Default.Tune, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.object_process_settings))
             }
             Button(
                 onClick = onChooseFilament,

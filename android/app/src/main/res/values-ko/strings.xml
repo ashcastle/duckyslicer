@@ -520,4 +520,14 @@
     <string name="object_filament">오브젝트 필라멘트</string>
     <string name="filament_tool_summary">T%1$d · %2$s</string>
     <string name="filament_slot_unavailable">이 프린터에서 사용할 수 있는 필라멘트 슬롯이 없습니다.</string>
+    <string name="object_process_settings">오브젝트 설정</string>
+    <string name="object_process_settings_summary">이 오브젝트에만 다른 값을 적용하고 나머지는 선택한 프로필을 그대로 사용합니다.</string>
+    <string name="object_setting_profile_value">프로필 · %1$s</string>
+    <string name="object_setting_override_value">이 오브젝트 · %1$s</string>
+    <string name="object_setting_on">켜짐</string>
+    <string name="object_setting_off">꺼짐</string>
+    <string name="enable_for_object">이 오브젝트에 서포트 생성</string>
+    <string name="wall_loops">벽 수</string>
+    <string name="sparse_infill_density">희소 인필 밀도</string>
+    <string name="outer_wall_speed">외벽 속도</string>
 </resources>

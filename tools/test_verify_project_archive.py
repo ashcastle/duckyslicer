@@ -22,7 +22,7 @@ def valid_sources() -> dict[str, str]:
                 "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_OBJECTS + 1",
                 'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
                 "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-                "PROJECT_ARCHIVE_SCHEMA_VERSION = 4",
+                "PROJECT_ARCHIVE_SCHEMA_VERSION = 5",
                 'Regex("models/[0-9]{3}\\\\.stl")',
                 "require(!entry.isDirectory require(entries.add(entry.name))",
                 "entry.method == ZipEntry.DEFLATED || entry.method == ZipEntry.STORED",
@@ -35,6 +35,7 @@ def valid_sources() -> dict[str, str]:
                 "multiColorPaint.facets.keys.all",
                 'getJSONArray("multiColorPaint").toArchiveMultiColorPaint()',
                 'getJSONArray("variableLayerHeights").toArchiveVariableLayerHeights()',
+                'getJSONObject("processOverrides").toObjectProcessOverrides()',
             )
         ),
         "ProjectStore.kt": " ".join(
@@ -136,8 +137,8 @@ def valid_sources() -> dict[str, str]:
         ),
         "SUPPORT.md": "`.duckyproject` model geometry include saved printer addresses, access keys, or G-code",
         "PROJECT_FORMAT.md": (
-            "manifest.json models/000.stl schema version `4` "
-            "Schema 1 through 3 projects remain readable multi-color painting variable layer-height ranges "
+            "manifest.json models/000.stl schema version `5` "
+            "Schema 1 through 4 projects remain readable multi-color painting variable layer-height ranges "
             "rejects duplicate, directory, traversal, and unknown entries "
             "A failed import leaves the current project unchanged and removes staged data "
             "it in Files. External opening accepts only a granted `content://` URI "

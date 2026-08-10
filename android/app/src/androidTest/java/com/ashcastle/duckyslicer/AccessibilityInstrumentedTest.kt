@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Rect
 import android.os.SystemClock
+import android.os.ParcelFileDescriptor
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -220,6 +221,60 @@ class AccessibilityInstrumentedTest {
         }
     }
 
+    @Test
+    fun objectSettingsExposeOrcaCategoriesAndStickyThirtySeventyActions() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val title = context.getString(R.string.object_process_settings)
+        val layerHeight = context.getString(R.string.layer_height)
+        val speed = context.getString(R.string.speed)
+        val outerWallSpeed = context.getString(R.string.outer_wall_speed)
+        val revert = context.getString(R.string.revert_changes)
+        val apply = context.getString(R.string.apply_changes)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_OBJECT_SETTINGS).use {
+            var nodes = waitForNodes(setOf(title, layerHeight, speed))
+            val layerOverride = nodes.firstOrNull {
+                it.isCheckable && it.isClickable && it.effectiveLabel().contains(layerHeight)
+            }
+            assertNotNull("Layer height must expose an object override switch", layerOverride)
+            tapCenter(checkNotNull(layerOverride))
+            SystemClock.sleep(300)
+            val overrideLabel = context.getString(R.string.object_setting_override_value, "0.20 mm")
+            val afterToggle = currentNodes()
+            assertTrue(
+                "Layer override tap did not change the draft: bounds=${layerOverride.screenBounds()} " +
+                    "labels=${afterToggle.map { it.effectiveLabel() }.filter(String::isNotBlank)}",
+                afterToggle.any { it.effectiveLabel().contains(overrideLabel) },
+            )
+
+            nodes = waitForNodes(setOf(revert, apply))
+            val revertButton = nodes.firstOrNull {
+                it.isClickable && it.effectiveLabel().contains(revert)
+            }
+            val applyButton = nodes.firstOrNull {
+                it.isClickable && it.effectiveLabel().contains(apply)
+            }
+            assertNotNull("Dirty object settings must expose Revert", revertButton)
+            assertNotNull("Dirty object settings must expose Apply", applyButton)
+            checkNotNull(revertButton)
+            checkNotNull(applyButton)
+            assertTrue(
+                "Apply must retain the requested 70/30 visual priority",
+                applyButton.screenBounds().width() > revertButton.screenBounds().width() * 2,
+            )
+
+            val speedTab = nodes.firstOrNull {
+                it.isClickable && it.effectiveLabel() == speed
+            }
+            assertNotNull("Object settings must expose the Speed category", speedTab)
+            tapCenter(checkNotNull(speedTab))
+            assertTrue(
+                waitForNodes(setOf(outerWallSpeed)).any {
+                    it.effectiveLabel().contains(outerWallSpeed)
+                },
+            )
+        }
+    }
+
     private fun launchHarness(screen: String): ActivityScenario<AccessibilityHarnessActivity> {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         return ActivityScenario.launch(
@@ -281,6 +336,15 @@ class AccessibilityInstrumentedTest {
         }
         collect(root)
         return result
+    }
+
+    private fun tapCenter(node: AccessibilityNodeInfo) {
+        val bounds = node.screenBounds()
+        val command = InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("input tap ${bounds.centerX()} ${bounds.centerY()}")
+        ParcelFileDescriptor.AutoCloseInputStream(command).use { output ->
+            while (output.read() != -1) Unit
+        }
     }
 
     private fun AccessibilityNodeInfo.effectiveLabel(depth: Int = 0): String {

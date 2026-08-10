@@ -532,7 +532,9 @@ private fun DuckySlicerScreen(
                     currentTarget.supportPaint == target.supportPaint &&
                     currentTarget.seamPaint == target.seamPaint &&
                     currentTarget.multiColorPaint == target.multiColorPaint &&
-                    currentTarget.variableLayerHeights == target.variableLayerHeights
+                    currentTarget.variableLayerHeights == target.variableLayerHeights &&
+                    currentTarget.processOverrides == target.processOverrides &&
+                    currentTarget.filamentSlot == target.filamentSlot
                 ) {
                     projectHistory = projectHistory.replaceSelected(result.objects)
                     notice = resources.getString(
@@ -592,6 +594,7 @@ private fun DuckySlicerScreen(
                     currentTarget.seamPaint == target.seamPaint &&
                     currentTarget.multiColorPaint == target.multiColorPaint &&
                     currentTarget.variableLayerHeights == target.variableLayerHeights &&
+                    currentTarget.processOverrides == target.processOverrides &&
                     currentTarget.filamentSlot == target.filamentSlot
                 ) {
                     projectHistory = projectHistory.replaceSelected(result.objects)
@@ -1045,6 +1048,16 @@ private fun DuckySlicerScreen(
             val nextHistory = projectHistory.updateSelectedVariableLayerHeights(
                 variableLayerHeights,
             )
+            if (nextHistory != projectHistory) {
+                projectHistory = nextHistory
+                clearCompletedSlice()
+                remoteUpload = null
+                notice = null
+                error = null
+            }
+        },
+        onObjectProcessOverridesChanged = { processOverrides ->
+            val nextHistory = projectHistory.updateSelectedProcessOverrides(processOverrides)
             if (nextHistory != projectHistory) {
                 projectHistory = nextHistory
                 clearCompletedSlice()

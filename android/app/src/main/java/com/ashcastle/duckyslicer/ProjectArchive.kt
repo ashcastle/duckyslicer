@@ -25,6 +25,7 @@ internal data class ArchivedProjectObject(
     val seamPaint: SeamPaint,
     val multiColorPaint: MultiColorPaint,
     val variableLayerHeights: VariableLayerHeights,
+    val processOverrides: ObjectProcessOverrides,
     val filamentSlot: Int,
 )
 
@@ -91,6 +92,7 @@ internal object ProjectArchiveCodec {
                                     "variableLayerHeights",
                                     projectObject.variableLayerHeights.toArchiveJson(),
                                 )
+                                .put("processOverrides", projectObject.processOverrides.toProjectJson())
                                 .put("filamentSlot", projectObject.filamentSlot),
                         )
                     }
@@ -229,6 +231,11 @@ internal object ProjectArchiveCodec {
                     value.getJSONArray("variableLayerHeights").toArchiveVariableLayerHeights()
                 } else {
                     VariableLayerHeights()
+                },
+                processOverrides = if (schemaVersion >= 5) {
+                    value.getJSONObject("processOverrides").toObjectProcessOverrides()
+                } else {
+                    ObjectProcessOverrides()
                 },
                 filamentSlot = value.optInt("filamentSlot", 0).takeIf {
                     it in 0 until MAX_FILAMENT_SLOTS
@@ -478,6 +485,6 @@ private const val MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_OBJECTS
 private const val MAX_PROJECT_ARCHIVE_ENTRY_NAME = 128
 private const val PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"
 private const val MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1
-private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 4
+private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 5
 private const val PROJECT_ARCHIVE_MANIFEST = "manifest.json"
 private val PROJECT_ARCHIVE_MODEL_ENTRY = Regex("models/[0-9]{3}\\.stl")
