@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -147,6 +148,8 @@ private const val PreviewDepthBands = 12
 private const val TabletShortestSideDp = 600f
 private const val CompactNavigationLabelFontScale = 1.5f
 private const val WorkspaceTopOverlayClearanceDp = 82f
+// Keep broad curves smooth in the mobile preview while retaining structural creases.
+private const val ModelSharpEdgeCosine = 0.422618f
 
 internal fun useWorkspaceNavigationRail(widthDp: Float, heightDp: Float): Boolean =
     minOf(widthDp, heightDp) >= TabletShortestSideDp
@@ -188,6 +191,103 @@ internal data class ModelScreenTriangle(
     val previewTriangleIndex: Int = sourceFacetIndex,
     val surfaceShade: Float = 1f,
 )
+
+internal data class ModelMeshEdge(
+    val triangleIndex: Int,
+    val startVertex: Int,
+    val endVertex: Int,
+    val adjacentTriangleIndex: Int?,
+    val sharp: Boolean,
+)
+
+private data class MeshVertexKey(val x: Int, val y: Int, val z: Int)
+
+private data class MeshEdgeKey(val first: MeshVertexKey, val second: MeshVertexKey)
+
+private data class MeshEdgeAccumulator(
+    val triangleIndex: Int,
+    val startVertex: Int,
+    val endVertex: Int,
+    val normal: FloatArray,
+    var adjacentTriangleIndex: Int? = null,
+    var sharp: Boolean = false,
+    var faceCount: Int = 1,
+)
+
+internal fun buildModelMeshEdges(previewTriangles: FloatArray): List<ModelMeshEdge> {
+    require(previewTriangles.size % 9 == 0)
+    val edgeMap = LinkedHashMap<MeshEdgeKey, MeshEdgeAccumulator>()
+    repeat(previewTriangles.size / 9) { triangleIndex ->
+        val triangleOffset = triangleIndex * 9
+        val normal = previewTriangleNormal(previewTriangles, triangleOffset)
+        arrayOf(0 to 1, 1 to 2, 2 to 0).forEach { (startVertex, endVertex) ->
+            val startKey = previewVertexKey(previewTriangles, triangleOffset + startVertex * 3)
+            val endKey = previewVertexKey(previewTriangles, triangleOffset + endVertex * 3)
+            val key = if (startKey.isBefore(endKey)) {
+                MeshEdgeKey(startKey, endKey)
+            } else {
+                MeshEdgeKey(endKey, startKey)
+            }
+            val existing = edgeMap[key]
+            if (existing == null) {
+                edgeMap[key] = MeshEdgeAccumulator(
+                    triangleIndex = triangleIndex,
+                    startVertex = startVertex,
+                    endVertex = endVertex,
+                    normal = normal,
+                )
+            } else {
+                existing.faceCount += 1
+                if (existing.adjacentTriangleIndex == null) {
+                    existing.adjacentTriangleIndex = triangleIndex
+                }
+                val normalDot = abs(
+                    existing.normal[0] * normal[0] +
+                        existing.normal[1] * normal[1] +
+                        existing.normal[2] * normal[2],
+                )
+                if (!normalDot.isFinite() || normalDot < ModelSharpEdgeCosine || existing.faceCount > 2) {
+                    existing.sharp = true
+                }
+            }
+        }
+    }
+    return edgeMap.values.map { edge ->
+        ModelMeshEdge(
+            triangleIndex = edge.triangleIndex,
+            startVertex = edge.startVertex,
+            endVertex = edge.endVertex,
+            adjacentTriangleIndex = edge.adjacentTriangleIndex,
+            sharp = edge.sharp,
+        )
+    }
+}
+
+private fun previewVertexKey(values: FloatArray, offset: Int): MeshVertexKey = MeshVertexKey(
+    x = values[offset].normalizedFloatBits(),
+    y = values[offset + 1].normalizedFloatBits(),
+    z = values[offset + 2].normalizedFloatBits(),
+)
+
+private fun Float.normalizedFloatBits(): Int = if (this == 0f) 0 else toRawBits()
+
+private fun MeshVertexKey.isBefore(other: MeshVertexKey): Boolean =
+    x < other.x || x == other.x && (y < other.y || y == other.y && z <= other.z)
+
+private fun previewTriangleNormal(values: FloatArray, offset: Int): FloatArray {
+    val ux = values[offset + 3] - values[offset]
+    val uy = values[offset + 4] - values[offset + 1]
+    val uz = values[offset + 5] - values[offset + 2]
+    val vx = values[offset + 6] - values[offset]
+    val vy = values[offset + 7] - values[offset + 1]
+    val vz = values[offset + 8] - values[offset + 2]
+    val nx = uy * vz - uz * vy
+    val ny = uz * vx - ux * vz
+    val nz = ux * vy - uy * vx
+    val length = kotlin.math.sqrt(nx * nx + ny * ny + nz * nz)
+    if (!length.isFinite() || length <= 0.000001f) return floatArrayOf(0f, 0f, 0f)
+    return floatArrayOf(nx / length, ny / length, nz / length)
+}
 
 internal data class ModelPoint3(
     val x: Float,
@@ -1192,7 +1292,7 @@ private fun ModelTransformSheet(
                     contentColor = Color(0xFFF4F4EE),
                 ),
             ) {
-                Icon(Icons.Default.Straighten, contentDescription = null)
+                Icon(Icons.Default.VerticalAlignBottom, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.lay_on_face))
             }
@@ -2005,6 +2105,12 @@ private fun BedScene(
     var interactionActive by remember { mutableStateOf(false) }
     var refinedPreview by remember { mutableStateOf(true) }
     val objectIds = projectObjects.map(ProjectObject::id)
+    val modelTopology = projectObjects.map { projectObject -> projectObject.id to projectObject.model }
+    val modelMeshEdges = remember(modelTopology) {
+        projectObjects.associate { projectObject ->
+            projectObject.id to buildModelMeshEdges(projectObject.model.previewTriangles)
+        }
+    }
     var modelScreenBounds by remember(objectIds) { mutableStateOf<Map<String, Rect>>(emptyMap()) }
     var modelScreenTriangles by remember(objectIds) {
         mutableStateOf<Map<String, List<ModelScreenTriangle>>>(emptyMap())
@@ -2508,9 +2614,9 @@ private fun BedScene(
                     facePath.reset()
                     facePath.addTriangle(triangle.a, triangle.b, triangle.c)
                     val light = if (objectSelected) {
-                        0.58f + triangle.surfaceShade * 0.38f
+                        0.78f + triangle.surfaceShade * 0.16f
                     } else {
-                        0.48f + triangle.surfaceShade * 0.38f
+                        0.70f + triangle.surfaceShade * 0.18f
                     }
                     drawPath(
                         facePath,
@@ -2518,6 +2624,24 @@ private fun BedScene(
                             .copy(alpha = 0.98f),
                     )
                 }
+                val featureEdgePath = Path()
+                modelMeshEdges[projectObject.id].orEmpty().forEach { edge ->
+                    val triangle = screenTriangles.getOrNull(edge.triangleIndex)
+                        ?: return@forEach
+                    val adjacent = edge.adjacentTriangleIndex?.let(screenTriangles::getOrNull)
+                    val silhouette = adjacent == null ||
+                        triangle.screenOrientation() * adjacent.screenOrientation() < 0f
+                    if (!edge.sharp && !silhouette) return@forEach
+                    val start = triangle.vertex(edge.startVertex)
+                    val end = triangle.vertex(edge.endVertex)
+                    featureEdgePath.moveTo(start.x, start.y)
+                    featureEdgePath.lineTo(end.x, end.y)
+                }
+                drawPath(
+                    featureEdgePath,
+                    color = Color(0xFF12130F).copy(alpha = if (objectSelected) 0.34f else 0.22f),
+                    style = Stroke(if (objectSelected) 0.7.dp.toPx() else 0.55.dp.toPx()),
+                )
                 multiColorPaintPaths.toSortedMap().forEach { (filamentSlot, path) ->
                     drawPath(path, filamentSlotColor(filamentSlot).copy(alpha = 0.94f))
                     drawPath(
@@ -2591,6 +2715,16 @@ private fun Path.addTriangle(a: Offset, b: Offset, c: Offset) {
     close()
 }
 
+private fun ModelScreenTriangle.vertex(index: Int): Offset = when (index) {
+    0 -> a
+    1 -> b
+    2 -> c
+    else -> error("model_vertex_invalid")
+}
+
+private fun ModelScreenTriangle.screenOrientation(): Float =
+    (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+
 internal fun modelSurfaceShade(a: FloatArray, b: FloatArray, c: FloatArray): Float {
     require(a.size >= 3 && b.size >= 3 && c.size >= 3)
     val ux = b[0] - a[0]
@@ -2605,7 +2739,7 @@ internal fun modelSurfaceShade(a: FloatArray, b: FloatArray, c: FloatArray): Flo
     val length = kotlin.math.sqrt(nx * nx + ny * ny + nz * nz)
     if (!length.isFinite() || length <= 0.000001f) return 0.45f
     val diffuse = abs(nx * 0.36f + ny * -0.48f + nz * 0.80f) / length
-    return (0.36f + diffuse.coerceIn(0f, 1f) * 0.64f).coerceIn(0f, 1f)
+    return (0.55f + diffuse.coerceIn(0f, 1f) * 0.45f).coerceIn(0f, 1f)
 }
 
 internal fun closestPaintFacet(
@@ -2843,7 +2977,7 @@ private fun LayOnFacePalette(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Default.Straighten, contentDescription = null)
+                Icon(Icons.Default.VerticalAlignBottom, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(
                     stringResource(R.string.lay_on_face),
@@ -3090,7 +3224,7 @@ private fun ObjectToolRail(
                 }
             }
             IconButton(onClick = onLayOnFace, enabled = !editingBusy) {
-                Icon(Icons.Default.Straighten, stringResource(R.string.lay_on_face))
+                Icon(Icons.Default.VerticalAlignBottom, stringResource(R.string.lay_on_face))
             }
             IconButton(onClick = onMeasure, enabled = !editingBusy) {
                 Icon(Icons.Default.Straighten, stringResource(R.string.measure_model))

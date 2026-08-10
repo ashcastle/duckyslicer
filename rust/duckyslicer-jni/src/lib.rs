@@ -139,7 +139,7 @@ fn probe_vulkan() -> VulkanCapabilities {
 const MAX_MODEL_IMPORT_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_TEXT_LINE_BYTES: usize = 64 * 1024;
 const MAX_STL_COORDINATE_ABS_MM: f32 = 1_000_000.0;
-const PREVIEW_TRIANGLE_LIMIT: usize = 3_500;
+const PREVIEW_TRIANGLE_LIMIT: usize = 12_000;
 const PREVIEW_CLUSTER_START_RESOLUTION: u16 = 36;
 const PREVIEW_CLUSTER_WORK_LIMIT: usize = PREVIEW_TRIANGLE_LIMIT * 8;
 const MAX_GCODE_COORDINATE_ABS_MM: f32 = 1_000_000.0;
@@ -420,70 +420,146 @@ fn compact_preview_paths(mut paths: Vec<PreviewPath>, limit: usize) -> Vec<Previ
         return paths;
     }
 
-    let average_path_size = total_segments as f64 / paths.len() as f64;
-    let target_path_count =
-        ((limit as f64 / average_path_size).floor() as usize).clamp(1, paths.len());
-    let mut candidates = Vec::with_capacity(target_path_count + ToolpathRole::COUNT * 2);
-    candidates.push(0);
-    candidates.push(paths.len() - 1);
-
-    for role_code in 0..ToolpathRole::COUNT {
-        if let Some(first) = paths
+    // A whole-path sampler leaves only a handful of complete layers on a dense
+    // model. The result is technically connected but looks like floating
+    // spaghetti. Give exterior/surface roles most of the budget, then simplify
+    // every retained loop so the silhouette remains present across the height.
+    const ROLE_WEIGHTS: [usize; ToolpathRole::COUNT] = [
+        50, // outer wall
+        5,  // inner wall
+        2,  // sparse infill
+        12, // top surface
+        3,  // internal solid
+        7,  // support
+        8,  // bridge
+        2,  // adhesion
+        1,  // other
+        10, // bottom surface
+    ];
+    let mut role_paths: [Vec<PreviewPath>; ToolpathRole::COUNT] =
+        std::array::from_fn(|_| Vec::new());
+    for path in paths.drain(..) {
+        role_paths[path.role as usize].push(path);
+    }
+    let role_totals: [usize; ToolpathRole::COUNT] = std::array::from_fn(|role| {
+        role_paths[role]
             .iter()
-            .position(|path| path.role as usize == role_code)
-        {
-            candidates.push(first);
-        }
-        if let Some(last) = paths
-            .iter()
-            .rposition(|path| path.role as usize == role_code)
-        {
-            candidates.push(last);
-        }
-    }
-    if target_path_count > 1 {
-        for index in 0..target_path_count {
-            candidates.push(index * (paths.len() - 1) / (target_path_count - 1));
+            .map(|path| path.segments.len())
+            .sum()
+    });
+    let present_weight: usize = (0..ToolpathRole::COUNT)
+        .filter(|role| role_totals[*role] > 0)
+        .map(|role| ROLE_WEIGHTS[role])
+        .sum();
+    let mut role_budgets = [0usize; ToolpathRole::COUNT];
+    if present_weight > 0 {
+        for role in 0..ToolpathRole::COUNT {
+            role_budgets[role] =
+                role_totals[role].min(limit.saturating_mul(ROLE_WEIGHTS[role]) / present_weight);
         }
     }
-
-    let mut selected = vec![false; paths.len()];
-    let mut candidate_seen = vec![false; paths.len()];
-    let mut used = 0usize;
-    for index in candidates {
-        if candidate_seen[index] {
-            continue;
-        }
-        candidate_seen[index] = true;
-        let path_size = paths[index].segments.len();
-        if path_size <= limit.saturating_sub(used) {
-            selected[index] = true;
-            used += path_size;
-        }
-    }
-    for (index, path) in paths.iter().enumerate() {
-        if !selected[index] && path.segments.len() <= limit.saturating_sub(used) {
-            selected[index] = true;
-            used += path.segments.len();
-        }
+    let priority = [0usize, 3, 9, 6, 5, 1, 4, 7, 2, 8];
+    let mut remaining = limit.saturating_sub(role_budgets.iter().sum());
+    for role in priority {
+        let extra = role_totals[role]
+            .saturating_sub(role_budgets[role])
+            .min(remaining);
+        role_budgets[role] += extra;
+        remaining -= extra;
     }
 
-    if used == 0
-        && let Some(smallest_index) = paths
+    let mut compacted = Vec::new();
+    for role in 0..ToolpathRole::COUNT {
+        compacted.extend(compact_role_paths(
+            std::mem::take(&mut role_paths[role]),
+            role_budgets[role],
+            role,
+        ));
+    }
+    compacted.sort_by_key(|path| path.order);
+    compacted
+}
+
+fn compact_role_paths(mut paths: Vec<PreviewPath>, budget: usize, role: usize) -> Vec<PreviewPath> {
+    if budget == 0 || paths.is_empty() {
+        return Vec::new();
+    }
+    let total: usize = paths.iter().map(|path| path.segments.len()).sum();
+    if total <= budget {
+        return paths;
+    }
+
+    let minimum_for = |path: &PreviewPath| {
+        let preferred = if matches!(role, 0 | 3 | 5 | 6 | 9) {
+            3
+        } else {
+            2
+        };
+        path.segments.len().min(preferred)
+    };
+    let minimum_total: usize = paths.iter().map(minimum_for).sum();
+    let mut allocations = vec![0usize; paths.len()];
+    if minimum_total <= budget {
+        for (index, path) in paths.iter().enumerate() {
+            allocations[index] = minimum_for(path);
+        }
+        let remaining = budget - minimum_total;
+        let possible_extra: usize = paths
             .iter()
-            .enumerate()
-            .min_by_key(|(_, path)| path.segments.len())
-            .map(|(index, _)| index)
-    {
-        paths[smallest_index].segments =
-            simplify_continuous_path(std::mem::take(&mut paths[smallest_index].segments), limit);
-        selected[smallest_index] = true;
+            .zip(&allocations)
+            .map(|(path, allocation)| path.segments.len() - allocation)
+            .sum();
+        if possible_extra > 0 {
+            for (index, path) in paths.iter().enumerate() {
+                let extra = path.segments.len() - allocations[index];
+                allocations[index] += remaining.saturating_mul(extra) / possible_extra;
+            }
+            let mut leftover = budget.saturating_sub(allocations.iter().sum());
+            while leftover > 0 {
+                let mut progressed = false;
+                for (allocation, path) in allocations.iter_mut().zip(&paths) {
+                    if *allocation < path.segments.len() {
+                        *allocation += 1;
+                        leftover -= 1;
+                        progressed = true;
+                        if leftover == 0 {
+                            break;
+                        }
+                    }
+                }
+                if !progressed {
+                    break;
+                }
+            }
+        }
+    } else {
+        let average_minimum = minimum_total as f64 / paths.len() as f64;
+        let target_count =
+            ((budget as f64 / average_minimum).floor() as usize).clamp(1, paths.len());
+        let mut used = 0usize;
+        for selection in 0..target_count {
+            let index = if target_count == 1 {
+                paths.len() / 2
+            } else {
+                selection * (paths.len() - 1) / (target_count - 1)
+            };
+            let allocation = minimum_for(&paths[index]).min(budget - used);
+            allocations[index] = allocation;
+            used += allocation;
+        }
     }
 
     paths
-        .into_iter()
-        .enumerate()
-        .filter_map(|(index, path)| selected[index].then_some(path))
+        .drain(..)
+        .zip(allocations)
+        .filter_map(|(mut path, allocation)| {
+            if allocation == 0 {
+                None
+            } else {
+                path.segments = simplify_continuous_path(path.segments, allocation);
+                Some(path)
+            }
+        })
         .collect()
 }
 
@@ -642,6 +718,7 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
     let triangles = stl_io::create_stl_reader(&mut file)
         .map_err(|error| EngineError::Parse(error.to_string()))?;
     let mut triangle_count = 0usize;
+    let mut surface_triangle_count = 0usize;
     let mut min = [f32::INFINITY; 3];
     let mut max = [f32::NEG_INFINITY; 3];
     let mut preview_triangles = Vec::with_capacity(PREVIEW_TRIANGLE_LIMIT);
@@ -655,6 +732,12 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
         triangle_count = triangle_count
             .checked_add(1)
             .ok_or_else(|| EngineError::Parse("STL contains too many triangles".to_owned()))?;
+        if triangle_area_squared(vertices) <= f32::EPSILON {
+            continue;
+        }
+        surface_triangle_count = surface_triangle_count.checked_add(1).ok_or_else(|| {
+            EngineError::Parse("STL contains too many surface triangles".to_owned())
+        })?;
         for vertex in vertices {
             for axis in 0..3 {
                 min[axis] = min[axis].min(vertex[axis]);
@@ -667,11 +750,11 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
             preview_triangle_indices.push(ordinal);
         }
     }
-    if triangle_count == 0 {
+    if surface_triangle_count == 0 {
         return Err(EngineError::Empty);
     }
 
-    if triangle_count > PREVIEW_TRIANGLE_LIMIT {
+    if surface_triangle_count > PREVIEW_TRIANGLE_LIMIT {
         let clustered = clustered_stl_preview(path, min, max)?;
         preview_triangles = clustered.triangles;
         preview_triangle_indices = clustered.source_indices;
@@ -735,6 +818,9 @@ fn clustered_stl_preview_at_resolution(
         let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
         validate_triangle(&triangle)?;
         let vertices = triangle.vertices.map(|vertex| vertex.0);
+        if triangle_area_squared(vertices) <= f32::EPSILON {
+            continue;
+        }
         let triangle_cells = vertices.map(|vertex| preview_cell(vertex, min, max, resolution));
         for (cell, vertex) in triangle_cells.into_iter().zip(vertices) {
             let accumulator = cells.entry(cell).or_default();
@@ -1234,6 +1320,78 @@ fn parse_axis(line: &str, axis: char) -> Option<f32> {
         .filter(|value: &f32| value.is_finite())
 }
 
+fn positioned_axis(
+    command: &str,
+    axis: char,
+    current: f32,
+    origin: f32,
+    relative: bool,
+    unit_scale: f32,
+) -> f32 {
+    parse_axis(command, axis)
+        .map(|value| value * unit_scale)
+        .map(|value| {
+            if relative {
+                current + value
+            } else {
+                origin + value
+            }
+        })
+        .filter(|value| value.is_finite() && value.abs() <= MAX_GCODE_COORDINATE_ABS_MM)
+        .unwrap_or(current)
+}
+
+fn push_arc_preview(
+    preview_paths: &mut PreviewPathAccumulator,
+    layer: usize,
+    role: ToolpathRole,
+    start: [f32; 2],
+    end: [f32; 2],
+    center: [f32; 2],
+    clockwise: bool,
+    z: f32,
+) -> bool {
+    let radius = ((start[0] - center[0]).powi(2) + (start[1] - center[1]).powi(2)).sqrt();
+    if !radius.is_finite() || radius <= 0.000_001 {
+        return false;
+    }
+    let start_angle = (start[1] - center[1]).atan2(start[0] - center[0]);
+    let end_angle = (end[1] - center[1]).atan2(end[0] - center[0]);
+    let same_endpoint =
+        (end[0] - start[0]).abs() < 0.000_01 && (end[1] - start[1]).abs() < 0.000_01;
+    let full_turn = std::f32::consts::TAU;
+    let mut sweep = end_angle - start_angle;
+    if same_endpoint {
+        sweep = if clockwise { -full_turn } else { full_turn };
+    } else if clockwise {
+        if sweep >= 0.0 {
+            sweep -= full_turn;
+        }
+    } else if sweep <= 0.0 {
+        sweep += full_turn;
+    }
+    let segment_count = ((radius * sweep.abs() / 0.6).ceil() as usize).clamp(2, 256);
+    let mut previous = start;
+    for index in 1..=segment_count {
+        let next = if index == segment_count {
+            end
+        } else {
+            let angle = start_angle + sweep * index as f32 / segment_count as f32;
+            [
+                center[0] + radius * angle.cos(),
+                center[1] + radius * angle.sin(),
+            ]
+        };
+        preview_paths.push(
+            layer,
+            role,
+            [previous[0], previous[1], next[0], next[1], z, role.code()],
+        );
+        previous = next;
+    }
+    true
+}
+
 fn preview_gcode(
     path: &str,
     requested_start_layer: usize,
@@ -1249,8 +1407,12 @@ fn preview_gcode(
     let mut max_requested_z: Option<f32> = None;
     let mut x = 0.0f32;
     let mut y = 0.0f32;
+    let mut x_origin = 0.0f32;
+    let mut y_origin = 0.0f32;
     let mut e = 0.0f32;
+    let mut relative_positioning = false;
     let mut relative_extrusion = false;
+    let mut unit_scale = 1.0f32;
     let mut toolpath_role = ToolpathRole::Other;
     let mut preview_paths = PreviewPathAccumulator::default();
     let mut line_buffer = Vec::with_capacity(256);
@@ -1309,64 +1471,109 @@ fn preview_gcode(
         }
 
         let command = trimmed.split(';').next().unwrap_or("").trim();
-        if command == "M82" {
+        let opcode = command.split_ascii_whitespace().next().unwrap_or("");
+        if opcode == "G20" {
+            unit_scale = 25.4;
+            continue;
+        }
+        if opcode == "G21" {
+            unit_scale = 1.0;
+            continue;
+        }
+        if opcode == "G90" {
+            relative_positioning = false;
+            continue;
+        }
+        if opcode == "G91" {
+            relative_positioning = true;
+            continue;
+        }
+        if opcode == "M82" {
             relative_extrusion = false;
             continue;
         }
-        if command == "M83" {
+        if opcode == "M83" {
             relative_extrusion = true;
             continue;
         }
-        if command.starts_with("G92") {
+        if opcode == "G92" {
+            let has_x = parse_axis(command, 'X').is_some();
+            let has_y = parse_axis(command, 'Y').is_some();
+            let has_e = parse_axis(command, 'E').is_some();
+            if let Some(next_x) = parse_axis(command, 'X') {
+                x_origin = x - next_x * unit_scale;
+            }
+            if let Some(next_y) = parse_axis(command, 'Y') {
+                y_origin = y - next_y * unit_scale;
+            }
             if let Some(next_e) = parse_axis(command, 'E') {
-                e = next_e;
+                e = next_e * unit_scale;
+            }
+            if !has_x && !has_y && !has_e {
+                x_origin = x;
+                y_origin = y;
+                e = 0.0;
             }
             continue;
         }
-        if !(command.starts_with("G0 ") || command.starts_with("G1 ")) {
+        let linear_move = matches!(opcode, "G0" | "G00" | "G1" | "G01");
+        let clockwise_arc = matches!(opcode, "G2" | "G02");
+        let counter_clockwise_arc = matches!(opcode, "G3" | "G03");
+        if !linear_move && !clockwise_arc && !counter_clockwise_arc {
             continue;
         }
 
-        let next_x = parse_axis(command, 'X')
-            .filter(|value| value.abs() <= MAX_GCODE_COORDINATE_ABS_MM)
-            .unwrap_or(x);
-        let next_y = parse_axis(command, 'Y')
-            .filter(|value| value.abs() <= MAX_GCODE_COORDINATE_ABS_MM)
-            .unwrap_or(y);
-        let next_e = parse_axis(command, 'E');
-        let extruding = next_e.is_some_and(|value| {
-            if relative_extrusion {
-                value > 0.0
-            } else {
-                value > e
-            }
-        });
+        let next_x = positioned_axis(command, 'X', x, x_origin, relative_positioning, unit_scale);
+        let next_y = positioned_axis(command, 'Y', y, y_origin, relative_positioning, unit_scale);
+        let next_e = parse_axis(command, 'E').map(|value| value * unit_scale);
+        let relative_e = relative_positioning || relative_extrusion;
+        let extruding =
+            next_e.is_some_and(|value| if relative_e { value > 0.0 } else { value > e });
 
         let moved = next_x != x || next_y != y;
+        let arc_center_offsets = if clockwise_arc || counter_clockwise_arc {
+            let i = parse_axis(command, 'I');
+            let j = parse_axis(command, 'J');
+            (i.is_some() || j.is_some())
+                .then_some([i.unwrap_or(0.0) * unit_scale, j.unwrap_or(0.0) * unit_scale])
+        } else {
+            None
+        };
+        let motion = moved || arc_center_offsets.is_some();
         let requested_layer =
             current_layer.filter(|layer| (start_layer..=end_layer).contains(layer));
-        if extruding && moved {
+        if extruding && motion {
             if let Some(layer) = requested_layer {
-                preview_paths.push(
-                    layer,
-                    toolpath_role,
-                    [x, y, next_x, next_y, layer_z, toolpath_role.code()],
-                );
+                let emitted_arc = arc_center_offsets.is_some_and(|offset| {
+                    push_arc_preview(
+                        &mut preview_paths,
+                        layer,
+                        toolpath_role,
+                        [x, y],
+                        [next_x, next_y],
+                        [x + offset[0], y + offset[1]],
+                        clockwise_arc,
+                        layer_z,
+                    )
+                });
+                if !emitted_arc {
+                    preview_paths.push(
+                        layer,
+                        toolpath_role,
+                        [x, y, next_x, next_y, layer_z, toolpath_role.code()],
+                    );
+                }
             } else {
                 preview_paths.break_path();
             }
-        } else if moved {
+        } else if motion {
             preview_paths.break_path();
         }
 
         x = next_x;
         y = next_y;
         if let Some(next_e) = next_e {
-            let updated = if relative_extrusion {
-                e + next_e
-            } else {
-                next_e
-            };
+            let updated = if relative_e { e + next_e } else { next_e };
             if !updated.is_finite() {
                 return Err(EngineError::Parse(
                     "G-code extrusion position is out of range".to_owned(),
@@ -1616,7 +1823,7 @@ mod tests {
 
         assert_eq!(inspection.triangles, 8_001);
         assert!(!inspection.preview_triangles.is_empty());
-        assert!(inspection.preview_triangles.len() <= 3_500);
+        assert!(inspection.preview_triangles.len() <= PREVIEW_TRIANGLE_LIMIT);
         assert_eq!(
             inspection.preview_triangles.len(),
             inspection.preview_triangle_indices.len()
@@ -1638,8 +1845,8 @@ mod tests {
         ));
         let mut file = File::create(&path).expect("create dense STL fixture");
         writeln!(file, "solid grid").expect("write header");
-        for y in 0..72 {
-            for x in 0..72 {
+        for y in 0..80 {
+            for x in 0..80 {
                 let x0 = x as f32;
                 let x1 = x0 + 1.0;
                 let y0 = y as f32;
@@ -1651,13 +1858,22 @@ mod tests {
                 .expect("write grid triangles");
             }
         }
+        for line in 0..512 {
+            let z = 20.0 + line as f32 * 0.01;
+            writeln!(
+                file,
+                "facet normal 0 0 0\nouter loop\nvertex -100 -100 {z}\nvertex 0 0 {z}\nvertex 100 100 {z}\nendloop\nendfacet",
+            )
+            .expect("write degenerate line facet");
+        }
         writeln!(file, "endsolid grid").expect("write footer");
         drop(file);
 
         let inspection = inspect_stl(path.to_str().expect("utf8 path")).expect("inspect STL");
         std::fs::remove_file(path).expect("remove fixture");
 
-        assert_eq!(inspection.triangles, 72 * 72 * 2);
+        assert_eq!(inspection.triangles, 80 * 80 * 2 + 512);
+        assert_eq!(inspection.dimensions_mm, [80.0, 80.0, 0.0]);
         assert!(!inspection.preview_triangles.is_empty());
         assert!(inspection.preview_triangles.len() <= PREVIEW_TRIANGLE_LIMIT);
         let vertex = |values: &[f32; 9], offset: usize| {
@@ -1693,8 +1909,17 @@ mod tests {
             .preview_triangles
             .iter()
             .flat_map(|triangle| [triangle[1], triangle[4], triangle[7]]);
-        assert!(preview_x.clone().fold(f32::NEG_INFINITY, f32::max) > 70.0);
-        assert!(preview_y.clone().fold(f32::NEG_INFINITY, f32::max) > 70.0);
+        assert!(preview_x.clone().fold(f32::NEG_INFINITY, f32::max) > 78.0);
+        assert!(preview_y.clone().fold(f32::NEG_INFINITY, f32::max) > 78.0);
+        assert!(preview_x.fold(f32::INFINITY, f32::min) >= 0.0);
+        assert!(preview_y.fold(f32::INFINITY, f32::min) >= 0.0);
+        assert!(
+            inspection
+                .preview_triangles
+                .iter()
+                .flat_map(|triangle| [triangle[2], triangle[5], triangle[8]])
+                .all(|z| z == 0.0)
+        );
     }
 
     #[test]
@@ -1830,6 +2055,63 @@ mod tests {
     }
 
     #[test]
+    fn gcode_preview_follows_standard_xyz_modes_and_g92_origins() {
+        let path = std::env::temp_dir().join(format!(
+            "duckyslicer-positioning-preview-{}.gcode",
+            std::process::id(),
+        ));
+        let mut file = File::create(&path).expect("create positioning fixture");
+        writeln!(
+            file,
+            "G90\nM83\n;LAYER_CHANGE\n;Z:0.2\n;TYPE:Outer wall\nG1 X100 Y100\nG91\nG1 X10 Y0 E1\nG90\nG92 X0 Y0\nG1 X20 Y10 E1",
+        )
+        .expect("write positioning fixture");
+        drop(file);
+
+        let preview = preview_gcode(path.to_str().expect("utf8 path"), 0, 0)
+            .expect("parse positioning modes");
+        std::fs::remove_file(path).expect("remove fixture");
+
+        assert_eq!(
+            preview.segments,
+            vec![
+                [100.0, 100.0, 110.0, 100.0, 0.2, 0.0],
+                [110.0, 100.0, 130.0, 110.0, 0.2, 0.0],
+            ],
+        );
+    }
+
+    #[test]
+    fn gcode_preview_tessellates_arcs_and_keeps_the_following_path_connected() {
+        let path = std::env::temp_dir().join(format!(
+            "duckyslicer-arc-preview-{}.gcode",
+            std::process::id(),
+        ));
+        let mut file = File::create(&path).expect("create arc fixture");
+        writeln!(
+            file,
+            "G90\nM83\n;LAYER_CHANGE\n;Z:0.2\n;TYPE:Outer wall\nG1 X0 Y0\nG3 X10 Y0 I5 E1\nG1 X20 Y0 E1",
+        )
+        .expect("write arc fixture");
+        drop(file);
+
+        let preview =
+            preview_gcode(path.to_str().expect("utf8 path"), 0, 0).expect("parse arc fixture");
+        std::fs::remove_file(path).expect("remove fixture");
+
+        assert!(
+            preview.segments.len() > 2,
+            "the arc must not collapse to one chord"
+        );
+        assert_eq!(preview.segments.first().expect("first arc")[0], 0.0);
+        assert_eq!(preview.segments.last().expect("following line")[0], 10.0);
+        assert_eq!(preview.segments.last().expect("following line")[2], 20.0);
+        assert!(preview.segments.windows(2).all(|pair| {
+            (pair[0][2] - pair[1][0]).abs() < 0.000_1 && (pair[0][3] - pair[1][1]).abs() < 0.000_1
+        }));
+    }
+
+    #[test]
     fn oversized_gcode_preview_simplifies_a_path_without_turning_it_into_particles() {
         let path = std::env::temp_dir().join(format!(
             "duckyslicer-continuous-preview-{}.gcode",
@@ -1865,7 +2147,7 @@ mod tests {
     }
 
     #[test]
-    fn path_compaction_drops_complete_paths_instead_of_alternating_segments() {
+    fn path_compaction_prioritizes_connected_outer_contours_over_sparse_infill() {
         let paths = (0..8)
             .map(|path_index| PreviewPath {
                 order: path_index,
@@ -1900,14 +2182,66 @@ mod tests {
                 .sum::<usize>()
                 <= 12
         );
-        assert!(compacted.iter().all(|path| path.segments.len() == 4));
+        assert!(
+            compacted
+                .iter()
+                .all(|path| path.role == ToolpathRole::OuterWall)
+        );
+        assert!(compacted.iter().all(|path| path.segments.len() == 3));
         assert!(compacted.iter().all(|path| {
             path.segments
                 .windows(2)
                 .all(|pair| pair[0][2] == pair[1][0] && pair[0][3] == pair[1][1])
         }));
         assert!(compacted.iter().any(|path| path.layer == 0));
-        assert!(compacted.iter().any(|path| path.layer == 7));
+        assert!(compacted.iter().any(|path| path.layer == 6));
+    }
+
+    #[test]
+    fn dense_outer_wall_compaction_keeps_every_layer_visible() {
+        let paths = (0..30)
+            .flat_map(|layer| {
+                [ToolpathRole::OuterWall, ToolpathRole::Infill].map(|role| PreviewPath {
+                    order: layer * 2 + role as usize,
+                    layer,
+                    role,
+                    segments: (0..20)
+                        .map(|segment| {
+                            let x = segment as f32;
+                            [
+                                x,
+                                layer as f32,
+                                x + 1.0,
+                                layer as f32,
+                                layer as f32,
+                                role.code(),
+                            ]
+                        })
+                        .collect(),
+                })
+            })
+            .collect();
+
+        let compacted = compact_preview_paths(paths, 120);
+        let outer_layers: HashSet<_> = compacted
+            .iter()
+            .filter(|path| path.role == ToolpathRole::OuterWall)
+            .map(|path| path.layer)
+            .collect();
+
+        assert_eq!(outer_layers, (0..30).collect());
+        assert!(
+            compacted
+                .iter()
+                .map(|path| path.segments.len())
+                .sum::<usize>()
+                <= 120
+        );
+        assert!(compacted.iter().all(|path| {
+            path.segments
+                .windows(2)
+                .all(|pair| pair[0][2] == pair[1][0] && pair[0][3] == pair[1][1])
+        }));
     }
 
     #[test]
