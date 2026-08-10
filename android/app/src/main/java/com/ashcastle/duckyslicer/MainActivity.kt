@@ -53,6 +53,7 @@ private val DuckyColors = darkColorScheme(
 internal const val GCODE_DOCUMENT_MIME_TYPE = "application/octet-stream"
 private const val SLICE_NOTIFICATION_PREFERENCES = "slice_notifications"
 private const val SLICE_NOTIFICATION_PERMISSION_ASKED = "permission_asked"
+private const val DEFAULT_PROJECT_ARCHIVE_NAME = "DuckySlicer-project$PROJECT_ARCHIVE_FILE_EXTENSION"
 
 data class ModelInfo(
     val fileName: String,
@@ -132,6 +133,10 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
     val profileSavedNotice = stringResource(R.string.profile_saved)
     val profileSaveError = stringResource(R.string.profile_save_error)
     val projectSaveError = stringResource(R.string.project_save_error)
+    val projectOpenedNotice = stringResource(R.string.project_opened)
+    val projectSavedNotice = stringResource(R.string.project_saved)
+    val projectOpenError = stringResource(R.string.project_open_error)
+    val projectExportError = stringResource(R.string.project_export_error)
     val savedDataUnavailable = stringResource(R.string.saved_data_unavailable)
     val previewError = stringResource(R.string.preview_error)
     val remoteSavedNotice = stringResource(R.string.device_saved)
@@ -153,6 +158,7 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var importing by remember { mutableStateOf(false) }
+    var projectTransferBusy by remember { mutableStateOf(false) }
     var autoLaying by remember { mutableStateOf(false) }
     var arranging by remember { mutableStateOf(false) }
     var sliceOutcome by rememberSaveable { mutableStateOf<SliceOutcome?>(null) }
@@ -260,8 +266,8 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
             SliceTerminalStatus.NONE -> Unit
         }
     }
-    LaunchedEffect(projectHistory.current, sliceOptions, projectRestored) {
-        if (!projectRestored || projectPersistenceBlocked) return@LaunchedEffect
+    LaunchedEffect(projectHistory.current, sliceOptions, projectRestored, projectTransferBusy) {
+        if (!projectRestored || projectPersistenceBlocked || projectTransferBusy) return@LaunchedEffect
         delay(400)
         runCatching {
             withContext(Dispatchers.IO) {
@@ -305,7 +311,8 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
     }
 
     val keepScreenAwake = appSettings.keepScreenAwakeWhileWorking &&
-        (importing || autoLaying || arranging || slicing || previewLoading || remoteBusy)
+        (importing || projectTransferBusy || autoLaying || arranging || slicing ||
+            previewLoading || remoteBusy)
     DisposableEffect(keepScreenAwake) {
         val window = (context as? MainActivity)?.window
         if (keepScreenAwake) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -490,6 +497,75 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
         }
     }
 
+    val projectOpenPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (
+            uri != null && projectRestored && !projectTransferBusy && !importing &&
+            !autoLaying && !arranging && !slicing && !previewLoading
+        ) {
+            projectTransferBusy = true
+            error = null
+            notice = null
+            scope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(uri).use { input ->
+                            projectStore.importArchive(requireNotNull(input) { "input_unavailable" })
+                        }
+                    }
+                }.onSuccess { document ->
+                    projectHistory = ProjectHistoryState(current = document.snapshot)
+                    document.sliceOptions?.let { sliceOptions = it }
+                    projectPersistenceBlocked = false
+                    clearCompletedSlice()
+                    remoteUpload = null
+                    notice = projectOpenedNotice
+                    error = null
+                }.onFailure {
+                    supportEvents.record(SupportEvent.PROJECT_ARCHIVE_IMPORT_FAILED)
+                    error = projectOpenError
+                    notice = null
+                }
+                projectTransferBusy = false
+            }
+        }
+    }
+
+    val projectSavePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(PROJECT_ARCHIVE_MIME_TYPE),
+    ) { uri ->
+        if (
+            uri != null && projectRestored && !projectTransferBusy && !importing &&
+            !autoLaying && !arranging && !slicing && !previewLoading
+        ) {
+            projectTransferBusy = true
+            error = null
+            notice = null
+            scope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openOutputStream(uri).use { output ->
+                            projectStore.exportArchive(
+                                projectHistory.current,
+                                sliceOptions,
+                                requireNotNull(output) { "output_unavailable" },
+                            )
+                        }
+                    }
+                }.onSuccess {
+                    notice = projectSavedNotice
+                    error = null
+                }.onFailure {
+                    supportEvents.record(SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED)
+                    error = projectExportError
+                    notice = null
+                }
+                projectTransferBusy = false
+            }
+        }
+    }
+
     val loadPreviewRange: (Int, Int) -> Unit = { startLayer, endLayer ->
         val completed = sliceOutcome
         if (completed != null && !slicing && !autoLaying && !arranging) {
@@ -511,7 +587,8 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
         val objects = projectObjects
         if (
             objects.isNotEmpty() &&
-            !slicing && !importing && !autoLaying && !arranging && !previewLoading &&
+            !slicing && !importing && !projectTransferBusy && !autoLaying && !arranging &&
+            !previewLoading &&
             sliceOperationModel.start(objects, sliceOptions)
         ) {
             sliceOutcome = null
@@ -638,7 +715,7 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
         remoteMessageIsError = remoteMessageIsError,
         sliceOutcome = sliceOutcome,
         layerPreview = layerPreview,
-        importing = importing || !projectRestored,
+        importing = importing || projectTransferBusy || !projectRestored,
         autoLaying = autoLaying,
         arranging = arranging,
         slicing = slicing,
@@ -654,6 +731,12 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
             }
         },
         onChoose = { filePicker.launch(arrayOf("model/stl", "application/sla", "*/*")) },
+        onOpenProject = {
+            projectOpenPicker.launch(
+                arrayOf(PROJECT_ARCHIVE_MIME_TYPE, "application/zip"),
+            )
+        },
+        onSaveProject = { projectSavePicker.launch(DEFAULT_PROJECT_ARCHIVE_NAME) },
         canUndo = projectHistory.canUndo,
         canRedo = projectHistory.canRedo,
         onObjectSelected = { objectId -> projectHistory = projectHistory.select(objectId) },
