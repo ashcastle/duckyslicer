@@ -34,13 +34,16 @@ def valid_sources() -> dict[str, str]:
             "viewModelScope.launch beginRemoteOperation finishRemoteOperation "
             "activeArtifactRevision invalidateRemoteUpload withRemoteUploadProgress "
             "RemoteStatusSnapshot SupportEvent.REMOTE_COMMAND_FAILED "
+            "fun saveProfile( fun deleteProfile( profilesLoaded selectedProfileId "
+            "remoteDeviceStore.load() remoteDeviceStore.save(draft) "
+            "remoteDeviceStore.delete(profileId) "
             + "remoteResultBelongsToSelection " * 4
         ),
         "MainActivity.kt": (
             "projectPersistenceBlocked saved_data_unavailable "
             "ViewModelProvider(this)[RemoteOperationViewModel::class.java] "
             "remoteOperationModel.state.collectAsStateWithLifecycle() "
-            "selectedRemoteDeviceId by rememberSaveable "
+            "selectedRemoteDeviceId = remoteOperationState.selectedProfileId "
             "remoteOperationModel.invalidateUpload()"
         ),
         "DeviceSheet.kt": ".selectable( selected = true enabled = !busy ),",
@@ -60,7 +63,9 @@ def valid_sources() -> dict[str, str]:
             "resultsAreVisibleOnlyForTheirOriginatingProfile "
             "staleCompletionCannotFinishANewerOperation "
             "invalidatedUploadCannotBecomePrintable "
-            "commandCompletionRetainsFileAndUpdatesState"
+            "commandCompletionRetainsFileAndUpdatesState "
+            "profileSaveSelectsTheDurableResultAndClearsOldPrinterState "
+            "deletingTheSelectedProfileChoosesTheFirstRemainingProfile"
         ),
         "RemoteDeviceStoreTest.kt": (
             "credentialsUseGenerationsAndDoNotFollowAChangedEndpoint "
@@ -72,6 +77,7 @@ def valid_sources() -> dict[str, str]:
         ),
         "RemoteDeviceInstrumentedTest.kt": (
             "remoteRefreshSurvivesActivityRecreationAndRejectsDuplicateWork "
+            "remoteProfileSaveAndSelectionSurviveActivityRecreation "
             "remoteDeviceMetadataRecoversFromLastKnownGoodBackup "
             "cleartextHostnameRequestUsesOneValidatedPinnedAddress"
         ),
@@ -80,7 +86,8 @@ def valid_sources() -> dict[str, str]:
             "bind a replacement printer credential generation "
             "Bind every remote status, upload-progress, and command result "
             "Remote operations and their busy state must "
-            "must never become eligible for Start Print"
+            "must never become eligible for Start Print "
+            "must share that same retained"
         ),
         "SECURITY.md": (
             "every current DNS answer DNS rebinding bypass system proxies "
@@ -123,6 +130,12 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
         sources = valid_sources()
         sources["MainActivity.kt"] += " RemoteDeviceClient(15000)"
         with self.assertRaisesRegex(VerificationError, "Activity composition"):
+            verify_resilience(sources)
+
+    def test_rejects_activity_owned_remote_profile_storage(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] += " RemoteDeviceStore(context) remoteProfileBusy"
+        with self.assertRaisesRegex(VerificationError, "profile persistence"):
             verify_resilience(sources)
 
     def test_rejects_remote_operations_without_artifact_revision(self) -> None:

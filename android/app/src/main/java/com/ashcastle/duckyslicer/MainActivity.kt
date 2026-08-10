@@ -231,36 +231,30 @@ private fun DuckySlicerScreen(
         SupportEventJournal(context.applicationContext)
     }
     var appSettings by remember { mutableStateOf(appSettingsStore.load()) }
-    val remoteDeviceStore = remember(context.applicationContext) {
-        RemoteDeviceStore(context.applicationContext)
-    }
-    var remoteDevices by remember { mutableStateOf<List<RemoteDeviceProfile>>(emptyList()) }
-    var selectedRemoteDeviceId by rememberSaveable { mutableStateOf<String?>(null) }
-    var remoteProfileBusy by remember { mutableStateOf(false) }
-    var remoteProfileMessage by remember { mutableStateOf<String?>(null) }
-    var remoteProfileMessageIsError by remember { mutableStateOf(false) }
+    val remoteDevices = remoteOperationState.profiles
+    val selectedRemoteDeviceId = remoteOperationState.selectedProfileId
     val remoteStatus = remoteOperationState.statusFor(selectedRemoteDeviceId)
     val remoteUpload = remoteOperationState.uploadFor(selectedRemoteDeviceId)
     val remoteUploadProgress = remoteOperationState.progressFor(selectedRemoteDeviceId)
     val remoteOperationMessage = remoteOperationState.messageFor(selectedRemoteDeviceId)
-    val remoteMessage = remoteProfileMessage ?: when (remoteOperationMessage) {
+    val remoteMessage = when (remoteOperationMessage) {
         RemoteOperationMessage.CONNECTED -> remoteConnectedNotice
         RemoteOperationMessage.UPLOADED -> remoteUploadNotice
         RemoteOperationMessage.STARTED -> remoteStartedNotice
         RemoteOperationMessage.PAUSED -> remotePausedNotice
         RemoteOperationMessage.RESUMED -> remoteResumedNotice
         RemoteOperationMessage.CANCELED -> remoteCanceledNotice
+        RemoteOperationMessage.PROFILE_SAVED -> remoteSavedNotice
+        RemoteOperationMessage.PROFILE_DELETED -> remoteDeletedNotice
         RemoteOperationMessage.ACCESS_DENIED -> remoteUnauthorizedError
         RemoteOperationMessage.CONNECTION_FAILED -> remoteConnectionError
         RemoteOperationMessage.COMMAND_FAILED -> remoteCommandError
+        RemoteOperationMessage.PROFILE_SAVE_FAILED -> remoteSaveError
+        RemoteOperationMessage.STORAGE_UNAVAILABLE -> savedDataUnavailable
         null -> null
     }
-    val remoteMessageIsError = if (remoteProfileMessage != null) {
-        remoteProfileMessageIsError
-    } else {
-        remoteOperationMessage?.isError ?: false
-    }
-    val remoteBusy = remoteProfileBusy || remoteOperationState.busy
+    val remoteMessageIsError = remoteOperationMessage?.isError ?: false
+    val remoteBusy = remoteOperationState.busy
 
     fun clearCompletedSlice() {
         sliceOperationModel.clearCompleted()
@@ -409,15 +403,10 @@ private fun DuckySlicerScreen(
             notice = null
         }
     }
-    LaunchedEffect(remoteDeviceStore) {
-        remoteDevices = withContext(Dispatchers.IO) { remoteDeviceStore.load() }
-        if (remoteDeviceStore.storageUnavailable) {
-            supportEvents.record(SupportEvent.REMOTE_STORAGE_UNAVAILABLE)
+    LaunchedEffect(remoteOperationState.profilesLoaded, remoteOperationState.storageUnavailable) {
+        if (remoteOperationState.profilesLoaded && remoteOperationState.storageUnavailable) {
             error = savedDataUnavailable
         }
-        selectedRemoteDeviceId = selectedRemoteDeviceId
-            ?.takeIf { selected -> remoteDevices.any { it.id == selected } }
-            ?: remoteDevices.firstOrNull()?.id
     }
     LaunchedEffect(appSettings) {
         delay(350)
@@ -923,8 +912,7 @@ private fun DuckySlicerScreen(
         }
     }
 
-    fun selectedRemoteDevice(): RemoteDeviceProfile? =
-        remoteDevices.firstOrNull { it.id == selectedRemoteDeviceId }
+    fun selectedRemoteDevice(): RemoteDeviceProfile? = remoteOperationState.selectedProfile()
 
     WorkspaceScreen(
         selectedTab = selectedTab,
@@ -1179,66 +1167,17 @@ private fun DuckySlicerScreen(
             appSettings = next
         },
         onRemoteDeviceSelected = { id ->
-            selectedRemoteDeviceId = id
             remoteOperationModel.selectionChanged(id)
-            remoteProfileMessage = null
-            remoteProfileMessageIsError = false
         },
         onRemoteDeviceSaved = { draft ->
-            if (!remoteBusy) {
-                remoteProfileBusy = true
-                remoteProfileMessage = null
-                scope.launch {
-                    runCatching {
-                        withContext(Dispatchers.IO) {
-                            val saved = remoteDeviceStore.save(draft)
-                            saved to remoteDeviceStore.load()
-                        }
-                    }.onSuccess { (saved, profiles) ->
-                        remoteDevices = profiles
-                        selectedRemoteDeviceId = saved.id
-                        remoteOperationModel.forgetProfile(saved.id)
-                        remoteProfileMessage = remoteSavedNotice
-                        remoteProfileMessageIsError = false
-                    }.onFailure {
-                        supportEvents.record(SupportEvent.REMOTE_PROFILE_SAVE_FAILED)
-                        remoteProfileMessage = remoteSaveError
-                        remoteProfileMessageIsError = true
-                    }
-                    remoteProfileBusy = false
-                }
-            }
+            remoteOperationModel.saveProfile(draft)
         },
         onRemoteDeviceDeleted = { id ->
-            if (!remoteBusy) {
-                remoteProfileBusy = true
-                scope.launch {
-                    runCatching {
-                        withContext(Dispatchers.IO) {
-                            remoteDeviceStore.delete(id)
-                            remoteDeviceStore.load()
-                        }
-                    }.onSuccess { profiles ->
-                        remoteDevices = profiles
-                        remoteOperationModel.forgetProfile(id)
-                        if (selectedRemoteDeviceId == id) {
-                            selectedRemoteDeviceId = profiles.firstOrNull()?.id
-                        }
-                        remoteProfileMessage = remoteDeletedNotice
-                        remoteProfileMessageIsError = false
-                    }.onFailure {
-                        supportEvents.record(SupportEvent.REMOTE_PROFILE_SAVE_FAILED)
-                        remoteProfileMessage = remoteSaveError
-                        remoteProfileMessageIsError = true
-                    }
-                    remoteProfileBusy = false
-                }
-            }
+            remoteOperationModel.deleteProfile(id)
         },
         onRemoteRefresh = {
             val profile = selectedRemoteDevice()
             if (profile != null && !remoteBusy) {
-                remoteProfileMessage = null
                 remoteOperationModel.refresh(profile, appSettings.connectionTimeoutSeconds)
             }
         },
@@ -1246,7 +1185,6 @@ private fun DuckySlicerScreen(
             val profile = selectedRemoteDevice()
             val output = sliceOutcome?.output
             if (profile != null && output != null && !remoteBusy) {
-                remoteProfileMessage = null
                 remoteOperationModel.upload(
                     profile,
                     output,
@@ -1258,25 +1196,21 @@ private fun DuckySlicerScreen(
             val profile = selectedRemoteDevice()
             val upload = remoteUpload
             if (profile != null && upload != null && !remoteBusy) {
-                remoteProfileMessage = null
                 remoteOperationModel.start(profile, upload, appSettings.connectionTimeoutSeconds)
             }
         },
         onRemotePause = {
             selectedRemoteDevice()?.let { profile ->
-                remoteProfileMessage = null
                 remoteOperationModel.pause(profile, appSettings.connectionTimeoutSeconds)
             }
         },
         onRemoteResume = {
             selectedRemoteDevice()?.let { profile ->
-                remoteProfileMessage = null
                 remoteOperationModel.resume(profile, appSettings.connectionTimeoutSeconds)
             }
         },
         onRemoteCancel = {
             selectedRemoteDevice()?.let { profile ->
-                remoteProfileMessage = null
                 remoteOperationModel.cancel(profile, appSettings.connectionTimeoutSeconds)
             }
         },

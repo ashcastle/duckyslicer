@@ -29,7 +29,9 @@ avoid introducing an account or cloud requirement.
   pause, resume, or cancel controls for the wrong device; keep profile changes disabled
   while a remote operation is active. Remote operations and their busy state must
   survive Activity recreation, and an upload completed after the project or slicing
-  inputs change must never become eligible for Start Print.
+  inputs change must never become eligible for Start Print. Device-profile loading,
+  selection, saving, deletion, and credential metadata must share that same retained
+  owner so a recreated Activity cannot race or replace a newer durable profile list.
 - Keep Orca work off every Android main thread. New long-running operations must
   retain request-scoped cancellation, terminate only the isolated worker, and prove
   a clean follow-up operation on ARM64.

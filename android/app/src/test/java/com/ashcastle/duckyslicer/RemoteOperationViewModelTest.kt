@@ -81,4 +81,69 @@ class RemoteOperationViewModelTest {
         assertEquals("duck.gcode", completed.statusFor("printer-a")?.fileName)
         assertEquals(RemoteOperationMessage.STARTED, completed.messageFor("printer-a"))
     }
+
+    @Test
+    fun profileSaveSelectsTheDurableResultAndClearsOldPrinterState() {
+        val old = RemoteDeviceProfile(
+            "printer-a",
+            "Printer A",
+            RemoteDeviceKind.OCTOPRINT,
+            "http://127.0.0.1:5000",
+        )
+        val saved = RemoteDeviceProfile(
+            "printer-b",
+            "Printer B",
+            RemoteDeviceKind.KLIPPER,
+            "http://127.0.0.1:7125",
+        )
+        val completed = RemoteOperationState(
+            profiles = listOf(old),
+            profilesLoaded = true,
+            selectedProfileId = old.id,
+            status = RemoteStatusSnapshot(old.id, RemoteDeviceStatus("idle")),
+            upload = RemoteUpload(old.id, "old.gcode", "old.gcode"),
+        ).beginRemoteOperation(5, saved.id).finishRemoteOperation(
+            5,
+            saved.id,
+            RemoteOperationOutcome.ProfileSaved(saved, listOf(old, saved)),
+        )
+
+        assertEquals(saved, completed.selectedProfile())
+        assertNull(completed.status)
+        assertNull(completed.upload)
+        assertEquals(RemoteOperationMessage.PROFILE_SAVED, completed.messageFor(old.id))
+        assertFalse(completed.busy)
+    }
+
+    @Test
+    fun deletingTheSelectedProfileChoosesTheFirstRemainingProfile() {
+        val first = RemoteDeviceProfile(
+            "printer-a",
+            "Printer A",
+            RemoteDeviceKind.OCTOPRINT,
+            "http://127.0.0.1:5000",
+        )
+        val second = RemoteDeviceProfile(
+            "printer-b",
+            "Printer B",
+            RemoteDeviceKind.KLIPPER,
+            "http://127.0.0.1:7125",
+        )
+        val completed = RemoteOperationState(
+            profiles = listOf(first, second),
+            profilesLoaded = true,
+            selectedProfileId = second.id,
+            status = RemoteStatusSnapshot(second.id, RemoteDeviceStatus("printing")),
+            upload = RemoteUpload(second.id, "old.gcode", "old.gcode"),
+        ).beginRemoteOperation(6, second.id).finishRemoteOperation(
+            6,
+            second.id,
+            RemoteOperationOutcome.ProfileDeleted(second.id, listOf(first)),
+        )
+
+        assertEquals(first, completed.selectedProfile())
+        assertNull(completed.status)
+        assertNull(completed.upload)
+        assertEquals(RemoteOperationMessage.PROFILE_DELETED, completed.messageFor(first.id))
+    }
 }

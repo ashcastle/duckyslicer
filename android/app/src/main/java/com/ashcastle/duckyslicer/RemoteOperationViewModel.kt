@@ -20,9 +20,13 @@ internal enum class RemoteOperationMessage(val isError: Boolean = false) {
     PAUSED,
     RESUMED,
     CANCELED,
+    PROFILE_SAVED,
+    PROFILE_DELETED,
     ACCESS_DENIED(isError = true),
     CONNECTION_FAILED(isError = true),
     COMMAND_FAILED(isError = true),
+    PROFILE_SAVE_FAILED(isError = true),
+    STORAGE_UNAVAILABLE(isError = true),
 }
 
 internal data class RemoteStatusSnapshot(
@@ -36,6 +40,10 @@ internal data class RemoteOperationState(
     val activeProfileId: String? = null,
     val artifactRevision: Long = 0,
     val activeArtifactRevision: Long? = null,
+    val profiles: List<RemoteDeviceProfile> = emptyList(),
+    val profilesLoaded: Boolean = false,
+    val storageUnavailable: Boolean = false,
+    val selectedProfileId: String? = null,
     val status: RemoteStatusSnapshot? = null,
     val upload: RemoteUpload? = null,
     val uploadProgress: Int? = null,
@@ -54,7 +62,12 @@ internal data class RemoteOperationState(
     }
 
     fun messageFor(profileId: String?): RemoteOperationMessage? = message.takeIf {
-        remoteResultBelongsToSelection(messageProfileId.orEmpty(), profileId)
+        messageProfileId == null ||
+            remoteResultBelongsToSelection(messageProfileId.orEmpty(), profileId)
+    }
+
+    fun selectedProfile(): RemoteDeviceProfile? = profiles.firstOrNull {
+        it.id == selectedProfileId
     }
 }
 
@@ -64,6 +77,16 @@ internal sealed interface RemoteOperationOutcome {
     data class Commanded(
         val state: String,
         val message: RemoteOperationMessage,
+    ) : RemoteOperationOutcome
+
+    data class ProfileSaved(
+        val saved: RemoteDeviceProfile,
+        val profiles: List<RemoteDeviceProfile>,
+    ) : RemoteOperationOutcome
+
+    data class ProfileDeleted(
+        val deletedProfileId: String,
+        val profiles: List<RemoteDeviceProfile>,
     ) : RemoteOperationOutcome
 
     data class Failed(
@@ -142,6 +165,32 @@ internal fun RemoteOperationState.finishRemoteOperation(
                 message = outcome.message,
             )
         }
+        is RemoteOperationOutcome.ProfileSaved -> settled.copy(
+            profiles = outcome.profiles,
+            profilesLoaded = true,
+            storageUnavailable = false,
+            selectedProfileId = outcome.saved.id,
+            status = null,
+            upload = null,
+            messageProfileId = null,
+            message = RemoteOperationMessage.PROFILE_SAVED,
+        )
+        is RemoteOperationOutcome.ProfileDeleted -> {
+            val nextSelected = selectedProfileId
+                ?.takeUnless { it == outcome.deletedProfileId }
+                ?.takeIf { selected -> outcome.profiles.any { it.id == selected } }
+                ?: outcome.profiles.firstOrNull()?.id
+            settled.copy(
+                profiles = outcome.profiles,
+                profilesLoaded = true,
+                storageUnavailable = false,
+                selectedProfileId = nextSelected,
+                status = status?.takeUnless { it.profileId == outcome.deletedProfileId },
+                upload = upload?.takeUnless { it.profileId == outcome.deletedProfileId },
+                messageProfileId = null,
+                message = RemoteOperationMessage.PROFILE_DELETED,
+            )
+        }
         is RemoteOperationOutcome.Failed -> settled.copy(
             status = status?.takeUnless { outcome.clearStatus && it.profileId == profileId },
             message = outcome.message,
@@ -158,8 +207,9 @@ internal fun RemoteOperationState.invalidateRemoteUpload(): RemoteOperationState
 )
 
 internal fun RemoteOperationState.changeRemoteSelection(profileId: String): RemoteOperationState {
-    if (busy) return this
+    if (busy || profiles.none { it.id == profileId }) return this
     return copy(
+        selectedProfileId = profileId,
         status = null,
         upload = upload?.takeIf { it.profileId == profileId },
         uploadProgress = null,
@@ -168,19 +218,33 @@ internal fun RemoteOperationState.changeRemoteSelection(profileId: String): Remo
     )
 }
 
-internal fun RemoteOperationState.forgetRemoteProfile(profileId: String): RemoteOperationState = copy(
-    status = status?.takeUnless { it.profileId == profileId },
-    upload = upload?.takeUnless { it.profileId == profileId },
-    messageProfileId = messageProfileId?.takeUnless { it == profileId },
-    message = message.takeUnless { messageProfileId == profileId },
-)
-
 internal class RemoteOperationViewModel(application: Application) : AndroidViewModel(application) {
     private val remoteDeviceStore = RemoteDeviceStore(application)
     private val supportEvents = SupportEventJournal(application)
-    private val mutableState = MutableStateFlow(RemoteOperationState())
+    private val mutableState = MutableStateFlow(
+        RemoteOperationState().beginRemoteOperation(
+            nextOperationId = 1,
+            profileId = PROFILE_STORAGE_OPERATION,
+        ),
+    )
     val state: StateFlow<RemoteOperationState> = mutableState.asStateFlow()
-    private var nextOperationId = 0L
+    private var nextOperationId = 1L
+
+    init {
+        loadProfiles(operationId = 1L)
+    }
+
+    fun saveProfile(draft: RemoteDeviceDraft): Boolean = launchProfileOperation(
+        profileId = draft.id ?: NEW_PROFILE_OPERATION,
+    ) {
+        val saved = remoteDeviceStore.save(draft)
+        RemoteOperationOutcome.ProfileSaved(saved, remoteDeviceStore.load())
+    }
+
+    fun deleteProfile(profileId: String): Boolean = launchProfileOperation(profileId) {
+        remoteDeviceStore.delete(profileId)
+        RemoteOperationOutcome.ProfileDeleted(profileId, remoteDeviceStore.load())
+    }
 
     fun refresh(profile: RemoteDeviceProfile, timeoutSeconds: Int): Boolean = launchOperation(
         profile = profile,
@@ -247,10 +311,6 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
         mutableState.update { it.changeRemoteSelection(profileId) }
     }
 
-    fun forgetProfile(profileId: String) {
-        mutableState.update { it.forgetRemoteProfile(profileId) }
-    }
-
     private fun command(
         profile: RemoteDeviceProfile,
         timeoutSeconds: Int,
@@ -264,6 +324,77 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
     ) { client, credential, _ ->
         operation(client, credential)
         RemoteOperationOutcome.Commanded(resultingState, message)
+    }
+
+    private fun loadProfiles(operationId: Long) {
+        viewModelScope.launch {
+            val (loaded, unavailable) = try {
+                withContext(Dispatchers.IO) {
+                    remoteDeviceStore.load() to remoteDeviceStore.storageUnavailable
+                }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                emptyList<RemoteDeviceProfile>() to true
+            }
+            if (unavailable) supportEvents.record(SupportEvent.REMOTE_STORAGE_UNAVAILABLE)
+            mutableState.update { current ->
+                if (
+                    !current.busy || current.operationId != operationId ||
+                    current.activeProfileId != PROFILE_STORAGE_OPERATION
+                ) {
+                    current
+                } else {
+                    current.copy(
+                        busy = false,
+                        activeProfileId = null,
+                        profiles = loaded,
+                        profilesLoaded = true,
+                        storageUnavailable = unavailable,
+                        selectedProfileId = current.selectedProfileId
+                            ?.takeIf { selected -> loaded.any { it.id == selected } }
+                            ?: loaded.firstOrNull()?.id,
+                        messageProfileId = null,
+                        message = RemoteOperationMessage.STORAGE_UNAVAILABLE.takeIf {
+                            unavailable
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    @Synchronized
+    private fun launchProfileOperation(
+        profileId: String,
+        operation: () -> RemoteOperationOutcome,
+    ): Boolean {
+        if (mutableState.value.busy) return false
+        val operationId = ++nextOperationId
+        mutableState.value = mutableState.value.beginRemoteOperation(operationId, profileId)
+        viewModelScope.launch {
+            val outcome = try {
+                withContext(Dispatchers.IO) { operation() }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                supportEvents.record(SupportEvent.REMOTE_PROFILE_SAVE_FAILED)
+                RemoteOperationOutcome.Failed(
+                    message = RemoteOperationMessage.PROFILE_SAVE_FAILED,
+                    clearStatus = false,
+                )
+            }
+            mutableState.update {
+                it.finishRemoteOperation(operationId, profileId, outcome).let { settled ->
+                    if (outcome is RemoteOperationOutcome.Failed) {
+                        settled.copy(messageProfileId = null)
+                    } else {
+                        settled
+                    }
+                }
+            }
+        }
+        return true
     }
 
     @Synchronized
@@ -325,5 +456,10 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
             }
         }
         return true
+    }
+
+    private companion object {
+        const val PROFILE_STORAGE_OPERATION = "profile-storage"
+        const val NEW_PROFILE_OPERATION = "new-profile"
     }
 }

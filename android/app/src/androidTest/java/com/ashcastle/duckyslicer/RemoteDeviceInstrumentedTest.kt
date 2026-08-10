@@ -66,6 +66,13 @@ class RemoteDeviceInstrumentedTest {
                 scenario.onActivity { activity ->
                     val model = ViewModelProvider(activity)[RemoteOperationViewModel::class.java]
                     retainedModel.set(model)
+                }
+                waitForRemoteState(
+                    retainedModel.get(),
+                    "Remote profiles did not finish loading",
+                ) { it.profilesLoaded && !it.busy }
+                scenario.onActivity {
+                    val model = retainedModel.get()
                     assertTrue(model.refresh(profile, timeoutSeconds = 5))
                 }
                 assertTrue("Remote request did not start", requestAccepted.await(3, TimeUnit.SECONDS))
@@ -79,12 +86,8 @@ class RemoteDeviceInstrumentedTest {
                 }
 
                 releaseResponse.countDown()
-                val deadline = SystemClock.elapsedRealtime() + 5_000
                 val model = retainedModel.get()
-                while (model.state.value.busy && SystemClock.elapsedRealtime() < deadline) {
-                    SystemClock.sleep(25)
-                }
-                assertFalse("Retained remote request did not finish", model.state.value.busy)
+                waitForRemoteState(model, "Retained remote request did not finish") { !it.busy }
                 assertEquals("Operational", model.state.value.statusFor(profile.id)?.state)
             }
         } finally {
@@ -94,6 +97,65 @@ class RemoteDeviceInstrumentedTest {
         }
         serverFailure.get()?.let { throw AssertionError("Local printer server failed", it) }
         assertFalse("Local printer server did not stop", worker.isAlive)
+    }
+
+    private fun waitForRemoteState(
+        model: RemoteOperationViewModel,
+        failureMessage: String,
+        condition: (RemoteOperationState) -> Boolean,
+    ) {
+        val deadline = SystemClock.elapsedRealtime() + 5_000
+        while (!condition(model.state.value) && SystemClock.elapsedRealtime() < deadline) {
+            SystemClock.sleep(25)
+        }
+        assertTrue(failureMessage, condition(model.state.value))
+    }
+
+    @Test
+    fun remoteProfileSaveAndSelectionSurviveActivityRecreation() {
+        val profileId = "retained-profile-${UUID.randomUUID()}"
+        val retainedModel = AtomicReference<RemoteOperationViewModel>()
+
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                retainedModel.set(
+                    ViewModelProvider(activity)[RemoteOperationViewModel::class.java],
+                )
+            }
+            val model = retainedModel.get()
+            waitForRemoteState(model, "Remote profiles did not finish loading") {
+                it.profilesLoaded && !it.busy
+            }
+            scenario.onActivity {
+                assertTrue(
+                    model.saveProfile(
+                        RemoteDeviceDraft(
+                            id = profileId,
+                            name = "Retained profile",
+                            kind = RemoteDeviceKind.KLIPPER,
+                            baseUrl = "http://127.0.0.1:7125",
+                        ),
+                    ),
+                )
+            }
+
+            scenario.recreate()
+            scenario.onActivity { recreated ->
+                assertSame(
+                    model,
+                    ViewModelProvider(recreated)[RemoteOperationViewModel::class.java],
+                )
+            }
+            waitForRemoteState(model, "Retained profile save did not finish") { state ->
+                !state.busy && state.profiles.any { it.id == profileId }
+            }
+            assertEquals(profileId, model.state.value.selectedProfileId)
+
+            assertTrue(model.deleteProfile(profileId))
+            waitForRemoteState(model, "Retained profile cleanup did not finish") { state ->
+                !state.busy && state.profiles.none { it.id == profileId }
+            }
+        }
     }
 
     @Test

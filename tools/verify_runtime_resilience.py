@@ -103,6 +103,13 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "withRemoteUploadProgress",
         "RemoteStatusSnapshot",
         "SupportEvent.REMOTE_COMMAND_FAILED",
+        "fun saveProfile(",
+        "fun deleteProfile(",
+        "profilesLoaded",
+        "selectedProfileId",
+        "remoteDeviceStore.load()",
+        "remoteDeviceStore.save(draft)",
+        "remoteDeviceStore.delete(profileId)",
     ):
         if marker not in remote_operation:
             raise VerificationError(f"remote operation lifecycle contract is missing: {marker}")
@@ -113,13 +120,15 @@ def verify_resilience(sources: dict[str, str]) -> None:
     for marker in (
         "ViewModelProvider(this)[RemoteOperationViewModel::class.java]",
         "remoteOperationModel.state.collectAsStateWithLifecycle()",
-        "selectedRemoteDeviceId by rememberSaveable",
+        "selectedRemoteDeviceId = remoteOperationState.selectedProfileId",
         "remoteOperationModel.invalidateUpload()",
     ):
         if marker not in main:
             raise VerificationError(f"remote operation Activity-recreation contract is missing: {marker}")
     if "RemoteDeviceClient(" in main:
         raise VerificationError("remote network work is still owned by the Activity composition")
+    if "RemoteDeviceStore(" in main or "remoteProfileBusy" in main:
+        raise VerificationError("remote profile persistence is still owned by the Activity composition")
 
     device_sheet = sources["DeviceSheet.kt"]
     selection_start = device_sheet.find(".selectable(")
@@ -187,6 +196,8 @@ def verify_resilience(sources: dict[str, str]) -> None:
             "staleCompletionCannotFinishANewerOperation",
             "invalidatedUploadCannotBecomePrintable",
             "commandCompletionRetainsFileAndUpdatesState",
+            "profileSaveSelectsTheDurableResultAndClearsOldPrinterState",
+            "deletingTheSelectedProfileChoosesTheFirstRemainingProfile",
         ),
         "RemoteDeviceStoreTest.kt": (
             "credentialsUseGenerationsAndDoNotFollowAChangedEndpoint",
@@ -198,6 +209,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         ),
         "RemoteDeviceInstrumentedTest.kt": (
             "remoteRefreshSurvivesActivityRecreationAndRejectsDuplicateWork",
+            "remoteProfileSaveAndSelectionSurviveActivityRecreation",
             "remoteDeviceMetadataRecoversFromLastKnownGoodBackup",
             "cleartextHostnameRequestUsesOneValidatedPinnedAddress",
         ),
@@ -223,6 +235,8 @@ def verify_resilience(sources: dict[str, str]) -> None:
         raise VerificationError("contributor guidance does not preserve remote operation lifetime")
     if "must never become eligible for Start Print" not in sources["CONTRIBUTING.md"]:
         raise VerificationError("contributor guidance does not reject stale uploaded G-code")
+    if "must share that same retained" not in sources["CONTRIBUTING.md"]:
+        raise VerificationError("contributor guidance does not retain device-profile persistence")
     security = sources["SECURITY.md"]
     for marker in (
         "every current DNS answer",
