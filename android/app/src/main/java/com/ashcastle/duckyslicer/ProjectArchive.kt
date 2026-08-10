@@ -23,6 +23,7 @@ internal data class ArchivedProjectObject(
     val transform: ModelTransform,
     val supportPaint: SupportPaint,
     val seamPaint: SeamPaint,
+    val variableLayerHeights: VariableLayerHeights,
     val filamentSlot: Int,
 )
 
@@ -80,6 +81,10 @@ internal object ProjectArchiveCodec {
                                 .put("transform", projectObject.transform.toArchiveJson())
                                 .put("supportPaint", projectObject.supportPaint.toArchiveJson())
                                 .put("seamPaint", projectObject.seamPaint.toArchiveJson())
+                                .put(
+                                    "variableLayerHeights",
+                                    projectObject.variableLayerHeights.toArchiveJson(),
+                                )
                                 .put("filamentSlot", projectObject.filamentSlot),
                         )
                     }
@@ -208,6 +213,11 @@ internal object ProjectArchiveCodec {
                 } else {
                     SeamPaint()
                 },
+                variableLayerHeights = if (schemaVersion >= 3) {
+                    value.getJSONArray("variableLayerHeights").toArchiveVariableLayerHeights()
+                } else {
+                    VariableLayerHeights()
+                },
                 filamentSlot = value.optInt("filamentSlot", 0).takeIf {
                     it in 0 until MAX_FILAMENT_SLOTS
                 } ?: throw ProjectArchiveException(),
@@ -303,6 +313,28 @@ private fun JSONArray.toArchiveSeamPaint(): SeamPaint {
         previousIndex = index
     }
     return SeamPaint(facets)
+}
+
+private fun VariableLayerHeights.toArchiveJson() = JSONArray().also { values ->
+    ranges.forEach { range ->
+        values.put(range.startRatio.toDouble())
+        values.put(range.endRatio.toDouble())
+        values.put(range.layerHeightMm.toDouble())
+    }
+}
+
+private fun JSONArray.toArchiveVariableLayerHeights(): VariableLayerHeights {
+    require(length() % 3 == 0 && length() / 3 <= VariableLayerHeights.MAX_RANGES)
+    return VariableLayerHeights(
+        List(length() / 3) { index ->
+            val offset = index * 3
+            VariableLayerRange(
+                startRatio = getDouble(offset).toFloat(),
+                endRatio = getDouble(offset + 1).toFloat(),
+                layerHeightMm = getDouble(offset + 2).toFloat(),
+            )
+        },
+    )
 }
 
 private fun JSONObject.checkedArchiveFloat(key: String, minimum: Float, maximum: Float): Float =
@@ -405,6 +437,6 @@ private const val MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_OBJECTS
 private const val MAX_PROJECT_ARCHIVE_ENTRY_NAME = 128
 private const val PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"
 private const val MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1
-private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 2
+private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 3
 private const val PROJECT_ARCHIVE_MANIFEST = "manifest.json"
 private val PROJECT_ARCHIVE_MODEL_ENTRY = Regex("models/[0-9]{3}\\.stl")

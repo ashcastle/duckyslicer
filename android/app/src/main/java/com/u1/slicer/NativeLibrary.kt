@@ -31,6 +31,7 @@ class NativeLibrary(
     external fun nativeSetVolumeExtruder(objectIndex: Int, volumeIndex: Int, slot: Int): Boolean
     external fun applySupportPaint(objectIndex: Int, sidecarPath: String): Boolean
     external fun applySeamPaint(objectIndex: Int, sidecarPath: String): Boolean
+    external fun applyVariableLayerHeights(objectIndex: Int, sidecarPath: String): Boolean
     external fun getObjectBoundingBoxes(): FloatArray
     external fun nativeGetObjectWorldAABBMins(): FloatArray
     external fun nativeExportLoadedObjects(outputDirectory: String): Array<String>?

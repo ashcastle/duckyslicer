@@ -56,11 +56,12 @@ index 963808df..e2c066c6 100644
      )
  else()
      target_link_libraries(libslic3r PRIVATE
-@@ -1123,6 +1141,8 @@ add_library(prusaslicer-jni SHARED
+@@ -1123,6 +1141,9 @@ add_library(prusaslicer-jni SHARED
      src/sapil_arrange.cpp
      src/sapil_bambu_snapshot.cpp
      src/sapil_bambu_volumes.cpp
 +    src/sapil_support_paint.cpp
++    src/sapil_variable_layer_height.cpp
 +    src/sapil_model_export.cpp
      src/sapil_bambu_project.cpp
      src/sapil_bambu_plate.cpp
@@ -1496,6 +1497,135 @@ index 00000000..bebc6734
 +    if (path == nullptr) return JNI_FALSE;
 +    const bool result = apply_facet_paint(
 +        static_cast<int>(object_index), std::string(path), SEAM_PAINT_MAGIC, true);
++    env->ReleaseStringUTFChars(sidecar_path, path);
++    return result ? JNI_TRUE : JNI_FALSE;
++}
+diff --git a/app/src/main/cpp/src/sapil_variable_layer_height.cpp b/app/src/main/cpp/src/sapil_variable_layer_height.cpp
+new file mode 100644
+index 00000000..9d941c00
+--- /dev/null
++++ b/app/src/main/cpp/src/sapil_variable_layer_height.cpp
+@@ -0,0 +1,123 @@
++#include <jni.h>
++
++#include <array>
++#include <cmath>
++#include <cstdint>
++#include <cstring>
++#include <fstream>
++#include <string>
++#include <tuple>
++#include <vector>
++
++#include "libslic3r/Model.hpp"
++
++namespace sapil {
++extern Slic3r::Model g_model;
++}
++
++namespace {
++
++constexpr std::array<unsigned char, 4> MAGIC{'D', 'V', 'L', '1'};
++constexpr std::uint32_t MAX_RANGES = 32;
++constexpr std::uint64_t HEADER_BYTES = 8;
++constexpr std::uint64_t ENTRY_BYTES = 12;
++constexpr float MINIMUM_LAYER_HEIGHT_MM = 0.01F;
++constexpr float MAXIMUM_LAYER_HEIGHT_MM = 2.0F;
++
++bool read_u32_be(std::istream& input, std::uint32_t& value)
++{
++    std::array<unsigned char, 4> bytes{};
++    if (!input.read(reinterpret_cast<char*>(bytes.data()), bytes.size())) return false;
++    value = (static_cast<std::uint32_t>(bytes[0]) << 24) |
++            (static_cast<std::uint32_t>(bytes[1]) << 16) |
++            (static_cast<std::uint32_t>(bytes[2]) << 8) |
++            static_cast<std::uint32_t>(bytes[3]);
++    return true;
++}
++
++bool read_f32_be(std::istream& input, float& value)
++{
++    std::uint32_t bits = 0;
++    if (!read_u32_be(input, bits)) return false;
++    static_assert(sizeof(bits) == sizeof(value));
++    std::memcpy(&value, &bits, sizeof(value));
++    return true;
++}
++
++bool apply_variable_layer_heights(int object_index, const std::string& sidecar_path)
++{
++    if (object_index < 0 || static_cast<std::size_t>(object_index) >= sapil::g_model.objects.size()) {
++        return false;
++    }
++    Slic3r::ModelObject* object = sapil::g_model.objects[static_cast<std::size_t>(object_index)];
++    if (object == nullptr) return false;
++
++    std::ifstream input(sidecar_path, std::ios::binary | std::ios::ate);
++    if (!input) return false;
++    const std::streamoff size = input.tellg();
++    if (size < static_cast<std::streamoff>(HEADER_BYTES)) return false;
++    input.seekg(0, std::ios::beg);
++
++    std::array<unsigned char, 4> magic{};
++    if (!input.read(reinterpret_cast<char*>(magic.data()), magic.size()) || magic != MAGIC) {
++        return false;
++    }
++    std::uint32_t count = 0;
++    if (!read_u32_be(input, count) || count > MAX_RANGES) return false;
++    const std::uint64_t expected_size = HEADER_BYTES + static_cast<std::uint64_t>(count) * ENTRY_BYTES;
++    if (static_cast<std::uint64_t>(size) != expected_size) return false;
++
++    std::vector<std::tuple<float, float, float>> ranges;
++    ranges.reserve(count);
++    float previous_end = 0.0F;
++    for (std::uint32_t index = 0; index < count; ++index) {
++        float start_ratio = 0.0F;
++        float end_ratio = 0.0F;
++        float layer_height = 0.0F;
++        if (!read_f32_be(input, start_ratio) ||
++            !read_f32_be(input, end_ratio) ||
++            !read_f32_be(input, layer_height)) {
++            return false;
++        }
++        if (!std::isfinite(start_ratio) || !std::isfinite(end_ratio) ||
++            !std::isfinite(layer_height) || start_ratio < 0.0F || end_ratio > 1.0F ||
++            start_ratio >= end_ratio || (index > 0 && start_ratio < previous_end) ||
++            layer_height < MINIMUM_LAYER_HEIGHT_MM || layer_height > MAXIMUM_LAYER_HEIGHT_MM) {
++            return false;
++        }
++        ranges.emplace_back(start_ratio, end_ratio, layer_height);
++        previous_end = end_ratio;
++    }
++
++    const double object_height = object->raw_mesh_bounding_box().size().z();
++    if (!std::isfinite(object_height) || object_height <= 0.0) return false;
++    Slic3r::t_layer_config_ranges native_ranges;
++    for (const auto& [start_ratio, end_ratio, layer_height] : ranges) {
++        Slic3r::ModelConfig config;
++        config.set_key_value(
++            "layer_height",
++            new Slic3r::ConfigOptionFloat(static_cast<double>(layer_height)));
++        const auto range = Slic3r::t_layer_height_range(
++            static_cast<double>(start_ratio) * object_height,
++            static_cast<double>(end_ratio) * object_height);
++        if (!native_ranges.emplace(range, std::move(config)).second) return false;
++    }
++    object->layer_config_ranges = std::move(native_ranges);
++    object->layer_height_profile.clear();
++    return true;
++}
++
++} // namespace
++
++extern "C" JNIEXPORT jboolean JNICALL
++Java_com_u1_slicer_NativeLibrary_applyVariableLayerHeights(
++        JNIEnv* env, jobject, jint object_index, jstring sidecar_path)
++{
++    if (sidecar_path == nullptr) return JNI_FALSE;
++    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
++    if (path == nullptr) return JNI_FALSE;
++    const bool result = apply_variable_layer_heights(
++        static_cast<int>(object_index), std::string(path));
 +    env->ReleaseStringUTFChars(sidecar_path, path);
 +    return result ? JNI_TRUE : JNI_FALSE;
 +}

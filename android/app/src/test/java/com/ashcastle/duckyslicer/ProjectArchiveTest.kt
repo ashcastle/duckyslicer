@@ -61,6 +61,9 @@ class ProjectArchiveTest {
                 ),
                 supportPaint = SupportPaint().paint(1, SupportPaintState.ENFORCE),
                 seamPaint = SeamPaint().paint(0, SeamPaintState.ENFORCE),
+                variableLayerHeights = VariableLayerHeights(
+                    listOf(VariableLayerRange(0.2f, 0.7f, 0.08f)),
+                ),
             )
             val second = first.copy(
                 id = "duck-b",
@@ -68,6 +71,9 @@ class ProjectArchiveTest {
                 transform = ModelTransform(offsetXmm = -18f, rotationXdeg = 90f),
                 supportPaint = SupportPaint().paint(0, SupportPaintState.BLOCK),
                 seamPaint = SeamPaint().paint(1, SeamPaintState.BLOCK),
+                variableLayerHeights = VariableLayerHeights(
+                    listOf(VariableLayerRange(0.1f, 0.4f, 0.12f)),
+                ),
                 filamentSlot = 1,
             )
             val snapshot = ProjectSnapshot(listOf(first, second), selectedObjectId = second.id)
@@ -92,7 +98,7 @@ class ProjectArchiveTest {
             assertEquals(
                 setOf(
                     "id", "displayName", "modelEntry", "transform", "supportPaint", "seamPaint",
-                    "filamentSlot",
+                    "variableLayerHeights", "filamentSlot",
                 ),
                 manifest.getJSONArray("objects").getJSONObject(0).keys().asSequence().toSet(),
             )
@@ -110,6 +116,14 @@ class ProjectArchiveTest {
             assertEquals(second.supportPaint, imported.snapshot.objects[1].supportPaint)
             assertEquals(first.seamPaint, imported.snapshot.objects[0].seamPaint)
             assertEquals(second.seamPaint, imported.snapshot.objects[1].seamPaint)
+            assertEquals(
+                first.variableLayerHeights,
+                imported.snapshot.objects[0].variableLayerHeights,
+            )
+            assertEquals(
+                second.variableLayerHeights,
+                imported.snapshot.objects[1].variableLayerHeights,
+            )
             assertEquals(0, imported.snapshot.objects[0].filamentSlot)
             assertEquals(1, imported.snapshot.objects[1].filamentSlot)
             assertEquals(
@@ -127,6 +141,7 @@ class ProjectArchiveTest {
                 val objects = getJSONArray("objects")
                 for (index in 0 until objects.length()) {
                     objects.getJSONObject(index).remove("seamPaint")
+                    objects.getJSONObject(index).remove("variableLayerHeights")
                 }
             }
             val legacyArchive = zipOf(
@@ -135,6 +150,7 @@ class ProjectArchiveTest {
             )
             val legacy = destination.importArchive(ByteArrayInputStream(legacyArchive))
             assertTrue(legacy.snapshot.objects.all { it.seamPaint.facets.isEmpty() })
+            assertTrue(legacy.snapshot.objects.all { it.variableLayerHeights.ranges.isEmpty() })
             assertEquals(
                 1,
                 File(destinationRoot, ProjectStore.MODELS_DIRECTORY).listFiles().orEmpty().size,
