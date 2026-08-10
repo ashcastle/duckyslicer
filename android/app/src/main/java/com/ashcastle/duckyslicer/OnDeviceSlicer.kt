@@ -1228,6 +1228,12 @@ object OnDeviceSlicer {
         require(objects.all { projectObject ->
             projectObject.seamPaint.facets.keys.all { it in 0 until projectObject.model.triangles }
         }) { "Seam paint references an unavailable facet" }
+        val maximumLayerHeight = options.nozzleDiameter * 0.7f
+        require(objects.all { projectObject ->
+            projectObject.variableLayerHeights.ranges.all { range ->
+                range.layerHeightMm in 0.04f..maximumLayerHeight
+            }
+        }) { "Variable layer height is unavailable for this nozzle" }
 
         return withTransformedModels(
             objects,
@@ -1256,11 +1262,23 @@ object OnDeviceSlicer {
                         ).also(it::writeSidecar)
                     }
             }
+            val variableLayerHeightFiles = objects.mapIndexed { index, projectObject ->
+                projectObject.variableLayerHeights
+                    .takeIf { it.ranges.isNotEmpty() }
+                    ?.let {
+                        File.createTempFile(
+                            "slice-layers-$index-",
+                            ".bin",
+                            File(projectObject.model.localPath).parentFile,
+                        ).also(it::writeSidecar)
+                    }
+            }
             try {
                 SlicerProcessClient.slice(
                     transformedModels,
                     supportPaintFiles,
                     seamPaintFiles,
+                    variableLayerHeightFiles,
                     options,
                     filamentSlots = objects.map(ProjectObject::filamentSlot).toIntArray(),
                     foregroundSession = foregroundSession,
@@ -1270,6 +1288,7 @@ object OnDeviceSlicer {
             } finally {
                 supportPaintFiles.filterNotNull().forEach(File::delete)
                 seamPaintFiles.filterNotNull().forEach(File::delete)
+                variableLayerHeightFiles.filterNotNull().forEach(File::delete)
             }
         }
     }

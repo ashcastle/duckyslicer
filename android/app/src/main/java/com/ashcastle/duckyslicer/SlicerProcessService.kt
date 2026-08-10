@@ -58,6 +58,7 @@ internal object SlicerProcessClient {
         transformedModels,
         List(transformedModels.size) { null },
         List(transformedModels.size) { null },
+        List(transformedModels.size) { null },
         options,
         filamentSlots,
         foregroundSession,
@@ -70,6 +71,7 @@ internal object SlicerProcessClient {
         transformedModels: List<File>,
         supportPaintFiles: List<File?>,
         seamPaintFiles: List<File?>,
+        variableLayerHeightFiles: List<File?>,
         options: SliceOptions,
         filamentSlots: IntArray = IntArray(transformedModels.size),
         foregroundSession: ForegroundSliceSession? = null,
@@ -79,6 +81,7 @@ internal object SlicerProcessClient {
         transformedModels,
         supportPaintFiles,
         seamPaintFiles,
+        variableLayerHeightFiles,
         options,
         filamentSlots,
         foregroundSession,
@@ -99,6 +102,7 @@ internal object SlicerProcessClient {
         }
         return sliceInternal(
             transformedModels,
+            List(transformedModels.size) { null },
             List(transformedModels.size) { null },
             List(transformedModels.size) { null },
             options,
@@ -320,6 +324,7 @@ internal object SlicerProcessClient {
         transformedModels: List<File>,
         supportPaintFiles: List<File?>,
         seamPaintFiles: List<File?>,
+        variableLayerHeightFiles: List<File?>,
         options: SliceOptions,
         filamentSlots: IntArray,
         foregroundSession: ForegroundSliceSession?,
@@ -335,12 +340,19 @@ internal object SlicerProcessClient {
         val modelPaths = transformedModels.map(File::getAbsolutePath)
         require(supportPaintFiles.size == transformedModels.size) { "Support paint count does not match models" }
         require(seamPaintFiles.size == transformedModels.size) { "Seam paint count does not match models" }
+        require(variableLayerHeightFiles.size == transformedModels.size) {
+            "Variable layer height count does not match models"
+        }
         require(filamentSlots.size == transformedModels.size) { "Filament slot count does not match models" }
         val supportPaintPaths = supportPaintFiles.map { it?.absolutePath.orEmpty() }
         val seamPaintPaths = seamPaintFiles.map { it?.absolutePath.orEmpty() }
+        val variableLayerHeightPaths = variableLayerHeightFiles.map { it?.absolutePath.orEmpty() }
         val optionsText = options.toProjectJson().toString()
         require(
-            encodedRequestBytes(modelPaths + supportPaintPaths + seamPaintPaths, optionsText) <=
+            encodedRequestBytes(
+                modelPaths + supportPaintPaths + seamPaintPaths + variableLayerHeightPaths,
+                optionsText,
+            ) <=
                 SlicerProcessContract.MAX_REQUEST_BYTES,
         ) {
             "Slice request is too large"
@@ -358,6 +370,10 @@ internal object SlicerProcessClient {
             putStringArrayList(
                 SlicerProcessContract.KEY_SEAM_PAINT_PATHS,
                 ArrayList(seamPaintPaths),
+            )
+            putStringArrayList(
+                SlicerProcessContract.KEY_VARIABLE_LAYER_HEIGHT_PATHS,
+                ArrayList(variableLayerHeightPaths),
             )
             putString(SlicerProcessContract.KEY_OPTIONS, optionsText)
             putIntArray(SlicerProcessContract.KEY_FILAMENT_SLOTS, filamentSlots)
@@ -1439,6 +1455,15 @@ class SlicerProcessService : Service() {
         val seamPaintFiles = seamPaintPaths.map { path ->
             path.takeIf(String::isNotEmpty)?.let(::validateSeamPaint)
         }
+        val variableLayerHeightPaths = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_VARIABLE_LAYER_HEIGHT_PATHS),
+        ) { "Variable layer height paths are unavailable" }
+        require(variableLayerHeightPaths.size == models.size) {
+            "Variable layer height count does not match models"
+        }
+        val variableLayerHeightFiles = variableLayerHeightPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let(::validateVariableLayerHeights)
+        }
         val optionsText = requireNotNull(extras.getString(SlicerProcessContract.KEY_OPTIONS)) {
             "Slice settings are unavailable"
         }
@@ -1446,7 +1471,10 @@ class SlicerProcessService : Service() {
             "Slice settings are too large"
         }
         require(
-            encodedRequestBytes(paths + supportPaintPaths + seamPaintPaths, optionsText) <=
+            encodedRequestBytes(
+                paths + supportPaintPaths + seamPaintPaths + variableLayerHeightPaths,
+                optionsText,
+            ) <=
                 SlicerProcessContract.MAX_REQUEST_BYTES,
         ) {
             "Slice request is too large"
@@ -1479,6 +1507,7 @@ class SlicerProcessService : Service() {
                 models,
                 supportPaintFiles,
                 seamPaintFiles,
+                variableLayerHeightFiles,
                 filamentSlots,
                 options,
                 maximumGcodeBytes,
@@ -1723,6 +1752,7 @@ class SlicerProcessService : Service() {
         models: List<File>,
         supportPaintFiles: List<ValidatedSupportPaint?>,
         seamPaintFiles: List<ValidatedSeamPaint?>,
+        variableLayerHeightFiles: List<ValidatedVariableLayerHeights?>,
         filamentSlots: IntArray,
         options: SliceOptions,
         maximumGcodeBytes: Int,
@@ -1755,6 +1785,16 @@ class SlicerProcessService : Service() {
                     check(runtime.applySeamPaint(objectIndex, seamPaint.file.absolutePath)) {
                         "Seam paint could not be applied"
                     }
+                }
+            }
+            variableLayerHeightFiles.forEachIndexed { objectIndex, variableLayers ->
+                if (variableLayers != null) {
+                    check(
+                        runtime.applyVariableLayerHeights(
+                            objectIndex,
+                            variableLayers.file.absolutePath,
+                        ),
+                    ) { "Variable layer heights could not be applied" }
                 }
             }
             val nativeConfig = options.toNativeConfig().apply {
@@ -1885,6 +1925,41 @@ class SlicerProcessService : Service() {
         return ValidatedSeamPaint(sidecar)
     }
 
+    private fun validateVariableLayerHeights(path: String): ValidatedVariableLayerHeights {
+        require(path.length in 1..MAX_PATH_LENGTH) { "Invalid variable layer height path" }
+        val sidecar = File(path).canonicalFile
+        val allowedRoots = listOf(filesDir.canonicalFile, cacheDir.canonicalFile)
+        require(allowedRoots.any(sidecar::isInside)) {
+            "Variable layer heights are outside private storage"
+        }
+        require(
+            sidecar.isFile &&
+                sidecar.length() in VariableLayerHeights.HEADER_BYTES..
+                    VariableLayerHeights.MAX_SIDECAR_BYTES,
+        ) { "Variable layer heights are unavailable" }
+        DataInputStream(sidecar.inputStream().buffered()).use { reader ->
+            val magic = ByteArray(VariableLayerHeights.MAGIC.size)
+            reader.readFully(magic)
+            require(magic.contentEquals(VariableLayerHeights.MAGIC)) {
+                "Variable layer height format is invalid"
+            }
+            val count = reader.readInt()
+            require(count in 0..VariableLayerHeights.MAX_RANGES) {
+                "Variable layer height count is invalid"
+            }
+            require(
+                sidecar.length() ==
+                    VariableLayerHeights.HEADER_BYTES + count.toLong() * VariableLayerHeights.ENTRY_BYTES,
+            ) { "Variable layer height size is invalid" }
+            VariableLayerHeights(
+                List(count) {
+                    VariableLayerRange(reader.readFloat(), reader.readFloat(), reader.readFloat())
+                },
+            )
+        }
+        return ValidatedVariableLayerHeights(sidecar)
+    }
+
     private fun success(outcome: SliceOutcome) = Bundle().apply {
         putBoolean(SlicerProcessContract.KEY_OK, true)
         putInt(SlicerProcessContract.KEY_PID, Process.myPid())
@@ -1980,6 +2055,8 @@ class SlicerProcessService : Service() {
     )
 
     private data class ValidatedSeamPaint(val file: File)
+
+    private data class ValidatedVariableLayerHeights(val file: File)
 }
 
 private object SlicerProcessContract {
@@ -2008,6 +2085,7 @@ private object SlicerProcessContract {
     const val KEY_PLACE_ON_CUT = "placeOnCut"
     const val KEY_SUPPORT_PAINT_PATHS = "supportPaintPaths"
     const val KEY_SEAM_PAINT_PATHS = "seamPaintPaths"
+    const val KEY_VARIABLE_LAYER_HEIGHT_PATHS = "variableLayerHeightPaths"
     const val KEY_OPTIONS = "options"
     const val KEY_MAXIMUM_GCODE_BYTES_FOR_TEST = "maximumGcodeBytesForTest"
     const val KEY_OK = "ok"

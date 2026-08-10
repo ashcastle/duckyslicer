@@ -83,7 +83,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_OBJECTS + 1",
             'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
             "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-            "PROJECT_ARCHIVE_SCHEMA_VERSION = 2",
+            "PROJECT_ARCHIVE_SCHEMA_VERSION = 3",
             'Regex("models/[0-9]{3}\\\\.stl")',
             "require(!entry.isDirectory",
             "require(entries.add(entry.name))",
@@ -97,6 +97,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "require(info.triangles > 0)",
             "supportPaint.facets.keys.all",
             "seamPaint.facets.keys.all",
+            'getJSONArray("variableLayerHeights").toArchiveVariableLayerHeights()',
         ),
     )
 
@@ -288,9 +289,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         sources["PRIVACY.md"],
         (
             "Exported DuckySlicer project files contain the model geometry",
-            "support and seam painting, and active printer, filament, and slicing settings",
+            "support and seam painting, variable layer-height ranges, and active printer, filament,",
             "They do not contain G-code, saved printer addresses, or printer",
-            "형상, 오브젝트 배치, 서포트·심 채색",
+            "형상, 오브젝트 배치, 서포트·심 채색, 가변 레이어 높이 구간",
             "프린터 접속 키는 포함되지",
         ),
     )
@@ -305,8 +306,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         (
             "manifest.json",
             "models/000.stl",
-            "schema version `2`",
-            "Schema 1 projects remain readable",
+            "schema version `3`",
+            "Schema 1 and 2 projects remain readable",
+            "variable layer-height",
             "rejects duplicate, directory, traversal, and unknown entries",
             "A failed import leaves the",
             "current project unchanged and removes staged data",
