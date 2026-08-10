@@ -67,7 +67,7 @@ jobs:
         with:
           name: duckyslicer-play-signed
 """,
-        "release.yml": """
+        "sign-local-release.yml": """
 jobs:
   publish:
     steps:
@@ -135,7 +135,7 @@ class VerifyPlayBundleWorkflowTest(unittest.TestCase):
 
     def test_rejects_aab_in_github_release(self) -> None:
         sources = valid_sources()
-        sources["release.yml"] = sources["release.yml"].replace(
+        sources["sign-local-release.yml"] = sources["sign-local-release.yml"].replace(
             "DuckySlicer-arm64.apk", "DuckySlicer-arm64.apk DuckySlicer-play.aab"
         )
         with self.assertRaisesRegex(VerificationError, "free of AAB"):

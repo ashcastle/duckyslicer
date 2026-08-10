@@ -23,7 +23,7 @@ EXCLUDED_INSTRUCTION_NAMES = {"AGENTS.md", "AGENTS.override.md", "CLAUDE.md"}
 EXCLUDED_INSTRUCTION_DIRECTORIES = {".agents", ".claude", ".codex"}
 BUILD_INPUTS = (
     ".github/workflows/android.yml",
-    ".github/workflows/release.yml",
+    ".github/workflows/sign-local-release.yml",
     "android/app/build.gradle.kts",
     "android/app/gradle.lockfile",
     "android/build.gradle.kts",

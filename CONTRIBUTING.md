@@ -104,18 +104,16 @@ Orca writes beside its transformed input, so the persistent project-model direct
 remain an explicit monitored transient root. The ARM64 persistent-project regression must
 finish with G-code in bounded slice storage and no `output.gcode` beside the model.
 
-Workflow changes must keep third-party Actions pinned to full commit hashes. A
-tagged release must preserve the build → isolated sign → publish dependency and
-the GitHub Release must contain only the signed ARM64 APK. Hosted emulator jobs
-must remain absent. The complete local ARM64 16 KB AVD gate must pass before a tag
-is created; hosted build or static packaging checks are not a substitute.
-The release build job must never receive signing secrets. Only the isolated `sign`
-job may use them; it must not check out source or execute Gradle, repository scripts,
-or other project code, and it must verify the pinned signing-certificate fingerprint.
-The build job must stage the first unsigned APK, rebuild the same version after a
-clean with the build cache disabled, and reject any byte difference. Release source
-generation must retain recursive submodule pins and the detached source manifest;
-GitHub's automatic source ZIP is not a replacement because it omits submodule files.
+Workflow changes must keep third-party Actions pinned to full commit hashes. The
+GitHub Release APK must be built locally with
+`python3 tools/prepare_local_release.py`; tag-triggered or manually dispatched hosted
+APK builds are not allowed. The local command runs the complete ARM64 16 KB AVD gate,
+builds the unsigned release twice, and rejects any byte difference.
+The signing workflow must preserve validate → isolated sign → publish ordering. Only
+the `sign` job may receive signing secrets; it must not check out source, execute
+Gradle or repository scripts, or write the Release. Only `publish` may write the
+Release. The GitHub Release must contain only the signed ARM64 APK. The tag and
+recursive submodule pins remain the corresponding-source identity.
 
 ## Updating Android dependencies
 
