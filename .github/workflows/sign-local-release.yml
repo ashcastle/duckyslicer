@@ -35,8 +35,10 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # GitHub exposes draft releases only to identities with push access. This
+    # job uses that scope only for read-only validation and never checks out code.
     permissions:
-      contents: read
+      contents: write
     outputs:
       release_version: ${{ steps.identity.outputs.version }}
     env:
