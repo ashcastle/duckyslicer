@@ -336,6 +336,7 @@ internal class ProjectStore(
     private fun ModelTransform.toStoredJson() = JSONObject()
         .put("offsetXmm", offsetXmm.checkedTransformValue(-MAX_OFFSET_MM, MAX_OFFSET_MM))
         .put("offsetYmm", offsetYmm.checkedTransformValue(-MAX_OFFSET_MM, MAX_OFFSET_MM))
+        .put("offsetZmm", offsetZmm.checkedTransformValue(-MAX_OFFSET_MM, MAX_OFFSET_MM))
         .put("rotationXdeg", rotationXdeg.checkedTransformValue(-MAX_ROTATION_DEG, MAX_ROTATION_DEG))
         .put("rotationYdeg", rotationYdeg.checkedTransformValue(-MAX_ROTATION_DEG, MAX_ROTATION_DEG))
         .put("rotationZdeg", rotationZdeg.checkedTransformValue(-MAX_ROTATION_DEG, MAX_ROTATION_DEG))
@@ -347,6 +348,7 @@ internal class ProjectStore(
     private fun JSONObject.toModelTransform() = ModelTransform(
         offsetXmm = checkedFloat("offsetXmm", -MAX_OFFSET_MM, MAX_OFFSET_MM),
         offsetYmm = checkedFloat("offsetYmm", -MAX_OFFSET_MM, MAX_OFFSET_MM),
+        offsetZmm = checkedOptionalFloat("offsetZmm", -MAX_OFFSET_MM, MAX_OFFSET_MM),
         rotationXdeg = checkedFloat("rotationXdeg", -MAX_ROTATION_DEG, MAX_ROTATION_DEG),
         rotationYdeg = checkedFloat("rotationYdeg", -MAX_ROTATION_DEG, MAX_ROTATION_DEG),
         rotationZdeg = checkedFloat("rotationZdeg", -MAX_ROTATION_DEG, MAX_ROTATION_DEG),
@@ -360,6 +362,12 @@ internal class ProjectStore(
         if (!has(name)) return false
         return get(name) as? Boolean ?: throw IllegalArgumentException("Invalid transform flag")
     }
+
+    private fun JSONObject.checkedOptionalFloat(
+        name: String,
+        minimum: Float,
+        maximum: Float,
+    ): Float = if (has(name)) checkedFloat(name, minimum, maximum) else 0f
 
     private fun SupportPaint.toStoredJson() = JSONArray().also { values ->
         require(facets.size <= SupportPaint.MAX_PAINTED_FACETS) { "Support paint is too large" }

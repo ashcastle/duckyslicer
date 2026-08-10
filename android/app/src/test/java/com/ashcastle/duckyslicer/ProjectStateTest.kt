@@ -95,6 +95,26 @@ class ProjectStateTest {
     }
 
     @Test
+    fun splitReplacementIsOneUndoableEditAtTheOriginalListPosition() {
+        val before = projectObject("compound")
+        val trailing = projectObject("trailing")
+        var state = ProjectHistoryState()
+            .add(before)
+            .add(trailing)
+            .select(before.id)
+
+        state = state.replaceSelected(listOf(projectObject("left"), projectObject("right")))
+
+        assertEquals(listOf("left", "right", "trailing"), state.current.objects.map { it.id })
+        assertEquals("left", state.current.selectedObjectId)
+        state = state.undo()
+        assertEquals(listOf("compound", "trailing"), state.current.objects.map { it.id })
+        assertEquals("compound", state.current.selectedObjectId)
+        state = state.redo()
+        assertEquals(listOf("left", "right", "trailing"), state.current.objects.map { it.id })
+    }
+
+    @Test
     fun asynchronousPlacementUpdatesTheRequestedObjectEvenIfSelectionChanges() {
         var state = ProjectHistoryState()
             .add(projectObject("first"))
