@@ -9,6 +9,7 @@ import java.io.BufferedInputStream
 import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
+import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicReference
 
@@ -113,6 +114,68 @@ class RemoteDeviceClientTest {
                 "http://192.168.1.20",
             ).validate(),
         )
+        assertEquals(
+            null,
+            RemoteDeviceProfile(
+                "local-v6",
+                "Local IPv6",
+                RemoteDeviceKind.KLIPPER,
+                "http://[fd00::20]",
+            ).validate(),
+        )
+    }
+
+    @Test
+    fun cleartextDnsResultsAreValidatedAndPinnedBeforeCredentialsAreAttached() {
+        val local = InetAddress.getByAddress(
+            "printer.local",
+            byteArrayOf(192.toByte(), 168.toByte(), 1, 55),
+        )
+        val endpoint = resolveRemoteEndpoint(
+            URI("http://printer.local:5000/api/job?history=false"),
+        ) { listOf(local) }
+
+        assertEquals("http://192.168.1.55:5000/api/job?history=false", endpoint.uri.toString())
+        assertEquals("printer.local:5000", endpoint.hostHeader)
+
+        val public = InetAddress.getByAddress(
+            "printer.local",
+            byteArrayOf(203.toByte(), 0, 113, 9),
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            resolveRemoteEndpoint(URI("http://printer.local/api/job")) {
+                listOf(local, public)
+            }
+        }
+
+        var resolvedHttps = false
+        val https = resolveRemoteEndpoint(URI("https://printer.example/api/job")) {
+            resolvedHttps = true
+            listOf(public)
+        }
+        assertEquals("https://printer.example/api/job", https.uri.toString())
+        assertEquals(null, https.hostHeader)
+        assertFalse("HTTPS must retain certificate hostname resolution", resolvedHttps)
+    }
+
+    @Test
+    fun cleartextHostnameRequestUsesThePinnedResolverAddress() {
+        withServer("""{"state":"Operational"}""") { baseUrl, request ->
+            val port = URI(baseUrl).port
+            val profile = RemoteDeviceProfile(
+                "dns-pinned",
+                "Pinned printer",
+                RemoteDeviceKind.OCTOPRINT,
+                "http://printer.local:$port",
+            )
+            val client = RemoteDeviceClient(2_000) { host ->
+                assertEquals("printer.local", host)
+                listOf(InetAddress.getByName("127.0.0.1"))
+            }
+
+            assertEquals("Operational", client.status(profile, "pinned-secret").state)
+            assertTrue(request.get().contains("X-Api-Key: pinned-secret", ignoreCase = true))
+        }
     }
 
     @Test
