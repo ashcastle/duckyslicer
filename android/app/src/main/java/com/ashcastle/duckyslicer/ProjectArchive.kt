@@ -214,6 +214,9 @@ private fun ModelTransform.toArchiveJson() = JSONObject()
     .put("rotationYdeg", rotationYdeg.checkedArchiveTransform(-ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG))
     .put("rotationZdeg", rotationZdeg.checkedArchiveTransform(-ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG))
     .put("scale", scale.checkedArchiveTransform(ProjectStore.MIN_SCALE, ProjectStore.MAX_SCALE))
+    .put("mirrorX", mirrorX)
+    .put("mirrorY", mirrorY)
+    .put("mirrorZ", mirrorZ)
 
 private fun JSONObject.toArchiveTransform() = ModelTransform(
     offsetXmm = checkedArchiveFloat("offsetXmm", -ProjectStore.MAX_OFFSET_MM, ProjectStore.MAX_OFFSET_MM),
@@ -222,7 +225,15 @@ private fun JSONObject.toArchiveTransform() = ModelTransform(
     rotationYdeg = checkedArchiveFloat("rotationYdeg", -ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG),
     rotationZdeg = checkedArchiveFloat("rotationZdeg", -ProjectStore.MAX_ROTATION_DEG, ProjectStore.MAX_ROTATION_DEG),
     scale = checkedArchiveFloat("scale", ProjectStore.MIN_SCALE, ProjectStore.MAX_SCALE),
+    mirrorX = checkedArchiveBoolean("mirrorX"),
+    mirrorY = checkedArchiveBoolean("mirrorY"),
+    mirrorZ = checkedArchiveBoolean("mirrorZ"),
 )
+
+private fun JSONObject.checkedArchiveBoolean(name: String): Boolean {
+    if (!has(name)) return false
+    return get(name) as? Boolean ?: throw ProjectArchiveException()
+}
 
 private fun SupportPaint.toArchiveJson() = JSONArray().also { values ->
     require(facets.size <= SupportPaint.MAX_PAINTED_FACETS)

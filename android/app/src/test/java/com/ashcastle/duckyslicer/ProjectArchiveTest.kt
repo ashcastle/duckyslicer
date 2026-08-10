@@ -51,7 +51,13 @@ class ProjectArchiveTest {
             val first = ProjectObject(
                 id = "duck-a",
                 model = inspectedModel(model).copy(fileName = "오리 모델.stl"),
-                transform = ModelTransform(offsetXmm = 12f, rotationZdeg = 35f, scale = 1.2f),
+                transform = ModelTransform(
+                    offsetXmm = 12f,
+                    rotationZdeg = 35f,
+                    scale = 1.2f,
+                    mirrorX = true,
+                    mirrorY = true,
+                ),
                 supportPaint = SupportPaint().paint(1, SupportPaintState.ENFORCE),
             )
             val second = first.copy(
