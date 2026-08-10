@@ -63,7 +63,19 @@ struct StlTransform {
     rotation_deg: [f32; 3],
     scale: f32,
     #[serde(default)]
+    scale_axes: Option<[f32; 3]>,
+    #[serde(default)]
     mirror: [bool; 3],
+}
+
+impl StlTransform {
+    fn scales(&self) -> [f32; 3] {
+        self.scale_axes.unwrap_or([self.scale; 3])
+    }
+
+    fn maximum_scale(&self) -> f32 {
+        self.scales().into_iter().fold(self.scale, f32::max)
+    }
 }
 
 #[derive(Serialize)]
@@ -378,16 +390,11 @@ fn transformed_vertex(
 }
 
 fn local_vertex(vertex: [f32; 3], source_center: [f32; 3], transform: &StlTransform) -> [f32; 3] {
+    let scales = transform.scales();
     [
-        (vertex[0] - source_center[0])
-            * transform.scale
-            * if transform.mirror[0] { -1.0 } else { 1.0 },
-        (vertex[1] - source_center[1])
-            * transform.scale
-            * if transform.mirror[1] { -1.0 } else { 1.0 },
-        (vertex[2] - source_center[2])
-            * transform.scale
-            * if transform.mirror[2] { -1.0 } else { 1.0 },
+        (vertex[0] - source_center[0]) * scales[0] * if transform.mirror[0] { -1.0 } else { 1.0 },
+        (vertex[1] - source_center[1]) * scales[1] * if transform.mirror[1] { -1.0 } else { 1.0 },
+        (vertex[2] - source_center[2]) * scales[2] * if transform.mirror[2] { -1.0 } else { 1.0 },
     ]
 }
 
@@ -437,9 +444,14 @@ fn transform_stl(
             "Input and output STL paths must be different".to_owned(),
         ));
     }
-    if !transform.scale.is_finite() || !(0.05..=10.0).contains(&transform.scale) {
+    if !transform.scale.is_finite()
+        || transform
+            .scales()
+            .iter()
+            .any(|scale| !scale.is_finite() || !(0.05..=10.0).contains(scale))
+    {
         return Err(EngineError::Parse(
-            "Scale must be between 5% and 1000%".to_owned(),
+            "Axis scales must be between 5% and 1000%".to_owned(),
         ));
     }
     if transform
@@ -528,7 +540,8 @@ fn transform_stl(
             vertices.swap(1, 2);
         }
         if vertices.iter().flatten().any(|value| {
-            !value.is_finite() || value.abs() > MAX_STL_COORDINATE_ABS_MM * transform.scale.max(1.0)
+            !value.is_finite()
+                || value.abs() > MAX_STL_COORDINATE_ABS_MM * transform.maximum_scale().max(1.0)
         }) {
             return Err(EngineError::Parse(
                 "STL transform produced an invalid or out-of-range coordinate".to_owned(),
@@ -1133,6 +1146,7 @@ mod tests {
             offset_z_mm: 7.0,
             rotation_deg: [0.0, 0.0, 90.0],
             scale: 2.0,
+            scale_axes: None,
             mirror: [false; 3],
         };
         transform_stl(
@@ -1160,12 +1174,31 @@ mod tests {
             offset_z_mm: 0.0,
             rotation_deg: [0.0; 3],
             scale: 2.0,
+            scale_axes: None,
             mirror: [true, false, true],
         };
 
         assert_eq!(
             transformed_vertex([2.0, 4.0, 6.0], [1.0, 2.0, 3.0], -6.0, &transform),
             [-2.0, 4.0, 0.0],
+        );
+    }
+
+    #[test]
+    fn stl_transform_applies_independent_axis_scales() {
+        let transform = StlTransform {
+            bed_center_mm: [0.0, 0.0],
+            offset_mm: [0.0, 0.0],
+            offset_z_mm: 0.0,
+            rotation_deg: [0.0; 3],
+            scale: 2.0,
+            scale_axes: Some([2.0, 3.0, 4.0]),
+            mirror: [false; 3],
+        };
+
+        assert_eq!(
+            local_vertex([2.0, 4.0, 6.0], [1.0, 2.0, 3.0], &transform),
+            [2.0, 6.0, 12.0],
         );
     }
 
@@ -1193,6 +1226,7 @@ mod tests {
                 offset_z_mm: 0.0,
                 rotation_deg: [0.0, 0.0, 0.0],
                 scale: 1.0,
+                scale_axes: None,
                 mirror: [false; 3],
             },
         );
@@ -1223,6 +1257,7 @@ mod tests {
                 offset_z_mm: 0.0,
                 rotation_deg: [0.0, 0.0, 0.0],
                 scale: 1.0,
+                scale_axes: None,
                 mirror: [false; 3],
             },
         );

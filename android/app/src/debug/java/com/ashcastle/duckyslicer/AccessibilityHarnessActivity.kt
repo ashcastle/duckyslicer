@@ -42,6 +42,9 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                             onAdd = { _, _ -> },
                             onDismiss = {},
                         )
+                        SCREEN_MODEL_TRANSFORM -> WorkspaceAccessibilityHarness(
+                            projectObjects = listOf(accessibilityProjectObject()),
+                        )
                         SCREEN_WORKSPACE -> {
                             val density = LocalDensity.current
                             CompositionLocalProvider(
@@ -67,6 +70,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_WORKSPACE = "workspace"
         const val SCREEN_OBJECT_SETTINGS = "object-settings"
         const val SCREEN_SHAPES = "shapes"
+        const val SCREEN_MODEL_TRANSFORM = "model-transform"
     }
 }
 
