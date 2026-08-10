@@ -54,6 +54,12 @@ repository pull requests and every push to `main`; untrusted fork pull requests 
 not receive a write-capable security token and are scanned after merge. This is
 static analysis only and does not replace the local ARM64 16 KB functional gate.
 
+The local gate generates a CycloneDX SBOM from the exact Debug APK, resolved Gradle
+runtime graph, locked Cargo graph, and pinned native components. Generation fails if
+any component lacks reviewed license policy or if the SBOM licenses differ from the
+offline license index packaged in that APK. CI retains its independently generated
+Debug SBOM as a review artifact; it is not an additional public Release asset.
+
 ## Reporting a vulnerability
 
 Do not publish exploit details, private data, or a proof-of-concept in a public

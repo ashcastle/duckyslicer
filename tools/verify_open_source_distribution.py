@@ -60,7 +60,12 @@ def verify_distribution(sources: dict[str, str]) -> None:
         "README.md",
         "native/slicer-runtime/versions.env",
         "tools/generate_offline_licenses.py",
+        "tools/generate_license_inventory.py",
+        "tools/generate_sbom.py",
         "tools/native_license_policy.py",
+        "tools/run_local_gate.py",
+        "CONTRIBUTING.md",
+        "SECURITY.md",
         "android/app/build.gradle.kts",
         "android/app/src/main/java/com/ashcastle/duckyslicer/AppSettingsSheet.kt",
         "android/app/src/main/res/values/strings.xml",
@@ -102,6 +107,30 @@ def verify_distribution(sources: dict[str, str]) -> None:
         if marker not in policy:
             raise VerificationError(f"native license policy is incomplete: {marker}")
 
+    license_inventory = sources["tools/generate_license_inventory.py"]
+    sbom = sources["tools/generate_sbom.py"]
+    local_gate = sources["tools/run_local_gate.py"]
+    for marker in ("build_inventory", "gradle_license", "normalize_cargo_expression"):
+        if marker not in license_inventory:
+            raise VerificationError(f"license inventory generator is incomplete: {marker}")
+    for marker in ("CycloneDX", '"specVersion": "1.5"', "verify_apk_license_bundle"):
+        if marker not in sbom:
+            raise VerificationError(f"CycloneDX generator is incomplete: {marker}")
+    for marker in (
+        "generate_license_inventory.py",
+        "generate_sbom.py",
+        "duckyslicer-debug.cdx.json",
+        "DEBUG_DEPENDENCY_INVENTORY",
+        "DEBUG_LICENSE_INVENTORY",
+    ):
+        if marker not in local_gate:
+            raise VerificationError(f"local production gate omits actual SBOM generation: {marker}")
+    contributing = sources["CONTRIBUTING.md"]
+    security = sources["SECURITY.md"]
+    for document, name in ((contributing, "CONTRIBUTING.md"), (security, "SECURITY.md")):
+        if "CycloneDX SBOM" not in document or "offline license" not in document:
+            raise VerificationError(f"{name} omits the local APK/SBOM license contract")
+
     settings = sources["android/app/src/main/java/com/ashcastle/duckyslicer/AppSettingsSheet.kt"]
     for marker in (*SETTINGS_LEGAL_ASSETS, SOURCE_URL, "BuildConfig.VERSION_NAME", "open_source_summary"):
         if marker not in settings:
@@ -133,7 +162,12 @@ def read_sources() -> dict[str, str]:
         "README.md",
         "native/slicer-runtime/versions.env",
         "tools/generate_offline_licenses.py",
+        "tools/generate_license_inventory.py",
+        "tools/generate_sbom.py",
         "tools/native_license_policy.py",
+        "tools/run_local_gate.py",
+        "CONTRIBUTING.md",
+        "SECURITY.md",
         "android/app/build.gradle.kts",
         "android/app/src/main/java/com/ashcastle/duckyslicer/AppSettingsSheet.kt",
         "android/app/src/main/res/values/strings.xml",
@@ -147,7 +181,10 @@ def main() -> None:
         verify_distribution(read_sources())
     except (OSError, VerificationError) as error:
         raise SystemExit(f"Open-source distribution verification failed: {error}") from error
-    print("Verified offline AGPL notice, matching third-party revisions, source link, and bilingual Settings access")
+    print(
+        "Verified offline AGPL/licensing, actual-APK CycloneDX generation, matching "
+        "third-party revisions, source link, and bilingual Settings access"
+    )
 
 
 if __name__ == "__main__":

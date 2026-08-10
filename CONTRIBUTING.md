@@ -74,6 +74,11 @@ python3 tools/run_local_gate.py --serial <adb-serial>
 `python3 tools/run_local_gate.py --host-only` is useful while iterating, but it is
 not the authoritative full gate. The local ARM64 16 KB AVD is the authoritative
 functional gate.
+The host portion also regenerates the CycloneDX SBOM at
+`android/app/build/outputs/duckyslicer-debug.cdx.json`
+from the resolved Debug dependency inventory and verifies that its licenses match the
+offline license index inside the exact APK. The generated SBOM and license inventory
+are ignored build outputs; review them when dependencies change, but do not commit them.
 
 Preview changes should be checked with outer walls, inner walls, sparse infill,
 solid surfaces, support, bridges, multiple layer heights, and a dense model. The

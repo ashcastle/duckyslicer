@@ -9,6 +9,9 @@ from pathlib import Path
 from tools.run_local_gate import (
     ANDROID,
     DEBUG_APK,
+    DEBUG_DEPENDENCY_INVENTORY,
+    DEBUG_LICENSE_INVENTORY,
+    DEBUG_SBOM,
     ROOT,
     STATIC_VERIFIERS,
     DeviceFacts,
@@ -62,6 +65,38 @@ physical unauthorized transport_id:3
         self.assertTrue(
             any(":app:assembleDebugAndroidTest" in command for command in commands)
         )
+        license_command = next(
+            command
+            for command in commands
+            if len(command) > 1 and command[1].endswith("generate_license_inventory.py")
+        )
+        self.assertEqual(
+            (
+                "python-for-test",
+                str(ROOT / "tools/generate_license_inventory.py"),
+                str(DEBUG_DEPENDENCY_INVENTORY),
+                str(DEBUG_LICENSE_INVENTORY),
+            ),
+            license_command,
+        )
+        sbom_command = next(
+            command
+            for command in commands
+            if len(command) > 1 and command[1].endswith("generate_sbom.py")
+        )
+        self.assertEqual(
+            (
+                "python-for-test",
+                str(ROOT / "tools/generate_sbom.py"),
+                str(DEBUG_APK),
+                str(DEBUG_SBOM),
+                "local-debug",
+                str(DEBUG_DEPENDENCY_INVENTORY),
+                str(DEBUG_LICENSE_INVENTORY),
+            ),
+            sbom_command,
+        )
+        self.assertLess(commands.index(license_command), commands.index(sbom_command))
         self.assertTrue(
             any(
                 command[:4] == ("python-for-test", "-m", "unittest", "discover")

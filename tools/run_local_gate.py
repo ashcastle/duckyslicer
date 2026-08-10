@@ -17,6 +17,9 @@ ROOT = Path(__file__).resolve().parent.parent
 ANDROID = ROOT / "android"
 RUST = ROOT / "rust/duckyslicer-jni"
 DEBUG_APK = ANDROID / "app/build/outputs/apk/debug/app-debug.apk"
+DEBUG_DEPENDENCY_INVENTORY = ANDROID / "app/build/reports/dependencies/debug.txt"
+DEBUG_LICENSE_INVENTORY = ANDROID / "app/build/reports/dependencies/debug-licenses.json"
+DEBUG_SBOM = ANDROID / "app/build/outputs/duckyslicer-debug.cdx.json"
 STATIC_VERIFIERS = (
     "verify_workflows.py",
     "verify_no_embedded_credentials.py",
@@ -165,6 +168,29 @@ def host_steps(python: str = sys.executable, windows: bool = os.name == "nt") ->
                 ":app:lintDebug",
             ),
             ANDROID,
+        ),
+        GateStep(
+            "Debug dependency license inventory",
+            (
+                python,
+                str(ROOT / "tools/generate_license_inventory.py"),
+                str(DEBUG_DEPENDENCY_INVENTORY),
+                str(DEBUG_LICENSE_INVENTORY),
+            ),
+            ROOT,
+        ),
+        GateStep(
+            "Debug CycloneDX SBOM",
+            (
+                python,
+                str(ROOT / "tools/generate_sbom.py"),
+                str(DEBUG_APK),
+                str(DEBUG_SBOM),
+                "local-debug",
+                str(DEBUG_DEPENDENCY_INVENTORY),
+                str(DEBUG_LICENSE_INVENTORY),
+            ),
+            ROOT,
         ),
         GateStep(
             "Python verifier tests",

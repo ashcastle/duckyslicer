@@ -19,7 +19,19 @@ def valid_sources() -> dict[str, str]:
         "README.md": "[GNU Affero General Public License v3](LICENSE.txt)\n[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)",
         "native/slicer-runtime/versions.env": "ANDROID_SLICER_RUNTIME_COMMIT=runtime-rev\nSLICER_ENGINE_COMMIT=engine-rev",
         "tools/generate_offline_licenses.py": "verify_vendored_policy native_notice_sources render_bundle",
+        "tools/generate_license_inventory.py": (
+            "build_inventory gradle_license normalize_cargo_expression"
+        ),
+        "tools/generate_sbom.py": (
+            'CycloneDX "specVersion": "1.5" verify_apk_license_bundle'
+        ),
         "tools/native_license_policy.py": "VENDORED_COMPONENTS native_components native_notice_sources",
+        "tools/run_local_gate.py": (
+            "generate_license_inventory.py generate_sbom.py duckyslicer-debug.cdx.json "
+            "DEBUG_DEPENDENCY_INVENTORY DEBUG_LICENSE_INVENTORY"
+        ),
+        "CONTRIBUTING.md": "CycloneDX SBOM matches the offline license index",
+        "SECURITY.md": "CycloneDX SBOM matches the offline license index",
         "android/app/build.gradle.kts": (
             "prepareOpenSourceNotices registerOfflineLicenseBundle generate_offline_licenses.py "
             "generatedLegalAssets LICENSE.txt THIRD_PARTY_NOTICES.md THIRD_PARTY_LICENSES.txt"
@@ -53,6 +65,14 @@ class VerifyOpenSourceDistributionTest(unittest.TestCase):
         sources = valid_sources()
         sources["THIRD_PARTY_NOTICES.md"] = sources["THIRD_PARTY_NOTICES.md"].replace("engine-rev", "stale")
         with self.assertRaisesRegex(VerificationError, "SLICER_ENGINE_COMMIT"):
+            verify_distribution(sources)
+
+    def test_rejects_local_gate_without_actual_sbom_generation(self) -> None:
+        sources = valid_sources()
+        sources["tools/run_local_gate.py"] = sources["tools/run_local_gate.py"].replace(
+            "generate_sbom.py", "unit-test-only"
+        )
+        with self.assertRaisesRegex(VerificationError, "actual SBOM generation"):
             verify_distribution(sources)
 
 
