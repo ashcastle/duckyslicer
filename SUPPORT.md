@@ -10,8 +10,10 @@ For a reproducible app problem:
 2. Open a bug report and include the steps that caused the problem, what you expected,
    and what happened.
 3. Attach the support details after reviewing them. They contain app and device
-   information plus fixed recent-problem categories, but no models, G-code, file
-   names, printer addresses, access keys, free-form error text, or stack traces.
+   information, fixed recent-problem categories, and up to four fixed prior-exit
+   records on Android 11 and later. They contain no models, G-code, file names,
+   printer addresses, access keys, raw process names, system exit descriptions,
+   memory samples, free-form error text, or stack traces.
 4. Attach a model or G-code only when it is the smallest safe reproduction file and
    you have permission to publish it.
 
