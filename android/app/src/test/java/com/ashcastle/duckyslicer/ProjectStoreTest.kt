@@ -48,6 +48,12 @@ class ProjectStoreTest {
                     variableLayerHeights = VariableLayerHeights(
                         listOf(VariableLayerRange(0.25f, 0.75f, 0.08f)),
                     ),
+                    processOverrides = ObjectProcessOverrides(
+                        wallLoops = 5,
+                        topShellLayers = 7,
+                        sparseInfillSpeedMmS = 75f,
+                        supportEnabled = false,
+                    ),
                 ),
             ),
             selectedObjectId = "duck",
@@ -67,6 +73,7 @@ class ProjectStoreTest {
             snapshot.selectedObject!!.variableLayerHeights,
             restored.selectedObject!!.variableLayerHeights,
         )
+        assertEquals(snapshot.selectedObject!!.processOverrides, restored.selectedObject!!.processOverrides)
         assertTrue(modelFile.isFile)
         assertFalse(orphan.exists())
         assertTrue(outside.isFile)
@@ -94,7 +101,7 @@ class ProjectStoreTest {
     }
 
     @Test
-    fun schemaSixRestoresProjectSettingsAndSchemaOneRemainsReadable() = withStore { root, store ->
+    fun schemaSevenRestoresProjectSettingsAndSchemaOneRemainsReadable() = withStore { root, store ->
         val modelFile = store.createModelDestination("settings.stl").apply { writeText("solid part") }
         val options = multiFilamentSettingsFixture()
         val snapshot = ProjectSnapshot(
@@ -105,7 +112,7 @@ class ProjectStoreTest {
 
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
-        assertEquals(6, JSONObject(File(root, "current_project.json").readText()).getInt("schemaVersion"))
+        assertEquals(7, JSONObject(File(root, "current_project.json").readText()).getInt("schemaVersion"))
         assertEquals(snapshot.selectedObjectId, restored.snapshot.selectedObjectId)
         assertEquals(snapshot.objects.single().id, restored.snapshot.objects.single().id)
         assertEquals(snapshot.objects.single().transform, restored.snapshot.objects.single().transform)
@@ -122,6 +129,7 @@ class ProjectStoreTest {
             remove("seamPaint")
             remove("multiColorPaint")
             remove("variableLayerHeights")
+            remove("processOverrides")
         }
         File(root, "current_project.json").writeText(current.toString())
         val migrated = ProjectStore(root, ::inspectedModel).loadProject()
@@ -130,6 +138,7 @@ class ProjectStoreTest {
         assertTrue(migrated.snapshot.selectedObject!!.seamPaint.facets.isEmpty())
         assertTrue(migrated.snapshot.selectedObject!!.multiColorPaint.facets.isEmpty())
         assertTrue(migrated.snapshot.selectedObject!!.variableLayerHeights.ranges.isEmpty())
+        assertTrue(migrated.snapshot.selectedObject!!.processOverrides.isEmpty)
     }
 
     @Test

@@ -83,7 +83,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_OBJECTS + 1",
             'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
             "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-            "PROJECT_ARCHIVE_SCHEMA_VERSION = 4",
+            "PROJECT_ARCHIVE_SCHEMA_VERSION = 5",
             'Regex("models/[0-9]{3}\\\\.stl")',
             "require(!entry.isDirectory",
             "require(entries.add(entry.name))",
@@ -100,6 +100,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "multiColorPaint.facets.keys.all",
             'getJSONArray("multiColorPaint").toArchiveMultiColorPaint()',
             'getJSONArray("variableLayerHeights").toArchiveVariableLayerHeights()',
+            'getJSONObject("processOverrides").toObjectProcessOverrides()',
         ),
     )
 
@@ -308,8 +309,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         (
             "manifest.json",
             "models/000.stl",
-            "schema version `4`",
-            "Schema 1 through 3 projects remain readable",
+            "schema version `5`",
+            "Schema 1 through 4 projects remain readable",
             "multi-color painting",
             "variable layer-height",
             "rejects duplicate, directory, traversal, and unknown entries",

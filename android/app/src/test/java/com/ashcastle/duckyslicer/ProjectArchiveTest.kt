@@ -65,6 +65,13 @@ class ProjectArchiveTest {
                 variableLayerHeights = VariableLayerHeights(
                     listOf(VariableLayerRange(0.2f, 0.7f, 0.08f)),
                 ),
+                processOverrides = ObjectProcessOverrides(
+                    layerHeightMm = 0.1f,
+                    wallLoops = 4,
+                    sparseInfillDensityPercent = 28f,
+                    outerWallSpeedMmS = 42f,
+                    supportEnabled = true,
+                ),
             )
             val second = first.copy(
                 id = "duck-b",
@@ -100,7 +107,7 @@ class ProjectArchiveTest {
             assertEquals(
                 setOf(
                     "id", "displayName", "modelEntry", "transform", "supportPaint", "seamPaint",
-                    "multiColorPaint", "variableLayerHeights", "filamentSlot",
+                    "multiColorPaint", "variableLayerHeights", "processOverrides", "filamentSlot",
                 ),
                 manifest.getJSONArray("objects").getJSONObject(0).keys().asSequence().toSet(),
             )
@@ -128,6 +135,8 @@ class ProjectArchiveTest {
                 second.variableLayerHeights,
                 imported.snapshot.objects[1].variableLayerHeights,
             )
+            assertEquals(first.processOverrides, imported.snapshot.objects[0].processOverrides)
+            assertEquals(second.processOverrides, imported.snapshot.objects[1].processOverrides)
             assertEquals(0, imported.snapshot.objects[0].filamentSlot)
             assertEquals(1, imported.snapshot.objects[1].filamentSlot)
             assertEquals(
@@ -147,6 +156,7 @@ class ProjectArchiveTest {
                     objects.getJSONObject(index).remove("seamPaint")
                     objects.getJSONObject(index).remove("multiColorPaint")
                     objects.getJSONObject(index).remove("variableLayerHeights")
+                    objects.getJSONObject(index).remove("processOverrides")
                 }
             }
             val legacyArchive = zipOf(
@@ -157,6 +167,7 @@ class ProjectArchiveTest {
             assertTrue(legacy.snapshot.objects.all { it.seamPaint.facets.isEmpty() })
             assertTrue(legacy.snapshot.objects.all { it.multiColorPaint.facets.isEmpty() })
             assertTrue(legacy.snapshot.objects.all { it.variableLayerHeights.ranges.isEmpty() })
+            assertTrue(legacy.snapshot.objects.all { it.processOverrides.isEmpty })
             assertEquals(
                 1,
                 File(destinationRoot, ProjectStore.MODELS_DIRECTORY).listFiles().orEmpty().size,

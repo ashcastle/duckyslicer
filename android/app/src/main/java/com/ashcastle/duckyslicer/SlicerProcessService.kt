@@ -60,6 +60,7 @@ internal object SlicerProcessClient {
         List(transformedModels.size) { null },
         List(transformedModels.size) { null },
         List(transformedModels.size) { null },
+        List(transformedModels.size) { null },
         options,
         filamentSlots,
         foregroundSession,
@@ -74,6 +75,7 @@ internal object SlicerProcessClient {
         seamPaintFiles: List<File?>,
         multiColorPaintFiles: List<File?>,
         variableLayerHeightFiles: List<File?>,
+        processOverrideFiles: List<File?>,
         options: SliceOptions,
         filamentSlots: IntArray = IntArray(transformedModels.size),
         foregroundSession: ForegroundSliceSession? = null,
@@ -85,6 +87,7 @@ internal object SlicerProcessClient {
         seamPaintFiles,
         multiColorPaintFiles,
         variableLayerHeightFiles,
+        processOverrideFiles,
         options,
         filamentSlots,
         foregroundSession,
@@ -105,6 +108,7 @@ internal object SlicerProcessClient {
         }
         return sliceInternal(
             transformedModels,
+            List(transformedModels.size) { null },
             List(transformedModels.size) { null },
             List(transformedModels.size) { null },
             List(transformedModels.size) { null },
@@ -330,6 +334,7 @@ internal object SlicerProcessClient {
         seamPaintFiles: List<File?>,
         multiColorPaintFiles: List<File?>,
         variableLayerHeightFiles: List<File?>,
+        processOverrideFiles: List<File?>,
         options: SliceOptions,
         filamentSlots: IntArray,
         foregroundSession: ForegroundSliceSession?,
@@ -351,16 +356,20 @@ internal object SlicerProcessClient {
         require(variableLayerHeightFiles.size == transformedModels.size) {
             "Variable layer height count does not match models"
         }
+        require(processOverrideFiles.size == transformedModels.size) {
+            "Object settings count does not match models"
+        }
         require(filamentSlots.size == transformedModels.size) { "Filament slot count does not match models" }
         val supportPaintPaths = supportPaintFiles.map { it?.absolutePath.orEmpty() }
         val seamPaintPaths = seamPaintFiles.map { it?.absolutePath.orEmpty() }
         val multiColorPaintPaths = multiColorPaintFiles.map { it?.absolutePath.orEmpty() }
         val variableLayerHeightPaths = variableLayerHeightFiles.map { it?.absolutePath.orEmpty() }
+        val processOverridePaths = processOverrideFiles.map { it?.absolutePath.orEmpty() }
         val optionsText = options.toProjectJson().toString()
         require(
             encodedRequestBytes(
                 modelPaths + supportPaintPaths + seamPaintPaths + multiColorPaintPaths +
-                    variableLayerHeightPaths,
+                    variableLayerHeightPaths + processOverridePaths,
                 optionsText,
             ) <=
                 SlicerProcessContract.MAX_REQUEST_BYTES,
@@ -388,6 +397,10 @@ internal object SlicerProcessClient {
             putStringArrayList(
                 SlicerProcessContract.KEY_VARIABLE_LAYER_HEIGHT_PATHS,
                 ArrayList(variableLayerHeightPaths),
+            )
+            putStringArrayList(
+                SlicerProcessContract.KEY_PROCESS_OVERRIDE_PATHS,
+                ArrayList(processOverridePaths),
             )
             putString(SlicerProcessContract.KEY_OPTIONS, optionsText)
             putIntArray(SlicerProcessContract.KEY_FILAMENT_SLOTS, filamentSlots)
@@ -1487,6 +1500,15 @@ class SlicerProcessService : Service() {
         val variableLayerHeightFiles = variableLayerHeightPaths.map { path ->
             path.takeIf(String::isNotEmpty)?.let(::validateVariableLayerHeights)
         }
+        val processOverridePaths = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_PROCESS_OVERRIDE_PATHS),
+        ) { "Object setting paths are unavailable" }
+        require(processOverridePaths.size == models.size) {
+            "Object settings count does not match models"
+        }
+        val processOverrideFiles = processOverridePaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let(::validateObjectProcessOverrides)
+        }
         val optionsText = requireNotNull(extras.getString(SlicerProcessContract.KEY_OPTIONS)) {
             "Slice settings are unavailable"
         }
@@ -1496,7 +1518,7 @@ class SlicerProcessService : Service() {
         require(
             encodedRequestBytes(
                 paths + supportPaintPaths + seamPaintPaths + multiColorPaintPaths +
-                    variableLayerHeightPaths,
+                    variableLayerHeightPaths + processOverridePaths,
                 optionsText,
             ) <=
                 SlicerProcessContract.MAX_REQUEST_BYTES,
@@ -1536,6 +1558,7 @@ class SlicerProcessService : Service() {
                 seamPaintFiles,
                 multiColorPaintFiles,
                 variableLayerHeightFiles,
+                processOverrideFiles,
                 filamentSlots,
                 options,
                 maximumGcodeBytes,
@@ -1782,6 +1805,7 @@ class SlicerProcessService : Service() {
         seamPaintFiles: List<ValidatedSeamPaint?>,
         multiColorPaintFiles: List<ValidatedMultiColorPaint?>,
         variableLayerHeightFiles: List<ValidatedVariableLayerHeights?>,
+        processOverrideFiles: List<ValidatedObjectProcessOverrides?>,
         filamentSlots: IntArray,
         options: SliceOptions,
         maximumGcodeBytes: Int,
@@ -1834,6 +1858,16 @@ class SlicerProcessService : Service() {
                             variableLayers.file.absolutePath,
                         ),
                     ) { "Variable layer heights could not be applied" }
+                }
+            }
+            processOverrideFiles.forEachIndexed { objectIndex, overrides ->
+                if (overrides != null) {
+                    check(
+                        runtime.applyObjectProcessOverrides(
+                            objectIndex,
+                            overrides.file.absolutePath,
+                        ),
+                    ) { "Object settings could not be applied" }
                 }
             }
             val nativeConfig = options.toNativeConfig().apply {
@@ -2039,6 +2073,61 @@ class SlicerProcessService : Service() {
         return ValidatedMultiColorPaint(sidecar, filamentSlots)
     }
 
+    private fun validateObjectProcessOverrides(path: String): ValidatedObjectProcessOverrides {
+        require(path.length in 1..MAX_PATH_LENGTH) { "Invalid object settings path" }
+        val sidecar = File(path).canonicalFile
+        val allowedRoots = listOf(filesDir.canonicalFile, cacheDir.canonicalFile)
+        require(allowedRoots.any(sidecar::isInside)) { "Object settings are outside private storage" }
+        require(sidecar.isFile && sidecar.length() == ObjectProcessOverrides.SIDECAR_BYTES) {
+            "Object settings are unavailable"
+        }
+        DataInputStream(sidecar.inputStream().buffered()).use { reader ->
+            val magic = ByteArray(ObjectProcessOverrides.MAGIC.size)
+            reader.readFully(magic)
+            require(magic.contentEquals(ObjectProcessOverrides.MAGIC)) {
+                "Object settings format is invalid"
+            }
+            val mask = reader.readInt()
+            require(mask != 0 && mask and ObjectProcessOverrides.ALL_BITS == mask) {
+                "Object setting mask is invalid"
+            }
+            val values = ObjectProcessOverrides(
+                layerHeightMm = reader.readFloat().takeIf {
+                    mask and ObjectProcessOverrides.LAYER_HEIGHT_BIT != 0
+                },
+                wallLoops = reader.readInt().takeIf {
+                    mask and ObjectProcessOverrides.WALL_LOOPS_BIT != 0
+                },
+                topShellLayers = reader.readInt().takeIf {
+                    mask and ObjectProcessOverrides.TOP_SHELL_LAYERS_BIT != 0
+                },
+                bottomShellLayers = reader.readInt().takeIf {
+                    mask and ObjectProcessOverrides.BOTTOM_SHELL_LAYERS_BIT != 0
+                },
+                sparseInfillDensityPercent = reader.readFloat().takeIf {
+                    mask and ObjectProcessOverrides.INFILL_DENSITY_BIT != 0
+                },
+                outerWallSpeedMmS = reader.readFloat().takeIf {
+                    mask and ObjectProcessOverrides.OUTER_WALL_SPEED_BIT != 0
+                },
+                innerWallSpeedMmS = reader.readFloat().takeIf {
+                    mask and ObjectProcessOverrides.INNER_WALL_SPEED_BIT != 0
+                },
+                sparseInfillSpeedMmS = reader.readFloat().takeIf {
+                    mask and ObjectProcessOverrides.INFILL_SPEED_BIT != 0
+                },
+                supportEnabled = reader.readUnsignedByte().let { enabled ->
+                    require(enabled in 0..1) { "Object support setting is invalid" }
+                    (enabled == 1).takeIf {
+                        mask and ObjectProcessOverrides.SUPPORT_ENABLED_BIT != 0
+                    }
+                },
+            )
+            require(!values.isEmpty) { "Object settings are empty" }
+        }
+        return ValidatedObjectProcessOverrides(sidecar)
+    }
+
     private fun success(outcome: SliceOutcome) = Bundle().apply {
         putBoolean(SlicerProcessContract.KEY_OK, true)
         putInt(SlicerProcessContract.KEY_PID, Process.myPid())
@@ -2141,6 +2230,8 @@ class SlicerProcessService : Service() {
     )
 
     private data class ValidatedVariableLayerHeights(val file: File)
+
+    private data class ValidatedObjectProcessOverrides(val file: File)
 }
 
 private object SlicerProcessContract {
@@ -2171,6 +2262,7 @@ private object SlicerProcessContract {
     const val KEY_SEAM_PAINT_PATHS = "seamPaintPaths"
     const val KEY_MULTI_COLOR_PAINT_PATHS = "multiColorPaintPaths"
     const val KEY_VARIABLE_LAYER_HEIGHT_PATHS = "variableLayerHeightPaths"
+    const val KEY_PROCESS_OVERRIDE_PATHS = "processOverridePaths"
     const val KEY_OPTIONS = "options"
     const val KEY_MAXIMUM_GCODE_BYTES_FOR_TEST = "maximumGcodeBytesForTest"
     const val KEY_OK = "ok"

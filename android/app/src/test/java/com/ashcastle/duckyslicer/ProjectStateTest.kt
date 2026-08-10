@@ -206,6 +206,28 @@ class ProjectStateTest {
     }
 
     @Test
+    fun processOverridesAreObjectScopedAndUndoable() {
+        var state = ProjectHistoryState()
+            .add(projectObject("first"))
+            .add(projectObject("second"))
+        val overrides = ObjectProcessOverrides(
+            layerHeightMm = 0.12f,
+            wallLoops = 5,
+            sparseInfillDensityPercent = 30f,
+            supportEnabled = true,
+        )
+
+        state = state.updateSelectedProcessOverrides(overrides)
+        assertTrue(state.current.objects.first().processOverrides.isEmpty)
+        assertEquals(overrides, state.current.selectedObject!!.processOverrides)
+
+        state = state.undo()
+        assertTrue(state.current.selectedObject!!.processOverrides.isEmpty)
+        state = state.redo()
+        assertEquals(overrides, state.current.selectedObject!!.processOverrides)
+    }
+
+    @Test
     fun filamentAssignmentIsObjectScopedUndoableAndConstrainedWhenSlotsShrink() {
         var state = ProjectHistoryState()
             .add(projectObject("first"))
