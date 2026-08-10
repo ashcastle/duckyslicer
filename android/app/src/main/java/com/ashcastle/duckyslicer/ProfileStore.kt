@@ -70,6 +70,7 @@ class ProfileStore private constructor(
             maxJerkY = options.maxJerkY,
             maxJerkZ = options.maxJerkZ,
             maxJerkE = options.maxJerkE,
+            extruderCount = options.printerProfile.extruderCount,
         )
         require(ProfileValidation.printer(profile)) { "Printer profile contains unsafe values" }
         append("printers", profile.toProfileJson())
@@ -77,28 +78,54 @@ class ProfileStore private constructor(
     }
 
     @Synchronized
-    fun saveFilament(name: String, options: SliceOptions): FilamentProfile {
+    fun saveFilament(name: String, options: SliceOptions, slot: Int = 0): FilamentProfile {
+        val selected = options.resolvedFilamentSlots().getOrElse(slot) {
+            throw IllegalArgumentException("Filament slot is unavailable")
+        }
+        val effective = if (slot == 0) {
+            selected.copy(
+                nozzleTemp = options.nozzleTemp,
+                firstLayerNozzleTemp = options.firstLayerNozzleTemp,
+                bedTemp = options.bedTemp,
+                firstLayerBedTemp = options.firstLayerBedTemp,
+                flowRatio = options.flowRatio,
+                maxVolumetricSpeed = options.maxVolumetricSpeed,
+                retractLength = options.retractLength,
+                retractSpeed = options.retractSpeed,
+                fanMinSpeed = options.fanMinSpeed,
+                fanMaxSpeed = options.fanMaxSpeed,
+                overhangFanSpeed = options.overhangFanSpeed,
+                slowDownLayerTime = options.slowDownLayerTime,
+                slowDownMinSpeed = options.slowDownMinSpeed,
+                closeFanFirstLayers = options.closeFanFirstLayers,
+                fullFanSpeedLayer = options.fullFanSpeedLayer,
+                pressureAdvanceEnabled = options.pressureAdvanceEnabled,
+                pressureAdvance = options.pressureAdvance,
+            )
+        } else {
+            selected
+        }
         val profile = FilamentProfile(
             id = userId(),
             name = requireName(name),
-            nativeName = options.filamentProfile.nativeName,
-            nozzleTemp = options.nozzleTemp,
-            firstLayerNozzleTemp = options.firstLayerNozzleTemp,
-            bedTemp = options.bedTemp,
-            firstLayerBedTemp = options.firstLayerBedTemp,
-            flowRatio = options.flowRatio,
-            maxVolumetricSpeed = options.maxVolumetricSpeed,
-            retractLength = options.retractLength,
-            retractSpeed = options.retractSpeed,
-            fanMinSpeed = options.fanMinSpeed,
-            fanMaxSpeed = options.fanMaxSpeed,
-            overhangFanSpeed = options.overhangFanSpeed,
-            slowDownLayerTime = options.slowDownLayerTime,
-            slowDownMinSpeed = options.slowDownMinSpeed,
-            closeFanFirstLayers = options.closeFanFirstLayers,
-            fullFanSpeedLayer = options.fullFanSpeedLayer,
-            pressureAdvanceEnabled = options.pressureAdvanceEnabled,
-            pressureAdvance = options.pressureAdvance,
+            nativeName = effective.nativeName,
+            nozzleTemp = effective.nozzleTemp,
+            firstLayerNozzleTemp = effective.firstLayerNozzleTemp,
+            bedTemp = effective.bedTemp,
+            firstLayerBedTemp = effective.firstLayerBedTemp,
+            flowRatio = effective.flowRatio,
+            maxVolumetricSpeed = effective.maxVolumetricSpeed,
+            retractLength = effective.retractLength,
+            retractSpeed = effective.retractSpeed,
+            fanMinSpeed = effective.fanMinSpeed,
+            fanMaxSpeed = effective.fanMaxSpeed,
+            overhangFanSpeed = effective.overhangFanSpeed,
+            slowDownLayerTime = effective.slowDownLayerTime,
+            slowDownMinSpeed = effective.slowDownMinSpeed,
+            closeFanFirstLayers = effective.closeFanFirstLayers,
+            fullFanSpeedLayer = effective.fullFanSpeedLayer,
+            pressureAdvanceEnabled = effective.pressureAdvanceEnabled,
+            pressureAdvance = effective.pressureAdvance,
         )
         require(ProfileValidation.filament(profile)) { "Filament profile contains unsafe values" }
         append("filaments", profile.toProfileJson())
@@ -364,6 +391,7 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("maxAccelerationTravel", maxAccelerationTravel)
     .put("maxJerkX", maxJerkX).put("maxJerkY", maxJerkY)
     .put("maxJerkZ", maxJerkZ).put("maxJerkE", maxJerkE)
+    .put("extruderCount", extruderCount)
     .put("builtIn", builtIn)
     .put("brand", brand ?: JSONObject.NULL)
 
@@ -575,6 +603,7 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         } else {
             rectangularBedPolygon(bedSizeX, bedSizeY)
         },
+        extruderCount = optInt("extruderCount", 1),
     )
 }.getOrNull()
 

@@ -5,6 +5,7 @@ data class ProjectObject(
     val model: ModelInfo,
     val transform: ModelTransform = ModelTransform(),
     val supportPaint: SupportPaint = SupportPaint(),
+    val filamentSlot: Int = 0,
 )
 
 data class ProjectSnapshot(
@@ -148,6 +149,32 @@ data class ProjectHistoryState(
             },
         )
         return if (recordHistory) record(next) else copy(current = next)
+    }
+
+    fun updateSelectedFilamentSlot(slot: Int): ProjectHistoryState {
+        require(slot in 0 until MAX_FILAMENT_SLOTS) { "Filament slot is invalid" }
+        val selected = current.selectedObject ?: return this
+        if (selected.filamentSlot == slot) return this
+        return record(
+            current.copy(
+                objects = current.objects.map { projectObject ->
+                    if (projectObject.id == selected.id) {
+                        projectObject.copy(filamentSlot = slot)
+                    } else {
+                        projectObject
+                    }
+                },
+            ),
+        )
+    }
+
+    fun constrainFilamentSlots(slotCount: Int): ProjectHistoryState {
+        require(slotCount in 1..MAX_FILAMENT_SLOTS) { "Filament slot count is invalid" }
+        val updated = current.objects.map { projectObject ->
+            if (projectObject.filamentSlot < slotCount) projectObject
+            else projectObject.copy(filamentSlot = 0)
+        }
+        return if (updated == current.objects) this else record(current.copy(objects = updated))
     }
 
     fun updateSupportPaint(

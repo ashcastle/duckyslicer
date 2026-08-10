@@ -489,4 +489,9 @@
     <string name="raft_expansion">래프트 확장</string>
     <string name="raft_first_layer_density">첫 레이어 밀도</string>
     <string name="raft_first_layer_expansion">첫 레이어 확장</string>
+    <string name="filament_slots_summary">필라멘트 슬롯 %1$d/%2$d</string>
+    <string name="add_filament_slot">필라멘트 슬롯 추가</string>
+    <string name="object_filament">오브젝트 필라멘트</string>
+    <string name="filament_tool_summary">T%1$d · %2$s</string>
+    <string name="filament_slot_unavailable">이 프린터에서 사용할 수 있는 필라멘트 슬롯이 없습니다.</string>
 </resources>

@@ -117,6 +117,7 @@ internal class ProjectStore(
                         ),
                         transform = archived.transform,
                         supportPaint = archived.supportPaint,
+                        filamentSlot = archived.filamentSlot,
                     )
                 },
                 selectedObjectId = decoded.selectedObjectId,
@@ -176,6 +177,14 @@ internal class ProjectStore(
         }
         val requestedSelection = root.takeUnless { it.isNull("selectedObjectId") }
             ?.optString("selectedObjectId")?.takeIf(String::isNotBlank)
+        val restoredOptions = if (schemaVersion >= 2) {
+            root.optJSONObject("sliceOptions")?.toProjectSliceOptionsOrNull()
+        } else {
+            null
+        }
+        if (objects.any { it.filamentSlot !in (restoredOptions?.resolvedFilamentSlots()?.indices ?: 0..0) }) {
+            return null
+        }
         return StoredProject(
             document = StoredProjectDocument(
                 snapshot = ProjectSnapshot(
@@ -183,11 +192,7 @@ internal class ProjectStore(
                     selectedObjectId = requestedSelection?.takeIf(objectIds::contains)
                         ?: objects.lastOrNull()?.id,
                 ),
-                sliceOptions = if (schemaVersion >= 2) {
-                    root.optJSONObject("sliceOptions")?.toProjectSliceOptionsOrNull()
-                } else {
-                    null
-                },
+                sliceOptions = restoredOptions,
             ),
             declaredModels = declaredModels,
         )
@@ -202,6 +207,9 @@ internal class ProjectStore(
         require(snapshot.selectedObjectId == null || snapshot.objects.any { it.id == snapshot.selectedObjectId }) {
             "Project selection is invalid"
         }
+        require(snapshot.objects.all { projectObject ->
+            projectObject.filamentSlot in (sliceOptions?.resolvedFilamentSlots()?.indices ?: 0..0)
+        }) { "Project filament assignment is invalid" }
         check(projectRoot.isDirectory || projectRoot.mkdirs()) { "Project storage is unavailable" }
         check(modelsDirectory.isDirectory || modelsDirectory.mkdirs()) {
             "Project model storage is unavailable"
@@ -258,11 +266,14 @@ internal class ProjectStore(
         val supportPaint = value.optJSONArray("supportPaint")
             ?.toSupportPaint(model.triangles)
             ?: SupportPaint()
+        val filamentSlot = value.optInt("filamentSlot", 0)
+        require(filamentSlot in 0 until MAX_FILAMENT_SLOTS) { "Filament slot is invalid" }
         return ProjectObject(
             id = id,
             model = model,
             transform = transform,
             supportPaint = supportPaint,
+            filamentSlot = filamentSlot,
         )
     }
 
@@ -306,6 +317,7 @@ internal class ProjectStore(
             if (schemaVersion >= 3) {
                 require(value.optJSONArray("supportPaint")?.isValidSupportPaintArray() == true)
             }
+            require(value.optInt("filamentSlot", 0) in 0 until MAX_FILAMENT_SLOTS)
         }
         val selected = root.takeUnless { it.isNull("selectedObjectId") }
             ?.optString("selectedObjectId")?.takeIf(String::isNotBlank)
@@ -331,6 +343,8 @@ internal class ProjectStore(
             .put("modelFile", modelFile.name)
             .put("transform", transform.toStoredJson())
             .put("supportPaint", supportPaint.toStoredJson())
+            .put("filamentSlot", filamentSlot.takeIf { it in 0 until MAX_FILAMENT_SLOTS }
+                ?: error("Invalid filament slot"))
     }
 
     private fun ModelTransform.toStoredJson() = JSONObject()

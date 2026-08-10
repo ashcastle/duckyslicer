@@ -126,6 +126,16 @@ import kotlinx.coroutines.delay
 private val WorkspaceYellow = Color(0xFFF6C945)
 private val WorkspaceBlack = Color(0xFF202124)
 private val WorkspacePanel = Color(0xEE2A2A27)
+private val FilamentSlotColors = listOf(
+    WorkspaceYellow,
+    Color(0xFF44D7FF),
+    Color(0xFFFF62D0),
+    Color(0xFF5EE6A8),
+    Color(0xFFFF6B6B),
+    Color(0xFFA78BFA),
+    Color(0xFFFF9F43),
+    Color(0xFFE7E7E2),
+)
 private const val PreviewDepthBands = 12
 private const val TabletShortestSideDp = 600f
 private const val CompactNavigationLabelFontScale = 1.5f
@@ -146,6 +156,9 @@ internal fun workspaceEditingBusy(
     slicing: Boolean,
     previewLoading: Boolean,
 ): Boolean = autoLaying || arranging || slicing || previewLoading
+
+internal fun filamentSlotColor(slot: Int): Color =
+    FilamentSlotColors[Math.floorMod(slot, FilamentSlotColors.size)]
 
 private enum class SupportPaintTool(val state: SupportPaintState?, val label: Int) {
     ENFORCE(SupportPaintState.ENFORCE, R.string.support_enforce),
@@ -230,6 +243,7 @@ internal fun WorkspaceScreen(
     onModelTransformChanged: (ModelTransform) -> Unit,
     onModelTransformPreview: (ModelTransform) -> Unit,
     onModelTransformCommitted: (ModelTransform) -> Unit,
+    onObjectFilamentSelected: (FilamentProfile) -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onDuplicate: () -> Unit,
@@ -244,7 +258,7 @@ internal fun WorkspaceScreen(
     onSave: () -> Unit,
     onSliceOptionsChanged: (SliceOptions) -> Unit,
     onSavePrinterProfile: (String, SliceOptions) -> Unit,
-    onSaveFilamentProfile: (String, SliceOptions) -> Unit,
+    onSaveFilamentProfile: (String, SliceOptions, Int) -> Unit,
     onSaveSlicingProfile: (String, SliceOptions) -> Unit,
     onLayerRangeSelected: (Int, Int) -> Unit,
     onAppSettingsChanged: (AppSettings) -> Unit,
@@ -265,12 +279,14 @@ internal fun WorkspaceScreen(
     val tabletLayout = useWorkspaceNavigationRail(maxWidth.value, maxHeight.value)
     val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
     var showModelTools by remember { mutableStateOf(false) }
+    var showFilamentPicker by remember { mutableStateOf(false) }
     var supportPainting by remember { mutableStateOf(false) }
     var supportPaintTool by remember { mutableStateOf(SupportPaintTool.ENFORCE) }
     var visibleToolpathRoles by remember { mutableStateOf(ToolpathStyles.indices.toSet()) }
     var previewControlsExpanded by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(selectedObjectId, selectedTab) {
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) supportPainting = false
+        if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showFilamentPicker = false
     }
     Scaffold(
         containerColor = Color(0xFF191A18),
@@ -482,8 +498,13 @@ internal fun WorkspaceScreen(
     }
     }
     if (showModelTools && selectedObject != null) {
+        val filamentSlots = sliceOptions.resolvedFilamentSlots()
         ModelTransformSheet(
             transform = modelTransform,
+            filamentSlot = selectedObject.filamentSlot,
+            filamentProfile = filamentSlots.getOrElse(selectedObject.filamentSlot) {
+                filamentSlots.first()
+            },
             bedSizeX = sliceOptions.bedSizeX,
             bedSizeY = sliceOptions.bedSizeY,
             maxPrintHeight = sliceOptions.maxPrintHeight,
@@ -495,6 +516,10 @@ internal fun WorkspaceScreen(
                 showModelTools = false
                 onSplit()
             },
+            onChooseFilament = {
+                showModelTools = false
+                showFilamentPicker = true
+            },
             onTransformChanged = onModelTransformChanged,
             onRemoveModel = {
                 showModelTools = false
@@ -503,12 +528,27 @@ internal fun WorkspaceScreen(
             onDismiss = { showModelTools = false },
         )
     }
+    if (showFilamentPicker && selectedObject != null) {
+        FilamentAssignmentSheet(
+            selectedSlot = selectedObject.filamentSlot,
+            options = sliceOptions,
+            catalog = profileCatalog,
+            recentIds = profileRecents.filamentIds,
+            onSelected = {
+                showFilamentPicker = false
+                onObjectFilamentSelected(it)
+            },
+            onDismiss = { showFilamentPicker = false },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ModelTransformSheet(
     transform: ModelTransform,
+    filamentSlot: Int,
+    filamentProfile: FilamentProfile,
     bedSizeX: Float,
     bedSizeY: Float,
     maxPrintHeight: Float,
@@ -517,6 +557,7 @@ private fun ModelTransformSheet(
     splitting: Boolean,
     onAutoLay: () -> Unit,
     onSplit: () -> Unit,
+    onChooseFilament: () -> Unit,
     onTransformChanged: (ModelTransform) -> Unit,
     onRemoveModel: () -> Unit,
     onDismiss: () -> Unit,
@@ -637,6 +678,31 @@ private fun ModelTransformSheet(
                 )
             }
             Button(
+                onClick = onChooseFilament,
+                enabled = !autoLaying && !splitting,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF3A3B37),
+                    contentColor = Color(0xFFF4F4EE),
+                ),
+            ) {
+                Surface(
+                    modifier = Modifier.size(18.dp),
+                    shape = RoundedCornerShape(50),
+                    color = filamentSlotColor(filamentSlot),
+                ) {}
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    stringResource(
+                        R.string.filament_tool_summary,
+                        filamentSlot + 1,
+                        profileLabel(filamentProfile),
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Button(
                 onClick = onAutoLay,
                 enabled = !autoLaying && !splitting,
                 modifier = Modifier.fillMaxWidth(),
@@ -710,6 +776,63 @@ private fun ModelTransformSheet(
             ) {
                 Text(stringResource(R.string.remove_model), color = Color(0xFFFF8A80))
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FilamentAssignmentSheet(
+    selectedSlot: Int,
+    options: SliceOptions,
+    catalog: ProfileCatalog,
+    recentIds: List<String>,
+    onSelected: (FilamentProfile) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val slots = options.resolvedFilamentSlots()
+    val selected = slots.getOrElse(selectedSlot) { slots.first() }
+    val slotLimit = options.printerProfile.extruderCount.coerceIn(1, MAX_FILAMENT_SLOTS)
+    val profiles = catalog.filaments
+        .asSequence()
+        .filter { it.compatiblePrinters.matchesPrinter(options.printerProfile) }
+        .filter { candidate ->
+            slots.any { it.id == candidate.id } || slots.size < slotLimit
+        }
+        .plus(selected)
+        .distinctBy(FilamentProfile::id)
+        .toList()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF282925),
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 680.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(
+                stringResource(R.string.object_filament),
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleLarge,
+            )
+            SearchableGroupedProfileChoices(
+                entries = profiles,
+                selected = selected,
+                recentIds = recentIds,
+                id = FilamentProfile::id,
+                label = { profileLabel(it) },
+                brand = FilamentProfile::brand,
+                builtIn = FilamentProfile::builtIn,
+                searchTerms = { listOf(it.name, it.nativeName, it.brand.orEmpty()) },
+                onSelected = onSelected,
+            )
         }
     }
 }
@@ -1293,6 +1416,7 @@ private fun BedScene(
                 val model = projectObject.model
                 val modelTransform = projectObject.transform
                 val objectSelected = projectObject.id == selectedObjectId
+                val objectColor = filamentSlotColor(projectObject.filamentSlot)
                 val minimumRotatedZ = modelTransform.minimumRotatedZ(model)
                 val meshPath = Path()
                 val enforcePaintPath = Path()
@@ -1373,11 +1497,11 @@ private fun BedScene(
                     )
                 }
                 nextScreenTriangles[projectObject.id] = screenTriangles
-                drawPath(meshPath, WorkspaceYellow.copy(alpha = if (objectSelected) 0.24f else 0.14f))
+                drawPath(meshPath, objectColor.copy(alpha = if (objectSelected) 0.28f else 0.17f))
                 drawPath(
                     meshPath,
                     if (objectSelected) Color.White.copy(alpha = 0.92f)
-                    else WorkspaceYellow.copy(alpha = 0.52f),
+                    else objectColor.copy(alpha = 0.66f),
                     style = Stroke(if (objectSelected) 1.5.dp.toPx() else 0.7.dp.toPx()),
                 )
                 drawPath(enforcePaintPath, Color(0xFF5EE6A8).copy(alpha = 0.9f))
@@ -1572,7 +1696,7 @@ private fun SliceSheet(
     onCancelSlice: () -> Unit,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSavePrinter: (String, SliceOptions) -> Unit,
-    onSaveFilament: (String, SliceOptions) -> Unit,
+    onSaveFilament: (String, SliceOptions, Int) -> Unit,
     onSaveSlicing: (String, SliceOptions) -> Unit,
     modifier: Modifier = Modifier,
 ) {
