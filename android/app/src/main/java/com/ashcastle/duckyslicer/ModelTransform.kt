@@ -80,6 +80,35 @@ internal fun ModelTransform.withAxisScale(
     )
 }
 
+internal fun ModelTransform.withFaceOnBed(triangle: FloatArray): ModelTransform {
+    require(triangle.size == 9 && triangle.all(Float::isFinite)) {
+        "Selected face is invalid"
+    }
+    val response = JSONObject(
+        NativeEngine.layOnFace(
+            JSONObject()
+                .put("transform", JSONObject(toJson(0f, 0f)))
+                .put("triangle", JSONArray(triangle.toList()))
+                .toString(),
+        ),
+    )
+    require(response.optBoolean("ok")) {
+        response.optString("error").ifBlank { "Selected face could not be placed" }
+    }
+    val rotation = response.getJSONArray("rotationDeg")
+    require(rotation.length() == 3) { "Selected face rotation is invalid" }
+    val degrees = FloatArray(3) { index -> rotation.getDouble(index).toFloat() }
+    require(degrees.all { it.isFinite() && it in -180f..180f }) {
+        "Selected face rotation is invalid"
+    }
+    return copy(
+        offsetZmm = 0f,
+        rotationXdeg = degrees[0],
+        rotationYdeg = degrees[1],
+        rotationZdeg = degrees[2],
+    )
+}
+
 internal data class OrcaOrientation(
     val rotationRadians: DoubleArray,
 ) {

@@ -2,6 +2,7 @@ package com.ashcastle.duckyslicer
 
 import androidx.compose.ui.geometry.Offset
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SupportPaintHitTest {
@@ -14,9 +15,14 @@ class SupportPaintHitTest {
             c = Offset(0f, 40f),
             depth = 2f,
         )
-        val front = back.copy(sourceFacetIndex = 9, depth = 8f)
+        val front = back.copy(sourceFacetIndex = 9, previewTriangleIndex = 27, depth = 8f)
 
         assertEquals(9, closestPaintFacet(listOf(back, front), Offset(5f, 5f), 10f))
+        assertEquals(
+            27,
+            closestModelTriangle(listOf(back, front), Offset(5f, 5f), 10f)
+                ?.previewTriangleIndex,
+        )
     }
 
     @Test
@@ -31,5 +37,22 @@ class SupportPaintHitTest {
 
         assertEquals(12, closestPaintFacet(listOf(thin), Offset(30f, 18f), 9f))
         assertEquals(null, closestPaintFacet(listOf(thin), Offset(30f, 40f), 9f))
+    }
+
+    @Test
+    fun solidModelFacesReceiveDirectionalShadingInsteadOfUniformWireframeColor() {
+        val upward = modelSurfaceShade(
+            floatArrayOf(0f, 0f, 0f),
+            floatArrayOf(1f, 0f, 0f),
+            floatArrayOf(0f, 1f, 0f),
+        )
+        val side = modelSurfaceShade(
+            floatArrayOf(0f, 0f, 0f),
+            floatArrayOf(0f, 1f, 0f),
+            floatArrayOf(0f, 0f, 1f),
+        )
+
+        assertTrue("Different face directions must remain visually distinguishable", upward > side)
+        assertTrue(upward in 0f..1f && side in 0f..1f)
     }
 }

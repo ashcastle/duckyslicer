@@ -13,6 +13,7 @@ import java.util.Locale
 internal enum class SupportEvent {
     ARRANGE_FAILED,
     AUTO_LAY_FAILED,
+    LAY_ON_FACE_FAILED,
     FILAMENT_PROFILE_SAVE_FAILED,
     GCODE_EXPORT_FAILED,
     MODEL_IMPORT_FAILED,

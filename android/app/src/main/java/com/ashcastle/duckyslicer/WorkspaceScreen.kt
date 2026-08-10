@@ -185,6 +185,8 @@ internal data class ModelScreenTriangle(
     val b: Offset,
     val c: Offset,
     val depth: Float,
+    val previewTriangleIndex: Int = sourceFacetIndex,
+    val surfaceShade: Float = 1f,
 )
 
 private data class ToolpathStyle(
@@ -264,6 +266,7 @@ internal fun WorkspaceScreen(
     onDuplicate: () -> Unit,
     onArrange: () -> Unit,
     onAutoLay: () -> Unit,
+    onLayOnFace: (String, FloatArray) -> Unit,
     onSplit: () -> Unit,
     onCut: (Float, Boolean) -> Unit,
     onSupportPaintPreview: (String, Int, SupportPaintState?) -> Unit,
@@ -307,6 +310,7 @@ internal fun WorkspaceScreen(
     var showVariableLayerHeightTool by remember { mutableStateOf(false) }
     var showObjectProcessSettings by remember { mutableStateOf(false) }
     var showPrimitivePicker by remember { mutableStateOf(false) }
+    var layingOnFace by remember { mutableStateOf(false) }
     var supportPainting by remember { mutableStateOf(false) }
     var supportPaintTool by remember { mutableStateOf(SupportPaintTool.ENFORCE) }
     var seamPainting by remember { mutableStateOf(false) }
@@ -316,6 +320,7 @@ internal fun WorkspaceScreen(
     var visibleToolpathRoles by remember { mutableStateOf(ToolpathStyles.indices.toSet()) }
     var previewControlsExpanded by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(selectedObjectId, selectedTab) {
+        if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) layingOnFace = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) supportPainting = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) seamPainting = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) multiColorPainting = false
@@ -364,7 +369,8 @@ internal fun WorkspaceScreen(
                     previewDetail = appSettings.previewDetail,
                     previewRenderingMode = appSettings.previewRenderingMode,
                     objectManipulationEnabled = selectedTab == WorkspaceTab.SLICE &&
-                        !importing && !editingBusy && !slicing && !previewLoading,
+                        !importing && !editingBusy && !slicing && !previewLoading && !layingOnFace,
+                    layOnFaceObjectId = selectedObjectId.takeIf { layingOnFace },
                     supportPaintObjectId = selectedObjectId.takeIf { supportPainting },
                     supportPaintState = supportPaintTool.state,
                     seamPaintObjectId = selectedObjectId.takeIf { seamPainting },
@@ -374,6 +380,10 @@ internal fun WorkspaceScreen(
                     onObjectSelected = onObjectSelected,
                     onModelTransformPreview = onModelTransformPreview,
                     onModelTransformCommitted = onModelTransformCommitted,
+                    onLayOnFace = { objectId, triangle ->
+                        layingOnFace = false
+                        onLayOnFace(objectId, triangle)
+                    },
                     onSupportPaintPreview = onSupportPaintPreview,
                     onSupportPaintCommitted = onSupportPaintCommitted,
                     onSeamPaintPreview = onSeamPaintPreview,
@@ -401,7 +411,7 @@ internal fun WorkspaceScreen(
 
             if (
                 selectedObject != null && selectedTab == WorkspaceTab.SLICE &&
-                !supportPainting && !seamPainting && !multiColorPainting
+                !layingOnFace && !supportPainting && !seamPainting && !multiColorPainting
             ) {
                 ObjectToolRail(
                     canUndo = canUndo,
@@ -410,6 +420,12 @@ internal fun WorkspaceScreen(
                     onRedo = onRedo,
                     onDuplicate = onDuplicate,
                     onAutoLay = onAutoLay,
+                    onLayOnFace = {
+                        supportPainting = false
+                        seamPainting = false
+                        multiColorPainting = false
+                        layingOnFace = true
+                    },
                     autoLaying = autoLaying,
                     editingBusy = editingBusy,
                     canPaintColor = availableFilaments.size > 1,
@@ -430,6 +446,13 @@ internal fun WorkspaceScreen(
                     onRemove = {
                         onRemoveModel()
                     },
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
+                )
+            }
+
+            if (selectedObject != null && selectedTab == WorkspaceTab.SLICE && layingOnFace) {
+                LayOnFacePalette(
+                    onDone = { layingOnFace = false },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
                 )
             }
@@ -606,6 +629,13 @@ internal fun WorkspaceScreen(
             splitting = splitting,
             cutting = cutting,
             onAutoLay = onAutoLay,
+            onLayOnFace = {
+                showModelTools = false
+                supportPainting = false
+                seamPainting = false
+                multiColorPainting = false
+                layingOnFace = true
+            },
             onSplit = {
                 showModelTools = false
                 onSplit()
@@ -813,6 +843,7 @@ private fun ModelTransformSheet(
     splitting: Boolean,
     cutting: Boolean,
     onAutoLay: () -> Unit,
+    onLayOnFace: () -> Unit,
     onSplit: () -> Unit,
     onCut: () -> Unit,
     onSeamPaint: () -> Unit,
@@ -1091,6 +1122,19 @@ private fun ModelTransformSheet(
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.auto_lay))
                 }
+            }
+            Button(
+                onClick = onLayOnFace,
+                enabled = !autoLaying && !splitting && !cutting,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF3A3B37),
+                    contentColor = Color(0xFFF4F4EE),
+                ),
+            ) {
+                Icon(Icons.Default.Straighten, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.lay_on_face))
             }
             Button(
                 onClick = onSplit,
@@ -1833,6 +1877,7 @@ private fun BedScene(
     previewDetail: PreviewDetail,
     previewRenderingMode: PreviewRenderingMode,
     objectManipulationEnabled: Boolean,
+    layOnFaceObjectId: String?,
     supportPaintObjectId: String?,
     supportPaintState: SupportPaintState?,
     seamPaintObjectId: String?,
@@ -1842,6 +1887,7 @@ private fun BedScene(
     onObjectSelected: (String?) -> Unit,
     onModelTransformPreview: (ModelTransform) -> Unit,
     onModelTransformCommitted: (ModelTransform) -> Unit,
+    onLayOnFace: (String, FloatArray) -> Unit,
     onSupportPaintPreview: (String, Int, SupportPaintState?) -> Unit,
     onSupportPaintCommitted: (String, SupportPaint) -> Unit,
     onSeamPaintPreview: (String, Int, SeamPaintState?) -> Unit,
@@ -1891,6 +1937,7 @@ private fun BedScene(
     val currentSelectionCallback by rememberUpdatedState(onObjectSelected)
     val currentTransformCallback by rememberUpdatedState(onModelTransformPreview)
     val currentTransformCommitCallback by rememberUpdatedState(onModelTransformCommitted)
+    val currentLayOnFaceCallback by rememberUpdatedState(onLayOnFace)
     val currentSupportPaintPreviewCallback by rememberUpdatedState(onSupportPaintPreview)
     val currentSupportPaintCommitCallback by rememberUpdatedState(onSupportPaintCommitted)
     val currentSeamPaintPreviewCallback by rememberUpdatedState(onSeamPaintPreview)
@@ -1904,14 +1951,16 @@ private fun BedScene(
     val previewPaths = remember(preview) {
         Array(PreviewDepthBands) { Array(ToolpathStyles.size) { Path() } }
     }
-    val movingPreviewPlan = remember(preview, effectivePreviewDetail) {
+    val movingPreviewPlan = remember(preview, effectivePreviewDetail, visibleToolpathRoles) {
         preview?.buildRenderPlan(
             segmentBudget = compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = false),
+            visibleRoles = visibleToolpathRoles,
         )
     }
-    val refinedPreviewPlan = remember(preview, effectivePreviewDetail) {
+    val refinedPreviewPlan = remember(preview, effectivePreviewDetail, visibleToolpathRoles) {
         preview?.buildRenderPlan(
             segmentBudget = compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = true),
+            visibleRoles = visibleToolpathRoles,
         )
     }
 
@@ -1929,6 +1978,7 @@ private fun BedScene(
             objectIds,
             preview,
             objectManipulationEnabled,
+            layOnFaceObjectId,
             supportPaintObjectId,
             supportPaintState,
             seamPaintObjectId,
@@ -1938,6 +1988,9 @@ private fun BedScene(
         ) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
+                val layOnFaceObject = layOnFaceObjectId?.let { objectId ->
+                    currentObjects.firstOrNull { it.id == objectId }
+                }
                 val supportPaintingObject = supportPaintObjectId?.let { objectId ->
                     currentObjects.firstOrNull { it.id == objectId }
                 }
@@ -1949,6 +2002,51 @@ private fun BedScene(
                 }
                 val paintingObject = supportPaintingObject ?: seamPaintingObject ?:
                     multiColorPaintingObject
+                if (layOnFaceObject != null) {
+                    var movement = 0f
+                    var usedMultiplePointers = false
+                    interactionActive = true
+                    try {
+                        var event: PointerEvent
+                        do {
+                            event = awaitPointerEvent()
+                            val pressed = event.changes.filter { it.pressed }
+                            if (pressed.size == 1) {
+                                val change = pressed.first()
+                                val delta = change.position - change.previousPosition
+                                movement += abs(delta.x) + abs(delta.y)
+                                yaw += delta.x * 0.32f
+                                pitch = (pitch - delta.y * 0.26f).coerceIn(22f, 88f)
+                            } else if (pressed.size >= 2) {
+                                usedMultiplePointers = true
+                                pan += event.calculatePan()
+                                zoom = (zoom * event.calculateZoom()).coerceIn(0.45f, 4.5f)
+                            }
+                            event.changes.forEach { change ->
+                                if (change.positionChanged()) change.consume()
+                            }
+                        } while (event.changes.any { it.pressed })
+                    } finally {
+                        interactionActive = false
+                    }
+                    if (movement < 12f && !usedMultiplePointers) {
+                        val hit = closestModelTriangle(
+                            modelScreenTriangles[layOnFaceObject.id].orEmpty(),
+                            down.position,
+                            18.dp.toPx(),
+                        )
+                        if (hit != null) {
+                            val start = hit.previewTriangleIndex * 9
+                            if (start >= 0 && start + 9 <= layOnFaceObject.model.previewTriangles.size) {
+                                currentLayOnFaceCallback(
+                                    layOnFaceObject.id,
+                                    layOnFaceObject.model.previewTriangles.copyOfRange(start, start + 9),
+                                )
+                            }
+                        }
+                    }
+                    return@awaitEachGesture
+                }
                 val hitObjectId = if (objectManipulationEnabled && paintingObject == null) {
                     modelScreenBounds.entries.toList().asReversed().firstOrNull { (_, bounds) ->
                         bounds.inflate(14.dp.toPx()).contains(down.position)
@@ -2201,7 +2299,6 @@ private fun BedScene(
                 val objectSelected = projectObject.id == selectedObjectId
                 val objectColor = filamentSlotColor(projectObject.filamentSlot)
                 val minimumRotatedZ = modelTransform.minimumRotatedZ(model)
-                val meshPath = Path()
                 val enforcePaintPath = Path()
                 val blockPaintPath = Path()
                 val seamEnforcePaintPath = Path()
@@ -2248,6 +2345,7 @@ private fun BedScene(
                         .getOrElse(triangleIndex / 9) { triangleIndex / 9 }
                     screenTriangles += ModelScreenTriangle(
                         sourceFacetIndex = sourceFacetIndex,
+                        previewTriangleIndex = triangleIndex / 9,
                         a = a,
                         b = b,
                         c = c,
@@ -2256,6 +2354,7 @@ private fun BedScene(
                                 cameraDepth(bPosition[0], bPosition[1], bPosition[2]) +
                                 cameraDepth(cPosition[0], cPosition[1], cPosition[2])
                             ) / 3f,
+                        surfaceShade = modelSurfaceShade(aPosition, bPosition, cPosition),
                     )
                     listOf(a, b, c).forEach { point ->
                         minimumScreenX = min(minimumScreenX, point.x)
@@ -2263,10 +2362,6 @@ private fun BedScene(
                         maximumScreenX = max(maximumScreenX, point.x)
                         maximumScreenY = max(maximumScreenY, point.y)
                     }
-                    meshPath.moveTo(a.x, a.y)
-                    meshPath.lineTo(b.x, b.y)
-                    meshPath.lineTo(c.x, c.y)
-                    meshPath.close()
                     when (projectObject.supportPaint.facets[sourceFacetIndex]) {
                         SupportPaintState.ENFORCE -> enforcePaintPath.addTriangle(a, b, c)
                         SupportPaintState.BLOCK -> blockPaintPath.addTriangle(a, b, c)
@@ -2291,13 +2386,21 @@ private fun BedScene(
                     )
                 }
                 nextScreenTriangles[projectObject.id] = screenTriangles
-                drawPath(meshPath, objectColor.copy(alpha = if (objectSelected) 0.28f else 0.17f))
-                drawPath(
-                    meshPath,
-                    if (objectSelected) Color.White.copy(alpha = 0.92f)
-                    else objectColor.copy(alpha = 0.66f),
-                    style = Stroke(if (objectSelected) 1.5.dp.toPx() else 0.7.dp.toPx()),
-                )
+                val facePath = Path()
+                screenTriangles.sortedBy(ModelScreenTriangle::depth).forEach { triangle ->
+                    facePath.reset()
+                    facePath.addTriangle(triangle.a, triangle.b, triangle.c)
+                    val light = if (objectSelected) {
+                        0.58f + triangle.surfaceShade * 0.38f
+                    } else {
+                        0.48f + triangle.surfaceShade * 0.38f
+                    }
+                    drawPath(
+                        facePath,
+                        lerp(Color(0xFF11130F), objectColor, light.coerceIn(0f, 1f))
+                            .copy(alpha = 0.98f),
+                    )
+                }
                 multiColorPaintPaths.toSortedMap().forEach { (filamentSlot, path) ->
                     drawPath(path, filamentSlotColor(filamentSlot).copy(alpha = 0.94f))
                     drawPath(
@@ -2344,13 +2447,36 @@ private fun Path.addTriangle(a: Offset, b: Offset, c: Offset) {
     close()
 }
 
+internal fun modelSurfaceShade(a: FloatArray, b: FloatArray, c: FloatArray): Float {
+    require(a.size >= 3 && b.size >= 3 && c.size >= 3)
+    val ux = b[0] - a[0]
+    val uy = b[1] - a[1]
+    val uz = b[2] - a[2]
+    val vx = c[0] - a[0]
+    val vy = c[1] - a[1]
+    val vz = c[2] - a[2]
+    val nx = uy * vz - uz * vy
+    val ny = uz * vx - ux * vz
+    val nz = ux * vy - uy * vx
+    val length = kotlin.math.sqrt(nx * nx + ny * ny + nz * nz)
+    if (!length.isFinite() || length <= 0.000001f) return 0.45f
+    val diffuse = abs(nx * 0.36f + ny * -0.48f + nz * 0.80f) / length
+    return (0.36f + diffuse.coerceIn(0f, 1f) * 0.64f).coerceIn(0f, 1f)
+}
+
 internal fun closestPaintFacet(
     triangles: List<ModelScreenTriangle>,
     point: Offset,
     brushRadius: Float,
-): Int? {
+): Int? = closestModelTriangle(triangles, point, brushRadius)?.sourceFacetIndex
+
+internal fun closestModelTriangle(
+    triangles: List<ModelScreenTriangle>,
+    point: Offset,
+    touchRadius: Float,
+): ModelScreenTriangle? {
     val inside = triangles.filter { triangle -> pointInsideTriangle(point, triangle) }
-    if (inside.isNotEmpty()) return inside.maxByOrNull(ModelScreenTriangle::depth)?.sourceFacetIndex
+    if (inside.isNotEmpty()) return inside.maxByOrNull(ModelScreenTriangle::depth)
     return triangles
         .asSequence()
         .map { triangle ->
@@ -2361,13 +2487,12 @@ internal fun closestPaintFacet(
             )
             triangle to distance
         }
-        .filter { (_, distance) -> distance <= brushRadius }
+        .filter { (_, distance) -> distance <= touchRadius }
         .minWithOrNull(
             compareBy<Pair<ModelScreenTriangle, Float>> { it.second }
                 .thenByDescending { it.first.depth },
         )
         ?.first
-        ?.sourceFacetIndex
 }
 
 private fun pointInsideTriangle(point: Offset, triangle: ModelScreenTriangle): Boolean {
@@ -2388,6 +2513,43 @@ private fun pointToSegmentDistance(point: Offset, start: Offset, end: Offset): F
     val offset = point - start
     val position = ((offset.x * segment.x + offset.y * segment.y) / lengthSquared).coerceIn(0f, 1f)
     return (point - (start + segment * position)).getDistance()
+}
+
+@Composable
+private fun LayOnFacePalette(
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.widthIn(max = 560.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = Color.Black.copy(alpha = 0.9f),
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.Straighten, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    stringResource(R.string.lay_on_face),
+                    modifier = Modifier.weight(1f),
+                    fontWeight = FontWeight.SemiBold,
+                )
+                TextButton(onClick = onDone) {
+                    Text(stringResource(R.string.cancel), color = WorkspaceYellow)
+                }
+            }
+            Text(
+                stringResource(R.string.lay_on_face_hint),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
 }
 
 @Composable
@@ -2576,6 +2738,7 @@ private fun ObjectToolRail(
     onRedo: () -> Unit,
     onDuplicate: () -> Unit,
     onAutoLay: () -> Unit,
+    onLayOnFace: () -> Unit,
     autoLaying: Boolean,
     editingBusy: Boolean,
     canPaintColor: Boolean,
@@ -2586,13 +2749,15 @@ private fun ObjectToolRail(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = modifier,
+        modifier = modifier.fillMaxWidth(0.96f).widthIn(max = 560.dp),
         shape = RoundedCornerShape(18.dp),
         color = Color.Black.copy(alpha = 0.82f),
         contentColor = Color(0xFFF4F4EE),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+            modifier = Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onUndo, enabled = canUndo && !editingBusy) {
@@ -2610,6 +2775,9 @@ private fun ObjectToolRail(
                 } else {
                     Icon(Icons.Default.AutoFixHigh, stringResource(R.string.auto_lay))
                 }
+            }
+            IconButton(onClick = onLayOnFace, enabled = !editingBusy) {
+                Icon(Icons.Default.Straighten, stringResource(R.string.lay_on_face))
             }
             IconButton(
                 onClick = onMultiColorPaint,

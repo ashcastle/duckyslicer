@@ -65,9 +65,9 @@ class PreviewPerformancePolicyTest {
 
     @Test
     fun segmentBudgetsStayBoundedForBothRenderers() {
-        assertEquals(6_000, depthPreviewSegmentBudget(PreviewDetail.PERFORMANCE))
-        assertEquals(16_000, depthPreviewSegmentBudget(PreviewDetail.BALANCED))
-        assertEquals(40_000, depthPreviewSegmentBudget(PreviewDetail.DETAIL))
+        assertEquals(24_000, depthPreviewSegmentBudget(PreviewDetail.PERFORMANCE))
+        assertEquals(80_000, depthPreviewSegmentBudget(PreviewDetail.BALANCED))
+        assertEquals(120_000, depthPreviewSegmentBudget(PreviewDetail.DETAIL))
         assertEquals(250, compatibilityPreviewSegmentBudget(PreviewDetail.PERFORMANCE, refined = false))
         assertEquals(8_000, compatibilityPreviewSegmentBudget(PreviewDetail.DETAIL, refined = true))
     }
