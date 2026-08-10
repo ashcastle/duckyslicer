@@ -136,7 +136,8 @@ def valid_sources() -> dict[str, str]:
             "must share that same retained "
             "Profile catalog loading, recent selections, and user-profile saves must share one "
             "only in the project session revision that "
-            "Live app settings and their debounced persistence must share one"
+            "Live app settings and their debounced persistence must share one "
+            "Fixed support-event writers must serialize through the process-wide journal boundary"
         ),
         "SECURITY.md": (
             "every current DNS answer DNS rebinding bypass system proxies "

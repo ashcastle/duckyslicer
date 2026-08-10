@@ -13,9 +13,42 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @RunWith(AndroidJUnit4::class)
 class SupportDiagnosticsInstrumentedTest {
+    @Test
+    fun concurrentJournalInstancesRetainEveryBoundedFixedEvent() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences("support_events", Context.MODE_PRIVATE)
+        assertTrue(preferences.edit().clear().commit())
+        val expected = (0 until MAX_SUPPORT_EVENTS).associate { index ->
+            (1_000L + index) to SupportEvent.entries[index % SupportEvent.entries.size]
+        }
+        val start = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(8)
+        try {
+            expected.forEach { (timestamp, event) ->
+                executor.submit {
+                    start.await()
+                    SupportEventJournal(context) { timestamp }.record(event)
+                }
+            }
+            start.countDown()
+            executor.shutdown()
+            assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS))
+
+            val retained = SupportEventJournal(context).snapshot()
+            assertEquals(MAX_SUPPORT_EVENTS, retained.size)
+            assertEquals(expected, retained.associate { it.timestampMillis to it.event })
+        } finally {
+            executor.shutdownNow()
+            preferences.edit().clear().commit()
+        }
+    }
+
     @Test
     fun supportDetailsUseRealDeviceFactsWithoutPrivateAppContent() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

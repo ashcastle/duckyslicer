@@ -186,6 +186,8 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
         "exit_memory_samples_included=false",
         "OsConstants._SC_PAGESIZE",
         "StatFs(context.filesDir.absolutePath).availableBytes",
+        "synchronized(SUPPORT_EVENT_LOCK)",
+        "private val SUPPORT_EVENT_LOCK = Any()",
     ):
         if marker not in diagnostics:
             raise VerificationError(f"bounded support report is missing: {marker}")
@@ -318,6 +320,9 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
     for marker in (
         "supportDetailsUseRealDeviceFactsWithoutPrivateAppContent",
         "recentProcessExitHistoryUsesOnlyFixedBoundedValues",
+        "concurrentJournalInstancesRetainEveryBoundedFixedEvent",
+        "Executors.newFixedThreadPool(8)",
+        "assertEquals(MAX_SUPPORT_EVENTS, retained.size)",
         "Os.sysconf(OsConstants._SC_PAGESIZE)",
         "pageSizeBytes == 4_096L || pageSizeBytes == 16_384L",
         'page_size_bytes=$pageSizeBytes',

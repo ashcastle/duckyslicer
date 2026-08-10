@@ -76,8 +76,7 @@ internal class SupportEventJournal(
         Context.MODE_PRIVATE,
     )
 
-    @Synchronized
-    fun record(event: SupportEvent) {
+    fun record(event: SupportEvent) = synchronized(SUPPORT_EVENT_LOCK) {
         val next = (
             decodeSupportEvents(preferences.getString(SUPPORT_EVENT_KEY, null).orEmpty()) +
                 SupportEventRecord(nowMillis().coerceAtLeast(0L), event)
@@ -85,9 +84,9 @@ internal class SupportEventJournal(
         preferences.edit().putString(SUPPORT_EVENT_KEY, encodeSupportEvents(next)).apply()
     }
 
-    @Synchronized
-    fun snapshot(): List<SupportEventRecord> =
+    fun snapshot(): List<SupportEventRecord> = synchronized(SUPPORT_EVENT_LOCK) {
         decodeSupportEvents(preferences.getString(SUPPORT_EVENT_KEY, null).orEmpty())
+    }
 }
 
 internal fun createSupportReport(context: Context, settings: AppSettings): String {
@@ -224,6 +223,7 @@ private fun supportValue(source: String): String = source
 
 private const val SUPPORT_EVENT_PREFERENCES = "support_events"
 private const val SUPPORT_EVENT_KEY = "recent_problem_categories"
+private val SUPPORT_EVENT_LOCK = Any()
 internal const val MAX_SUPPORT_EVENTS = 32
 internal const val MAX_SUPPORT_REPORT_BYTES = 16 * 1_024
 private const val MAX_SUPPORT_EVENT_STORAGE_CHARS = 8 * 1_024

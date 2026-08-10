@@ -341,6 +341,10 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "CONTRIBUTING.md"
     ]:
         raise VerificationError("contributor guidance does not retain live app settings")
+    if "Fixed support-event writers must serialize through the process-wide journal boundary" not in sources[
+        "CONTRIBUTING.md"
+    ]:
+        raise VerificationError("contributor guidance does not serialize support diagnostics")
     security = sources["SECURITY.md"]
     for marker in (
         "every current DNS answer",

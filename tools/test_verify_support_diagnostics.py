@@ -68,6 +68,8 @@ def valid_sources() -> dict[str, str]:
             "exit_memory_samples_included=false",
             "OsConstants._SC_PAGESIZE",
             "StatFs(context.filesDir.absolutePath).availableBytes",
+            "synchronized(SUPPORT_EVENT_LOCK)",
+            "private val SUPPORT_EVENT_LOCK = Any()",
         )
     )
     process_history = "\n".join(
@@ -112,6 +114,9 @@ def valid_sources() -> dict[str, str]:
         "SupportDiagnosticsInstrumentedTest.kt": (
             "supportDetailsUseRealDeviceFactsWithoutPrivateAppContent "
             "recentProcessExitHistoryUsesOnlyFixedBoundedValues "
+            "concurrentJournalInstancesRetainEveryBoundedFixedEvent "
+            "Executors.newFixedThreadPool(8) "
+            "assertEquals(MAX_SUPPORT_EVENTS, retained.size) "
             "Os.sysconf(OsConstants._SC_PAGESIZE) "
             "pageSizeBytes == 4_096L || pageSizeBytes == 16_384L "
             "page_size_bytes=$pageSizeBytes"
@@ -165,6 +170,14 @@ class VerifySupportDiagnosticsTest(unittest.TestCase):
             "SupportEvent.SLICE_FAILED", ""
         )
         with self.assertRaisesRegex(VerificationError, "never recorded"):
+            verify_support_diagnostics(sources)
+
+    def test_rejects_instance_local_support_event_locking(self) -> None:
+        sources = valid_sources()
+        sources["SupportDiagnostics.kt"] = sources["SupportDiagnostics.kt"].replace(
+            "synchronized(SUPPORT_EVENT_LOCK)", "@Synchronized", 1
+        )
+        with self.assertRaisesRegex(VerificationError, "bounded support report"):
             verify_support_diagnostics(sources)
 
     def test_rejects_non_user_chosen_export(self) -> None:
