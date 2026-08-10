@@ -160,6 +160,7 @@ private fun DuckySlicerScreen(
     val savedNotice = stringResource(R.string.gcode_saved)
     val profileSavedNotice = stringResource(R.string.profile_saved)
     val profileSaveError = stringResource(R.string.profile_save_error)
+    val filamentSlotUnavailable = stringResource(R.string.filament_slot_unavailable)
     val projectSaveError = stringResource(R.string.project_save_error)
     val projectOpenedNotice = stringResource(R.string.project_opened)
     val projectSavedNotice = stringResource(R.string.project_saved)
@@ -402,13 +403,17 @@ private fun DuckySlicerScreen(
             if (options.printerProfile.id != previous.printerProfile.id) {
                 nextRecents = nextRecents.recordPrinter(options.printerProfile.id)
             }
-            if (options.filamentProfile.id != previous.filamentProfile.id) {
-                nextRecents = nextRecents.recordFilament(options.filamentProfile.id)
+            val previousFilamentIds = previous.resolvedFilamentSlots().mapTo(mutableSetOf()) { it.id }
+            options.resolvedFilamentSlots().forEach { filament ->
+                if (filament.id !in previousFilamentIds) {
+                    nextRecents = nextRecents.recordFilament(filament.id)
+                }
             }
             if (options.quality.id != previous.quality.id) {
                 nextRecents = nextRecents.recordSlicing(options.quality.id)
             }
             profileRecents = nextRecents
+            projectHistory = projectHistory.constrainFilamentSlots(options.resolvedFilamentSlots().size)
             sliceOptions = options
             clearCompletedSlice()
             remoteUpload = null
@@ -866,6 +871,21 @@ private fun DuckySlicerScreen(
         onModelTransformCommitted = { previous ->
             projectHistory = projectHistory.commitSelectedTransform(previous)
         },
+        onObjectFilamentSelected = { filament ->
+            runCatching { sliceOptions.assignFilament(filament) }
+                .onSuccess { assignment ->
+                    applyOptions(assignment.options)
+                    projectHistory = projectHistory.updateSelectedFilamentSlot(assignment.slot)
+                    clearCompletedSlice()
+                    remoteUpload = null
+                    notice = null
+                    error = null
+                }
+                .onFailure {
+                    error = filamentSlotUnavailable
+                    notice = null
+                }
+        },
         onUndo = {
             if (projectHistory.canUndo) {
                 projectHistory = projectHistory.undo()
@@ -939,15 +959,15 @@ private fun DuckySlicerScreen(
                     }
             }
         },
-        onSaveFilamentProfile = { name, options ->
+        onSaveFilamentProfile = { name, options, slot ->
             scope.launch {
                 runCatching {
                     withContext(Dispatchers.IO) {
-                        profileStore.saveFilament(name, options) to profileStore.load()
+                        profileStore.saveFilament(name, options, slot) to profileStore.load()
                     }
                 }.onSuccess { (saved, catalog) ->
                     profileCatalog = catalog
-                    applyOptions(options.selectFilament(saved))
+                    applyOptions(options.updateFilamentSlot(slot, saved))
                     notice = profileSavedNotice
                     error = null
                 }
