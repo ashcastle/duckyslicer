@@ -59,6 +59,7 @@ internal object SlicerProcessClient {
         List(transformedModels.size) { null },
         List(transformedModels.size) { null },
         List(transformedModels.size) { null },
+        List(transformedModels.size) { null },
         options,
         filamentSlots,
         foregroundSession,
@@ -71,6 +72,7 @@ internal object SlicerProcessClient {
         transformedModels: List<File>,
         supportPaintFiles: List<File?>,
         seamPaintFiles: List<File?>,
+        multiColorPaintFiles: List<File?>,
         variableLayerHeightFiles: List<File?>,
         options: SliceOptions,
         filamentSlots: IntArray = IntArray(transformedModels.size),
@@ -81,6 +83,7 @@ internal object SlicerProcessClient {
         transformedModels,
         supportPaintFiles,
         seamPaintFiles,
+        multiColorPaintFiles,
         variableLayerHeightFiles,
         options,
         filamentSlots,
@@ -102,6 +105,7 @@ internal object SlicerProcessClient {
         }
         return sliceInternal(
             transformedModels,
+            List(transformedModels.size) { null },
             List(transformedModels.size) { null },
             List(transformedModels.size) { null },
             List(transformedModels.size) { null },
@@ -324,6 +328,7 @@ internal object SlicerProcessClient {
         transformedModels: List<File>,
         supportPaintFiles: List<File?>,
         seamPaintFiles: List<File?>,
+        multiColorPaintFiles: List<File?>,
         variableLayerHeightFiles: List<File?>,
         options: SliceOptions,
         filamentSlots: IntArray,
@@ -340,17 +345,22 @@ internal object SlicerProcessClient {
         val modelPaths = transformedModels.map(File::getAbsolutePath)
         require(supportPaintFiles.size == transformedModels.size) { "Support paint count does not match models" }
         require(seamPaintFiles.size == transformedModels.size) { "Seam paint count does not match models" }
+        require(multiColorPaintFiles.size == transformedModels.size) {
+            "Multi-color paint count does not match models"
+        }
         require(variableLayerHeightFiles.size == transformedModels.size) {
             "Variable layer height count does not match models"
         }
         require(filamentSlots.size == transformedModels.size) { "Filament slot count does not match models" }
         val supportPaintPaths = supportPaintFiles.map { it?.absolutePath.orEmpty() }
         val seamPaintPaths = seamPaintFiles.map { it?.absolutePath.orEmpty() }
+        val multiColorPaintPaths = multiColorPaintFiles.map { it?.absolutePath.orEmpty() }
         val variableLayerHeightPaths = variableLayerHeightFiles.map { it?.absolutePath.orEmpty() }
         val optionsText = options.toProjectJson().toString()
         require(
             encodedRequestBytes(
-                modelPaths + supportPaintPaths + seamPaintPaths + variableLayerHeightPaths,
+                modelPaths + supportPaintPaths + seamPaintPaths + multiColorPaintPaths +
+                    variableLayerHeightPaths,
                 optionsText,
             ) <=
                 SlicerProcessContract.MAX_REQUEST_BYTES,
@@ -370,6 +380,10 @@ internal object SlicerProcessClient {
             putStringArrayList(
                 SlicerProcessContract.KEY_SEAM_PAINT_PATHS,
                 ArrayList(seamPaintPaths),
+            )
+            putStringArrayList(
+                SlicerProcessContract.KEY_MULTI_COLOR_PAINT_PATHS,
+                ArrayList(multiColorPaintPaths),
             )
             putStringArrayList(
                 SlicerProcessContract.KEY_VARIABLE_LAYER_HEIGHT_PATHS,
@@ -1455,6 +1469,15 @@ class SlicerProcessService : Service() {
         val seamPaintFiles = seamPaintPaths.map { path ->
             path.takeIf(String::isNotEmpty)?.let(::validateSeamPaint)
         }
+        val multiColorPaintPaths = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_MULTI_COLOR_PAINT_PATHS),
+        ) { "Multi-color paint paths are unavailable" }
+        require(multiColorPaintPaths.size == models.size) {
+            "Multi-color paint count does not match models"
+        }
+        val multiColorPaintFiles = multiColorPaintPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let(::validateMultiColorPaint)
+        }
         val variableLayerHeightPaths = requireNotNull(
             extras.getStringArrayList(SlicerProcessContract.KEY_VARIABLE_LAYER_HEIGHT_PATHS),
         ) { "Variable layer height paths are unavailable" }
@@ -1472,7 +1495,8 @@ class SlicerProcessService : Service() {
         }
         require(
             encodedRequestBytes(
-                paths + supportPaintPaths + seamPaintPaths + variableLayerHeightPaths,
+                paths + supportPaintPaths + seamPaintPaths + multiColorPaintPaths +
+                    variableLayerHeightPaths,
                 optionsText,
             ) <=
                 SlicerProcessContract.MAX_REQUEST_BYTES,
@@ -1488,7 +1512,10 @@ class SlicerProcessService : Service() {
         val availableFilaments = options.resolvedFilamentSlots()
         require(
             filamentSlots.size == models.size &&
-                filamentSlots.all { it in availableFilaments.indices },
+                filamentSlots.all { it in availableFilaments.indices } &&
+                multiColorPaintFiles.filterNotNull().all { paint ->
+                    paint.filamentSlots.all { it in availableFilaments.indices }
+                },
         ) { "Filament assignments are invalid" }
         val maximumGcodeBytes = if (
             BuildConfig.DEBUG &&
@@ -1507,6 +1534,7 @@ class SlicerProcessService : Service() {
                 models,
                 supportPaintFiles,
                 seamPaintFiles,
+                multiColorPaintFiles,
                 variableLayerHeightFiles,
                 filamentSlots,
                 options,
@@ -1752,6 +1780,7 @@ class SlicerProcessService : Service() {
         models: List<File>,
         supportPaintFiles: List<ValidatedSupportPaint?>,
         seamPaintFiles: List<ValidatedSeamPaint?>,
+        multiColorPaintFiles: List<ValidatedMultiColorPaint?>,
         variableLayerHeightFiles: List<ValidatedVariableLayerHeights?>,
         filamentSlots: IntArray,
         options: SliceOptions,
@@ -1785,6 +1814,16 @@ class SlicerProcessService : Service() {
                     check(runtime.applySeamPaint(objectIndex, seamPaint.file.absolutePath)) {
                         "Seam paint could not be applied"
                     }
+                }
+            }
+            multiColorPaintFiles.forEachIndexed { objectIndex, multiColorPaint ->
+                if (multiColorPaint != null) {
+                    check(
+                        runtime.applyMultiColorPaint(
+                            objectIndex,
+                            multiColorPaint.file.absolutePath,
+                        ),
+                    ) { "Multi-color paint could not be applied" }
                 }
             }
             variableLayerHeightFiles.forEachIndexed { objectIndex, variableLayers ->
@@ -1960,6 +1999,46 @@ class SlicerProcessService : Service() {
         return ValidatedVariableLayerHeights(sidecar)
     }
 
+    private fun validateMultiColorPaint(path: String): ValidatedMultiColorPaint {
+        require(path.length in 1..MAX_PATH_LENGTH) { "Invalid multi-color paint path" }
+        val sidecar = File(path).canonicalFile
+        val allowedRoots = listOf(filesDir.canonicalFile, cacheDir.canonicalFile)
+        require(allowedRoots.any(sidecar::isInside)) {
+            "Multi-color paint is outside private storage"
+        }
+        require(
+            sidecar.isFile &&
+                sidecar.length() in MultiColorPaint.HEADER_BYTES..MultiColorPaint.MAX_SIDECAR_BYTES,
+        ) { "Multi-color paint is unavailable" }
+        val filamentSlots = HashSet<Int>()
+        DataInputStream(sidecar.inputStream().buffered()).use { reader ->
+            val magic = ByteArray(MultiColorPaint.MAGIC.size)
+            reader.readFully(magic)
+            require(magic.contentEquals(MultiColorPaint.MAGIC)) {
+                "Multi-color paint format is invalid"
+            }
+            val count = reader.readInt()
+            require(count in 0..MultiColorPaint.MAX_PAINTED_FACETS) {
+                "Multi-color paint count is invalid"
+            }
+            require(
+                sidecar.length() ==
+                    MultiColorPaint.HEADER_BYTES + count.toLong() * MultiColorPaint.ENTRY_BYTES,
+            ) { "Multi-color paint size is invalid" }
+            var previousIndex = -1
+            repeat(count) {
+                val facetIndex = reader.readInt()
+                val state = reader.readUnsignedByte()
+                require(
+                    facetIndex > previousIndex && state in 1..MAX_FILAMENT_SLOTS,
+                ) { "Multi-color paint entry is invalid" }
+                filamentSlots += state - 1
+                previousIndex = facetIndex
+            }
+        }
+        return ValidatedMultiColorPaint(sidecar, filamentSlots)
+    }
+
     private fun success(outcome: SliceOutcome) = Bundle().apply {
         putBoolean(SlicerProcessContract.KEY_OK, true)
         putInt(SlicerProcessContract.KEY_PID, Process.myPid())
@@ -2056,6 +2135,11 @@ class SlicerProcessService : Service() {
 
     private data class ValidatedSeamPaint(val file: File)
 
+    private data class ValidatedMultiColorPaint(
+        val file: File,
+        val filamentSlots: Set<Int>,
+    )
+
     private data class ValidatedVariableLayerHeights(val file: File)
 }
 
@@ -2085,6 +2169,7 @@ private object SlicerProcessContract {
     const val KEY_PLACE_ON_CUT = "placeOnCut"
     const val KEY_SUPPORT_PAINT_PATHS = "supportPaintPaths"
     const val KEY_SEAM_PAINT_PATHS = "seamPaintPaths"
+    const val KEY_MULTI_COLOR_PAINT_PATHS = "multiColorPaintPaths"
     const val KEY_VARIABLE_LAYER_HEIGHT_PATHS = "variableLayerHeightPaths"
     const val KEY_OPTIONS = "options"
     const val KEY_MAXIMUM_GCODE_BYTES_FOR_TEST = "maximumGcodeBytesForTest"

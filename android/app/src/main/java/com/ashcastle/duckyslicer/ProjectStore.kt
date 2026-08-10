@@ -118,6 +118,7 @@ internal class ProjectStore(
                         transform = archived.transform,
                         supportPaint = archived.supportPaint,
                         seamPaint = archived.seamPaint,
+                        multiColorPaint = archived.multiColorPaint,
                         variableLayerHeights = archived.variableLayerHeights,
                         filamentSlot = archived.filamentSlot,
                     )
@@ -184,7 +185,12 @@ internal class ProjectStore(
         } else {
             null
         }
-        if (objects.any { it.filamentSlot !in (restoredOptions?.resolvedFilamentSlots()?.indices ?: 0..0) }) {
+        val availableSlots = restoredOptions?.resolvedFilamentSlots()?.indices ?: 0..0
+        if (objects.any { projectObject ->
+                projectObject.filamentSlot !in availableSlots ||
+                    projectObject.multiColorPaint.facets.values.any { it !in availableSlots }
+            }
+        ) {
             return null
         }
         return StoredProject(
@@ -210,7 +216,9 @@ internal class ProjectStore(
             "Project selection is invalid"
         }
         require(snapshot.objects.all { projectObject ->
-            projectObject.filamentSlot in (sliceOptions?.resolvedFilamentSlots()?.indices ?: 0..0)
+            val availableSlots = sliceOptions?.resolvedFilamentSlots()?.indices ?: 0..0
+            projectObject.filamentSlot in availableSlots &&
+                projectObject.multiColorPaint.facets.values.all { it in availableSlots }
         }) { "Project filament assignment is invalid" }
         check(projectRoot.isDirectory || projectRoot.mkdirs()) { "Project storage is unavailable" }
         check(modelsDirectory.isDirectory || modelsDirectory.mkdirs()) {
@@ -271,6 +279,9 @@ internal class ProjectStore(
         val seamPaint = value.optJSONArray("seamPaint")
             ?.toSeamPaint(model.triangles)
             ?: SeamPaint()
+        val multiColorPaint = value.optJSONArray("multiColorPaint")
+            ?.toMultiColorPaint(model.triangles)
+            ?: MultiColorPaint()
         val variableLayerHeights = value.optJSONArray("variableLayerHeights")
             ?.toVariableLayerHeights()
             ?: VariableLayerHeights()
@@ -282,6 +293,7 @@ internal class ProjectStore(
             transform = transform,
             supportPaint = supportPaint,
             seamPaint = seamPaint,
+            multiColorPaint = multiColorPaint,
             variableLayerHeights = variableLayerHeights,
             filamentSlot = filamentSlot,
         )
@@ -336,6 +348,9 @@ internal class ProjectStore(
                         ?.toVariableLayerHeights() != null,
                 )
             }
+            if (schemaVersion >= 6) {
+                require(value.optJSONArray("multiColorPaint")?.isValidMultiColorPaintArray() == true)
+            }
             require(value.optInt("filamentSlot", 0) in 0 until MAX_FILAMENT_SLOTS)
         }
         val selected = root.takeUnless { it.isNull("selectedObjectId") }
@@ -363,6 +378,7 @@ internal class ProjectStore(
             .put("transform", transform.toStoredJson())
             .put("supportPaint", supportPaint.toStoredJson())
             .put("seamPaint", seamPaint.toStoredJson())
+            .put("multiColorPaint", multiColorPaint.toStoredJson())
             .put("variableLayerHeights", variableLayerHeights.toStoredJson())
             .put("filamentSlot", filamentSlot.takeIf { it in 0 until MAX_FILAMENT_SLOTS }
                 ?: error("Invalid filament slot"))
@@ -474,6 +490,40 @@ internal class ProjectStore(
         }
     }.isSuccess
 
+    private fun MultiColorPaint.toStoredJson() = JSONArray().also { values ->
+        facets.toSortedMap().forEach { (facetIndex, filamentSlot) ->
+            values.put(facetIndex)
+            values.put(filamentSlot)
+        }
+    }
+
+    private fun JSONArray.toMultiColorPaint(triangleCount: Int): MultiColorPaint {
+        require(isValidMultiColorPaintArray()) { "Invalid multi-color paint" }
+        val facets = LinkedHashMap<Int, Int>(length() / 2)
+        var previousIndex = -1
+        for (offset in 0 until length() step 2) {
+            val facetIndex = getInt(offset)
+            val filamentSlot = getInt(offset + 1)
+            require(facetIndex in 0 until triangleCount && facetIndex > previousIndex) {
+                "Invalid multi-color paint facet"
+            }
+            facets[facetIndex] = filamentSlot
+            previousIndex = facetIndex
+        }
+        return MultiColorPaint(facets)
+    }
+
+    private fun JSONArray.isValidMultiColorPaintArray(): Boolean = runCatching {
+        require(length() % 2 == 0 && length() / 2 <= MultiColorPaint.MAX_PAINTED_FACETS)
+        var previousIndex = -1
+        for (offset in 0 until length() step 2) {
+            val facetIndex = getInt(offset)
+            require(facetIndex >= 0 && facetIndex > previousIndex)
+            require(getInt(offset + 1) in 0 until MAX_FILAMENT_SLOTS)
+            previousIndex = facetIndex
+        }
+    }.isSuccess
+
     private fun VariableLayerHeights.toStoredJson() = JSONArray().also { values ->
         ranges.forEach { range ->
             values.put(range.startRatio.toDouble())
@@ -540,7 +590,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 5
+        const val SCHEMA_VERSION = 6
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"

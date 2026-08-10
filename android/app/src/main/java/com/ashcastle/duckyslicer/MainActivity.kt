@@ -531,6 +531,7 @@ private fun DuckySlicerScreen(
                     currentTarget.transform == target.transform &&
                     currentTarget.supportPaint == target.supportPaint &&
                     currentTarget.seamPaint == target.seamPaint &&
+                    currentTarget.multiColorPaint == target.multiColorPaint &&
                     currentTarget.variableLayerHeights == target.variableLayerHeights
                 ) {
                     projectHistory = projectHistory.replaceSelected(result.objects)
@@ -589,6 +590,7 @@ private fun DuckySlicerScreen(
                     currentTarget.transform == target.transform &&
                     currentTarget.supportPaint == target.supportPaint &&
                     currentTarget.seamPaint == target.seamPaint &&
+                    currentTarget.multiColorPaint == target.multiColorPaint &&
                     currentTarget.variableLayerHeights == target.variableLayerHeights &&
                     currentTarget.filamentSlot == target.filamentSlot
                 ) {
@@ -1013,6 +1015,31 @@ private fun DuckySlicerScreen(
         },
         onSeamPaintCommitted = { objectId, previous ->
             projectHistory = projectHistory.commitSeamPaint(objectId, previous)
+        },
+        onMultiColorPaintPreview = { objectId, facetIndex, slot ->
+            val projectObject = projectHistory.current.objects.firstOrNull { it.id == objectId }
+            val availableSlots = sliceOptions.resolvedFilamentSlots().indices
+            if (
+                projectObject != null &&
+                facetIndex in 0 until projectObject.model.triangles &&
+                (slot == null || slot in availableSlots)
+            ) {
+                val nextPaint = projectObject.multiColorPaint.paint(facetIndex, slot)
+                val nextHistory = projectHistory.updateMultiColorPaint(
+                    objectId,
+                    nextPaint,
+                    recordHistory = false,
+                )
+                if (nextHistory != projectHistory) {
+                    projectHistory = nextHistory
+                    clearCompletedSlice()
+                    remoteUpload = null
+                    notice = null
+                }
+            }
+        },
+        onMultiColorPaintCommitted = { objectId, previous ->
+            projectHistory = projectHistory.commitMultiColorPaint(objectId, previous)
         },
         onVariableLayerHeightsChanged = { variableLayerHeights ->
             val nextHistory = projectHistory.updateSelectedVariableLayerHeights(
