@@ -4,6 +4,7 @@ import unittest
 
 from tools.verify_support_diagnostics import (
     EXPECTED_EVENTS,
+    EXPECTED_EXIT_REASONS,
     REQUIRED_STRINGS,
     VerificationError,
     verify_support_diagnostics,
@@ -21,6 +22,9 @@ def valid_sources() -> dict[str, str]:
     event_enum = "\n".join(f"    {event}," for event in sorted(EXPECTED_EVENTS))
     event_calls = " ".join(f"SupportEvent.{event}" for event in EXPECTED_EVENTS)
     string_calls = " ".join(f"R.string.{name}" for name in REQUIRED_STRINGS)
+    exit_reasons = "\n".join(
+        f"    {name}({code})," for name, code in EXPECTED_EXIT_REASONS.items()
+    )
     diagnostics = "\n".join(
         (
             "internal enum class SupportEvent {",
@@ -30,19 +34,47 @@ def valid_sources() -> dict[str, str]:
             "SupportEventJournal(context.applicationContext).snapshot()",
             "MAX_SUPPORT_EVENTS = 32",
             "MAX_SUPPORT_REPORT_BYTES = 16 * 1_024",
+            'appendLine("schema=2")',
             "takeLast(MAX_SUPPORT_EVENTS)",
+            "snapshot.processExits.take(MAX_SUPPORT_PROCESS_EXITS)",
+            "previous_exit_count=",
+            "previous_exit.$index.process=${record.process.name}",
+            "previous_exit.$index.reason=${record.reason.name}",
             "private_content_included=false",
             "models_included=false",
             "gcode_included=false",
             "file_names_included=false",
             "printer_addresses_included=false",
             "access_keys_included=false",
+            "raw_process_names_included=false",
+            "exit_descriptions_included=false",
+            "exit_traces_included=false",
+            "exit_memory_samples_included=false",
             "OsConstants._SC_PAGESIZE",
             "StatFs(context.filesDir.absolutePath).availableBytes",
         )
     )
+    process_history = "\n".join(
+        (
+            "internal enum class SupportExitReason(val platformCode: Int) {",
+            exit_reasons,
+            "    ;",
+            "}",
+            "Build.VERSION.SDK_INT >= Build.VERSION_CODES.R",
+            "MAX_SUPPORT_PROCESS_EXITS = 4",
+            "SupportProcessKind.APP SupportProcessKind.SLICER SupportProcessKind.OTHER",
+            "Api30ProcessExitHistory.read(context.applicationContext)",
+        )
+    )
     return {
         "SupportDiagnostics.kt": diagnostics,
+        "ProcessExitHistory.kt": process_history,
+        "ProcessExitHistoryApi30.kt": (
+            "@RequiresApi(30) getHistoricalProcessExitReasons( context.packageName "
+            "MAX_SUPPORT_PROCESS_EXITS info.timestamp "
+            "supportProcessKind(context.packageName, info.processName) "
+            "SupportExitReason.fromPlatformCode(info.reason)"
+        ),
         "MainActivity.kt": event_calls,
         "AppSettingsSheet.kt": (
             'ActivityResultContracts.CreateDocument("text/plain") '
@@ -54,21 +86,28 @@ def valid_sources() -> dict[str, str]:
         "SupportDiagnosticsTest.kt": (
             "supportReportContainsOnlyBoundedEnvironmentSettingsAndFixedProblemCodes "
             "supportEventCodecRejectsMalformedUnknownAndOversizedHistory "
-            "supportReportWriterProducesExactUtf8AndRejectsOversizedInput"
+            "supportReportWriterProducesExactUtf8AndRejectsOversizedInput "
+            "processExitMappingNeverExportsAnUnexpectedRawProcessNameOrReason"
         ),
         "SupportDiagnosticsInstrumentedTest.kt": (
-            "supportDetailsUseRealDeviceFactsWithoutPrivateAppContent page_size_bytes=16384"
+            "supportDetailsUseRealDeviceFactsWithoutPrivateAppContent "
+            "recentProcessExitHistoryUsesOnlyFixedBoundedValues page_size_bytes=16384"
         ),
         "AccessibilityInstrumentedTest.kt": "appSettingsExposeAVisibleSupportDetailsAction",
         "strings.xml": string_resources(),
         "strings-ko.xml": string_resources(),
         "PRIVACY.md": (
             "Support details are written only to a location you select.\n"
-            "They do not contain models, G-code, file names, printer\n"
+            "contain models, G-code, file names, printer addresses\n"
+            "On Android 11 and later, they also contain up to four\n"
+            "raw process names, memory samples, or stack traces\n"
             "지원 정보는 사용자가 선택한 위치에만 저장됩니다.\n"
+            "프로세스 종료 시각, 고정 프로세스 분류 및 고정 종료 원인을 최대 4건 포함합니다.\n"
             "사용자가 직접 공유한 경우에만 DuckySlicer 프로젝트가 이 정보를 받습니다."
         ),
-        "SUPPORT.md": "Settings > Help > Save support details SECURITY.md",
+        "SUPPORT.md": (
+            "Settings > Help > Save support details up to four fixed prior-exit SECURITY.md"
+        ),
         "bug_report.yml": "Settings > Help > Save support details",
     }
 
@@ -81,6 +120,20 @@ class VerifySupportDiagnosticsTest(unittest.TestCase):
         sources = valid_sources()
         sources["SupportDiagnostics.kt"] += " Throwable stackTrace"
         with self.assertRaisesRegex(VerificationError, "private or free-form"):
+            verify_support_diagnostics(sources)
+
+    def test_rejects_system_exit_trace_capture(self) -> None:
+        sources = valid_sources()
+        sources["ProcessExitHistoryApi30.kt"] += " info.getTraceInputStream()"
+        with self.assertRaisesRegex(VerificationError, "raw system details"):
+            verify_support_diagnostics(sources)
+
+    def test_rejects_unbounded_process_exit_history(self) -> None:
+        sources = valid_sources()
+        sources["ProcessExitHistory.kt"] = sources["ProcessExitHistory.kt"].replace(
+            "MAX_SUPPORT_PROCESS_EXITS = 4", "MAX_SUPPORT_PROCESS_EXITS = 400"
+        )
+        with self.assertRaisesRegex(VerificationError, "bounded process-exit"):
             verify_support_diagnostics(sources)
 
     def test_rejects_missing_problem_category_recording(self) -> None:

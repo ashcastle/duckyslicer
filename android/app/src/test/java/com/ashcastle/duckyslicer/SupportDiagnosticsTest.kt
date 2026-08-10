@@ -16,14 +16,34 @@ class SupportDiagnosticsTest {
                     SupportEventRecord(1_000L, SupportEvent.MODEL_IMPORT_FAILED),
                     SupportEventRecord(2_000L, SupportEvent.SLICE_FAILED),
                 ),
+                processExits = List(MAX_SUPPORT_PROCESS_EXITS + 2) { index ->
+                    SupportProcessExit(
+                        timestampMillis = index.toLong(),
+                        process = if (index % 2 == 0) {
+                            SupportProcessKind.APP
+                        } else {
+                            SupportProcessKind.SLICER
+                        },
+                        reason = SupportExitReason.CRASH_NATIVE,
+                    )
+                },
             ),
         )
 
-        assertTrue(report.startsWith("DuckySlicer support details\nschema=1\n"))
+        assertTrue(report.startsWith("DuckySlicer support details\nschema=2\n"))
         assertTrue(report.contains("device_model=Duck Phone"))
         assertTrue(report.contains("recent_problem.0.code=MODEL_IMPORT_FAILED"))
         assertTrue(report.contains("recent_problem.1.code=SLICE_FAILED"))
+        assertTrue(report.contains("previous_exit_count=4"))
+        assertTrue(report.contains("previous_exit.0.process=APP"))
+        assertTrue(report.contains("previous_exit.1.process=SLICER"))
+        assertTrue(report.contains("previous_exit.0.reason=CRASH_NATIVE"))
+        assertFalse(report.contains("previous_exit.4."))
         assertTrue(report.contains("private_content_included=false"))
+        assertTrue(report.contains("raw_process_names_included=false"))
+        assertTrue(report.contains("exit_descriptions_included=false"))
+        assertTrue(report.contains("exit_traces_included=false"))
+        assertTrue(report.contains("exit_memory_samples_included=false"))
         assertFalse(report.contains("/storage/emulated"))
         assertFalse(report.contains("printer.local"))
         assertFalse(report.contains("secret-access-key"))
@@ -58,9 +78,27 @@ class SupportDiagnosticsTest {
         }
     }
 
+    @Test
+    fun processExitMappingNeverExportsAnUnexpectedRawProcessNameOrReason() {
+        assertEquals(SupportProcessKind.APP, supportProcessKind("com.ducky", "com.ducky"))
+        assertEquals(
+            SupportProcessKind.SLICER,
+            supportProcessKind("com.ducky", "com.ducky:slicer"),
+        )
+        assertEquals(
+            SupportProcessKind.OTHER,
+            supportProcessKind("com.ducky", "private.file-name.stl"),
+        )
+        SupportExitReason.entries.forEach { reason ->
+            assertEquals(reason, SupportExitReason.fromPlatformCode(reason.platformCode))
+        }
+        assertEquals(SupportExitReason.UNKNOWN, SupportExitReason.fromPlatformCode(Int.MAX_VALUE))
+    }
+
     private fun snapshot(
         deviceModel: String = "Ducky Phone",
         events: List<SupportEventRecord> = emptyList(),
+        processExits: List<SupportProcessExit> = emptyList(),
     ) = SupportReportSnapshot(
         generatedAtMillis = 0L,
         appVersion = "0.1.0-test",
@@ -85,5 +123,6 @@ class SupportDiagnosticsTest {
         confirmRemotePrint = true,
         connectionTimeoutSeconds = 15,
         events = events,
+        processExits = processExits,
     )
 }
