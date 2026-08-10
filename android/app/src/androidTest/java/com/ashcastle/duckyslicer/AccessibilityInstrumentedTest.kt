@@ -275,6 +275,41 @@ class AccessibilityInstrumentedTest {
         }
     }
 
+    @Test
+    fun shapePickerExposesEveryOrcaPrimitiveAndSizeControl() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val title = context.getString(R.string.add_shape)
+        val cube = context.getString(R.string.shape_cube)
+        val cylinder = context.getString(R.string.shape_cylinder)
+        val sphere = context.getString(R.string.shape_sphere)
+        val cone = context.getString(R.string.shape_cone)
+        val disc = context.getString(R.string.shape_disc)
+        val torus = context.getString(R.string.shape_torus)
+        val size = context.getString(R.string.shape_size)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_SHAPES).use {
+            val nodes = waitForNodes(
+                setOf(title, cube, cylinder, sphere, cone, disc, torus, size),
+            )
+            listOf(cube, cylinder, sphere, cone, disc, torus).forEach { label ->
+                assertTrue(
+                    "$label must be selectable",
+                    nodes.any { it.isClickable && it.effectiveLabel() == label },
+                )
+            }
+            assertTrue(
+                "Shape size must expose an adjustable control",
+                nodes.any {
+                    it.className?.toString() == SEEK_BAR_CLASS &&
+                        it.effectiveLabel().contains(size)
+                },
+            )
+            assertTrue(
+                "The selected shape must expose Add",
+                nodes.any { it.isClickable && it.effectiveLabel() == title },
+            )
+        }
+    }
+
     private fun launchHarness(screen: String): ActivityScenario<AccessibilityHarnessActivity> {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         return ActivityScenario.launch(
