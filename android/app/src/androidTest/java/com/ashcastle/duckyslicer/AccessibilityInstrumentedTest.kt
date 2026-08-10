@@ -155,6 +155,28 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun projectActionsAreVisibleAndOpeningConfirmsReplacement() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val openLabel = context.getString(R.string.open_project)
+        val saveLabel = context.getString(R.string.save_project)
+        val confirmation = context.getString(R.string.replace_project_title)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_PROJECT).use {
+            val nodes = waitForNodes(setOf(openLabel, saveLabel))
+            val open = nodes.firstOrNull { it.isClickable && it.effectiveLabel().contains(openLabel) }
+            val save = nodes.firstOrNull { it.isClickable && it.effectiveLabel().contains(saveLabel) }
+            assertNotNull("Open project must be an explicit action", open)
+            assertNotNull("Save project must be an explicit action", save)
+            assertTrue(checkNotNull(open).isFocusable)
+            assertTrue(checkNotNull(save).isFocusable)
+            assertTrue(open.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            assertTrue(
+                "Replacing a non-empty project must require confirmation",
+                waitForNodes(setOf(confirmation)).any { it.effectiveLabel().contains(confirmation) },
+            )
+        }
+    }
+
+    @Test
     fun largeTextLandscapeKeepsMenuClearOfScrollableWorkspaceSheet() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val menuLabel = context.getString(R.string.menu)

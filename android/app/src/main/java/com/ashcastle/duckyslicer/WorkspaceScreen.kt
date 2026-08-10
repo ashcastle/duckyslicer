@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -221,6 +222,8 @@ internal fun WorkspaceScreen(
     canRedo: Boolean,
     onTabSelected: (WorkspaceTab) -> Unit,
     onChoose: () -> Unit,
+    onOpenProject: () -> Unit,
+    onSaveProject: () -> Unit,
     onObjectSelected: (String?) -> Unit,
     onModelTransformChanged: (ModelTransform) -> Unit,
     onModelTransformPreview: (ModelTransform) -> Unit,
@@ -459,7 +462,10 @@ internal fun WorkspaceScreen(
                     objects = projectObjects,
                     selectedObjectId = selectedObjectId,
                     outcome = sliceOutcome,
+                    busy = importing || editingBusy,
                     onObjectSelected = onObjectSelected,
+                    onOpenProject = onOpenProject,
+                    onSaveProject = onSaveProject,
                     modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
                 )
 
@@ -1926,9 +1932,13 @@ private fun ProjectSheet(
     objects: List<ProjectObject>,
     selectedObjectId: String?,
     outcome: SliceOutcome?,
+    busy: Boolean,
     onObjectSelected: (String) -> Unit,
+    onOpenProject: () -> Unit,
+    onSaveProject: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var confirmReplacement by remember { mutableStateOf(false) }
     WorkspaceCard(modifier) {
         Text(
             stringResource(R.string.tab_project),
@@ -1960,6 +1970,59 @@ private fun ProjectSheet(
         Text(
             if (outcome == null) stringResource(R.string.no_gcode) else stringResource(R.string.gcode_ready),
             color = if (outcome == null) Color(0xFFC8C9C2) else WorkspaceYellow,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Button(
+                onClick = {
+                    if (objects.isEmpty()) onOpenProject() else confirmReplacement = true
+                },
+                enabled = !busy,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF454640),
+                    contentColor = Color(0xFFF4F4EE),
+                ),
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Default.FileOpen, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.open_project))
+            }
+            Button(
+                onClick = onSaveProject,
+                enabled = !busy,
+                colors = primaryButtonColors(),
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Default.SaveAlt, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.save_project))
+            }
+        }
+    }
+    if (confirmReplacement) {
+        AlertDialog(
+            onDismissRequest = { confirmReplacement = false },
+            title = { Text(stringResource(R.string.replace_project_title)) },
+            text = { Text(stringResource(R.string.replace_project_body)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        confirmReplacement = false
+                        onOpenProject()
+                    },
+                    colors = primaryButtonColors(),
+                ) {
+                    Text(stringResource(R.string.open_project))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmReplacement = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
         )
     }
 }
