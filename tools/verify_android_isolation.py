@@ -174,6 +174,22 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
     missing = [description for description, marker in required_service_markers.items() if marker not in service]
     if missing:
         raise VerificationError(f"slicer service safety markers are missing: {missing}")
+    for description, marker in {
+        "explicit notification content intent": "Intent(this, MainActivity::class.java)",
+        "explicit notification cancel intent":
+            "Intent(context, SlicerProcessService::class.java)",
+        "request-scoped notification cancel identity": "data = Uri.Builder()",
+    }.items():
+        if marker not in service:
+            raise VerificationError(f"notification PendingIntent is unsafe: {description}")
+    if (
+        service.count("PendingIntent.FLAG_IMMUTABLE") < 2
+        or "PendingIntent.FLAG_MUTABLE" in service
+        or "PendingIntent.FLAG_UPDATE_CURRENT" in service
+    ):
+        raise VerificationError(
+            "notification PendingIntents must remain explicit, request-scoped, and immutable"
+        )
     for marker in ("output.fd.sync()", "MAXIMUM_RETAINED_OUTPUTS", "MAXIMUM_RETAINED_BYTES"):
         if marker not in artifacts:
             raise VerificationError(f"slicer artifact safety marker is missing: {marker}")

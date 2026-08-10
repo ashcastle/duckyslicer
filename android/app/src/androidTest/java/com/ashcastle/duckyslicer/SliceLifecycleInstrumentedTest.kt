@@ -19,6 +19,21 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class SliceLifecycleInstrumentedTest {
     @Test
+    fun notificationCancelIntentsAreExplicitAndRequestScoped() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val first = SlicerProcessService.cancelSliceIntent(context, "request-one")
+        val second = SlicerProcessService.cancelSliceIntent(context, "request-two")
+
+        assertEquals(context.packageName, first.component?.packageName)
+        assertEquals(SlicerProcessService::class.java.name, first.component?.className)
+        assertEquals("duckyslicer", first.data?.scheme)
+        assertEquals("slice-cancel", first.data?.authority)
+        assertEquals("request-one", first.data?.lastPathSegment)
+        assertEquals("request-two", second.data?.lastPathSegment)
+        assertFalse("Each slice must receive a distinct cancel token", first.filterEquals(second))
+    }
+
+    @Test
     fun activeSliceSurvivesActivityRecreationAndCompletes() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

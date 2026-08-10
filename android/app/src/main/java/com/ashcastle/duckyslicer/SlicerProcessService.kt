@@ -12,6 +12,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.ServiceInfo
 import android.graphics.drawable.Icon
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -858,13 +859,13 @@ class SlicerProcessService : Service() {
             Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            PendingIntent.FLAG_IMMUTABLE,
         )
         val cancelIntent = PendingIntent.getService(
             this,
             CANCEL_REQUEST_CODE,
             cancelSliceIntent(this, requestId),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            PendingIntent.FLAG_IMMUTABLE,
         )
         val text = when {
             canceling -> getString(R.string.slice_notification_canceling)
@@ -1573,6 +1574,11 @@ class SlicerProcessService : Service() {
         fun cancelSliceIntent(context: Context, requestId: String): Intent =
             Intent(context, SlicerProcessService::class.java).apply {
                 action = ACTION_CANCEL_SLICE
+                data = Uri.Builder()
+                    .scheme("duckyslicer")
+                    .authority("slice-cancel")
+                    .appendPath(requestId)
+                    .build()
                 putExtra(EXTRA_REQUEST_ID, requestId)
             }
 
