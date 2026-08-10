@@ -19,6 +19,9 @@ avoid introducing an account or cloud requirement.
 - Treat app-private JSON and LAN-printer responses as untrusted too. Preserve the
   last-known-good generation, never replace unreadable/future-schema data, keep
   response size and nesting bounded, and do not enable credential-bearing redirects.
+  Cleartext printer names must resolve entirely to local addresses at request time;
+  pin the connection target and bypass system proxies before attaching an access key
+  to prevent DNS rebinding or proxy forwarding.
 - Keep Orca work off every Android main thread. New long-running operations must
   retain request-scoped cancellation, terminate only the isolated worker, and prove
   a clean follow-up operation on ARM64.
