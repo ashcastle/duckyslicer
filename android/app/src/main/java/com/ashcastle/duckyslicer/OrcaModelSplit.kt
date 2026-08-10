@@ -8,7 +8,7 @@ import org.json.JSONObject
 
 internal data class SplitProjectResult(
     val objects: List<ProjectObject>,
-    val clearedSupportPaint: Boolean,
+    val clearedFacetPaint: Boolean,
 )
 
 /**
@@ -76,7 +76,8 @@ internal suspend fun splitProjectObject(
         }
         SplitProjectResult(
             objects = objects,
-            clearedSupportPaint = projectObject.supportPaint.facets.isNotEmpty(),
+            clearedFacetPaint = projectObject.supportPaint.facets.isNotEmpty() ||
+                projectObject.seamPaint.facets.isNotEmpty(),
         )
     } catch (failure: Throwable) {
         installed.forEach(File::delete)

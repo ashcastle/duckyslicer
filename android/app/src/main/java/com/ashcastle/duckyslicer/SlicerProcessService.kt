@@ -57,6 +57,7 @@ internal object SlicerProcessClient {
     ): SliceOutcome = sliceInternal(
         transformedModels,
         List(transformedModels.size) { null },
+        List(transformedModels.size) { null },
         options,
         filamentSlots,
         foregroundSession,
@@ -68,6 +69,7 @@ internal object SlicerProcessClient {
     fun slice(
         transformedModels: List<File>,
         supportPaintFiles: List<File?>,
+        seamPaintFiles: List<File?>,
         options: SliceOptions,
         filamentSlots: IntArray = IntArray(transformedModels.size),
         foregroundSession: ForegroundSliceSession? = null,
@@ -76,6 +78,7 @@ internal object SlicerProcessClient {
     ): SliceOutcome = sliceInternal(
         transformedModels,
         supportPaintFiles,
+        seamPaintFiles,
         options,
         filamentSlots,
         foregroundSession,
@@ -96,6 +99,7 @@ internal object SlicerProcessClient {
         }
         return sliceInternal(
             transformedModels,
+            List(transformedModels.size) { null },
             List(transformedModels.size) { null },
             options,
             IntArray(transformedModels.size),
@@ -315,6 +319,7 @@ internal object SlicerProcessClient {
     private fun sliceInternal(
         transformedModels: List<File>,
         supportPaintFiles: List<File?>,
+        seamPaintFiles: List<File?>,
         options: SliceOptions,
         filamentSlots: IntArray,
         foregroundSession: ForegroundSliceSession?,
@@ -329,11 +334,13 @@ internal object SlicerProcessClient {
         val requestId = foregroundSession?.requestId ?: UUID.randomUUID().toString()
         val modelPaths = transformedModels.map(File::getAbsolutePath)
         require(supportPaintFiles.size == transformedModels.size) { "Support paint count does not match models" }
+        require(seamPaintFiles.size == transformedModels.size) { "Seam paint count does not match models" }
         require(filamentSlots.size == transformedModels.size) { "Filament slot count does not match models" }
         val supportPaintPaths = supportPaintFiles.map { it?.absolutePath.orEmpty() }
+        val seamPaintPaths = seamPaintFiles.map { it?.absolutePath.orEmpty() }
         val optionsText = options.toProjectJson().toString()
         require(
-            encodedRequestBytes(modelPaths + supportPaintPaths, optionsText) <=
+            encodedRequestBytes(modelPaths + supportPaintPaths + seamPaintPaths, optionsText) <=
                 SlicerProcessContract.MAX_REQUEST_BYTES,
         ) {
             "Slice request is too large"
@@ -347,6 +354,10 @@ internal object SlicerProcessClient {
             putStringArrayList(
                 SlicerProcessContract.KEY_SUPPORT_PAINT_PATHS,
                 ArrayList(supportPaintPaths),
+            )
+            putStringArrayList(
+                SlicerProcessContract.KEY_SEAM_PAINT_PATHS,
+                ArrayList(seamPaintPaths),
             )
             putString(SlicerProcessContract.KEY_OPTIONS, optionsText)
             putIntArray(SlicerProcessContract.KEY_FILAMENT_SLOTS, filamentSlots)
@@ -1421,6 +1432,13 @@ class SlicerProcessService : Service() {
         val supportPaintFiles = supportPaintPaths.map { path ->
             path.takeIf(String::isNotEmpty)?.let(::validateSupportPaint)
         }
+        val seamPaintPaths = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_SEAM_PAINT_PATHS),
+        ) { "Seam paint paths are unavailable" }
+        require(seamPaintPaths.size == models.size) { "Seam paint count does not match models" }
+        val seamPaintFiles = seamPaintPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let(::validateSeamPaint)
+        }
         val optionsText = requireNotNull(extras.getString(SlicerProcessContract.KEY_OPTIONS)) {
             "Slice settings are unavailable"
         }
@@ -1428,7 +1446,7 @@ class SlicerProcessService : Service() {
             "Slice settings are too large"
         }
         require(
-            encodedRequestBytes(paths + supportPaintPaths, optionsText) <=
+            encodedRequestBytes(paths + supportPaintPaths + seamPaintPaths, optionsText) <=
                 SlicerProcessContract.MAX_REQUEST_BYTES,
         ) {
             "Slice request is too large"
@@ -1460,6 +1478,7 @@ class SlicerProcessService : Service() {
             runNativeSlice(
                 models,
                 supportPaintFiles,
+                seamPaintFiles,
                 filamentSlots,
                 options,
                 maximumGcodeBytes,
@@ -1703,6 +1722,7 @@ class SlicerProcessService : Service() {
     private fun runNativeSlice(
         models: List<File>,
         supportPaintFiles: List<ValidatedSupportPaint?>,
+        seamPaintFiles: List<ValidatedSeamPaint?>,
         filamentSlots: IntArray,
         options: SliceOptions,
         maximumGcodeBytes: Int,
@@ -1727,6 +1747,13 @@ class SlicerProcessService : Service() {
                 if (supportPaint != null) {
                     check(runtime.applySupportPaint(objectIndex, supportPaint.file.absolutePath)) {
                         "Support paint could not be applied"
+                    }
+                }
+            }
+            seamPaintFiles.forEachIndexed { objectIndex, seamPaint ->
+                if (seamPaint != null) {
+                    check(runtime.applySeamPaint(objectIndex, seamPaint.file.absolutePath)) {
+                        "Seam paint could not be applied"
                     }
                 }
             }
@@ -1828,6 +1855,36 @@ class SlicerProcessService : Service() {
         return ValidatedSupportPaint(sidecar, hasEnforcer)
     }
 
+    private fun validateSeamPaint(path: String): ValidatedSeamPaint {
+        require(path.length in 1..MAX_PATH_LENGTH) { "Invalid seam paint path" }
+        val sidecar = File(path).canonicalFile
+        val allowedRoots = listOf(filesDir.canonicalFile, cacheDir.canonicalFile)
+        require(allowedRoots.any(sidecar::isInside)) { "Seam paint is outside private storage" }
+        require(sidecar.isFile && sidecar.length() in SeamPaint.HEADER_BYTES..SeamPaint.MAX_SIDECAR_BYTES) {
+            "Seam paint is unavailable"
+        }
+        DataInputStream(sidecar.inputStream().buffered()).use { reader ->
+            val magic = ByteArray(SeamPaint.MAGIC.size)
+            reader.readFully(magic)
+            require(magic.contentEquals(SeamPaint.MAGIC)) { "Seam paint format is invalid" }
+            val count = reader.readInt()
+            require(count in 0..SeamPaint.MAX_PAINTED_FACETS) { "Seam paint count is invalid" }
+            require(sidecar.length() == SeamPaint.HEADER_BYTES + count.toLong() * SeamPaint.ENTRY_BYTES) {
+                "Seam paint size is invalid"
+            }
+            var previousIndex = -1
+            repeat(count) {
+                val facetIndex = reader.readInt()
+                val state = reader.readUnsignedByte()
+                require(facetIndex > previousIndex && SeamPaintState.fromCode(state) != null) {
+                    "Seam paint entry is invalid"
+                }
+                previousIndex = facetIndex
+            }
+        }
+        return ValidatedSeamPaint(sidecar)
+    }
+
     private fun success(outcome: SliceOutcome) = Bundle().apply {
         putBoolean(SlicerProcessContract.KEY_OK, true)
         putInt(SlicerProcessContract.KEY_PID, Process.myPid())
@@ -1921,6 +1978,8 @@ class SlicerProcessService : Service() {
         val file: File,
         val hasEnforcer: Boolean,
     )
+
+    private data class ValidatedSeamPaint(val file: File)
 }
 
 private object SlicerProcessContract {
@@ -1948,6 +2007,7 @@ private object SlicerProcessContract {
     const val KEY_CUT_HEIGHT_RATIO = "cutHeightRatio"
     const val KEY_PLACE_ON_CUT = "placeOnCut"
     const val KEY_SUPPORT_PAINT_PATHS = "supportPaintPaths"
+    const val KEY_SEAM_PAINT_PATHS = "seamPaintPaths"
     const val KEY_OPTIONS = "options"
     const val KEY_MAXIMUM_GCODE_BYTES_FOR_TEST = "maximumGcodeBytesForTest"
     const val KEY_OK = "ok"

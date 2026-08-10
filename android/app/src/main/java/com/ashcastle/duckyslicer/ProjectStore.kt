@@ -117,6 +117,7 @@ internal class ProjectStore(
                         ),
                         transform = archived.transform,
                         supportPaint = archived.supportPaint,
+                        seamPaint = archived.seamPaint,
                         filamentSlot = archived.filamentSlot,
                     )
                 },
@@ -266,6 +267,9 @@ internal class ProjectStore(
         val supportPaint = value.optJSONArray("supportPaint")
             ?.toSupportPaint(model.triangles)
             ?: SupportPaint()
+        val seamPaint = value.optJSONArray("seamPaint")
+            ?.toSeamPaint(model.triangles)
+            ?: SeamPaint()
         val filamentSlot = value.optInt("filamentSlot", 0)
         require(filamentSlot in 0 until MAX_FILAMENT_SLOTS) { "Filament slot is invalid" }
         return ProjectObject(
@@ -273,6 +277,7 @@ internal class ProjectStore(
             model = model,
             transform = transform,
             supportPaint = supportPaint,
+            seamPaint = seamPaint,
             filamentSlot = filamentSlot,
         )
     }
@@ -317,6 +322,9 @@ internal class ProjectStore(
             if (schemaVersion >= 3) {
                 require(value.optJSONArray("supportPaint")?.isValidSupportPaintArray() == true)
             }
+            if (schemaVersion >= 4) {
+                require(value.optJSONArray("seamPaint")?.isValidSeamPaintArray() == true)
+            }
             require(value.optInt("filamentSlot", 0) in 0 until MAX_FILAMENT_SLOTS)
         }
         val selected = root.takeUnless { it.isNull("selectedObjectId") }
@@ -343,6 +351,7 @@ internal class ProjectStore(
             .put("modelFile", modelFile.name)
             .put("transform", transform.toStoredJson())
             .put("supportPaint", supportPaint.toStoredJson())
+            .put("seamPaint", seamPaint.toStoredJson())
             .put("filamentSlot", filamentSlot.takeIf { it in 0 until MAX_FILAMENT_SLOTS }
                 ?: error("Invalid filament slot"))
     }
@@ -418,6 +427,41 @@ internal class ProjectStore(
         }
     }.isSuccess
 
+    private fun SeamPaint.toStoredJson() = JSONArray().also { values ->
+        require(facets.size <= SeamPaint.MAX_PAINTED_FACETS) { "Seam paint is too large" }
+        facets.toSortedMap().forEach { (facetIndex, state) ->
+            values.put(facetIndex)
+            values.put(state.code)
+        }
+    }
+
+    private fun JSONArray.toSeamPaint(triangleCount: Int): SeamPaint {
+        require(isValidSeamPaintArray()) { "Invalid seam paint" }
+        val facets = LinkedHashMap<Int, SeamPaintState>(length() / 2)
+        var previousIndex = -1
+        for (offset in 0 until length() step 2) {
+            val facetIndex = getInt(offset)
+            val state = requireNotNull(SeamPaintState.fromCode(getInt(offset + 1)))
+            require(facetIndex in 0 until triangleCount && facetIndex > previousIndex) {
+                "Invalid seam paint facet"
+            }
+            facets[facetIndex] = state
+            previousIndex = facetIndex
+        }
+        return SeamPaint(facets)
+    }
+
+    private fun JSONArray.isValidSeamPaintArray(): Boolean = runCatching {
+        require(length() % 2 == 0 && length() / 2 <= SeamPaint.MAX_PAINTED_FACETS)
+        var previousIndex = -1
+        for (offset in 0 until length() step 2) {
+            val facetIndex = getInt(offset)
+            require(facetIndex >= 0 && facetIndex > previousIndex)
+            require(SeamPaintState.fromCode(getInt(offset + 1)) != null)
+            previousIndex = facetIndex
+        }
+    }.isSuccess
+
     private fun JSONObject.checkedFloat(
         key: String,
         minimum: Float,
@@ -460,7 +504,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 3
+        const val SCHEMA_VERSION = 4
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"

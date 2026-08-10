@@ -43,6 +43,7 @@ class ProjectStoreTest {
                         mirrorZ = true,
                     ),
                     supportPaint = SupportPaint().paint(0, SupportPaintState.ENFORCE),
+                    seamPaint = SeamPaint().paint(0, SeamPaintState.BLOCK),
                 ),
             ),
             selectedObjectId = "duck",
@@ -56,6 +57,7 @@ class ProjectStoreTest {
         assertEquals(modelFile.canonicalPath, restored.selectedObject!!.model.localPath)
         assertEquals(snapshot.selectedObject!!.transform, restored.selectedObject!!.transform)
         assertEquals(snapshot.selectedObject!!.supportPaint, restored.selectedObject!!.supportPaint)
+        assertEquals(snapshot.selectedObject!!.seamPaint, restored.selectedObject!!.seamPaint)
         assertTrue(modelFile.isFile)
         assertFalse(orphan.exists())
         assertTrue(outside.isFile)
@@ -83,7 +85,7 @@ class ProjectStoreTest {
     }
 
     @Test
-    fun schemaThreeRestoresProjectSettingsAndSchemaOneRemainsReadable() = withStore { root, store ->
+    fun schemaFourRestoresProjectSettingsAndSchemaOneRemainsReadable() = withStore { root, store ->
         val modelFile = store.createModelDestination("settings.stl").apply { writeText("solid part") }
         val options = multiFilamentSettingsFixture()
         val snapshot = ProjectSnapshot(
@@ -94,7 +96,7 @@ class ProjectStoreTest {
 
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
-        assertEquals(3, JSONObject(File(root, "current_project.json").readText()).getInt("schemaVersion"))
+        assertEquals(4, JSONObject(File(root, "current_project.json").readText()).getInt("schemaVersion"))
         assertEquals(snapshot.selectedObjectId, restored.snapshot.selectedObjectId)
         assertEquals(snapshot.objects.single().id, restored.snapshot.objects.single().id)
         assertEquals(snapshot.objects.single().transform, restored.snapshot.objects.single().transform)
@@ -106,11 +108,15 @@ class ProjectStoreTest {
 
         val current = JSONObject(File(root, "current_project.json").readText())
         current.put("schemaVersion", 1).remove("sliceOptions")
-        current.getJSONArray("objects").getJSONObject(0).remove("filamentSlot")
+        current.getJSONArray("objects").getJSONObject(0).apply {
+            remove("filamentSlot")
+            remove("seamPaint")
+        }
         File(root, "current_project.json").writeText(current.toString())
         val migrated = ProjectStore(root, ::inspectedModel).loadProject()
         assertEquals("settings", migrated.snapshot.selectedObjectId)
         assertEquals(null, migrated.sliceOptions)
+        assertTrue(migrated.snapshot.selectedObject!!.seamPaint.facets.isEmpty())
     }
 
     @Test

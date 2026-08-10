@@ -151,6 +151,26 @@ class ProjectStateTest {
     }
 
     @Test
+    fun seamPaintingIsObjectScopedAndUndoable() {
+        var state = ProjectHistoryState().add(projectObject("part"))
+        state = state.updateSeamPaint(
+            "part",
+            SeamPaint().paint(0, SeamPaintState.ENFORCE),
+            recordHistory = false,
+        )
+        state = state.updateSeamPaint(
+            "part",
+            state.current.selectedObject!!.seamPaint.paint(0, SeamPaintState.BLOCK),
+            recordHistory = false,
+        )
+        state = state.commitSeamPaint("part", SeamPaint())
+
+        assertEquals(SeamPaintState.BLOCK, state.current.selectedObject!!.seamPaint.facets[0])
+        state = state.undo()
+        assertTrue(state.current.selectedObject!!.seamPaint.facets.isEmpty())
+    }
+
+    @Test
     fun filamentAssignmentIsObjectScopedUndoableAndConstrainedWhenSlotsShrink() {
         var state = ProjectHistoryState()
             .add(projectObject("first"))
