@@ -24,6 +24,12 @@ The archive intentionally does not contain G-code, remote-printer profiles, prin
 addresses, access keys, support reports, or other app state. A project therefore
 remains offline and portable without becoming a printer-credential backup.
 
+On Android, a saved project can be opened from DuckySlicer's Project tab or by tapping
+it in Files. External opening accepts only a granted `content://` URI with the project
+MIME type, or a `.duckyproject` name reported as a ZIP-compatible type. Web, `file://`,
+and unrelated binary URIs are not accepted. Opening into a non-empty workspace always
+requires confirmation before the current project is replaced.
+
 ## Import boundary
 
 Project files are untrusted input. The importer accepts only the manifest and numbered
@@ -32,6 +38,10 @@ all references before replacing the current project. Models are extracted to a p
 staging directory, synced, inspected by the native STL boundary, and moved into private
 storage before the project metadata is atomically committed. A failed import leaves the
 current project unchanged and removes staged data.
+
+Import and export run in an Activity-retained operation so rotation does not interrupt
+the transfer. If Android terminates the process during extraction, the next app start
+removes only abandoned private staging directories with the exact generated UUID form.
 
 The current bounds are:
 
