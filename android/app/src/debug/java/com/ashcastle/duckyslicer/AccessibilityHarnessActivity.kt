@@ -36,6 +36,12 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                             projectObjects = listOf(accessibilityProjectObject()),
                         )
                         SCREEN_OBJECT_SETTINGS -> ObjectSettingsAccessibilityHarness()
+                        SCREEN_SHAPES -> BasicShapeSheet(
+                            bedSizeX = 220f,
+                            bedSizeY = 220f,
+                            onAdd = { _, _ -> },
+                            onDismiss = {},
+                        )
                         SCREEN_WORKSPACE -> {
                             val density = LocalDensity.current
                             CompositionLocalProvider(
@@ -60,6 +66,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_PROJECT = "project"
         const val SCREEN_WORKSPACE = "workspace"
         const val SCREEN_OBJECT_SETTINGS = "object-settings"
+        const val SCREEN_SHAPES = "shapes"
     }
 }
 
@@ -201,6 +208,7 @@ private fun WorkspaceAccessibilityHarness(
         canRedo = false,
         onTabSelected = {},
         onChoose = {},
+        onCreatePrimitive = { _, _ -> },
         onOpenProject = {},
         onSaveProject = {},
         onObjectSelected = {},
