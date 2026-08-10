@@ -97,6 +97,11 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "GLES30.GL_STATIC_DRAW",
         "geometryUploadCountForTest",
         "cachedGeometryCountForTest",
+        "ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN",
+        "registerComponentCallbacks(memoryCallbacks)",
+        "unregisterComponentCallbacks(memoryCallbacks)",
+        "queueEvent { toolpathRenderer.releaseGpuGeometryForMemoryPressure() }",
+        "releaseGpuGeometryForMemoryPressure()",
         "POSITION_OFFSET_BYTES",
         "COLOR_OFFSET_BYTES",
         ".allocateDirect(capacity * Float.SIZE_BYTES)",
@@ -369,6 +374,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "Every subsequent gesture frame must reuse the lower-detail VBO",
         "Settling after a gesture must reuse the requested VBO",
         "The GPU cache must remain bounded to two VBOs",
+        "UI memory pressure must release every reconstructable preview VBO",
+        "The first frame after memory pressure must rebuild the requested VBO once",
         "ARM64 GPU staging must use direct memory",
         "ARM64 balanced preview must honor its geometry budget",
         "Slice outcome must retain Orca's print-time estimate",
@@ -395,6 +402,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "Camera-only frames must reuse the GPU buffer",
         "The least recently used gesture VBO must be evicted",
         "Context recreation must re-upload retained scene data",
+        "gpuPreviewMemoryIsReleasedOnlyAfterTheUiBecomesHidden",
     ):
         if marker not in mesh_tests:
             raise VerificationError(f"GPU preview performance regression is missing: {marker}")

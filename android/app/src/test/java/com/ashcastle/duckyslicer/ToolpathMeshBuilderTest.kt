@@ -1,5 +1,6 @@
 package com.ashcastle.duckyslicer
 
+import android.content.ComponentCallbacks2
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -8,6 +9,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ToolpathMeshBuilderTest {
+    @Test
+    fun gpuPreviewMemoryIsReleasedOnlyAfterTheUiBecomesHidden() {
+        assertFalse(
+            shouldReleaseToolpathGpuMemory(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN - 1),
+        )
+        assertTrue(
+            shouldReleaseToolpathGpuMemory(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN),
+        )
+        assertTrue(
+            shouldReleaseToolpathGpuMemory(ComponentCallbacks2.TRIM_MEMORY_BACKGROUND),
+        )
+    }
+
     @Test
     fun machineOriginIsNormalizedOnlyForPreviewRendering() {
         fun preview(xOffset: Float, yOffset: Float) = GcodeLayerPreview(

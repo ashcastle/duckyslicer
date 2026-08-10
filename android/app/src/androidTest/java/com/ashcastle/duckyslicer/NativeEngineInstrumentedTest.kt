@@ -224,6 +224,23 @@ class NativeEngineInstrumentedTest {
                 renderer.cachedGeometryCountForTest(),
             )
             assertEquals("The replacement VBO draw must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
+
+            val uploadsBeforeTrim = renderer.geometryUploadCountForTest()
+            renderer.releaseGpuGeometryForMemoryPressure()
+            assertEquals(
+                "UI memory pressure must release every reconstructable preview VBO",
+                0,
+                renderer.cachedGeometryCountForTest(),
+            )
+            assertEquals("Releasing preview VBOs must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
+            renderer.onDrawFrame(null)
+            assertEquals(
+                "The first frame after memory pressure must rebuild the requested VBO once",
+                uploadsBeforeTrim + 1,
+                renderer.geometryUploadCountForTest(),
+            )
+            assertEquals(1, renderer.cachedGeometryCountForTest())
+            assertEquals("The rebuilt VBO draw must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
         } finally {
             EGL14.eglMakeCurrent(
                 display,

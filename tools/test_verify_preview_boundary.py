@@ -49,6 +49,11 @@ def valid_sources() -> dict[str, str]:
             "GLES30.glGenBuffers GLES30.glDeleteBuffers "
             "GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER GLES30.glBufferData( "
             "GLES30.GL_STATIC_DRAW geometryUploadCountForTest cachedGeometryCountForTest "
+            "ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN "
+            "registerComponentCallbacks(memoryCallbacks) "
+            "unregisterComponentCallbacks(memoryCallbacks) "
+            "queueEvent { toolpathRenderer.releaseGpuGeometryForMemoryPressure() } "
+            "releaseGpuGeometryForMemoryPressure() "
             "POSITION_OFFSET_BYTES COLOR_OFFSET_BYTES "
             ".allocateDirect(capacity * Float.SIZE_BYTES) return builder.finish() "
             "setInteractionActive(true) postDelayed(restoreDetail, DETAIL_RESTORE_DELAY_MS) "
@@ -122,6 +127,8 @@ def valid_sources() -> dict[str, str]:
             "Every subsequent gesture frame must reuse the lower-detail VBO "
             "Settling after a gesture must reuse the requested VBO "
             "The GPU cache must remain bounded to two VBOs "
+            "UI memory pressure must release every reconstructable preview VBO "
+            "The first frame after memory pressure must rebuild the requested VBO once "
             "ARM64 GPU staging must use direct memory "
             "ARM64 balanced preview must honor its geometry budget "
             "Slice outcome must retain Orca's print-time estimate "
@@ -165,6 +172,7 @@ def valid_sources() -> dict[str, str]:
             "Camera-only frames must reuse the GPU buffer "
             "The least recently used gesture VBO must be evicted "
             "Context recreation must re-upload retained scene data"
+            " gpuPreviewMemoryIsReleasedOnlyAfterTheUiBecomesHidden"
         ),
         "WorkspaceLayoutPolicyTest.kt": (
             "landscapePhoneKeepsBottomNavigation "
@@ -240,6 +248,14 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "GLES30.glBufferData(", "upload("
         )
         with self.assertRaisesRegex(VerificationError, "glBufferData"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_missing_gpu_memory_pressure_release(self) -> None:
+        sources = valid_sources()
+        sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
+            "registerComponentCallbacks(memoryCallbacks)", ""
+        )
+        with self.assertRaisesRegex(VerificationError, "GPU preview upload contract"):
             verify_preview_boundary(sources)
 
     def test_rejects_duplicated_client_side_vertex_storage(self) -> None:

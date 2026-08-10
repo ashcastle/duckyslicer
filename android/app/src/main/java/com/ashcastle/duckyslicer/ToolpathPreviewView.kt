@@ -1,10 +1,13 @@
 package com.ashcastle.duckyslicer
 
 import android.app.ActivityManager
+import android.content.ComponentCallbacks2
 import android.content.Context
+import android.content.res.Configuration
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
+import android.view.View
 import android.view.MotionEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -60,9 +63,21 @@ internal fun supportsDepthTestedPreview(context: Context): Boolean {
 }
 
 private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
+    private val applicationContext = context.applicationContext
     private val toolpathRenderer = ToolpathRenderer {
         post { requestRender() }
     }
+    private val memoryCallbacks = object : ComponentCallbacks2 {
+        override fun onConfigurationChanged(newConfig: Configuration) = Unit
+
+        @Suppress("OVERRIDE_DEPRECATION")
+        override fun onLowMemory() = releaseGpuMemory()
+
+        override fun onTrimMemory(level: Int) {
+            if (shouldReleaseToolpathGpuMemory(level)) releaseGpuMemory()
+        }
+    }
+    private var memoryCallbacksRegistered = false
     private var lastX = 0f
     private var lastY = 0f
     private var lastSpan = 0f
@@ -169,7 +184,29 @@ private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
 
     override fun onDetachedFromWindow() {
         removeCallbacks(restoreDetail)
+        if (memoryCallbacksRegistered) {
+            applicationContext.unregisterComponentCallbacks(memoryCallbacks)
+            memoryCallbacksRegistered = false
+        }
+        releaseGpuMemory()
         super.onDetachedFromWindow()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (!memoryCallbacksRegistered) {
+            applicationContext.registerComponentCallbacks(memoryCallbacks)
+            memoryCallbacksRegistered = true
+        }
+    }
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        if (visibility == View.VISIBLE) requestRender()
+    }
+
+    private fun releaseGpuMemory() {
+        queueEvent { toolpathRenderer.releaseGpuGeometryForMemoryPressure() }
     }
 
     private fun captureTwoFingerState(event: MotionEvent) {
@@ -187,6 +224,9 @@ private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
         const val DETAIL_RESTORE_DELAY_MS = 220L
     }
 }
+
+internal fun shouldReleaseToolpathGpuMemory(level: Int): Boolean =
+    level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
 
 internal data class ToolpathScene(
     val preview: GcodeLayerPreview,
@@ -228,6 +268,15 @@ internal class ToolpathRenderer(
     internal fun geometryUploadCountForTest(): Int = geometryUploadCount
 
     internal fun cachedGeometryCountForTest(): Int = gpuGeometry.size
+
+    internal fun releaseGpuGeometryForMemoryPressure() {
+        gpuGeometry.values.forEach { geometry ->
+            GLES30.glDeleteBuffers(1, intArrayOf(geometry.bufferId), 0)
+        }
+        gpuGeometry.clear()
+        uploadState.invalidate()
+        pendingPrewarmScene = null
+    }
 
     fun submit(scene: ToolpathScene) {
         latestScene = scene

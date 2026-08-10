@@ -92,8 +92,10 @@ Low-RAM or 192 MiB-and-smaller app heaps use the bounded performance tier, expli
 user choices remain authoritative, and active gestures may downgrade at most one tier
 until the view settles. The requested and gesture tiers may retain at most two VBOs;
 prewarm the gesture tier after the first visible frame instead of rebuilding or uploading
-geometry on touch-down or touch-up. Keep this policy pure and host-tested alongside the
-real ARM64 EGL renderer regression.
+geometry on touch-down or touch-up. Reconstructable VBOs must be released when Android
+reports that the UI is hidden or the process is in the background, then rebuilt lazily on
+the first visible frame. Keep this policy pure and host-tested alongside the real ARM64
+EGL renderer regression.
 
 The mobile slicing-profile editor keeps the Orca mental model in five horizontally
 scrollable sections: Quality, Strength, Speed, Support, and Others. Keep profile
