@@ -148,6 +148,7 @@ private fun DuckySlicerScreen(
     val scope = rememberCoroutineScope()
     val modelReadError = stringResource(R.string.model_read_error)
     val modelTooLargeError = stringResource(R.string.model_too_large_error)
+    val shapeError = stringResource(R.string.shape_error)
     val autoLayDone = stringResource(R.string.auto_lay_done)
     val autoLayError = stringResource(R.string.auto_lay_error)
     val arrangeDone = stringResource(R.string.arrange_done)
@@ -619,6 +620,51 @@ private fun DuckySlicerScreen(
         }
     }
 
+    fun addPrimitive(primitive: OrcaPrimitive, sizeMm: Float) {
+        if (
+            importing || projectTransferBusy || !projectRestored || autoLaying || arranging ||
+            splitting || cutting || slicing || previewLoading
+        ) return
+        if (projectObjects.size >= ProjectStore.MAX_PROJECT_OBJECTS) {
+            error = shapeError
+            notice = null
+            return
+        }
+        importing = true
+        error = null
+        notice = null
+        val displayName = resources.getString(primitive.label)
+        val objectIndex = projectObjects.size
+        scope.launch {
+            runCatching {
+                createOrcaPrimitive(primitive, sizeMm, displayName, projectStore)
+            }.onSuccess { created ->
+                val distance = ((objectIndex + 1) / 2) * 24f
+                val offset = when {
+                    objectIndex == 0 -> 0f
+                    objectIndex % 2 == 1 -> distance
+                    else -> -distance
+                }
+                projectHistory = projectHistory.addAll(
+                    listOf(
+                        created.copy(
+                            transform = created.transform.copy(offsetXmm = offset),
+                        ),
+                    ),
+                )
+                clearCompletedSlice()
+                remoteUpload = null
+                selectedTab = WorkspaceTab.SLICE
+                notice = resources.getString(R.string.shape_added, displayName)
+            }.onFailure { failure ->
+                if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Shape creation failed", failure)
+                error = shapeError
+                notice = null
+            }
+            importing = false
+        }
+    }
+
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && projectRestored && !autoLaying && !arranging && !splitting && !cutting && !slicing && !previewLoading) {
             importing = true
@@ -927,6 +973,7 @@ private fun DuckySlicerScreen(
                 ),
             )
         },
+        onCreatePrimitive = ::addPrimitive,
         onOpenProject = {
             projectOpenPicker.launch(
                 arrayOf(PROJECT_ARCHIVE_MIME_TYPE, "application/zip"),

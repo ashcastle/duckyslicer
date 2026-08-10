@@ -27,6 +27,7 @@ class NativeLibrary(
     ): FloatArray?
     external fun nativeSplitObject(objectIndex: Int): IntArray?
     external fun nativeCutObject(objectIndex: Int, heightRatio: Float, placeOnCut: Boolean): IntArray?
+    external fun nativeCreatePrimitive(primitiveType: Int, sizeMm: Float, outputPath: String): Boolean
     external fun nativeIsObjectSplittable(objectIndex: Int): Boolean
     external fun nativeSetVolumeExtruder(objectIndex: Int, volumeIndex: Int, slot: Int): Boolean
     external fun applySupportPaint(objectIndex: Int, sidecarPath: String): Boolean

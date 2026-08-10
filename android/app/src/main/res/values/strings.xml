@@ -530,4 +530,15 @@
     <string name="wall_loops">Wall loops</string>
     <string name="sparse_infill_density">Sparse infill density</string>
     <string name="outer_wall_speed">Outer wall speed</string>
+    <string name="add_shape">Add shape</string>
+    <string name="add_shape_hint">Choose a shape and its starting size. You can move, rotate, and scale it after adding.</string>
+    <string name="shape_size">Size</string>
+    <string name="shape_cube">Cube</string>
+    <string name="shape_cylinder">Cylinder</string>
+    <string name="shape_sphere">Sphere</string>
+    <string name="shape_cone">Cone</string>
+    <string name="shape_disc">Disc</string>
+    <string name="shape_torus">Torus</string>
+    <string name="shape_added">%1$s added</string>
+    <string name="shape_error">The shape could not be added.</string>
 </resources>

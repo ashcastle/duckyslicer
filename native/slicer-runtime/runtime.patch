@@ -56,7 +56,7 @@ index 963808df..e2c066c6 100644
      )
  else()
      target_link_libraries(libslic3r PRIVATE
-@@ -1123,6 +1141,11 @@ add_library(prusaslicer-jni SHARED
+@@ -1123,6 +1141,12 @@ add_library(prusaslicer-jni SHARED
      src/sapil_arrange.cpp
      src/sapil_bambu_snapshot.cpp
      src/sapil_bambu_volumes.cpp
@@ -64,6 +64,7 @@ index 963808df..e2c066c6 100644
 +    src/sapil_multi_color_paint.cpp
 +    src/sapil_variable_layer_height.cpp
 +    src/sapil_object_process_overrides.cpp
++    src/sapil_primitive.cpp
 +    src/sapil_model_export.cpp
      src/sapil_bambu_project.cpp
      src/sapil_bambu_plate.cpp
@@ -2057,3 +2058,99 @@ diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slic
  JNIEXPORT jint JNICALL
  Java_com_u1_slicer_NativeLibrary_nativeSplitVolume(JNIEnv*, jobject, jint objIdx, jint volIdx) {
      if (!g_engine) return -1;
+diff --git a/app/src/main/cpp/src/sapil_primitive.cpp b/app/src/main/cpp/src/sapil_primitive.cpp
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/cpp/src/sapil_primitive.cpp
+@@ -0,0 +1,91 @@
++#include <jni.h>
++
++#include <cmath>
++#include <cstdint>
++#include <cstdio>
++#include <fstream>
++#include <string>
++
++#include "libslic3r/TriangleMesh.hpp"
++
++namespace {
++
++constexpr int CUBE = 0;
++constexpr int CYLINDER = 1;
++constexpr int SPHERE = 2;
++constexpr int CONE = 3;
++constexpr int DISC = 4;
++constexpr int TORUS = 5;
++constexpr float MINIMUM_SIZE_MM = 5.0F;
++constexpr float MAXIMUM_SIZE_MM = 200.0F;
++constexpr std::uint64_t MAXIMUM_TRIANGLES = 1'000'000;
++constexpr std::uint64_t STL_HEADER_BYTES = 84;
++constexpr std::uint64_t STL_TRIANGLE_BYTES = 50;
++
++bool create_primitive(int primitive_type, float size_mm, const std::string& output_path)
++{
++    if (!std::isfinite(size_mm) || size_mm < MINIMUM_SIZE_MM ||
++        size_mm > MAXIMUM_SIZE_MM || output_path.empty() || output_path.size() > 1024) {
++        return false;
++    }
++
++    Slic3r::TriangleMesh mesh;
++    switch (primitive_type) {
++    case CUBE:
++        mesh = Slic3r::make_cube(size_mm, size_mm, size_mm);
++        break;
++    case CYLINDER:
++        mesh = Slic3r::make_cylinder(size_mm * 0.5, size_mm);
++        break;
++    case SPHERE:
++        mesh = Slic3r::make_sphere(size_mm * 0.5);
++        break;
++    case CONE:
++        mesh = Slic3r::make_cone(size_mm * 0.5, size_mm);
++        break;
++    case DISC:
++        mesh = Slic3r::make_cylinder(size_mm * 0.5, 0.2);
++        break;
++    case TORUS:
++        mesh = Slic3r::make_torus(size_mm * 0.375, size_mm * 0.125);
++        break;
++    default:
++        return false;
++    }
++
++    const std::uint64_t triangles = mesh.facets_count();
++    if (mesh.empty() || triangles == 0 || triangles > MAXIMUM_TRIANGLES) return false;
++    const std::uint64_t expected_bytes = STL_HEADER_BYTES + triangles * STL_TRIANGLE_BYTES;
++    if (!mesh.write_binary(output_path.c_str())) return false;
++    std::ifstream written(output_path, std::ios::binary | std::ios::ate);
++    if (!written || static_cast<std::uint64_t>(written.tellg()) != expected_bytes) {
++        written.close();
++        std::remove(output_path.c_str());
++        return false;
++    }
++    return true;
++}
++
++} // namespace
++
++extern "C" JNIEXPORT jboolean JNICALL
++Java_com_u1_slicer_NativeLibrary_nativeCreatePrimitive(
++        JNIEnv* env,
++        jobject,
++        jint primitive_type,
++        jfloat size_mm,
++        jstring output_path)
++{
++    if (output_path == nullptr || env->GetStringUTFLength(output_path) > 1024) return JNI_FALSE;
++    const char* path = env->GetStringUTFChars(output_path, nullptr);
++    if (path == nullptr) return JNI_FALSE;
++    bool result = false;
++    try {
++        result = create_primitive(
++            static_cast<int>(primitive_type), static_cast<float>(size_mm), std::string(path));
++    } catch (...) {
++        result = false;
++    }
++    env->ReleaseStringUTFChars(output_path, path);
++    return result ? JNI_TRUE : JNI_FALSE;
++}

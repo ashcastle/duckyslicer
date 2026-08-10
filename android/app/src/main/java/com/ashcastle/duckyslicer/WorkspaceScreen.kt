@@ -32,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.AddBox
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Brush
@@ -250,6 +251,7 @@ internal fun WorkspaceScreen(
     canRedo: Boolean,
     onTabSelected: (WorkspaceTab) -> Unit,
     onChoose: () -> Unit,
+    onCreatePrimitive: (OrcaPrimitive, Float) -> Unit,
     onOpenProject: () -> Unit,
     onSaveProject: () -> Unit,
     onObjectSelected: (String?) -> Unit,
@@ -304,6 +306,7 @@ internal fun WorkspaceScreen(
     var showCutTool by remember { mutableStateOf(false) }
     var showVariableLayerHeightTool by remember { mutableStateOf(false) }
     var showObjectProcessSettings by remember { mutableStateOf(false) }
+    var showPrimitivePicker by remember { mutableStateOf(false) }
     var supportPainting by remember { mutableStateOf(false) }
     var supportPaintTool by remember { mutableStateOf(SupportPaintTool.ENFORCE) }
     var seamPainting by remember { mutableStateOf(false) }
@@ -322,6 +325,9 @@ internal fun WorkspaceScreen(
             showVariableLayerHeightTool = false
             showObjectProcessSettings = false
         }
+    }
+    LaunchedEffect(selectedTab) {
+        if (selectedTab != WorkspaceTab.SLICE) showPrimitivePicker = false
     }
     LaunchedEffect(availableFilaments.size) {
         if (availableFilaments.size < 2) {
@@ -384,6 +390,7 @@ internal fun WorkspaceScreen(
                 previewLoading = previewLoading,
                 canExport = sliceOutcome != null,
                 onImport = onChoose,
+                onAddShape = { showPrimitivePicker = true },
                 onExport = onSave,
                 canArrange = projectObjects.size > 1,
                 onArrange = onArrange,
@@ -678,6 +685,115 @@ internal fun WorkspaceScreen(
             },
             onDismiss = { showObjectProcessSettings = false },
         )
+    }
+    if (showPrimitivePicker) {
+        BasicShapeSheet(
+            bedSizeX = sliceOptions.bedSizeX,
+            bedSizeY = sliceOptions.bedSizeY,
+            onAdd = { primitive, sizeMm ->
+                showPrimitivePicker = false
+                onCreatePrimitive(primitive, sizeMm)
+            },
+            onDismiss = { showPrimitivePicker = false },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun BasicShapeSheet(
+    bedSizeX: Float,
+    bedSizeY: Float,
+    onAdd: (OrcaPrimitive, Float) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var selected by remember { mutableStateOf(OrcaPrimitive.CUBE) }
+    val initialSize = (minOf(bedSizeX, bedSizeY) * 0.1f).coerceIn(10f, 40f)
+    var sizeMm by rememberSaveable(bedSizeX, bedSizeY) { mutableFloatStateOf(initialSize) }
+    val shapeSizeLabel = stringResource(R.string.shape_size)
+    val shapeSizeValue = stringResource(R.string.millimeters_value, sizeMm)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF282925),
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(
+                stringResource(R.string.add_shape),
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                stringResource(R.string.add_shape_hint),
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            OrcaPrimitive.entries.chunked(3).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    row.forEach { primitive ->
+                        Button(
+                            onClick = { selected = primitive },
+                            modifier = Modifier
+                                .weight(1f)
+                                .semantics { this.selected = selected == primitive },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (selected == primitive) {
+                                    WorkspaceYellow
+                                } else {
+                                    Color(0xFF3A3B37)
+                                },
+                                contentColor = if (selected == primitive) {
+                                    WorkspaceBlack
+                                } else {
+                                    Color(0xFFF4F4EE)
+                                },
+                            ),
+                        ) {
+                            Text(
+                                stringResource(primitive.label),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(shapeSizeLabel, fontWeight = FontWeight.SemiBold)
+                Text(shapeSizeValue, color = WorkspaceYellow)
+            }
+            Slider(
+                value = sizeMm,
+                onValueChange = { sizeMm = it },
+                valueRange = MIN_PRIMITIVE_SIZE_MM..MAX_PRIMITIVE_SIZE_MM,
+                steps = 38,
+                modifier = Modifier.semantics {
+                    contentDescription = "$shapeSizeLabel $shapeSizeValue"
+                },
+                colors = duckySliderColors(),
+            )
+            Button(
+                onClick = { onAdd(selected, sizeMm) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = WorkspaceYellow,
+                    contentColor = WorkspaceBlack,
+                ),
+            ) {
+                Text(stringResource(R.string.add_shape))
+            }
+        }
     }
 }
 
@@ -1400,6 +1516,7 @@ private fun WorkspaceMenu(
     canExport: Boolean,
     canArrange: Boolean,
     onImport: () -> Unit,
+    onAddShape: () -> Unit,
     onExport: () -> Unit,
     onArrange: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1428,6 +1545,15 @@ private fun WorkspaceMenu(
                 onClick = {
                     expanded = false
                     onImport()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.add_shape)) },
+                leadingIcon = { Icon(Icons.Default.AddBox, null) },
+                enabled = !importing && !editingBusy && !slicing && !previewLoading,
+                onClick = {
+                    expanded = false
+                    onAddShape()
                 },
             )
             DropdownMenuItem(
