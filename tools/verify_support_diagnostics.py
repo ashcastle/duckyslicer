@@ -36,6 +36,25 @@ EXPECTED_EVENTS = {
     "SLICE_FAILED",
     "SLICING_PROFILE_SAVE_FAILED",
 }
+EXPECTED_EXIT_REASONS = {
+    "UNKNOWN": 0,
+    "EXIT_SELF": 1,
+    "SIGNALED": 2,
+    "LOW_MEMORY": 3,
+    "CRASH": 4,
+    "CRASH_NATIVE": 5,
+    "ANR": 6,
+    "INITIALIZATION_FAILURE": 7,
+    "PERMISSION_CHANGE": 8,
+    "EXCESSIVE_RESOURCE_USAGE": 9,
+    "USER_REQUESTED": 10,
+    "USER_STOPPED": 11,
+    "DEPENDENCY_DIED": 12,
+    "OTHER": 13,
+    "FREEZER": 14,
+    "PACKAGE_STATE_CHANGE": 15,
+    "PACKAGE_UPDATED": 16,
+}
 FORBIDDEN_DIAGNOSTIC_MARKERS = {
     ".message",
     "ACTION_SEND",
@@ -48,6 +67,20 @@ FORBIDDEN_DIAGNOSTIC_MARKERS = {
     "localPath",
     "printStackTrace",
     "stackTrace",
+}
+FORBIDDEN_EXIT_MARKERS = {
+    ".description",
+    ".pss",
+    ".rss",
+    ".status",
+    "getDescription",
+    "getProcessStateSummary",
+    "getPss",
+    "getRss",
+    "getStatus",
+    "getTraceInputStream",
+    "processStateSummary",
+    "traceInputStream",
 }
 
 
@@ -82,9 +115,30 @@ def _event_names(source: str) -> set[str]:
     }
 
 
+def _exit_reason_codes(source: str) -> dict[str, int]:
+    match = re.search(
+        r"internal enum class SupportExitReason\(val platformCode: Int\)\s*\{"
+        r"(?P<body>.*?)\n\s*;",
+        source,
+        flags=re.DOTALL,
+    )
+    if not match:
+        return {}
+    return {
+        name: int(code)
+        for name, code in re.findall(
+            r"^\s*([A-Z][A-Z_]*)\((\d+)\),?\s*$",
+            match.group("body"),
+            flags=re.MULTILINE,
+        )
+    }
+
+
 def verify_support_diagnostics(sources: dict[str, str]) -> None:
     required = {
         "SupportDiagnostics.kt",
+        "ProcessExitHistory.kt",
+        "ProcessExitHistoryApi30.kt",
         "MainActivity.kt",
         "AppSettingsSheet.kt",
         "SupportDiagnosticsTest.kt",
@@ -106,13 +160,22 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
         "SupportEventJournal(context.applicationContext).snapshot()",
         "MAX_SUPPORT_EVENTS = 32",
         "MAX_SUPPORT_REPORT_BYTES = 16 * 1_024",
+        'appendLine("schema=2")',
         "takeLast(MAX_SUPPORT_EVENTS)",
+        "snapshot.processExits.take(MAX_SUPPORT_PROCESS_EXITS)",
+        "previous_exit_count=",
+        "previous_exit.$index.process=${record.process.name}",
+        "previous_exit.$index.reason=${record.reason.name}",
         "private_content_included=false",
         "models_included=false",
         "gcode_included=false",
         "file_names_included=false",
         "printer_addresses_included=false",
         "access_keys_included=false",
+        "raw_process_names_included=false",
+        "exit_descriptions_included=false",
+        "exit_traces_included=false",
+        "exit_memory_samples_included=false",
         "OsConstants._SC_PAGESIZE",
         "StatFs(context.filesDir.absolutePath).availableBytes",
     ):
@@ -125,6 +188,44 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
         raise VerificationError(
             "support details may capture private or free-form data: "
             f"{found_forbidden}"
+        )
+
+    history = sources["ProcessExitHistory.kt"]
+    api30_history = sources["ProcessExitHistoryApi30.kt"]
+    for marker in (
+        "Build.VERSION.SDK_INT >= Build.VERSION_CODES.R",
+        "SupportProcessKind.APP",
+        "SupportProcessKind.SLICER",
+        "SupportProcessKind.OTHER",
+        "Api30ProcessExitHistory.read(context.applicationContext)",
+    ):
+        if marker not in history:
+            raise VerificationError(f"bounded process-exit history is missing: {marker}")
+    if not re.search(r"\bMAX_SUPPORT_PROCESS_EXITS\s*=\s*4\b", history):
+        raise VerificationError("bounded process-exit history is missing: exact four-entry limit")
+    if _exit_reason_codes(history) != EXPECTED_EXIT_REASONS:
+        raise VerificationError(
+            "process-exit reason mapping changed without a privacy review: "
+            f"expected={EXPECTED_EXIT_REASONS}, found={_exit_reason_codes(history)}"
+        )
+    for marker in (
+        "@RequiresApi(30)",
+        "getHistoricalProcessExitReasons(",
+        "context.packageName",
+        "MAX_SUPPORT_PROCESS_EXITS",
+        "info.timestamp",
+        "supportProcessKind(context.packageName, info.processName)",
+        "SupportExitReason.fromPlatformCode(info.reason)",
+    ):
+        if marker not in api30_history:
+            raise VerificationError(f"Android process-exit history is missing: {marker}")
+    found_exit_forbidden = sorted(
+        marker for marker in FORBIDDEN_EXIT_MARKERS if marker in api30_history
+    )
+    if found_exit_forbidden:
+        raise VerificationError(
+            "process-exit history may expose raw system details: "
+            f"{found_exit_forbidden}"
         )
 
     events = _event_names(diagnostics)
@@ -160,8 +261,11 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
     policy = sources["PRIVACY.md"]
     for marker in (
         "Support details are written only to a location you select.",
-        "They do not contain models, G-code, file names, printer",
+        "contain models, G-code, file names, printer addresses",
+        "On Android 11 and later, they also contain up to four",
+        "raw process names, memory samples, or stack traces",
         "지원 정보는 사용자가 선택한 위치에만 저장됩니다.",
+        "프로세스 종료 시각, 고정 프로세스 분류 및 고정 종료 원인을 최대 4건 포함합니다.",
         "사용자가 직접 공유한 경우에만 DuckySlicer 프로젝트가 이 정보를 받습니다.",
     ):
         if marker not in policy:
@@ -169,7 +273,11 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
 
     support = sources["SUPPORT.md"]
     issue = sources["bug_report.yml"]
-    for marker in ("Settings > Help > Save support details", "SECURITY.md"):
+    for marker in (
+        "Settings > Help > Save support details",
+        "up to four fixed prior-exit",
+        "SECURITY.md",
+    ):
         if marker not in support:
             raise VerificationError(f"support guidance is missing: {marker}")
     if "Settings > Help > Save support details" not in issue:
@@ -182,11 +290,13 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
         "supportReportContainsOnlyBoundedEnvironmentSettingsAndFixedProblemCodes",
         "supportEventCodecRejectsMalformedUnknownAndOversizedHistory",
         "supportReportWriterProducesExactUtf8AndRejectsOversizedInput",
+        "processExitMappingNeverExportsAnUnexpectedRawProcessNameOrReason",
     ):
         if marker not in host_test:
             raise VerificationError(f"support host regression is missing: {marker}")
     for marker in (
         "supportDetailsUseRealDeviceFactsWithoutPrivateAppContent",
+        "recentProcessExitHistoryUsesOnlyFixedBoundedValues",
         "page_size_bytes=16384",
     ):
         if marker not in device_test:
@@ -200,6 +310,10 @@ def read_sources() -> dict[str, str]:
     package = main / "java/com/ashcastle/duckyslicer"
     return {
         "SupportDiagnostics.kt": (package / "SupportDiagnostics.kt").read_text(encoding="utf-8"),
+        "ProcessExitHistory.kt": (package / "ProcessExitHistory.kt").read_text(encoding="utf-8"),
+        "ProcessExitHistoryApi30.kt": (package / "ProcessExitHistoryApi30.kt").read_text(
+            encoding="utf-8"
+        ),
         "MainActivity.kt": (package / "MainActivity.kt").read_text(encoding="utf-8"),
         "AppSettingsSheet.kt": (package / "AppSettingsSheet.kt").read_text(encoding="utf-8"),
         "SupportDiagnosticsTest.kt": (

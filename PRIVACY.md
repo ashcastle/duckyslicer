@@ -24,6 +24,11 @@ included in exported printer profiles. Android backup is disabled for the app.
 A bounded history of recent problem categories and times is also kept locally so you
 can choose to create support details without installing a tracking service. It does
 not store error messages, stack traces, file names, printer addresses, or access keys.
+On Android 11 and later, Android also keeps a bounded system history of prior app
+process exits. DuckySlicer reads at most four entries only when you create support
+details and reduces each entry to its time, a fixed app-or-slicer process kind, and a
+fixed exit reason. It does not read the system description, trace, raw process name,
+or memory sample.
 
 Background slicing uses an Android notification to show progress and let you reopen
 the app or cancel the current slice. It does not send models or G-code to the
@@ -45,9 +50,11 @@ DuckySlicer sends data only when you choose an action that requires it:
 - Support details are written only to a location you select. They contain the app and
   Android versions, device manufacturer and model, memory and storage capacity,
   non-sensitive display and connection preferences, and the fixed categories and
-  times of recent problems. They do not contain models, G-code, file names, printer
-  addresses, access keys, free-form error text, or stack traces. The DuckySlicer
-  project receives this report only if you choose to share it.
+  times of recent problems. On Android 11 and later, they also contain up to four
+  prior process-exit times, fixed process kinds, and fixed exit reasons. They do not
+  contain models, G-code, file names, printer addresses, access keys, free-form error
+  text, system exit descriptions, raw process names, memory samples, or stack traces.
+  The DuckySlicer project receives this report only if you choose to share it.
 
 Printer servers and selected storage providers may keep uploaded files or connection
 logs. DuckySlicer does not control their retention practices.
@@ -99,6 +106,11 @@ DuckySlicer 클라우드 서비스가 없습니다. DuckySlicer 프로젝트는 
 추적 서비스를 설치하지 않고도 지원 정보를 만들 수 있도록 최근 문제의 고정된
 분류와 발생 시각을 제한된 개수만 기기에 저장합니다. 오류 메시지, 스택 트레이스,
 파일 이름, 프린터 주소 또는 접속 키는 저장하지 않습니다.
+Android 11 이상에서는 Android가 이전 앱 프로세스의 종료 이력을 제한된 개수로
+기기에 보관합니다. DuckySlicer는 사용자가 지원 정보를 만들 때에만 최대 4건을
+읽어 종료 시각, 앱 또는 슬라이서로 구분한 고정 프로세스 분류, 고정 종료 원인으로
+축약합니다. 시스템 설명, 추적 정보, 원래 프로세스 이름 또는 메모리 표본은 읽지
+않습니다.
 
 백그라운드 슬라이싱은 진행 상태를 보여주고 앱을 다시 열거나 현재 슬라이싱을
 취소할 수 있도록 Android 알림을 사용합니다. 모델이나 G-code를 DuckySlicer
@@ -119,8 +131,10 @@ DuckySlicer는 사용자가 다음 동작을 선택한 경우에만 필요한 �
   이후 요청은 브라우저와 GitHub의 개인정보처리방침에 따라 처리됩니다.
 - 지원 정보는 사용자가 선택한 위치에만 저장됩니다. 앱 및 Android 버전, 기기
   제조사와 모델, 메모리 및 저장 공간 용량, 민감하지 않은 화면·연결 설정, 최근
-  문제의 고정된 분류와 발생 시각이 포함됩니다. 모델, G-code, 파일 이름, 프린터
-  주소, 접속 키, 자유 형식 오류 내용 또는 스택 트레이스는 포함되지 않습니다.
+  문제의 고정된 분류와 발생 시각이 포함됩니다. Android 11 이상에서는 이전
+  프로세스 종료 시각, 고정 프로세스 분류 및 고정 종료 원인을 최대 4건 포함합니다.
+  모델, G-code, 파일 이름, 프린터 주소, 접속 키, 자유 형식 오류 내용, 시스템 종료
+  설명, 원래 프로세스 이름, 메모리 표본 또는 스택 트레이스는 포함되지 않습니다.
   사용자가 직접 공유한 경우에만 DuckySlicer 프로젝트가 이 정보를 받습니다.
 
 프린터 서버와 사용자가 선택한 저장 공간 제공자는 업로드된 파일이나 연결 로그를
