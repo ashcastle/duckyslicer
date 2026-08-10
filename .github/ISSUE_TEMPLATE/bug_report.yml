@@ -1,74 +1,113 @@
 name: Bug report
-description: Report a reproducible DuckySlicer problem
+description: Report a reproducible problem in DuckySlicer.
+title: "[Bug] "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for helping improve DuckySlicer. Search existing issues first and
-        remove private model data or printer credentials from anything you attach.
-  - type: checkboxes
-    attributes:
-      label: Before submitting
-      options:
-        - label: I searched existing open and closed issues.
-          required: true
-        - label: I reproduced this with the newest available DuckySlicer build.
-          required: true
+        Thanks for helping improve DuckySlicer. Do not include private models, G-code,
+        printer addresses, access keys, personal data, or security exploit details.
+        Follow the Security reporting guidance for security or sensitive privacy problems.
+
   - type: input
     id: version
     attributes:
       label: DuckySlicer version
-      placeholder: 0.1.0-dev or commit SHA
+      description: Use the version shown in Settings or the GitHub Release name.
+      placeholder: 0.1.0-alpha.4
     validations:
       required: true
+
   - type: input
     id: device
     attributes:
-      label: Device and Android version
-      placeholder: Galaxy S24 Ultra, Android 16
+      label: Android device
+      description: Manufacturer and model only.
+      placeholder: Samsung Galaxy S24
     validations:
       required: true
+
   - type: input
-    id: printer
+    id: android_version
     attributes:
-      label: Selected printer, nozzle, and filament profiles
-      placeholder: U1, 0.4 mm, PLA
+      label: Android version
+      placeholder: Android 15
     validations:
-      required: false
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Model import and Prepare
+        - Slicing
+        - Preview
+        - Printer, filament, or process profiles
+        - Device connection or upload
+        - Projects and export
+        - Settings
+        - Installation or startup
+        - Other
+    validations:
+      required: true
+
   - type: textarea
-    id: reproduce
+    id: steps
     attributes:
       label: Steps to reproduce
+      description: Use a public or synthetic model if a model is needed.
       placeholder: |
-        1. Import …
-        2. Select …
-        3. Tap …
+        1. Open...
+        2. Choose...
+        3. Observe...
     validations:
       required: true
-  - type: textarea
-    id: actual
+
+  - type: input
+    id: profiles
     attributes:
-      label: What happened
-    validations:
-      required: true
+      label: Selected profiles
+      description: Optional printer, nozzle, filament, and process profile names. Do not include an address or access key.
+      placeholder: Generic printer · 0.4 mm · Generic PLA · 0.20 mm Standard
+
   - type: textarea
     id: expected
     attributes:
-      label: What you expected
+      label: Expected result
     validations:
       required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include exact visible wording when useful, but remove private information.
+    validations:
+      required: true
+
   - type: textarea
     id: support_details
     attributes:
-      label: Support details
-      description: Attach the text file from Settings > Help > Save support details after reviewing it.
-    validations:
-      required: false
+      label: Optional support details
+      description: Paste only the report you explicitly exported from Settings > Help > Save support details.
+      render: text
+
   - type: textarea
-    id: attachments
+    id: evidence
     attributes:
-      label: Screenshots and safe sample files
-      description: Attach only files you are permitted to share. Do not post security vulnerabilities here.
-    validations:
-      required: false
+      label: Optional screenshots or safe sample
+      description: Attach only public or synthetic content that you have permission to publish.
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Public report safety
+      options:
+        - label: I removed private models, private or identifying G-code, printer addresses, access keys, personal data, and security details.
+          required: true
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I reproduced this with the newest available DuckySlicer build.
+          required: true

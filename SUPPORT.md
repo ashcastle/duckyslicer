@@ -7,8 +7,9 @@ For a reproducible app problem:
 
 1. In DuckySlicer, open **Settings > Help > Save support details** and save the small
    text report.
-2. Open a bug report and include the steps that caused the problem, what you expected,
-   and what happened.
+2. Open the structured
+   [bug report](https://github.com/ashcastle/duckyslicer/issues/new?template=bug_report.yml)
+   and include the steps that caused the problem, what you expected, and what happened.
 3. Attach the support details after reviewing them. They contain app and device
    information, fixed recent-problem categories, and up to four fixed prior-exit
    records on Android 11 and later. They contain no models, G-code, file names,

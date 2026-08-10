@@ -1,0 +1,35 @@
+name: Support question
+description: Ask a non-sensitive usage or compatibility question.
+title: "[Question] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Public issues are visible to everyone. Do not include private models, private
+        or identifying G-code, printer addresses, access keys, personal data, or
+        security exploit details.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: Describe the workflow or compatibility point you need help with.
+    validations:
+      required: true
+
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What you already tried
+      description: Include public documentation or safe steps you checked.
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Public question safety
+      options:
+        - label: I removed private models, private or identifying G-code, printer addresses, access keys, personal data, and security details.
+          required: true
+        - label: I checked the support guide and searched existing issues.
+          required: true

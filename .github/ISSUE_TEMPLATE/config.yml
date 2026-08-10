@@ -1,1 +1,8 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
+contact_links:
+  - name: Security reporting
+    url: https://github.com/ashcastle/duckyslicer/blob/main/SECURITY.md
+    about: Follow the current private-reporting or safe contact-channel instructions.
+  - name: Support guide
+    url: https://github.com/ashcastle/duckyslicer/blob/main/SUPPORT.md
+    about: Check safe diagnostic and support guidance before opening a public bug report.
