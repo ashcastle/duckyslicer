@@ -5,18 +5,68 @@ import android.net.Uri
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.content.FileProvider
+import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ProjectArchiveIntentInstrumentedTest {
+    @Test
+    fun unsavedProjectEditAndUndoSurviveImmediateActivityRecreation() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        projectRoot.deleteRecursively()
+        try {
+            seedCurrentProject("retained-object", "retained.stl")
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                lateinit var retainedModel: ProjectTransferViewModel
+                scenario.onActivity { activity ->
+                    retainedModel = ViewModelProvider(activity)[ProjectTransferViewModel::class.java]
+                }
+                waitForSession(retainedModel, "retained-object")
+                val initial = retainedModel.state.value
+                val nextHistory = initial.history.updateSelectedTransform(
+                    ModelTransform(offsetXmm = 23f, rotationZdeg = 17f),
+                )
+                val nextOptions = initial.sliceOptions.copy(fillDensity = 0.37f)
+                assertTrue(
+                    retainedModel.updateSession(
+                        initial.history,
+                        nextHistory,
+                        initial.sliceOptions,
+                        nextOptions,
+                    ),
+                )
+
+                // Recreate before the 400 ms durable-save debounce can finish.
+                scenario.recreate()
+                scenario.onActivity { recreated ->
+                    assertSame(
+                        retainedModel,
+                        ViewModelProvider(recreated)[ProjectTransferViewModel::class.java],
+                    )
+                }
+                val retained = retainedModel.state.value
+                assertEquals(23f, retained.history.current.selectedObject?.transform?.offsetXmm)
+                assertEquals(17f, retained.history.current.selectedObject?.transform?.rotationZdeg)
+                assertEquals(0.37f, retained.sliceOptions.fillDensity)
+                assertTrue("Undo history must survive recreation", retained.history.canUndo)
+
+                waitForPersistedSession("retained-object", 23f, 0.37f)
+            }
+        } finally {
+            projectRoot.deleteRecursively()
+        }
+    }
+
     @Test
     fun customProjectIntentSurvivesRecreationRestoresAndSlices() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -210,6 +260,39 @@ class ProjectArchiveIntentInstrumentedTest {
         return ProjectStore(context).loadProject().also { document ->
             assertEquals(objectId, document.snapshot.selectedObjectId)
         }
+    }
+
+    private fun waitForSession(model: ProjectTransferViewModel, objectId: String) {
+        val deadline = SystemClock.elapsedRealtime() + WAIT_TIMEOUT_MILLIS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val state = model.state.value
+            if (state.restored && !state.busy && state.history.current.selectedObjectId == objectId) {
+                return
+            }
+            SystemClock.sleep(WAIT_POLL_MILLIS)
+        }
+        throw AssertionError("Timed out waiting for retained project session: $objectId")
+    }
+
+    private fun waitForPersistedSession(
+        objectId: String,
+        offsetXmm: Float,
+        fillDensity: Float,
+    ) {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val deadline = SystemClock.elapsedRealtime() + WAIT_TIMEOUT_MILLIS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val stored = ProjectStore(context).loadProject()
+            if (
+                stored.snapshot.selectedObjectId == objectId &&
+                stored.snapshot.selectedObject?.transform?.offsetXmm == offsetXmm &&
+                stored.sliceOptions?.fillDensity == fillDensity
+            ) {
+                return
+            }
+            SystemClock.sleep(WAIT_POLL_MILLIS)
+        }
+        throw AssertionError("Timed out waiting for retained project persistence")
     }
 
     private fun waitForNode(

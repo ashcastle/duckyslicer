@@ -18,6 +18,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "BoundedJson.kt",
         "DurableJsonFile.kt",
         "ProjectStore.kt",
+        "ProjectTransfer.kt",
         "ProfileStore.kt",
         "RemoteDevice.kt",
         "RemoteOperationViewModel.kt",
@@ -64,10 +65,18 @@ def verify_resilience(sources: dict[str, str]) -> None:
     project = sources["ProjectStore.kt"]
     if "storageUnavailable" not in project or "validateProjectRoot" not in project:
         raise VerificationError("project corruption is not surfaced and blocked")
-    main = sources["MainActivity.kt"]
-    for marker in ("projectPersistenceBlocked", "saved_data_unavailable"):
-        if marker not in main:
+    project_session = sources["ProjectTransfer.kt"]
+    for marker in (
+        "val persistenceBlocked: Boolean",
+        "restored.storageUnavailable",
+        "!current.persistenceBlocked",
+        "projectStore.save(document.history.current, document.sliceOptions)",
+    ):
+        if marker not in project_session:
             raise VerificationError(f"project autosave corruption guard is missing: {marker}")
+    main = sources["MainActivity.kt"]
+    if "saved_data_unavailable" not in main:
+        raise VerificationError("project autosave corruption warning is missing")
 
     remote = sources["RemoteDevice.kt"]
     for marker in (
@@ -258,6 +267,7 @@ def read_sources() -> dict[str, str]:
         "BoundedJson.kt": (main / "BoundedJson.kt").read_text(encoding="utf-8"),
         "DurableJsonFile.kt": (main / "DurableJsonFile.kt").read_text(encoding="utf-8"),
         "ProjectStore.kt": (main / "ProjectStore.kt").read_text(encoding="utf-8"),
+        "ProjectTransfer.kt": (main / "ProjectTransfer.kt").read_text(encoding="utf-8"),
         "ProfileStore.kt": (main / "ProfileStore.kt").read_text(encoding="utf-8"),
         "RemoteDevice.kt": (main / "RemoteDevice.kt").read_text(encoding="utf-8"),
         "RemoteOperationViewModel.kt": (main / "RemoteOperationViewModel.kt").read_text(

@@ -21,9 +21,11 @@ def string_resources() -> str:
 def valid_sources() -> dict[str, str]:
     event_enum = "\n".join(f"    {event}," for event in sorted(EXPECTED_EVENTS))
     remote_events = {event for event in EXPECTED_EVENTS if event.startswith("REMOTE_")}
+    project_events = {"PROJECT_SAVE_FAILED", "PROJECT_STORAGE_UNAVAILABLE"}
     event_calls = " ".join(
-        f"SupportEvent.{event}" for event in EXPECTED_EVENTS - remote_events
+        f"SupportEvent.{event}" for event in EXPECTED_EVENTS - remote_events - project_events
     )
+    project_event_calls = " ".join(f"SupportEvent.{event}" for event in project_events)
     remote_event_calls = " ".join(f"SupportEvent.{event}" for event in remote_events)
     string_calls = " ".join(f"R.string.{name}" for name in REQUIRED_STRINGS)
     exit_reasons = "\n".join(
@@ -80,6 +82,7 @@ def valid_sources() -> dict[str, str]:
             "SupportExitReason.fromPlatformCode(info.reason)"
         ),
         "MainActivity.kt": event_calls,
+        "ProjectTransfer.kt": project_event_calls,
         "RemoteOperationViewModel.kt": remote_event_calls,
         "AppSettingsSheet.kt": (
             'ActivityResultContracts.CreateDocument("text/plain") '

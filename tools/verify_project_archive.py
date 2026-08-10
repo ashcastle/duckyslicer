@@ -58,6 +58,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "WorkspaceScreen.kt",
         "AndroidManifest.xml",
         "ProjectArchiveTest.kt",
+        "ProjectTransferStateTest.kt",
         "ProjectArchiveIntentInstrumentedTest.kt",
         "NativeEngineInstrumentedTest.kt",
         "strings.xml",
@@ -65,6 +66,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "PRIVACY.md",
         "SUPPORT.md",
         "PROJECT_FORMAT.md",
+        "CONTRIBUTING.md",
     }
     missing_files = sorted(required_files - sources.keys())
     if missing_files:
@@ -158,6 +160,15 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "viewModelScope.launch(Dispatchers.IO)",
             "ProjectStore.recoverAbandonedArchiveStaging",
             "ProjectTransferState(busy = true)",
+            "val history: ProjectHistoryState",
+            "val sliceOptions: SliceOptions",
+            "val restored: Boolean",
+            "val sessionRevision: Long",
+            "fun updateHistory(",
+            "fun updateSession(",
+            "projectStore.loadProject()",
+            "projectStore.save(document.history.current, document.sliceOptions)",
+            "PROJECT_SAVE_DEBOUNCE_MILLIS = 400L",
             "mutableState.value.completion != null",
             "openInputStream(uri)",
             "projectStore.importArchive",
@@ -262,9 +273,23 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "externalProjectModel.enqueue(intent)",
             "ProjectTransferViewModel",
             "projectTransferState.completion",
+            "projectHistory = projectTransferState.history",
+            "sliceOptions = projectTransferState.sliceOptions",
+            "projectRestored = projectTransferState.restored",
+            "projectTransferModel.updateHistory(",
             "ProjectReplacementDialog(",
         ),
     )
+    for forbidden in (
+        "mutableStateOf(ProjectHistoryState())",
+        "mutableStateOf(SliceOptions())",
+        "projectStore.loadProject()",
+        "projectStore.save(projectHistory.current",
+    ):
+        if forbidden in main:
+            raise VerificationError(
+                "MainActivity.kt still owns project session persistence: " + forbidden
+            )
     if "ACTION_SEND" in main or "HttpURLConnection" in main:
         raise VerificationError("project archives must use user-chosen local documents, not sharing or network upload")
 
@@ -339,16 +364,35 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         ),
     )
     _require_markers(
+        "ProjectTransferStateTest.kt",
+        sources["ProjectTransferStateTest.kt"],
+        (
+            "retainedSessionMutationKeepsHistoryAndOptionsTogether",
+            "staleOrBusySessionMutationIsRejected",
+            "withUpdatedSession",
+        ),
+    )
+    _require_markers(
         "ProjectArchiveIntentInstrumentedTest.kt",
         sources["ProjectArchiveIntentInstrumentedTest.kt"],
         (
             "customProjectIntentSurvivesRecreationRestoresAndSlices",
+            "unsavedProjectEditAndUndoSurviveImmediateActivityRecreation",
             "compatibleZipIntentConfirmsBeforeReplacingTheCurrentProject",
             "projectViewIntentRejectsNetworkAndUnrelatedBinaryUris",
             "Intent.ACTION_VIEW",
             "Intent.FLAG_GRANT_READ_URI_PERMISSION",
             "scenario.recreate()",
             "OnDeviceSlicer.slice(",
+        ),
+    )
+    _require_markers(
+        "CONTRIBUTING.md",
+        sources["CONTRIBUTING.md"],
+        (
+            "Project history, active slicing options, restoration, and debounced persistence",
+            "same Activity-retained owner",
+            "process-death recovery",
         ),
     )
     _require_markers(
@@ -376,6 +420,9 @@ def read_sources() -> dict[str, str]:
         "ProjectArchiveTest.kt": (
             tests / "test/java/com/ashcastle/duckyslicer/ProjectArchiveTest.kt"
         ).read_text(encoding="utf-8"),
+        "ProjectTransferStateTest.kt": (
+            tests / "test/java/com/ashcastle/duckyslicer/ProjectTransferStateTest.kt"
+        ).read_text(encoding="utf-8"),
         "ProjectArchiveIntentInstrumentedTest.kt": (
             tests
             / "androidTest/java/com/ashcastle/duckyslicer/ProjectArchiveIntentInstrumentedTest.kt"
@@ -388,6 +435,7 @@ def read_sources() -> dict[str, str]:
         "PRIVACY.md": (ROOT / "PRIVACY.md").read_text(encoding="utf-8"),
         "SUPPORT.md": (ROOT / "SUPPORT.md").read_text(encoding="utf-8"),
         "PROJECT_FORMAT.md": (ROOT / "docs/PROJECT_FORMAT.md").read_text(encoding="utf-8"),
+        "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),
     }
 
 

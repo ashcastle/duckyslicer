@@ -143,6 +143,7 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
         "ProcessExitHistory.kt",
         "ProcessExitHistoryApi30.kt",
         "MainActivity.kt",
+        "ProjectTransfer.kt",
         "RemoteOperationViewModel.kt",
         "AppSettingsSheet.kt",
         "SupportDiagnosticsTest.kt",
@@ -238,12 +239,21 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
             "support event allowlist changed without a privacy review: "
             f"expected={sorted(EXPECTED_EVENTS)}, found={sorted(events)}"
         )
-    event_recorders = sources["MainActivity.kt"] + sources["RemoteOperationViewModel.kt"]
+    event_recorders = (
+        sources["MainActivity.kt"] +
+        sources["ProjectTransfer.kt"] +
+        sources["RemoteOperationViewModel.kt"]
+    )
     unrecorded = sorted(
         event for event in events if f"SupportEvent.{event}" not in event_recorders
     )
     if unrecorded:
         raise VerificationError(f"support problem categories are never recorded: {unrecorded}")
+    for retained_event in ("PROJECT_SAVE_FAILED", "PROJECT_STORAGE_UNAVAILABLE"):
+        if f"SupportEvent.{retained_event}" not in sources["ProjectTransfer.kt"]:
+            raise VerificationError(
+                "retained project diagnostics are missing: " + retained_event
+            )
 
     settings = sources["AppSettingsSheet.kt"]
     for marker in (
@@ -323,6 +333,7 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "MainActivity.kt": (package / "MainActivity.kt").read_text(encoding="utf-8"),
+        "ProjectTransfer.kt": (package / "ProjectTransfer.kt").read_text(encoding="utf-8"),
         "RemoteOperationViewModel.kt": (package / "RemoteOperationViewModel.kt").read_text(
             encoding="utf-8"
         ),

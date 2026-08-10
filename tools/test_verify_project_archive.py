@@ -70,6 +70,12 @@ def valid_sources() -> dict[str, str]:
                 "viewModelScope.launch(Dispatchers.IO)",
                 "ProjectStore.recoverAbandonedArchiveStaging",
                 "ProjectTransferState(busy = true)",
+                "val history: ProjectHistoryState val sliceOptions: SliceOptions "
+                "val restored: Boolean val sessionRevision: Long",
+                "fun updateHistory( fun updateSession(",
+                "projectStore.loadProject()",
+                "projectStore.save(document.history.current, document.sliceOptions)",
+                "PROJECT_SAVE_DEBOUNCE_MILLIS = 400L",
                 "mutableState.value.completion != null",
                 "openInputStream(uri) projectStore.importArchive",
                 "openOutputStream(uri) projectStore.exportArchive",
@@ -87,6 +93,10 @@ def valid_sources() -> dict[str, str]:
                 "override fun onNewIntent(intent: Intent)",
                 "externalProjectModel.enqueue(intent)",
                 "ProjectTransferViewModel projectTransferState.completion ProjectReplacementDialog(",
+                "projectHistory = projectTransferState.history "
+                "sliceOptions = projectTransferState.sliceOptions "
+                "projectRestored = projectTransferState.restored "
+                "projectTransferModel.updateHistory(",
             )
         ),
         "WorkspaceScreen.kt": (
@@ -99,8 +109,13 @@ def valid_sources() -> dict[str, str]:
             "oversizedManifestIsRejectedBeforeProjectStateChanges "
             "startupRecoveryRemovesOnlyExactAbandonedArchiveDirectories"
         ),
+        "ProjectTransferStateTest.kt": (
+            "retainedSessionMutationKeepsHistoryAndOptionsTogether "
+            "staleOrBusySessionMutationIsRejected withUpdatedSession"
+        ),
         "ProjectArchiveIntentInstrumentedTest.kt": (
             "customProjectIntentSurvivesRecreationRestoresAndSlices "
+            "unsavedProjectEditAndUndoSurviveImmediateActivityRecreation "
             "compatibleZipIntentConfirmsBeforeReplacingTheCurrentProject "
             "projectViewIntentRejectsNetworkAndUnrelatedBinaryUris "
             "Intent.ACTION_VIEW Intent.FLAG_GRANT_READ_URI_PERMISSION "
@@ -149,6 +164,10 @@ def valid_sources() -> dict[str, str]:
             "requires confirmation before the current project is replaced "
             "the transfer. If Android terminates the process exact generated UUID form "
             "1 GiB total uncompressed content"
+        ),
+        "CONTRIBUTING.md": (
+            "Project history, active slicing options, restoration, and debounced persistence "
+            "same Activity-retained owner process-death recovery"
         ),
     }
 
@@ -235,6 +254,12 @@ class VerifyProjectArchiveTest(unittest.TestCase):
             "viewModelScope.launch(Dispatchers.IO)", "scope.launch(Dispatchers.IO)"
         )
         with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_activity_owned_project_session(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] += " mutableStateOf(ProjectHistoryState())"
+        with self.assertRaisesRegex(VerificationError, "session persistence"):
             verify_project_archive(sources)
 
 

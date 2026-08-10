@@ -189,9 +189,6 @@ private fun DuckySlicerScreen(
     val remoteCommandError = stringResource(R.string.device_command_error)
     val remoteSaveError = stringResource(R.string.device_save_error)
 
-    var projectHistory by remember { mutableStateOf(ProjectHistoryState()) }
-    var projectRestored by remember { mutableStateOf(false) }
-    var projectPersistenceBlocked by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var importing by remember { mutableStateOf(false) }
@@ -210,8 +207,10 @@ private fun DuckySlicerScreen(
     val previewLoading = sliceOperationState.previewLoading
     val projectTransferState by projectTransferModel.state.collectAsStateWithLifecycle()
     val projectTransferBusy = projectTransferState.busy
+    val projectHistory = projectTransferState.history
+    val projectRestored = projectTransferState.restored
     val remoteOperationState by remoteOperationModel.state.collectAsStateWithLifecycle()
-    var sliceOptions by remember { mutableStateOf(SliceOptions()) }
+    val sliceOptions = projectTransferState.sliceOptions
     val projectObjects = projectHistory.current.objects
     val selectedProjectObject = projectHistory.current.selectedObject
     val model = selectedProjectObject?.model ?: projectObjects.firstOrNull()?.model
@@ -267,10 +266,6 @@ private fun DuckySlicerScreen(
         val completion = projectTransferState.completion ?: return@LaunchedEffect
         when (completion) {
             is ProjectTransferCompletion.Imported -> {
-                projectHistory = ProjectHistoryState(current = completion.document.snapshot)
-                completion.document.sliceOptions?.let { sliceOptions = it }
-                projectPersistenceBlocked = false
-                projectRestored = true
                 clearCompletedSlice()
                 externalProjectConfirmation = null
                 notice = projectOpenedNotice
@@ -316,31 +311,6 @@ private fun DuckySlicerScreen(
             error = savedDataUnavailable
         }
     }
-    LaunchedEffect(
-        projectStore,
-        projectRestored,
-        projectTransferBusy,
-        projectTransferState.completion?.id,
-    ) {
-        // ProjectTransferViewModel survives Activity recreation. Do not let a
-        // fresh screen's initial disk read race an in-flight import and replace
-        // its newer result with the project that existed before the import.
-        if (projectRestored || projectTransferBusy || projectTransferState.completion != null) {
-            return@LaunchedEffect
-        }
-        val restored = withContext(Dispatchers.IO) { projectStore.loadProject() }
-        if (projectTransferModel.state.value.let { it.busy || it.completion != null }) {
-            return@LaunchedEffect
-        }
-        projectHistory = ProjectHistoryState(current = restored.snapshot)
-        restored.sliceOptions?.let { sliceOptions = it }
-        projectPersistenceBlocked = restored.storageUnavailable
-        if (restored.storageUnavailable) {
-            supportEvents.record(SupportEvent.PROJECT_STORAGE_UNAVAILABLE)
-            error = savedDataUnavailable
-        }
-        projectRestored = true
-    }
     LaunchedEffect(sliceOutcome?.output?.absolutePath) {
         val restored = sliceOutcome ?: return@LaunchedEffect
         if (!restored.isRestorableFrom(context.filesDir)) {
@@ -374,18 +344,13 @@ private fun DuckySlicerScreen(
             SliceTerminalStatus.NONE -> Unit
         }
     }
-    LaunchedEffect(projectHistory.current, sliceOptions, projectRestored, projectTransferBusy) {
-        if (!projectRestored || projectPersistenceBlocked || projectTransferBusy) return@LaunchedEffect
-        delay(400)
-        runCatching {
-            withContext(Dispatchers.IO) {
-                projectStore.save(projectHistory.current, sliceOptions)
-            }
-        }.onFailure {
-            supportEvents.record(SupportEvent.PROJECT_SAVE_FAILED)
-            error = projectSaveError
-            notice = null
+    LaunchedEffect(projectTransferState.persistenceMessage) {
+        when (projectTransferState.persistenceMessage) {
+            ProjectPersistenceMessage.STORAGE_UNAVAILABLE -> error = savedDataUnavailable
+            ProjectPersistenceMessage.SAVE_FAILED -> error = projectSaveError
+            null -> Unit
         }
+        if (projectTransferState.persistenceMessage != null) notice = null
     }
     LaunchedEffect(projectRestored, profileRecentsLoaded) {
         if (projectRestored && profileRecentsLoaded) {
@@ -430,8 +395,9 @@ private fun DuckySlicerScreen(
     }
 
     fun applyOptions(options: SliceOptions) {
-        if (options != sliceOptions) {
-            val previous = sliceOptions
+        val session = projectTransferModel.state.value
+        val previous = session.sliceOptions
+        if (options != previous) {
             var nextRecents = profileRecents
             if (options.printerProfile.id != previous.printerProfile.id) {
                 nextRecents = nextRecents.recordPrinter(options.printerProfile.id)
@@ -445,18 +411,28 @@ private fun DuckySlicerScreen(
             if (options.quality.id != previous.quality.id) {
                 nextRecents = nextRecents.recordSlicing(options.quality.id)
             }
-            profileRecents = nextRecents
-            projectHistory = projectHistory.constrainFilamentSlots(options.resolvedFilamentSlots().size)
-            sliceOptions = options
-            clearCompletedSlice()
-            notice = null
+            val nextHistory = session.history.constrainFilamentSlots(
+                options.resolvedFilamentSlots().size,
+            )
+            if (
+                projectTransferModel.updateSession(
+                    expectedHistory = session.history,
+                    nextHistory = nextHistory,
+                    expectedOptions = previous,
+                    nextOptions = options,
+                )
+            ) {
+                profileRecents = nextRecents
+                clearCompletedSlice()
+                notice = null
+            }
         }
     }
 
     fun applyModelTransform(transform: ModelTransform, recordHistory: Boolean = true) {
-        val nextHistory = projectHistory.updateSelectedTransform(transform, recordHistory)
-        if (nextHistory != projectHistory) {
-            projectHistory = nextHistory
+        val current = projectTransferModel.state.value.history
+        val nextHistory = current.updateSelectedTransform(transform, recordHistory)
+        if (nextHistory != current && projectTransferModel.updateHistory(current, nextHistory)) {
             clearCompletedSlice()
             notice = null
         }
@@ -474,14 +450,17 @@ private fun DuckySlicerScreen(
                     SlicerProcessClient.autoOrient(File(target.model.localPath))
                 }
             }.onSuccess { orientation ->
-                val currentTarget = projectHistory.current.objects.firstOrNull { it.id == target.id }
+                val current = projectTransferModel.state.value.history
+                val currentTarget = current.current.objects.firstOrNull { it.id == target.id }
                 if (currentTarget != null) {
-                    val nextHistory = projectHistory.updateTransform(
+                    val nextHistory = current.updateTransform(
                         target.id,
                         currentTarget.transform.withOrcaOrientation(orientation),
                     )
-                    if (nextHistory != projectHistory) {
-                        projectHistory = nextHistory
+                    if (
+                        nextHistory != current &&
+                        projectTransferModel.updateHistory(current, nextHistory)
+                    ) {
                         clearCompletedSlice()
                     }
                     notice = autoLayDone
@@ -502,9 +481,12 @@ private fun DuckySlicerScreen(
         val target = projectHistory.current.objects.firstOrNull { it.id == objectId } ?: return
         runCatching { target.transform.withFaceOnBed(triangle) }
             .onSuccess { transform ->
-                val nextHistory = projectHistory.updateTransform(objectId, transform)
-                if (nextHistory != projectHistory) {
-                    projectHistory = nextHistory
+                val current = projectTransferModel.state.value.history
+                val nextHistory = current.updateTransform(objectId, transform)
+                if (
+                    nextHistory != current &&
+                    projectTransferModel.updateHistory(current, nextHistory)
+                ) {
                     clearCompletedSlice()
                 }
                 notice = layOnFaceDone
@@ -530,17 +512,20 @@ private fun DuckySlicerScreen(
             runCatching {
                 withContext(Dispatchers.IO) { OnDeviceSlicer.arrange(targets, targetOptions) }
             }.onSuccess { arrangement ->
-                val currentObjects = projectHistory.current.objects
+                val current = projectTransferModel.state.value.history
+                val currentObjects = current.current.objects
                 if (currentObjects.map(ProjectObject::id) == targets.map(ProjectObject::id) &&
                     currentObjects.map(ProjectObject::transform) == targets.map(ProjectObject::transform)
                 ) {
-                    projectHistory = projectHistory.applyOrcaArrangement(
+                    val nextHistory = current.applyOrcaArrangement(
                         arrangement,
                         targetOptions.bedSizeX,
                         targetOptions.bedSizeY,
                     )
-                    notice = arrangeDone
-                    error = null
+                    if (projectTransferModel.updateHistory(current, nextHistory)) {
+                        notice = arrangeDone
+                        error = null
+                    }
                 }
             }.onFailure { failure ->
                 if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Automatic arrangement failed", failure)
@@ -570,7 +555,8 @@ private fun DuckySlicerScreen(
             runCatching {
                 splitProjectObject(target, projectStore, targetOptions, maximumObjects)
             }.onSuccess { result ->
-                val currentTarget = projectHistory.current.selectedObject
+                val current = projectTransferModel.state.value.history
+                val currentTarget = current.current.selectedObject
                 if (
                     currentTarget?.id == target.id &&
                     currentTarget.model.localPath == target.model.localPath &&
@@ -582,17 +568,21 @@ private fun DuckySlicerScreen(
                     currentTarget.processOverrides == target.processOverrides &&
                     currentTarget.filamentSlot == target.filamentSlot
                 ) {
-                    projectHistory = projectHistory.replaceSelected(result.objects)
-                    notice = resources.getString(
-                        if (result.clearedObjectSettings) {
-                            R.string.split_done_painting_cleared
-                        } else {
-                            R.string.split_done
-                        },
-                        result.objects.size,
-                    )
-                    error = null
-                    selectedTab = WorkspaceTab.SLICE
+                    val nextHistory = current.replaceSelected(result.objects)
+                    if (projectTransferModel.updateHistory(current, nextHistory)) {
+                        notice = resources.getString(
+                            if (result.clearedObjectSettings) {
+                                R.string.split_done_painting_cleared
+                            } else {
+                                R.string.split_done
+                            },
+                            result.objects.size,
+                        )
+                        error = null
+                        selectedTab = WorkspaceTab.SLICE
+                    } else {
+                        result.objects.forEach { File(it.model.localPath).delete() }
+                    }
                 } else {
                     result.objects.forEach { File(it.model.localPath).delete() }
                 }
@@ -630,7 +620,8 @@ private fun DuckySlicerScreen(
                     maximumObjects,
                 )
             }.onSuccess { result ->
-                val currentTarget = projectHistory.current.selectedObject
+                val current = projectTransferModel.state.value.history
+                val currentTarget = current.current.selectedObject
                 if (
                     currentTarget?.id == target.id &&
                     currentTarget.model.localPath == target.model.localPath &&
@@ -642,16 +633,20 @@ private fun DuckySlicerScreen(
                     currentTarget.processOverrides == target.processOverrides &&
                     currentTarget.filamentSlot == target.filamentSlot
                 ) {
-                    projectHistory = projectHistory.replaceSelected(result.objects)
-                    notice = resources.getString(
-                        if (result.clearedObjectSettings) {
-                            R.string.cut_done_painting_cleared
-                        } else {
-                            R.string.cut_done
-                        },
-                    )
-                    error = null
-                    selectedTab = WorkspaceTab.SLICE
+                    val nextHistory = current.replaceSelected(result.objects)
+                    if (projectTransferModel.updateHistory(current, nextHistory)) {
+                        notice = resources.getString(
+                            if (result.clearedObjectSettings) {
+                                R.string.cut_done_painting_cleared
+                            } else {
+                                R.string.cut_done
+                            },
+                        )
+                        error = null
+                        selectedTab = WorkspaceTab.SLICE
+                    } else {
+                        result.objects.forEach { File(it.model.localPath).delete() }
+                    }
                 } else {
                     result.objects.forEach { File(it.model.localPath).delete() }
                 }
@@ -689,16 +684,21 @@ private fun DuckySlicerScreen(
                     objectIndex % 2 == 1 -> distance
                     else -> -distance
                 }
-                projectHistory = projectHistory.addAll(
+                val current = projectTransferModel.state.value.history
+                val nextHistory = current.addAll(
                     listOf(
                         created.copy(
                             transform = created.transform.copy(offsetXmm = offset),
                         ),
                     ),
                 )
-                clearCompletedSlice()
-                selectedTab = WorkspaceTab.SLICE
-                notice = resources.getString(R.string.shape_added, displayName)
+                if (projectTransferModel.updateHistory(current, nextHistory)) {
+                    clearCompletedSlice()
+                    selectedTab = WorkspaceTab.SLICE
+                    notice = resources.getString(R.string.shape_added, displayName)
+                } else {
+                    File(created.model.localPath).delete()
+                }
             }.onFailure { failure ->
                 if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Shape creation failed", failure)
                 error = shapeError
@@ -716,7 +716,8 @@ private fun DuckySlicerScreen(
             scope.launch {
                 runCatching { importOrcaModels(context, uri, projectStore, sliceOptions) }
                     .onSuccess { importedObjects ->
-                        val objectIndex = projectObjects.size
+                        val current = projectTransferModel.state.value.history
+                        val objectIndex = current.current.objects.size
                         val distance = ((objectIndex + 1) / 2) * 24f
                         val offset = when {
                             objectIndex == 0 -> 0f
@@ -730,9 +731,13 @@ private fun DuckySlicerScreen(
                                 ),
                             )
                         }
-                        projectHistory = projectHistory.addAll(placedObjects)
-                        clearCompletedSlice()
-                        selectedTab = WorkspaceTab.SLICE
+                        val nextHistory = current.addAll(placedObjects)
+                        if (projectTransferModel.updateHistory(current, nextHistory)) {
+                            clearCompletedSlice()
+                            selectedTab = WorkspaceTab.SLICE
+                        } else {
+                            importedObjects.forEach { File(it.model.localPath).delete() }
+                        }
                     }
                     .onFailure { failure ->
                         if (failure is ModelTooLargeException) {
@@ -971,20 +976,30 @@ private fun DuckySlicerScreen(
         onSaveProject = { projectSavePicker.launch(DEFAULT_PROJECT_ARCHIVE_NAME) },
         canUndo = projectHistory.canUndo,
         canRedo = projectHistory.canRedo,
-        onObjectSelected = { objectId -> projectHistory = projectHistory.select(objectId) },
+        onObjectSelected = { objectId ->
+            val current = projectTransferModel.state.value.history
+            projectTransferModel.updateHistory(current, current.select(objectId))
+        },
         onModelTransformChanged = { transform -> applyModelTransform(transform) },
         onModelTransformPreview = { transform -> applyModelTransform(transform, recordHistory = false) },
         onModelTransformCommitted = { previous ->
-            projectHistory = projectHistory.commitSelectedTransform(previous)
+            val current = projectTransferModel.state.value.history
+            projectTransferModel.updateHistory(
+                current,
+                current.commitSelectedTransform(previous),
+            )
         },
         onObjectFilamentSelected = { filament ->
             runCatching { sliceOptions.assignFilament(filament) }
                 .onSuccess { assignment ->
                     applyOptions(assignment.options)
-                    projectHistory = projectHistory.updateSelectedFilamentSlot(assignment.slot)
-                    clearCompletedSlice()
-                    notice = null
-                    error = null
+                    val current = projectTransferModel.state.value.history
+                    val nextHistory = current.updateSelectedFilamentSlot(assignment.slot)
+                    if (projectTransferModel.updateHistory(current, nextHistory)) {
+                        clearCompletedSlice()
+                        notice = null
+                        error = null
+                    }
                 }
                 .onFailure {
                     error = filamentSlotUnavailable
@@ -992,20 +1007,27 @@ private fun DuckySlicerScreen(
                 }
         },
         onUndo = {
-            if (projectHistory.canUndo) {
-                projectHistory = projectHistory.undo()
-                clearCompletedSlice()
+            val current = projectTransferModel.state.value.history
+            if (current.canUndo) {
+                if (projectTransferModel.updateHistory(current, current.undo())) {
+                    clearCompletedSlice()
+                }
             }
         },
         onRedo = {
-            if (projectHistory.canRedo) {
-                projectHistory = projectHistory.redo()
-                clearCompletedSlice()
+            val current = projectTransferModel.state.value.history
+            if (current.canRedo) {
+                if (projectTransferModel.updateHistory(current, current.redo())) {
+                    clearCompletedSlice()
+                }
             }
         },
         onDuplicate = {
-            projectHistory = projectHistory.duplicateSelected(UUID.randomUUID().toString())
-            clearCompletedSlice()
+            val current = projectTransferModel.state.value.history
+            val nextHistory = current.duplicateSelected(UUID.randomUUID().toString())
+            if (projectTransferModel.updateHistory(current, nextHistory)) {
+                clearCompletedSlice()
+            }
         },
         onArrange = ::arrangeProjectObjects,
         onAutoLay = ::autoLaySelectedModel,
@@ -1013,93 +1035,128 @@ private fun DuckySlicerScreen(
         onSplit = ::splitSelectedModel,
         onCut = ::cutSelectedModel,
         onSupportPaintPreview = { objectId, facetIndex, state ->
-            val projectObject = projectHistory.current.objects.firstOrNull { it.id == objectId }
+            val current = projectTransferModel.state.value.history
+            val projectObject = current.current.objects.firstOrNull { it.id == objectId }
             if (projectObject != null && facetIndex in 0 until projectObject.model.triangles) {
                 val nextPaint = projectObject.supportPaint.paint(facetIndex, state)
-                val nextHistory = projectHistory.updateSupportPaint(
+                val nextHistory = current.updateSupportPaint(
                     objectId,
                     nextPaint,
                     recordHistory = false,
                 )
-                if (nextHistory != projectHistory) {
-                    projectHistory = nextHistory
+                if (
+                    nextHistory != current &&
+                    projectTransferModel.updateHistory(current, nextHistory)
+                ) {
                     clearCompletedSlice()
                     notice = null
                 }
             }
         },
         onSupportPaintCommitted = { objectId, previous ->
-            projectHistory = projectHistory.commitSupportPaint(objectId, previous)
+            val current = projectTransferModel.state.value.history
+            projectTransferModel.updateHistory(
+                current,
+                current.commitSupportPaint(objectId, previous),
+            )
         },
         onSeamPaintPreview = { objectId, facetIndex, state ->
-            val projectObject = projectHistory.current.objects.firstOrNull { it.id == objectId }
+            val current = projectTransferModel.state.value.history
+            val projectObject = current.current.objects.firstOrNull { it.id == objectId }
             if (projectObject != null && facetIndex in 0 until projectObject.model.triangles) {
                 val nextPaint = projectObject.seamPaint.paint(facetIndex, state)
-                val nextHistory = projectHistory.updateSeamPaint(
+                val nextHistory = current.updateSeamPaint(
                     objectId,
                     nextPaint,
                     recordHistory = false,
                 )
-                if (nextHistory != projectHistory) {
-                    projectHistory = nextHistory
+                if (
+                    nextHistory != current &&
+                    projectTransferModel.updateHistory(current, nextHistory)
+                ) {
                     clearCompletedSlice()
                     notice = null
                 }
             }
         },
         onSeamPaintCommitted = { objectId, previous ->
-            projectHistory = projectHistory.commitSeamPaint(objectId, previous)
+            val current = projectTransferModel.state.value.history
+            projectTransferModel.updateHistory(
+                current,
+                current.commitSeamPaint(objectId, previous),
+            )
         },
         onMultiColorPaintPreview = { objectId, facetIndex, slot ->
-            val projectObject = projectHistory.current.objects.firstOrNull { it.id == objectId }
-            val availableSlots = sliceOptions.resolvedFilamentSlots().indices
+            val session = projectTransferModel.state.value
+            val current = session.history
+            val projectObject = current.current.objects.firstOrNull { it.id == objectId }
+            val availableSlots = session.sliceOptions.resolvedFilamentSlots().indices
             if (
                 projectObject != null &&
                 facetIndex in 0 until projectObject.model.triangles &&
                 (slot == null || slot in availableSlots)
             ) {
                 val nextPaint = projectObject.multiColorPaint.paint(facetIndex, slot)
-                val nextHistory = projectHistory.updateMultiColorPaint(
+                val nextHistory = current.updateMultiColorPaint(
                     objectId,
                     nextPaint,
                     recordHistory = false,
                 )
-                if (nextHistory != projectHistory) {
-                    projectHistory = nextHistory
+                if (
+                    nextHistory != current &&
+                    projectTransferModel.updateHistory(current, nextHistory)
+                ) {
                     clearCompletedSlice()
                     notice = null
                 }
             }
         },
         onMultiColorPaintCommitted = { objectId, previous ->
-            projectHistory = projectHistory.commitMultiColorPaint(objectId, previous)
+            val current = projectTransferModel.state.value.history
+            projectTransferModel.updateHistory(
+                current,
+                current.commitMultiColorPaint(objectId, previous),
+            )
         },
         onVariableLayerHeightsChanged = { variableLayerHeights ->
-            val nextHistory = projectHistory.updateSelectedVariableLayerHeights(
+            val current = projectTransferModel.state.value.history
+            val nextHistory = current.updateSelectedVariableLayerHeights(
                 variableLayerHeights,
             )
-            if (nextHistory != projectHistory) {
-                projectHistory = nextHistory
+            if (
+                nextHistory != current &&
+                projectTransferModel.updateHistory(current, nextHistory)
+            ) {
                 clearCompletedSlice()
                 notice = null
                 error = null
             }
         },
         onObjectProcessOverridesChanged = { processOverrides ->
-            val nextHistory = projectHistory.updateSelectedProcessOverrides(processOverrides)
-            if (nextHistory != projectHistory) {
-                projectHistory = nextHistory
+            val current = projectTransferModel.state.value.history
+            val nextHistory = current.updateSelectedProcessOverrides(processOverrides)
+            if (
+                nextHistory != current &&
+                projectTransferModel.updateHistory(current, nextHistory)
+            ) {
                 clearCompletedSlice()
                 notice = null
                 error = null
             }
         },
         onRemoveModel = {
-            projectHistory = projectHistory.removeSelected()
-            clearCompletedSlice()
-            notice = null
-            error = null
-            selectedTab = WorkspaceTab.SLICE
+            val current = projectTransferModel.state.value.history
+            if (
+                projectTransferModel.updateHistory(
+                    current,
+                    current.removeSelected(),
+                )
+            ) {
+                clearCompletedSlice()
+                notice = null
+                error = null
+                selectedTab = WorkspaceTab.SLICE
+            }
         },
         onSlice = startSlice,
         onCancelSlice = cancelSlice,

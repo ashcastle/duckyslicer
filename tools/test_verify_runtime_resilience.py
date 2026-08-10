@@ -13,6 +13,11 @@ def valid_sources() -> dict[str, str]:
             "saved_data_unreadable parseBoundedJsonObject"
         ),
         "ProjectStore.kt": "DurableJsonFile( storageUnavailable validateProjectRoot",
+        "ProjectTransfer.kt": (
+            "val persistenceBlocked: Boolean restored.storageUnavailable "
+            "!current.persistenceBlocked "
+            "projectStore.save(document.history.current, document.sliceOptions)"
+        ),
         "ProfileStore.kt": "DurableJsonFile(",
         "RemoteDevice.kt": (
             "DurableJsonFile( MAX_REMOTE_RESPONSE_BYTES MAX_REMOTE_CREDENTIAL_BYTES "
@@ -40,7 +45,7 @@ def valid_sources() -> dict[str, str]:
             + "remoteResultBelongsToSelection " * 4
         ),
         "MainActivity.kt": (
-            "projectPersistenceBlocked saved_data_unavailable "
+            "saved_data_unavailable "
             "ViewModelProvider(this)[RemoteOperationViewModel::class.java] "
             "remoteOperationModel.state.collectAsStateWithLifecycle() "
             "selectedRemoteDeviceId = remoteOperationState.selectedProfileId "
@@ -112,8 +117,8 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
 
     def test_rejects_missing_autosave_guard(self) -> None:
         sources = valid_sources()
-        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
-            "projectPersistenceBlocked", ""
+        sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
+            "!current.persistenceBlocked", "true"
         )
         with self.assertRaisesRegex(VerificationError, "autosave"):
             verify_resilience(sources)

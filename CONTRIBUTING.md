@@ -35,6 +35,9 @@ avoid introducing an account or cloud requirement.
 - Keep Orca work off every Android main thread. New long-running operations must
   retain request-scoped cancellation, terminate only the isolated worker, and prove
   a clean follow-up operation on ARM64.
+- Project history, active slicing options, restoration, and debounced persistence must
+  share the same Activity-retained owner. Rotation must preserve unsaved edits and undo
+  history, while the durable project generation remains the process-death recovery path.
 - Keep every external activity intent inside the reviewed Manifest allowlist. Explicit
   notification and test launches must match the activity's declared action and
   category so strict intent matching can remain enabled.
