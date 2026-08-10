@@ -29,10 +29,14 @@ GitHub-hosted emulators are not part of the release pipeline; functional qualifi
 runs on the local ARM64 16 KB AVD.
 
 Play bundles use a separate upload key in a separate protected `play` environment.
-The manual Play workflow isolates unsigned building from signing, does not check out
-or execute repository code in the signer, pins the upload-certificate fingerprint,
-and stops at a signed Actions artifact. It has no Play Console credentials and cannot
-select a track or start a rollout.
+The AAB and universal delivery APK are built twice on the maintainer's local machine
+and must be byte-for-byte reproducible. GitHub never builds the Play AAB. The manual
+Play workflow validates only the digest-pinned local AAB from a private draft, does
+not check out or execute repository code in validation, signing, or cleanup, pins the
+upload-certificate fingerprint, and stops at a signed Actions artifact. Validation
+and cleanup can inspect or remove the private draft but receive no signing material;
+the signer can read only the validated Actions artifact. The workflow has no Play
+Console credentials and cannot select a track or start a rollout.
 
 The same Gradle build used by pull-request verification is traced by CodeQL for
 Java and Kotlin using the extended security query suite. Analysis runs for trusted

@@ -157,6 +157,9 @@ def main() -> None:
         "local release preparation is unit tested": (
             "tools.test_prepare_local_release"
         ),
+        "local Play preparation is unit tested": (
+            "tools.test_prepare_local_play_bundle"
+        ),
         "workflow shell syntax verification is unit tested": (
             "tools.test_verify_workflows"
         ),
@@ -211,19 +214,6 @@ def main() -> None:
         "primitive preview boundary is unit tested": (
             "tools.test_verify_preview_boundary"
         ),
-        "Play App Bundle is assembled": (
-            ":app:bundleRelease :app:packageReleaseUniversalApk"
-        ),
-        "Play delivery APK is structurally verified": (
-            'play_apk="android/app/build/outputs/apk_from_bundle/release/'
-            'app-release-universal-unsigned.apk"'
-        ),
-        "Play delivery APK is 16 KB aligned": (
-            'zipalign" -c -P 16 -v 4 "$play_apk"'
-        ),
-        "Play delivery APK runs the full APK verifier": (
-            'python3 tools/verify_apk.py "$play_apk"'
-        ),
     }
     for description, marker in required_android_gates.items():
         if marker not in android_source:
@@ -262,6 +252,17 @@ def main() -> None:
 
     if "device-tests" in android_jobs or "runs-on: macos-14" in android_source:
         errors.append("android.yml: hosted emulator jobs are not allowed")
+    for hosted_play_build in (
+        ":app:bundleRelease",
+        ":app:packageReleaseUniversalApk",
+        "app-release.aab",
+        "app-release-universal-unsigned.apk",
+    ):
+        if hosted_play_build in android_source:
+            errors.append(
+                "android.yml: hosted CI must not assemble Play artifacts: "
+                + hosted_play_build
+            )
     if "app-release.aab" in release_jobs.get("publish", ""):
         errors.append("sign-local-release.yml: GitHub Releases must remain APK-only")
 
@@ -317,24 +318,37 @@ def main() -> None:
 
     required_play_gates = {
         "manual dispatch only": "  workflow_dispatch:\n",
-        "strict Gradle verification": "./gradlew --dependency-verification=strict",
-        "credential-bearing signed URLs are rejected": (
-            "python3 tools/verify_no_embedded_credentials.py"
+        "local source identity is accepted": "source_commit:",
+        "private transport tag is accepted": "transport_tag:",
+        "local artifact digest is accepted": "unsigned_sha256:",
+        "validator checks the tag commit": (
+            'commits/$TRANSPORT_TAG" --jq .sha'
         ),
-        "Play isolation verifier runs before build": (
-            "python3 tools/verify_play_bundle_workflow.py"
+        "validator checks the local digest": (
+            'if [ "$actual_sha256" != "$normalized_sha" ]'
         ),
-        "support details are privacy bounded": (
-            "python3 tools/verify_support_diagnostics.py"
-        ),
-        "portable projects are bounded and atomic": (
-            "python3 tools/verify_project_archive.py"
+        "signer rechecks the local digest": (
+            "Signer input differs from the locally verified SHA-256"
         ),
         "signed Play artifact is retained": "name: duckyslicer-play-signed",
+        "private transport draft is removed": (
+            'gh release delete "$TRANSPORT_TAG" --yes'
+        ),
     }
     for description, marker in required_play_gates.items():
         if marker not in play_source:
             errors.append(f"play-bundle.yml: missing gate: {description}")
+    for forbidden_play_execution in (
+        "actions/checkout@",
+        "./gradlew",
+        "cargo ",
+        "python3 tools/",
+    ):
+        if forbidden_play_execution in play_source:
+            errors.append(
+                "play-bundle.yml: signing handoff must not build or execute "
+                "repository code: " + forbidden_play_execution
+            )
 
     validate = release_jobs.get("validate", "")
     signer = release_jobs.get("sign", "")

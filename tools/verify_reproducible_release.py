@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Require two independently assembled unsigned APKs to be byte-for-byte equal."""
+"""Require two independently assembled release artifacts to be byte-for-byte equal."""
 
 from __future__ import annotations
 
@@ -24,9 +24,9 @@ def zip_differences(first: Path, second: Path) -> list[str]:
             second_entries = {entry.filename: entry for entry in second_zip.infolist()}
             differences: list[str] = []
             for name in sorted(first_entries.keys() - second_entries.keys()):
-                differences.append(f"only in first APK: {name}")
+                differences.append(f"only in first artifact: {name}")
             for name in sorted(second_entries.keys() - first_entries.keys()):
-                differences.append(f"only in second APK: {name}")
+                differences.append(f"only in second artifact: {name}")
             for name in sorted(first_entries.keys() & second_entries.keys()):
                 left = first_entries[name]
                 right = second_entries[name]
@@ -54,13 +54,13 @@ def zip_differences(first: Path, second: Path) -> list[str]:
                 differences.append("ZIP archive comment changed")
             return differences
     except zipfile.BadZipFile as error:
-        return [f"could not inspect APK ZIP entries: {error}"]
+        return [f"could not inspect artifact ZIP entries: {error}"]
 
 
 def verify_reproducible(first: Path, second: Path) -> str:
     if not first.is_file() or not second.is_file():
         missing = [str(path) for path in (first, second) if not path.is_file()]
-        raise ValueError(f"missing APK input: {', '.join(missing)}")
+        raise ValueError(f"missing artifact input: {', '.join(missing)}")
     first_hash = sha256(first)
     second_hash = sha256(second)
     if first_hash != second_hash:
@@ -75,12 +75,12 @@ def verify_reproducible(first: Path, second: Path) -> str:
 
 def main(argv: list[str]) -> None:
     if len(argv) != 3:
-        raise SystemExit(f"usage: {argv[0]} FIRST_UNSIGNED.apk SECOND_UNSIGNED.apk")
+        raise SystemExit(f"usage: {argv[0]} FIRST_UNSIGNED SECOND_UNSIGNED")
     try:
         digest = verify_reproducible(Path(argv[1]), Path(argv[2]))
     except ValueError as error:
         raise SystemExit(str(error)) from error
-    print(f"Reproducible unsigned APK: sha256={digest}")
+    print(f"Reproducible unsigned artifact: sha256={digest}")
 
 
 if __name__ == "__main__":
