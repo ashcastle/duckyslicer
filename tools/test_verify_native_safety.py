@@ -26,6 +26,12 @@ def native_source(*, unguarded: str | None = None, production_panic: str = "") -
 
 
 class VerifyNativeSafetyTest(unittest.TestCase):
+    def test_capability_probe_is_part_of_the_export_contract(self) -> None:
+        self.assertIn(
+            "Java_com_ashcastle_duckyslicer_NativeEngine_vulkanCapabilities",
+            EXPECTED_ENTRYPOINTS,
+        )
+
     def test_accepts_unwind_and_guarded_allowlisted_exports(self) -> None:
         verify_manifest({"profile": {"release": {"panic": "unwind"}}})
         self.assertEqual(len(EXPECTED_ENTRYPOINTS), verify_source(native_source()))
