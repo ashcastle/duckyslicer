@@ -1,37 +1,32 @@
 # Releasing DuckySlicer
 
-Tagged releases are built from source by GitHub Actions, signed without checking
-keys into the repository, and verified for Android 16 KB page compatibility. A
-GitHub Release contains exactly one public asset: the signed ARM64 APK. Its build-
-provenance attestation is bound to that APK alone.
+The GitHub Release APK is built only on the maintainer's machine. GitHub Actions
+never builds the GitHub Release APK. A GitHub Release contains exactly one public
+asset: the signed ARM64 APK.
 
-The workflow still generates a CycloneDX SBOM, reviewed dependency inventory,
-deterministic recursive source archive, detached source manifest, and checksum
-manifest as build evidence. Those files are verified inside the workflow and kept
-as short-lived Actions artifacts; they are not GitHub Release downloads. The tagged
-repository and its recursive submodule pins remain the durable corresponding source.
+`tools/prepare_local_release.py` runs the complete local gate, assembles the unsigned
+APK twice with identical version inputs, performs the second build after a clean with
+the Gradle build cache disabled, and rejects any byte difference. It also verifies
+the package identity, unsigned state, APK structure, and 16 KB alignment, then records
+the SHA-256 and exact source commit in local release metadata.
 
-The unsigned APK is assembled twice with identical version inputs, with the second
-build running clean and without the Gradle build cache; publication stops unless
-both files are byte-for-byte identical. Every external GitHub Action is pinned to an
-immutable commit. The build job has no signing secrets. A separate protected job
-that does not check out or execute project code signs the candidate, verifies the
-public certificate fingerprint, and removes its temporary keystore before artifact
-upload.
+The manually dispatched GitHub workflow only validates those pinned inputs, signs in
+the protected `release` environment, and publishes. Validation has no signing key;
+signing has no repository checkout or Release write permission; publishing has no
+signing key. The tagged repository and its recursive submodule pins are the durable
+corresponding source.
 
-GitHub Actions does not run an Android emulator. Before a tag is created, the full
-functional suite must pass on the local Android 15 ARM64 16 KB
-`DuckySlicer_16KB_API35` AVD. Hosted CI supplies independent build, host-test, lint,
-packaging, and static 16 KB evidence; it is not the functional device gate.
-Gradle plug-ins, module metadata, and library artifacts are resolved from a checked-in
-lock and must match the reviewed SHA-256 verification metadata.
+GitHub Actions does not run an Android emulator. The local preparation command runs
+the functional suite on the Android 15 ARM64 16 KB `DuckySlicer_16KB_API35` AVD.
+Pull-request CI remains independent static evidence and is never a release build.
 
 ## One-time repository setup
 
 Create an Android signing key outside the repository. In GitHub, create a protected
-environment named `release`, restrict it to release tags, and configure required
-reviewers when the repository plan supports them. Store these encrypted environment
-secrets there, not as build-job environment variables:
+environment named `release` and configure required reviewers when the repository
+plan supports them. Because the signing workflow is manually dispatched from `main`,
+allow only the protected `main` branch in the environment deployment rules. Store
+these encrypted environment secrets there, not as build-job environment variables:
 
 - `DUCKYSLICER_KEYSTORE_BASE64`: base64-encoded keystore bytes
 - `DUCKYSLICER_STORE_PASSWORD`: keystore password
@@ -54,26 +49,34 @@ key prevents publishing a compatible update under the same Android identity.
 
 ## Release procedure
 
-1. On `DuckySlicer_16KB_API35`, confirm `getconf PAGE_SIZE` is `16384`, run the
-   complete connected instrumentation suite against the intended commit, then
-   perform an offline import, slice, preview, and G-code export smoke test.
-2. Ensure the Android workflow passes on the intended commit.
-3. Review the source diff, dependency changes, license notices, and generated
-   profile-catalog counts.
-4. Create and push an annotated SemVer tag such as `v0.2.0` or `v0.2.0-rc.1`.
-5. Approve the protected `release` environment when prompted, then wait for the
-   unsigned build, isolated sign, and publish stages. A reproducibility, signing,
-   source-verification, or packaging failure intentionally leaves no GitHub Release.
-6. Verify that the GitHub Release contains exactly one asset, the ARM64 APK. Confirm
-   its pinned signing-certificate fingerprint, structural verifier result, and
-   build-provenance attestation. Review the SBOM, source archive, detached source
-   manifest, and checksum results in the workflow evidence.
-7. Install the release APK on a supported ARM64 device and perform an offline
-   import, slice, full-layer preview, export, and optional printer upload smoke
-   test before announcing the release.
+1. Switch to a clean `main` and initialize recursive submodules. The preparation
+   command fetches `origin/main` itself and refuses a stale or divergent checkout.
+2. Choose a SemVer and a positive Android `versionCode` greater than every previously
+   released build, then prepare the candidate locally:
 
-The workflow derives `versionName` from the tag and uses the GitHub run number as
-the monotonically increasing Android `versionCode`.
+   ```shell
+   python3 tools/prepare_local_release.py \
+     --version 0.2.0-rc.1 \
+     --version-code 4
+   ```
+
+3. Review the generated `LOCAL-RELEASE.json`, source diff, dependency changes, license
+   notices, and profile catalog. Perform an offline import, slice, full-layer preview,
+   and G-code export smoke test with the locally installed Debug APK.
+4. Create and push an annotated `v<version>` tag at the exact `sourceCommit` recorded
+   in the metadata. Create an unpublished draft GitHub Release for that tag containing
+   exactly the recorded unsigned APK; mark it as a prerelease when the SemVer has a
+   prerelease suffix.
+5. Dispatch `sign-local-release.yml` from `main` with the recorded tag, asset name,
+   SHA-256, versionCode, and source commit. The workflow rejects every other ref;
+   approve the protected `release` environment.
+6. The `validate` job checks the draft, tag commit, digest, package name, versionCode,
+   versionName, unsigned state, and 16 KB alignment. The isolated `sign` job signs
+   those exact bytes. The `publish` job rechecks the draft and tag, replaces the
+   unsigned asset, and publishes only the signed APK.
+7. Verify that the GitHub Release contains exactly one asset and that its certificate
+   fingerprint matches the pinned release key. Install it on a supported ARM64 device
+   and repeat the offline smoke test before announcing the release.
 
 ## Play Console bundle handoff
 
@@ -121,55 +124,18 @@ and [User Data policy](https://support.google.com/googleplay/android-developer/a
 when completing that review; do not rely on a previous Console submission after app
 behavior or Play definitions change.
 
-## Local unsigned release check
+## Local release output
 
-```shell
-cd android
-./gradlew --dependency-verification=strict \
-  :app:testDebugUnitTest :app:lintRelease :app:assembleRelease
-cd ..
-python3 -m unittest discover -s tools -p 'test_*.py'
-python3 tools/verify_apk.py android/app/build/outputs/apk/release/app-release-unsigned.apk
-python3 tools/verify_gradle_supply_chain.py
-python3 tools/verify_slice_storage.py
-python3 tools/verify_preview_boundary.py
-python3 tools/verify_runtime_resilience.py
-python3 tools/verify_data_practices.py
-python3 tools/verify_support_diagnostics.py
-python3 tools/verify_project_archive.py
-python3 tools/verify_release_contract.py
-python3 tools/verify_play_bundle_workflow.py
-python3 tools/verify_workflows.py
-```
+The default output directory is `build/local-release/<version>/`. It contains the
+unsigned APK and a small `LOCAL-RELEASE.json` with `versionName`, `versionCode`,
+`sourceCommit`, `unsignedAsset`, and `unsignedSha256`. Both files are ignored by Git.
 
-To reproduce the unsigned release locally, use the same `versionName` and positive
-`versionCode` for both builds, copy the first APK outside `android/app/build`, then
-clean and rebuild with `--no-build-cache`:
+The command refreshes `origin/main`, then refuses a dirty checkout, a branch other
+than `main`, a mismatch with `origin/main`, unpinned recursive submodules, existing
+output files, or any local or hosted signing variable. It never reads a keystore and
+never uploads or publishes.
+The unsigned draft asset is temporary; the public Release must never expose it.
 
-```shell
-python3 tools/verify_reproducible_release.py \
-  /path/to/first-app-release-unsigned.apk \
-  android/app/build/outputs/apk/release/app-release-unsigned.apk
-```
-
-Generate and verify the same recursive corresponding-source artifacts used by CI:
-
-```shell
-python3 tools/generate_source_bundle.py 0.2.0 42 \
-  /tmp/DuckySlicer-0.2.0-source.tar.gz \
-  /tmp/DuckySlicer-0.2.0-SOURCE-MANIFEST.json
-python3 tools/generate_source_bundle.py --verify \
-  /tmp/DuckySlicer-0.2.0-source.tar.gz \
-  /tmp/DuckySlicer-0.2.0-SOURCE-MANIFEST.json
-```
-
-The generator reads committed Git objects and requires every recursive submodule to
-be initialized at its recorded gitlink. Local AI instruction files are intentionally
-excluded because they are neither build inputs nor corresponding source.
-
-Keep the four signing variables unset during the local build so Gradle produces an
-unsigned candidate matching the build job. Never move the signing secrets back into
-that job or publish its unsigned artifact. The structural verifier rejects unexpected
-ABIs or native libraries, compressed or misaligned native entries, ELF LOAD segments
-below 16 KB alignment, unsafe or duplicate ZIP paths, and missing or legacy profile
-catalogs.
+To obtain the complete corresponding source, clone the tagged repository with
+`--recurse-submodules`. Local AI instruction files are not build inputs and remain
+excluded from source-generation tooling and version control.
