@@ -1194,7 +1194,7 @@ private fun VariableLayerHeightSheet(
                     },
                     modifier = Modifier.weight(0.3f),
                 ) {
-                    Text(stringResource(R.string.reset))
+                    Text(stringResource(R.string.revert_changes))
                 }
                 Button(
                     onClick = { onApply(staged) },
