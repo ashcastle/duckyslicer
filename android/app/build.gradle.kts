@@ -14,6 +14,7 @@ val generatedNativeOutput = layout.buildDirectory.dir("generated/native-libs")
 val generatedProfileAssets = layout.buildDirectory.dir("generated/profile-assets")
 val generatedLegalAssets = layout.buildDirectory.dir("generated/legal-assets")
 val generatedOfflineLegalAssets = layout.buildDirectory.dir("generated/offline-legal-assets")
+val generatedTranslationResources = layout.buildDirectory.dir("generated/android-translations/res")
 val slicerRuntimeBuilder = repositoryRoot.resolve("native/slicer-runtime/build.sh")
 val slicerRuntimeOutput = repositoryRoot.resolve(
     "build/native-slicer/output/arm64-v8a/libprusaslicer-jni.so",
@@ -23,7 +24,10 @@ val orcaProfileRoot = repositoryRoot.resolve(
 )
 val profileCatalogGenerator = repositoryRoot.resolve("tools/generate_profile_catalog.py")
 val offlineLicenseGenerator = repositoryRoot.resolve("tools/generate_offline_licenses.py")
+val androidTranslationGenerator = repositoryRoot.resolve("tools/generate_android_translations.py")
 val nativeLicensePolicy = repositoryRoot.resolve("tools/native_license_policy.py")
+val defaultAndroidStrings = projectDir.resolve("src/main/res/values/strings.xml")
+val orcaTranslationRoot = repositoryRoot.resolve("localization/i18n")
 val generatedProfileCatalog = generatedProfileAssets.map { it.file("profile_catalog_v15.bin") }
 val ndkSharedRuntime = nativeNdkDirectory.map { ndk ->
     val prebuiltRoot = ndk.asFile.resolve("toolchains/llvm/prebuilt")
@@ -200,6 +204,24 @@ val generateDebugOfflineLicenseBundle =
 val generateReleaseOfflineLicenseBundle =
     registerOfflineLicenseBundle("release", releaseDependencyInventory)
 
+val generateAndroidTranslations = tasks.register<Exec>("generateAndroidTranslations") {
+    group = "build"
+    description = "Generates exact Android translations from the inherited Orca catalogs."
+    workingDir(repositoryRoot)
+    commandLine(
+        "python3",
+        androidTranslationGenerator.absolutePath,
+        defaultAndroidStrings.absolutePath,
+        orcaTranslationRoot.absolutePath,
+        generatedTranslationResources.get().asFile.absolutePath,
+    )
+    inputs.file(androidTranslationGenerator)
+    inputs.file(defaultAndroidStrings)
+    inputs.files(fileTree(orcaTranslationRoot) { include("*/OrcaSlicer_*.po") })
+    inputs.property("orcaAndroidLocalePolicy", 1)
+    outputs.dir(generatedTranslationResources)
+}
+
 val prepareOpenSourceNotices = tasks.register<Sync>("prepareOpenSourceNotices") {
     group = "build"
     description = "Packages the privacy policy, project license, and notices for offline viewing."
@@ -217,7 +239,7 @@ val prepareOpenSourceNotices = tasks.register<Sync>("prepareOpenSourceNotices") 
 }
 
 tasks.named("preBuild").configure {
-    dependsOn(buildRustNative, prepareOpenSourceNotices)
+    dependsOn(buildRustNative, generateAndroidTranslations, prepareOpenSourceNotices)
 }
 
 android {
@@ -232,10 +254,17 @@ android {
         versionCode = providers.gradleProperty("duckyslicer.versionCode").orNull?.toInt() ?: 1
         versionName = providers.gradleProperty("duckyslicer.versionName").orNull ?: "0.1.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
         ndk {
             abiFilters += setOf("arm64-v8a")
         }
+    }
+
+    androidResources {
+        localeFilters += listOf(
+            "en", "ko", "ca", "cs", "de", "es", "fr", "hu", "it", "ja", "lt",
+            "nl", "pl", "pt-rBR", "ru", "sv", "th", "tr", "uk", "vi", "zh-rCN",
+            "zh-rTW",
+        )
     }
 
     val releaseKeystoreFile = providers.environmentVariable("DUCKYSLICER_KEYSTORE_FILE").orNull
@@ -286,6 +315,12 @@ android {
         buildConfig = true
     }
 
+    lint {
+        // Generated Orca overlays are intentionally partial; missing mobile-only copy
+        // falls back to the complete default resource and is checked by our verifier.
+        disable += "MissingTranslation"
+    }
+
     sourceSets.getByName("main").jniLibs.directories.apply {
         clear()
         add(generatedNativeOutput.get().asFile.absolutePath)
@@ -295,6 +330,9 @@ android {
     )
     sourceSets.getByName("main").assets.directories.add(
         generatedLegalAssets.get().asFile.absolutePath,
+    )
+    sourceSets.getByName("main").res.directories.add(
+        generatedTranslationResources.get().asFile.absolutePath,
     )
     sourceSets.getByName("debug").assets.directories.add(
         generatedOfflineLegalAssets.get().dir("debug").asFile.absolutePath,
@@ -317,6 +355,9 @@ android {
 }
 
 tasks.configureEach {
+    if (name.contains("resources", ignoreCase = true) || name.contains("lint", ignoreCase = true)) {
+        dependsOn(generateAndroidTranslations)
+    }
     if (name.contains("assets", ignoreCase = true) || name.contains("lint", ignoreCase = true)) {
         dependsOn(generateOrcaProfileCatalog)
     }

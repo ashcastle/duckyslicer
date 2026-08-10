@@ -175,6 +175,7 @@ def verify_release_contract(sources: dict[str, str]) -> None:
             "verify_reproducible(candidate_output, RELEASE_APK)",
             'ROOT / "tools/verify_apk.py"',
             'ROOT / "tools/verify_artifact_manifest.py"',
+            'ROOT / "tools/verify_artifact_localization.py"',
             'branch != "main"',
             '"+refs/heads/main:refs/remotes/origin/main"',
             'captured(("git", "rev-parse", "origin/main"))',

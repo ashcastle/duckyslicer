@@ -33,6 +33,7 @@ STATIC_VERIFIERS = (
     "verify_project_archive.py",
     "verify_release_contract.py",
     "verify_play_bundle_workflow.py",
+    "verify_localization.py",
 )
 
 
@@ -184,6 +185,17 @@ def host_steps(python: str = sys.executable, windows: bool = os.name == "nt") ->
                 str(ROOT / "tools/verify_artifact_manifest.py"),
                 "--variant",
                 "debug",
+                str(DEBUG_APK),
+            ),
+            ROOT,
+        )
+    )
+    steps.append(
+        GateStep(
+            "Debug artifact localization",
+            (
+                python,
+                str(ROOT / "tools/verify_artifact_localization.py"),
                 str(DEBUG_APK),
             ),
             ROOT,
