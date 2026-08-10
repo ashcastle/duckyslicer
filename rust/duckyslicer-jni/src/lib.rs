@@ -647,14 +647,20 @@ fn clustered_stl_preview_at_resolution(
     let mut preview_triangles = Vec::with_capacity(clustered_triangles.len());
     let mut source_indices = Vec::with_capacity(clustered_triangles.len());
     for triangle in clustered_triangles {
-        let vertices = triangle.cells.map(|cell| {
-            let accumulator = cells
-                .get(&cell)
-                .expect("cluster triangle must reference an accumulated cell");
-            accumulator
+        let mut vertices = [[0.0_f32; 3]; 3];
+        for (index, cell) in triangle.cells.into_iter().enumerate() {
+            let accumulator = cells.get(&cell).ok_or_else(|| {
+                EngineError::Parse("STL preview clustering lost vertex state".to_owned())
+            })?;
+            if accumulator.samples == 0 {
+                return Err(EngineError::Parse(
+                    "STL preview clustering produced an empty vertex".to_owned(),
+                ));
+            }
+            vertices[index] = accumulator
                 .sums
-                .map(|sum| (sum / accumulator.samples as f64) as f32)
-        });
+                .map(|sum| (sum / accumulator.samples as f64) as f32);
+        }
         if triangle_area_squared(vertices) <= f32::EPSILON {
             continue;
         }
