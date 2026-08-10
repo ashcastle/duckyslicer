@@ -28,6 +28,7 @@ class NativeLibrary(
     external fun applySupportPaint(objectIndex: Int, sidecarPath: String): Boolean
     external fun getObjectBoundingBoxes(): FloatArray
     external fun nativeGetObjectWorldAABBMins(): FloatArray
+    external fun nativeExportLoadedObjects(outputDirectory: String): Array<String>?
     external fun clearModel()
     external fun getModelInfo(): ModelInfo?
     external fun slice(config: SliceConfig): SliceResult?

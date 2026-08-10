@@ -52,9 +52,9 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     init {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
-                ProjectStore.recoverAbandonedArchiveStaging(
-                    projectRoot = java.io.File(application.filesDir, ProjectStore.PROJECT_DIRECTORY),
-                )
+                val projectRoot = java.io.File(application.filesDir, ProjectStore.PROJECT_DIRECTORY)
+                ProjectStore.recoverAbandonedArchiveStaging(projectRoot)
+                ProjectStore.recoverAbandonedModelImportStaging(projectRoot)
             }
             mutableState.value = ProjectTransferState()
         }

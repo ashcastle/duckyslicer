@@ -121,6 +121,8 @@ prepare_runtime_source() {
     mkdir -p "$EXTERN_ROOT/libpng_stub/include"
     copy_if_changed "$SCRIPT_DIR/overlay/openssl/md5.h" "$EXTERN_ROOT/openssl_stub/include/openssl/md5.h"
     copy_if_changed "$SCRIPT_DIR/overlay/png.h" "$EXTERN_ROOT/libpng_stub/include/png.h"
+    copy_if_changed "$SCRIPT_DIR/overlay/sapil_model_export.cpp" \
+        "$SOURCE_ROOT/app/src/main/cpp/src/sapil_model_export.cpp"
 }
 
 prepare_dependency_sources() {

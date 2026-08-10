@@ -33,6 +33,18 @@ data class ProjectHistoryState(
         )
     }
 
+    fun addAll(projectObjects: List<ProjectObject>): ProjectHistoryState {
+        if (projectObjects.isEmpty()) return this
+        val existingIds = current.objects.mapTo(HashSet(), ProjectObject::id)
+        require(projectObjects.all { existingIds.add(it.id) }) { "Duplicate project object id" }
+        return record(
+            current.copy(
+                objects = current.objects + projectObjects,
+                selectedObjectId = projectObjects.last().id,
+            ),
+        )
+    }
+
     fun removeSelected(): ProjectHistoryState {
         val selected = current.selectedObject ?: return this
         val remaining = current.objects.filterNot { it.id == selected.id }
