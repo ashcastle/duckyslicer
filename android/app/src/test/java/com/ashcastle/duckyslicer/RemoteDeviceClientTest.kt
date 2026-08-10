@@ -16,6 +16,13 @@ import java.util.concurrent.atomic.AtomicReference
 
 class RemoteDeviceClientTest {
     @Test
+    fun remoteResultsOnlyBelongToTheirOriginatingSelection() {
+        assertTrue(remoteResultBelongsToSelection("printer-a", "printer-a"))
+        assertFalse(remoteResultBelongsToSelection("printer-a", "printer-b"))
+        assertFalse(remoteResultBelongsToSelection("printer-a", null))
+    }
+
+    @Test
     fun octoPrintStatusUploadAndStartFollowTheRemoteContract() {
         withServer(
             """{"state":"Printing","job":{"file":{"name":"duck.gcode"}},"progress":{"completion":42.8}}""",

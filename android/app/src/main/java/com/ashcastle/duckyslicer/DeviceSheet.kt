@@ -99,7 +99,10 @@ internal fun DeviceSheet(
                     modifier = Modifier.semantics { heading() },
                     style = MaterialTheme.typography.titleLarge,
                 )
-                TextButton(onClick = { editing = RemoteDeviceDraft() }) {
+                TextButton(
+                    onClick = { editing = RemoteDeviceDraft() },
+                    enabled = !busy,
+                ) {
                     Icon(Icons.Default.Add, null)
                     Spacer(Modifier.width(4.dp))
                     Text(stringResource(R.string.add_device))
@@ -126,12 +129,13 @@ internal fun DeviceSheet(
                                 .heightIn(min = 48.dp)
                                 .selectable(
                                     selected = isSelected,
+                                    enabled = !busy,
                                     role = Role.RadioButton,
                                     onClick = { onSelect(profile.id) },
                                 ),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            RadioButton(selected = isSelected, onClick = null)
+                            RadioButton(selected = isSelected, onClick = null, enabled = !busy)
                             Column(Modifier.weight(1f)) {
                                 Text(profile.name, fontWeight = FontWeight.SemiBold)
                                 Text(
@@ -141,17 +145,23 @@ internal fun DeviceSheet(
                                 )
                             }
                         }
-                        IconButton(onClick = {
-                            editing = RemoteDeviceDraft(
-                                id = profile.id,
-                                name = profile.name,
-                                kind = profile.kind,
-                                baseUrl = profile.baseUrl,
-                            )
-                        }) {
+                        IconButton(
+                            onClick = {
+                                editing = RemoteDeviceDraft(
+                                    id = profile.id,
+                                    name = profile.name,
+                                    kind = profile.kind,
+                                    baseUrl = profile.baseUrl,
+                                )
+                            },
+                            enabled = !busy,
+                        ) {
                             Icon(Icons.Default.Edit, stringResource(R.string.edit_device))
                         }
-                        IconButton(onClick = { onDelete(profile.id) }) {
+                        IconButton(
+                            onClick = { onDelete(profile.id) },
+                            enabled = !busy,
+                        ) {
                             Icon(
                                 Icons.Default.DeleteOutline,
                                 stringResource(R.string.delete_device),

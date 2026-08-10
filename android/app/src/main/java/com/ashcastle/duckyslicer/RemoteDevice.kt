@@ -85,6 +85,11 @@ data class RemoteUpload(
     val displayName: String,
 )
 
+internal fun remoteResultBelongsToSelection(
+    operationProfileId: String,
+    selectedProfileId: String?,
+): Boolean = operationProfileId == selectedProfileId
+
 internal fun normalizeRemoteBaseUrl(raw: String): String {
     val trimmed = raw.trim().trimEnd('/')
     return if (trimmed.contains("://")) trimmed else "http://$trimmed"

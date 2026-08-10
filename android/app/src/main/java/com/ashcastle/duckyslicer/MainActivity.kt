@@ -934,12 +934,14 @@ private fun DuckySlicerScreen(
                     )
                 }
             }.onSuccess {
-                remoteStatus = (remoteStatus ?: RemoteDeviceStatus(resultingState)).copy(
-                    state = resultingState,
-                    fileName = remoteStatus?.fileName ?: remoteUpload?.displayName,
-                )
-                remoteMessage = successMessage
-                remoteMessageIsError = false
+                if (remoteResultBelongsToSelection(profile.id, selectedRemoteDeviceId)) {
+                    remoteStatus = (remoteStatus ?: RemoteDeviceStatus(resultingState)).copy(
+                        state = resultingState,
+                        fileName = remoteStatus?.fileName ?: remoteUpload?.displayName,
+                    )
+                    remoteMessage = successMessage
+                    remoteMessageIsError = false
+                }
             }.onFailure { failure ->
                 supportEvents.record(
                     if (
@@ -951,14 +953,19 @@ private fun DuckySlicerScreen(
                         SupportEvent.REMOTE_COMMAND_FAILED
                     },
                 )
-                remoteMessage = if (failure is RemoteDeviceException && failure.statusCode in setOf(401, 403)) {
-                    remoteUnauthorizedError
-                } else if (failure is RemoteDeviceException) {
-                    remoteCommandError
-                } else {
-                    remoteConnectionError
+                if (remoteResultBelongsToSelection(profile.id, selectedRemoteDeviceId)) {
+                    remoteMessage = if (
+                        failure is RemoteDeviceException &&
+                        failure.statusCode in setOf(401, 403)
+                    ) {
+                        remoteUnauthorizedError
+                    } else if (failure is RemoteDeviceException) {
+                        remoteCommandError
+                    } else {
+                        remoteConnectionError
+                    }
+                    remoteMessageIsError = true
                 }
-                remoteMessageIsError = true
             }
             remoteBusy = false
         }
@@ -1230,7 +1237,9 @@ private fun DuckySlicerScreen(
             selectedRemoteDeviceId = id
             remoteStatus = null
             remoteUpload = remoteUpload?.takeIf { it.profileId == id }
+            remoteUploadProgress = null
             remoteMessage = null
+            remoteMessageIsError = false
         },
         onRemoteDeviceSaved = { draft ->
             if (!remoteBusy) {
@@ -1301,11 +1310,12 @@ private fun DuckySlicerScreen(
                             )
                         }
                     }.onSuccess { status ->
-                        remoteStatus = status
-                        remoteMessage = remoteConnectedNotice
-                        remoteMessageIsError = false
+                        if (remoteResultBelongsToSelection(profile.id, selectedRemoteDeviceId)) {
+                            remoteStatus = status
+                            remoteMessage = remoteConnectedNotice
+                            remoteMessageIsError = false
+                        }
                     }.onFailure { failure ->
-                        remoteStatus = null
                         supportEvents.record(
                             if (
                                 failure is RemoteDeviceException &&
@@ -1316,10 +1326,14 @@ private fun DuckySlicerScreen(
                                 SupportEvent.REMOTE_CONNECTION_FAILED
                             },
                         )
-                        remoteMessage = if (
-                            failure is RemoteDeviceException && failure.statusCode in setOf(401, 403)
-                        ) remoteUnauthorizedError else remoteConnectionError
-                        remoteMessageIsError = true
+                        if (remoteResultBelongsToSelection(profile.id, selectedRemoteDeviceId)) {
+                            remoteStatus = null
+                            remoteMessage = if (
+                                failure is RemoteDeviceException &&
+                                failure.statusCode in setOf(401, 403)
+                            ) remoteUnauthorizedError else remoteConnectionError
+                            remoteMessageIsError = true
+                        }
                     }
                     remoteBusy = false
                 }
@@ -1340,12 +1354,25 @@ private fun DuckySlicerScreen(
                                 profile,
                                 remoteDeviceStore.credential(profile),
                                 output,
-                            ) { progress -> scope.launch { remoteUploadProgress = progress } }
+                            ) { progress ->
+                                scope.launch {
+                                    if (
+                                        remoteResultBelongsToSelection(
+                                            profile.id,
+                                            selectedRemoteDeviceId,
+                                        )
+                                    ) {
+                                        remoteUploadProgress = progress
+                                    }
+                                }
+                            }
                         }
                     }.onSuccess { uploaded ->
                         remoteUpload = uploaded
-                        remoteMessage = remoteUploadNotice
-                        remoteMessageIsError = false
+                        if (remoteResultBelongsToSelection(profile.id, selectedRemoteDeviceId)) {
+                            remoteMessage = remoteUploadNotice
+                            remoteMessageIsError = false
+                        }
                     }.onFailure { failure ->
                         supportEvents.record(
                             if (
@@ -1357,10 +1384,13 @@ private fun DuckySlicerScreen(
                                 SupportEvent.REMOTE_CONNECTION_FAILED
                             },
                         )
-                        remoteMessage = if (
-                            failure is RemoteDeviceException && failure.statusCode in setOf(401, 403)
-                        ) remoteUnauthorizedError else remoteConnectionError
-                        remoteMessageIsError = true
+                        if (remoteResultBelongsToSelection(profile.id, selectedRemoteDeviceId)) {
+                            remoteMessage = if (
+                                failure is RemoteDeviceException &&
+                                failure.statusCode in setOf(401, 403)
+                            ) remoteUnauthorizedError else remoteConnectionError
+                            remoteMessageIsError = true
+                        }
                     }
                     remoteUploadProgress = null
                     remoteBusy = false

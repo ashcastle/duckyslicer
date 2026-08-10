@@ -21,6 +21,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "ProfileStore.kt",
         "RemoteDevice.kt",
         "MainActivity.kt",
+        "DeviceSheet.kt",
         "DurableJsonFileTest.kt",
         "ProjectStoreTest.kt",
         "ProfileStoreMigrationTest.kt",
@@ -87,6 +88,22 @@ def verify_resilience(sources: dict[str, str]) -> None:
             raise VerificationError(f"remote input containment is missing: {marker}")
     if "bufferedReader()?.use { it.readText() }" in remote:
         raise VerificationError("remote response uses an unbounded text read")
+    if "remoteResultBelongsToSelection" not in remote:
+        raise VerificationError("remote operation results are not bound to their printer profile")
+
+    main = sources["MainActivity.kt"]
+    if main.count("remoteResultBelongsToSelection") < 7:
+        raise VerificationError("remote result and progress callbacks can escape profile binding")
+    if "remoteUploadProgress = null\n            remoteMessage = null" not in main:
+        raise VerificationError("printer selection does not clear operation progress")
+
+    device_sheet = sources["DeviceSheet.kt"]
+    selection_start = device_sheet.find(".selectable(")
+    selection_end = device_sheet.find("),", selection_start)
+    if selection_start < 0 or selection_end < 0 or "enabled = !busy" not in device_sheet[
+        selection_start:selection_end
+    ]:
+        raise VerificationError("printer selection remains enabled during a remote operation")
 
     save_start = remote.find("fun save(draft: RemoteDeviceDraft)")
     save_end = remote.find("fun delete(profileId: String)", save_start)
@@ -135,6 +152,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "ProjectStoreTest.kt": ("unreadablePrimaryAndBackupBlockAutosave",),
         "ProfileStoreMigrationTest.kt": ("unreadableOrFutureProfilesAreNotOverwritten",),
         "RemoteDeviceClientTest.kt": (
+            "remoteResultsOnlyBelongToTheirOriginatingSelection",
             "redirectsOversizedResponsesAndDeepJsonFailClosed",
             "unsafeServerUploadPathIsRejected",
             "cleartextDnsResultsAreValidatedAndPinnedBeforeCredentialsAreAttached",
@@ -166,6 +184,10 @@ def verify_resilience(sources: dict[str, str]) -> None:
         raise VerificationError("contributor guidance does not preserve cleartext DNS pinning")
     if "bind a replacement printer credential generation" not in sources["CONTRIBUTING.md"]:
         raise VerificationError("contributor guidance does not preserve credential generations")
+    if "Bind every remote status, upload-progress, and command result" not in sources[
+        "CONTRIBUTING.md"
+    ]:
+        raise VerificationError("contributor guidance does not preserve printer result binding")
     security = sources["SECURITY.md"]
     for marker in (
         "every current DNS answer",
@@ -190,6 +212,7 @@ def read_sources() -> dict[str, str]:
         "ProfileStore.kt": (main / "ProfileStore.kt").read_text(encoding="utf-8"),
         "RemoteDevice.kt": (main / "RemoteDevice.kt").read_text(encoding="utf-8"),
         "MainActivity.kt": (main / "MainActivity.kt").read_text(encoding="utf-8"),
+        "DeviceSheet.kt": (main / "DeviceSheet.kt").read_text(encoding="utf-8"),
         "DurableJsonFileTest.kt": (tests / "DurableJsonFileTest.kt").read_text(encoding="utf-8"),
         "ProjectStoreTest.kt": (tests / "ProjectStoreTest.kt").read_text(encoding="utf-8"),
         "ProfileStoreMigrationTest.kt": (tests / "ProfileStoreMigrationTest.kt").read_text(

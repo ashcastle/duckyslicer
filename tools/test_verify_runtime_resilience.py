@@ -28,8 +28,14 @@ def valid_sources() -> dict[str, str]:
             'write(existing.filterNot load() check(!storageUnavailable) { "saved_data_unreadable" } '
             "removedCredentialKey?.let(secrets::remove) "
             "fun credential(profile: RemoteDeviceProfile) REMOTE_DEVICE_SCHEMA_VERSION = 2"
+            " remoteResultBelongsToSelection"
         ),
-        "MainActivity.kt": "projectPersistenceBlocked saved_data_unavailable",
+        "MainActivity.kt": (
+            "projectPersistenceBlocked saved_data_unavailable "
+            + "remoteResultBelongsToSelection " * 7
+            + "remoteUploadProgress = null\n            remoteMessage = null"
+        ),
+        "DeviceSheet.kt": ".selectable( selected = true enabled = !busy ),",
         "DurableJsonFileTest.kt": (
             "validPrimaryCreatesBackupAndCorruptionRecoversIt "
             "unreadableGenerationsAreNeverOverwritten"
@@ -37,6 +43,7 @@ def valid_sources() -> dict[str, str]:
         "ProjectStoreTest.kt": "unreadablePrimaryAndBackupBlockAutosave",
         "ProfileStoreMigrationTest.kt": "unreadableOrFutureProfilesAreNotOverwritten",
         "RemoteDeviceClientTest.kt": (
+            "remoteResultsOnlyBelongToTheirOriginatingSelection "
             "redirectsOversizedResponsesAndDeepJsonFailClosed unsafeServerUploadPathIsRejected "
             "cleartextDnsResultsAreValidatedAndPinnedBeforeCredentialsAreAttached "
             "cleartextHostnameRequestUsesThePinnedResolverAddress"
@@ -55,7 +62,8 @@ def valid_sources() -> dict[str, str]:
         ),
         "CONTRIBUTING.md": (
             "pin the connection target and bypass system proxies "
-            "bind a replacement printer credential generation"
+            "bind a replacement printer credential generation "
+            "Bind every remote status, upload-progress, and command result"
         ),
         "SECURITY.md": (
             "every current DNS answer DNS rebinding bypass system proxies "
@@ -84,6 +92,22 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
             "projectPersistenceBlocked", ""
         )
         with self.assertRaisesRegex(VerificationError, "autosave"):
+            verify_resilience(sources)
+
+    def test_rejects_remote_results_without_profile_binding(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+            "remoteResultBelongsToSelection", "unboundRemoteResult", 1
+        )
+        with self.assertRaisesRegex(VerificationError, "profile binding"):
+            verify_resilience(sources)
+
+    def test_rejects_printer_selection_during_remote_operation(self) -> None:
+        sources = valid_sources()
+        sources["DeviceSheet.kt"] = sources["DeviceSheet.kt"].replace(
+            "enabled = !busy", "enabled = true"
+        )
+        with self.assertRaisesRegex(VerificationError, "selection remains enabled"):
             verify_resilience(sources)
 
     def test_rejects_cleartext_connection_without_dns_pinning(self) -> None:
