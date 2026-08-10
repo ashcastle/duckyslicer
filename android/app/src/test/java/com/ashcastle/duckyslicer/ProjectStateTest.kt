@@ -171,6 +171,22 @@ class ProjectStateTest {
     }
 
     @Test
+    fun variableLayerHeightsAreObjectScopedAndUndoable() {
+        var state = ProjectHistoryState().add(projectObject("part"))
+        val variableLayers = VariableLayerHeights(
+            listOf(VariableLayerRange(0.25f, 0.75f, 0.08f)),
+        )
+
+        state = state.updateSelectedVariableLayerHeights(variableLayers)
+        assertEquals(variableLayers, state.current.selectedObject!!.variableLayerHeights)
+
+        state = state.undo()
+        assertTrue(state.current.selectedObject!!.variableLayerHeights.ranges.isEmpty())
+        state = state.redo()
+        assertEquals(variableLayers, state.current.selectedObject!!.variableLayerHeights)
+    }
+
+    @Test
     fun filamentAssignmentIsObjectScopedUndoableAndConstrainedWhenSlotsShrink() {
         var state = ProjectHistoryState()
             .add(projectObject("first"))
