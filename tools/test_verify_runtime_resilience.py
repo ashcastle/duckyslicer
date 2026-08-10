@@ -26,6 +26,15 @@ def valid_sources() -> dict[str, str]:
             "fun saveFilament( fun saveSlicing( fun recordSelection( activeOperationId "
             "optionsForSession RECENT_PROFILE_SAVE_DEBOUNCE_MILLIS"
         ),
+        "AppSettings.kt": (
+            "fun AppSettings.normalized() fun save(settings: AppSettings): Boolean .commit()"
+        ),
+        "AppSettingsViewModel.kt": (
+            "class AppSettingsViewModel(application: Application) : AndroidViewModel(application) "
+            "viewModelScope.launch withUpdatedSettings SETTINGS_SAVE_DEBOUNCE_MILLIS "
+            "current.revision != revision override fun onCleared() "
+            "SupportEvent.APP_SETTINGS_SAVE_FAILED"
+        ),
         "RemoteDevice.kt": (
             "DurableJsonFile( MAX_REMOTE_RESPONSE_BYTES MAX_REMOTE_CREDENTIAL_BYTES "
             "MAX_REMOTE_GCODE_BYTES readBoundedBytes parseBoundedJsonObject "
@@ -60,7 +69,10 @@ def valid_sources() -> dict[str, str]:
             "ViewModelProvider(this)[ProfileLibraryViewModel::class.java] "
             "profileLibraryModel.state.collectAsStateWithLifecycle() "
             "completion.optionsForSession(session.sessionRevision) "
-            "profileLibraryModel.recordSelection(options)"
+            "profileLibraryModel.recordSelection(options) "
+            "ViewModelProvider(this)[AppSettingsViewModel::class.java] "
+            "appSettingsModel.state.collectAsStateWithLifecycle() "
+            "appSettingsModel.updateSettings(next)"
         ),
         "DeviceSheet.kt": ".selectable( selected = true enabled = !busy ),",
         "DurableJsonFileTest.kt": (
@@ -72,6 +84,10 @@ def valid_sources() -> dict[str, str]:
         "ProfileLibraryViewModelTest.kt": (
             "savedProfileAppliesOnlyToTheSessionRevisionThatStartedTheSave "
             "eachSavedProfileKindBuildsItsExpectedSelection"
+        ),
+        "AppSettingsViewModelTest.kt": (
+            "settingsUpdatesNormalizeValuesAdvanceRevisionAndClearFailure "
+            "equivalentNormalizedSettingsDoNotScheduleAnotherWrite"
         ),
         "RemoteDeviceClientTest.kt": (
             "remoteResultsOnlyBelongToTheirOriginatingSelection "
@@ -107,6 +123,10 @@ def valid_sources() -> dict[str, str]:
             "The profile save must be active before recreation "
             "The profile save must be active before the newer edit"
         ),
+        "AppSettingsLifecycleInstrumentedTest.kt": (
+            "latestUnsavedSettingsSurviveImmediateActivityRecreationAndPersist "
+            "Recreate before the 350 ms persistence debounce can run"
+        ),
         "CONTRIBUTING.md": (
             "pin the connection target and bypass system proxies "
             "bind a replacement printer credential generation "
@@ -115,7 +135,8 @@ def valid_sources() -> dict[str, str]:
             "must never become eligible for Start Print "
             "must share that same retained "
             "Profile catalog loading, recent selections, and user-profile saves must share one "
-            "only in the project session revision that"
+            "only in the project session revision that "
+            "Live app settings and their debounced persistence must share one"
         ),
         "SECURITY.md": (
             "every current DNS answer DNS rebinding bypass system proxies "
@@ -123,8 +144,8 @@ def valid_sources() -> dict[str, str]:
             "Credential updates are staged under a new generation "
             "never carried to a changed connection type or address"
         ),
-        "strings.xml": "saved_data_unavailable",
-        "strings-ko.xml": "saved_data_unavailable",
+        "strings.xml": "saved_data_unavailable settings_save_error",
+        "strings-ko.xml": "saved_data_unavailable settings_save_error",
     }
 
 
@@ -164,6 +185,18 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
         sources = valid_sources()
         sources["MainActivity.kt"] += " RemoteDeviceStore(context) remoteProfileBusy"
         with self.assertRaisesRegex(VerificationError, "profile persistence"):
+            verify_resilience(sources)
+
+    def test_rejects_activity_owned_app_settings_storage(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] += " AppSettingsStore(context)"
+        with self.assertRaisesRegex(VerificationError, "app-settings persistence"):
+            verify_resilience(sources)
+
+    def test_rejects_async_settings_write_without_commit_result(self) -> None:
+        sources = valid_sources()
+        sources["AppSettings.kt"] = sources["AppSettings.kt"].replace(".commit()", ".apply()")
+        with self.assertRaisesRegex(VerificationError, "durable commit"):
             verify_resilience(sources)
 
     def test_rejects_remote_operations_without_artifact_revision(self) -> None:

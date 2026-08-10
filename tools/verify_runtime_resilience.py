@@ -21,6 +21,8 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "ProjectTransfer.kt",
         "ProfileStore.kt",
         "ProfileLibraryViewModel.kt",
+        "AppSettings.kt",
+        "AppSettingsViewModel.kt",
         "RemoteDevice.kt",
         "RemoteOperationViewModel.kt",
         "MainActivity.kt",
@@ -29,11 +31,13 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "ProjectStoreTest.kt",
         "ProfileStoreMigrationTest.kt",
         "ProfileLibraryViewModelTest.kt",
+        "AppSettingsViewModelTest.kt",
         "RemoteDeviceClientTest.kt",
         "RemoteOperationViewModelTest.kt",
         "RemoteDeviceStoreTest.kt",
         "RemoteDeviceInstrumentedTest.kt",
         "ProfileLibraryInstrumentedTest.kt",
+        "AppSettingsLifecycleInstrumentedTest.kt",
         "CONTRIBUTING.md",
         "SECURITY.md",
         "strings.xml",
@@ -169,6 +173,36 @@ def verify_resilience(sources: dict[str, str]) -> None:
     if "ProfileStore(" in main or "ProfileRecentStore(" in main:
         raise VerificationError("profile library persistence is still owned by the Activity composition")
 
+    app_settings = sources["AppSettingsViewModel.kt"]
+    for marker in (
+        "class AppSettingsViewModel(application: Application) : AndroidViewModel(application)",
+        "viewModelScope.launch",
+        "withUpdatedSettings",
+        "SETTINGS_SAVE_DEBOUNCE_MILLIS",
+        "current.revision != revision",
+        "override fun onCleared()",
+        "SupportEvent.APP_SETTINGS_SAVE_FAILED",
+    ):
+        if marker not in app_settings:
+            raise VerificationError(f"app-settings lifecycle contract is missing: {marker}")
+    settings_store = sources["AppSettings.kt"]
+    for marker in (
+        "fun AppSettings.normalized()",
+        "fun save(settings: AppSettings): Boolean",
+        ".commit()",
+    ):
+        if marker not in settings_store:
+            raise VerificationError(f"app-settings durable commit contract is missing: {marker}")
+    for marker in (
+        "ViewModelProvider(this)[AppSettingsViewModel::class.java]",
+        "appSettingsModel.state.collectAsStateWithLifecycle()",
+        "appSettingsModel.updateSettings(next)",
+    ):
+        if marker not in main:
+            raise VerificationError(f"app-settings Activity-recreation contract is missing: {marker}")
+    if "AppSettingsStore(" in main:
+        raise VerificationError("app-settings persistence is still owned by the Activity composition")
+
     device_sheet = sources["DeviceSheet.kt"]
     selection_start = device_sheet.find(".selectable(")
     selection_end = device_sheet.find("),", selection_start)
@@ -262,6 +296,14 @@ def verify_resilience(sources: dict[str, str]) -> None:
             "The profile save must be active before recreation",
             "The profile save must be active before the newer edit",
         ),
+        "AppSettingsViewModelTest.kt": (
+            "settingsUpdatesNormalizeValuesAdvanceRevisionAndClearFailure",
+            "equivalentNormalizedSettingsDoNotScheduleAnotherWrite",
+        ),
+        "AppSettingsLifecycleInstrumentedTest.kt": (
+            "latestUnsavedSettingsSurviveImmediateActivityRecreationAndPersist",
+            "Recreate before the 350 ms persistence debounce can run",
+        ),
     }
     for source_name, markers in test_markers.items():
         for marker in markers:
@@ -269,7 +311,10 @@ def verify_resilience(sources: dict[str, str]) -> None:
                 raise VerificationError(f"resilience regression is missing: {marker}")
 
     for strings in ("strings.xml", "strings-ko.xml"):
-        if "saved_data_unavailable" not in sources[strings]:
+        if not all(
+            marker in sources[strings]
+            for marker in ("saved_data_unavailable", "settings_save_error")
+        ):
             raise VerificationError(f"saved-data recovery copy is missing from {strings}")
 
     if "pin the connection target and bypass system proxies" not in sources["CONTRIBUTING.md"]:
@@ -292,6 +337,10 @@ def verify_resilience(sources: dict[str, str]) -> None:
         raise VerificationError("contributor guidance does not retain profile-library persistence")
     if "only in the project session revision that" not in sources["CONTRIBUTING.md"]:
         raise VerificationError("contributor guidance does not bind late profile-save completion")
+    if "Live app settings and their debounced persistence must share one" not in sources[
+        "CONTRIBUTING.md"
+    ]:
+        raise VerificationError("contributor guidance does not retain live app settings")
     security = sources["SECURITY.md"]
     for marker in (
         "every current DNS answer",
@@ -318,6 +367,10 @@ def read_sources() -> dict[str, str]:
         "ProfileLibraryViewModel.kt": (main / "ProfileLibraryViewModel.kt").read_text(
             encoding="utf-8"
         ),
+        "AppSettings.kt": (main / "AppSettings.kt").read_text(encoding="utf-8"),
+        "AppSettingsViewModel.kt": (main / "AppSettingsViewModel.kt").read_text(
+            encoding="utf-8"
+        ),
         "RemoteDevice.kt": (main / "RemoteDevice.kt").read_text(encoding="utf-8"),
         "RemoteOperationViewModel.kt": (main / "RemoteOperationViewModel.kt").read_text(
             encoding="utf-8"
@@ -331,6 +384,9 @@ def read_sources() -> dict[str, str]:
         ),
         "ProfileLibraryViewModelTest.kt": (
             tests / "ProfileLibraryViewModelTest.kt"
+        ).read_text(encoding="utf-8"),
+        "AppSettingsViewModelTest.kt": (
+            tests / "AppSettingsViewModelTest.kt"
         ).read_text(encoding="utf-8"),
         "RemoteDeviceClientTest.kt": (tests / "RemoteDeviceClientTest.kt").read_text(
             encoding="utf-8"
@@ -346,6 +402,9 @@ def read_sources() -> dict[str, str]:
         ).read_text(encoding="utf-8"),
         "ProfileLibraryInstrumentedTest.kt": (
             device_tests / "ProfileLibraryInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "AppSettingsLifecycleInstrumentedTest.kt": (
+            device_tests / "AppSettingsLifecycleInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),
         "SECURITY.md": (ROOT / "SECURITY.md").read_text(encoding="utf-8"),
@@ -363,7 +422,7 @@ def main() -> None:
         verify_resilience(read_sources())
     except (OSError, VerificationError) as error:
         raise SystemExit(f"Runtime resilience verification failed: {error}") from error
-    print("Verified durable project/profile/device state and bounded LAN-printer inputs")
+    print("Verified durable project/profile/settings/device state and bounded LAN-printer inputs")
 
 
 if __name__ == "__main__":

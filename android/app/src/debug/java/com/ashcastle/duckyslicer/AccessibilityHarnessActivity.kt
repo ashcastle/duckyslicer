@@ -170,6 +170,7 @@ private fun SettingsAccessibilityHarness() {
     var settings by remember { mutableStateOf(AppSettings()) }
     AppSettingsSheet(
         settings = settings,
+        saveFailed = false,
         onSettingsChanged = { settings = it },
     )
 }
@@ -196,6 +197,7 @@ private fun WorkspaceAccessibilityHarness(
         remoteMessage = null,
         remoteMessageIsError = false,
         profileBusy = false,
+        appSettingsSaveFailed = false,
         sliceOutcome = null,
         layerPreview = null,
         importing = false,

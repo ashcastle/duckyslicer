@@ -28,13 +28,15 @@ def valid_sources() -> dict[str, str]:
         "PROFILE_STORAGE_UNAVAILABLE",
         "SLICING_PROFILE_SAVE_FAILED",
     }
+    settings_events = {"APP_SETTINGS_SAVE_FAILED"}
     event_calls = " ".join(
         f"SupportEvent.{event}"
-        for event in EXPECTED_EVENTS - remote_events - project_events - profile_events
+        for event in EXPECTED_EVENTS - remote_events - project_events - profile_events - settings_events
     )
     project_event_calls = " ".join(f"SupportEvent.{event}" for event in project_events)
     remote_event_calls = " ".join(f"SupportEvent.{event}" for event in remote_events)
     profile_event_calls = " ".join(f"SupportEvent.{event}" for event in profile_events)
+    settings_event_calls = " ".join(f"SupportEvent.{event}" for event in settings_events)
     string_calls = " ".join(f"R.string.{name}" for name in REQUIRED_STRINGS)
     exit_reasons = "\n".join(
         f"    {name}({code})," for name, code in EXPECTED_EXIT_REASONS.items()
@@ -93,6 +95,7 @@ def valid_sources() -> dict[str, str]:
         "ProjectTransfer.kt": project_event_calls,
         "RemoteOperationViewModel.kt": remote_event_calls,
         "ProfileLibraryViewModel.kt": profile_event_calls,
+        "AppSettingsViewModel.kt": settings_event_calls,
         "AppSettingsSheet.kt": (
             'ActivityResultContracts.CreateDocument("text/plain") '
             "createSupportReport(context.applicationContext, settings) "

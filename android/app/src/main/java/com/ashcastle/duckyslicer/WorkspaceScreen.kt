@@ -357,6 +357,7 @@ internal fun WorkspaceScreen(
     remoteMessage: String?,
     remoteMessageIsError: Boolean,
     profileBusy: Boolean,
+    appSettingsSaveFailed: Boolean,
     sliceOutcome: SliceOutcome?,
     layerPreview: GcodeLayerPreview?,
     importing: Boolean,
@@ -763,6 +764,7 @@ internal fun WorkspaceScreen(
 
                 WorkspaceTab.SETTINGS -> AppSettingsSheet(
                     settings = appSettings,
+                    saveFailed = appSettingsSaveFailed,
                     onSettingsChanged = onAppSettingsChanged,
                     modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
                 )

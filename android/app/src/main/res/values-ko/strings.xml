@@ -393,6 +393,7 @@
     <string name="project_open_error">이 프로젝트를 열지 못했습니다. 현재 프로젝트는 그대로 두었습니다.</string>
     <string name="project_export_error">프로젝트 파일을 저장하지 못했습니다.</string>
     <string name="saved_data_unavailable">일부 저장 항목을 열지 못했습니다. 기존 파일은 변경하지 않았습니다.</string>
+    <string name="settings_save_error">설정을 저장하지 못했습니다.</string>
     <string name="add_device">추가</string>
     <string name="edit_device">디바이스 편집</string>
     <string name="delete_device">디바이스 삭제</string>

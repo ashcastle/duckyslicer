@@ -88,9 +88,17 @@ data class AppSettings(
     val connectionTimeoutSeconds: Int = 15,
 )
 
+internal fun AppSettings.normalized(): AppSettings = copy(
+    toolpathOpacity = toolpathOpacity.takeIf(Float::isFinite)?.coerceIn(0.3f, 1f) ?: 0.92f,
+    toolpathDepthContrast = toolpathDepthContrast.takeIf(Float::isFinite)?.coerceIn(0f, 1f)
+        ?: 0.78f,
+    connectionTimeoutSeconds = connectionTimeoutSeconds.coerceIn(5, 60),
+)
+
 class AppSettingsStore(context: Context) {
     private val preferences = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
 
+    @Synchronized
     fun load(): AppSettings = AppSettings(
         previewDetail = runCatching {
             PreviewDetail.valueOf(
@@ -104,22 +112,33 @@ class AppSettingsStore(context: Context) {
                     ?: PreviewRenderingMode.DEPTH_TESTED.name,
             )
         }.getOrDefault(PreviewRenderingMode.DEPTH_TESTED),
-        toolpathOpacity = preferences.getFloat("toolpath_opacity", 0.92f).coerceIn(0.3f, 1f),
-        toolpathDepthContrast = preferences.getFloat("toolpath_depth_contrast", 0.78f).coerceIn(0f, 1f),
-        keepScreenAwakeWhileWorking = preferences.getBoolean("keep_screen_awake", true),
-        confirmBeforeRemotePrint = preferences.getBoolean("confirm_remote_print", true),
-        connectionTimeoutSeconds = preferences.getInt("connection_timeout_seconds", 15).coerceIn(5, 60),
-    )
+        toolpathOpacity = runCatching { preferences.getFloat("toolpath_opacity", 0.92f) }
+            .getOrDefault(0.92f),
+        toolpathDepthContrast = runCatching {
+            preferences.getFloat("toolpath_depth_contrast", 0.78f)
+        }.getOrDefault(0.78f),
+        keepScreenAwakeWhileWorking = runCatching {
+            preferences.getBoolean("keep_screen_awake", true)
+        }.getOrDefault(true),
+        confirmBeforeRemotePrint = runCatching {
+            preferences.getBoolean("confirm_remote_print", true)
+        }.getOrDefault(true),
+        connectionTimeoutSeconds = runCatching {
+            preferences.getInt("connection_timeout_seconds", 15)
+        }.getOrDefault(15),
+    ).normalized()
 
-    fun save(settings: AppSettings) {
-        preferences.edit()
-            .putString("preview_detail", settings.previewDetail.name)
-            .putString("preview_rendering_mode", settings.previewRenderingMode.name)
-            .putFloat("toolpath_opacity", settings.toolpathOpacity.coerceIn(0.3f, 1f))
-            .putFloat("toolpath_depth_contrast", settings.toolpathDepthContrast.coerceIn(0f, 1f))
-            .putBoolean("keep_screen_awake", settings.keepScreenAwakeWhileWorking)
-            .putBoolean("confirm_remote_print", settings.confirmBeforeRemotePrint)
-            .putInt("connection_timeout_seconds", settings.connectionTimeoutSeconds.coerceIn(5, 60))
-            .apply()
+    @Synchronized
+    fun save(settings: AppSettings): Boolean {
+        val normalized = settings.normalized()
+        return preferences.edit()
+            .putString("preview_detail", normalized.previewDetail.name)
+            .putString("preview_rendering_mode", normalized.previewRenderingMode.name)
+            .putFloat("toolpath_opacity", normalized.toolpathOpacity)
+            .putFloat("toolpath_depth_contrast", normalized.toolpathDepthContrast)
+            .putBoolean("keep_screen_awake", normalized.keepScreenAwakeWhileWorking)
+            .putBoolean("confirm_remote_print", normalized.confirmBeforeRemotePrint)
+            .putInt("connection_timeout_seconds", normalized.connectionTimeoutSeconds)
+            .commit()
     }
 }

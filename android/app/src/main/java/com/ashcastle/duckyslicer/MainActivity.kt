@@ -34,7 +34,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -110,6 +109,7 @@ class MainActivity : ComponentActivity() {
         val sliceOperationModel = ViewModelProvider(this)[SliceOperationViewModel::class.java]
         val remoteOperationModel = ViewModelProvider(this)[RemoteOperationViewModel::class.java]
         val profileLibraryModel = ViewModelProvider(this)[ProfileLibraryViewModel::class.java]
+        val appSettingsModel = ViewModelProvider(this)[AppSettingsViewModel::class.java]
         externalProjectModel = ViewModelProvider(this)[ExternalProjectRequestViewModel::class.java]
         projectTransferModel = ViewModelProvider(this)[ProjectTransferViewModel::class.java]
         if (savedInstanceState == null) externalProjectModel.enqueue(intent)
@@ -125,6 +125,7 @@ class MainActivity : ComponentActivity() {
                     sliceOperationModel = sliceOperationModel,
                     remoteOperationModel = remoteOperationModel,
                     profileLibraryModel = profileLibraryModel,
+                    appSettingsModel = appSettingsModel,
                     projectTransferModel = projectTransferModel,
                     externalProjectRequest = externalProjectRequest,
                     onExternalProjectRequestConsumed = externalProjectModel::consume,
@@ -145,6 +146,7 @@ private fun DuckySlicerScreen(
     sliceOperationModel: SliceOperationViewModel,
     remoteOperationModel: RemoteOperationViewModel,
     profileLibraryModel: ProfileLibraryViewModel,
+    appSettingsModel: AppSettingsViewModel,
     projectTransferModel: ProjectTransferViewModel,
     externalProjectRequest: ExternalProjectRequest?,
     onExternalProjectRequestConsumed: (Long) -> Unit,
@@ -214,6 +216,7 @@ private fun DuckySlicerScreen(
     val projectRestored = projectTransferState.restored
     val remoteOperationState by remoteOperationModel.state.collectAsStateWithLifecycle()
     val profileLibraryState by profileLibraryModel.state.collectAsStateWithLifecycle()
+    val appSettingsState by appSettingsModel.state.collectAsStateWithLifecycle()
     val sliceOptions = projectTransferState.sliceOptions
     val projectObjects = projectHistory.current.objects
     val selectedProjectObject = projectHistory.current.selectedObject
@@ -224,13 +227,10 @@ private fun DuckySlicerScreen(
     val profileRecents = profileLibraryState.recents
     val profileRecentsLoaded = profileLibraryState.recentsLoaded
     val profileBusy = profileLibraryState.busy || profileLibraryState.completion != null
-    val appSettingsStore = remember(context.applicationContext) {
-        AppSettingsStore(context.applicationContext)
-    }
     val supportEvents = remember(context.applicationContext) {
         SupportEventJournal(context.applicationContext)
     }
-    var appSettings by remember { mutableStateOf(appSettingsStore.load()) }
+    val appSettings = appSettingsState.settings
     val remoteDevices = remoteOperationState.profiles
     val selectedRemoteDeviceId = remoteOperationState.selectedProfileId
     val remoteStatus = remoteOperationState.statusFor(selectedRemoteDeviceId)
@@ -357,11 +357,6 @@ private fun DuckySlicerScreen(
             error = savedDataUnavailable
         }
     }
-    LaunchedEffect(appSettings) {
-        delay(350)
-        withContext(Dispatchers.IO) { appSettingsStore.save(appSettings) }
-    }
-
     val keepScreenAwake = appSettings.keepScreenAwakeWhileWorking &&
         (importing || projectTransferBusy || autoLaying || arranging || splitting || cutting || slicing ||
             previewLoading || remoteBusy || profileBusy)
@@ -916,6 +911,7 @@ private fun DuckySlicerScreen(
         remoteMessage = remoteMessage,
         remoteMessageIsError = remoteMessageIsError,
         profileBusy = profileBusy,
+        appSettingsSaveFailed = appSettingsState.message == AppSettingsMessage.SAVE_FAILED,
         sliceOutcome = sliceOutcome,
         layerPreview = layerPreview,
         importing = importing || projectTransferBusy || !projectRestored,
@@ -1182,7 +1178,7 @@ private fun DuckySlicerScreen(
         },
         onLayerRangeSelected = loadPreviewRange,
         onAppSettingsChanged = { next ->
-            appSettings = next
+            appSettingsModel.updateSettings(next)
         },
         onRemoteDeviceSelected = { id ->
             remoteOperationModel.selectionChanged(id)

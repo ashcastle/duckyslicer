@@ -17,6 +17,7 @@ REQUIRED_STRINGS = {
     "support_details_save_error",
 }
 EXPECTED_EVENTS = {
+    "APP_SETTINGS_SAVE_FAILED",
     "ARRANGE_FAILED",
     "AUTO_LAY_FAILED",
     "FILAMENT_PROFILE_SAVE_FAILED",
@@ -146,6 +147,7 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
         "ProjectTransfer.kt",
         "RemoteOperationViewModel.kt",
         "ProfileLibraryViewModel.kt",
+        "AppSettingsViewModel.kt",
         "AppSettingsSheet.kt",
         "SupportDiagnosticsTest.kt",
         "SupportDiagnosticsInstrumentedTest.kt",
@@ -244,7 +246,8 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
         sources["MainActivity.kt"] +
         sources["ProjectTransfer.kt"] +
         sources["RemoteOperationViewModel.kt"] +
-        sources["ProfileLibraryViewModel.kt"]
+        sources["ProfileLibraryViewModel.kt"] +
+        sources["AppSettingsViewModel.kt"]
     )
     unrecorded = sorted(
         event for event in events if f"SupportEvent.{event}" not in event_recorders
@@ -340,6 +343,9 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "ProfileLibraryViewModel.kt": (package / "ProfileLibraryViewModel.kt").read_text(
+            encoding="utf-8"
+        ),
+        "AppSettingsViewModel.kt": (package / "AppSettingsViewModel.kt").read_text(
             encoding="utf-8"
         ),
         "AppSettingsSheet.kt": (package / "AppSettingsSheet.kt").read_text(encoding="utf-8"),

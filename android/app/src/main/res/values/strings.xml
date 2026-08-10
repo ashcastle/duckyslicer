@@ -393,6 +393,7 @@
     <string name="project_open_error">Couldn’t open this project. Your current project was left unchanged.</string>
     <string name="project_export_error">Couldn’t save a project file.</string>
     <string name="saved_data_unavailable">Some saved items couldn’t be opened. They were left unchanged.</string>
+    <string name="settings_save_error">Couldn’t save settings.</string>
     <string name="add_device">Add</string>
     <string name="edit_device">Edit device</string>
     <string name="delete_device">Delete device</string>

@@ -68,6 +68,7 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalLayoutApi::class)
 internal fun AppSettingsSheet(
     settings: AppSettings,
+    saveFailed: Boolean,
     onSettingsChanged: (AppSettings) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -135,6 +136,12 @@ internal fun AppSettingsSheet(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             SettingsHeading(stringResource(R.string.settings), primary = true)
+            if (saveFailed) {
+                Text(
+                    stringResource(R.string.settings_save_error),
+                    color = Color(0xFFFF8A80),
+                )
+            }
 
             SettingsHeading(stringResource(R.string.preview_settings))
             Text(stringResource(R.string.preview_renderer), color = Color(0xFFC8C9C2))

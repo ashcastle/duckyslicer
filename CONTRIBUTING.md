@@ -42,6 +42,9 @@ avoid introducing an account or cloud requirement.
   Activity-retained owner. A saved profile may update the catalog after rotation, but
   its late completion may select that profile only in the project session revision that
   started the save.
+- Live app settings and their debounced persistence must share one Activity-retained
+  owner. Rotation must preserve the latest slider and toggle values before disk commit,
+  and only the newest revision may report a persistence result.
 - Keep every external activity intent inside the reviewed Manifest allowlist. Explicit
   notification and test launches must match the activity's declared action and
   category so strict intent matching can remain enabled.

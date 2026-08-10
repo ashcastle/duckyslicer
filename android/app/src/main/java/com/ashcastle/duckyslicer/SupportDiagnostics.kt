@@ -11,6 +11,7 @@ import java.time.Instant
 import java.util.Locale
 
 internal enum class SupportEvent {
+    APP_SETTINGS_SAVE_FAILED,
     ARRANGE_FAILED,
     AUTO_LAY_FAILED,
     LAY_ON_FACE_FAILED,
