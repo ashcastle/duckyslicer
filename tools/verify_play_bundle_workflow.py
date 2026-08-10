@@ -29,7 +29,7 @@ def _job_sections(workflow: str) -> dict[str, str]:
 
 
 def verify_play_bundle_workflow(sources: dict[str, str]) -> None:
-    required_files = {"play-bundle.yml", "release.yml", "RELEASING.md"}
+    required_files = {"play-bundle.yml", "sign-local-release.yml", "RELEASING.md"}
     missing_files = sorted(required_files - sources.keys())
     if missing_files:
         raise VerificationError(f"Play workflow sources are missing: {missing_files}")
@@ -140,7 +140,7 @@ def verify_play_bundle_workflow(sources: dict[str, str]) -> None:
                 f"Play workflow must stop at a signed Actions artifact: {marker}"
             )
 
-    release_publish = _job_sections(sources["release.yml"]).get("publish", "")
+    release_publish = _job_sections(sources["sign-local-release.yml"]).get("publish", "")
     if ".aab" in release_publish.lower():
         raise VerificationError("GitHub Release publish job must remain free of AAB files")
 
@@ -159,9 +159,9 @@ def read_sources() -> dict[str, str]:
         "play-bundle.yml": (ROOT / ".github/workflows/play-bundle.yml").read_text(
             encoding="utf-8"
         ),
-        "release.yml": (ROOT / ".github/workflows/release.yml").read_text(
-            encoding="utf-8"
-        ),
+        "sign-local-release.yml": (
+            ROOT / ".github/workflows/sign-local-release.yml"
+        ).read_text(encoding="utf-8"),
         "RELEASING.md": (ROOT / "docs/RELEASING.md").read_text(encoding="utf-8"),
     }
 

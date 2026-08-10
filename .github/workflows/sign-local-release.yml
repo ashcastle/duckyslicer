@@ -4,11 +4,23 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag, for example v0.1.0-alpha.3
+        description: Existing draft release tag, for example v0.1.0-alpha.4
         required: true
         type: string
       unsigned_asset:
-        description: Unsigned APK asset already attached to the draft release
+        description: Unsigned APK asset produced by prepare_local_release.py
+        required: true
+        type: string
+      unsigned_sha256:
+        description: Lowercase SHA-256 from the local release metadata
+        required: true
+        type: string
+      version_code:
+        description: Android versionCode from the local release metadata
+        required: true
+        type: string
+      source_commit:
+        description: Full main commit from the local release metadata
         required: true
         type: string
 
@@ -20,29 +32,50 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  sign:
+  validate:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: release
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      release_version: ${{ steps.identity.outputs.version }}
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ inputs.tag }}
       UNSIGNED_ASSET: ${{ inputs.unsigned_asset }}
+      UNSIGNED_SHA256: ${{ inputs.unsigned_sha256 }}
+      RELEASE_VERSION_CODE: ${{ inputs.version_code }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
     steps:
       - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
         with:
           packages: platform-tools
 
-      - name: Install pinned Android signing tools
+      - name: Install pinned Android validation tools
         run: sdkmanager "build-tools;36.0.0"
 
-      - name: Validate draft release and local APK
+      - name: Validate draft, source identity, and local APK
+        id: identity
         run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Local release signing must be dispatched from main" >&2
+            exit 1
+          fi
           version="${RELEASE_TAG#v}"
-          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+          if [ "v$version" != "$RELEASE_TAG" ] || [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
             echo "Release tag must be SemVer, got: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          if [[ ! "$RELEASE_VERSION_CODE" =~ ^[1-9][0-9]{0,9}$ ]] || [ "$RELEASE_VERSION_CODE" -gt 2100000000 ]; then
+            echo "versionCode must be between 1 and 2100000000" >&2
+            exit 1
+          fi
+          if [[ ! "$UNSIGNED_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "unsigned_sha256 must be a lowercase SHA-256 digest" >&2
+            exit 1
+          fi
+          if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "source_commit must be a full lowercase Git commit" >&2
             exit 1
           fi
           expected_unsigned="DuckySlicer-$version-arm64-unsigned.apk"
@@ -50,8 +83,23 @@ jobs:
             echo "Unexpected unsigned APK asset: $UNSIGNED_ASSET" >&2
             exit 1
           fi
+
+          tag_commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq .sha)
+          if [ "$tag_commit" != "$SOURCE_COMMIT" ]; then
+            echo "Release tag does not resolve to the locally recorded source commit" >&2
+            exit 1
+          fi
           if [ "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" != "true" ]; then
             echo "Local APK signing requires an unpublished draft release" >&2
+            exit 1
+          fi
+          expected_prerelease=false
+          if [[ "$version" == *-* ]]; then
+            expected_prerelease=true
+          fi
+          actual_prerelease=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq .isPrerelease)
+          if [ "$actual_prerelease" != "$expected_prerelease" ]; then
+            echo "Draft prerelease state does not match the SemVer tag" >&2
             exit 1
           fi
           asset_count=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length')
@@ -61,24 +109,67 @@ jobs:
             exit 1
           fi
 
-          mkdir -p unsigned signed
+          mkdir -p unsigned
           gh release download "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --pattern "$UNSIGNED_ASSET" \
             --dir unsigned
           unsigned_apk="unsigned/$UNSIGNED_ASSET"
           test -s "$unsigned_apk"
-          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$unsigned_apk"
-          badging=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$unsigned_apk" | head -n 1)
-          if [[ "$badging" != *"versionName='$version'"* ]]; then
-            echo "Unsigned APK version does not match $RELEASE_TAG" >&2
+          actual_sha256=$(sha256sum "$unsigned_apk" | cut -d ' ' -f 1)
+          if [ "$actual_sha256" != "$UNSIGNED_SHA256" ]; then
+            echo "Unsigned APK SHA-256 does not match the local release metadata" >&2
             exit 1
           fi
-          if "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$unsigned_apk" >/dev/null 2>&1; then
+
+          build_tools="$ANDROID_HOME/build-tools/36.0.0"
+          "$build_tools/zipalign" -c -P 16 -v 4 "$unsigned_apk"
+          badging=$("$build_tools/aapt" dump badging "$unsigned_apk" | head -n 1)
+          package_name=$(printf '%s\n' "$badging" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+          actual_version_code=$(printf '%s\n' "$badging" | sed -n "s/.* versionCode='\([^']*\)'.*/\1/p")
+          actual_version_name=$(printf '%s\n' "$badging" | sed -n "s/.* versionName='\([^']*\)'.*/\1/p")
+          if [ "$package_name" != "com.ashcastle.duckyslicer" ] || \
+             [ "$actual_version_code" != "$RELEASE_VERSION_CODE" ] || \
+             [ "$actual_version_name" != "$version" ]; then
+            echo "Unsigned APK package identity does not match the local release metadata" >&2
+            exit 1
+          fi
+          if "$build_tools/apksigner" verify "$unsigned_apk" >/dev/null 2>&1; then
             echo "Expected a locally built unsigned APK" >&2
             exit 1
           fi
-          echo "DUCKYSLICER_RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: duckyslicer-local-unsigned-${{ github.run_id }}
+          path: unsigned/${{ inputs.unsigned_asset }}
+          if-no-files-found: error
+          retention-days: 1
+
+  sign:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      actions: read
+    env:
+      UNSIGNED_ASSET: ${{ inputs.unsigned_asset }}
+      UNSIGNED_SHA256: ${{ inputs.unsigned_sha256 }}
+      DUCKYSLICER_RELEASE_VERSION: ${{ needs.validate.outputs.release_version }}
+    steps:
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+        with:
+          packages: platform-tools
+
+      - name: Install pinned signing tools
+        run: sdkmanager "build-tools;36.0.0"
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: duckyslicer-local-unsigned-${{ github.run_id }}
+          path: unsigned
 
       - name: Sign and verify local release APK
         env:
@@ -92,6 +183,14 @@ jobs:
           test -n "$DUCKYSLICER_STORE_PASSWORD"
           test -n "$DUCKYSLICER_KEY_ALIAS"
           test -n "$DUCKYSLICER_KEY_PASSWORD"
+          unsigned_apk="unsigned/$UNSIGNED_ASSET"
+          test -s "$unsigned_apk"
+          actual_unsigned_sha256=$(sha256sum "$unsigned_apk" | cut -d ' ' -f 1)
+          if [ "$actual_unsigned_sha256" != "$UNSIGNED_SHA256" ]; then
+            echo "Validated unsigned artifact changed before signing" >&2
+            exit 1
+          fi
+
           expected_fingerprint=$(printf '%s' "$DUCKYSLICER_SIGNING_CERT_SHA256" \
             | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')
           if [[ ! "$expected_fingerprint" =~ ^[0-9a-f]{64}$ ]]; then
@@ -103,7 +202,7 @@ jobs:
           trap 'rm -f "$key_file"' EXIT
           printf '%s' "$DUCKYSLICER_KEYSTORE_BASE64" | base64 --decode > "$key_file"
           chmod 600 "$key_file"
-          unsigned_apk="unsigned/$UNSIGNED_ASSET"
+          mkdir -p signed
           signed_apk="signed/DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-arm64.apk"
           apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
           "$apksigner" sign \
@@ -130,10 +229,64 @@ jobs:
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$signed_apk"
           sha256sum "$signed_apk"
 
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: duckyslicer-local-signed-${{ github.run_id }}
+          path: signed/DuckySlicer-*-arm64.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [validate, sign]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      UNSIGNED_ASSET: ${{ inputs.unsigned_asset }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      DUCKYSLICER_RELEASE_VERSION: ${{ needs.validate.outputs.release_version }}
+    steps:
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+        with:
+          packages: platform-tools
+
+      - name: Install pinned publication validation tools
+        run: sdkmanager "build-tools;36.0.0"
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: duckyslicer-local-signed-${{ github.run_id }}
+          path: signed
+
       - name: Replace draft asset and publish APK-only release
         run: |
           signed_name="DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-arm64.apk"
           signed_apk="signed/$signed_name"
+          test -s "$signed_apk"
+          build_tools="$ANDROID_HOME/build-tools/36.0.0"
+          "$build_tools/apksigner" verify --verbose --print-certs "$signed_apk"
+          "$build_tools/zipalign" -c -P 16 -v 4 "$signed_apk"
+
+          tag_commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq .sha)
+          if [ "$tag_commit" != "$SOURCE_COMMIT" ]; then
+            echo "Release tag changed after local artifact validation" >&2
+            exit 1
+          fi
+          if [ "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" != "true" ]; then
+            echo "Release was published before the isolated signer completed" >&2
+            exit 1
+          fi
+          asset_count=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length')
+          asset_name=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[0].name')
+          if [ "$asset_count" != "1" ] || [ "$asset_name" != "$UNSIGNED_ASSET" ]; then
+            echo "Draft assets changed after local artifact validation" >&2
+            exit 1
+          fi
+
           gh release upload "$RELEASE_TAG" "$signed_apk" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
@@ -149,5 +302,4 @@ jobs:
           fi
           gh release edit "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --draft=false \
-            --prerelease
+            --draft=false
