@@ -314,6 +314,7 @@ class AccessibilityInstrumentedTest {
     fun modelTransformExposesIndependentAxesAndProportionLock() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val more = context.getString(R.string.more_settings)
+        val placement = context.getString(R.string.model_placement)
         val keepProportions = context.getString(R.string.keep_proportions)
         val axisLabels = listOf(
             context.getString(R.string.scale_x),
@@ -323,10 +324,11 @@ class AccessibilityInstrumentedTest {
         launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use {
             val workspaceNodes = waitForNodes(setOf(more))
             val moreButton = workspaceNodes.firstOrNull {
-                it.isClickable && it.effectiveLabel().contains(more)
+                it.isClickable && it.effectiveLabel() == more
             }
             assertNotNull("A selected object must expose the model tools", moreButton)
             tapCenter(checkNotNull(moreButton))
+            waitForNodes(setOf(placement))
 
             val proportionLock = scrollUntilClickable(keepProportions)
             assertTrue(
