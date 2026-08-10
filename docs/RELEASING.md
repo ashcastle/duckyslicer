@@ -147,8 +147,10 @@ For each Play candidate:
    workflow run URL with the release record. The cleanup job removes the private
    draft even when signing fails after validation, but deliberately keeps the tag as
    durable corresponding-source identity.
-5. Install the locally verified universal delivery APK for the final offline smoke
-   test. Upload only the signed AAB to Play Console. Track selection, release notes,
+5. Treat the unsigned universal delivery APK as a packaging and 16 KB inspection
+   artifact; Android cannot install it until it is signed. Upload only the signed AAB
+   to Play Console, then install the Play-signed build from an internal test track on
+   representative physical devices before rollout. Track selection, release notes,
    review, staged rollout, and rollback remain explicit Console actions.
 
 Before each Play upload, verify the public privacy-policy URL is reachable:
