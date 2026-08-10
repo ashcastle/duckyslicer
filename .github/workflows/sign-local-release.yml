@@ -1,0 +1,153 @@
+name: Sign local release APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag, for example v0.1.0-alpha.3
+        required: true
+        type: string
+      unsigned_asset:
+        description: Unsigned APK asset already attached to the draft release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sign-local-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      UNSIGNED_ASSET: ${{ inputs.unsigned_asset }}
+    steps:
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+        with:
+          packages: platform-tools
+
+      - name: Install pinned Android signing tools
+        run: sdkmanager "build-tools;36.0.0"
+
+      - name: Validate draft release and local APK
+        run: |
+          version="${RELEASE_TAG#v}"
+          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "Release tag must be SemVer, got: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          expected_unsigned="DuckySlicer-$version-arm64-unsigned.apk"
+          if [ "$UNSIGNED_ASSET" != "$expected_unsigned" ]; then
+            echo "Unexpected unsigned APK asset: $UNSIGNED_ASSET" >&2
+            exit 1
+          fi
+          if [ "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" != "true" ]; then
+            echo "Local APK signing requires an unpublished draft release" >&2
+            exit 1
+          fi
+          asset_count=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length')
+          asset_name=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[0].name')
+          if [ "$asset_count" != "1" ] || [ "$asset_name" != "$UNSIGNED_ASSET" ]; then
+            echo "Draft release must contain exactly the requested unsigned APK" >&2
+            exit 1
+          fi
+
+          mkdir -p unsigned signed
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$UNSIGNED_ASSET" \
+            --dir unsigned
+          unsigned_apk="unsigned/$UNSIGNED_ASSET"
+          test -s "$unsigned_apk"
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$unsigned_apk"
+          badging=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$unsigned_apk" | head -n 1)
+          if [[ "$badging" != *"versionName='$version'"* ]]; then
+            echo "Unsigned APK version does not match $RELEASE_TAG" >&2
+            exit 1
+          fi
+          if "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$unsigned_apk" >/dev/null 2>&1; then
+            echo "Expected a locally built unsigned APK" >&2
+            exit 1
+          fi
+          echo "DUCKYSLICER_RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Sign and verify local release APK
+        env:
+          DUCKYSLICER_KEYSTORE_BASE64: ${{ secrets.DUCKYSLICER_KEYSTORE_BASE64 }}
+          DUCKYSLICER_STORE_PASSWORD: ${{ secrets.DUCKYSLICER_STORE_PASSWORD }}
+          DUCKYSLICER_KEY_ALIAS: ${{ secrets.DUCKYSLICER_KEY_ALIAS }}
+          DUCKYSLICER_KEY_PASSWORD: ${{ secrets.DUCKYSLICER_KEY_PASSWORD }}
+          DUCKYSLICER_SIGNING_CERT_SHA256: ${{ vars.DUCKYSLICER_SIGNING_CERT_SHA256 }}
+        run: |
+          test -n "$DUCKYSLICER_KEYSTORE_BASE64"
+          test -n "$DUCKYSLICER_STORE_PASSWORD"
+          test -n "$DUCKYSLICER_KEY_ALIAS"
+          test -n "$DUCKYSLICER_KEY_PASSWORD"
+          expected_fingerprint=$(printf '%s' "$DUCKYSLICER_SIGNING_CERT_SHA256" \
+            | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')
+          if [[ ! "$expected_fingerprint" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "DUCKYSLICER_SIGNING_CERT_SHA256 must be a SHA-256 fingerprint" >&2
+            exit 1
+          fi
+
+          key_file="$RUNNER_TEMP/duckyslicer-release.jks"
+          trap 'rm -f "$key_file"' EXIT
+          printf '%s' "$DUCKYSLICER_KEYSTORE_BASE64" | base64 --decode > "$key_file"
+          chmod 600 "$key_file"
+          unsigned_apk="unsigned/$UNSIGNED_ASSET"
+          signed_apk="signed/DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-arm64.apk"
+          apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          "$apksigner" sign \
+            --ks "$key_file" \
+            --ks-key-alias "$DUCKYSLICER_KEY_ALIAS" \
+            --ks-pass env:DUCKYSLICER_STORE_PASSWORD \
+            --key-pass env:DUCKYSLICER_KEY_PASSWORD \
+            --v1-signing-enabled false \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --v4-signing-enabled false \
+            --out "$signed_apk" \
+            "$unsigned_apk"
+
+          signer_report=$("$apksigner" verify --verbose --print-certs "$signed_apk")
+          printf '%s\n' "$signer_report"
+          actual_fingerprint=$(printf '%s\n' "$signer_report" \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
+            | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')
+          if [ "$actual_fingerprint" != "$expected_fingerprint" ]; then
+            echo "Release signing certificate does not match the pinned fingerprint" >&2
+            exit 1
+          fi
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$signed_apk"
+          sha256sum "$signed_apk"
+
+      - name: Replace draft asset and publish APK-only release
+        run: |
+          signed_name="DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-arm64.apk"
+          signed_apk="signed/$signed_name"
+          gh release upload "$RELEASE_TAG" "$signed_apk" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+          gh release delete-asset "$RELEASE_TAG" "$UNSIGNED_ASSET" \
+            --repo "$GITHUB_REPOSITORY" \
+            --yes
+
+          asset_count=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length')
+          asset_name=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[0].name')
+          if [ "$asset_count" != "1" ] || [ "$asset_name" != "$signed_name" ]; then
+            echo "Refusing to publish a release without exactly one signed APK" >&2
+            exit 1
+          fi
+          gh release edit "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft=false \
+            --prerelease
