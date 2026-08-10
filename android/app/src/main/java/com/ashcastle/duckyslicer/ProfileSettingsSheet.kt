@@ -99,7 +99,7 @@ internal fun ProfileSettings(
     enabled: Boolean,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSavePrinter: (String, SliceOptions) -> Unit,
-    onSaveFilament: (String, SliceOptions) -> Unit,
+    onSaveFilament: (String, SliceOptions, Int) -> Unit,
     onSaveSlicing: (String, SliceOptions) -> Unit,
 ) {
     var editor by remember { mutableStateOf<ProfileEditorState?>(null) }
@@ -143,12 +143,20 @@ internal fun ProfileSettings(
     HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
     ProfileRow(
         title = stringResource(R.string.filament_profile),
-        summary = stringResource(
-            R.string.filament_profile_summary,
-            profileLabel(options.filamentProfile),
-            options.nozzleTemp,
-            options.bedTemp,
-        ),
+        summary = if (options.resolvedFilamentSlots().size == 1) {
+            stringResource(
+                R.string.filament_profile_summary,
+                profileLabel(options.filamentProfile),
+                options.nozzleTemp,
+                options.bedTemp,
+            )
+        } else {
+            stringResource(
+                R.string.filament_slots_summary,
+                options.resolvedFilamentSlots().size,
+                options.printerProfile.extruderCount,
+            )
+        },
         enabled = enabled,
         onClick = { open(ProfileSettingsKind.FILAMENT) },
     )
@@ -207,9 +215,9 @@ internal fun ProfileSettings(
                     it.compatiblePrinters.matchesPrinter(activeEditor.session.working.printerProfile)
             },
             onOptionsChanged = ::updateEditor,
-            onSave = { name, staged ->
+            onSave = { name, staged, slot ->
                 onOptionsChanged(staged)
-                onSaveFilament(name, staged)
+                onSaveFilament(name, staged, slot)
             },
             dirty = activeEditor.session.isDirty,
             onRevert = ::revertEditor,
@@ -447,169 +455,304 @@ private fun FilamentSettingsSheet(
     profiles: List<FilamentProfile>,
     recentIds: List<String>,
     onOptionsChanged: (SliceOptions) -> Unit,
-    onSave: (String, SliceOptions) -> Unit,
+    onSave: (String, SliceOptions, Int) -> Unit,
     dirty: Boolean,
     onRevert: () -> Unit,
     onApply: () -> Unit,
     onDismiss: () -> Unit,
-) = SettingsSheet(
-    title = stringResource(R.string.filament_profile),
-    onDismiss = onDismiss,
-    dirty = dirty,
-    onRevert = onRevert,
-    onApply = onApply,
 ) {
-    SearchableGroupedProfileChoices(
-        entries = profiles,
-        selected = options.filamentProfile,
-        recentIds = recentIds,
-        id = { it.id },
-        label = { profileLabel(it) },
-        brand = { it.brand },
-        builtIn = { it.builtIn },
-        searchTerms = {
-            listOf(it.name, it.brand.orEmpty(), it.nativeName)
-        },
-        onSelected = { onOptionsChanged(options.selectFilament(it)) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.nozzle_temperature),
-        valueText = stringResource(R.string.celsius_value, options.nozzleTemp),
-        value = options.nozzleTemp.toFloat(),
-        range = 170f..300f,
-        steps = 129,
-        onValueChange = { onOptionsChanged(options.copy(nozzleTemp = it.roundToInt())) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.first_layer_nozzle_temperature),
-        valueText = stringResource(R.string.celsius_value, options.firstLayerNozzleTemp),
-        value = options.firstLayerNozzleTemp.toFloat(),
-        range = 170f..300f,
-        steps = 129,
-        onValueChange = { onOptionsChanged(options.copy(firstLayerNozzleTemp = it.roundToInt())) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.bed_temperature),
-        valueText = stringResource(R.string.celsius_value, options.bedTemp),
-        value = options.bedTemp.toFloat(),
-        range = 0f..120f,
-        steps = 119,
-        onValueChange = { onOptionsChanged(options.copy(bedTemp = it.roundToInt())) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.first_layer_bed_temperature),
-        valueText = stringResource(R.string.celsius_value, options.firstLayerBedTemp),
-        value = options.firstLayerBedTemp.toFloat(),
-        range = 0f..120f,
-        steps = 119,
-        onValueChange = { onOptionsChanged(options.copy(firstLayerBedTemp = it.roundToInt())) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.flow_ratio),
-        valueText = stringResource(R.string.flow_ratio_value, options.flowRatio),
-        value = options.flowRatio,
-        range = 0.8f..1.2f,
-        steps = 39,
-        onValueChange = { onOptionsChanged(options.copy(flowRatio = it)) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.max_volumetric_speed),
-        valueText = stringResource(R.string.volumetric_speed_value, options.maxVolumetricSpeed),
-        value = options.maxVolumetricSpeed,
-        range = 4f..40f,
-        steps = 35,
-        onValueChange = { onOptionsChanged(options.copy(maxVolumetricSpeed = it.roundToInt().toFloat())) },
-    )
-    SettingsGroupTitle(stringResource(R.string.retraction))
-    SettingSlider(
-        label = stringResource(R.string.retraction_length),
-        valueText = stringResource(R.string.millimeters_value_precise, options.retractLength),
-        value = options.retractLength,
-        range = 0f..8f,
-        steps = 79,
-        onValueChange = { onOptionsChanged(options.copy(retractLength = it)) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.retraction_speed),
-        valueText = stringResource(R.string.print_speed_value, options.retractSpeed),
-        value = options.retractSpeed,
-        range = 10f..100f,
-        steps = 89,
-        onValueChange = { onOptionsChanged(options.copy(retractSpeed = it.roundToInt().toFloat())) },
-    )
-    SettingsGroupTitle(stringResource(R.string.cooling))
-    SettingSlider(
-        label = stringResource(R.string.minimum_fan_speed),
-        valueText = stringResource(R.string.percent_value, options.fanMinSpeed),
-        value = options.fanMinSpeed.toFloat(),
-        range = 0f..100f,
-        steps = 99,
-        onValueChange = { onOptionsChanged(options.copy(fanMinSpeed = it.roundToInt().coerceAtMost(options.fanMaxSpeed))) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.maximum_fan_speed),
-        valueText = stringResource(R.string.percent_value, options.fanMaxSpeed),
-        value = options.fanMaxSpeed.toFloat(),
-        range = 0f..100f,
-        steps = 99,
-        onValueChange = { onOptionsChanged(options.copy(fanMaxSpeed = it.roundToInt().coerceAtLeast(options.fanMinSpeed))) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.overhang_fan_speed),
-        valueText = stringResource(R.string.percent_value, options.overhangFanSpeed),
-        value = options.overhangFanSpeed.toFloat(),
-        range = 0f..100f,
-        steps = 99,
-        onValueChange = { onOptionsChanged(options.copy(overhangFanSpeed = it.roundToInt())) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.slow_down_layer_time),
-        valueText = stringResource(R.string.seconds_value, options.slowDownLayerTime),
-        value = options.slowDownLayerTime,
-        range = 1f..30f,
-        steps = 28,
-        onValueChange = { onOptionsChanged(options.copy(slowDownLayerTime = it.roundToInt().toFloat())) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.minimum_print_speed),
-        valueText = stringResource(R.string.print_speed_value, options.slowDownMinSpeed),
-        value = options.slowDownMinSpeed,
-        range = 5f..50f,
-        steps = 44,
-        onValueChange = { onOptionsChanged(options.copy(slowDownMinSpeed = it.roundToInt().toFloat())) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.no_fan_first_layers),
-        valueText = options.closeFanFirstLayers.toString(),
-        value = options.closeFanFirstLayers.toFloat(),
-        range = 0f..10f,
-        steps = 9,
-        onValueChange = { onOptionsChanged(options.copy(closeFanFirstLayers = it.roundToInt())) },
-    )
-    SettingSlider(
-        label = stringResource(R.string.full_fan_layer),
-        valueText = options.fullFanSpeedLayer.toString(),
-        value = options.fullFanSpeedLayer.toFloat(),
-        range = 1f..20f,
-        steps = 18,
-        onValueChange = { onOptionsChanged(options.copy(fullFanSpeedLayer = it.roundToInt())) },
-    )
-    SettingsSwitch(
-        label = stringResource(R.string.pressure_advance),
-        checked = options.pressureAdvanceEnabled,
-        onCheckedChange = { onOptionsChanged(options.copy(pressureAdvanceEnabled = it)) },
-    )
-    if (options.pressureAdvanceEnabled) {
+    var selectedSlot by remember { mutableStateOf(0) }
+    val slots = options.resolvedFilamentSlots()
+    LaunchedEffect(slots.size) {
+        selectedSlot = selectedSlot.coerceIn(0, slots.lastIndex)
+    }
+    val activeProfile = slots.getOrElse(selectedSlot) { slots.last() }
+    SettingsSheet(
+        title = stringResource(R.string.filament_profile),
+        onDismiss = onDismiss,
+        scrollKey = selectedSlot,
+        dirty = dirty,
+        onRevert = onRevert,
+        onApply = onApply,
+    ) {
+        SecondaryScrollableTabRow(selectedTabIndex = selectedSlot.coerceAtMost(slots.lastIndex)) {
+            slots.forEachIndexed { index, profile ->
+                Tab(
+                    selected = index == selectedSlot,
+                    onClick = { selectedSlot = index },
+                    text = { Text("T${index + 1} · ${profile.nativeName}") },
+                )
+            }
+        }
+        if (slots.size < options.printerProfile.extruderCount.coerceIn(1, MAX_FILAMENT_SLOTS)) {
+            OutlinedButton(
+                onClick = {
+                    val nextProfile = profiles.firstOrNull { candidate ->
+                        slots.none { it.id == candidate.id }
+                    } ?: options.filamentProfile
+                    onOptionsChanged(options.addFilamentSlot(nextProfile))
+                    selectedSlot = slots.size
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.add_filament_slot))
+            }
+        }
+        SearchableGroupedProfileChoices(
+            entries = profiles,
+            selected = activeProfile,
+            recentIds = recentIds,
+            id = { it.id },
+            label = { profileLabel(it) },
+            brand = { it.brand },
+            builtIn = { it.builtIn },
+            searchTerms = {
+                listOf(it.name, it.brand.orEmpty(), it.nativeName)
+            },
+            onSelected = { onOptionsChanged(options.updateFilamentSlot(selectedSlot, it)) },
+        )
         SettingSlider(
-            label = stringResource(R.string.pressure_advance_value),
-            valueText = String.format(Locale.ROOT, "%.3f", options.pressureAdvance),
-            value = options.pressureAdvance,
-            range = 0f..0.2f,
-            steps = 199,
-            onValueChange = { onOptionsChanged(options.copy(pressureAdvance = it)) },
+            label = stringResource(R.string.nozzle_temperature),
+            valueText = stringResource(R.string.celsius_value, activeProfile.nozzleTemp),
+            value = activeProfile.nozzleTemp.toFloat(),
+            range = 170f..300f,
+            steps = 129,
+            onValueChange = {
+                onOptionsChanged(options.updateFilamentSlot(selectedSlot, activeProfile.copy(nozzleTemp = it.roundToInt())))
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.first_layer_nozzle_temperature),
+            valueText = stringResource(R.string.celsius_value, activeProfile.firstLayerNozzleTemp),
+            value = activeProfile.firstLayerNozzleTemp.toFloat(),
+            range = 170f..300f,
+            steps = 129,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(firstLayerNozzleTemp = it.roundToInt()),
+                    ),
+                )
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.bed_temperature),
+            valueText = stringResource(R.string.celsius_value, activeProfile.bedTemp),
+            value = activeProfile.bedTemp.toFloat(),
+            range = 0f..120f,
+            steps = 119,
+            onValueChange = {
+                onOptionsChanged(options.updateFilamentSlot(selectedSlot, activeProfile.copy(bedTemp = it.roundToInt())))
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.first_layer_bed_temperature),
+            valueText = stringResource(R.string.celsius_value, activeProfile.firstLayerBedTemp),
+            value = activeProfile.firstLayerBedTemp.toFloat(),
+            range = 0f..120f,
+            steps = 119,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(firstLayerBedTemp = it.roundToInt()),
+                    ),
+                )
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.flow_ratio),
+            valueText = stringResource(R.string.flow_ratio_value, activeProfile.flowRatio),
+            value = activeProfile.flowRatio,
+            range = 0.8f..1.2f,
+            steps = 39,
+            onValueChange = {
+                onOptionsChanged(options.updateFilamentSlot(selectedSlot, activeProfile.copy(flowRatio = it)))
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.max_volumetric_speed),
+            valueText = stringResource(R.string.volumetric_speed_value, activeProfile.maxVolumetricSpeed),
+            value = activeProfile.maxVolumetricSpeed,
+            range = 4f..40f,
+            steps = 35,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(maxVolumetricSpeed = it.roundToInt().toFloat()),
+                    ),
+                )
+            },
+        )
+        SettingsGroupTitle(stringResource(R.string.retraction))
+        SettingSlider(
+            label = stringResource(R.string.retraction_length),
+            valueText = stringResource(R.string.millimeters_value_precise, activeProfile.retractLength),
+            value = activeProfile.retractLength,
+            range = 0f..8f,
+            steps = 79,
+            onValueChange = {
+                onOptionsChanged(options.updateFilamentSlot(selectedSlot, activeProfile.copy(retractLength = it)))
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.retraction_speed),
+            valueText = stringResource(R.string.print_speed_value, activeProfile.retractSpeed),
+            value = activeProfile.retractSpeed,
+            range = 10f..100f,
+            steps = 89,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(retractSpeed = it.roundToInt().toFloat()),
+                    ),
+                )
+            },
+        )
+        SettingsGroupTitle(stringResource(R.string.cooling))
+        SettingSlider(
+            label = stringResource(R.string.minimum_fan_speed),
+            valueText = stringResource(R.string.percent_value, activeProfile.fanMinSpeed),
+            value = activeProfile.fanMinSpeed.toFloat(),
+            range = 0f..100f,
+            steps = 99,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(
+                            fanMinSpeed = it.roundToInt().coerceAtMost(activeProfile.fanMaxSpeed),
+                        ),
+                    ),
+                )
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.maximum_fan_speed),
+            valueText = stringResource(R.string.percent_value, activeProfile.fanMaxSpeed),
+            value = activeProfile.fanMaxSpeed.toFloat(),
+            range = 0f..100f,
+            steps = 99,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(
+                            fanMaxSpeed = it.roundToInt().coerceAtLeast(activeProfile.fanMinSpeed),
+                        ),
+                    ),
+                )
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.overhang_fan_speed),
+            valueText = stringResource(R.string.percent_value, activeProfile.overhangFanSpeed),
+            value = activeProfile.overhangFanSpeed.toFloat(),
+            range = 0f..100f,
+            steps = 99,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(overhangFanSpeed = it.roundToInt()),
+                    ),
+                )
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.slow_down_layer_time),
+            valueText = stringResource(R.string.seconds_value, activeProfile.slowDownLayerTime),
+            value = activeProfile.slowDownLayerTime,
+            range = 1f..30f,
+            steps = 28,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(slowDownLayerTime = it.roundToInt().toFloat()),
+                    ),
+                )
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.minimum_print_speed),
+            valueText = stringResource(R.string.print_speed_value, activeProfile.slowDownMinSpeed),
+            value = activeProfile.slowDownMinSpeed,
+            range = 5f..50f,
+            steps = 44,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(slowDownMinSpeed = it.roundToInt().toFloat()),
+                    ),
+                )
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.no_fan_first_layers),
+            valueText = activeProfile.closeFanFirstLayers.toString(),
+            value = activeProfile.closeFanFirstLayers.toFloat(),
+            range = 0f..10f,
+            steps = 9,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(closeFanFirstLayers = it.roundToInt()),
+                    ),
+                )
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.full_fan_layer),
+            valueText = activeProfile.fullFanSpeedLayer.toString(),
+            value = activeProfile.fullFanSpeedLayer.toFloat(),
+            range = 1f..20f,
+            steps = 18,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(fullFanSpeedLayer = it.roundToInt()),
+                    ),
+                )
+            },
+        )
+        SettingsSwitch(
+            label = stringResource(R.string.pressure_advance),
+            checked = activeProfile.pressureAdvanceEnabled,
+            onCheckedChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(pressureAdvanceEnabled = it),
+                    ),
+                )
+            },
+        )
+        if (activeProfile.pressureAdvanceEnabled) {
+            SettingSlider(
+                label = stringResource(R.string.pressure_advance_value),
+                valueText = String.format(Locale.ROOT, "%.3f", activeProfile.pressureAdvance),
+                value = activeProfile.pressureAdvance,
+                range = 0f..0.2f,
+                steps = 199,
+                onValueChange = {
+                    onOptionsChanged(
+                        options.updateFilamentSlot(selectedSlot, activeProfile.copy(pressureAdvance = it)),
+                    )
+                },
+            )
+        }
+        SaveProfileField(
+            onSave = { name -> onSave(name, options, selectedSlot) },
+            onDismiss = onDismiss,
         )
     }
-    SaveProfileField(onSave = { name -> onSave(name, options) }, onDismiss = onDismiss)
 }
 
 @Composable
@@ -2305,11 +2448,11 @@ private data class ProfileChoiceGroup<T>(
     val entries: List<T>,
 )
 
-private fun List<String>.matchesPrinter(printer: PrinterProfile): Boolean =
+internal fun List<String>.matchesPrinter(printer: PrinterProfile): Boolean =
     isEmpty() || printer.name in this
 
 @Composable
-private fun <T> SearchableGroupedProfileChoices(
+internal fun <T> SearchableGroupedProfileChoices(
     entries: List<T>,
     selected: T,
     recentIds: List<String>,
@@ -2497,14 +2640,14 @@ internal fun SettingSlider(
 }
 
 @Composable
-private fun profileLabel(profile: PrinterProfile) = when (profile.id) {
+internal fun profileLabel(profile: PrinterProfile) = when (profile.id) {
     PrinterProfile.U1_04.id -> stringResource(R.string.printer_u1_04)
     PrinterProfile.U1_06.id -> stringResource(R.string.printer_u1_06)
     else -> profile.name
 }
 
 @Composable
-private fun profileLabel(profile: FilamentProfile) = when (profile.id) {
+internal fun profileLabel(profile: FilamentProfile) = when (profile.id) {
     FilamentProfile.PLA.id -> stringResource(R.string.filament_snapmaker_pla)
     FilamentProfile.PETG.id -> stringResource(R.string.filament_snapmaker_petg)
     FilamentProfile.ABS.id -> stringResource(R.string.filament_snapmaker_abs)
@@ -2512,7 +2655,7 @@ private fun profileLabel(profile: FilamentProfile) = when (profile.id) {
 }
 
 @Composable
-private fun profileLabel(profile: QualityProfile) = when (profile.id) {
+internal fun profileLabel(profile: QualityProfile) = when (profile.id) {
     QualityProfile.DRAFT.id -> stringResource(R.string.quality_draft)
     QualityProfile.STANDARD.id -> stringResource(R.string.quality_standard)
     QualityProfile.FINE.id -> stringResource(R.string.quality_fine)

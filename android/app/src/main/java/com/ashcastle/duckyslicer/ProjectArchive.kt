@@ -22,6 +22,7 @@ internal data class ArchivedProjectObject(
     val modelEntry: String,
     val transform: ModelTransform,
     val supportPaint: SupportPaint,
+    val filamentSlot: Int,
 )
 
 internal data class StagedArchiveModel(
@@ -48,6 +49,7 @@ internal object ProjectArchiveCodec {
             snapshot.selectedObjectId == null ||
                 snapshot.objects.any { it.id == snapshot.selectedObjectId },
         )
+        require(snapshot.objects.all { it.filamentSlot in sliceOptions.resolvedFilamentSlots().indices })
         val modelEntries = LinkedHashMap<File, String>()
         snapshot.objects.forEach { projectObject ->
             val model = File(projectObject.model.localPath).canonicalFile
@@ -75,7 +77,8 @@ internal object ProjectArchiveCodec {
                                 .put("displayName", checkedArchiveDisplayName(projectObject.model.fileName))
                                 .put("modelEntry", requireNotNull(modelEntries[model]))
                                 .put("transform", projectObject.transform.toArchiveJson())
-                                .put("supportPaint", projectObject.supportPaint.toArchiveJson()),
+                                .put("supportPaint", projectObject.supportPaint.toArchiveJson())
+                                .put("filamentSlot", projectObject.filamentSlot),
                         )
                     }
                 },
@@ -196,6 +199,9 @@ internal object ProjectArchiveCodec {
                     ?: throw ProjectArchiveException(),
                 transform = value.getJSONObject("transform").toArchiveTransform(),
                 supportPaint = value.getJSONArray("supportPaint").toArchiveSupportPaint(),
+                filamentSlot = value.optInt("filamentSlot", 0).takeIf {
+                    it in 0 until MAX_FILAMENT_SLOTS
+                } ?: throw ProjectArchiveException(),
             )
         }
         val selected = root.takeUnless { it.isNull("selectedObjectId") }
@@ -203,6 +209,7 @@ internal object ProjectArchiveCodec {
         require(selected == null || selected in ids)
         val options = root.getJSONObject("sliceOptions").toProjectSliceOptionsOrNull()
             ?: throw ProjectArchiveException()
+        require(objects.all { it.filamentSlot in options.resolvedFilamentSlots().indices })
         return DecodedProjectArchive(objects, selected, options, emptyMap())
     }
 }
