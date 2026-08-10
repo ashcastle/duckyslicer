@@ -41,10 +41,7 @@ internal class ProfileRecentStore(private val file: File) {
     @Synchronized
     fun load(): ProfileRecents {
         val result = durable.read(::parse, ::compatible)
-        storageUnavailable = result.status in setOf(
-            DurableJsonStatus.INCOMPATIBLE,
-            DurableJsonStatus.UNREADABLE,
-        )
+        storageUnavailable = !result.status.mutationSafe
         return result.value ?: ProfileRecents()
     }
 

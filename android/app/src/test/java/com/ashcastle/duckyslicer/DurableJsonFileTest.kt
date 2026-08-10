@@ -72,6 +72,44 @@ class DurableJsonFileTest {
     }
 
     @Test
+    fun validPrimaryRemainsReadableWhenBackupCannotBeRefreshed() = withStore { file, store ->
+        file.writeText("""{"version":1,"value":"primary"}""")
+        assertTrue(store.backup.mkdir())
+        File(store.backup, "unexpected-entry").writeText("keep")
+        val primaryBytes = file.readBytes()
+
+        val read = store.read(::versionOne)
+
+        assertEquals(DurableJsonStatus.PRIMARY_WITHOUT_BACKUP, read.status)
+        assertEquals("primary", read.value?.getString("value"))
+        assertTrue(!read.status.mutationSafe)
+        assertThrows(IllegalStateException::class.java) {
+            store.write(JSONObject().put("version", 1).put("value", "replacement"), ::versionOne)
+        }
+        assertTrue(primaryBytes.contentEquals(file.readBytes()))
+        assertTrue(File(store.backup, "unexpected-entry").isFile)
+    }
+
+    @Test
+    fun validBackupRemainsReadableWhenPrimaryCannotBeRepaired() = withStore { file, store ->
+        assertTrue(file.mkdir())
+        File(file, "unexpected-entry").writeText("keep")
+        store.backup.writeText("""{"version":1,"value":"backup"}""")
+        val backupBytes = store.backup.readBytes()
+
+        val read = store.read(::versionOne)
+
+        assertEquals(DurableJsonStatus.BACKUP_ONLY, read.status)
+        assertEquals("backup", read.value?.getString("value"))
+        assertTrue(!read.status.mutationSafe)
+        assertThrows(IllegalStateException::class.java) {
+            store.write(JSONObject().put("version", 1).put("value", "replacement"), ::versionOne)
+        }
+        assertTrue(backupBytes.contentEquals(store.backup.readBytes()))
+        assertTrue(File(file, "unexpected-entry").isFile)
+    }
+
+    @Test
     fun oversizedMalformedUtf8DeepAndFutureJsonAreRejected() = withStore(maximumBytes = 128) { file, store ->
         file.writeBytes(ByteArray(129) { 'x'.code.toByte() })
         assertEquals(DurableJsonStatus.UNREADABLE, store.read(::versionOne).status)

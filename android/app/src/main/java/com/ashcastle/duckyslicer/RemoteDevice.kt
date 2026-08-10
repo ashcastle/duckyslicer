@@ -165,10 +165,7 @@ class RemoteDeviceStore(context: Context) {
     @Synchronized
     fun load(): List<RemoteDeviceProfile> {
         val stored = durableDevices.read(::parseProfiles, ::isCompatibleRoot)
-        storageUnavailable = stored.status in setOf(
-            DurableJsonStatus.UNREADABLE,
-            DurableJsonStatus.INCOMPATIBLE,
-        )
+        storageUnavailable = !stored.status.mutationSafe
         return stored.value.orEmpty()
     }
 

@@ -145,18 +145,16 @@ internal class ProjectStore(
     @Synchronized
     fun loadProject(): StoredProjectDocument {
         val stored = durableProject.read(::readSnapshot, ::isCompatibleProjectRoot)
+        val storageUnavailable = !stored.status.mutationSafe
         if (stored.value != null) {
             pruneUnreferencedModels(stored.value.declaredModels)
-            return stored.value.document
+            return stored.value.document.copy(storageUnavailable = storageUnavailable)
         }
         if (stored.status == DurableJsonStatus.MISSING) {
             pruneUnreferencedModels(ProjectSnapshot())
         }
         return StoredProjectDocument(
-            storageUnavailable = stored.status in setOf(
-                DurableJsonStatus.UNREADABLE,
-                DurableJsonStatus.INCOMPATIBLE,
-            ),
+            storageUnavailable = storageUnavailable,
         )
     }
 

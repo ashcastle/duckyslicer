@@ -252,6 +252,7 @@ private fun DuckySlicerScreen(
                 projectHistory = ProjectHistoryState(current = completion.document.snapshot)
                 completion.document.sliceOptions?.let { sliceOptions = it }
                 projectPersistenceBlocked = false
+                projectRestored = true
                 clearCompletedSlice()
                 remoteUpload = null
                 externalProjectConfirmation = null
@@ -298,8 +299,22 @@ private fun DuckySlicerScreen(
             error = savedDataUnavailable
         }
     }
-    LaunchedEffect(projectStore) {
+    LaunchedEffect(
+        projectStore,
+        projectRestored,
+        projectTransferBusy,
+        projectTransferState.completion?.id,
+    ) {
+        // ProjectTransferViewModel survives Activity recreation. Do not let a
+        // fresh screen's initial disk read race an in-flight import and replace
+        // its newer result with the project that existed before the import.
+        if (projectRestored || projectTransferBusy || projectTransferState.completion != null) {
+            return@LaunchedEffect
+        }
         val restored = withContext(Dispatchers.IO) { projectStore.loadProject() }
+        if (projectTransferModel.state.value.let { it.busy || it.completion != null }) {
+            return@LaunchedEffect
+        }
         projectHistory = ProjectHistoryState(current = restored.snapshot)
         restored.sliceOptions?.let { sliceOptions = it }
         projectPersistenceBlocked = restored.storageUnavailable

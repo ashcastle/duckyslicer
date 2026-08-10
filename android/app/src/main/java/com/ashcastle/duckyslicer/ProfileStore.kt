@@ -317,10 +317,7 @@ class ProfileStore private constructor(
 
     private fun readRoot(forMutation: Boolean = false): JSONObject {
         val stored = durableProfiles.read(::validateRoot, ::isCompatibleRoot)
-        storageUnavailable = stored.status in setOf(
-            DurableJsonStatus.UNREADABLE,
-            DurableJsonStatus.INCOMPATIBLE,
-        )
+        storageUnavailable = !stored.status.mutationSafe
         if (forMutation) check(!storageUnavailable) { "saved_data_unreadable" }
         return stored.value ?: JSONObject()
     }

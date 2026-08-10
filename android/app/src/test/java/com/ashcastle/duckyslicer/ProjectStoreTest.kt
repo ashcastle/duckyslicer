@@ -224,6 +224,32 @@ class ProjectStoreTest {
         assertTrue(backupBytes.contentEquals(backup.readBytes()))
     }
 
+    @Test
+    fun validProjectStaysVisibleButReadOnlyWhenBackupRefreshFails() = withStore { root, store ->
+        val modelFile = store.createModelDestination("part.stl").apply { writeText("solid part") }
+        val snapshot = ProjectSnapshot(
+            objects = listOf(ProjectObject("part", inspectedModel(modelFile))),
+            selectedObjectId = "part",
+        )
+        store.save(snapshot)
+        val primary = File(root, "current_project.json")
+        val primaryBytes = primary.readBytes()
+        val backup = File(root, "current_project.json.bak")
+        assertTrue(backup.mkdir())
+        File(backup, "unexpected-entry").writeText("keep")
+
+        val restored = store.loadProject()
+
+        assertTrue(restored.storageUnavailable)
+        assertEquals("part", restored.snapshot.selectedObjectId)
+        assertEquals(modelFile.canonicalPath, restored.snapshot.selectedObject?.model?.localPath)
+        assertThrows(IllegalStateException::class.java) {
+            store.save(restored.snapshot)
+        }
+        assertTrue(primaryBytes.contentEquals(primary.readBytes()))
+        assertTrue(File(backup, "unexpected-entry").isFile)
+    }
+
     private fun withStore(block: (File, ProjectStore) -> Unit) {
         val root = Files.createTempDirectory("duckyslicer-project-store-").toFile()
         try {
