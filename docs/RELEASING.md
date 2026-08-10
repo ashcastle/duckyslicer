@@ -104,6 +104,23 @@ to Play and no greater than `2100000000`. The workflow stops after producing the
 signed Actions artifact; Play track selection, release notes, review, and rollout
 remain explicit Console actions.
 
+Before each Play upload, verify the public privacy-policy URL is reachable:
+`https://github.com/ashcastle/duckyslicer/blob/main/PRIVACY.md`. The same bilingual
+policy must open offline from **Settings > Data & privacy > Privacy policy** in the
+candidate app. For the current official build, the Data safety answers are **No** for
+both collection and sharing: app data remains on-device, and optional exports or
+printer transfers go directly to a destination chosen by the user rather than to the
+DuckySlicer project. Re-evaluate those answers and update the policy before adding any
+account, telemetry, crash-reporting, advertising, hosted service, new permission, or
+new data destination. The policy, Data safety form, store listing, and actual release
+behavior must agree.
+
+Use the current Google Play
+[Data safety guidance](https://support.google.com/googleplay/android-developer/answer/10787469?hl=en)
+and [User Data policy](https://support.google.com/googleplay/android-developer/answer/10144311?hl=en)
+when completing that review; do not rely on a previous Console submission after app
+behavior or Play definitions change.
+
 ## Local unsigned release check
 
 ```shell

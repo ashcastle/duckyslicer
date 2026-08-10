@@ -61,6 +61,7 @@ class VerifyApkTest(unittest.TestCase):
         }
         for invalid in (
             {name: data for name, data in complete.items() if not name.endswith("AGPL-3.0.txt")},
+            {**complete, "assets/legal/PRIVACY.md": b"stale"},
             {**complete, "assets/legal/THIRD_PARTY_NOTICES.md": b"stale"},
         ):
             with self.assertRaisesRegex(VerificationError, "legal asset"):

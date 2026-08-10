@@ -401,6 +401,7 @@
     <string name="data_privacy">데이터 및 개인정보</string>
     <string name="data_privacy_summary">모델, 프로젝트, 프로필, G-code는 사용자가 내보내거나 프린터로 보낼 때를 제외하면 기기에만 저장됩니다. DuckySlicer에는 계정, 광고, 사용 추적이 없습니다.</string>
     <string name="data_handling_details">데이터 처리 방식</string>
+    <string name="privacy_policy">개인정보처리방침</string>
     <string name="data_handling_title">DuckySlicer 데이터 처리 방식</string>
     <string name="data_stored_title">이 기기에 저장</string>
     <string name="data_stored_body">가져온 모델, 프로젝트, 프로필, 최근 선택 내용, 생성된 G-code는 앱 전용 공간에 저장됩니다. 내보낸 파일은 사용자가 저장한 위치에 남습니다.</string>
