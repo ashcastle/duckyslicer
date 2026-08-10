@@ -1,6 +1,8 @@
 package com.ashcastle.duckyslicer
 
+import android.content.Intent
 import android.os.SystemClock
+import android.provider.Settings
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
@@ -18,6 +20,16 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class SliceLifecycleInstrumentedTest {
+    @Test
+    fun notificationSettingsIntentTargetsThisApp() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val intent = sliceNotificationSettingsIntent(context)
+
+        assertEquals(Settings.ACTION_APP_NOTIFICATION_SETTINGS, intent.action)
+        assertEquals(context.packageName, intent.getStringExtra(Settings.EXTRA_APP_PACKAGE))
+        assertTrue(intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+    }
+
     @Test
     fun notificationCancelIntentsAreExplicitAndRequestScoped() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

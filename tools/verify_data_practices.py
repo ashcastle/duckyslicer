@@ -25,6 +25,10 @@ DATA_STRING_NAMES = {
     "data_stored_body",
     "background_slicing_title",
     "background_slicing_body",
+    "slice_notifications_on",
+    "slice_notifications_off",
+    "slice_notifications_summary",
+    "manage_slice_notifications",
     "printer_connection_data_title",
     "printer_connection_data_body",
     "no_tracking_title",
@@ -82,6 +86,7 @@ def _string_values(name: str, source: str) -> dict[str, str]:
 def verify_data_practices(sources: dict[str, str]) -> None:
     required_files = {
         "AppSettingsSheet.kt",
+        "MainActivity.kt",
         "RemoteDevice.kt",
         "AndroidManifest.xml",
         "build.gradle.kts",
@@ -99,6 +104,11 @@ def verify_data_practices(sources: dict[str, str]) -> None:
         "DataPracticesDialog(",
         "LegalDocument.PRIVACY",
         'PRIVACY("legal/PRIVACY.md", R.string.privacy_policy)',
+        "sliceNotificationsEnabled(context)",
+        "openSliceNotificationSettings(context)",
+        "Settings.ACTION_APP_NOTIFICATION_SETTINGS",
+        "Settings.EXTRA_APP_PACKAGE",
+        "Lifecycle.Event.ON_RESUME",
     ):
         if marker not in settings:
             raise VerificationError(f"data-practice UI is missing: {marker}")
@@ -107,6 +117,16 @@ def verify_data_practices(sources: dict[str, str]) -> None:
             raise VerificationError(
                 f"data-practice UI does not use required copy: {resource_name}"
             )
+
+    activity = sources["MainActivity.kt"]
+    for marker in (
+        "ActivityResultContracts.RequestPermission()",
+        "Manifest.permission.POST_NOTIFICATIONS",
+        "SLICE_NOTIFICATION_PERMISSION_ASKED",
+        ".putBoolean(SLICE_NOTIFICATION_PERMISSION_ASKED, true)",
+    ):
+        if marker not in activity:
+            raise VerificationError(f"slice notification permission flow is missing: {marker}")
 
     for source_name in ("strings.xml", "strings-ko.xml"):
         values = _string_values(source_name, sources[source_name])
@@ -174,6 +194,7 @@ def read_sources() -> dict[str, str]:
         "AppSettingsSheet.kt": (package / "AppSettingsSheet.kt").read_text(
             encoding="utf-8"
         ),
+        "MainActivity.kt": (package / "MainActivity.kt").read_text(encoding="utf-8"),
         "RemoteDevice.kt": (package / "RemoteDevice.kt").read_text(encoding="utf-8"),
         "AndroidManifest.xml": (main / "AndroidManifest.xml").read_text(encoding="utf-8"),
         "build.gradle.kts": (ROOT / "android/app/build.gradle.kts").read_text(

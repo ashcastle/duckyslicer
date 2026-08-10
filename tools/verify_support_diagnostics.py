@@ -300,7 +300,9 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
     for marker in (
         "supportDetailsUseRealDeviceFactsWithoutPrivateAppContent",
         "recentProcessExitHistoryUsesOnlyFixedBoundedValues",
-        "page_size_bytes=16384",
+        "Os.sysconf(OsConstants._SC_PAGESIZE)",
+        "pageSizeBytes == 4_096L || pageSizeBytes == 16_384L",
+        'page_size_bytes=$pageSizeBytes',
     ):
         if marker not in device_test:
             raise VerificationError(f"support ARM64 regression is missing: {marker}")

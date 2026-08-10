@@ -91,7 +91,10 @@ def valid_sources() -> dict[str, str]:
         ),
         "SupportDiagnosticsInstrumentedTest.kt": (
             "supportDetailsUseRealDeviceFactsWithoutPrivateAppContent "
-            "recentProcessExitHistoryUsesOnlyFixedBoundedValues page_size_bytes=16384"
+            "recentProcessExitHistoryUsesOnlyFixedBoundedValues "
+            "Os.sysconf(OsConstants._SC_PAGESIZE) "
+            "pageSizeBytes == 4_096L || pageSizeBytes == 16_384L "
+            "page_size_bytes=$pageSizeBytes"
         ),
         "AccessibilityInstrumentedTest.kt": "appSettingsExposeAVisibleSupportDetailsAction",
         "strings.xml": string_resources(),
@@ -151,6 +154,15 @@ class VerifySupportDiagnosticsTest(unittest.TestCase):
             "automaticUpload()",
         )
         with self.assertRaisesRegex(VerificationError, "user-chosen"):
+            verify_support_diagnostics(sources)
+
+    def test_rejects_fixed_page_size_device_regression(self) -> None:
+        sources = valid_sources()
+        sources["SupportDiagnosticsInstrumentedTest.kt"] = (
+            "supportDetailsUseRealDeviceFactsWithoutPrivateAppContent "
+            "recentProcessExitHistoryUsesOnlyFixedBoundedValues page_size_bytes=16384"
+        )
+        with self.assertRaisesRegex(VerificationError, "support ARM64 regression"):
             verify_support_diagnostics(sources)
 
     def test_rejects_missing_privacy_disclosure(self) -> None:

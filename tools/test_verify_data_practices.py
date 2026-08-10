@@ -30,7 +30,15 @@ def valid_sources() -> dict[str, str]:
         "AppSettingsSheet.kt": (
             "showDataPractices DataPracticesDialog( LegalDocument.PRIVACY "
             'PRIVACY("legal/PRIVACY.md", R.string.privacy_policy) '
+            "sliceNotificationsEnabled(context) openSliceNotificationSettings(context) "
+            "Settings.ACTION_APP_NOTIFICATION_SETTINGS Settings.EXTRA_APP_PACKAGE "
+            "Lifecycle.Event.ON_RESUME "
             f"{settings_markers}"
+        ),
+        "MainActivity.kt": (
+            "ActivityResultContracts.RequestPermission() Manifest.permission.POST_NOTIFICATIONS "
+            "SLICE_NOTIFICATION_PERMISSION_ASKED "
+            ".putBoolean(SLICE_NOTIFICATION_PERMISSION_ASKED, true)"
         ),
         "RemoteDevice.kt": (
             'KeyStore.getInstance("AndroidKeyStore") secrets.remove(profileId) '
@@ -93,6 +101,22 @@ class VerifyDataPracticesTest(unittest.TestCase):
             '<string name="no_tracking_body">no_tracking_body value</string>', ""
         )
         with self.assertRaisesRegex(VerificationError, "strings-ko.xml"):
+            verify_data_practices(sources)
+
+    def test_rejects_missing_notification_settings_route(self) -> None:
+        sources = valid_sources()
+        sources["AppSettingsSheet.kt"] = sources["AppSettingsSheet.kt"].replace(
+            "Settings.EXTRA_APP_PACKAGE", ""
+        )
+        with self.assertRaisesRegex(VerificationError, "data-practice UI"):
+            verify_data_practices(sources)
+
+    def test_rejects_missing_notification_permission_request(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+            "Manifest.permission.POST_NOTIFICATIONS", ""
+        )
+        with self.assertRaisesRegex(VerificationError, "notification permission"):
             verify_data_practices(sources)
 
     def test_rejects_missing_credential_removal(self) -> None:

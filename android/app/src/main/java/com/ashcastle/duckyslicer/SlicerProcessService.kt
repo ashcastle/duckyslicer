@@ -2223,7 +2223,7 @@ class SlicerProcessService : Service() {
         private const val ACTION_FINISH_SLICE =
             "com.ashcastle.duckyslicer.action.FINISH_FOREGROUND_SLICE"
         private const val EXTRA_REQUEST_ID = "foregroundRequestId"
-        private const val NOTIFICATION_CHANNEL_ID = "active_slicing"
+        internal const val NOTIFICATION_CHANNEL_ID = "active_slicing"
         private const val NOTIFICATION_ID = 2_041
         private const val OPEN_APP_REQUEST_CODE = 2_042
         private const val CANCEL_REQUEST_CODE = 2_043

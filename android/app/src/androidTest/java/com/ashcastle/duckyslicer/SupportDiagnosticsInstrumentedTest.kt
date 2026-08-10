@@ -3,6 +3,8 @@ package com.ashcastle.duckyslicer
 import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
+import android.system.Os
+import android.system.OsConstants
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
@@ -31,7 +33,9 @@ class SupportDiagnosticsInstrumentedTest {
         assertEquals(report, output.toString(Charsets.UTF_8.name()))
         assertTrue(report.contains("app_version=${BuildConfig.VERSION_NAME}"))
         assertTrue(report.contains("android_api=${Build.VERSION.SDK_INT}"))
-        assertTrue(report.contains("page_size_bytes=16384"))
+        val pageSizeBytes = Os.sysconf(OsConstants._SC_PAGESIZE)
+        assertTrue(pageSizeBytes == 4_096L || pageSizeBytes == 16_384L)
+        assertTrue(report.contains("page_size_bytes=$pageSizeBytes"))
         assertTrue(report.contains("preview_detail_requested=DETAIL"))
         assertTrue(report.contains("preview_display=COMPATIBILITY"))
         assertTrue(report.contains("connection_timeout_seconds=25"))

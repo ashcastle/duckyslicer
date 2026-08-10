@@ -127,6 +127,29 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun appSettingsExposeSliceNotificationStateAndSystemSettingsAction() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val actionLabel = context.getString(R.string.manage_slice_notifications)
+        val expectedState = context.getString(
+            if (sliceNotificationsEnabled(context)) {
+                R.string.slice_notifications_on
+            } else {
+                R.string.slice_notifications_off
+            },
+        )
+        launchHarness(AccessibilityHarnessActivity.SCREEN_SETTINGS).use {
+            val action = scrollUntilClickable(actionLabel)
+            assertTrue(action.effectiveLabel().contains(actionLabel))
+            assertTrue(
+                "Settings must expose the current slice notification state",
+                currentNodes().any {
+                    it.isVisibleToUser && it.effectiveLabel().contains(expectedState)
+                },
+            )
+        }
+    }
+
+    @Test
     fun appSettingsOpenTheBundledPrivacyPolicyOffline() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val privacyLabel = context.getString(R.string.privacy_policy)

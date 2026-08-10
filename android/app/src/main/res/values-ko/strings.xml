@@ -451,6 +451,10 @@
     <string name="slice_notification_preparing">G-code 준비 중…</string>
     <string name="slice_notification_progress">%1$d%% 완료</string>
     <string name="slice_notification_canceling">취소 중…</string>
+    <string name="slice_notifications_on">진행 알림 켜짐</string>
+    <string name="slice_notifications_off">진행 알림 꺼짐</string>
+    <string name="slice_notifications_summary">앱을 나간 뒤에도 진행 상태를 보고 슬라이싱을 취소할 수 있습니다. 알림이 꺼져 있어도 슬라이싱은 계속됩니다.</string>
+    <string name="manage_slice_notifications">진행 알림 관리</string>
     <string name="connection_settings">프린터 연결</string>
     <string name="confirm_remote_print">시작 전 확인</string>
     <string name="confirm_remote_print_summary">원격 출력을 시작하기 전에 한 번 더 확인합니다.</string>
@@ -466,7 +470,7 @@
     <string name="data_stored_title">이 기기에 저장</string>
     <string name="data_stored_body">가져온 모델, 프로젝트, 프로필, 최근 선택 내용, 생성된 G-code는 앱 전용 공간에 저장됩니다. 내보낸 파일은 사용자가 저장한 위치에 남습니다.</string>
     <string name="background_slicing_title">백그라운드 슬라이싱</string>
-    <string name="background_slicing_body">슬라이싱 중에는 Android가 작업을 유지하고 진행 상태를 표시합니다. 알림에서 DuckySlicer를 다시 열거나 슬라이싱을 취소할 수 있습니다. 모델과 G-code는 이 기기에만 남습니다.</string>
+    <string name="background_slicing_body">앱을 나가도 Android가 슬라이싱을 계속 유지합니다. 알림이 켜져 있으면 진행 알림에서 DuckySlicer를 다시 열거나 슬라이싱을 취소할 수 있습니다. 모델과 G-code는 이 기기에만 남습니다.</string>
     <string name="printer_connection_data_title">프린터 연결</string>
     <string name="printer_connection_data_body">OctoPrint와 Klipper의 접속 키는 Android가 보호합니다. 상태 확인과 G-code는 사용자가 추가한 프린터 주소로만 전송됩니다. 파일 전송만으로 출력이 시작되지는 않습니다.</string>
     <string name="no_tracking_title">사용 추적 없음</string>

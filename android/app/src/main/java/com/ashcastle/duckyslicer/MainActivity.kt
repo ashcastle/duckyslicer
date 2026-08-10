@@ -856,6 +856,9 @@ private fun DuckySlicerScreen(
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) {
+        sliceNotificationPreferences.edit()
+            .putBoolean(SLICE_NOTIFICATION_PERMISSION_ASKED, true)
+            .apply()
         beginSlice()
     }
     val startSlice = {
@@ -868,9 +871,6 @@ private fun DuckySlicerScreen(
                     false,
                 )
         if (shouldRequestNotification) {
-            sliceNotificationPreferences.edit()
-                .putBoolean(SLICE_NOTIFICATION_PERMISSION_ASKED, true)
-                .apply()
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
             beginSlice()

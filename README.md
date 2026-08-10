@@ -28,7 +28,7 @@ jobs, previewing layers, and exporting G-code directly on your device.
 - Multi-object projects, automatic arrangement, and support painting
 - Touch-first phone and tablet interface
 - Optional OctoPrint and Klipper/Moonraker connections
-- English and Korean interface
+- 22 app languages, with English as the default
 
 ## Install
 
