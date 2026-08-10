@@ -340,11 +340,21 @@ def main() -> None:
     signer = release_jobs.get("sign", "")
     publish = release_jobs.get("publish", "")
     isolated_signing_rules = {
-        "validation has read-only source access": (
-            "permissions:\n      contents: read" in validate
-            and "contents: write" not in validate
+        "validation can inspect drafts without signing material": (
+            "permissions:\n      contents: write" in validate
             and "environment: release" not in validate
             and "${{ secrets." not in validate
+        ),
+        "validation does not mutate the draft release": not any(
+            marker in validate
+            for marker in (
+                "gh release edit",
+                "gh release upload",
+                "gh release delete",
+                "gh api --method",
+                "git push",
+                "curl -X",
+            )
         ),
         "validation does not build or execute repository code": (
             "actions/checkout@" not in validate
@@ -390,8 +400,9 @@ def main() -> None:
             and "./gradlew" not in publish
             and "python3 tools/" not in publish
         ),
-        "only publish can write releases": (
-            release_source.count("contents: write") == 1
+        "only validation and publish receive release-capable tokens": (
+            release_source.count("contents: write") == 2
+            and "contents: write" in validate
             and "contents: write" in publish
             and "contents: write" not in signer
             and "attestations: write" not in release_source

@@ -18,12 +18,15 @@ never builds the GitHub Release APK. The GitHub Release exposes exactly one
 downloadable asset: the signed ARM64 APK. The tagged repository plus its recursive
 submodule pins are the durable corresponding source.
 
-Validation has no signing key. Signing occurs in a protected environment job without
-a repository checkout, repository execution, or Release write permission. It signs
-only the digest-checked artifact, verifies the pinned public certificate fingerprint,
-and removes its temporary keystore. A separate keyless publisher rechecks the tag and
-draft state before exposing the signed APK. GitHub-hosted emulators are not part of
-the release pipeline; functional qualification runs on the local ARM64 16 KB AVD.
+Validation has no signing key and never checks out repository code. GitHub requires
+push access to see draft releases, so its token is Release-capable, but policy checks
+limit the inline validator to read-only release commands. Signing occurs in a
+protected environment job without a repository checkout, repository execution, or
+Release permission. It signs only the digest-checked artifact, verifies the pinned
+public certificate fingerprint, and removes its temporary keystore. A separate
+keyless publisher rechecks the tag and draft state before exposing the signed APK.
+GitHub-hosted emulators are not part of the release pipeline; functional qualification
+runs on the local ARM64 16 KB AVD.
 
 Play bundles use a separate upload key in a separate protected `play` environment.
 The manual Play workflow isolates unsigned building from signing, does not check out
