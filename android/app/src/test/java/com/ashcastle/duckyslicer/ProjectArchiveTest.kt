@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
+import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -16,6 +17,28 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProjectArchiveTest {
+    @Test
+    fun startupRecoveryRemovesOnlyExactAbandonedArchiveDirectories() {
+        val root = Files.createTempDirectory("ducky-project-recovery-").toFile()
+        try {
+            val abandoned = File(root, ".archive-${UUID.randomUUID()}").apply {
+                mkdirs()
+                File(this, "partial.stl").writeText("partial")
+            }
+            val unrelated = File(root, ".archive-not-a-request").apply { mkdirs() }
+            val lookalikeFile = File(root, ".archive-${UUID.randomUUID()}").apply {
+                writeText("keep")
+            }
+
+            assertEquals(1, ProjectStore.recoverAbandonedArchiveStaging(root))
+            assertFalse(abandoned.exists())
+            assertTrue(unrelated.isDirectory)
+            assertTrue(lookalikeFile.isFile)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
     @Test
     fun projectArchiveRoundTripsModelsTransformsPaintAndResolvedProfilesDeterministically() {
         val sourceRoot = Files.createTempDirectory("ducky-project-source-").toFile()

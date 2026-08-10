@@ -361,6 +361,27 @@ internal class ProjectStore(
         internal fun modelStorageRoot(filesRoot: File): File =
             File(File(filesRoot, PROJECT_DIRECTORY), MODELS_DIRECTORY)
 
+        internal fun recoverAbandonedArchiveStaging(projectRoot: File): Int {
+            val canonicalRoot = runCatching { projectRoot.canonicalFile }.getOrNull() ?: return 0
+            var removed = 0
+            projectRoot.listFiles().orEmpty().forEach { candidate ->
+                val identifier = candidate.name.removePrefix(".archive-")
+                val expectedName = runCatching { UUID.fromString(identifier).toString() }
+                    .getOrNull()
+                    ?.let { ".archive-$it" }
+                    ?: return@forEach
+                val resolved = runCatching { candidate.canonicalFile }.getOrNull() ?: return@forEach
+                if (
+                    candidate.name == expectedName && candidate.isDirectory &&
+                    !Files.isSymbolicLink(candidate.toPath()) && resolved.parentFile == canonicalRoot &&
+                    candidate.deleteRecursively()
+                ) {
+                    removed += 1
+                }
+            }
+            return removed
+        }
+
         const val SCHEMA_VERSION = 3
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
