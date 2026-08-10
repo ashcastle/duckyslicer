@@ -174,12 +174,24 @@ The reviewed English and Korean listing copy, declarations, icon, feature graphi
 and five phone screenshots live under `distribution/google-play/`. Run
 `python3 tools/verify_store_listing.py` before opening Play Console. The verifier
 enforces the current text limits, image formats and dimensions, localized alt text,
-no-data declarations, and public test-model capture provenance. The screenshots are
+no-data declarations, foreground-service contract, and public test-model capture
+provenance. The screenshots are
 actual 1080 × 1920 app screens from the local Android 15 ARM64 16 KB emulator; do not
 replace them with private models or identifying printer information. Recheck the
 current official [listing field limits](https://support.google.com/googleplay/android-developer/answer/9859152?hl=en)
 and [preview asset requirements](https://support.google.com/googleplay/android-developer/answer/9866151?hl=en)
 before each submission because Console policy can change independently of the source.
+
+The candidate declares one `dataSync` foreground service for user-initiated,
+on-device slicing. In **Policy > App content > Foreground service permissions**, use
+the reviewed functionality and interruption text from `console-declarations.json`
+under **Local processing: Other**. Record and externally host a short demonstration
+that follows every `demoVideo.captureSteps` item, then paste that video URL into Play
+Console. The repository intentionally stores neither the submission URL nor account
+information. Re-record the video whenever the user-visible start, progress, cancel,
+or completion flow changes. Recheck Google's current
+[foreground-service declaration requirements](https://support.google.com/googleplay/android-developer/answer/13392821?hl=en)
+before each submission.
 
 ## Local release output
 

@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import struct
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -46,6 +47,41 @@ CORE_COPY = {
     "en-US": ("offline", "STL", "OBJ", "3MF", "G-code", "No account", "open-source"),
     "ko-KR": ("오프라인", "STL", "OBJ", "3MF", "G-code", "계정", "오픈소스"),
 }
+EXPECTED_FOREGROUND_SERVICE = {
+    "type": "dataSync",
+    "consoleUseCase": "Local processing: Other",
+    "functionality": (
+        "A user taps Slice to convert selected 3D models and profiles into G-code on the "
+        "device. The foreground service keeps that explicitly requested slice running when "
+        "the app is no longer visible."
+    ),
+    "deferredImpact": (
+        "Deferring the work makes the user wait after tapping Slice and delays the G-code "
+        "they explicitly requested."
+    ),
+    "interruptedImpact": (
+        "Interrupting the work discards the in-progress slice because slicing cannot resume "
+        "from a checkpoint; the user must start the slice again."
+    ),
+    "userInitiated": True,
+    "userPerceptible": True,
+    "userStoppable": True,
+    "runsOnlyWhileNecessary": True,
+    "demoVideo": {
+        "externalUrlRequiredAtSubmission": True,
+        "repositoryStoresUrl": False,
+        "captureSteps": [
+            "Use a public or synthetic model that keeps slicing active long enough to "
+            "demonstrate the service.",
+            "Tap Slice in DuckySlicer and show the in-app progress state.",
+            "Leave DuckySlicer while slicing continues, then open the notification shade.",
+            "Show the slicing progress notification and its Cancel action.",
+            "Tap Cancel and show that the active slice stops.",
+            "Start the slice again, leave the app, return, and show the completed preview.",
+        ],
+    },
+}
+ANDROID_NAMESPACE = "{http://schemas.android.com/apk/res/android}"
 
 
 class StoreListingError(ValueError):
@@ -232,7 +268,102 @@ def _verify_png(
         raise StoreListingError(f"{path.name} must be {color}")
 
 
-def _verify_declarations(store_root: Path, privacy_policy: str) -> None:
+def _verify_foreground_service_sources(repository_root: Path) -> None:
+    manifest_path = repository_root / "android/app/src/main/AndroidManifest.xml"
+    try:
+        manifest = ET.fromstring(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ET.ParseError) as error:
+        raise StoreListingError(f"Could not inspect Android manifest: {error}") from error
+
+    permissions = {
+        permission.get(f"{ANDROID_NAMESPACE}name")
+        for permission in manifest.findall("uses-permission")
+    }
+    required_permissions = {
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+        "android.permission.POST_NOTIFICATIONS",
+    }
+    if not required_permissions.issubset(permissions):
+        raise StoreListingError("Android manifest no longer declares the dataSync permissions")
+
+    services = manifest.findall("application/service")
+    declared_foreground_services = [
+        service
+        for service in services
+        if service.get(f"{ANDROID_NAMESPACE}foregroundServiceType") is not None
+    ]
+    slicer_services = [
+        service
+        for service in services
+        if service.get(f"{ANDROID_NAMESPACE}name") == ".SlicerProcessService"
+    ]
+    if len(slicer_services) != 1:
+        raise StoreListingError("Android manifest must declare one SlicerProcessService")
+    if declared_foreground_services != slicer_services:
+        raise StoreListingError(
+            "Every Android foreground service must have a reviewed Play declaration"
+        )
+    service = slicer_services[0]
+    if (
+        service.get(f"{ANDROID_NAMESPACE}foregroundServiceType") != "dataSync"
+        or service.get(f"{ANDROID_NAMESPACE}exported") != "false"
+    ):
+        raise StoreListingError(
+            "SlicerProcessService must remain a private dataSync foreground service"
+        )
+
+    source_paths = {
+        "slicer service": repository_root
+        / "android/app/src/main/java/com/ashcastle/duckyslicer/SlicerProcessService.kt",
+        "slice UI": repository_root
+        / "android/app/src/main/java/com/ashcastle/duckyslicer/MainActivity.kt",
+    }
+    sources: dict[str, str] = {}
+    for name, path in source_paths.items():
+        try:
+            sources[name] = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as error:
+            raise StoreListingError(f"Could not inspect {name}: {error}") from error
+
+    service_markers = (
+        "context.startForegroundService(SlicerProcessService.startSliceIntent(context, requestId))",
+        "ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC",
+        "ACTION_CANCEL_SLICE",
+        "cancelIntent",
+        ".addAction(",
+        "getString(R.string.slice_notification_progress",
+        "getString(R.string.cancel)",
+        "stopForeground(STOP_FOREGROUND_REMOVE)",
+        "stopSelf()",
+        "return START_NOT_STICKY",
+    )
+    missing_service = [
+        marker for marker in service_markers if marker not in sources["slicer service"]
+    ]
+    if missing_service:
+        raise StoreListingError(
+            f"Foreground slicing implementation no longer supports its declaration: {missing_service}"
+        )
+    ui_markers = (
+        "fun beginSlice()",
+        "val startSlice = {",
+        "onSlice = startSlice",
+        "val cancelSlice = {",
+        "onCancelSlice = cancelSlice",
+    )
+    missing_ui = [marker for marker in ui_markers if marker not in sources["slice UI"]]
+    if missing_ui:
+        raise StoreListingError(
+            f"Foreground slicing is no longer demonstrably user initiated: {missing_ui}"
+        )
+
+
+def _verify_declarations(
+    store_root: Path,
+    repository_root: Path,
+    privacy_policy: str,
+) -> None:
     declarations = _exact_keys(
         _read_json(store_root / "console-declarations.json"),
         {
@@ -245,11 +376,12 @@ def _verify_declarations(store_root: Path, privacy_policy: str) -> None:
             "appAccess",
             "monetization",
             "dataSafety",
+            "foregroundServices",
         },
         "console declarations",
     )
     expected_scalars = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "packageName": EXPECTED_PACKAGE,
         "defaultLocale": "en-US",
         "listingLocales": list(EXPECTED_LOCALES),
@@ -276,6 +408,12 @@ def _verify_declarations(store_root: Path, privacy_policy: str) -> None:
     )
     if safety != {"collectsData": False, "sharesData": False}:
         raise StoreListingError("Data safety changed and requires a new shipping-build review")
+    foreground_services = declarations["foregroundServices"]
+    if foreground_services != [EXPECTED_FOREGROUND_SERVICE]:
+        raise StoreListingError(
+            "Foreground service declaration changed and requires a new implementation review"
+        )
+    _verify_foreground_service_sources(repository_root)
     for marker in (
         EXPECTED_PACKAGE,
         "does not collect, sell, or share",
@@ -408,7 +546,7 @@ def verify_store_listing(
     policy = privacy_policy
     if policy is None:
         policy = (repository_root / "PRIVACY.md").read_text(encoding="utf-8")
-    _verify_declarations(store_root, policy)
+    _verify_declarations(store_root, repository_root, policy)
     _verify_assets(store_root, repository_root)
 
 
@@ -418,8 +556,8 @@ def main() -> None:
     except (OSError, StoreListingError) as error:
         raise SystemExit(f"Google Play listing verification failed: {error}") from error
     print(
-        "Verified bilingual Play copy, no-data declarations, public capture provenance, "
-        "and publication-ready graphics"
+        "Verified bilingual Play copy, no-data and foreground-service declarations, "
+        "public capture provenance, and publication-ready graphics"
     )
 
 

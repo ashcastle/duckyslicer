@@ -87,7 +87,7 @@ def create_fixture(root: Path) -> Path:
         (listing / "short-description.txt").write_text(short[locale] + "\n", encoding="utf-8")
         (listing / "full-description.txt").write_text(full[locale] + "\n", encoding="utf-8")
     declarations = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "packageName": "com.ashcastle.duckyslicer",
         "defaultLocale": "en-US",
         "listingLocales": ["en-US", "ko-KR"],
@@ -96,6 +96,42 @@ def create_fixture(root: Path) -> Path:
         "appAccess": {"loginRequired": False},
         "monetization": {"containsAds": False},
         "dataSafety": {"collectsData": False, "sharesData": False},
+        "foregroundServices": [
+            {
+                "type": "dataSync",
+                "consoleUseCase": "Local processing: Other",
+                "functionality": (
+                    "A user taps Slice to convert selected 3D models and profiles into G-code "
+                    "on the device. The foreground service keeps that explicitly requested "
+                    "slice running when the app is no longer visible."
+                ),
+                "deferredImpact": (
+                    "Deferring the work makes the user wait after tapping Slice and delays "
+                    "the G-code they explicitly requested."
+                ),
+                "interruptedImpact": (
+                    "Interrupting the work discards the in-progress slice because slicing "
+                    "cannot resume from a checkpoint; the user must start the slice again."
+                ),
+                "userInitiated": True,
+                "userPerceptible": True,
+                "userStoppable": True,
+                "runsOnlyWhileNecessary": True,
+                "demoVideo": {
+                    "externalUrlRequiredAtSubmission": True,
+                    "repositoryStoresUrl": False,
+                    "captureSteps": [
+                        "Use a public or synthetic model that keeps slicing active long "
+                        "enough to demonstrate the service.",
+                        "Tap Slice in DuckySlicer and show the in-app progress state.",
+                        "Leave DuckySlicer while slicing continues, then open the notification shade.",
+                        "Show the slicing progress notification and its Cancel action.",
+                        "Tap Cancel and show that the active slice stops.",
+                        "Start the slice again, leave the app, return, and show the completed preview.",
+                    ],
+                },
+            }
+        ],
     }
     write_json(store / "console-declarations.json", declarations)
     screenshots = []
@@ -142,6 +178,43 @@ def create_fixture(root: Path) -> Path:
     source = root / "tests/data/test_stl/ASCII/20mmbox-LF.stl"
     source.parent.mkdir(parents=True)
     source.write_bytes(b"solid public\nendsolid public\n")
+    manifest = root / "android/app/src/main/AndroidManifest.xml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        """<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <application>
+        <service android:name=".SlicerProcessService" android:exported="false"
+            android:foregroundServiceType="dataSync" />
+    </application>
+</manifest>
+""",
+        encoding="utf-8",
+    )
+    kotlin_root = root / "android/app/src/main/java/com/ashcastle/duckyslicer"
+    kotlin_root.mkdir(parents=True)
+    (kotlin_root / "SlicerProcessService.kt").write_text(
+        """context.startForegroundService(SlicerProcessService.startSliceIntent(context, requestId))
+ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+ACTION_CANCEL_SLICE
+cancelIntent
+.addAction(
+getString(R.string.slice_notification_progress
+getString(R.string.cancel)
+stopForeground(STOP_FOREGROUND_REMOVE)
+stopSelf()
+return START_NOT_STICKY
+""",
+        encoding="utf-8",
+    )
+    (kotlin_root / "MainActivity.kt").write_text(
+        "fun beginSlice() {}\nval startSlice = { beginSlice() }\nonSlice = startSlice\n"
+        "val cancelSlice = {}\nonCancelSlice = cancelSlice\n",
+        encoding="utf-8",
+    )
     return store
 
 
@@ -202,6 +275,71 @@ class VerifyStoreListingTest(unittest.TestCase):
         source["dataSafety"]["collectsData"] = True
         write_json(path, source)
         with self.assertRaisesRegex(StoreListingError, "Data safety changed"):
+            self.verify()
+
+    def test_rejects_missing_foreground_service_declaration(self) -> None:
+        path = self.store / "console-declarations.json"
+        source = json.loads(path.read_text(encoding="utf-8"))
+        del source["foregroundServices"]
+        write_json(path, source)
+        with self.assertRaisesRegex(StoreListingError, "keys changed"):
+            self.verify()
+
+    def test_rejects_changed_foreground_service_type(self) -> None:
+        path = self.store / "console-declarations.json"
+        source = json.loads(path.read_text(encoding="utf-8"))
+        source["foregroundServices"][0]["type"] = "specialUse"
+        write_json(path, source)
+        with self.assertRaisesRegex(StoreListingError, "implementation review"):
+            self.verify()
+
+    def test_rejects_non_stoppable_foreground_service_claim(self) -> None:
+        path = self.store / "console-declarations.json"
+        source = json.loads(path.read_text(encoding="utf-8"))
+        source["foregroundServices"][0]["userStoppable"] = False
+        write_json(path, source)
+        with self.assertRaisesRegex(StoreListingError, "implementation review"):
+            self.verify()
+
+    def test_rejects_missing_demo_capture_step(self) -> None:
+        path = self.store / "console-declarations.json"
+        source = json.loads(path.read_text(encoding="utf-8"))
+        source["foregroundServices"][0]["demoVideo"]["captureSteps"].pop()
+        write_json(path, source)
+        with self.assertRaisesRegex(StoreListingError, "implementation review"):
+            self.verify()
+
+    def test_rejects_manifest_foreground_service_drift(self) -> None:
+        path = self.root / "android/app/src/main/AndroidManifest.xml"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace("dataSync", "specialUse"),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(StoreListingError, "private dataSync"):
+            self.verify()
+
+    def test_rejects_an_undeclared_additional_foreground_service(self) -> None:
+        path = self.root / "android/app/src/main/AndroidManifest.xml"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "</application>",
+                '<service android:name=".OtherService" android:exported="false" '
+                'android:foregroundServiceType="specialUse" />\n    </application>',
+            ),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(StoreListingError, "reviewed Play declaration"):
+            self.verify()
+
+    def test_rejects_missing_notification_cancel_action(self) -> None:
+        path = self.root / (
+            "android/app/src/main/java/com/ashcastle/duckyslicer/SlicerProcessService.kt"
+        )
+        path.write_text(
+            path.read_text(encoding="utf-8").replace("getString(R.string.cancel)", ""),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(StoreListingError, "supports its declaration"):
             self.verify()
 
     def test_rejects_missing_localized_alt_text(self) -> None:

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "packageName": "com.ashcastle.duckyslicer",
   "defaultLocale": "en-US",
   "listingLocales": [
@@ -17,5 +17,30 @@
   "dataSafety": {
     "collectsData": false,
     "sharesData": false
-  }
+  },
+  "foregroundServices": [
+    {
+      "type": "dataSync",
+      "consoleUseCase": "Local processing: Other",
+      "functionality": "A user taps Slice to convert selected 3D models and profiles into G-code on the device. The foreground service keeps that explicitly requested slice running when the app is no longer visible.",
+      "deferredImpact": "Deferring the work makes the user wait after tapping Slice and delays the G-code they explicitly requested.",
+      "interruptedImpact": "Interrupting the work discards the in-progress slice because slicing cannot resume from a checkpoint; the user must start the slice again.",
+      "userInitiated": true,
+      "userPerceptible": true,
+      "userStoppable": true,
+      "runsOnlyWhileNecessary": true,
+      "demoVideo": {
+        "externalUrlRequiredAtSubmission": true,
+        "repositoryStoresUrl": false,
+        "captureSteps": [
+          "Use a public or synthetic model that keeps slicing active long enough to demonstrate the service.",
+          "Tap Slice in DuckySlicer and show the in-app progress state.",
+          "Leave DuckySlicer while slicing continues, then open the notification shade.",
+          "Show the slicing progress notification and its Cancel action.",
+          "Tap Cancel and show that the active slice stops.",
+          "Start the slice again, leave the app, return, and show the completed preview."
+        ]
+      }
+    }
+  ]
 }
