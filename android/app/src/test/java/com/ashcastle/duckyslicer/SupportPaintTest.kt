@@ -1,7 +1,7 @@
 package com.ashcastle.duckyslicer
 
 import java.io.DataInputStream
-import java.io.File
+import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -14,7 +14,7 @@ class SupportPaintTest {
             .paint(3, SupportPaintState.ENFORCE)
             .paint(12, SupportPaintState.ENFORCE)
         val erased = paint.paint(3, null)
-        val output = File.createTempFile("duckyslicer-support-paint-", ".bin")
+        val output = Files.createTempFile("duckyslicer-support-paint-", ".bin").toFile()
         try {
             paint.writeSidecar(output)
             DataInputStream(output.inputStream()).use { reader ->
