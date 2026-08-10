@@ -40,8 +40,12 @@ class ToolpathMeshBuilderTest {
             ),
             roleSegmentCounts = intArrayOf(1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
         )
-        fun values(scene: ToolpathScene): FloatArray = ToolpathMeshBuilder.build(scene).let { buffer ->
-            FloatArray(buffer.remaining()).also(buffer::get)
+        fun values(scene: ToolpathScene): Pair<FloatArray, ByteArray> =
+            ToolpathMeshBuilder.build(scene).let { payload ->
+                val bed = FloatArray(payload.bedVertices.remaining()).also(payload.bedVertices::get)
+                val instances = ByteArray(payload.toolpathInstances.remaining())
+                    .also(payload.toolpathInstances::get)
+                bed to instances
         }
 
         val normalized = values(
@@ -60,7 +64,8 @@ class ToolpathMeshBuilderTest {
             ),
         )
 
-        assertArrayEquals(normalized, machineCoordinates, 0f)
+        assertArrayEquals(normalized.first, machineCoordinates.first, 0f)
+        assertArrayEquals(normalized.second, machineCoordinates.second)
     }
 
     @Test
@@ -132,7 +137,7 @@ class ToolpathMeshBuilderTest {
     }
 
     @Test
-    fun toolpathsBecomeFlatOutlinedRibbonsInsteadOfDisconnectedBoxes() {
+    fun toolpathsBecomeCompactOutlinedRibbonInstancesInsteadOfExpandedBoxes() {
         val preview = GcodeLayerPreview(
             startLayer = 0,
             endLayer = 1,
@@ -145,22 +150,40 @@ class ToolpathMeshBuilderTest {
             ),
             roleSegmentCounts = intArrayOf(1, 1, 0, 0, 0, 0, 0, 0, 0),
         )
-        val buffer = ToolpathMeshBuilder.build(
+        val payload = ToolpathMeshBuilder.build(
             ToolpathScene(preview, 100f, 100f, 1f, 0.8f, PreviewDetail.BALANCED),
         )
-        val values = FloatArray(buffer.remaining()).also(buffer::get)
-        val zValues = values.indices
-            .filter { it % 8 == 2 }
-            .map(values::get)
-        val acrossValues = values.indices
-            .filter { it % 8 == 7 }
-            .map(values::get)
+        val instances = payload.toolpathInstances
+            .duplicate()
+            .order(payload.toolpathInstances.order())
+        val zValues = List(payload.instanceCount) { index ->
+            instances.getFloat(
+                index * ToolpathMeshBuilder.INSTANCE_STRIDE_BYTES + 2 * Float.SIZE_BYTES,
+            )
+        }
+        val firstHalfWidth = instances.getFloat(
+            ToolpathMeshBuilder.INSTANCE_HALF_WIDTH_OFFSET_BYTES,
+        )
+        val firstAlpha = instances
+            .get(ToolpathMeshBuilder.INSTANCE_COLOR_OFFSET_BYTES + 3)
+            .toInt() and 0xff
 
-        assertTrue("The mesh must include the bed below Z=0", zValues.any { it < 0f })
+        val bedValues = FloatArray(payload.bedVertices.remaining()).also(payload.bedVertices::get)
+        assertTrue(
+            "The mesh must include the bed below Z=0",
+            bedValues.indices.filter { it % 8 == 2 }.map(bedValues::get).any { it < 0f },
+        )
         assertTrue("Toolpath ribbons must retain real separated heights", zValues.any { it > 0.4f })
-        assertTrue("The shader must receive both ribbon edges", -1f in acrossValues && 1f in acrossValues)
-        assertTrue("Every draw vertex must contain XYZ, RGBA, and lateral position", values.size % 8 == 0)
-        assertTrue("GPU staging geometry must use direct native memory", buffer.isDirect)
+        assertTrue("Each instance must retain the role-specific extrusion width", firstHalfWidth > 0f)
+        assertEquals("Packed instance alpha must preserve full opacity", 255, firstAlpha)
+        assertEquals("Each toolpath must become one GPU instance", 2, payload.instanceCount)
+        assertEquals(
+            "Each instance must contain two endpoints, width, and packed RGBA",
+            payload.instanceCount * ToolpathMeshBuilder.INSTANCE_STRIDE_BYTES,
+            payload.toolpathInstances.remaining(),
+        )
+        assertTrue("GPU bed staging must use direct native memory", payload.bedVertices.isDirect)
+        assertTrue("GPU instance staging must use direct native memory", payload.toolpathInstances.isDirect)
     }
 
     @Test
@@ -203,9 +226,23 @@ class ToolpathMeshBuilderTest {
             ),
         )
 
-        assertTrue("Hiding the outer wall must remove its geometry", onlyInnerWall.remaining() < allRoles.remaining())
-        assertTrue("Selecting the inner wall must retain its geometry", onlyInnerWall.remaining() > noToolpaths.remaining())
-        assertTrue("The bed must remain visible when every role is hidden", noToolpaths.remaining() > 0)
+        assertTrue(
+            "Hiding the outer wall must remove its geometry",
+            onlyInnerWall.instanceCount < allRoles.instanceCount,
+        )
+        assertTrue(
+            "Selecting the inner wall must retain its geometry",
+            onlyInnerWall.instanceCount > noToolpaths.instanceCount,
+        )
+        assertEquals(
+            "Hiding toolpaths must not remove the bed",
+            allRoles.bedVertices.remaining(),
+            noToolpaths.bedVertices.remaining(),
+        )
+        assertTrue(
+            "The bed must remain visible when every role is hidden",
+            noToolpaths.bedVertices.remaining() > 0,
+        )
     }
 
     @Test
@@ -225,13 +262,29 @@ class ToolpathMeshBuilderTest {
             roleCounts[role] += 1
         }
         val preview = GcodeLayerPreview(0, 29, 30, 0.2f, 6f, segments, roleCounts)
-        val buffer = ToolpathMeshBuilder.build(
+        val payload = ToolpathMeshBuilder.build(
             ToolpathScene(preview, 220f, 220f, 0.92f, 0.78f, PreviewDetail.BALANCED),
         )
-        val vertexCount = buffer.remaining() / 8
 
-        assertTrue("One flat ribbon must replace each former 36-vertex segment box", vertexCount < 190_000)
-        assertTrue("Dense previews must retain every segment at this size", vertexCount > 180_000)
+        assertEquals(
+            "Dense previews must retain every segment at this size",
+            segmentCount,
+            payload.instanceCount,
+        )
+        assertEquals(
+            "One compact 32-byte instance must replace six expanded 32-byte vertices",
+            segmentCount * ToolpathMeshBuilder.INSTANCE_STRIDE_BYTES,
+            payload.toolpathInstances.remaining(),
+        )
+        assertTrue(
+            "Bed plus toolpath staging must stay far below expanded ribbon storage",
+            payload.stagingByteCount < segmentCount * 6 * 8 * Float.SIZE_BYTES,
+        )
+        assertTrue(
+            "The maximum 120,000-segment instance payload must stay below 4 MiB",
+            GcodeLayerPreview.MAX_SEGMENTS.toLong() *
+                ToolpathMeshBuilder.INSTANCE_STRIDE_BYTES < 4L * 1024L * 1024L,
+        )
     }
 
     @Test

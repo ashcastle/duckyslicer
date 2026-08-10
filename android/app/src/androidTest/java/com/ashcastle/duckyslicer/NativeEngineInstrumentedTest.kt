@@ -17,6 +17,7 @@ import org.junit.runner.RunWith
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.ByteBuffer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -80,6 +81,7 @@ class NativeEngineInstrumentedTest {
 
     @Test
     fun depthPreviewPrewarmsGestureVboAndReusesItAcrossCameraFrames() {
+        val framebufferSize = 256
         val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
         assertNotEquals("EGL display must be available", EGL14.EGL_NO_DISPLAY, display)
         val version = IntArray(2)
@@ -126,7 +128,13 @@ class NativeEngineInstrumentedTest {
         val surface = EGL14.eglCreatePbufferSurface(
             display,
             config,
-            intArrayOf(EGL14.EGL_WIDTH, 64, EGL14.EGL_HEIGHT, 64, EGL14.EGL_NONE),
+            intArrayOf(
+                EGL14.EGL_WIDTH,
+                framebufferSize,
+                EGL14.EGL_HEIGHT,
+                framebufferSize,
+                EGL14.EGL_NONE,
+            ),
             0,
         )
         assertNotEquals("EGL pbuffer creation must succeed", EGL14.EGL_NO_SURFACE, surface)
@@ -148,20 +156,24 @@ class NativeEngineInstrumentedTest {
             val renderer = ToolpathRenderer()
             renderer.submit(scene)
             renderer.onSurfaceCreated(null, null)
-            renderer.onSurfaceChanged(null, 64, 64)
+            renderer.onSurfaceChanged(null, framebufferSize, framebufferSize)
             renderer.onDrawFrame(null)
 
-            assertEquals("The first frame must upload one VBO", 1, renderer.geometryUploadCountForTest())
-            assertEquals("The VBO draw must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
+            assertEquals(
+                "The first frame must upload one geometry set",
+                1,
+                renderer.geometryUploadCountForTest(),
+            )
+            assertEquals("The instanced draw must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
 
             renderer.onDrawFrame(null)
             assertEquals(
-                "The next idle frame must prewarm one lower-detail VBO",
+                "The next idle frame must prewarm one lower-detail geometry set",
                 2,
                 renderer.geometryUploadCountForTest(),
             )
             assertEquals(
-                "Only the requested and gesture VBOs may stay resident",
+                "Only the requested and gesture geometry sets may stay resident",
                 2,
                 renderer.cachedGeometryCountForTest(),
             )
@@ -170,7 +182,7 @@ class NativeEngineInstrumentedTest {
             renderer.zoomBy(1.1f)
             renderer.onDrawFrame(null)
             assertEquals(
-                "Camera-only frames must reuse the uploaded VBO",
+                "Camera-only frames must reuse the uploaded GPU buffers",
                 2,
                 renderer.geometryUploadCountForTest(),
             )
@@ -179,14 +191,14 @@ class NativeEngineInstrumentedTest {
             renderer.setInteractionActive(true)
             renderer.onDrawFrame(null)
             assertEquals(
-                "Starting a gesture must reuse the prewarmed lower-detail VBO",
+                "Starting a gesture must reuse the prewarmed lower-detail geometry",
                 2,
                 renderer.geometryUploadCountForTest(),
             )
             renderer.orbitBy(-8f, 5f)
             renderer.onDrawFrame(null)
             assertEquals(
-                "Every subsequent gesture frame must reuse the lower-detail VBO",
+                "Every subsequent gesture frame must reuse the lower-detail geometry",
                 2,
                 renderer.geometryUploadCountForTest(),
             )
@@ -195,7 +207,7 @@ class NativeEngineInstrumentedTest {
             renderer.setInteractionActive(false)
             renderer.onDrawFrame(null)
             assertEquals(
-                "Settling after a gesture must reuse the requested VBO",
+                "Settling after a gesture must reuse the requested geometry",
                 2,
                 renderer.geometryUploadCountForTest(),
             )
@@ -203,12 +215,12 @@ class NativeEngineInstrumentedTest {
             renderer.submit(scene.copy(visibleRoles = setOf(1)))
             renderer.onDrawFrame(null)
             assertEquals(
-                "A geometry change must replace the VBO exactly once",
+                "A geometry change must replace the GPU buffers exactly once",
                 3,
                 renderer.geometryUploadCountForTest(),
             )
             assertEquals(
-                "Old-scene VBOs must be released before the new gesture tier is prewarmed",
+                "Old-scene GPU buffers must be released before the new gesture tier is prewarmed",
                 1,
                 renderer.cachedGeometryCountForTest(),
             )
@@ -219,7 +231,7 @@ class NativeEngineInstrumentedTest {
                 renderer.geometryUploadCountForTest(),
             )
             assertEquals(
-                "The GPU cache must remain bounded to two VBOs",
+                "The GPU cache must remain bounded to two geometry sets",
                 2,
                 renderer.cachedGeometryCountForTest(),
             )
@@ -228,19 +240,33 @@ class NativeEngineInstrumentedTest {
             val uploadsBeforeTrim = renderer.geometryUploadCountForTest()
             renderer.releaseGpuGeometryForMemoryPressure()
             assertEquals(
-                "UI memory pressure must release every reconstructable preview VBO",
+                "UI memory pressure must release every reconstructable preview buffer",
                 0,
                 renderer.cachedGeometryCountForTest(),
             )
             assertEquals("Releasing preview VBOs must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
             renderer.onDrawFrame(null)
             assertEquals(
-                "The first frame after memory pressure must rebuild the requested VBO once",
+                "The first frame after memory pressure must rebuild the requested geometry once",
                 uploadsBeforeTrim + 1,
                 renderer.geometryUploadCountForTest(),
             )
             assertEquals(1, renderer.cachedGeometryCountForTest())
             assertEquals("The rebuilt VBO draw must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
+
+            val withoutToolpath = framebufferRgba(framebufferSize, framebufferSize)
+            renderer.submit(scene.copy(visibleRoles = setOf(0)))
+            renderer.onDrawFrame(null)
+            val withToolpath = framebufferRgba(framebufferSize, framebufferSize)
+            assertFalse(
+                "Instanced toolpath must change the rendered framebuffer",
+                withoutToolpath.contentEquals(withToolpath),
+            )
+            assertEquals(
+                "Instanced toolpath framebuffer readback must be valid",
+                GLES30.GL_NO_ERROR,
+                GLES30.glGetError(),
+            )
         } finally {
             EGL14.eglMakeCurrent(
                 display,
@@ -252,6 +278,21 @@ class NativeEngineInstrumentedTest {
             EGL14.eglDestroyContext(display, context)
             EGL14.eglTerminate(display)
         }
+    }
+
+    private fun framebufferRgba(width: Int, height: Int): ByteArray {
+        val pixels = ByteBuffer.allocateDirect(width * height * 4)
+        GLES30.glReadPixels(
+            0,
+            0,
+            width,
+            height,
+            GLES30.GL_RGBA,
+            GLES30.GL_UNSIGNED_BYTE,
+            pixels,
+        )
+        pixels.position(0)
+        return ByteArray(pixels.remaining()).also(pixels::get)
     }
 
     private fun outerWallBounds(gcode: File): ToolpathBounds {
@@ -2004,9 +2045,20 @@ class NativeEngineInstrumentedTest {
                 detail = PreviewDetail.BALANCED,
             ),
         )
-        val gpuVertexCount = gpuStaging.remaining() / 8
-        assertTrue("ARM64 GPU staging must use direct memory", gpuStaging.isDirect)
-        assertTrue("ARM64 balanced preview must honor its geometry budget", gpuVertexCount < 190_000)
+        assertTrue("ARM64 GPU bed staging must use direct memory", gpuStaging.bedVertices.isDirect)
+        assertTrue(
+            "ARM64 GPU instance staging must use direct memory",
+            gpuStaging.toolpathInstances.isDirect,
+        )
+        assertEquals(
+            "ARM64 toolpaths must use compact 32-byte instances",
+            gpuStaging.instanceCount * ToolpathMeshBuilder.INSTANCE_STRIDE_BYTES,
+            gpuStaging.toolpathInstances.remaining(),
+        )
+        assertTrue(
+            "ARM64 compact preview instances must stay below four MiB",
+            gpuStaging.toolpathInstances.remaining() < 4 * 1024 * 1024,
+        )
     }
 
     private companion object {

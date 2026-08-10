@@ -48,14 +48,18 @@ def valid_sources() -> dict[str, str]:
             "uploadState.remove(staleScene) "
             "GLES30.glGenBuffers GLES30.glDeleteBuffers "
             "GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER GLES30.glBufferData( "
-            "GLES30.GL_STATIC_DRAW geometryUploadCountForTest cachedGeometryCountForTest "
+            "GLES30.GL_STATIC_DRAW GLES30.glDrawArraysInstanced( "
+            "GLES30.glVertexAttribDivisor( GLES30.GL_UNSIGNED_BYTE "
+            "geometryUploadCountForTest cachedGeometryCountForTest "
             "ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN "
             "registerComponentCallbacks(memoryCallbacks) "
             "unregisterComponentCallbacks(memoryCallbacks) "
             "queueEvent { toolpathRenderer.releaseGpuGeometryForMemoryPressure() } "
             "releaseGpuGeometryForMemoryPressure() "
-            "POSITION_OFFSET_BYTES COLOR_OFFSET_BYTES "
-            ".allocateDirect(capacity * Float.SIZE_BYTES) return builder.finish() "
+            "ToolpathUploadPayload INSTANCE_STRIDE_BYTES = 32 "
+            "INSTANCE_START_OFFSET_BYTES INSTANCE_COLOR_OFFSET_BYTES "
+            "toolpathInstances = instanceBuilder.finish() "
+            ".allocateDirect(capacity * Float.SIZE_BYTES) .allocateDirect(capacity) "
             "setInteractionActive(true) postDelayed(restoreDetail, DETAIL_RESTORE_DELAY_MS) "
             "previewDetailForInteraction(sourceScene.detail, interactionActive) "
             "depthPreviewSegmentBudget(scene.detail)"
@@ -117,20 +121,22 @@ def valid_sources() -> dict[str, str]:
             "GcodeLayerPreview.fromNative GcodeLayerPreview.fromNative "
             "GcodeLayerPreview.fromNative gcodeResult == null "
             "depthPreviewPrewarmsGestureVboAndReusesItAcrossCameraFrames "
-            "The first frame must upload one VBO "
-            "The next idle frame must prewarm one lower-detail VBO "
-            "Camera-only frames must reuse the uploaded VBO "
-            "A geometry change must replace the VBO exactly once "
-            "Old-scene VBOs must be released before the new gesture tier is prewarmed "
+            "The first frame must upload one geometry set "
+            "The next idle frame must prewarm one lower-detail geometry set "
+            "Camera-only frames must reuse the uploaded GPU buffers "
+            "A geometry change must replace the GPU buffers exactly once "
+            "Old-scene GPU buffers must be released before the new gesture tier is prewarmed "
             "automaticPreviewQualityResolvesToAConcreteDeviceTier "
-            "Starting a gesture must reuse the prewarmed lower-detail VBO "
-            "Every subsequent gesture frame must reuse the lower-detail VBO "
-            "Settling after a gesture must reuse the requested VBO "
-            "The GPU cache must remain bounded to two VBOs "
-            "UI memory pressure must release every reconstructable preview VBO "
-            "The first frame after memory pressure must rebuild the requested VBO once "
-            "ARM64 GPU staging must use direct memory "
-            "ARM64 balanced preview must honor its geometry budget "
+            "Starting a gesture must reuse the prewarmed lower-detail geometry "
+            "Every subsequent gesture frame must reuse the lower-detail geometry "
+            "Settling after a gesture must reuse the requested geometry "
+            "The GPU cache must remain bounded to two geometry sets "
+            "UI memory pressure must release every reconstructable preview buffer "
+            "The first frame after memory pressure must rebuild the requested geometry once "
+            "Instanced toolpath must change the rendered framebuffer "
+            "ARM64 GPU bed staging must use direct memory "
+            "ARM64 GPU instance staging must use direct memory "
+            "ARM64 compact preview instances must stay below four MiB "
             "Slice outcome must retain Orca's print-time estimate "
             "Slice outcome must retain Orca's filament-length estimate "
             "Slice outcome must retain Orca's filament-mass estimate"
@@ -166,7 +172,9 @@ def valid_sources() -> dict[str, str]:
         ),
         "ToolpathMeshBuilderTest.kt": (
             "balancedModeCapsDensePreviewGeometry "
-            "GPU staging geometry must use direct native memory "
+            "GPU bed staging must use direct native memory "
+            "GPU instance staging must use direct native memory "
+            "maximum 120,000-segment instance payload must stay below 4 MiB "
             "unchangedSceneUploadsOnceUntilGeometryOrContextChanges "
             "twoSlotGeometryCacheEvictsTheLeastRecentlyUsedDetail "
             "Camera-only frames must reuse the GPU buffer "
@@ -203,7 +211,7 @@ def valid_sources() -> dict[str, str]:
             'name="toolpath_visibility_control" name="toolpath_depth_contrast_control" '
             'name="connection_timeout_control"'
         ),
-        "CONTRIBUTING.md": "Preview FloatArray VBO Automatic",
+        "CONTRIBUTING.md": "Preview FloatArray VBO Automatic instanced 32-byte",
     }
 
 
@@ -248,6 +256,20 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "GLES30.glBufferData(", "upload("
         )
         with self.assertRaisesRegex(VerificationError, "glBufferData"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_missing_instanced_toolpath_draw(self) -> None:
+        sources = valid_sources()
+        sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
+            "GLES30.glDrawArraysInstanced(", "drawExpandedToolpaths("
+        )
+        with self.assertRaisesRegex(VerificationError, "glDrawArraysInstanced"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_expanded_per_segment_ribbon_vertices(self) -> None:
+        sources = valid_sources()
+        sources["ToolpathPreviewView.kt"] += " plan.segmentOffsets.size * 6 * 8"
+        with self.assertRaisesRegex(VerificationError, "expanded per-segment"):
             verify_preview_boundary(sources)
 
     def test_rejects_missing_gpu_memory_pressure_release(self) -> None:

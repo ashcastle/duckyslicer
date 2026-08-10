@@ -96,15 +96,18 @@ The Rust-to-Kotlin G-code preview boundary must remain a versioned, bounded prim
 format changes require Rust encoding, Kotlin validation, malformed-payload host tests,
 and the ARM64 production parser test to change together.
 Depth-tested preview geometry must be built directly in native-order direct memory and
-uploaded through an OpenGL VBO only when the layer range, role visibility, quality, or
-visual style changes. Camera gestures must reuse the existing GPU buffer; do not return
-to client-side vertex arrays or per-frame geometry uploads.
+uploaded only when the layer range, role visibility, quality, or visual style changes.
+Toolpaths use one 32-byte instance per retained segment and OpenGL ES 3 instanced draws;
+do not expand every line into six duplicated CPU vertices. Bed triangles remain a small
+separate VBO. Camera gestures must reuse the existing GPU buffers; do not return to
+client-side vertex arrays or per-frame geometry uploads.
 Automatic preview quality must resolve to a concrete tier before mesh generation.
 Low-RAM or 192 MiB-and-smaller app heaps use the bounded performance tier, explicit
 user choices remain authoritative, and active gestures may downgrade at most one tier
-until the view settles. The requested and gesture tiers may retain at most two VBOs;
-prewarm the gesture tier after the first visible frame instead of rebuilding or uploading
-geometry on touch-down or touch-up. Reconstructable VBOs must be released when Android
+until the view settles. The requested and gesture tiers may retain at most two geometry
+sets (bed plus toolpath-instance VBOs). Prewarm the gesture tier after the first visible
+frame instead of rebuilding or uploading geometry on touch-down or touch-up.
+Reconstructable VBOs must be released when Android
 reports that the UI is hidden or the process is in the background, then rebuilt lazily on
 the first visible frame. Keep this policy pure and host-tested alongside the real ARM64
 EGL renderer regression.

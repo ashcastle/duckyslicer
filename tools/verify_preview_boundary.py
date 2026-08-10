@@ -95,6 +95,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER",
         "GLES30.glBufferData(",
         "GLES30.GL_STATIC_DRAW",
+        "GLES30.glDrawArraysInstanced(",
+        "GLES30.glVertexAttribDivisor(",
+        "GLES30.GL_UNSIGNED_BYTE",
         "geometryUploadCountForTest",
         "cachedGeometryCountForTest",
         "ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN",
@@ -102,10 +105,13 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "unregisterComponentCallbacks(memoryCallbacks)",
         "queueEvent { toolpathRenderer.releaseGpuGeometryForMemoryPressure() }",
         "releaseGpuGeometryForMemoryPressure()",
-        "POSITION_OFFSET_BYTES",
-        "COLOR_OFFSET_BYTES",
+        "ToolpathUploadPayload",
+        "INSTANCE_STRIDE_BYTES = 32",
+        "INSTANCE_START_OFFSET_BYTES",
+        "INSTANCE_COLOR_OFFSET_BYTES",
+        "toolpathInstances = instanceBuilder.finish()",
         ".allocateDirect(capacity * Float.SIZE_BYTES)",
-        "return builder.finish()",
+        ".allocateDirect(capacity)",
         "setInteractionActive(true)",
         "postDelayed(restoreDetail, DETAIL_RESTORE_DELAY_MS)",
         "previewDetailForInteraction(sourceScene.detail, interactionActive)",
@@ -119,6 +125,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         or "builder.writeTo" in renderer
     ):
         raise VerificationError("GPU preview reverted to duplicated client-side vertex storage")
+    if "plan.segmentOffsets.size * 6 * 8" in renderer:
+        raise VerificationError("GPU preview reverted to expanded per-segment ribbon vertices")
 
     workspace = sources["WorkspaceScreen.kt"]
     for marker in (
@@ -364,20 +372,22 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         raise VerificationError("ARM64 primitive preview regressions are incomplete")
     for marker in (
         "depthPreviewPrewarmsGestureVboAndReusesItAcrossCameraFrames",
-        "The first frame must upload one VBO",
-        "The next idle frame must prewarm one lower-detail VBO",
-        "Camera-only frames must reuse the uploaded VBO",
-        "A geometry change must replace the VBO exactly once",
-        "Old-scene VBOs must be released before the new gesture tier is prewarmed",
+        "The first frame must upload one geometry set",
+        "The next idle frame must prewarm one lower-detail geometry set",
+        "Camera-only frames must reuse the uploaded GPU buffers",
+        "A geometry change must replace the GPU buffers exactly once",
+        "Old-scene GPU buffers must be released before the new gesture tier is prewarmed",
         "automaticPreviewQualityResolvesToAConcreteDeviceTier",
-        "Starting a gesture must reuse the prewarmed lower-detail VBO",
-        "Every subsequent gesture frame must reuse the lower-detail VBO",
-        "Settling after a gesture must reuse the requested VBO",
-        "The GPU cache must remain bounded to two VBOs",
-        "UI memory pressure must release every reconstructable preview VBO",
-        "The first frame after memory pressure must rebuild the requested VBO once",
-        "ARM64 GPU staging must use direct memory",
-        "ARM64 balanced preview must honor its geometry budget",
+        "Starting a gesture must reuse the prewarmed lower-detail geometry",
+        "Every subsequent gesture frame must reuse the lower-detail geometry",
+        "Settling after a gesture must reuse the requested geometry",
+        "The GPU cache must remain bounded to two geometry sets",
+        "UI memory pressure must release every reconstructable preview buffer",
+        "The first frame after memory pressure must rebuild the requested geometry once",
+        "Instanced toolpath must change the rendered framebuffer",
+        "ARM64 GPU bed staging must use direct memory",
+        "ARM64 GPU instance staging must use direct memory",
+        "ARM64 compact preview instances must stay below four MiB",
         "Slice outcome must retain Orca's print-time estimate",
         "Slice outcome must retain Orca's filament-length estimate",
         "Slice outcome must retain Orca's filament-mass estimate",
@@ -396,7 +406,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     mesh_tests = sources["ToolpathMeshBuilderTest.kt"]
     for marker in (
         "balancedModeCapsDensePreviewGeometry",
-        "GPU staging geometry must use direct native memory",
+        "GPU bed staging must use direct native memory",
+        "GPU instance staging must use direct native memory",
+        "maximum 120,000-segment instance payload must stay below 4 MiB",
         "unchangedSceneUploadsOnceUntilGeometryOrContextChanges",
         "twoSlotGeometryCacheEvictsTheLeastRecentlyUsedDetail",
         "Camera-only frames must reuse the GPU buffer",
@@ -424,6 +436,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
             or "floatarray" not in lowered
             or "vbo" not in lowered
             or "automatic" not in lowered
+            or "instanced" not in lowered
+            or "32-byte" not in lowered
         ):
             raise VerificationError(f"primitive preview boundary is not documented in {document}")
 
@@ -494,7 +508,7 @@ def main() -> None:
         raise SystemExit(f"Preview boundary verification failed: {error}") from error
     print(
         "Verified bounded FloatArray preview, responsive controls, adaptive detail, "
-        "and a bounded prewarmed two-tier VBO cache"
+        "compact instanced toolpaths, and a bounded prewarmed two-tier GPU cache"
     )
 
 

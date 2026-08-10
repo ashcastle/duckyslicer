@@ -21,6 +21,7 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 @Composable
@@ -249,11 +250,17 @@ internal class ToolpathRenderer(
     private val uploadState = ToolpathGeometryUploadState(capacity = GPU_GEOMETRY_CACHE_SIZE)
     private val gpuGeometry = HashMap<ToolpathScene, ToolpathGpuGeometry>()
     private var pendingPrewarmScene: ToolpathScene? = null
-    private var program = 0
-    private var positionLocation = 0
-    private var colorLocation = 0
-    private var acrossLocation = 0
-    private var matrixLocation = 0
+    private var bedProgram = 0
+    private var bedPositionLocation = 0
+    private var bedColorLocation = 0
+    private var bedAcrossLocation = 0
+    private var bedMatrixLocation = 0
+    private var toolpathProgram = 0
+    private var toolpathStartLocation = 0
+    private var toolpathEndLocation = 0
+    private var toolpathHalfWidthLocation = 0
+    private var toolpathColorLocation = 0
+    private var toolpathMatrixLocation = 0
     private var viewportWidth = 1
     private var viewportHeight = 1
     private var yawDegrees = -45f
@@ -270,9 +277,7 @@ internal class ToolpathRenderer(
     internal fun cachedGeometryCountForTest(): Int = gpuGeometry.size
 
     internal fun releaseGpuGeometryForMemoryPressure() {
-        gpuGeometry.values.forEach { geometry ->
-            GLES30.glDeleteBuffers(1, intArrayOf(geometry.bufferId), 0)
-        }
+        gpuGeometry.values.forEach(::deleteGeometry)
         gpuGeometry.clear()
         uploadState.invalidate()
         pendingPrewarmScene = null
@@ -303,7 +308,8 @@ internal class ToolpathRenderer(
     }
 
     override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {
-        program = 0
+        bedProgram = 0
+        toolpathProgram = 0
         geometryUploadCount = 0
         pendingPrewarmScene = null
         gpuGeometry.clear()
@@ -313,12 +319,28 @@ internal class ToolpathRenderer(
         GLES30.glDepthFunc(GLES30.GL_LEQUAL)
         GLES30.glEnable(GLES30.GL_BLEND)
         GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
-        program = runCatching { createProgram(VERTEX_SHADER, FRAGMENT_SHADER) }.getOrDefault(0)
-        if (program == 0) return
-        positionLocation = GLES30.glGetAttribLocation(program, "aPosition")
-        colorLocation = GLES30.glGetAttribLocation(program, "aColor")
-        acrossLocation = GLES30.glGetAttribLocation(program, "aAcross")
-        matrixLocation = GLES30.glGetUniformLocation(program, "uMvp")
+        bedProgram = runCatching {
+            createProgram(BED_VERTEX_SHADER, FRAGMENT_SHADER)
+        }.getOrDefault(0)
+        toolpathProgram = runCatching {
+            createProgram(TOOLPATH_VERTEX_SHADER, FRAGMENT_SHADER)
+        }.getOrDefault(0)
+        if (bedProgram == 0 || toolpathProgram == 0) {
+            if (bedProgram != 0) GLES30.glDeleteProgram(bedProgram)
+            if (toolpathProgram != 0) GLES30.glDeleteProgram(toolpathProgram)
+            bedProgram = 0
+            toolpathProgram = 0
+            return
+        }
+        bedPositionLocation = GLES30.glGetAttribLocation(bedProgram, "aPosition")
+        bedColorLocation = GLES30.glGetAttribLocation(bedProgram, "aColor")
+        bedAcrossLocation = GLES30.glGetAttribLocation(bedProgram, "aAcross")
+        bedMatrixLocation = GLES30.glGetUniformLocation(bedProgram, "uMvp")
+        toolpathStartLocation = GLES30.glGetAttribLocation(toolpathProgram, "aStart")
+        toolpathEndLocation = GLES30.glGetAttribLocation(toolpathProgram, "aEnd")
+        toolpathHalfWidthLocation = GLES30.glGetAttribLocation(toolpathProgram, "aHalfWidth")
+        toolpathColorLocation = GLES30.glGetAttribLocation(toolpathProgram, "aColor")
+        toolpathMatrixLocation = GLES30.glGetUniformLocation(toolpathProgram, "uMvp")
     }
 
     override fun onSurfaceChanged(unused: GL10?, width: Int, height: Int) {
@@ -329,7 +351,7 @@ internal class ToolpathRenderer(
 
     override fun onDrawFrame(unused: GL10?) {
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
-        if (program == 0) return
+        if (bedProgram == 0 || toolpathProgram == 0) return
         val sourceScene = latestScene ?: return
         val prewarmAtFrameStart = pendingPrewarmScene
         pendingPrewarmScene = null
@@ -347,38 +369,9 @@ internal class ToolpathRenderer(
             sourceScene.copy(detail = renderDetail)
         }
         val geometry = geometryFor(scene) ?: return
-        GLES30.glUseProgram(program)
-        GLES30.glUniformMatrix4fv(matrixLocation, 1, false, cameraMatrix(scene), 0)
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.bufferId)
-        GLES30.glVertexAttribPointer(
-            positionLocation,
-            3,
-            GLES30.GL_FLOAT,
-            false,
-            STRIDE_BYTES,
-            POSITION_OFFSET_BYTES,
-        )
-        GLES30.glEnableVertexAttribArray(positionLocation)
-        GLES30.glVertexAttribPointer(
-            colorLocation,
-            4,
-            GLES30.GL_FLOAT,
-            false,
-            STRIDE_BYTES,
-            COLOR_OFFSET_BYTES,
-        )
-        GLES30.glEnableVertexAttribArray(colorLocation)
-        GLES30.glVertexAttribPointer(
-            acrossLocation,
-            1,
-            GLES30.GL_FLOAT,
-            false,
-            STRIDE_BYTES,
-            ACROSS_OFFSET_BYTES,
-        )
-        GLES30.glEnableVertexAttribArray(acrossLocation)
-        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, geometry.vertexCount)
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+        val matrix = cameraMatrix(scene)
+        drawBed(geometry, matrix)
+        drawToolpaths(geometry, matrix)
 
         if (!interactionActive && interactionScene != sourceScene) {
             if (uploadState.needsUpload(interactionScene)) {
@@ -392,11 +385,117 @@ internal class ToolpathRenderer(
         }
     }
 
+    private fun drawBed(geometry: ToolpathGpuGeometry, matrix: FloatArray) {
+        GLES30.glUseProgram(bedProgram)
+        GLES30.glUniformMatrix4fv(bedMatrixLocation, 1, false, matrix, 0)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.bedBufferId)
+        GLES30.glVertexAttribPointer(
+            bedPositionLocation,
+            3,
+            GLES30.GL_FLOAT,
+            false,
+            BED_STRIDE_BYTES,
+            BED_POSITION_OFFSET_BYTES,
+        )
+        GLES30.glEnableVertexAttribArray(bedPositionLocation)
+        GLES30.glVertexAttribDivisor(bedPositionLocation, 0)
+        GLES30.glVertexAttribPointer(
+            bedColorLocation,
+            4,
+            GLES30.GL_FLOAT,
+            false,
+            BED_STRIDE_BYTES,
+            BED_COLOR_OFFSET_BYTES,
+        )
+        GLES30.glEnableVertexAttribArray(bedColorLocation)
+        GLES30.glVertexAttribDivisor(bedColorLocation, 0)
+        GLES30.glVertexAttribPointer(
+            bedAcrossLocation,
+            1,
+            GLES30.GL_FLOAT,
+            false,
+            BED_STRIDE_BYTES,
+            BED_ACROSS_OFFSET_BYTES,
+        )
+        GLES30.glEnableVertexAttribArray(bedAcrossLocation)
+        GLES30.glVertexAttribDivisor(bedAcrossLocation, 0)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, geometry.bedVertexCount)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+    }
+
+    private fun drawToolpaths(geometry: ToolpathGpuGeometry, matrix: FloatArray) {
+        if (geometry.instanceCount == 0) return
+        GLES30.glUseProgram(toolpathProgram)
+        GLES30.glUniformMatrix4fv(toolpathMatrixLocation, 1, false, matrix, 0)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.instanceBufferId)
+        setInstanceAttribute(
+            toolpathStartLocation,
+            3,
+            GLES30.GL_FLOAT,
+            false,
+            ToolpathMeshBuilder.INSTANCE_START_OFFSET_BYTES,
+        )
+        setInstanceAttribute(
+            toolpathEndLocation,
+            3,
+            GLES30.GL_FLOAT,
+            false,
+            ToolpathMeshBuilder.INSTANCE_END_OFFSET_BYTES,
+        )
+        setInstanceAttribute(
+            toolpathHalfWidthLocation,
+            1,
+            GLES30.GL_FLOAT,
+            false,
+            ToolpathMeshBuilder.INSTANCE_HALF_WIDTH_OFFSET_BYTES,
+        )
+        setInstanceAttribute(
+            toolpathColorLocation,
+            4,
+            GLES30.GL_UNSIGNED_BYTE,
+            true,
+            ToolpathMeshBuilder.INSTANCE_COLOR_OFFSET_BYTES,
+        )
+        GLES30.glDrawArraysInstanced(
+            GLES30.GL_TRIANGLES,
+            0,
+            TOOLPATH_VERTICES_PER_INSTANCE,
+            geometry.instanceCount,
+        )
+        val instanceLocations = intArrayOf(
+            toolpathStartLocation,
+            toolpathEndLocation,
+            toolpathHalfWidthLocation,
+            toolpathColorLocation,
+        )
+        for (location in instanceLocations) {
+            GLES30.glVertexAttribDivisor(location, 0)
+        }
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+    }
+
+    private fun setInstanceAttribute(
+        location: Int,
+        size: Int,
+        type: Int,
+        normalized: Boolean,
+        offsetBytes: Int,
+    ) {
+        GLES30.glVertexAttribPointer(
+            location,
+            size,
+            type,
+            normalized,
+            ToolpathMeshBuilder.INSTANCE_STRIDE_BYTES,
+            offsetBytes,
+        )
+        GLES30.glEnableVertexAttribArray(location)
+        GLES30.glVertexAttribDivisor(location, 1)
+    }
+
     private fun releaseStaleGeometry(retainedScenes: Set<ToolpathScene>) {
         gpuGeometry.keys.filterNot { it in retainedScenes }.forEach { staleScene ->
-            gpuGeometry.remove(staleScene)?.let { stale ->
-                GLES30.glDeleteBuffers(1, intArrayOf(stale.bufferId), 0)
-            }
+            gpuGeometry.remove(staleScene)?.let(::deleteGeometry)
             uploadState.remove(staleScene)
         }
     }
@@ -410,31 +509,48 @@ internal class ToolpathRenderer(
     }
 
     private fun uploadGeometry(scene: ToolpathScene): ToolpathGpuGeometry? {
-        val buffer = ToolpathMeshBuilder.build(scene)
-        val buffers = IntArray(1)
-        GLES30.glGenBuffers(1, buffers, 0)
-        val bufferId = buffers[0]
-        if (bufferId == 0) return null
+        val payload = ToolpathMeshBuilder.build(scene)
+        val buffers = IntArray(2)
+        GLES30.glGenBuffers(buffers.size, buffers, 0)
+        if (buffers.any { it == 0 }) {
+            GLES30.glDeleteBuffers(buffers.size, buffers, 0)
+            return null
+        }
         val geometry = ToolpathGpuGeometry(
-            bufferId = bufferId,
-            vertexCount = buffer.remaining() / FLOATS_PER_VERTEX,
+            bedBufferId = buffers[0],
+            bedVertexCount = payload.bedVertices.remaining() / BED_FLOATS_PER_VERTEX,
+            instanceBufferId = buffers[1],
+            instanceCount = payload.instanceCount,
         )
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, bufferId)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.bedBufferId)
         GLES30.glBufferData(
             GLES30.GL_ARRAY_BUFFER,
-            buffer.remaining() * Float.SIZE_BYTES,
-            buffer,
+            payload.bedVertices.remaining() * Float.SIZE_BYTES,
+            payload.bedVertices,
+            GLES30.GL_STATIC_DRAW,
+        )
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.instanceBufferId)
+        GLES30.glBufferData(
+            GLES30.GL_ARRAY_BUFFER,
+            payload.toolpathInstances.remaining(),
+            payload.toolpathInstances,
             GLES30.GL_STATIC_DRAW,
         )
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
         uploadState.markUploaded(scene)?.let { evictedScene ->
-            gpuGeometry.remove(evictedScene)?.let { evicted ->
-                GLES30.glDeleteBuffers(1, intArrayOf(evicted.bufferId), 0)
-            }
+            gpuGeometry.remove(evictedScene)?.let(::deleteGeometry)
         }
         gpuGeometry[scene] = geometry
         geometryUploadCount += 1
         return geometry
+    }
+
+    private fun deleteGeometry(geometry: ToolpathGpuGeometry) {
+        GLES30.glDeleteBuffers(
+            2,
+            intArrayOf(geometry.bedBufferId, geometry.instanceBufferId),
+            0,
+        )
     }
 
     private fun cameraMatrix(scene: ToolpathScene): FloatArray {
@@ -498,12 +614,13 @@ internal class ToolpathRenderer(
 
     private companion object {
         const val GPU_GEOMETRY_CACHE_SIZE = 2
-        const val FLOATS_PER_VERTEX = 8
-        const val STRIDE_BYTES = FLOATS_PER_VERTEX * 4
-        const val POSITION_OFFSET_BYTES = 0
-        const val COLOR_OFFSET_BYTES = 3 * 4
-        const val ACROSS_OFFSET_BYTES = 7 * 4
-        const val VERTEX_SHADER = """#version 300 es
+        const val BED_FLOATS_PER_VERTEX = 8
+        const val BED_STRIDE_BYTES = BED_FLOATS_PER_VERTEX * Float.SIZE_BYTES
+        const val BED_POSITION_OFFSET_BYTES = 0
+        const val BED_COLOR_OFFSET_BYTES = 3 * Float.SIZE_BYTES
+        const val BED_ACROSS_OFFSET_BYTES = 7 * Float.SIZE_BYTES
+        const val TOOLPATH_VERTICES_PER_INSTANCE = 6
+        const val BED_VERTEX_SHADER = """#version 300 es
             uniform mat4 uMvp;
             in vec3 aPosition;
             in vec4 aColor;
@@ -514,6 +631,36 @@ internal class ToolpathRenderer(
                 gl_Position = uMvp * vec4(aPosition, 1.0);
                 vColor = aColor;
                 vAcross = aAcross;
+            }
+        """
+        const val TOOLPATH_VERTEX_SHADER = """#version 300 es
+            uniform mat4 uMvp;
+            in vec3 aStart;
+            in vec3 aEnd;
+            in float aHalfWidth;
+            in vec4 aColor;
+            out vec4 vColor;
+            out float vAcross;
+            const vec2 CORNERS[6] = vec2[6](
+                vec2(0.0, -1.0),
+                vec2(1.0, -1.0),
+                vec2(1.0, 1.0),
+                vec2(0.0, -1.0),
+                vec2(1.0, 1.0),
+                vec2(0.0, 1.0)
+            );
+            void main() {
+                vec2 delta = aEnd.xy - aStart.xy;
+                vec2 tangent = delta / max(length(delta), 0.0001);
+                vec2 normal = vec2(-tangent.y, tangent.x);
+                vec2 corner = CORNERS[gl_VertexID];
+                vec3 cappedStart = vec3(aStart.xy - tangent * aHalfWidth, aStart.z);
+                vec3 cappedEnd = vec3(aEnd.xy + tangent * aHalfWidth, aEnd.z);
+                vec3 position = mix(cappedStart, cappedEnd, corner.x);
+                position.xy += normal * aHalfWidth * corner.y;
+                gl_Position = uMvp * vec4(position, 1.0);
+                vColor = aColor;
+                vAcross = corner.y;
             }
         """
         const val FRAGMENT_SHADER = """#version 300 es
@@ -532,8 +679,10 @@ internal class ToolpathRenderer(
 }
 
 private data class ToolpathGpuGeometry(
-    val bufferId: Int,
-    val vertexCount: Int,
+    val bedBufferId: Int,
+    val bedVertexCount: Int,
+    val instanceBufferId: Int,
+    val instanceCount: Int,
 )
 
 internal class ToolpathGeometryUploadState(private val capacity: Int = 2) {
@@ -580,11 +729,18 @@ internal object ToolpathMeshBuilder {
     private val roleWidths =
         floatArrayOf(0.52f, 0.46f, 0.40f, 0.46f, 0.42f, 0.42f, 0.52f, 0.48f, 0.36f, 0.46f)
 
-    fun build(scene: ToolpathScene): FloatBuffer {
+    internal const val INSTANCE_STRIDE_BYTES = 32
+    internal const val INSTANCE_START_OFFSET_BYTES = 0
+    internal const val INSTANCE_END_OFFSET_BYTES = 3 * Float.SIZE_BYTES
+    internal const val INSTANCE_HALF_WIDTH_OFFSET_BYTES = 6 * Float.SIZE_BYTES
+    internal const val INSTANCE_COLOR_OFFSET_BYTES = 7 * Float.SIZE_BYTES
+
+    fun build(scene: ToolpathScene): ToolpathUploadPayload {
         val budget = depthPreviewSegmentBudget(scene.detail)
         val plan = scene.preview.buildRenderPlan(budget, scene.visibleRoles)
-        val builder = FloatBuilder(plan.segmentOffsets.size * 6 * 8 + 2_400)
-        addBed(builder, scene.bedSizeX, scene.bedSizeY, scene.bedPolygon)
+        val bedBuilder = FloatBuilder(2_400)
+        val instanceBuilder = ToolpathInstanceBuilder(plan.segmentOffsets.size)
+        addBed(bedBuilder, scene.bedSizeX, scene.bedSizeY, scene.bedPolygon)
         val zSpan = (scene.preview.maxZMm - scene.preview.minZMm).coerceAtLeast(0.001f)
         plan.segmentOffsets.forEach { offset ->
             val x1 = scene.preview.segments[offset] - scene.bedOriginX
@@ -598,35 +754,29 @@ internal object ToolpathMeshBuilder {
             val dy = y2 - y1
             val length = hypot(dx, dy)
             if (length < 0.001f) return@forEach
-            val nx = -dy / length
-            val ny = dx / length
-            val tx = dx / length
-            val ty = dy / length
             val normalizedHeight = ((z - scene.preview.minZMm) / zSpan).coerceIn(0f, 1f)
             val base = roleColors[role]
             val shade = scene.depthContrast * (1f - normalizedHeight) * 0.56f
-            val color = floatArrayOf(
+            val halfWidth = roleWidths[role] / 2f
+            instanceBuilder.segment(
+                x1,
+                y1,
+                z + 0.024f,
+                x2,
+                y2,
+                z + 0.024f,
+                halfWidth,
                 base[0] * (1f - shade),
                 base[1] * (1f - shade),
                 base[2] * (1f - shade),
-            )
-            val halfWidth = roleWidths[role] / 2f
-            addRibbon(
-                builder,
-                x1 - tx * halfWidth,
-                y1 - ty * halfWidth,
-                x2 + tx * halfWidth,
-                y2 + ty * halfWidth,
-                z + 0.024f,
-                nx,
-                ny,
-                halfWidth,
-                color,
                 scene.opacity,
-                outlined = true,
             )
         }
-        return builder.finish()
+        return ToolpathUploadPayload(
+            bedVertices = bedBuilder.finish(),
+            toolpathInstances = instanceBuilder.finish(),
+            instanceCount = instanceBuilder.instanceCount,
+        )
     }
 
     private fun addBed(builder: FloatBuilder, width: Float, depth: Float, bedPolygon: List<Float>) {
@@ -729,6 +879,69 @@ internal object ToolpathMeshBuilder {
         builder.vertex(x3, y3, z3, color, alpha, across3)
         builder.vertex(x4, y4, z4, color, alpha, across4)
     }
+}
+
+internal data class ToolpathUploadPayload(
+    val bedVertices: FloatBuffer,
+    val toolpathInstances: ByteBuffer,
+    val instanceCount: Int,
+) {
+    val stagingByteCount: Int
+        get() = bedVertices.remaining() * Float.SIZE_BYTES + toolpathInstances.remaining()
+}
+
+private class ToolpathInstanceBuilder(initialInstanceCapacity: Int) {
+    private var values = allocate(
+        (initialInstanceCapacity * ToolpathMeshBuilder.INSTANCE_STRIDE_BYTES)
+            .coerceAtLeast(ToolpathMeshBuilder.INSTANCE_STRIDE_BYTES),
+    )
+    var instanceCount: Int = 0
+        private set
+
+    fun segment(
+        startX: Float,
+        startY: Float,
+        startZ: Float,
+        endX: Float,
+        endY: Float,
+        endZ: Float,
+        halfWidth: Float,
+        red: Float,
+        green: Float,
+        blue: Float,
+        alpha: Float,
+    ) {
+        ensure(ToolpathMeshBuilder.INSTANCE_STRIDE_BYTES)
+        values.putFloat(startX)
+        values.putFloat(startY)
+        values.putFloat(startZ)
+        values.putFloat(endX)
+        values.putFloat(endY)
+        values.putFloat(endZ)
+        values.putFloat(halfWidth)
+        values.put(colorByte(red))
+        values.put(colorByte(green))
+        values.put(colorByte(blue))
+        values.put(colorByte(alpha))
+        instanceCount += 1
+    }
+
+    fun finish(): ByteBuffer = values.apply { flip() }
+
+    private fun ensure(additionalBytes: Int) {
+        if (values.remaining() >= additionalBytes) return
+        val next = allocate(max(values.capacity() * 2, values.position() + additionalBytes))
+        values.flip()
+        next.put(values)
+        values = next
+    }
+
+    private fun colorByte(value: Float): Byte =
+        (value.coerceIn(0f, 1f) * 255f).roundToInt().toByte()
+
+    private fun allocate(capacity: Int): ByteBuffer = ByteBuffer
+        .allocateDirect(capacity)
+        .order(ByteOrder.nativeOrder())
 }
 
 private class FloatBuilder(initialCapacity: Int) {
