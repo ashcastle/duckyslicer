@@ -202,8 +202,11 @@ val generateReleaseOfflineLicenseBundle =
 
 val prepareOpenSourceNotices = tasks.register<Sync>("prepareOpenSourceNotices") {
     group = "build"
-    description = "Packages the project license and third-party notices for offline viewing."
+    description = "Packages the privacy policy, project license, and notices for offline viewing."
     into(generatedLegalAssets)
+    from(repositoryRoot.resolve("PRIVACY.md")) {
+        into("legal")
+    }
     from(repositoryRoot.resolve("LICENSE.txt")) {
         into("legal")
         rename { "AGPL-3.0.txt" }

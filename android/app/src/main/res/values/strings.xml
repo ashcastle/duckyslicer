@@ -401,6 +401,7 @@
     <string name="data_privacy">Data &amp; privacy</string>
     <string name="data_privacy_summary">Models, projects, profiles, and G-code stay on this device unless you choose to export or send them. DuckySlicer has no accounts, ads, or usage tracking.</string>
     <string name="data_handling_details">How data is handled</string>
+    <string name="privacy_policy">Privacy policy</string>
     <string name="data_handling_title">How DuckySlicer handles data</string>
     <string name="data_stored_title">Stored on this device</string>
     <string name="data_stored_body">Imported models, projects, profiles, recent choices, and generated G-code are stored in the app’s private space. Files you export stay where you save them.</string>

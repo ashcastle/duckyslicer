@@ -228,6 +228,9 @@ internal fun AppSettingsSheet(
             TextButton(onClick = { showDataPractices = true }) {
                 Text(stringResource(R.string.data_handling_details))
             }
+            TextButton(onClick = { legalDocument = LegalDocument.PRIVACY }) {
+                Text(stringResource(R.string.privacy_policy))
+            }
 
             SettingsHeading(stringResource(R.string.about))
             Text(
@@ -354,6 +357,7 @@ private enum class LegalDocument(
     val assetPath: String,
     val titleResource: Int,
 ) {
+    PRIVACY("legal/PRIVACY.md", R.string.privacy_policy),
     LICENSE("legal/AGPL-3.0.txt", R.string.open_source_license),
     THIRD_PARTY("legal/THIRD_PARTY_LICENSES.txt", R.string.third_party_notices),
 }
