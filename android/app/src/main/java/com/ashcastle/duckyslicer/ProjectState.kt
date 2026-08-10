@@ -6,6 +6,7 @@ data class ProjectObject(
     val transform: ModelTransform = ModelTransform(),
     val supportPaint: SupportPaint = SupportPaint(),
     val seamPaint: SeamPaint = SeamPaint(),
+    val variableLayerHeights: VariableLayerHeights = VariableLayerHeights(),
     val filamentSlot: Int = 0,
 )
 
@@ -255,6 +256,24 @@ data class ProjectHistoryState(
         return copy(
             undoStates = (undoStates + previousSnapshot).takeLast(HISTORY_LIMIT),
             redoStates = emptyList(),
+        )
+    }
+
+    fun updateSelectedVariableLayerHeights(
+        variableLayerHeights: VariableLayerHeights,
+    ): ProjectHistoryState {
+        val selected = current.selectedObject ?: return this
+        if (selected.variableLayerHeights == variableLayerHeights) return this
+        return record(
+            current.copy(
+                objects = current.objects.map { projectObject ->
+                    if (projectObject.id == selected.id) {
+                        projectObject.copy(variableLayerHeights = variableLayerHeights)
+                    } else {
+                        projectObject
+                    }
+                },
+            ),
         )
     }
 

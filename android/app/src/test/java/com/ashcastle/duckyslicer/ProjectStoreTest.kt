@@ -44,6 +44,9 @@ class ProjectStoreTest {
                     ),
                     supportPaint = SupportPaint().paint(0, SupportPaintState.ENFORCE),
                     seamPaint = SeamPaint().paint(0, SeamPaintState.BLOCK),
+                    variableLayerHeights = VariableLayerHeights(
+                        listOf(VariableLayerRange(0.25f, 0.75f, 0.08f)),
+                    ),
                 ),
             ),
             selectedObjectId = "duck",
@@ -58,6 +61,10 @@ class ProjectStoreTest {
         assertEquals(snapshot.selectedObject!!.transform, restored.selectedObject!!.transform)
         assertEquals(snapshot.selectedObject!!.supportPaint, restored.selectedObject!!.supportPaint)
         assertEquals(snapshot.selectedObject!!.seamPaint, restored.selectedObject!!.seamPaint)
+        assertEquals(
+            snapshot.selectedObject!!.variableLayerHeights,
+            restored.selectedObject!!.variableLayerHeights,
+        )
         assertTrue(modelFile.isFile)
         assertFalse(orphan.exists())
         assertTrue(outside.isFile)
@@ -85,7 +92,7 @@ class ProjectStoreTest {
     }
 
     @Test
-    fun schemaFourRestoresProjectSettingsAndSchemaOneRemainsReadable() = withStore { root, store ->
+    fun schemaFiveRestoresProjectSettingsAndSchemaOneRemainsReadable() = withStore { root, store ->
         val modelFile = store.createModelDestination("settings.stl").apply { writeText("solid part") }
         val options = multiFilamentSettingsFixture()
         val snapshot = ProjectSnapshot(
@@ -96,7 +103,7 @@ class ProjectStoreTest {
 
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
-        assertEquals(4, JSONObject(File(root, "current_project.json").readText()).getInt("schemaVersion"))
+        assertEquals(5, JSONObject(File(root, "current_project.json").readText()).getInt("schemaVersion"))
         assertEquals(snapshot.selectedObjectId, restored.snapshot.selectedObjectId)
         assertEquals(snapshot.objects.single().id, restored.snapshot.objects.single().id)
         assertEquals(snapshot.objects.single().transform, restored.snapshot.objects.single().transform)
@@ -111,12 +118,14 @@ class ProjectStoreTest {
         current.getJSONArray("objects").getJSONObject(0).apply {
             remove("filamentSlot")
             remove("seamPaint")
+            remove("variableLayerHeights")
         }
         File(root, "current_project.json").writeText(current.toString())
         val migrated = ProjectStore(root, ::inspectedModel).loadProject()
         assertEquals("settings", migrated.snapshot.selectedObjectId)
         assertEquals(null, migrated.sliceOptions)
         assertTrue(migrated.snapshot.selectedObject!!.seamPaint.facets.isEmpty())
+        assertTrue(migrated.snapshot.selectedObject!!.variableLayerHeights.ranges.isEmpty())
     }
 
     @Test

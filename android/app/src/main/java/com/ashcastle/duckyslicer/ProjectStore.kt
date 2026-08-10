@@ -118,6 +118,7 @@ internal class ProjectStore(
                         transform = archived.transform,
                         supportPaint = archived.supportPaint,
                         seamPaint = archived.seamPaint,
+                        variableLayerHeights = archived.variableLayerHeights,
                         filamentSlot = archived.filamentSlot,
                     )
                 },
@@ -270,6 +271,9 @@ internal class ProjectStore(
         val seamPaint = value.optJSONArray("seamPaint")
             ?.toSeamPaint(model.triangles)
             ?: SeamPaint()
+        val variableLayerHeights = value.optJSONArray("variableLayerHeights")
+            ?.toVariableLayerHeights()
+            ?: VariableLayerHeights()
         val filamentSlot = value.optInt("filamentSlot", 0)
         require(filamentSlot in 0 until MAX_FILAMENT_SLOTS) { "Filament slot is invalid" }
         return ProjectObject(
@@ -278,6 +282,7 @@ internal class ProjectStore(
             transform = transform,
             supportPaint = supportPaint,
             seamPaint = seamPaint,
+            variableLayerHeights = variableLayerHeights,
             filamentSlot = filamentSlot,
         )
     }
@@ -325,6 +330,12 @@ internal class ProjectStore(
             if (schemaVersion >= 4) {
                 require(value.optJSONArray("seamPaint")?.isValidSeamPaintArray() == true)
             }
+            if (schemaVersion >= 5) {
+                require(
+                    value.optJSONArray("variableLayerHeights")
+                        ?.toVariableLayerHeights() != null,
+                )
+            }
             require(value.optInt("filamentSlot", 0) in 0 until MAX_FILAMENT_SLOTS)
         }
         val selected = root.takeUnless { it.isNull("selectedObjectId") }
@@ -352,6 +363,7 @@ internal class ProjectStore(
             .put("transform", transform.toStoredJson())
             .put("supportPaint", supportPaint.toStoredJson())
             .put("seamPaint", seamPaint.toStoredJson())
+            .put("variableLayerHeights", variableLayerHeights.toStoredJson())
             .put("filamentSlot", filamentSlot.takeIf { it in 0 until MAX_FILAMENT_SLOTS }
                 ?: error("Invalid filament slot"))
     }
@@ -462,6 +474,30 @@ internal class ProjectStore(
         }
     }.isSuccess
 
+    private fun VariableLayerHeights.toStoredJson() = JSONArray().also { values ->
+        ranges.forEach { range ->
+            values.put(range.startRatio.toDouble())
+            values.put(range.endRatio.toDouble())
+            values.put(range.layerHeightMm.toDouble())
+        }
+    }
+
+    private fun JSONArray.toVariableLayerHeights(): VariableLayerHeights {
+        require(length() % 3 == 0 && length() / 3 <= VariableLayerHeights.MAX_RANGES) {
+            "Invalid variable layer heights"
+        }
+        return VariableLayerHeights(
+            List(length() / 3) { index ->
+                val offset = index * 3
+                VariableLayerRange(
+                    startRatio = getDouble(offset).toFloat(),
+                    endRatio = getDouble(offset + 1).toFloat(),
+                    layerHeightMm = getDouble(offset + 2).toFloat(),
+                )
+            },
+        )
+    }
+
     private fun JSONObject.checkedFloat(
         key: String,
         minimum: Float,
@@ -504,7 +540,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 4
+        const val SCHEMA_VERSION = 5
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"

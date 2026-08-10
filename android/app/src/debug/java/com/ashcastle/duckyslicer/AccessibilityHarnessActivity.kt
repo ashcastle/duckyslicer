@@ -206,6 +206,7 @@ private fun WorkspaceAccessibilityHarness(
         onSupportPaintCommitted = { _, _ -> },
         onSeamPaintPreview = { _, _, _ -> },
         onSeamPaintCommitted = { _, _ -> },
+        onVariableLayerHeightsChanged = {},
         onRemoveModel = {},
         onSlice = {},
         onCancelSlice = {},

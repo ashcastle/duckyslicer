@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -79,6 +80,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -264,6 +266,7 @@ internal fun WorkspaceScreen(
     onSupportPaintCommitted: (String, SupportPaint) -> Unit,
     onSeamPaintPreview: (String, Int, SeamPaintState?) -> Unit,
     onSeamPaintCommitted: (String, SeamPaint) -> Unit,
+    onVariableLayerHeightsChanged: (VariableLayerHeights) -> Unit,
     onRemoveModel: () -> Unit,
     onSlice: () -> Unit,
     onCancelSlice: () -> Unit,
@@ -293,6 +296,7 @@ internal fun WorkspaceScreen(
     var showModelTools by remember { mutableStateOf(false) }
     var showFilamentPicker by remember { mutableStateOf(false) }
     var showCutTool by remember { mutableStateOf(false) }
+    var showVariableLayerHeightTool by remember { mutableStateOf(false) }
     var supportPainting by remember { mutableStateOf(false) }
     var supportPaintTool by remember { mutableStateOf(SupportPaintTool.ENFORCE) }
     var seamPainting by remember { mutableStateOf(false) }
@@ -304,6 +308,9 @@ internal fun WorkspaceScreen(
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) seamPainting = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showFilamentPicker = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showCutTool = false
+        if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) {
+            showVariableLayerHeightTool = false
+        }
     }
     Scaffold(
         containerColor = Color(0xFF191A18),
@@ -562,6 +569,10 @@ internal fun WorkspaceScreen(
                 supportPainting = false
                 seamPainting = true
             },
+            onVariableLayerHeight = {
+                showModelTools = false
+                showVariableLayerHeightTool = true
+            },
             onChooseFilament = {
                 showModelTools = false
                 showFilamentPicker = true
@@ -597,6 +608,18 @@ internal fun WorkspaceScreen(
             onDismiss = { showCutTool = false },
         )
     }
+    if (showVariableLayerHeightTool && selectedObject != null) {
+        VariableLayerHeightSheet(
+            current = selectedObject.variableLayerHeights,
+            baseLayerHeightMm = sliceOptions.layerHeight,
+            nozzleDiameterMm = sliceOptions.nozzleDiameter,
+            onApply = {
+                showVariableLayerHeightTool = false
+                onVariableLayerHeightsChanged(it)
+            },
+            onDismiss = { showVariableLayerHeightTool = false },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -616,6 +639,7 @@ private fun ModelTransformSheet(
     onSplit: () -> Unit,
     onCut: () -> Unit,
     onSeamPaint: () -> Unit,
+    onVariableLayerHeight: () -> Unit,
     onChooseFilament: () -> Unit,
     onTransformChanged: (ModelTransform) -> Unit,
     onRemoveModel: () -> Unit,
@@ -823,6 +847,19 @@ private fun ModelTransformSheet(
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.paint_seam))
             }
+            Button(
+                onClick = onVariableLayerHeight,
+                enabled = !autoLaying && !splitting && !cutting,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF3A3B37),
+                    contentColor = Color(0xFFF4F4EE),
+                ),
+            ) {
+                Icon(Icons.Default.Layers, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.variable_layer_height))
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -961,6 +998,221 @@ private fun CutObjectSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun VariableLayerHeightSheet(
+    current: VariableLayerHeights,
+    baseLayerHeightMm: Float,
+    nozzleDiameterMm: Float,
+    onApply: (VariableLayerHeights) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val maximumLayerHeight = (nozzleDiameterMm * 0.7f).coerceAtLeast(0.04f)
+    val initialLayerHeight = (baseLayerHeightMm * 0.5f).coerceIn(0.04f, maximumLayerHeight)
+    var staged by remember(current) { mutableStateOf(current) }
+    var selectedIndex by remember(current) { mutableStateOf(-1) }
+    var selectedRange by remember(current) { mutableStateOf(0.25f..0.75f) }
+    var selectedLayerHeight by remember(current) { mutableFloatStateOf(initialLayerHeight) }
+    var rangeError by remember(current) { mutableStateOf(false) }
+
+    fun stageRange() {
+        val minimumGap = 0.01f
+        val safeStart = selectedRange.start.coerceIn(0f, 1f - minimumGap)
+        val safeEnd = selectedRange.endInclusive
+            .coerceAtLeast(safeStart + minimumGap)
+            .coerceAtMost(1f)
+        val candidate = VariableLayerRange(
+            startRatio = safeStart,
+            endRatio = safeEnd,
+            layerHeightMm = selectedLayerHeight,
+        )
+        val next = staged.ranges.toMutableList().apply {
+            if (selectedIndex in indices) this[selectedIndex] = candidate else add(candidate)
+            sortBy(VariableLayerRange::startRatio)
+        }
+        runCatching { VariableLayerHeights(next) }
+            .onSuccess {
+                staged = it
+                selectedIndex = -1
+                rangeError = false
+            }
+            .onFailure { rangeError = true }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Color(0xFF282925),
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.9f),
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    stringResource(R.string.variable_layer_height),
+                    modifier = Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Text(
+                    stringResource(R.string.variable_layer_height_hint),
+                    color = Color(0xFFB8BAB3),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                staged.ranges.forEachIndexed { index, range ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                selectedIndex = index
+                                selectedRange = range.startRatio..range.endRatio
+                                selectedLayerHeight = range.layerHeightMm
+                                rangeError = false
+                            },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (selectedIndex == index) {
+                                Color(0xFF4A4430)
+                            } else {
+                                Color(0xFF343530)
+                            },
+                        ),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(start = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                stringResource(
+                                    R.string.variable_layer_range_summary,
+                                    (range.startRatio * 100).roundToInt(),
+                                    (range.endRatio * 100).roundToInt(),
+                                    range.layerHeightMm,
+                                ),
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconButton(
+                                onClick = {
+                                    staged = VariableLayerHeights(
+                                        staged.ranges.filterIndexed { itemIndex, _ ->
+                                            itemIndex != index
+                                        },
+                                    )
+                                    selectedIndex = -1
+                                    rangeError = false
+                                },
+                            ) {
+                                Icon(
+                                    Icons.Default.DeleteOutline,
+                                    stringResource(R.string.remove_layer_range),
+                                )
+                            }
+                        }
+                    }
+                }
+                Text(
+                    stringResource(
+                        R.string.variable_layer_range_percent,
+                        (selectedRange.start * 100).roundToInt(),
+                        (selectedRange.endInclusive * 100).roundToInt(),
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                RangeSlider(
+                    value = selectedRange,
+                    onValueChange = {
+                        selectedRange = it
+                        rangeError = false
+                    },
+                    valueRange = 0f..1f,
+                    steps = 19,
+                    colors = SliderDefaults.colors(
+                        thumbColor = WorkspaceYellow,
+                        activeTrackColor = WorkspaceYellow,
+                        inactiveTrackColor = Color(0xFF555650),
+                    ),
+                )
+                TransformSlider(
+                    label = stringResource(R.string.layer_height),
+                    valueText = stringResource(
+                        R.string.millimeters_value_precise,
+                        selectedLayerHeight,
+                    ),
+                    value = selectedLayerHeight,
+                    range = 0.04f..maximumLayerHeight,
+                    steps = ((maximumLayerHeight - 0.04f) / 0.01f)
+                        .roundToInt().coerceAtLeast(1) - 1,
+                    enabled = true,
+                    onValueChange = {
+                        selectedLayerHeight = it
+                        rangeError = false
+                    },
+                )
+                if (rangeError) {
+                    Text(
+                        stringResource(R.string.layer_ranges_overlap),
+                        color = Color(0xFFFF8A80),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Button(
+                    onClick = ::stageRange,
+                    enabled = selectedIndex >= 0 ||
+                        staged.ranges.size < VariableLayerHeights.MAX_RANGES,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF3A3B37),
+                        contentColor = Color(0xFFF4F4EE),
+                    ),
+                ) {
+                    Text(
+                        stringResource(
+                            if (selectedIndex >= 0) R.string.update_layer_range
+                            else R.string.add_layer_range,
+                        ),
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextButton(
+                    onClick = {
+                        staged = current
+                        selectedIndex = -1
+                        selectedRange = 0.25f..0.75f
+                        selectedLayerHeight = initialLayerHeight
+                        rangeError = false
+                    },
+                    modifier = Modifier.weight(0.3f),
+                ) {
+                    Text(stringResource(R.string.reset))
+                }
+                Button(
+                    onClick = { onApply(staged) },
+                    modifier = Modifier.weight(0.7f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = WorkspaceYellow,
+                        contentColor = WorkspaceBlack,
+                    ),
+                ) {
+                    Text(stringResource(R.string.apply_changes))
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun FilamentAssignmentSheet(
     selectedSlot: Int,
     options: SliceOptions,
@@ -1044,6 +1296,7 @@ private fun TransformSlider(
     valueText: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
+    steps: Int = 0,
     enabled: Boolean = true,
     onValueChange: (Float) -> Unit,
 ) {
@@ -1060,6 +1313,7 @@ private fun TransformSlider(
             stateDescription = valueText
         },
         valueRange = range,
+        steps = steps,
         colors = duckySliderColors(),
     )
 }

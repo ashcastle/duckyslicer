@@ -530,11 +530,12 @@ private fun DuckySlicerScreen(
                     currentTarget.model.localPath == target.model.localPath &&
                     currentTarget.transform == target.transform &&
                     currentTarget.supportPaint == target.supportPaint &&
-                    currentTarget.seamPaint == target.seamPaint
+                    currentTarget.seamPaint == target.seamPaint &&
+                    currentTarget.variableLayerHeights == target.variableLayerHeights
                 ) {
                     projectHistory = projectHistory.replaceSelected(result.objects)
                     notice = resources.getString(
-                        if (result.clearedFacetPaint) {
+                        if (result.clearedObjectSettings) {
                             R.string.split_done_painting_cleared
                         } else {
                             R.string.split_done
@@ -588,11 +589,12 @@ private fun DuckySlicerScreen(
                     currentTarget.transform == target.transform &&
                     currentTarget.supportPaint == target.supportPaint &&
                     currentTarget.seamPaint == target.seamPaint &&
+                    currentTarget.variableLayerHeights == target.variableLayerHeights &&
                     currentTarget.filamentSlot == target.filamentSlot
                 ) {
                     projectHistory = projectHistory.replaceSelected(result.objects)
                     notice = resources.getString(
-                        if (result.clearedFacetPaint) {
+                        if (result.clearedObjectSettings) {
                             R.string.cut_done_painting_cleared
                         } else {
                             R.string.cut_done
@@ -1011,6 +1013,18 @@ private fun DuckySlicerScreen(
         },
         onSeamPaintCommitted = { objectId, previous ->
             projectHistory = projectHistory.commitSeamPaint(objectId, previous)
+        },
+        onVariableLayerHeightsChanged = { variableLayerHeights ->
+            val nextHistory = projectHistory.updateSelectedVariableLayerHeights(
+                variableLayerHeights,
+            )
+            if (nextHistory != projectHistory) {
+                projectHistory = nextHistory
+                clearCompletedSlice()
+                remoteUpload = null
+                notice = null
+                error = null
+            }
         },
         onRemoveModel = {
             projectHistory = projectHistory.removeSelected()
