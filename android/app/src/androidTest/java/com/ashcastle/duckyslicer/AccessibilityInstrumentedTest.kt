@@ -449,15 +449,21 @@ class AccessibilityInstrumentedTest {
             nodes.firstOrNull { node ->
                 matches(node) && node.isVisibleToUser && node.effectiveLabel().contains(label)
             }?.let { return it }
-            val scrollable = nodes.firstOrNull { node ->
-                node.actionList.any { action ->
-                    action.id == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+            val scrollable = nodes.asSequence()
+                .filter { node -> node.isVisibleToUser }
+                .filter { node ->
+                    node.actionList.any { action ->
+                        action.id == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+                    }
                 }
-            }
+                .maxByOrNull { node ->
+                    val bounds = node.screenBounds()
+                    bounds.width().toLong() * bounds.height()
+                }
             if (scrollable != null) {
-                scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                swipeForward(scrollable)
             }
-            SystemClock.sleep(NODE_POLL_MILLIS)
+            SystemClock.sleep(SCROLL_SETTLE_MILLIS)
         } while (SystemClock.elapsedRealtime() < deadline)
         throw AssertionError("Timed out scrolling to accessibility action: $label")
     }
@@ -476,8 +482,21 @@ class AccessibilityInstrumentedTest {
 
     private fun tapCenter(node: AccessibilityNodeInfo) {
         val bounds = node.screenBounds()
+        executeShellInput("input tap ${bounds.centerX()} ${bounds.centerY()}")
+    }
+
+    private fun swipeForward(node: AccessibilityNodeInfo) {
+        val bounds = node.screenBounds()
+        val travel = (bounds.height() / 6).coerceAtLeast(1)
+        executeShellInput(
+            "input swipe ${bounds.centerX()} ${bounds.centerY() + travel} " +
+                "${bounds.centerX()} ${bounds.centerY() - travel} 220",
+        )
+    }
+
+    private fun executeShellInput(commandText: String) {
         val command = InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("input tap ${bounds.centerX()} ${bounds.centerY()}")
+            .executeShellCommand(commandText)
         ParcelFileDescriptor.AutoCloseInputStream(command).use { output ->
             while (output.read() != -1) Unit
         }
@@ -502,5 +521,6 @@ class AccessibilityInstrumentedTest {
         const val MAX_LABEL_DEPTH = 12
         const val NODE_TIMEOUT_MILLIS = 5_000L
         const val NODE_POLL_MILLIS = 50L
+        const val SCROLL_SETTLE_MILLIS = 200L
     }
 }
