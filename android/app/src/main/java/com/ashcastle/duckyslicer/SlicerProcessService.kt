@@ -160,11 +160,28 @@ internal object SlicerProcessClient {
             fallbackError = "OrcaSlicer could not split the model",
         )
 
+    /** Uses Orca's inherited planar Cut and exports the two resulting solids. */
+    fun cutModel(
+        model: File,
+        stagingDirectory: File,
+        heightRatio: Float,
+        placeOnCut: Boolean,
+    ): List<OrcaImportedObject> = runModelOperation(
+        message = SlicerProcessContract.MESSAGE_CUT_MODEL,
+        model = model,
+        stagingDirectory = stagingDirectory,
+        fallbackError = "OrcaSlicer could not cut the model",
+    ) {
+        putFloat(SlicerProcessContract.KEY_CUT_HEIGHT_RATIO, heightRatio)
+        putBoolean(SlicerProcessContract.KEY_PLACE_ON_CUT, placeOnCut)
+    }
+
     private fun runModelOperation(
         message: Int,
         model: File,
         stagingDirectory: File,
         fallbackError: String,
+        configureRequest: Bundle.() -> Unit = {},
     ): List<OrcaImportedObject> {
         check(Looper.myLooper() != Looper.getMainLooper()) {
             "Model operations must run outside the application main thread"
@@ -184,12 +201,16 @@ internal object SlicerProcessClient {
                             SlicerProcessContract.KEY_MODEL_OUTPUT_DIRECTORY,
                             stagingDirectory.absolutePath,
                         )
+                        configureRequest()
                     },
                     timeoutSeconds = MODEL_NORMALIZATION_TIMEOUT_SECONDS,
                 )
             }
             if (response.getBoolean(SlicerProcessContract.KEY_MODEL_NOT_SPLITTABLE)) {
                 throw ModelNotSplittableException()
+            }
+            if (response.getBoolean(SlicerProcessContract.KEY_MODEL_NOT_CUTTABLE)) {
+                throw ModelNotCuttableException()
             }
             check(response.getBoolean(SlicerProcessContract.KEY_OK)) {
                 response.getString(SlicerProcessContract.KEY_ERROR) ?: fallbackError
@@ -810,6 +831,7 @@ internal class ForegroundSliceSession internal constructor(
 internal class SlicingCancelledException : Exception("Slicing was cancelled")
 
 internal class ModelNotSplittableException : Exception("model_not_splittable")
+internal class ModelNotCuttableException : Exception("model_not_cuttable")
 
 internal data class OrcaImportedObject(
     val file: File,
@@ -1054,6 +1076,8 @@ class SlicerProcessService : Service() {
                 startWork(message, WorkOperation.NORMALIZE_MODEL)
             SlicerProcessContract.MESSAGE_SPLIT_MODEL ->
                 startWork(message, WorkOperation.SPLIT_MODEL)
+            SlicerProcessContract.MESSAGE_CUT_MODEL ->
+                startWork(message, WorkOperation.CUT_MODEL)
             SlicerProcessContract.MESSAGE_ATTACH -> attachToForegroundSlice(message)
             SlicerProcessContract.MESSAGE_CANCEL -> cancelWork(message)
             SlicerProcessContract.MESSAGE_HEALTH -> send(
@@ -1215,6 +1239,7 @@ class SlicerProcessService : Service() {
                 WorkOperation.AUTO_ARRANGE -> runAutoArrange(requestData)
                 WorkOperation.NORMALIZE_MODEL -> runNormalizeModel(requestData)
                 WorkOperation.SPLIT_MODEL -> runSplitModel(requestData)
+                WorkOperation.CUT_MODEL -> runCutModel(requestData)
                 WorkOperation.SLICE -> runSlice(requestData) { percent ->
                     foregroundProgress = maxOf(foregroundProgress, percent.coerceIn(0, 100))
                     mainHandler.post { updateForegroundSlice(requestId, percent) }
@@ -1548,6 +1573,52 @@ class SlicerProcessService : Service() {
         failure(error.message ?: "OrcaSlicer could not split the model")
     }
 
+    private fun runCutModel(extras: Bundle): Bundle = try {
+        val sourcePath = requireNotNull(extras.getString(SlicerProcessContract.KEY_MODEL_PATH)) {
+            "Model path is unavailable"
+        }
+        val outputPath = requireNotNull(
+            extras.getString(SlicerProcessContract.KEY_MODEL_OUTPUT_DIRECTORY),
+        ) { "Model output is unavailable" }
+        val heightRatio = extras.getFloat(SlicerProcessContract.KEY_CUT_HEIGHT_RATIO, Float.NaN)
+        require(heightRatio.isFinite() && heightRatio in 0.02f..0.98f) {
+            "Cut height is invalid"
+        }
+        val placeOnCut = extras.getBoolean(SlicerProcessContract.KEY_PLACE_ON_CUT, true)
+        val source = validateModel(sourcePath)
+        val outputDirectory = validateModelImportDirectory(outputPath)
+        val runtime = createNativeRuntime()
+        try {
+            check(runtime.loadModel(source.absolutePath)) { "Model could not be prepared" }
+            val cut = runtime.nativeCutObject(0, heightRatio, placeOnCut)
+            if (cut == null) {
+                return failure("The cut plane does not divide this model").apply {
+                    putBoolean(SlicerProcessContract.KEY_MODEL_NOT_CUTTABLE, true)
+                }
+            }
+            require(cut.size == 2 && cut[0] == 0 && cut[1] == 2) {
+                "Invalid cut object count"
+            }
+            val records = requireNotNull(
+                runtime.nativeExportLoadedObjects(outputDirectory.absolutePath),
+            ) { "Cut objects could not be exported" }
+            require(records.size == 2) { "Cut object export count changed" }
+            Bundle().apply {
+                putBoolean(SlicerProcessContract.KEY_OK, true)
+                putInt(SlicerProcessContract.KEY_PID, Process.myPid())
+                putStringArrayList(
+                    SlicerProcessContract.KEY_NORMALIZED_MODELS,
+                    ArrayList(records.toList()),
+                )
+            }
+        } finally {
+            runtime.clearModel()
+        }
+    } catch (error: Exception) {
+        if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Model cut failed", error)
+        failure(error.message ?: "OrcaSlicer could not cut the model")
+    }
+
     private fun runAutoArrange(extras: Bundle): Bundle = try {
         val paths = requireNotNull(extras.getStringArrayList(SlicerProcessContract.KEY_MODEL_PATHS)) {
             "Model paths are unavailable"
@@ -1842,6 +1913,7 @@ class SlicerProcessService : Service() {
         AUTO_ARRANGE,
         NORMALIZE_MODEL,
         SPLIT_MODEL,
+        CUT_MODEL,
         TEST_PROBE,
     }
 
@@ -1864,6 +1936,7 @@ private object SlicerProcessContract {
     const val MESSAGE_ATTACH = 10
     const val MESSAGE_NORMALIZE_MODEL = 11
     const val MESSAGE_SPLIT_MODEL = 12
+    const val MESSAGE_CUT_MODEL = 13
     const val KEY_REQUEST_ID = "requestId"
     const val KEY_MODEL_PATH = "modelPath"
     const val KEY_MODEL_PATHS = "modelPaths"
@@ -1871,6 +1944,9 @@ private object SlicerProcessContract {
     const val KEY_NORMALIZED_MODELS = "normalizedModels"
     const val KEY_FILAMENT_SLOTS = "filamentSlots"
     const val KEY_MODEL_NOT_SPLITTABLE = "modelNotSplittable"
+    const val KEY_MODEL_NOT_CUTTABLE = "modelNotCuttable"
+    const val KEY_CUT_HEIGHT_RATIO = "cutHeightRatio"
+    const val KEY_PLACE_ON_CUT = "placeOnCut"
     const val KEY_SUPPORT_PAINT_PATHS = "supportPaintPaths"
     const val KEY_OPTIONS = "options"
     const val KEY_MAXIMUM_GCODE_BYTES_FOR_TEST = "maximumGcodeBytesForTest"
