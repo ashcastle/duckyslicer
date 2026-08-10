@@ -110,6 +110,12 @@ def main() -> None:
             "python3 tools/verify_data_practices.py"
         ),
         "data-practice policy is unit tested": "tools.test_verify_data_practices",
+        "support details are privacy bounded": (
+            "python3 tools/verify_support_diagnostics.py"
+        ),
+        "support-detail policy is unit tested": (
+            "tools.test_verify_support_diagnostics"
+        ),
         "release publication contract is verified": (
             "python3 tools/verify_release_contract.py"
         ),
@@ -248,6 +254,12 @@ def main() -> None:
             "python3 tools/verify_data_practices.py"
         ),
         "data-practice policy is unit tested": "tools.test_verify_data_practices",
+        "support details are privacy bounded": (
+            "python3 tools/verify_support_diagnostics.py"
+        ),
+        "support-detail policy is unit tested": (
+            "tools.test_verify_support_diagnostics"
+        ),
         "release publication contract is verified": (
             "python3 tools/verify_release_contract.py"
         ),
@@ -294,6 +306,9 @@ def main() -> None:
         ),
         "Play isolation verifier runs before build": (
             "python3 tools/verify_play_bundle_workflow.py"
+        ),
+        "support details are privacy bounded": (
+            "python3 tools/verify_support_diagnostics.py"
         ),
         "signed Play artifact is retained": "name: duckyslicer-play-signed",
     }

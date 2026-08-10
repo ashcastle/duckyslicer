@@ -59,6 +59,13 @@ body:
     validations:
       required: true
   - type: textarea
+    id: support_details
+    attributes:
+      label: Support details
+      description: Attach the text file from Settings > Help > Save support details after reviewing it.
+    validations:
+      required: false
+  - type: textarea
     id: attachments
     attributes:
       label: Screenshots and safe sample files
