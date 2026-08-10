@@ -13,7 +13,7 @@ on:
 jobs:
   validate:
     permissions:
-      contents: read
+      contents: write
     env:
       UNSIGNED_SHA256: ${{ inputs.unsigned_sha256 }}
       RELEASE_VERSION_CODE: ${{ inputs.version_code }}

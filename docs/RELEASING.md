@@ -11,9 +11,11 @@ the package identity, unsigned state, APK structure, and 16 KB alignment, then r
 the SHA-256 and exact source commit in local release metadata.
 
 The manually dispatched GitHub workflow only validates those pinned inputs, signs in
-the protected `release` environment, and publishes. Validation has no signing key;
-signing has no repository checkout or Release write permission; publishing has no
-signing key. The tagged repository and its recursive submodule pins are the durable
+the protected `release` environment, and publishes. GitHub exposes drafts only to a
+token with push access, so validation receives `contents: write` but contains only
+read-only release commands, has no signing key, and never checks out repository code.
+Signing has no repository checkout or Release permission; publishing has no signing
+key. The tagged repository and its recursive submodule pins are the durable
 corresponding source.
 
 GitHub Actions does not run an Android emulator. The local preparation command runs
