@@ -163,6 +163,18 @@ def main() -> None:
         "merged artifact manifest policy is unit tested": (
             "tools.test_verify_artifact_manifest"
         ),
+        "Orca translation generation is unit tested": (
+            "tools.test_generate_android_translations"
+        ),
+        "localization source policy is verified": (
+            "python3 tools/verify_localization.py"
+        ),
+        "localization source policy is unit tested": (
+            "tools.test_verify_localization"
+        ),
+        "packaged localization is unit tested": (
+            "tools.test_verify_artifact_localization"
+        ),
         "workflow shell syntax verification is unit tested": (
             "tools.test_verify_workflows"
         ),
@@ -219,6 +231,9 @@ def main() -> None:
         ),
         "merged debug manifest is verified": (
             "python3 tools/verify_artifact_manifest.py --variant debug"
+        ),
+        "debug APK language resources are verified": (
+            "python3 tools/verify_artifact_localization.py"
         ),
     }
     for description, marker in required_android_gates.items():

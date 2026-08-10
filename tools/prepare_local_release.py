@@ -242,6 +242,13 @@ def verify_unsigned_apk(
             str(apk),
         )
     )
+    run(
+        (
+            sys.executable,
+            str(ROOT / "tools/verify_artifact_localization.py"),
+            str(apk),
+        )
+    )
     run((str(build_tools / "zipalign"), "-c", "-P", "16", "-v", "4", str(apk)))
     badging = captured((str(build_tools / "aapt"), "dump", "badging", str(apk)))
     package, actual_code, actual_version = parse_badging(badging)

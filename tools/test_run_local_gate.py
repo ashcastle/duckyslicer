@@ -83,6 +83,14 @@ physical unauthorized transport_id:3
                 for command in commands
             )
         )
+        self.assertTrue(
+            any(
+                len(command) == 3
+                and command[1].endswith("verify_artifact_localization.py")
+                and command[-1] == str(DEBUG_APK)
+                for command in commands
+            )
+        )
         self.assertEqual(str(DEBUG_APK), commands[-1][-1])
 
     def test_host_plan_contains_every_standalone_static_verifier(self) -> None:
@@ -92,6 +100,7 @@ physical unauthorized transport_id:3
             if path.name
             not in {
                 "verify_apk.py",
+                "verify_artifact_localization.py",
                 "verify_artifact_manifest.py",
                 "verify_reproducible_release.py",
             }

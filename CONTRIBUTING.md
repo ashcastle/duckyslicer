@@ -47,6 +47,12 @@ take a while. The complete prerequisites are listed in [README.md](README.md).
 The checked-in `rust-toolchain.toml` pins the compiler, formatter, linter, and Android
 target used by local and CI builds; do not replace it with an unversioned `stable`.
 
+English is the default Android resource and Korean is the complete hand-maintained
+translation. The other supported Orca languages are generated at build time only from
+exact, non-fuzzy matches in the pinned PO catalogs; unmatched mobile copy falls back to
+English. Do not edit generated resources or add languages outside that catalog set.
+Run `python3 tools/verify_localization.py` after changing app copy or translations.
+
 ## Validate a change
 
 Run the narrow checks that cover your change, then the full local gate before a
