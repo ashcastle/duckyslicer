@@ -530,4 +530,15 @@
     <string name="wall_loops">벽 수</string>
     <string name="sparse_infill_density">희소 인필 밀도</string>
     <string name="outer_wall_speed">외벽 속도</string>
+    <string name="add_shape">도형 추가</string>
+    <string name="add_shape_hint">도형과 처음 크기를 선택하세요. 추가한 뒤 위치, 회전, 크기를 바꿀 수 있습니다.</string>
+    <string name="shape_size">크기</string>
+    <string name="shape_cube">정육면체</string>
+    <string name="shape_cylinder">원기둥</string>
+    <string name="shape_sphere">구</string>
+    <string name="shape_cone">원뿔</string>
+    <string name="shape_disc">원판</string>
+    <string name="shape_torus">도넛</string>
+    <string name="shape_added">%1$s 추가됨</string>
+    <string name="shape_error">도형을 추가하지 못했습니다.</string>
 </resources>

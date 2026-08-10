@@ -192,9 +192,29 @@ internal object SlicerProcessClient {
         putBoolean(SlicerProcessContract.KEY_PLACE_ON_CUT, placeOnCut)
     }
 
+    /** Creates a bounded STL with OrcaSlicer's inherited primitive mesh generators. */
+    fun createPrimitive(
+        primitive: OrcaPrimitive,
+        sizeMm: Float,
+        stagingDirectory: File,
+    ): OrcaImportedObject {
+        require(sizeMm.isFinite() && sizeMm in MIN_PRIMITIVE_SIZE_MM..MAX_PRIMITIVE_SIZE_MM) {
+            "Shape size is invalid"
+        }
+        return runModelOperation(
+            message = SlicerProcessContract.MESSAGE_CREATE_PRIMITIVE,
+            model = null,
+            stagingDirectory = stagingDirectory,
+            fallbackError = "OrcaSlicer could not create the shape",
+        ) {
+            putInt(SlicerProcessContract.KEY_PRIMITIVE_TYPE, primitive.nativeId)
+            putFloat(SlicerProcessContract.KEY_PRIMITIVE_SIZE_MM, sizeMm)
+        }.single()
+    }
+
     private fun runModelOperation(
         message: Int,
-        model: File,
+        model: File?,
         stagingDirectory: File,
         fallbackError: String,
         configureRequest: Bundle.() -> Unit = {},
@@ -212,7 +232,9 @@ internal object SlicerProcessClient {
                     what = message,
                     data = Bundle().apply {
                         putString(SlicerProcessContract.KEY_REQUEST_ID, requestId)
-                        putString(SlicerProcessContract.KEY_MODEL_PATH, model.absolutePath)
+                        model?.let {
+                            putString(SlicerProcessContract.KEY_MODEL_PATH, it.absolutePath)
+                        }
                         putString(
                             SlicerProcessContract.KEY_MODEL_OUTPUT_DIRECTORY,
                             stagingDirectory.absolutePath,
@@ -790,6 +812,7 @@ internal object SlicerProcessClient {
                 what == SlicerProcessContract.MESSAGE_AUTO_ARRANGE ||
                 what == SlicerProcessContract.MESSAGE_NORMALIZE_MODEL ||
                 what == SlicerProcessContract.MESSAGE_SPLIT_MODEL ||
+                what == SlicerProcessContract.MESSAGE_CREATE_PRIMITIVE ||
                 what == SlicerProcessContract.MESSAGE_BLOCK_FOR_TEST
             if (!cancellable) return
             val requestId = data.getString(SlicerProcessContract.KEY_REQUEST_ID) ?: return
@@ -1132,6 +1155,8 @@ class SlicerProcessService : Service() {
                 startWork(message, WorkOperation.SPLIT_MODEL)
             SlicerProcessContract.MESSAGE_CUT_MODEL ->
                 startWork(message, WorkOperation.CUT_MODEL)
+            SlicerProcessContract.MESSAGE_CREATE_PRIMITIVE ->
+                startWork(message, WorkOperation.CREATE_PRIMITIVE)
             SlicerProcessContract.MESSAGE_ATTACH -> attachToForegroundSlice(message)
             SlicerProcessContract.MESSAGE_CANCEL -> cancelWork(message)
             SlicerProcessContract.MESSAGE_HEALTH -> send(
@@ -1294,6 +1319,7 @@ class SlicerProcessService : Service() {
                 WorkOperation.NORMALIZE_MODEL -> runNormalizeModel(requestData)
                 WorkOperation.SPLIT_MODEL -> runSplitModel(requestData)
                 WorkOperation.CUT_MODEL -> runCutModel(requestData)
+                WorkOperation.CREATE_PRIMITIVE -> runCreatePrimitive(requestData)
                 WorkOperation.SLICE -> runSlice(requestData) { percent ->
                     foregroundProgress = maxOf(foregroundProgress, percent.coerceIn(0, 100))
                     mainHandler.post { updateForegroundSlice(requestId, percent) }
@@ -1716,6 +1742,42 @@ class SlicerProcessService : Service() {
     } catch (error: Exception) {
         if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Model cut failed", error)
         failure(error.message ?: "OrcaSlicer could not cut the model")
+    }
+
+    private fun runCreatePrimitive(extras: Bundle): Bundle = try {
+        val outputPath = requireNotNull(
+            extras.getString(SlicerProcessContract.KEY_MODEL_OUTPUT_DIRECTORY),
+        ) { "Shape output is unavailable" }
+        val primitiveType = extras.getInt(SlicerProcessContract.KEY_PRIMITIVE_TYPE, -1)
+        val primitive = OrcaPrimitive.entries.firstOrNull { it.nativeId == primitiveType }
+        requireNotNull(primitive) { "Shape type is invalid" }
+        val sizeMm = extras.getFloat(SlicerProcessContract.KEY_PRIMITIVE_SIZE_MM, Float.NaN)
+        require(sizeMm.isFinite() && sizeMm in MIN_PRIMITIVE_SIZE_MM..MAX_PRIMITIVE_SIZE_MM) {
+            "Shape size is invalid"
+        }
+        val outputDirectory = validateModelImportDirectory(outputPath)
+        val output = File(outputDirectory, "primitive.stl")
+        require(!output.exists()) { "Shape output already exists" }
+        val runtime = createNativeRuntime()
+        check(runtime.nativeCreatePrimitive(primitiveType, sizeMm, output.absolutePath)) {
+            "Shape could not be generated"
+        }
+        require(output.isFile && output.length() in 1..MAX_MODEL_BYTES) {
+            "Generated shape is invalid"
+        }
+        Bundle().apply {
+            putBoolean(SlicerProcessContract.KEY_OK, true)
+            putInt(SlicerProcessContract.KEY_PID, Process.myPid())
+            putStringArrayList(
+                SlicerProcessContract.KEY_NORMALIZED_MODELS,
+                arrayListOf(
+                    "${output.absolutePath}\t${primitive.wireName}.stl\t0\t0",
+                ),
+            )
+        }
+    } catch (error: Exception) {
+        if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Shape creation failed", error)
+        failure(error.message ?: "OrcaSlicer could not create the shape")
     }
 
     private fun runAutoArrange(extras: Bundle): Bundle = try {
@@ -2214,6 +2276,7 @@ class SlicerProcessService : Service() {
         NORMALIZE_MODEL,
         SPLIT_MODEL,
         CUT_MODEL,
+        CREATE_PRIMITIVE,
         TEST_PROBE,
     }
 
@@ -2248,6 +2311,7 @@ private object SlicerProcessContract {
     const val MESSAGE_NORMALIZE_MODEL = 11
     const val MESSAGE_SPLIT_MODEL = 12
     const val MESSAGE_CUT_MODEL = 13
+    const val MESSAGE_CREATE_PRIMITIVE = 14
     const val KEY_REQUEST_ID = "requestId"
     const val KEY_MODEL_PATH = "modelPath"
     const val KEY_MODEL_PATHS = "modelPaths"
@@ -2258,6 +2322,8 @@ private object SlicerProcessContract {
     const val KEY_MODEL_NOT_CUTTABLE = "modelNotCuttable"
     const val KEY_CUT_HEIGHT_RATIO = "cutHeightRatio"
     const val KEY_PLACE_ON_CUT = "placeOnCut"
+    const val KEY_PRIMITIVE_TYPE = "primitiveType"
+    const val KEY_PRIMITIVE_SIZE_MM = "primitiveSizeMm"
     const val KEY_SUPPORT_PAINT_PATHS = "supportPaintPaths"
     const val KEY_SEAM_PAINT_PATHS = "seamPaintPaths"
     const val KEY_MULTI_COLOR_PAINT_PATHS = "multiColorPaintPaths"
