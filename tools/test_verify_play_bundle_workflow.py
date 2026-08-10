@@ -96,6 +96,7 @@ jobs:
         "prepare_local_play_bundle.py": """
 SIGNING_ENVIRONMENT = ()
 run_local_gate.py
+--require-api-36
 --no-build-cache
 :app:clean
 :app:bundleRelease
@@ -108,7 +109,7 @@ play_transport_tag
         "RELEASING.md": """
 Run prepare_local_play_bundle.py; it is built twice. GitHub never builds the Play AAB.
 Use a separate Play upload key. It never uploads to Play Console.
-Download duckyslicer-play-signed.
+Download duckyslicer-play-signed. The local gate requires API 36.
 """,
         "SECURITY.md": "local-only Play signing",
         "CONTRIBUTING.md": "local-only Play signing",
@@ -172,6 +173,14 @@ class VerifyPlayBundleWorkflowTest(unittest.TestCase):
         sources = valid_sources()
         sources["play-bundle.yml"] += "\n# androidpublisher upload\n"
         with self.assertRaisesRegex(VerificationError, "signed Actions artifact"):
+            verify_play_bundle_workflow(sources)
+
+    def test_rejects_play_preparation_without_api36_runtime_gate(self) -> None:
+        sources = valid_sources()
+        sources["prepare_local_play_bundle.py"] = sources[
+            "prepare_local_play_bundle.py"
+        ].replace("--require-api-36", "--host-only")
+        with self.assertRaisesRegex(VerificationError, "require-api-36"):
             verify_play_bundle_workflow(sources)
 
     def test_rejects_aab_in_github_release(self) -> None:

@@ -308,7 +308,13 @@ def prepare_release(version_name: str, version_code: int, output_root: Path) -> 
 
     completed = False
     try:
-        run((sys.executable, str(ROOT / "tools/run_local_gate.py")))
+        run(
+            (
+                sys.executable,
+                str(ROOT / "tools/run_local_gate.py"),
+                "--require-api-36",
+            )
+        )
         run(gradle_release_command(version_name, version_code, rebuild=False), cwd=ANDROID)
         verify_unsigned_apk(RELEASE_APK, version_name, version_code, build_tools)
         shutil.copyfile(RELEASE_APK, candidate_output)

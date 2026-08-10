@@ -215,6 +215,7 @@ def verify_play_bundle_workflow(sources: dict[str, str]) -> None:
         local_preparer,
         (
             "run_local_gate.py",
+            "--require-api-36",
             "--no-build-cache",
             ":app:clean",
             ":app:bundleRelease",
@@ -248,6 +249,7 @@ def verify_play_bundle_workflow(sources: dict[str, str]) -> None:
         "separate play upload key",
         "never uploads to play console",
         "duckyslicer-play-signed",
+        "api 36",
     ):
         if marker not in documentation:
             raise VerificationError(f"Play handoff documentation is missing: {marker}")

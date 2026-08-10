@@ -79,7 +79,8 @@ jobs:
 """,
         "prepare_local_release.py": " ".join(
             (
-                'run((sys.executable, str(ROOT / "tools/run_local_gate.py")))',
+                'str(ROOT / "tools/run_local_gate.py")',
+                '"--require-api-36"',
                 '"--no-build-cache",',
                 '":app:clean",',
                 'command.append(":app:assembleRelease")',
@@ -102,7 +103,7 @@ jobs:
             "GitHub Release APK. A GitHub Release contains exactly one public asset: the "
             "signed ARM64 APK. Release notes must describe user-visible changes. The publisher "
             "appends the signed APK SHA-256, signing-certificate fingerprint, and source tag. "
-            "Use DuckySlicer_16KB_API35."
+            "Use DuckySlicer_16KB_API36 on Android 16/API 36."
         ),
         "SECURITY.md": (
             "The Release APK is built twice on the maintainer's local machine. "
@@ -168,6 +169,14 @@ class VerifyReleaseContractTest(unittest.TestCase):
         sources = valid_sources()
         sources["RELEASING.md"] = ""
         with self.assertRaisesRegex(VerificationError, "RELEASING.md"):
+            verify_release_contract(sources)
+
+    def test_rejects_release_preparation_without_api36_runtime_gate(self) -> None:
+        sources = valid_sources()
+        sources["prepare_local_release.py"] = sources["prepare_local_release.py"].replace(
+            '"--require-api-36"', '"--host-only"'
+        )
+        with self.assertRaisesRegex(VerificationError, "require-api-36"):
             verify_release_contract(sources)
 
     def test_rejects_missing_release_note_integrity_publication(self) -> None:

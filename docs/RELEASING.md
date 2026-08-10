@@ -19,10 +19,17 @@ key. The tagged repository and its recursive submodule pins are the durable
 corresponding source.
 
 GitHub Actions does not run an Android emulator. The local preparation command runs
-the functional suite on the Android 15 ARM64 16 KB `DuckySlicer_16KB_API35` AVD.
+the functional suite on the Android 16/API 36 ARM64 16 KB
+`DuckySlicer_16KB_API36` AVD. The preparer refuses API 35 even though the ordinary
+development gate accepts it.
 Pull-request CI remains independent static evidence and is never a release build.
 
 ## One-time repository setup
+
+Create `DuckySlicer_16KB_API36` in Android Studio Device Manager from an Android 16,
+API 36, Google APIs ARM64 system image configured for 16 KB pages. Boot it and verify
+that `adb shell getconf PAGE_SIZE` reports `16384` before preparing either release
+format. An API 35 16 KB AVD may remain installed for development regression testing.
 
 Create an Android signing key outside the repository. In GitHub, create a protected
 environment named `release` and configure required reviewers when the repository
@@ -87,11 +94,12 @@ key prevents publishing a compatible update under the same Android identity.
 ## Play Console bundle handoff
 
 Google Play receives an Android App Bundle, but the public GitHub Release remains
-APK-only. `tools/prepare_local_play_bundle.py` runs the complete local ARM64 16 KB
-gate, builds the unsigned AAB and its universal delivery APK twice from clean inputs
-with the Gradle build cache disabled, and rejects any byte difference. The delivery
-APK is checked for package and version identity, unsigned state, ARM64-only native
-libraries, and 16 KB alignment. It remains local and is never uploaded.
+APK-only. `tools/prepare_local_play_bundle.py` runs the complete local Android 16/
+API 36 ARM64 16 KB gate, builds the unsigned AAB and its universal delivery APK twice
+from clean inputs with the Gradle build cache disabled, and rejects any byte
+difference. The delivery APK is checked for package and version identity, unsigned
+state, ARM64-only native libraries, and 16 KB alignment. It remains local and is
+never uploaded.
 
 GitHub never builds the Play AAB. The manually dispatched **Sign Local Play Bundle**
 workflow only downloads a digest-pinned AAB from a private draft, validates its source

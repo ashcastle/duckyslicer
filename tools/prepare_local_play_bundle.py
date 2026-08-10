@@ -215,7 +215,13 @@ def prepare_play_bundle(
 
     completed = False
     try:
-        run((sys.executable, str(ROOT / "tools/run_local_gate.py")))
+        run(
+            (
+                sys.executable,
+                str(ROOT / "tools/run_local_gate.py"),
+                "--require-api-36",
+            )
+        )
         run(
             gradle_play_command(version_name, version_code, include_lint=True),
             cwd=ANDROID,

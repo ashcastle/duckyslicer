@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import subprocess
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from tools.run_local_gate import (
     ANDROID,
@@ -13,6 +15,7 @@ from tools.run_local_gate import (
     DEBUG_LICENSE_INVENTORY,
     DEBUG_SBOM,
     ROOT,
+    RELEASE_RUNTIME_API,
     STATIC_VERIFIERS,
     DeviceFacts,
     GateError,
@@ -20,6 +23,7 @@ from tools.run_local_gate import (
     choose_device,
     device_steps,
     host_steps,
+    main,
     parse_online_devices,
     run_steps,
 )
@@ -42,13 +46,25 @@ physical unauthorized transport_id:3
         }
         self.assertEqual("sixteen-kb", choose_device(None, None, devices))
 
+    def test_release_gate_requires_api36_even_when_api35_is_eligible_for_development(
+        self,
+    ) -> None:
+        devices = {
+            "android-15": DeviceFacts(35, "arm64-v8a", 16_384),
+            "android-16": DeviceFacts(36, "arm64-v8a", 16_384),
+        }
+        self.assertEqual("android-15", choose_device("android-15", None, devices))
+        self.assertEqual("android-16", choose_device(None, None, devices, minimum_api=36))
+        with self.assertRaisesRegex(GateError, "API 36"):
+            choose_device("android-15", None, devices, minimum_api=36)
+
     def test_explicit_or_environment_device_must_meet_the_gate(self) -> None:
         devices = {
             "four-kb": DeviceFacts(35, "arm64-v8a", 4096),
             "sixteen-kb": DeviceFacts(35, "arm64-v8a", 16_384),
         }
         self.assertEqual("sixteen-kb", choose_device("sixteen-kb", "four-kb", devices))
-        with self.assertRaisesRegex(GateError, "not the local 16 KB gate"):
+        with self.assertRaisesRegex(GateError, r"not the API 35\+ local 16 KB gate"):
             choose_device(None, "four-kb", devices)
 
     def test_ambiguous_or_missing_device_fails_closed(self) -> None:
@@ -57,6 +73,28 @@ physical unauthorized transport_id:3
             choose_device(None, None, {})
         with self.assertRaisesRegex(GateError, "Multiple eligible"):
             choose_device(None, None, {"first": eligible, "second": eligible})
+
+    def test_release_cli_passes_api36_requirement_to_device_discovery(self) -> None:
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch(
+                "tools.run_local_gate.discover_device",
+                return_value="api36",
+            ) as discover,
+            patch(
+                "tools.run_local_gate.capture",
+                side_effect=("36", "arm64-v8a", "16384"),
+            ),
+            patch("tools.run_local_gate.host_steps", return_value=[]),
+            patch("tools.run_local_gate.device_steps", return_value=[]),
+            patch("tools.run_local_gate.run_steps"),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(
+                0,
+                main(("--require-api-36", "--serial", "api36")),
+            )
+        discover.assert_called_once_with("api36", None, RELEASE_RUNTIME_API)
 
     def test_host_plan_covers_rust_android_static_and_apk_gates(self) -> None:
         steps = host_steps(python="python-for-test", windows=False)

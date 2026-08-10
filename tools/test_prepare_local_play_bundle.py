@@ -127,7 +127,7 @@ class PrepareLocalPlayBundleTest(unittest.TestCase):
                     "tools.prepare_local_play_bundle.android_build_tools",
                     return_value=root,
                 ),
-                patch("tools.prepare_local_play_bundle.run"),
+                patch("tools.prepare_local_play_bundle.run") as run_mock,
                 patch("tools.prepare_local_play_bundle.verify_play_candidate"),
                 patch(
                     "tools.prepare_local_play_bundle.write_metadata",
@@ -136,6 +136,9 @@ class PrepareLocalPlayBundleTest(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(OSError, "disk full"):
                     prepare_play_bundle("1.2.3", 42, output)
+            gate_command = run_mock.call_args_list[0].args[0]
+            self.assertTrue(gate_command[1].endswith("tools/run_local_gate.py"))
+            self.assertEqual("--require-api-36", gate_command[-1])
             self.assertEqual([], list(output.iterdir()))
 
 

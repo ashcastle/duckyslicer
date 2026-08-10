@@ -77,8 +77,10 @@ python3 tools/run_local_gate.py --serial <adb-serial>
 ```
 
 `python3 tools/run_local_gate.py --host-only` is useful while iterating, but it is
-not the authoritative full gate. The local ARM64 16 KB AVD is the authoritative
-functional gate.
+not a complete functional gate. API 35+ ARM64 16 KB devices remain valid for normal
+development checks. The local GitHub APK and Play AAB preparation commands raise that
+requirement to an Android 16/API 36 ARM64 16 KB runtime and refuse to create a release
+candidate without it.
 The host portion also regenerates the CycloneDX SBOM at
 `android/app/build/outputs/duckyslicer-debug.cdx.json`
 from the resolved Debug dependency inventory and verifies that its licenses match the
@@ -125,7 +127,8 @@ finish with G-code in bounded slice storage and no `output.gcode` beside the mod
 Workflow changes must keep third-party Actions pinned to full commit hashes. The
 GitHub Release APK must be built locally with
 `python3 tools/prepare_local_release.py`; tag-triggered or manually dispatched hosted
-APK builds are not allowed. The local command runs the complete ARM64 16 KB AVD gate,
+APK builds are not allowed. The local command runs the complete Android 16/API 36
+ARM64 16 KB gate,
 builds the unsigned release twice, and rejects any byte difference.
 The signing workflow must preserve validate → isolated sign → publish ordering. Only
 the `sign` job may receive signing secrets; it must not check out source, execute
@@ -137,7 +140,8 @@ publisher preserves those notes and publishes the APK SHA-256 and signing-certif
 fingerprint in the Release notes; do not add separate checksum or SBOM assets.
 Play AABs follow the same local-only rule. Build them with
 `python3 tools/prepare_local_play_bundle.py`; the local command runs the full gate,
-builds both Play artifacts twice, checks the universal delivery APK at 16 KB, and
+requires the same API 36 runtime, builds both Play artifacts twice, checks the
+universal delivery APK at 16 KB, and
 rejects byte differences. GitHub never builds the Play AAB. Its manual workflow may
 only validate the private draft, sign the exact digest in the protected `play`
 environment, retain the signed AAB plus checksum as an Actions artifact, and remove

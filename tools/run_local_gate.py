@@ -20,6 +20,8 @@ DEBUG_APK = ANDROID / "app/build/outputs/apk/debug/app-debug.apk"
 DEBUG_DEPENDENCY_INVENTORY = ANDROID / "app/build/reports/dependencies/debug.txt"
 DEBUG_LICENSE_INVENTORY = ANDROID / "app/build/reports/dependencies/debug-licenses.json"
 DEBUG_SBOM = ANDROID / "app/build/outputs/duckyslicer-debug.cdx.json"
+MINIMUM_FUNCTIONAL_API = 35
+RELEASE_RUNTIME_API = 36
 STATIC_VERIFIERS = (
     "verify_workflows.py",
     "verify_no_embedded_credentials.py",
@@ -55,8 +57,11 @@ class DeviceFacts:
 
     @property
     def eligible(self) -> bool:
+        return self.eligible_for(MINIMUM_FUNCTIONAL_API)
+
+    def eligible_for(self, minimum_api: int) -> bool:
         return (
-            self.api_level >= 35
+            self.api_level >= minimum_api
             and self.abi == "arm64-v8a"
             and self.page_size == 16_384
         )
@@ -86,19 +91,23 @@ def choose_device(
     requested: str | None,
     environment_serial: str | None,
     devices: Mapping[str, DeviceFacts],
+    minimum_api: int = MINIMUM_FUNCTIONAL_API,
 ) -> str:
     selected = requested or environment_serial
     if selected:
         facts = devices.get(selected)
         if facts is None:
             raise GateError(f"Requested Android device is not online: {selected}")
-        if not facts.eligible:
+        if not facts.eligible_for(minimum_api):
             raise GateError(
-                f"Requested device {selected} is not the local 16 KB gate: {facts.summary()}"
+                f"Requested device {selected} is not the API {minimum_api}+ local 16 KB "
+                f"gate: {facts.summary()}"
             )
         return selected
 
-    eligible = sorted(serial for serial, facts in devices.items() if facts.eligible)
+    eligible = sorted(
+        serial for serial, facts in devices.items() if facts.eligible_for(minimum_api)
+    )
     if len(eligible) == 1:
         return eligible[0]
     if not eligible:
@@ -106,7 +115,8 @@ def choose_device(
             f"{serial} ({facts.summary()})" for serial, facts in sorted(devices.items())
         ) or "no online devices"
         raise GateError(
-            "No API 35+ ARM64 device with 16,384-byte pages is available: " + detail
+            f"No API {minimum_api}+ ARM64 device with 16,384-byte pages is available: "
+            + detail
         )
     raise GateError(
         "Multiple eligible 16 KB devices are online; pass --serial: " + ", ".join(eligible)
@@ -132,7 +142,11 @@ def capture(command: Sequence[str], timeout: float = 20) -> str:
     return result.stdout.strip()
 
 
-def discover_device(requested: str | None, environment_serial: str | None) -> str:
+def discover_device(
+    requested: str | None,
+    environment_serial: str | None,
+    minimum_api: int = MINIMUM_FUNCTIONAL_API,
+) -> str:
     online = parse_online_devices(capture(("adb", "devices", "-l")))
     facts: dict[str, DeviceFacts] = {}
     for serial in online:
@@ -143,7 +157,7 @@ def discover_device(requested: str | None, environment_serial: str | None) -> st
             facts[serial] = DeviceFacts(int(api_text), abi, int(page_text))
         except (GateError, ValueError):
             continue
-    return choose_device(requested, environment_serial, facts)
+    return choose_device(requested, environment_serial, facts, minimum_api)
 
 
 def host_steps(python: str = sys.executable, windows: bool = os.name == "nt") -> list[GateStep]:
@@ -297,15 +311,27 @@ def main(arguments: Sequence[str] | None = None) -> int:
         "--serial",
         help="Use this API 35+ ARM64 16 KB Android device instead of automatic selection.",
     )
+    parser.add_argument(
+        "--require-api-36",
+        action="store_true",
+        help="Require an Android 16/API 36 ARM64 16 KB runtime for release qualification.",
+    )
     options = parser.parse_args(arguments)
     if options.host_only and options.serial:
         parser.error("--serial cannot be combined with --host-only")
+    if options.host_only and options.require_api_36:
+        parser.error("--require-api-36 cannot be combined with --host-only")
 
     try:
+        minimum_api = RELEASE_RUNTIME_API if options.require_api_36 else MINIMUM_FUNCTIONAL_API
         serial = (
             None
             if options.host_only
-            else discover_device(options.serial, os.environ.get("ANDROID_SERIAL"))
+            else discover_device(
+                options.serial,
+                os.environ.get("ANDROID_SERIAL"),
+                minimum_api,
+            )
         )
         steps = host_steps()
         if serial:
@@ -324,7 +350,11 @@ def main(arguments: Sequence[str] | None = None) -> int:
         print("Local production gate interrupted", file=sys.stderr)
         return 130
 
-    scope = "host and local ARM64 16 KB device" if serial else "host only"
+    scope = (
+        f"host and local API {minimum_api}+ ARM64 16 KB device"
+        if serial
+        else "host only"
+    )
     print(f"Local production gate passed: {scope}")
     return 0
 

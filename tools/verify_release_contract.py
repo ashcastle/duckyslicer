@@ -195,7 +195,8 @@ def verify_release_contract(sources: dict[str, str]) -> None:
         "prepare_local_release.py",
         preparation,
         (
-            'run((sys.executable, str(ROOT / "tools/run_local_gate.py")))',
+            'str(ROOT / "tools/run_local_gate.py")',
+            '"--require-api-36"',
             '"--no-build-cache",',
             '":app:clean",',
             'command.append(":app:assembleRelease")',
@@ -221,7 +222,8 @@ def verify_release_contract(sources: dict[str, str]) -> None:
             "github release contains exactly one public asset: the signed arm64 apk",
             "release notes must describe user-visible changes",
             "appends the signed apk sha-256, signing-certificate fingerprint, and source tag",
-            "duckyslicer_16kb_api35",
+            "duckyslicer_16kb_api36",
+            "android 16/api 36",
         ),
         "SECURITY.md": (
             "release apk is built twice on the maintainer's local machine",

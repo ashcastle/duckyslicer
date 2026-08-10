@@ -29,8 +29,9 @@ protected environment job without a repository checkout, repository execution, o
 Release permission. It signs only the digest-checked artifact, verifies the pinned
 public certificate fingerprint, and removes its temporary keystore. A separate
 keyless publisher rechecks the tag and draft state before exposing the signed APK.
-GitHub-hosted emulators are not part of the release pipeline; functional qualification
-runs on the local ARM64 16 KB AVD.
+GitHub-hosted emulators are not part of the release pipeline. Release qualification
+requires a local Android 16/API 36 ARM64 16 KB runtime; the API 35+ gate remains
+available for ordinary development checks but cannot produce a release candidate.
 
 Play bundles use a separate upload key in a separate protected `play` environment.
 The AAB and universal delivery APK are built twice on the maintainer's local machine
