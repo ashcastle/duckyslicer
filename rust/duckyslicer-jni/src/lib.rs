@@ -1341,16 +1341,27 @@ fn positioned_axis(
         .unwrap_or(current)
 }
 
-fn push_arc_preview(
-    preview_paths: &mut PreviewPathAccumulator,
-    layer: usize,
-    role: ToolpathRole,
+struct ArcPreview {
     start: [f32; 2],
     end: [f32; 2],
     center: [f32; 2],
     clockwise: bool,
     z: f32,
+}
+
+fn push_arc_preview(
+    preview_paths: &mut PreviewPathAccumulator,
+    layer: usize,
+    role: ToolpathRole,
+    arc: ArcPreview,
 ) -> bool {
+    let ArcPreview {
+        start,
+        end,
+        center,
+        clockwise,
+        z,
+    } = arc;
     let radius = ((start[0] - center[0]).powi(2) + (start[1] - center[1]).powi(2)).sqrt();
     if !radius.is_finite() || radius <= 0.000_001 {
         return false;
@@ -1549,11 +1560,13 @@ fn preview_gcode(
                         &mut preview_paths,
                         layer,
                         toolpath_role,
-                        [x, y],
-                        [next_x, next_y],
-                        [x + offset[0], y + offset[1]],
-                        clockwise_arc,
-                        layer_z,
+                        ArcPreview {
+                            start: [x, y],
+                            end: [next_x, next_y],
+                            center: [x + offset[0], y + offset[1]],
+                            clockwise: clockwise_arc,
+                            z: layer_z,
+                        },
                     )
                 });
                 if !emitted_arc {
