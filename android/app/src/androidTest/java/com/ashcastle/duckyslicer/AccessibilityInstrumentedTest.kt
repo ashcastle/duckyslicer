@@ -126,6 +126,24 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun appSettingsOpenTheBundledPrivacyPolicyOffline() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val privacyLabel = context.getString(R.string.privacy_policy)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_SETTINGS).use {
+            val privacyButton = scrollUntilClickable(privacyLabel)
+            assertTrue(
+                "The privacy policy action must open its bundled document",
+                privacyButton.performAction(AccessibilityNodeInfo.ACTION_CLICK),
+            )
+            val nodes = waitForNodes(setOf(PRIVACY_DOCUMENT_HEADING))
+            assertTrue(
+                "The offline privacy document must expose its English heading",
+                nodes.any { it.effectiveLabel().contains(PRIVACY_DOCUMENT_HEADING) },
+            )
+        }
+    }
+
+    @Test
     fun largeTextLandscapeKeepsMenuClearOfScrollableWorkspaceSheet() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val menuLabel = context.getString(R.string.menu)
@@ -199,6 +217,27 @@ class AccessibilityInstrumentedTest {
         throw AssertionError("Timed out waiting for accessibility labels: $labels")
     }
 
+    private fun scrollUntilClickable(label: String): AccessibilityNodeInfo {
+        val deadline = SystemClock.elapsedRealtime() + NODE_TIMEOUT_MILLIS
+        do {
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            val nodes = currentNodes()
+            nodes.firstOrNull { node ->
+                node.isClickable && node.isVisibleToUser && node.effectiveLabel().contains(label)
+            }?.let { return it }
+            val scrollable = nodes.firstOrNull { node ->
+                node.actionList.any { action ->
+                    action.id == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+                }
+            }
+            if (scrollable != null) {
+                scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+            }
+            SystemClock.sleep(NODE_POLL_MILLIS)
+        } while (SystemClock.elapsedRealtime() < deadline)
+        throw AssertionError("Timed out scrolling to accessibility action: $label")
+    }
+
     private fun currentNodes(): List<AccessibilityNodeInfo> {
         val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow
             ?: return emptyList()
@@ -226,6 +265,7 @@ class AccessibilityInstrumentedTest {
 
     private companion object {
         const val SEEK_BAR_CLASS = "android.widget.SeekBar"
+        const val PRIVACY_DOCUMENT_HEADING = "DuckySlicer Privacy Policy"
         const val MAX_LABEL_DEPTH = 12
         const val NODE_TIMEOUT_MILLIS = 5_000L
         const val NODE_POLL_MILLIS = 50L

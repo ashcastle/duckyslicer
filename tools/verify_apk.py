@@ -27,6 +27,13 @@ ALLOWED_NATIVE_LIBRARIES = frozenset(
     }
 )
 REQUIRED_LEGAL_ASSETS = {
+    "assets/legal/PRIVACY.md": (
+        b"DuckySlicer Privacy Policy",
+        b"does not collect, sell, or share",
+        b"Optional OctoPrint and Klipper connections",
+        b"Retention and deletion",
+        "DuckySlicer 개인정보처리방침".encode("utf-8"),
+    ),
     "assets/legal/AGPL-3.0.txt": (
         b"GNU AFFERO GENERAL PUBLIC LICENSE",
         b"Version 3, 19 November 2007",
@@ -184,7 +191,7 @@ def main() -> None:
     print(
         f"Verified {apk}: {library_count} allowlisted ARM64 libraries, "
         f"{load_count} 16 KB-compatible LOAD segments, one binary profile catalog, "
-        "and offline legal notices"
+        "and offline privacy and legal materials"
     )
 
 

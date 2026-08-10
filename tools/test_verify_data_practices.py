@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import unittest
 
-from tools.verify_data_practices import DATA_STRING_NAMES, EXPECTED_PERMISSIONS, VerificationError
-from tools.verify_data_practices import verify_data_practices
+from tools.verify_data_practices import (
+    DATA_STRING_NAMES,
+    EXPECTED_PERMISSIONS,
+    PRIVACY_POLICY_MARKERS,
+    VerificationError,
+    verify_data_practices,
+)
 
 
 def string_resources() -> str:
@@ -23,7 +28,9 @@ def valid_sources() -> dict[str, str]:
     )
     return {
         "AppSettingsSheet.kt": (
-            f"showDataPractices DataPracticesDialog( {settings_markers}"
+            "showDataPractices DataPracticesDialog( LegalDocument.PRIVACY "
+            'PRIVACY("legal/PRIVACY.md", R.string.privacy_policy) '
+            f"{settings_markers}"
         ),
         "RemoteDevice.kt": (
             'KeyStore.getInstance("AndroidKeyStore") secrets.remove(profileId) '
@@ -34,7 +41,11 @@ def valid_sources() -> dict[str, str]:
             f"{permissions}"
             "</manifest>"
         ),
-        "build.gradle.kts": "dependencies { implementation(libs.compose) }",
+        "build.gradle.kts": (
+            'dependencies { implementation(libs.compose) } '
+            'repositoryRoot.resolve("PRIVACY.md") into("legal")'
+        ),
+        "PRIVACY.md": "\n".join(sorted(PRIVACY_POLICY_MARKERS)),
         "strings.xml": string_resources(),
         "strings-ko.xml": string_resources(),
     }
@@ -58,6 +69,22 @@ class VerifyDataPracticesTest(unittest.TestCase):
         sources = valid_sources()
         sources["build.gradle.kts"] += ' implementation("firebase-analytics")'
         with self.assertRaisesRegex(VerificationError, "disclosure review"):
+            verify_data_practices(sources)
+
+    def test_rejects_incomplete_privacy_policy(self) -> None:
+        sources = valid_sources()
+        sources["PRIVACY.md"] = sources["PRIVACY.md"].replace(
+            "does not collect, sell, or share", "collects app activity"
+        )
+        with self.assertRaisesRegex(VerificationError, "privacy policy"):
+            verify_data_practices(sources)
+
+    def test_rejects_missing_offline_privacy_policy_access(self) -> None:
+        sources = valid_sources()
+        sources["AppSettingsSheet.kt"] = sources["AppSettingsSheet.kt"].replace(
+            "LegalDocument.PRIVACY", ""
+        )
+        with self.assertRaisesRegex(VerificationError, "data-practice UI"):
             verify_data_practices(sources)
 
     def test_rejects_missing_korean_copy(self) -> None:
