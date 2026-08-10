@@ -2,6 +2,7 @@ package com.ashcastle.duckyslicer
 
 import androidx.compose.ui.geometry.Offset
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -54,5 +55,110 @@ class SupportPaintHitTest {
 
         assertTrue("Different face directions must remain visually distinguishable", upward > side)
         assertTrue(upward in 0f..1f && side in 0f..1f)
+    }
+
+    @Test
+    fun surfaceMeasurementInterpolatesTheExactTransformedFacePoint() {
+        val triangle = ModelScreenTriangle(
+            sourceFacetIndex = 3,
+            a = Offset(0f, 0f),
+            b = Offset(100f, 0f),
+            c = Offset(0f, 100f),
+            depth = 4f,
+        )
+
+        val point = modelSurfacePoint(
+            triangle = triangle,
+            point = Offset(25f, 25f),
+            worldA = floatArrayOf(10f, 20f, 30f),
+            worldB = floatArrayOf(30f, 20f, 30f),
+            worldC = floatArrayOf(10f, 60f, 50f),
+        )
+
+        assertEquals(15f, checkNotNull(point).x, 0.0001f)
+        assertEquals(30f, point.y, 0.0001f)
+        assertEquals(35f, point.z, 0.0001f)
+    }
+
+    @Test
+    fun nearbyEdgeHitClampsToTheVisibleSurfaceInsteadOfExtrapolating() {
+        val triangle = ModelScreenTriangle(
+            sourceFacetIndex = 3,
+            a = Offset(0f, 0f),
+            b = Offset(100f, 0f),
+            c = Offset(0f, 100f),
+            depth = 4f,
+        )
+
+        val point = modelSurfacePoint(
+            triangle = triangle,
+            point = Offset(50f, -8f),
+            worldA = floatArrayOf(10f, 20f, 30f),
+            worldB = floatArrayOf(30f, 20f, 30f),
+            worldC = floatArrayOf(10f, 60f, 50f),
+        )
+
+        assertEquals(20f, checkNotNull(point).x, 0.0001f)
+        assertEquals(20f, point.y, 0.0001f)
+        assertEquals(30f, point.z, 0.0001f)
+    }
+
+    @Test
+    fun edgeOnFaceStillProducesAFiniteMeasurementPoint() {
+        val triangle = ModelScreenTriangle(
+            sourceFacetIndex = 8,
+            a = Offset(0f, 0f),
+            b = Offset(100f, 0f),
+            c = Offset(200f, 0f),
+            depth = 2f,
+        )
+
+        val point = modelSurfacePoint(
+            triangle = triangle,
+            point = Offset(150f, 4f),
+            worldA = floatArrayOf(0f, 0f, 0f),
+            worldB = floatArrayOf(100f, 0f, 0f),
+            worldC = floatArrayOf(200f, 0f, 0f),
+        )
+
+        assertEquals(150f, checkNotNull(point).x, 0.0001f)
+        assertTrue(point.y.isFinite() && point.z.isFinite())
+    }
+
+    @Test
+    fun measurementReportsEuclideanAndAxisDistances() {
+        val measurement = measurementBetween(
+            ModelPoint3(1f, 2f, 3f),
+            ModelPoint3(4f, 6f, 15f),
+        )
+
+        assertEquals(13f, checkNotNull(measurement).distanceMm, 0.0001f)
+        assertEquals(3f, measurement.deltaXmm, 0.0001f)
+        assertEquals(4f, measurement.deltaYmm, 0.0001f)
+        assertEquals(12f, measurement.deltaZmm, 0.0001f)
+    }
+
+    @Test
+    fun aThirdTapStartsANewMeasurementAndInvalidInputIsRejected() {
+        val first = ModelPoint3(1f, 2f, 3f)
+        val second = ModelPoint3(4f, 5f, 6f)
+        val third = ModelPoint3(7f, 8f, 9f)
+
+        assertEquals(listOf(third), nextMeasurementPoints(listOf(first, second), third))
+        assertNull(
+            modelSurfacePoint(
+                triangle = ModelScreenTriangle(
+                    sourceFacetIndex = 0,
+                    a = Offset.Zero,
+                    b = Offset(1f, 0f),
+                    c = Offset(0f, 1f),
+                    depth = 1f,
+                ),
+                point = Offset.Zero,
+                worldA = floatArrayOf(Float.NaN, 0f, 0f),
+                worldB = floatArrayOf(1f, 0f, 0f),
+                worldC = floatArrayOf(0f, 1f, 0f),
+            ),
+        )
     }
 }

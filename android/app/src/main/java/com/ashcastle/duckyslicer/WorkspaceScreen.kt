@@ -189,6 +189,19 @@ internal data class ModelScreenTriangle(
     val surfaceShade: Float = 1f,
 )
 
+internal data class ModelPoint3(
+    val x: Float,
+    val y: Float,
+    val z: Float,
+)
+
+internal data class ModelMeasurement(
+    val distanceMm: Float,
+    val deltaXmm: Float,
+    val deltaYmm: Float,
+    val deltaZmm: Float,
+)
+
 private data class ToolpathStyle(
     val code: Int,
     val label: Int,
@@ -311,6 +324,8 @@ internal fun WorkspaceScreen(
     var showObjectProcessSettings by remember { mutableStateOf(false) }
     var showPrimitivePicker by remember { mutableStateOf(false) }
     var layingOnFace by remember { mutableStateOf(false) }
+    var measuring by remember { mutableStateOf(false) }
+    var measurementPoints by remember { mutableStateOf<List<ModelPoint3>>(emptyList()) }
     var supportPainting by remember { mutableStateOf(false) }
     var supportPaintTool by remember { mutableStateOf(SupportPaintTool.ENFORCE) }
     var seamPainting by remember { mutableStateOf(false) }
@@ -321,6 +336,10 @@ internal fun WorkspaceScreen(
     var previewControlsExpanded by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(selectedObjectId, selectedTab) {
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) layingOnFace = false
+        if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) {
+            measuring = false
+            measurementPoints = emptyList()
+        }
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) supportPainting = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) seamPainting = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) multiColorPainting = false
@@ -369,8 +388,11 @@ internal fun WorkspaceScreen(
                     previewDetail = appSettings.previewDetail,
                     previewRenderingMode = appSettings.previewRenderingMode,
                     objectManipulationEnabled = selectedTab == WorkspaceTab.SLICE &&
-                        !importing && !editingBusy && !slicing && !previewLoading && !layingOnFace,
+                        !importing && !editingBusy && !slicing && !previewLoading &&
+                        !layingOnFace && !measuring,
                     layOnFaceObjectId = selectedObjectId.takeIf { layingOnFace },
+                    measureObjectId = selectedObjectId.takeIf { measuring },
+                    measurementPoints = measurementPoints,
                     supportPaintObjectId = selectedObjectId.takeIf { supportPainting },
                     supportPaintState = supportPaintTool.state,
                     seamPaintObjectId = selectedObjectId.takeIf { seamPainting },
@@ -383,6 +405,9 @@ internal fun WorkspaceScreen(
                     onLayOnFace = { objectId, triangle ->
                         layingOnFace = false
                         onLayOnFace(objectId, triangle)
+                    },
+                    onMeasurePoint = { point ->
+                        measurementPoints = nextMeasurementPoints(measurementPoints, point)
                     },
                     onSupportPaintPreview = onSupportPaintPreview,
                     onSupportPaintCommitted = onSupportPaintCommitted,
@@ -411,7 +436,8 @@ internal fun WorkspaceScreen(
 
             if (
                 selectedObject != null && selectedTab == WorkspaceTab.SLICE &&
-                !layingOnFace && !supportPainting && !seamPainting && !multiColorPainting
+                !layingOnFace && !measuring && !supportPainting && !seamPainting &&
+                !multiColorPainting
             ) {
                 ObjectToolRail(
                     canUndo = canUndo,
@@ -421,10 +447,20 @@ internal fun WorkspaceScreen(
                     onDuplicate = onDuplicate,
                     onAutoLay = onAutoLay,
                     onLayOnFace = {
+                        measuring = false
+                        measurementPoints = emptyList()
                         supportPainting = false
                         seamPainting = false
                         multiColorPainting = false
                         layingOnFace = true
+                    },
+                    onMeasure = {
+                        layingOnFace = false
+                        supportPainting = false
+                        seamPainting = false
+                        multiColorPainting = false
+                        measurementPoints = emptyList()
+                        measuring = true
                     },
                     autoLaying = autoLaying,
                     editingBusy = editingBusy,
@@ -453,6 +489,18 @@ internal fun WorkspaceScreen(
             if (selectedObject != null && selectedTab == WorkspaceTab.SLICE && layingOnFace) {
                 LayOnFacePalette(
                     onDone = { layingOnFace = false },
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
+                )
+            }
+
+            if (selectedObject != null && selectedTab == WorkspaceTab.SLICE && measuring) {
+                MeasurePalette(
+                    points = measurementPoints,
+                    onClear = { measurementPoints = emptyList() },
+                    onDone = {
+                        measuring = false
+                        measurementPoints = emptyList()
+                    },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
                 )
             }
@@ -631,10 +679,21 @@ internal fun WorkspaceScreen(
             onAutoLay = onAutoLay,
             onLayOnFace = {
                 showModelTools = false
+                measuring = false
+                measurementPoints = emptyList()
                 supportPainting = false
                 seamPainting = false
                 multiColorPainting = false
                 layingOnFace = true
+            },
+            onMeasure = {
+                showModelTools = false
+                layingOnFace = false
+                supportPainting = false
+                seamPainting = false
+                multiColorPainting = false
+                measurementPoints = emptyList()
+                measuring = true
             },
             onSplit = {
                 showModelTools = false
@@ -844,6 +903,7 @@ private fun ModelTransformSheet(
     cutting: Boolean,
     onAutoLay: () -> Unit,
     onLayOnFace: () -> Unit,
+    onMeasure: () -> Unit,
     onSplit: () -> Unit,
     onCut: () -> Unit,
     onSeamPaint: () -> Unit,
@@ -1135,6 +1195,19 @@ private fun ModelTransformSheet(
                 Icon(Icons.Default.Straighten, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.lay_on_face))
+            }
+            Button(
+                onClick = onMeasure,
+                enabled = !autoLaying && !splitting && !cutting,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF3A3B37),
+                    contentColor = Color(0xFFF4F4EE),
+                ),
+            ) {
+                Icon(Icons.Default.Straighten, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.measure_model))
             }
             Button(
                 onClick = onSplit,
@@ -1878,6 +1951,8 @@ private fun BedScene(
     previewRenderingMode: PreviewRenderingMode,
     objectManipulationEnabled: Boolean,
     layOnFaceObjectId: String?,
+    measureObjectId: String?,
+    measurementPoints: List<ModelPoint3>,
     supportPaintObjectId: String?,
     supportPaintState: SupportPaintState?,
     seamPaintObjectId: String?,
@@ -1888,6 +1963,7 @@ private fun BedScene(
     onModelTransformPreview: (ModelTransform) -> Unit,
     onModelTransformCommitted: (ModelTransform) -> Unit,
     onLayOnFace: (String, FloatArray) -> Unit,
+    onMeasurePoint: (ModelPoint3) -> Unit,
     onSupportPaintPreview: (String, Int, SupportPaintState?) -> Unit,
     onSupportPaintCommitted: (String, SupportPaint) -> Unit,
     onSeamPaintPreview: (String, Int, SeamPaintState?) -> Unit,
@@ -1938,6 +2014,7 @@ private fun BedScene(
     val currentTransformCallback by rememberUpdatedState(onModelTransformPreview)
     val currentTransformCommitCallback by rememberUpdatedState(onModelTransformCommitted)
     val currentLayOnFaceCallback by rememberUpdatedState(onLayOnFace)
+    val currentMeasurePointCallback by rememberUpdatedState(onMeasurePoint)
     val currentSupportPaintPreviewCallback by rememberUpdatedState(onSupportPaintPreview)
     val currentSupportPaintCommitCallback by rememberUpdatedState(onSupportPaintCommitted)
     val currentSeamPaintPreviewCallback by rememberUpdatedState(onSeamPaintPreview)
@@ -1979,6 +2056,7 @@ private fun BedScene(
             preview,
             objectManipulationEnabled,
             layOnFaceObjectId,
+            measureObjectId,
             supportPaintObjectId,
             supportPaintState,
             seamPaintObjectId,
@@ -1989,6 +2067,9 @@ private fun BedScene(
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 val layOnFaceObject = layOnFaceObjectId?.let { objectId ->
+                    currentObjects.firstOrNull { it.id == objectId }
+                }
+                val measuringObject = measureObjectId?.let { objectId ->
                     currentObjects.firstOrNull { it.id == objectId }
                 }
                 val supportPaintingObject = supportPaintObjectId?.let { objectId ->
@@ -2002,7 +2083,7 @@ private fun BedScene(
                 }
                 val paintingObject = supportPaintingObject ?: seamPaintingObject ?:
                     multiColorPaintingObject
-                if (layOnFaceObject != null) {
+                if (layOnFaceObject != null || measuringObject != null) {
                     var movement = 0f
                     var usedMultiplePointers = false
                     interactionActive = true
@@ -2030,18 +2111,54 @@ private fun BedScene(
                         interactionActive = false
                     }
                     if (movement < 12f && !usedMultiplePointers) {
+                        val activeObject = layOnFaceObject ?: checkNotNull(measuringObject)
                         val hit = closestModelTriangle(
-                            modelScreenTriangles[layOnFaceObject.id].orEmpty(),
+                            modelScreenTriangles[activeObject.id].orEmpty(),
                             down.position,
                             18.dp.toPx(),
                         )
                         if (hit != null) {
                             val start = hit.previewTriangleIndex * 9
-                            if (start >= 0 && start + 9 <= layOnFaceObject.model.previewTriangles.size) {
-                                currentLayOnFaceCallback(
-                                    layOnFaceObject.id,
-                                    layOnFaceObject.model.previewTriangles.copyOfRange(start, start + 9),
-                                )
+                            if (start >= 0 && start + 9 <= activeObject.model.previewTriangles.size) {
+                                if (layOnFaceObject != null) {
+                                    currentLayOnFaceCallback(
+                                        layOnFaceObject.id,
+                                        layOnFaceObject.model.previewTriangles.copyOfRange(start, start + 9),
+                                    )
+                                } else {
+                                    val model = activeObject.model
+                                    val transform = activeObject.transform
+                                    val minimumRotatedZ = transform.minimumRotatedZ(model)
+                                    val worldA = transform.placeVertex(
+                                        model.previewTriangles[start],
+                                        model.previewTriangles[start + 1],
+                                        model.previewTriangles[start + 2],
+                                        model,
+                                        bedSizeX,
+                                        bedSizeY,
+                                        minimumRotatedZ,
+                                    )
+                                    val worldB = transform.placeVertex(
+                                        model.previewTriangles[start + 3],
+                                        model.previewTriangles[start + 4],
+                                        model.previewTriangles[start + 5],
+                                        model,
+                                        bedSizeX,
+                                        bedSizeY,
+                                        minimumRotatedZ,
+                                    )
+                                    val worldC = transform.placeVertex(
+                                        model.previewTriangles[start + 6],
+                                        model.previewTriangles[start + 7],
+                                        model.previewTriangles[start + 8],
+                                        model,
+                                        bedSizeX,
+                                        bedSizeY,
+                                        minimumRotatedZ,
+                                    )
+                                    modelSurfacePoint(hit, down.position, worldA, worldB, worldC)
+                                        ?.let(currentMeasurePointCallback)
+                                }
                             }
                         }
                     }
@@ -2434,6 +2551,33 @@ private fun BedScene(
                     style = Stroke(1.2.dp.toPx()),
                 )
             }
+            if (measureObjectId != null && measurementPoints.isNotEmpty()) {
+                val projectedPoints = measurementPoints.take(2).map { point ->
+                    project(point.x, point.y, point.z)
+                }
+                if (projectedPoints.size == 2) {
+                    drawLine(
+                        color = Color.Black.copy(alpha = 0.86f),
+                        start = projectedPoints[0],
+                        end = projectedPoints[1],
+                        strokeWidth = 4.5.dp.toPx(),
+                    )
+                    drawLine(
+                        color = WorkspaceYellow,
+                        start = projectedPoints[0],
+                        end = projectedPoints[1],
+                        strokeWidth = 2.dp.toPx(),
+                    )
+                }
+                projectedPoints.forEachIndexed { index, point ->
+                    drawCircle(Color.Black.copy(alpha = 0.88f), 7.dp.toPx(), point)
+                    drawCircle(
+                        if (index == 0) WorkspaceYellow else Color(0xFFF4F4EE),
+                        4.dp.toPx(),
+                        point,
+                    )
+                }
+            }
             if (modelScreenBounds != nextBounds) modelScreenBounds = nextBounds
             if (modelScreenTriangles != nextScreenTriangles) modelScreenTriangles = nextScreenTriangles
         }
@@ -2513,6 +2657,174 @@ private fun pointToSegmentDistance(point: Offset, start: Offset, end: Offset): F
     val offset = point - start
     val position = ((offset.x * segment.x + offset.y * segment.y) / lengthSquared).coerceIn(0f, 1f)
     return (point - (start + segment * position)).getDistance()
+}
+
+private data class TriangleWeights(
+    val a: Float,
+    val b: Float,
+    val c: Float,
+)
+
+internal fun modelSurfacePoint(
+    triangle: ModelScreenTriangle,
+    point: Offset,
+    worldA: FloatArray,
+    worldB: FloatArray,
+    worldC: FloatArray,
+): ModelPoint3? {
+    if (worldA.size < 3 || worldB.size < 3 || worldC.size < 3) return null
+    if (
+        worldA.take(3).any { !it.isFinite() } ||
+        worldB.take(3).any { !it.isFinite() } ||
+        worldC.take(3).any { !it.isFinite() }
+    ) {
+        return null
+    }
+    val weights = triangleWeights(triangle, point)
+    val result = ModelPoint3(
+        x = worldA[0] * weights.a + worldB[0] * weights.b + worldC[0] * weights.c,
+        y = worldA[1] * weights.a + worldB[1] * weights.b + worldC[1] * weights.c,
+        z = worldA[2] * weights.a + worldB[2] * weights.b + worldC[2] * weights.c,
+    )
+    return result.takeIf { it.x.isFinite() && it.y.isFinite() && it.z.isFinite() }
+}
+
+private fun triangleWeights(triangle: ModelScreenTriangle, point: Offset): TriangleWeights {
+    val denominator =
+        (triangle.b.y - triangle.c.y) * (triangle.a.x - triangle.c.x) +
+            (triangle.c.x - triangle.b.x) * (triangle.a.y - triangle.c.y)
+    if (abs(denominator) > 0.000001f && pointInsideTriangle(point, triangle)) {
+        val a = (
+            (triangle.b.y - triangle.c.y) * (point.x - triangle.c.x) +
+                (triangle.c.x - triangle.b.x) * (point.y - triangle.c.y)
+            ) / denominator
+        val b = (
+            (triangle.c.y - triangle.a.y) * (point.x - triangle.c.x) +
+                (triangle.a.x - triangle.c.x) * (point.y - triangle.c.y)
+            ) / denominator
+        val c = 1f - a - b
+        if (a.isFinite() && b.isFinite() && c.isFinite()) {
+            return TriangleWeights(a, b, c)
+        }
+    }
+
+    data class EdgeCandidate(val distance: Float, val weights: TriangleWeights)
+
+    fun edge(start: Offset, end: Offset, startIndex: Int, endIndex: Int): EdgeCandidate {
+        val segment = end - start
+        val lengthSquared = segment.x * segment.x + segment.y * segment.y
+        val position = if (lengthSquared <= 0.000001f) {
+            0f
+        } else {
+            val offset = point - start
+            ((offset.x * segment.x + offset.y * segment.y) / lengthSquared).coerceIn(0f, 1f)
+        }
+        val closest = start + segment * position
+        val values = FloatArray(3)
+        values[startIndex] = 1f - position
+        values[endIndex] = position
+        return EdgeCandidate(
+            distance = (point - closest).getDistance(),
+            weights = TriangleWeights(values[0], values[1], values[2]),
+        )
+    }
+
+    return listOf(
+        edge(triangle.a, triangle.b, 0, 1),
+        edge(triangle.b, triangle.c, 1, 2),
+        edge(triangle.c, triangle.a, 2, 0),
+    ).minBy(EdgeCandidate::distance).weights
+}
+
+internal fun measurementBetween(first: ModelPoint3, second: ModelPoint3): ModelMeasurement? {
+    val deltaX = abs(second.x - first.x)
+    val deltaY = abs(second.y - first.y)
+    val deltaZ = abs(second.z - first.z)
+    val distance = kotlin.math.sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ)
+    return ModelMeasurement(distance, deltaX, deltaY, deltaZ).takeIf {
+        it.distanceMm.isFinite() && it.deltaXmm.isFinite() &&
+            it.deltaYmm.isFinite() && it.deltaZmm.isFinite()
+    }
+}
+
+internal fun nextMeasurementPoints(
+    current: List<ModelPoint3>,
+    point: ModelPoint3,
+): List<ModelPoint3> {
+    if (!point.x.isFinite() || !point.y.isFinite() || !point.z.isFinite()) return current.take(2)
+    return if (current.size >= 2) listOf(point) else (current + point).take(2)
+}
+
+@Composable
+private fun MeasurePalette(
+    points: List<ModelPoint3>,
+    onClear: () -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val measurement = points.takeIf { it.size == 2 }
+        ?.let { measurementBetween(it[0], it[1]) }
+    Surface(
+        modifier = modifier.widthIn(max = 560.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = Color.Black.copy(alpha = 0.9f),
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.Straighten, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    stringResource(R.string.measure_model),
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                    fontWeight = FontWeight.SemiBold,
+                )
+                TextButton(onClick = onClear, enabled = points.isNotEmpty()) {
+                    Text(stringResource(R.string.measure_clear))
+                }
+                TextButton(onClick = onDone) {
+                    Text(stringResource(R.string.done), color = WorkspaceYellow)
+                }
+            }
+            when {
+                measurement != null -> {
+                    Text(
+                        stringResource(R.string.measure_distance, measurement.distanceMm),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        color = WorkspaceYellow,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        stringResource(
+                            R.string.measure_axes,
+                            measurement.deltaXmm,
+                            measurement.deltaYmm,
+                            measurement.deltaZmm,
+                        ),
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        color = Color(0xFFC8C9C2),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                points.size == 1 -> Text(
+                    stringResource(R.string.measure_second_point),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    color = Color(0xFFC8C9C2),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                else -> Text(
+                    stringResource(R.string.measure_hint),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    color = Color(0xFFC8C9C2),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -2739,6 +3051,7 @@ private fun ObjectToolRail(
     onDuplicate: () -> Unit,
     onAutoLay: () -> Unit,
     onLayOnFace: () -> Unit,
+    onMeasure: () -> Unit,
     autoLaying: Boolean,
     editingBusy: Boolean,
     canPaintColor: Boolean,
@@ -2779,6 +3092,12 @@ private fun ObjectToolRail(
             IconButton(onClick = onLayOnFace, enabled = !editingBusy) {
                 Icon(Icons.Default.Straighten, stringResource(R.string.lay_on_face))
             }
+            IconButton(onClick = onMeasure, enabled = !editingBusy) {
+                Icon(Icons.Default.Straighten, stringResource(R.string.measure_model))
+            }
+            IconButton(onClick = onMore, enabled = !editingBusy) {
+                Icon(Icons.Default.Tune, stringResource(R.string.more_settings))
+            }
             IconButton(
                 onClick = onMultiColorPaint,
                 enabled = canPaintColor && !editingBusy,
@@ -2787,9 +3106,6 @@ private fun ObjectToolRail(
             }
             IconButton(onClick = onSupportPaint, enabled = !editingBusy) {
                 Icon(Icons.Default.Brush, stringResource(R.string.paint_support))
-            }
-            IconButton(onClick = onMore, enabled = !editingBusy) {
-                Icon(Icons.Default.Tune, stringResource(R.string.more_settings))
             }
             IconButton(onClick = onRemove, enabled = !editingBusy) {
                 Icon(Icons.Default.DeleteOutline, stringResource(R.string.remove_model), tint = Color(0xFFFF8A80))
