@@ -225,6 +225,7 @@ private fun WorkspaceAccessibilityHarness(
         onDuplicate = {},
         onArrange = {},
         onAutoLay = {},
+        onLayOnFace = { _, _ -> },
         onSplit = {},
         onCut = { _, _ -> },
         onSupportPaintPreview = { _, _, _ -> },

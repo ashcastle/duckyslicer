@@ -52,9 +52,9 @@ internal fun previewDetailForInteraction(
 }
 
 internal fun depthPreviewSegmentBudget(detail: PreviewDetail): Int = when (detail.concreteOrBalanced()) {
-    PreviewDetail.PERFORMANCE -> 6_000
-    PreviewDetail.BALANCED -> 16_000
-    PreviewDetail.DETAIL -> 40_000
+    PreviewDetail.PERFORMANCE -> 24_000
+    PreviewDetail.BALANCED -> 80_000
+    PreviewDetail.DETAIL -> GcodeLayerPreview.MAX_SEGMENTS
     PreviewDetail.AUTOMATIC -> error("concreteOrBalanced must resolve automatic detail")
 }
 
