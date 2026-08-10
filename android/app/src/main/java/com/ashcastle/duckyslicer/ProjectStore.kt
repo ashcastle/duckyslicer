@@ -340,6 +340,9 @@ internal class ProjectStore(
         .put("rotationYdeg", rotationYdeg.checkedTransformValue(-MAX_ROTATION_DEG, MAX_ROTATION_DEG))
         .put("rotationZdeg", rotationZdeg.checkedTransformValue(-MAX_ROTATION_DEG, MAX_ROTATION_DEG))
         .put("scale", scale.checkedTransformValue(MIN_SCALE, MAX_SCALE))
+        .put("mirrorX", mirrorX)
+        .put("mirrorY", mirrorY)
+        .put("mirrorZ", mirrorZ)
 
     private fun JSONObject.toModelTransform() = ModelTransform(
         offsetXmm = checkedFloat("offsetXmm", -MAX_OFFSET_MM, MAX_OFFSET_MM),
@@ -348,7 +351,15 @@ internal class ProjectStore(
         rotationYdeg = checkedFloat("rotationYdeg", -MAX_ROTATION_DEG, MAX_ROTATION_DEG),
         rotationZdeg = checkedFloat("rotationZdeg", -MAX_ROTATION_DEG, MAX_ROTATION_DEG),
         scale = checkedFloat("scale", MIN_SCALE, MAX_SCALE),
+        mirrorX = checkedOptionalBoolean("mirrorX"),
+        mirrorY = checkedOptionalBoolean("mirrorY"),
+        mirrorZ = checkedOptionalBoolean("mirrorZ"),
     )
+
+    private fun JSONObject.checkedOptionalBoolean(name: String): Boolean {
+        if (!has(name)) return false
+        return get(name) as? Boolean ?: throw IllegalArgumentException("Invalid transform flag")
+    }
 
     private fun SupportPaint.toStoredJson() = JSONArray().also { values ->
         require(facets.size <= SupportPaint.MAX_PAINTED_FACETS) { "Support paint is too large" }

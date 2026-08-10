@@ -63,6 +63,9 @@
     <string name="rotate_y">Y 회전</string>
     <string name="rotate_z">Z 회전</string>
     <string name="scale">크기</string>
+    <string name="mirror_x">X 미러</string>
+    <string name="mirror_y">Y 미러</string>
+    <string name="mirror_z">Z 미러</string>
     <string name="degrees_value">%1$.0f°</string>
     <string name="center_model">가운데</string>
     <string name="rotate_90">90° 회전</string>

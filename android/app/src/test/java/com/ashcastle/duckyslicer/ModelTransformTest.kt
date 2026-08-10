@@ -42,6 +42,19 @@ class ModelTransformTest {
     }
 
     @Test
+    fun localPreviewTransformMirrorsBeforeRotation() {
+        val transformed = ModelTransform(
+            scale = 2f,
+            mirrorX = true,
+            mirrorZ = true,
+        ).transformLocal(floatArrayOf(1f, 2f, 3f))
+
+        assertEquals(-2f, transformed[0], 0.0001f)
+        assertEquals(4f, transformed[1], 0.0001f)
+        assertEquals(-6f, transformed[2], 0.0001f)
+    }
+
+    @Test
     fun orcaArrangementRejectsCountAndGeometryMismatches() {
         val malformed = listOf(
             { OrcaArrangement(floatArrayOf(), floatArrayOf(), floatArrayOf()) },

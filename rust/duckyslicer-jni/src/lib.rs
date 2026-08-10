@@ -60,6 +60,8 @@ struct StlTransform {
     offset_mm: [f32; 2],
     rotation_deg: [f32; 3],
     scale: f32,
+    #[serde(default)]
+    mirror: [bool; 3],
 }
 
 #[derive(Serialize)]
@@ -362,16 +364,28 @@ fn transformed_vertex(
     transformed_min_z: f32,
     transform: &StlTransform,
 ) -> [f32; 3] {
-    let local = [
-        (vertex[0] - source_center[0]) * transform.scale,
-        (vertex[1] - source_center[1]) * transform.scale,
-        (vertex[2] - source_center[2]) * transform.scale,
-    ];
-    let rotated = rotate_vertex(local, transform.rotation_deg);
+    let rotated = rotate_vertex(
+        local_vertex(vertex, source_center, transform),
+        transform.rotation_deg,
+    );
     [
         rotated[0] + transform.bed_center_mm[0] + transform.offset_mm[0],
         rotated[1] + transform.bed_center_mm[1] + transform.offset_mm[1],
         rotated[2] - transformed_min_z,
+    ]
+}
+
+fn local_vertex(vertex: [f32; 3], source_center: [f32; 3], transform: &StlTransform) -> [f32; 3] {
+    [
+        (vertex[0] - source_center[0])
+            * transform.scale
+            * if transform.mirror[0] { -1.0 } else { 1.0 },
+        (vertex[1] - source_center[1])
+            * transform.scale
+            * if transform.mirror[1] { -1.0 } else { 1.0 },
+        (vertex[2] - source_center[2])
+            * transform.scale
+            * if transform.mirror[2] { -1.0 } else { 1.0 },
     ]
 }
 
@@ -475,11 +489,7 @@ fn transform_stl(
         let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
         validate_triangle(&triangle)?;
         for vertex in triangle.vertices {
-            let local = [
-                (vertex[0] - source_center[0]) * transform.scale,
-                (vertex[1] - source_center[1]) * transform.scale,
-                (vertex[2] - source_center[2]) * transform.scale,
-            ];
+            let local = local_vertex(vertex.0, source_center, transform);
             transformed_min_z =
                 transformed_min_z.min(rotate_vertex(local, transform.rotation_deg)[2]);
         }
@@ -498,12 +508,22 @@ fn transform_stl(
     let mut writer = BufWriter::new(output_file);
     writer.write_all(&[0u8; 80])?;
     writer.write_all(&triangle_count.to_le_bytes())?;
+    let reverses_winding = transform
+        .mirror
+        .iter()
+        .filter(|mirrored| **mirrored)
+        .count()
+        % 2
+        == 1;
     for triangle in output_pass {
         let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
         validate_triangle(&triangle)?;
-        let vertices = triangle.vertices.map(|vertex| {
+        let mut vertices = triangle.vertices.map(|vertex| {
             transformed_vertex(vertex.0, source_center, transformed_min_z, transform)
         });
+        if reverses_winding {
+            vertices.swap(1, 2);
+        }
         if vertices.iter().flatten().any(|value| {
             !value.is_finite() || value.abs() > MAX_STL_COORDINATE_ABS_MM * transform.scale.max(1.0)
         }) {
@@ -1109,6 +1129,7 @@ mod tests {
             offset_mm: [5.0, -3.0],
             rotation_deg: [0.0, 0.0, 90.0],
             scale: 2.0,
+            mirror: [false; 3],
         };
         transform_stl(
             input_path.to_str().expect("utf8 path"),
@@ -1125,6 +1146,22 @@ mod tests {
         assert!((inspection.min_mm[0] - 101.0).abs() < 0.001);
         assert!((inspection.max_mm[1] - 99.0).abs() < 0.001);
         assert_eq!(inspection.min_mm[2], 0.0);
+    }
+
+    #[test]
+    fn stl_transform_mirrors_axes_before_rotation() {
+        let transform = StlTransform {
+            bed_center_mm: [0.0, 0.0],
+            offset_mm: [0.0, 0.0],
+            rotation_deg: [0.0; 3],
+            scale: 2.0,
+            mirror: [true, false, true],
+        };
+
+        assert_eq!(
+            transformed_vertex([2.0, 4.0, 6.0], [1.0, 2.0, 3.0], -6.0, &transform),
+            [-2.0, 4.0, 0.0],
+        );
     }
 
     #[test]
@@ -1150,6 +1187,7 @@ mod tests {
                 offset_mm: [0.0, 0.0],
                 rotation_deg: [0.0, 0.0, 0.0],
                 scale: 1.0,
+                mirror: [false; 3],
             },
         );
 
@@ -1178,6 +1216,7 @@ mod tests {
                 offset_mm: [0.0, 0.0],
                 rotation_deg: [0.0, 0.0, 0.0],
                 scale: 1.0,
+                mirror: [false; 3],
             },
         );
         let after = std::fs::read(&path).expect("read preserved source");
