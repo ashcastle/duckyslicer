@@ -1376,7 +1376,7 @@ new file mode 100644
 index 00000000..bebc6734
 --- /dev/null
 +++ b/app/src/main/cpp/src/sapil_support_paint.cpp
-@@ -0,0 +1,101 @@
+@@ -0,0 +1,122 @@
 +#include <jni.h>
 +
 +#include <array>
@@ -1394,6 +1394,7 @@ index 00000000..bebc6734
 +namespace {
 +
 +constexpr std::array<unsigned char, 4> SUPPORT_PAINT_MAGIC{'D', 'S', 'P', '1'};
++constexpr std::array<unsigned char, 4> SEAM_PAINT_MAGIC{'D', 'S', 'E', '1'};
 +constexpr std::uint32_t MAX_PAINTED_FACETS = 100000;
 +constexpr std::uint64_t HEADER_BYTES = 8;
 +constexpr std::uint64_t ENTRY_BYTES = 5;
@@ -1409,7 +1410,11 @@ index 00000000..bebc6734
 +    return true;
 +}
 +
-+bool apply_support_paint(int object_index, const std::string& sidecar_path)
++bool apply_facet_paint(
++    int object_index,
++    const std::string& sidecar_path,
++    const std::array<unsigned char, 4>& expected_magic,
++    bool seam_paint)
 +{
 +    if (object_index < 0 || static_cast<std::size_t>(object_index) >= sapil::g_model.objects.size()) {
 +        return false;
@@ -1432,7 +1437,7 @@ index 00000000..bebc6734
 +    input.seekg(0, std::ios::beg);
 +
 +    std::array<unsigned char, 4> magic{};
-+    if (!input.read(reinterpret_cast<char*>(magic.data()), magic.size()) || magic != SUPPORT_PAINT_MAGIC) {
++    if (!input.read(reinterpret_cast<char*>(magic.data()), magic.size()) || magic != expected_magic) {
 +        return false;
 +    }
 +    std::uint32_t count = 0;
@@ -1462,7 +1467,9 @@ index 00000000..bebc6734
 +        previous_index = facet_index;
 +        has_previous = true;
 +    }
-+    return volume->supported_facets.set(selector) || count == 0;
++    const bool changed = seam_paint ? volume->seam_facets.set(selector)
++                                    : volume->supported_facets.set(selector);
++    return changed || count == 0;
 +}
 +
 +} // namespace
@@ -1474,7 +1481,21 @@ index 00000000..bebc6734
 +    if (sidecar_path == nullptr) return JNI_FALSE;
 +    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
 +    if (path == nullptr) return JNI_FALSE;
-+    const bool result = apply_support_paint(static_cast<int>(object_index), std::string(path));
++    const bool result = apply_facet_paint(
++        static_cast<int>(object_index), std::string(path), SUPPORT_PAINT_MAGIC, false);
++    env->ReleaseStringUTFChars(sidecar_path, path);
++    return result ? JNI_TRUE : JNI_FALSE;
++}
++
++extern "C" JNIEXPORT jboolean JNICALL
++Java_com_u1_slicer_NativeLibrary_applySeamPaint(
++        JNIEnv* env, jobject, jint object_index, jstring sidecar_path)
++{
++    if (sidecar_path == nullptr) return JNI_FALSE;
++    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
++    if (path == nullptr) return JNI_FALSE;
++    const bool result = apply_facet_paint(
++        static_cast<int>(object_index), std::string(path), SEAM_PAINT_MAGIC, true);
 +    env->ReleaseStringUTFChars(sidecar_path, path);
 +    return result ? JNI_TRUE : JNI_FALSE;
 +}

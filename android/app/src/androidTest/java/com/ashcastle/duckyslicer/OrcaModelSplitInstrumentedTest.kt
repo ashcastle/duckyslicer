@@ -44,6 +44,7 @@ class OrcaModelSplitInstrumentedTest {
                     mirrorX = true,
                 ),
                 supportPaint = SupportPaint().paint(0, SupportPaintState.ENFORCE),
+                seamPaint = SeamPaint().paint(1, SeamPaintState.BLOCK),
             )
             val expectedFile = File(context.cacheDir, "expected-split-parent.stl")
             val transformed = JSONObject(
@@ -62,8 +63,8 @@ class OrcaModelSplitInstrumentedTest {
             val split = splitProjectObject(parent, store, options)
 
             assertEquals(2, split.objects.size)
-            assertTrue(split.clearedSupportPaint)
-            assertTrue(split.objects.all { it.supportPaint.facets.isEmpty() })
+            assertTrue(split.clearedFacetPaint)
+            assertTrue(split.objects.all { it.supportPaint.facets.isEmpty() && it.seamPaint.facets.isEmpty() })
             val placed = split.objects.mapIndexed { index, projectObject ->
                 val output = File(context.cacheDir, "placed-split-$index.stl")
                 val response = JSONObject(

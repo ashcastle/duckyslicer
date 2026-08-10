@@ -22,6 +22,7 @@ internal data class ArchivedProjectObject(
     val modelEntry: String,
     val transform: ModelTransform,
     val supportPaint: SupportPaint,
+    val seamPaint: SeamPaint,
     val filamentSlot: Int,
 )
 
@@ -78,6 +79,7 @@ internal object ProjectArchiveCodec {
                                 .put("modelEntry", requireNotNull(modelEntries[model]))
                                 .put("transform", projectObject.transform.toArchiveJson())
                                 .put("supportPaint", projectObject.supportPaint.toArchiveJson())
+                                .put("seamPaint", projectObject.seamPaint.toArchiveJson())
                                 .put("filamentSlot", projectObject.filamentSlot),
                         )
                     }
@@ -172,6 +174,7 @@ internal object ProjectArchiveCodec {
         val validatedObjects = metadata.objects.map { archived ->
             val triangleCount = requireNotNull(inspected[archived.modelEntry]).info.triangles
             require(archived.supportPaint.facets.keys.all { it in 0 until triangleCount })
+            require(archived.seamPaint.facets.keys.all { it in 0 until triangleCount })
             archived
         }
         DecodedProjectArchive(
@@ -184,7 +187,8 @@ internal object ProjectArchiveCodec {
 
     private fun parseManifest(root: JSONObject): DecodedProjectArchive {
         require(root.optString("format") == PROJECT_ARCHIVE_FORMAT)
-        require(root.optInt("schemaVersion", 0) == PROJECT_ARCHIVE_SCHEMA_VERSION)
+        val schemaVersion = root.optInt("schemaVersion", 0)
+        require(schemaVersion in MIN_PROJECT_ARCHIVE_SCHEMA_VERSION..PROJECT_ARCHIVE_SCHEMA_VERSION)
         val values = root.getJSONArray("objects")
         require(values.length() <= ProjectStore.MAX_PROJECT_OBJECTS)
         val ids = HashSet<String>()
@@ -199,6 +203,11 @@ internal object ProjectArchiveCodec {
                     ?: throw ProjectArchiveException(),
                 transform = value.getJSONObject("transform").toArchiveTransform(),
                 supportPaint = value.getJSONArray("supportPaint").toArchiveSupportPaint(),
+                seamPaint = if (schemaVersion >= 2) {
+                    value.getJSONArray("seamPaint").toArchiveSeamPaint()
+                } else {
+                    SeamPaint()
+                },
                 filamentSlot = value.optInt("filamentSlot", 0).takeIf {
                     it in 0 until MAX_FILAMENT_SLOTS
                 } ?: throw ProjectArchiveException(),
@@ -271,6 +280,29 @@ private fun JSONArray.toArchiveSupportPaint(): SupportPaint {
         previousIndex = index
     }
     return SupportPaint(facets)
+}
+
+private fun SeamPaint.toArchiveJson() = JSONArray().also { values ->
+    require(facets.size <= SeamPaint.MAX_PAINTED_FACETS)
+    facets.toSortedMap().forEach { (facetIndex, state) ->
+        require(facetIndex >= 0)
+        values.put(facetIndex)
+        values.put(state.code)
+    }
+}
+
+private fun JSONArray.toArchiveSeamPaint(): SeamPaint {
+    require(length() % 2 == 0 && length() / 2 <= SeamPaint.MAX_PAINTED_FACETS)
+    val facets = LinkedHashMap<Int, SeamPaintState>(length() / 2)
+    var previousIndex = -1
+    for (offset in 0 until length() step 2) {
+        val index = getInt(offset)
+        val state = SeamPaintState.fromCode(getInt(offset + 1)) ?: throw ProjectArchiveException()
+        require(index >= 0 && index > previousIndex)
+        facets[index] = state
+        previousIndex = index
+    }
+    return SeamPaint(facets)
 }
 
 private fun JSONObject.checkedArchiveFloat(key: String, minimum: Float, maximum: Float): Float =
@@ -372,6 +404,7 @@ internal const val MAX_PROJECT_ARCHIVE_FILE_BYTES = 1_082_130_432L
 private const val MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_OBJECTS + 1
 private const val MAX_PROJECT_ARCHIVE_ENTRY_NAME = 128
 private const val PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"
-private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 1
+private const val MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1
+private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 2
 private const val PROJECT_ARCHIVE_MANIFEST = "manifest.json"
 private val PROJECT_ARCHIVE_MODEL_ENTRY = Regex("models/[0-9]{3}\\.stl")

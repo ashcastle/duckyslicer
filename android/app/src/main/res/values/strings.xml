@@ -76,7 +76,7 @@
     <string name="auto_lay_error">Couldn’t place this model automatically.</string>
     <string name="split_to_objects">Split to objects</string>
     <string name="split_done">%1$d objects created.</string>
-    <string name="split_done_paint_cleared">%1$d objects created. Support painting was cleared.</string>
+    <string name="split_done_painting_cleared">%1$d objects created. Surface painting was cleared.</string>
     <string name="split_not_possible">This model has no separate objects.</string>
     <string name="split_error">Couldn’t split this model.</string>
     <string name="cut_model">Cut</string>
@@ -86,10 +86,15 @@
     <string name="place_on_cut">Place cut faces on the bed</string>
     <string name="cut_working">Cutting…</string>
     <string name="cut_done">2 objects created.</string>
-    <string name="cut_done_paint_cleared">2 objects created. Support painting was cleared.</string>
+    <string name="cut_done_painting_cleared">2 objects created. Surface painting was cleared.</string>
     <string name="cut_not_possible">The cut plane does not divide this model.</string>
     <string name="cut_error">Couldn’t cut this model.</string>
     <string name="paint_support">Paint support</string>
+    <string name="paint_seam">Paint seam</string>
+    <string name="seam_enforce">Prefer</string>
+    <string name="seam_block">Avoid</string>
+    <string name="seam_erase">Erase</string>
+    <string name="seam_paint_hint">Drag across the model to choose or avoid seam positions.</string>
     <string name="support_enforce">Add support</string>
     <string name="support_block">Block support</string>
     <string name="support_erase">Erase</string>
