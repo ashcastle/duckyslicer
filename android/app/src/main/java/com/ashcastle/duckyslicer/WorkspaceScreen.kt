@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.ExpandLess
@@ -75,6 +76,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -227,6 +229,7 @@ internal fun WorkspaceScreen(
     autoLaying: Boolean,
     arranging: Boolean,
     splitting: Boolean,
+    cutting: Boolean,
     slicing: Boolean,
     sliceCancellationRequested: Boolean,
     sliceProgress: Int,
@@ -250,6 +253,7 @@ internal fun WorkspaceScreen(
     onArrange: () -> Unit,
     onAutoLay: () -> Unit,
     onSplit: () -> Unit,
+    onCut: (Float, Boolean) -> Unit,
     onSupportPaintPreview: (String, Int, SupportPaintState?) -> Unit,
     onSupportPaintCommitted: (String, SupportPaint) -> Unit,
     onRemoveModel: () -> Unit,
@@ -275,11 +279,12 @@ internal fun WorkspaceScreen(
     val selectedObject = projectObjects.firstOrNull { it.id == selectedObjectId }
     val model = selectedObject?.model ?: projectObjects.firstOrNull()?.model
     val modelTransform = selectedObject?.transform ?: ModelTransform()
-    val editingBusy = workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading) || splitting
+    val editingBusy = workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading) || splitting || cutting
     val tabletLayout = useWorkspaceNavigationRail(maxWidth.value, maxHeight.value)
     val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
     var showModelTools by remember { mutableStateOf(false) }
     var showFilamentPicker by remember { mutableStateOf(false) }
+    var showCutTool by remember { mutableStateOf(false) }
     var supportPainting by remember { mutableStateOf(false) }
     var supportPaintTool by remember { mutableStateOf(SupportPaintTool.ENFORCE) }
     var visibleToolpathRoles by remember { mutableStateOf(ToolpathStyles.indices.toSet()) }
@@ -287,6 +292,7 @@ internal fun WorkspaceScreen(
     LaunchedEffect(selectedObjectId, selectedTab) {
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) supportPainting = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showFilamentPicker = false
+        if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showCutTool = false
     }
     Scaffold(
         containerColor = Color(0xFF191A18),
@@ -511,10 +517,15 @@ internal fun WorkspaceScreen(
             bedPolygon = sliceOptions.bedPolygon,
             autoLaying = autoLaying,
             splitting = splitting,
+            cutting = cutting,
             onAutoLay = onAutoLay,
             onSplit = {
                 showModelTools = false
                 onSplit()
+            },
+            onCut = {
+                showModelTools = false
+                showCutTool = true
             },
             onChooseFilament = {
                 showModelTools = false
@@ -541,6 +552,16 @@ internal fun WorkspaceScreen(
             onDismiss = { showFilamentPicker = false },
         )
     }
+    if (showCutTool && selectedObject != null) {
+        CutObjectSheet(
+            modelHeightMm = selectedObject.model.dimensions[2].toFloat(),
+            onCut = { heightRatio, placeOnCut ->
+                showCutTool = false
+                onCut(heightRatio, placeOnCut)
+            },
+            onDismiss = { showCutTool = false },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -555,8 +576,10 @@ private fun ModelTransformSheet(
     bedPolygon: List<Float>,
     autoLaying: Boolean,
     splitting: Boolean,
+    cutting: Boolean,
     onAutoLay: () -> Unit,
     onSplit: () -> Unit,
+    onCut: () -> Unit,
     onChooseFilament: () -> Unit,
     onTransformChanged: (ModelTransform) -> Unit,
     onRemoveModel: () -> Unit,
@@ -679,7 +702,7 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onChooseFilament,
-                enabled = !autoLaying && !splitting,
+                enabled = !autoLaying && !splitting && !cutting,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF3A3B37),
@@ -704,7 +727,7 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onAutoLay,
-                enabled = !autoLaying && !splitting,
+                enabled = !autoLaying && !splitting && !cutting,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = WorkspaceYellow,
@@ -727,7 +750,7 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onSplit,
-                enabled = !autoLaying && !splitting,
+                enabled = !autoLaying && !splitting && !cutting,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF3A3B37),
@@ -737,6 +760,19 @@ private fun ModelTransformSheet(
                 Icon(Icons.Default.Layers, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.split_to_objects))
+            }
+            Button(
+                onClick = onCut,
+                enabled = !autoLaying && !splitting && !cutting,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF3A3B37),
+                    contentColor = Color(0xFFF4F4EE),
+                ),
+            ) {
+                Icon(Icons.Default.ContentCut, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.cut_model))
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -775,6 +811,100 @@ private fun ModelTransformSheet(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(stringResource(R.string.remove_model), color = Color(0xFFFF8A80))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CutObjectSheet(
+    modelHeightMm: Float,
+    onCut: (Float, Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var heightRatio by rememberSaveable { mutableFloatStateOf(0.5f) }
+    var placeOnCut by rememberSaveable { mutableStateOf(true) }
+    val safeHeight = modelHeightMm.takeIf { it.isFinite() && it > 0f } ?: 0f
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF282925),
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(
+                stringResource(R.string.cut_model_title),
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                stringResource(R.string.cut_height),
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Text(
+                stringResource(
+                    R.string.cut_height_value,
+                    safeHeight * heightRatio,
+                    (heightRatio * 100f).roundToInt(),
+                ),
+                color = WorkspaceYellow,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Slider(
+                value = heightRatio,
+                onValueChange = { heightRatio = it },
+                valueRange = 0.05f..0.95f,
+                steps = 17,
+                colors = SliderDefaults.colors(
+                    thumbColor = WorkspaceYellow,
+                    activeTrackColor = WorkspaceYellow,
+                    inactiveTrackColor = Color(0xFF555650),
+                ),
+            )
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = placeOnCut,
+                        role = Role.Switch,
+                        onValueChange = { placeOnCut = it },
+                    ),
+                shape = RoundedCornerShape(14.dp),
+                color = Color(0xFF343530),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.place_on_cut),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = placeOnCut,
+                        onCheckedChange = null,
+                    )
+                }
+            }
+            Button(
+                onClick = { onCut(heightRatio, placeOnCut) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = WorkspaceYellow,
+                    contentColor = WorkspaceBlack,
+                ),
+            ) {
+                Icon(Icons.Default.ContentCut, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.cut_model))
             }
         }
     }
