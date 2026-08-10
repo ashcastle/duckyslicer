@@ -163,6 +163,14 @@ def captured(command: Sequence[str], *, cwd: Path = ROOT) -> str:
     return run(command, cwd=cwd, capture=True).stdout.strip()
 
 
+def mismatched_submodules(source: str) -> list[str]:
+    return [
+        line
+        for line in source.splitlines()
+        if line and not line.startswith(" ")
+    ]
+
+
 def verify_checkout() -> str:
     status = captured(("git", "status", "--porcelain", "--untracked-files=normal"))
     if status:
@@ -185,8 +193,11 @@ def verify_checkout() -> str:
     origin_main = captured(("git", "rev-parse", "origin/main"))
     if commit != origin_main:
         raise ReleasePreparationError("Local main must exactly match origin/main")
-    submodules = captured(("git", "submodule", "status", "--recursive"))
-    invalid = [line for line in submodules.splitlines() if line and not line.startswith(" ")]
+    submodules = run(
+        ("git", "submodule", "status", "--recursive"),
+        capture=True,
+    ).stdout
+    invalid = mismatched_submodules(submodules)
     if invalid:
         raise ReleasePreparationError(
             "Recursive submodules do not match their recorded commits: " + "; ".join(invalid)
