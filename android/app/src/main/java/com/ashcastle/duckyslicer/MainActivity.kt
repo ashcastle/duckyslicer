@@ -8,7 +8,6 @@ import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.OpenableColumns
 import android.util.Log
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -499,24 +498,23 @@ private fun DuckySlicerScreen(
             error = null
             notice = null
             scope.launch {
-                runCatching { importAndInspect(context, uri, projectStore) }
-                    .onSuccess {
+                runCatching { importOrcaModels(context, uri, projectStore, sliceOptions) }
+                    .onSuccess { importedObjects ->
                         val objectIndex = projectObjects.size
                         val distance = ((objectIndex + 1) / 2) * 24f
-                        val initialTransform = ModelTransform(
-                            offsetXmm = when {
-                                objectIndex == 0 -> 0f
-                                objectIndex % 2 == 1 -> distance
-                                else -> -distance
-                            },
-                        )
-                        projectHistory = projectHistory.add(
-                            ProjectObject(
-                                id = UUID.randomUUID().toString(),
-                                model = it,
-                                transform = initialTransform,
-                            ),
-                        )
+                        val offset = when {
+                            objectIndex == 0 -> 0f
+                            objectIndex % 2 == 1 -> distance
+                            else -> -distance
+                        }
+                        val placedObjects = importedObjects.map { imported ->
+                            imported.copy(
+                                transform = imported.transform.copy(
+                                    offsetXmm = imported.transform.offsetXmm + offset,
+                                ),
+                            )
+                        }
+                        projectHistory = projectHistory.addAll(placedObjects)
                         clearCompletedSlice()
                         remoteUpload = null
                         selectedTab = WorkspaceTab.SLICE
@@ -784,7 +782,19 @@ private fun DuckySlicerScreen(
                 loadPreviewRange(0, Int.MAX_VALUE)
             }
         },
-        onChoose = { filePicker.launch(arrayOf("model/stl", "application/sla", "*/*")) },
+        onChoose = {
+            filePicker.launch(
+                arrayOf(
+                    "model/stl",
+                    "model/3mf",
+                    "model/obj",
+                    "application/sla",
+                    "application/vnd.ms-package.3dmanufacturing-3dmodel+xml",
+                    "application/x-tgif",
+                    "*/*",
+                ),
+            )
+        },
         onOpenProject = {
             projectOpenPicker.launch(
                 arrayOf(PROJECT_ARCHIVE_MIME_TYPE, "application/zip"),
@@ -1089,49 +1099,5 @@ private fun DuckySlicerScreen(
                 onExternalProjectRequestConsumed(request.id)
             },
         )
-    }
-}
-
-private suspend fun importAndInspect(
-    context: Context,
-    uri: Uri,
-    projectStore: ProjectStore,
-): ModelInfo = withContext(Dispatchers.IO) {
-    val metadata = runCatching {
-        context.contentResolver.query(
-            uri,
-            arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
-            null,
-            null,
-            null,
-        )?.use { cursor ->
-            if (!cursor.moveToFirst()) return@use null
-            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-            val name = nameIndex.takeIf { it >= 0 && !cursor.isNull(it) }?.let(cursor::getString)
-            val size = sizeIndex.takeIf { it >= 0 && !cursor.isNull(it) }?.let(cursor::getLong)
-            name to size
-        }
-    }.getOrNull()
-    val displayName = metadata?.first
-        ?.take(200)
-        ?.takeIf { it.endsWith(".stl", ignoreCase = true) }
-        ?: "model.stl"
-    val reportedSize = metadata?.second?.takeIf { it >= 0 }
-    if (reportedSize != null && reportedSize > MAX_MODEL_IMPORT_BYTES) {
-        throw ModelTooLargeException()
-    }
-    val destination = projectStore.createModelDestination(displayName)
-
-    try {
-        context.contentResolver.openInputStream(uri).use { input ->
-            requireNotNull(input) { "model_unreadable" }
-            destination.outputStream().use { output -> copyModelWithLimit(input, output) }
-        }
-        ModelInfo.fromJson(NativeEngine.inspectStl(destination.absolutePath), destination.absolutePath)
-            .copy(fileName = displayName)
-    } catch (failure: Throwable) {
-        destination.delete()
-        throw failure
     }
 }
