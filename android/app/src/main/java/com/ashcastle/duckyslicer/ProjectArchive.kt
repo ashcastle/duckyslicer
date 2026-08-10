@@ -23,6 +23,7 @@ internal data class ArchivedProjectObject(
     val transform: ModelTransform,
     val supportPaint: SupportPaint,
     val seamPaint: SeamPaint,
+    val multiColorPaint: MultiColorPaint,
     val variableLayerHeights: VariableLayerHeights,
     val filamentSlot: Int,
 )
@@ -51,7 +52,11 @@ internal object ProjectArchiveCodec {
             snapshot.selectedObjectId == null ||
                 snapshot.objects.any { it.id == snapshot.selectedObjectId },
         )
-        require(snapshot.objects.all { it.filamentSlot in sliceOptions.resolvedFilamentSlots().indices })
+        val availableSlots = sliceOptions.resolvedFilamentSlots().indices
+        require(snapshot.objects.all { projectObject ->
+            projectObject.filamentSlot in availableSlots &&
+                projectObject.multiColorPaint.facets.values.all { it in availableSlots }
+        })
         val modelEntries = LinkedHashMap<File, String>()
         snapshot.objects.forEach { projectObject ->
             val model = File(projectObject.model.localPath).canonicalFile
@@ -81,6 +86,7 @@ internal object ProjectArchiveCodec {
                                 .put("transform", projectObject.transform.toArchiveJson())
                                 .put("supportPaint", projectObject.supportPaint.toArchiveJson())
                                 .put("seamPaint", projectObject.seamPaint.toArchiveJson())
+                                .put("multiColorPaint", projectObject.multiColorPaint.toArchiveJson())
                                 .put(
                                     "variableLayerHeights",
                                     projectObject.variableLayerHeights.toArchiveJson(),
@@ -180,6 +186,7 @@ internal object ProjectArchiveCodec {
             val triangleCount = requireNotNull(inspected[archived.modelEntry]).info.triangles
             require(archived.supportPaint.facets.keys.all { it in 0 until triangleCount })
             require(archived.seamPaint.facets.keys.all { it in 0 until triangleCount })
+            require(archived.multiColorPaint.facets.keys.all { it in 0 until triangleCount })
             archived
         }
         DecodedProjectArchive(
@@ -213,6 +220,11 @@ internal object ProjectArchiveCodec {
                 } else {
                     SeamPaint()
                 },
+                multiColorPaint = if (schemaVersion >= 4) {
+                    value.getJSONArray("multiColorPaint").toArchiveMultiColorPaint()
+                } else {
+                    MultiColorPaint()
+                },
                 variableLayerHeights = if (schemaVersion >= 3) {
                     value.getJSONArray("variableLayerHeights").toArchiveVariableLayerHeights()
                 } else {
@@ -228,7 +240,11 @@ internal object ProjectArchiveCodec {
         require(selected == null || selected in ids)
         val options = root.getJSONObject("sliceOptions").toProjectSliceOptionsOrNull()
             ?: throw ProjectArchiveException()
-        require(objects.all { it.filamentSlot in options.resolvedFilamentSlots().indices })
+        val availableSlots = options.resolvedFilamentSlots().indices
+        require(objects.all { archived ->
+            archived.filamentSlot in availableSlots &&
+                archived.multiColorPaint.facets.values.all { it in availableSlots }
+        })
         return DecodedProjectArchive(objects, selected, options, emptyMap())
     }
 }
@@ -313,6 +329,31 @@ private fun JSONArray.toArchiveSeamPaint(): SeamPaint {
         previousIndex = index
     }
     return SeamPaint(facets)
+}
+
+private fun MultiColorPaint.toArchiveJson() = JSONArray().also { values ->
+    facets.toSortedMap().forEach { (facetIndex, filamentSlot) ->
+        require(facetIndex >= 0 && filamentSlot in 0 until MAX_FILAMENT_SLOTS)
+        values.put(facetIndex)
+        values.put(filamentSlot)
+    }
+}
+
+private fun JSONArray.toArchiveMultiColorPaint(): MultiColorPaint {
+    require(length() % 2 == 0 && length() / 2 <= MultiColorPaint.MAX_PAINTED_FACETS)
+    val facets = LinkedHashMap<Int, Int>(length() / 2)
+    var previousIndex = -1
+    for (offset in 0 until length() step 2) {
+        val index = getInt(offset)
+        val filamentSlot = getInt(offset + 1)
+        require(
+            index >= 0 && index > previousIndex &&
+                filamentSlot in 0 until MAX_FILAMENT_SLOTS,
+        )
+        facets[index] = filamentSlot
+        previousIndex = index
+    }
+    return MultiColorPaint(facets)
 }
 
 private fun VariableLayerHeights.toArchiveJson() = JSONArray().also { values ->
@@ -437,6 +478,6 @@ private const val MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_OBJECTS
 private const val MAX_PROJECT_ARCHIVE_ENTRY_NAME = 128
 private const val PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"
 private const val MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1
-private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 3
+private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 4
 private const val PROJECT_ARCHIVE_MANIFEST = "manifest.json"
 private val PROJECT_ARCHIVE_MODEL_ENTRY = Regex("models/[0-9]{3}\\.stl")

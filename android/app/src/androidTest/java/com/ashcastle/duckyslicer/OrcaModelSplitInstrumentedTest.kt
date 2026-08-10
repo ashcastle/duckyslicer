@@ -45,6 +45,7 @@ class OrcaModelSplitInstrumentedTest {
                 ),
                 supportPaint = SupportPaint().paint(0, SupportPaintState.ENFORCE),
                 seamPaint = SeamPaint().paint(1, SeamPaintState.BLOCK),
+                multiColorPaint = MultiColorPaint().paint(2, 0),
                 variableLayerHeights = VariableLayerHeights(
                     listOf(VariableLayerRange(0.2f, 0.8f, 0.1f)),
                 ),
@@ -70,6 +71,7 @@ class OrcaModelSplitInstrumentedTest {
             assertTrue(
                 split.objects.all {
                     it.supportPaint.facets.isEmpty() && it.seamPaint.facets.isEmpty() &&
+                        it.multiColorPaint.facets.isEmpty() &&
                         it.variableLayerHeights.ranges.isEmpty()
                 },
             )

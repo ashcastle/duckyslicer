@@ -6,6 +6,7 @@ data class ProjectObject(
     val transform: ModelTransform = ModelTransform(),
     val supportPaint: SupportPaint = SupportPaint(),
     val seamPaint: SeamPaint = SeamPaint(),
+    val multiColorPaint: MultiColorPaint = MultiColorPaint(),
     val variableLayerHeights: VariableLayerHeights = VariableLayerHeights(),
     val filamentSlot: Int = 0,
 )
@@ -173,8 +174,10 @@ data class ProjectHistoryState(
     fun constrainFilamentSlots(slotCount: Int): ProjectHistoryState {
         require(slotCount in 1..MAX_FILAMENT_SLOTS) { "Filament slot count is invalid" }
         val updated = current.objects.map { projectObject ->
-            if (projectObject.filamentSlot < slotCount) projectObject
-            else projectObject.copy(filamentSlot = 0)
+            projectObject.copy(
+                filamentSlot = projectObject.filamentSlot.takeIf { it < slotCount } ?: 0,
+                multiColorPaint = projectObject.multiColorPaint.constrainedToSlotCount(slotCount),
+            )
         }
         return if (updated == current.objects) this else record(current.copy(objects = updated))
     }
@@ -248,6 +251,49 @@ data class ProjectHistoryState(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
                     projectObject.copy(seamPaint = previous)
+                } else {
+                    projectObject
+                }
+            },
+        )
+        return copy(
+            undoStates = (undoStates + previousSnapshot).takeLast(HISTORY_LIMIT),
+            redoStates = emptyList(),
+        )
+    }
+
+    fun updateMultiColorPaint(
+        objectId: String,
+        multiColorPaint: MultiColorPaint,
+        recordHistory: Boolean = true,
+    ): ProjectHistoryState {
+        val target = current.objects.firstOrNull { it.id == objectId } ?: return this
+        if (target.multiColorPaint == multiColorPaint) return this
+        require(multiColorPaint.facets.keys.all { it in 0 until target.model.triangles }) {
+            "Multi-color paint references an unavailable facet"
+        }
+        val next = current.copy(
+            objects = current.objects.map { projectObject ->
+                if (projectObject.id == objectId) {
+                    projectObject.copy(multiColorPaint = multiColorPaint)
+                } else {
+                    projectObject
+                }
+            },
+        )
+        return if (recordHistory) record(next) else copy(current = next)
+    }
+
+    fun commitMultiColorPaint(
+        objectId: String,
+        previous: MultiColorPaint,
+    ): ProjectHistoryState {
+        val target = current.objects.firstOrNull { it.id == objectId } ?: return this
+        if (target.multiColorPaint == previous) return this
+        val previousSnapshot = current.copy(
+            objects = current.objects.map { projectObject ->
+                if (projectObject.id == objectId) {
+                    projectObject.copy(multiColorPaint = previous)
                 } else {
                     projectObject
                 }

@@ -38,6 +38,7 @@ class OrcaModelCutInstrumentedTest {
                 transform = ModelTransform(offsetXmm = 7f, offsetYmm = -4f, offsetZmm = 3f),
                 supportPaint = SupportPaint().paint(0, SupportPaintState.ENFORCE),
                 seamPaint = SeamPaint().paint(1, SeamPaintState.BLOCK),
+                multiColorPaint = MultiColorPaint().paint(2, 1),
                 variableLayerHeights = VariableLayerHeights(
                     listOf(VariableLayerRange(0.2f, 0.8f, 0.1f)),
                 ),
@@ -65,6 +66,7 @@ class OrcaModelCutInstrumentedTest {
             assertTrue(
                 cut.objects.all {
                     it.supportPaint.facets.isEmpty() && it.seamPaint.facets.isEmpty() &&
+                        it.multiColorPaint.facets.isEmpty() &&
                         it.variableLayerHeights.ranges.isEmpty() &&
                         it.filamentSlot == 1
                 },
