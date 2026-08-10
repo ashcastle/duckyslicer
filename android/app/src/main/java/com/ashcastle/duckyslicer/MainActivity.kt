@@ -529,12 +529,13 @@ private fun DuckySlicerScreen(
                     currentTarget?.id == target.id &&
                     currentTarget.model.localPath == target.model.localPath &&
                     currentTarget.transform == target.transform &&
-                    currentTarget.supportPaint == target.supportPaint
+                    currentTarget.supportPaint == target.supportPaint &&
+                    currentTarget.seamPaint == target.seamPaint
                 ) {
                     projectHistory = projectHistory.replaceSelected(result.objects)
                     notice = resources.getString(
-                        if (result.clearedSupportPaint) {
-                            R.string.split_done_paint_cleared
+                        if (result.clearedFacetPaint) {
+                            R.string.split_done_painting_cleared
                         } else {
                             R.string.split_done
                         },
@@ -586,12 +587,13 @@ private fun DuckySlicerScreen(
                     currentTarget.model.localPath == target.model.localPath &&
                     currentTarget.transform == target.transform &&
                     currentTarget.supportPaint == target.supportPaint &&
+                    currentTarget.seamPaint == target.seamPaint &&
                     currentTarget.filamentSlot == target.filamentSlot
                 ) {
                     projectHistory = projectHistory.replaceSelected(result.objects)
                     notice = resources.getString(
-                        if (result.clearedSupportPaint) {
-                            R.string.cut_done_paint_cleared
+                        if (result.clearedFacetPaint) {
+                            R.string.cut_done_painting_cleared
                         } else {
                             R.string.cut_done
                         },
@@ -989,6 +991,26 @@ private fun DuckySlicerScreen(
         },
         onSupportPaintCommitted = { objectId, previous ->
             projectHistory = projectHistory.commitSupportPaint(objectId, previous)
+        },
+        onSeamPaintPreview = { objectId, facetIndex, state ->
+            val projectObject = projectHistory.current.objects.firstOrNull { it.id == objectId }
+            if (projectObject != null && facetIndex in 0 until projectObject.model.triangles) {
+                val nextPaint = projectObject.seamPaint.paint(facetIndex, state)
+                val nextHistory = projectHistory.updateSeamPaint(
+                    objectId,
+                    nextPaint,
+                    recordHistory = false,
+                )
+                if (nextHistory != projectHistory) {
+                    projectHistory = nextHistory
+                    clearCompletedSlice()
+                    remoteUpload = null
+                    notice = null
+                }
+            }
+        },
+        onSeamPaintCommitted = { objectId, previous ->
+            projectHistory = projectHistory.commitSeamPaint(objectId, previous)
         },
         onRemoveModel = {
             projectHistory = projectHistory.removeSelected()

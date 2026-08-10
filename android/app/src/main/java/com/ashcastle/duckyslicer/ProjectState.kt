@@ -5,6 +5,7 @@ data class ProjectObject(
     val model: ModelInfo,
     val transform: ModelTransform = ModelTransform(),
     val supportPaint: SupportPaint = SupportPaint(),
+    val seamPaint: SeamPaint = SeamPaint(),
     val filamentSlot: Int = 0,
 )
 
@@ -206,6 +207,46 @@ data class ProjectHistoryState(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
                     projectObject.copy(supportPaint = previous)
+                } else {
+                    projectObject
+                }
+            },
+        )
+        return copy(
+            undoStates = (undoStates + previousSnapshot).takeLast(HISTORY_LIMIT),
+            redoStates = emptyList(),
+        )
+    }
+
+    fun updateSeamPaint(
+        objectId: String,
+        seamPaint: SeamPaint,
+        recordHistory: Boolean = true,
+    ): ProjectHistoryState {
+        val target = current.objects.firstOrNull { it.id == objectId } ?: return this
+        if (target.seamPaint == seamPaint) return this
+        require(seamPaint.facets.keys.all { it in 0 until target.model.triangles }) {
+            "Seam paint references an unavailable facet"
+        }
+        val next = current.copy(
+            objects = current.objects.map { projectObject ->
+                if (projectObject.id == objectId) {
+                    projectObject.copy(seamPaint = seamPaint)
+                } else {
+                    projectObject
+                }
+            },
+        )
+        return if (recordHistory) record(next) else copy(current = next)
+    }
+
+    fun commitSeamPaint(objectId: String, previous: SeamPaint): ProjectHistoryState {
+        val target = current.objects.firstOrNull { it.id == objectId } ?: return this
+        if (target.seamPaint == previous) return this
+        val previousSnapshot = current.copy(
+            objects = current.objects.map { projectObject ->
+                if (projectObject.id == objectId) {
+                    projectObject.copy(seamPaint = previous)
                 } else {
                     projectObject
                 }
