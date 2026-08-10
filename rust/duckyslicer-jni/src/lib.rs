@@ -16,6 +16,124 @@ use thiserror::Error;
 
 unsafe extern "C" {
     fn duckyslicer_core_version() -> *const c_char;
+    fn duckyslicer_probe_vulkan(capabilities: *mut VulkanCapabilitiesNative);
+}
+
+#[repr(C)]
+struct VulkanCapabilitiesNative {
+    loader_api_version: u32,
+    physical_device_count: u32,
+    device_api_version: u32,
+    driver_version: u32,
+    vendor_id: u32,
+    device_id: u32,
+    device_type: u32,
+    compute_queue_family: u32,
+    api_available: u8,
+    compute_queue_available: u8,
+    shader_int64: u8,
+    software_device: u8,
+    driver_probe_passed: u8,
+    auto_candidate: u8,
+    device_name: [c_char; 256],
+    reason: [c_char; 128],
+}
+
+impl Default for VulkanCapabilitiesNative {
+    fn default() -> Self {
+        Self {
+            loader_api_version: 0,
+            physical_device_count: 0,
+            device_api_version: 0,
+            driver_version: 0,
+            vendor_id: 0,
+            device_id: 0,
+            device_type: 0,
+            compute_queue_family: u32::MAX,
+            api_available: 0,
+            compute_queue_available: 0,
+            shader_int64: 0,
+            software_device: 0,
+            driver_probe_passed: 0,
+            auto_candidate: 0,
+            device_name: [0; 256],
+            reason: [0; 128],
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VulkanCapabilities {
+    api_available: bool,
+    loader_api_version: String,
+    physical_device_count: u32,
+    device_name: String,
+    device_api_version: String,
+    driver_version: u32,
+    vendor_id: u32,
+    device_id: u32,
+    device_type: String,
+    compute_queue_available: bool,
+    compute_queue_family: Option<u32>,
+    shader_int64: bool,
+    software_device: bool,
+    driver_probe_passed: bool,
+    auto_candidate: bool,
+    auto_enabled: bool,
+    reason: String,
+}
+
+fn vulkan_version(value: u32) -> String {
+    format!(
+        "{}.{}.{}",
+        value >> 22,
+        (value >> 12) & 0x3ff,
+        value & 0xfff,
+    )
+}
+
+fn native_text(value: &[c_char]) -> String {
+    let pointer = value.as_ptr();
+    if pointer.is_null() {
+        String::new()
+    } else {
+        unsafe { CStr::from_ptr(pointer) }
+            .to_string_lossy()
+            .into_owned()
+    }
+}
+
+fn probe_vulkan() -> VulkanCapabilities {
+    let mut native = VulkanCapabilitiesNative::default();
+    unsafe { duckyslicer_probe_vulkan(&mut native) };
+    VulkanCapabilities {
+        api_available: native.api_available != 0,
+        loader_api_version: vulkan_version(native.loader_api_version),
+        physical_device_count: native.physical_device_count,
+        device_name: native_text(&native.device_name),
+        device_api_version: vulkan_version(native.device_api_version),
+        driver_version: native.driver_version,
+        vendor_id: native.vendor_id,
+        device_id: native.device_id,
+        device_type: match native.device_type {
+            1 => "integrated_gpu",
+            2 => "discrete_gpu",
+            3 => "virtual_gpu",
+            4 => "cpu",
+            _ => "other",
+        }
+        .to_owned(),
+        compute_queue_available: native.compute_queue_available != 0,
+        compute_queue_family: (native.compute_queue_family != u32::MAX)
+            .then_some(native.compute_queue_family),
+        shader_int64: native.shader_int64 != 0,
+        software_device: native.software_device != 0,
+        driver_probe_passed: native.driver_probe_passed != 0,
+        auto_candidate: native.auto_candidate != 0,
+        auto_enabled: false,
+        reason: native_text(&native.reason),
+    }
 }
 
 const MAX_MODEL_IMPORT_BYTES: u64 = 512 * 1024 * 1024;
@@ -1343,6 +1461,18 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_version(
 }
 
 #[unsafe(no_mangle)]
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_vulkanCapabilities(
+    env: JNIEnv<'_>,
+    _class: JClass<'_>,
+) -> jstring {
+    let response = catch_unwind(AssertUnwindSafe(|| serde_json::to_string(&probe_vulkan())))
+        .ok()
+        .and_then(Result::ok)
+        .unwrap_or_else(|| INTERNAL_ERROR_JSON.to_owned());
+    make_java_string(&env, &response)
+}
+
+#[unsafe(no_mangle)]
 pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_inspectStl(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
@@ -1440,6 +1570,15 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeR
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn host_vulkan_probe_never_enables_android_acceleration() {
+        let capabilities = probe_vulkan();
+
+        assert!(!capabilities.auto_enabled);
+        assert!(!capabilities.auto_candidate);
+        assert_eq!(capabilities.reason, "not_android");
+    }
 
     #[test]
     fn missing_stl_is_reported_without_panicking() {

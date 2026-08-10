@@ -16,5 +16,9 @@ fn main() {
         .warnings(true)
         .compile("duckyslicer_bridge");
 
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android") {
+        println!("cargo:rustc-link-lib=dylib=vulkan");
+    }
+
     println!("cargo:rerun-if-changed={}", bridge_dir.display());
 }
