@@ -28,6 +28,7 @@ import com.u1.slicer.NativeLibrary
 import java.io.DataInputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -130,6 +131,70 @@ internal object SlicerProcessClient {
                     "OrcaSlicer returned no orientation"
                 },
             )
+        } finally {
+            activeRequestId.compareAndSet(requestId, null)
+            cancelledRequestId.compareAndSet(requestId, null)
+        }
+    }
+
+    /** Loads STL, 3MF, or OBJ through Orca and exports bounded project-owned STL objects. */
+    fun normalizeModel(model: File, stagingDirectory: File): List<OrcaImportedObject> {
+        check(Looper.myLooper() != Looper.getMainLooper()) {
+            "Model normalization must run outside the application main thread"
+        }
+        val requestId = UUID.randomUUID().toString()
+        check(activeRequestId.compareAndSet(null, requestId)) {
+            "Another slicer operation is already running"
+        }
+        return try {
+            val response = withWorker(DuckySlicerApplication.context()) { worker ->
+                worker.request(
+                    what = SlicerProcessContract.MESSAGE_NORMALIZE_MODEL,
+                    data = Bundle().apply {
+                        putString(SlicerProcessContract.KEY_REQUEST_ID, requestId)
+                        putString(SlicerProcessContract.KEY_MODEL_PATH, model.absolutePath)
+                        putString(
+                            SlicerProcessContract.KEY_MODEL_OUTPUT_DIRECTORY,
+                            stagingDirectory.absolutePath,
+                        )
+                    },
+                    timeoutSeconds = MODEL_NORMALIZATION_TIMEOUT_SECONDS,
+                )
+            }
+            check(response.getBoolean(SlicerProcessContract.KEY_OK)) {
+                response.getString(SlicerProcessContract.KEY_ERROR)
+                    ?: "OrcaSlicer could not import the model"
+            }
+            latestWorkerPid = response.getInt(SlicerProcessContract.KEY_PID)
+            val records = requireNotNull(
+                response.getStringArrayList(SlicerProcessContract.KEY_NORMALIZED_MODELS),
+            ) { "OrcaSlicer returned no model objects" }
+            val canonicalStaging = stagingDirectory.canonicalFile
+            val seen = HashSet<File>()
+            records.map { record ->
+                val values = record.split('\t', limit = 4)
+                require(values.size == 4) { "OrcaSlicer returned invalid model metadata" }
+                val output = File(values[0]).canonicalFile
+                val name = values[1].trim().takeIf { it.length in 1..200 } ?: "model.stl"
+                val centerX = requireNotNull(values[2].toFloatOrNull()) {
+                    "OrcaSlicer returned invalid model placement"
+                }
+                val centerY = requireNotNull(values[3].toFloatOrNull()) {
+                    "OrcaSlicer returned invalid model placement"
+                }
+                require(
+                    output.parentFile == canonicalStaging && seen.add(output) &&
+                        output.isFile && output.length() in 1..MAX_MODEL_IMPORT_BYTES &&
+                        centerX.isFinite() && centerY.isFinite() &&
+                        kotlin.math.abs(centerX) <= MAX_MODEL_COORDINATE_MM &&
+                        kotlin.math.abs(centerY) <= MAX_MODEL_COORDINATE_MM
+                ) { "OrcaSlicer returned an unsafe model object" }
+                OrcaImportedObject(output, name, centerX, centerY)
+            }.also { imported ->
+                require(imported.size in 1..SlicerProcessService.MAX_OBJECTS) {
+                    "OrcaSlicer returned an invalid model count"
+                }
+            }
         } finally {
             activeRequestId.compareAndSet(requestId, null)
             cancelledRequestId.compareAndSet(requestId, null)
@@ -616,6 +681,7 @@ internal object SlicerProcessClient {
             val cancellable = what == SlicerProcessContract.MESSAGE_SLICE ||
                 what == SlicerProcessContract.MESSAGE_AUTO_ORIENT ||
                 what == SlicerProcessContract.MESSAGE_AUTO_ARRANGE ||
+                what == SlicerProcessContract.MESSAGE_NORMALIZE_MODEL ||
                 what == SlicerProcessContract.MESSAGE_BLOCK_FOR_TEST
             if (!cancellable) return
             val requestId = data.getString(SlicerProcessContract.KEY_REQUEST_ID) ?: return
@@ -646,6 +712,7 @@ internal object SlicerProcessClient {
 
     private const val CONNECTION_TIMEOUT_SECONDS = 10L
     private const val ARRANGEMENT_TIMEOUT_SECONDS = 5L * 60L
+    private const val MODEL_NORMALIZATION_TIMEOUT_SECONDS = 5L * 60L
     private const val ORIENTATION_TIMEOUT_SECONDS = 5L * 60L
     private const val SLICE_TIMEOUT_SECONDS = 30L * 60L
     private const val TEST_PROBE_TIMEOUT_SECONDS = 60L
@@ -708,6 +775,15 @@ internal class ForegroundSliceSession internal constructor(
 }
 
 internal class SlicingCancelledException : Exception("Slicing was cancelled")
+
+internal data class OrcaImportedObject(
+    val file: File,
+    val displayName: String,
+    val centerXmm: Float,
+    val centerYmm: Float,
+)
+
+private const val MAX_MODEL_COORDINATE_MM = 1_000_000f
 
 class SlicerProcessService : Service() {
     private val activeRequestId = AtomicReference<String?>(null)
@@ -939,6 +1015,8 @@ class SlicerProcessService : Service() {
             SlicerProcessContract.MESSAGE_SLICE -> startWork(message, WorkOperation.SLICE)
             SlicerProcessContract.MESSAGE_AUTO_ORIENT -> startWork(message, WorkOperation.AUTO_ORIENT)
             SlicerProcessContract.MESSAGE_AUTO_ARRANGE -> startWork(message, WorkOperation.AUTO_ARRANGE)
+            SlicerProcessContract.MESSAGE_NORMALIZE_MODEL ->
+                startWork(message, WorkOperation.NORMALIZE_MODEL)
             SlicerProcessContract.MESSAGE_ATTACH -> attachToForegroundSlice(message)
             SlicerProcessContract.MESSAGE_CANCEL -> cancelWork(message)
             SlicerProcessContract.MESSAGE_HEALTH -> send(
@@ -1098,6 +1176,7 @@ class SlicerProcessService : Service() {
                 WorkOperation.TEST_PROBE -> runCancellationProbe(reply)
                 WorkOperation.AUTO_ORIENT -> runAutoOrient(requestData)
                 WorkOperation.AUTO_ARRANGE -> runAutoArrange(requestData)
+                WorkOperation.NORMALIZE_MODEL -> runNormalizeModel(requestData)
                 WorkOperation.SLICE -> runSlice(requestData) { percent ->
                     foregroundProgress = maxOf(foregroundProgress, percent.coerceIn(0, 100))
                     mainHandler.post { updateForegroundSlice(requestId, percent) }
@@ -1339,6 +1418,38 @@ class SlicerProcessService : Service() {
         failure(error.message ?: "OrcaSlicer could not orient the model")
     }
 
+    private fun runNormalizeModel(extras: Bundle): Bundle = try {
+        val sourcePath = requireNotNull(extras.getString(SlicerProcessContract.KEY_MODEL_PATH)) {
+            "Model path is unavailable"
+        }
+        val outputPath = requireNotNull(
+            extras.getString(SlicerProcessContract.KEY_MODEL_OUTPUT_DIRECTORY),
+        ) { "Model output is unavailable" }
+        val source = validateModel(sourcePath)
+        val outputDirectory = validateModelImportDirectory(outputPath)
+        val runtime = createNativeRuntime()
+        try {
+            check(runtime.loadModel(source.absolutePath)) { "Model could not be prepared" }
+            val records = requireNotNull(
+                runtime.nativeExportLoadedObjects(outputDirectory.absolutePath),
+            ) { "Model objects could not be exported" }
+            require(records.size in 1..MAX_OBJECTS) { "Invalid imported object count" }
+            Bundle().apply {
+                putBoolean(SlicerProcessContract.KEY_OK, true)
+                putInt(SlicerProcessContract.KEY_PID, Process.myPid())
+                putStringArrayList(
+                    SlicerProcessContract.KEY_NORMALIZED_MODELS,
+                    ArrayList(records.toList()),
+                )
+            }
+        } finally {
+            runtime.clearModel()
+        }
+    } catch (error: Exception) {
+        if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Model normalization failed", error)
+        failure(error.message ?: "OrcaSlicer could not import the model")
+    }
+
     private fun runAutoArrange(extras: Bundle): Bundle = try {
         val paths = requireNotNull(extras.getStringArrayList(SlicerProcessContract.KEY_MODEL_PATHS)) {
             "Model paths are unavailable"
@@ -1492,6 +1603,21 @@ class SlicerProcessService : Service() {
         return model
     }
 
+    private fun validateModelImportDirectory(path: String): File {
+        require(path.length in 1..MAX_PATH_LENGTH) { "Invalid model output path" }
+        val directory = File(path).canonicalFile
+        val projectRoot = File(filesDir, ProjectStore.PROJECT_DIRECTORY).canonicalFile
+        val identifier = directory.name.removePrefix(ProjectStore.MODEL_IMPORT_DIRECTORY_PREFIX)
+        val expectedName = runCatching { UUID.fromString(identifier).toString() }
+            .getOrNull()
+            ?.let { "${ProjectStore.MODEL_IMPORT_DIRECTORY_PREFIX}$it" }
+        require(
+            expectedName == directory.name && directory.parentFile == projectRoot &&
+                directory.isDirectory && !Files.isSymbolicLink(directory.toPath())
+        ) { "Model output directory is unavailable" }
+        return directory
+    }
+
     private fun createNativeRuntime(onProgress: (Int) -> Unit = {}): NativeLibrary =
         NativeLibrary(onProgress)
 
@@ -1610,6 +1736,7 @@ class SlicerProcessService : Service() {
         SLICE,
         AUTO_ORIENT,
         AUTO_ARRANGE,
+        NORMALIZE_MODEL,
         TEST_PROBE,
     }
 
@@ -1630,9 +1757,12 @@ private object SlicerProcessContract {
     const val MESSAGE_AUTO_ORIENT = 8
     const val MESSAGE_AUTO_ARRANGE = 9
     const val MESSAGE_ATTACH = 10
+    const val MESSAGE_NORMALIZE_MODEL = 11
     const val KEY_REQUEST_ID = "requestId"
     const val KEY_MODEL_PATH = "modelPath"
     const val KEY_MODEL_PATHS = "modelPaths"
+    const val KEY_MODEL_OUTPUT_DIRECTORY = "modelOutputDirectory"
+    const val KEY_NORMALIZED_MODELS = "normalizedModels"
     const val KEY_SUPPORT_PAINT_PATHS = "supportPaintPaths"
     const val KEY_OPTIONS = "options"
     const val KEY_MAXIMUM_GCODE_BYTES_FOR_TEST = "maximumGcodeBytesForTest"

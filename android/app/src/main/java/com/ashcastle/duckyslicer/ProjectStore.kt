@@ -37,6 +37,43 @@ internal class ProjectStore(
         return File(modelsDirectory, "${UUID.randomUUID()}-$safeName")
     }
 
+    fun createModelImportStaging(): File {
+        check(projectRoot.isDirectory || projectRoot.mkdirs()) { "Project storage is unavailable" }
+        return File(projectRoot, "$MODEL_IMPORT_DIRECTORY_PREFIX${UUID.randomUUID()}").also {
+            check(it.mkdir()) { "Model import storage is unavailable" }
+        }
+    }
+
+    fun installImportedModel(source: File, displayName: String): ModelInfo {
+        val canonicalRoot = projectRoot.canonicalFile
+        val requestedStaging = source.absoluteFile.parentFile
+        val canonicalSource = source.canonicalFile
+        val staging = requestedStaging?.canonicalFile
+        val stagingId = staging?.name
+            ?.removePrefix(MODEL_IMPORT_DIRECTORY_PREFIX)
+            ?.let { runCatching { UUID.fromString(it).toString() }.getOrNull() }
+        require(
+            requestedStaging != null &&
+                !Files.isSymbolicLink(requestedStaging.toPath()) &&
+                !Files.isSymbolicLink(source.toPath()) &&
+                staging?.parentFile == canonicalRoot &&
+                staging.name == "$MODEL_IMPORT_DIRECTORY_PREFIX$stagingId" &&
+                canonicalSource.parentFile == staging &&
+                canonicalSource.isFile && canonicalSource.length() in 1..MAX_MODEL_IMPORT_BYTES
+        ) { "Imported model is outside staging storage" }
+        val destination = createModelDestination(displayName)
+        return try {
+            moveArchiveModel(canonicalSource, destination)
+            inspectModel(destination).copy(
+                fileName = displayName,
+                localPath = destination.canonicalPath,
+            )
+        } catch (failure: Throwable) {
+            destination.delete()
+            throw failure
+        }
+    }
+
     @Synchronized
     fun exportArchive(
         snapshot: ProjectSnapshot,
@@ -362,13 +399,21 @@ internal class ProjectStore(
             File(File(filesRoot, PROJECT_DIRECTORY), MODELS_DIRECTORY)
 
         internal fun recoverAbandonedArchiveStaging(projectRoot: File): Int {
+            return recoverGeneratedStaging(projectRoot, ".archive-")
+        }
+
+        internal fun recoverAbandonedModelImportStaging(projectRoot: File): Int {
+            return recoverGeneratedStaging(projectRoot, MODEL_IMPORT_DIRECTORY_PREFIX)
+        }
+
+        private fun recoverGeneratedStaging(projectRoot: File, prefix: String): Int {
             val canonicalRoot = runCatching { projectRoot.canonicalFile }.getOrNull() ?: return 0
             var removed = 0
             projectRoot.listFiles().orEmpty().forEach { candidate ->
-                val identifier = candidate.name.removePrefix(".archive-")
+                val identifier = candidate.name.removePrefix(prefix)
                 val expectedName = runCatching { UUID.fromString(identifier).toString() }
                     .getOrNull()
-                    ?.let { ".archive-$it" }
+                    ?.let { "$prefix$it" }
                     ?: return@forEach
                 val resolved = runCatching { candidate.canonicalFile }.getOrNull() ?: return@forEach
                 if (
@@ -385,6 +430,7 @@ internal class ProjectStore(
         const val SCHEMA_VERSION = 3
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
+        const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"
         const val MODELS_DIRECTORY = "models"
         const val PROJECT_FILE = "current_project.json"
         const val MAX_PROJECT_BYTES = 1_048_576L
