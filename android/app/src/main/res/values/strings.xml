@@ -413,6 +413,11 @@
     <string name="no_tracking_body">DuckySlicer has no developer-run accounts, analytics, ads, or cloud service. The source code page opens only when you choose to view it.</string>
     <string name="removing_data_title">Removing data</string>
     <string name="removing_data_body">Deleting a printer connection removes its saved access key. Clearing DuckySlicer’s app data or uninstalling it removes its private data. Exported files remain where you saved them.</string>
+    <string name="help">Help</string>
+    <string name="support_details_summary">Save app and device details with a short history of recent problems. Models, G-code, file names, printer addresses, and access keys are never included.</string>
+    <string name="save_support_details">Save support details</string>
+    <string name="support_details_saved">Support details saved.</string>
+    <string name="support_details_save_error">Couldn’t save support details.</string>
     <string name="about">About</string>
     <string name="app_version">DuckySlicer %1$s</string>
     <string name="open_source_summary">Free software under the GNU AGPL v3. You may share and modify it. It comes without any warranty. Complete source code and build instructions are available below.</string>

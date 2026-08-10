@@ -144,6 +144,17 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun appSettingsExposeAVisibleSupportDetailsAction() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val supportLabel = context.getString(R.string.save_support_details)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_SETTINGS).use {
+            val supportButton = scrollUntilClickable(supportLabel)
+            assertTrue("Support details must be a visible user action", supportButton.isVisibleToUser)
+            assertTrue("Support details must be keyboard and switch-access focusable", supportButton.isFocusable)
+        }
+    }
+
+    @Test
     fun largeTextLandscapeKeepsMenuClearOfScrollableWorkspaceSheet() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val menuLabel = context.getString(R.string.menu)

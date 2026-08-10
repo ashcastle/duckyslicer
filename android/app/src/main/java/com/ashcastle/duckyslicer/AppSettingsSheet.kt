@@ -4,6 +4,8 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -34,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +50,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 @Composable
@@ -57,6 +63,7 @@ internal fun AppSettingsSheet(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val toolpathVisibilityLabel = stringResource(R.string.toolpath_visibility_control)
     val toolpathVisibilityState = stringResource(
         R.string.percent_value,
@@ -74,6 +81,24 @@ internal fun AppSettingsSheet(
     )
     var legalDocument by remember { mutableStateOf<LegalDocument?>(null) }
     var showDataPractices by remember { mutableStateOf(false) }
+    var supportSaveResult by remember { mutableStateOf<Boolean?>(null) }
+    val supportReportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain"),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                supportSaveResult = runCatching {
+                    withContext(Dispatchers.IO) {
+                        val report = createSupportReport(context.applicationContext, settings)
+                        context.contentResolver.openOutputStream(uri).use { output ->
+                            requireNotNull(output) { "output_unavailable" }
+                            writeSupportReport(output, report)
+                        }
+                    }
+                }.isSuccess
+            }
+        }
+    }
 
     Card(
         modifier = modifier.padding(12.dp).fillMaxWidth().widthIn(max = 620.dp),
@@ -232,6 +257,34 @@ internal fun AppSettingsSheet(
                 Text(stringResource(R.string.privacy_policy))
             }
 
+            SettingsHeading(stringResource(R.string.help))
+            Text(
+                stringResource(R.string.support_details_summary),
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            TextButton(
+                onClick = {
+                    supportSaveResult = null
+                    supportReportLauncher.launch(SUPPORT_REPORT_FILE_NAME)
+                },
+            ) {
+                Text(stringResource(R.string.save_support_details))
+            }
+            supportSaveResult?.let { saved ->
+                Text(
+                    stringResource(
+                        if (saved) {
+                            R.string.support_details_saved
+                        } else {
+                            R.string.support_details_save_error
+                        },
+                    ),
+                    color = if (saved) Color(0xFF9FE2A2) else MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
             SettingsHeading(stringResource(R.string.about))
             Text(
                 stringResource(R.string.app_version, BuildConfig.VERSION_NAME),
@@ -376,6 +429,7 @@ private fun openSourceRepository(context: Context) {
 }
 
 private const val SOURCE_CODE_URL = "https://github.com/ashcastle/duckyslicer"
+private const val SUPPORT_REPORT_FILE_NAME = "DuckySlicer-support.txt"
 
 internal fun legalTextChunks(source: String, maximumCharacters: Int = 12_000): List<String> {
     require(maximumCharacters > 0)
