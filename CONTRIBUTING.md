@@ -122,6 +122,10 @@ only validate the private draft, sign the exact digest in the protected `play`
 environment, retain the signed AAB plus checksum as an Actions artifact, and remove
 the draft without deleting its source tag. It must use a separate Play upload key and
 never uploads to Play Console.
+Both local release paths inspect the final merged APK manifest, not only the source
+manifest. API levels, permissions, backup/debug state, application components, and
+content-URI import filters are fail-closed allowlists. Any dependency that changes the
+merged manifest requires explicit security review and a policy update.
 
 ## Updating Android dependencies
 

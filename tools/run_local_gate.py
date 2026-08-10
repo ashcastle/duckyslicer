@@ -178,6 +178,19 @@ def host_steps(python: str = sys.executable, windows: bool = os.name == "nt") ->
     )
     steps.append(
         GateStep(
+            "Debug merged manifest policy",
+            (
+                python,
+                str(ROOT / "tools/verify_artifact_manifest.py"),
+                "--variant",
+                "debug",
+                str(DEBUG_APK),
+            ),
+            ROOT,
+        )
+    )
+    steps.append(
+        GateStep(
             "Debug APK policy",
             (python, str(ROOT / "tools/verify_apk.py"), str(DEBUG_APK)),
             ROOT,

@@ -160,6 +160,9 @@ def main() -> None:
         "local Play preparation is unit tested": (
             "tools.test_prepare_local_play_bundle"
         ),
+        "merged artifact manifest policy is unit tested": (
+            "tools.test_verify_artifact_manifest"
+        ),
         "workflow shell syntax verification is unit tested": (
             "tools.test_verify_workflows"
         ),
@@ -213,6 +216,9 @@ def main() -> None:
         ),
         "primitive preview boundary is unit tested": (
             "tools.test_verify_preview_boundary"
+        ),
+        "merged debug manifest is verified": (
+            "python3 tools/verify_artifact_manifest.py --variant debug"
         ),
     }
     for description, marker in required_android_gates.items():

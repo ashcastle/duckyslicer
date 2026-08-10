@@ -40,6 +40,7 @@ BUILD_INPUTS = (
     "rust-toolchain.toml",
     "rust/duckyslicer-jni/Cargo.lock",
     "rust/duckyslicer-jni/Cargo.toml",
+    "tools/verify_artifact_manifest.py",
 )
 
 
