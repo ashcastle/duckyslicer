@@ -37,6 +37,14 @@ class GenerateSourceBundleTest(unittest.TestCase):
         self.initialize(engine, "engine")
         (engine / "engine.cpp").write_text("int slice();\n", encoding="utf-8")
         (engine / "AGENTS.md").write_text("private agent instruction\n", encoding="utf-8")
+        (engine / "AGENT.md").write_text("private agent instruction\n", encoding="utf-8")
+        (engine / "GEMINI.md").write_text("private agent instruction\n", encoding="utf-8")
+        (engine / "preview.ai-design.md").write_text("private design notes\n", encoding="utf-8")
+        (engine / ".claude/commands").mkdir(parents=True)
+        (engine / ".claude/commands/release.md").write_text(
+            "private release prompt\n",
+            encoding="utf-8",
+        )
         self.commit_all(engine, "engine")
 
         runtime = temporary / "runtime"
@@ -123,7 +131,14 @@ class GenerateSourceBundleTest(unittest.TestCase):
                 "app/src/main/cpp/orcaslicer/engine.cpp",
                 names,
             )
-            self.assertFalse(any(name.endswith("/AGENTS.md") for name in names))
+            for excluded in (
+                "/AGENT.md",
+                "/AGENTS.md",
+                "/GEMINI.md",
+                "/preview.ai-design.md",
+                "/.claude/commands/release.md",
+            ):
+                self.assertFalse(any(name.endswith(excluded) for name in names))
             build_inputs = {entry["path"] for entry in verified["source"]["buildInputs"]}
             self.assertIn("tools/verify_artifact_manifest.py", build_inputs)
             self.assertIn("tools/generate_android_translations.py", build_inputs)

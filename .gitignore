@@ -57,7 +57,9 @@ __pycache__/
 .agents/
 **/AGENTS.md
 **/AGENTS.override.md
+**/AGENT.md
 **/CLAUDE.md
+**/GEMINI.md
 .aider*
 .continue/
 .cursor/

@@ -19,8 +19,30 @@ from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parent.parent
 VERSION = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$")
-EXCLUDED_INSTRUCTION_NAMES = {"AGENTS.md", "AGENTS.override.md", "CLAUDE.md"}
-EXCLUDED_INSTRUCTION_DIRECTORIES = {".agents", ".claude", ".codex"}
+EXCLUDED_INSTRUCTION_NAMES = {
+    "AGENT.md",
+    "AGENTS.md",
+    "AGENTS.override.md",
+    "CLAUDE.md",
+    "CLAUDE.local.md",
+    "GEMINI.md",
+    "GEMINI.local.md",
+    "PROMPT.local.md",
+}
+EXCLUDED_INSTRUCTION_DIRECTORIES = {
+    ".agents",
+    ".ai",
+    ".ai-notes",
+    ".claude",
+    ".claude.local",
+    ".codex",
+}
+EXCLUDED_INSTRUCTION_SUFFIXES = (
+    ".prompt.local.md",
+    ".ai.md",
+    ".ai-plan.md",
+    ".ai-design.md",
+)
 BUILD_INPUTS = (
     ".github/workflows/android.yml",
     ".github/workflows/sign-local-release.yml",
@@ -212,6 +234,7 @@ def source_manifest(
         "excludedNonBuildInstructions": {
             "fileNames": sorted(EXCLUDED_INSTRUCTION_NAMES),
             "directoryNames": sorted(EXCLUDED_INSTRUCTION_DIRECTORIES),
+            "fileSuffixes": sorted(EXCLUDED_INSTRUCTION_SUFFIXES),
         },
     }
 
@@ -220,6 +243,7 @@ def include_member(path: PurePosixPath) -> bool:
     return not (
         path.name in EXCLUDED_INSTRUCTION_NAMES
         or any(part in EXCLUDED_INSTRUCTION_DIRECTORIES for part in path.parts)
+        or path.name.endswith(EXCLUDED_INSTRUCTION_SUFFIXES)
     )
 
 

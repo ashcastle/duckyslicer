@@ -36,6 +36,7 @@ STATIC_VERIFIERS = (
     "verify_localization.py",
     "verify_community_health.py",
     "verify_store_listing.py",
+    "verify_repository_hygiene.py",
 )
 
 

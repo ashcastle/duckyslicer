@@ -247,6 +247,12 @@ def main() -> None:
         "Google Play listing policy is unit tested": (
             "tools.test_verify_store_listing"
         ),
+        "repository hygiene is verified": (
+            "python3 tools/verify_repository_hygiene.py"
+        ),
+        "repository hygiene policy is unit tested": (
+            "tools.test_verify_repository_hygiene"
+        ),
     }
     for description, marker in required_android_gates.items():
         if marker not in android_source:
