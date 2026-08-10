@@ -986,7 +986,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(14, catalog.schemaVersion)
+        assertEquals(15, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1232,6 +1232,82 @@ class NativeEngineInstrumentedTest {
             )
         } finally {
             output.delete()
+        }
+    }
+
+    @Test
+    fun selectedFaceUsesRustAlignmentAndStillProducesRealGcodeOnDevice() {
+        val source = fixtureModel()
+        val model = ModelInfo.fromJson(NativeEngine.inspectStl(source.absolutePath), source.absolutePath)
+        val triangle = model.previewTriangles.copyOfRange(0, 9)
+        val transform = ModelTransform(
+            rotationXdeg = 19f,
+            rotationYdeg = -31f,
+            rotationZdeg = 12f,
+            scale = 1.2f,
+            scaleY = 0.85f,
+            scaleZ = 1.4f,
+            mirrorX = true,
+        ).withFaceOnBed(triangle)
+        val center = FloatArray(3) { axis ->
+            ((model.minMm[axis] + model.maxMm[axis]) / 2.0).toFloat()
+        }
+        val transformed = Array(3) { vertex ->
+            transform.transformLocal(
+                FloatArray(3) { axis -> triangle[vertex * 3 + axis] - center[axis] },
+            )
+        }
+        val reversesWinding = listOf(transform.mirrorX, transform.mirrorY, transform.mirrorZ)
+            .count { it } % 2 == 1
+        val secondVertex = if (reversesWinding) transformed[2] else transformed[1]
+        val thirdVertex = if (reversesWinding) transformed[1] else transformed[2]
+        val first = FloatArray(3) { axis -> secondVertex[axis] - transformed[0][axis] }
+        val second = FloatArray(3) { axis -> thirdVertex[axis] - transformed[0][axis] }
+        val normal = floatArrayOf(
+            first[1] * second[2] - first[2] * second[1],
+            first[2] * second[0] - first[0] * second[2],
+            first[0] * second[1] - first[1] * second[0],
+        )
+        val normalLength = sqrt(normal.sumOf { (it * it).toDouble() }).toFloat()
+        assertTrue("Selected face normal must point into the bed", normal[2] / normalLength < -0.999f)
+
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val transformedModel = File(context.cacheDir, "lay-on-face-${System.nanoTime()}.stl")
+        var slicedOutput: File? = null
+        try {
+            val options = SliceOptions()
+                .selectPrinter(PrinterProfile.U1_04)
+                .selectFilament(FilamentProfile.PLA)
+                .selectQuality(QualityProfile.DRAFT)
+            val result = JSONObject(
+                NativeEngine.transformStl(
+                    source.absolutePath,
+                    transformedModel.absolutePath,
+                    transform.toJson(
+                        options.bedSizeX,
+                        options.bedSizeY,
+                        options.bedOriginX,
+                        options.bedOriginY,
+                    ),
+                ),
+            )
+            assertTrue(result.optString("error"), result.optBoolean("ok"))
+            val inspection = JSONObject(NativeEngine.inspectStl(transformedModel.absolutePath))
+            assertTrue("Placed model must remain readable", inspection.optBoolean("ok"))
+            assertTrue(
+                "Placed model must touch Z=0",
+                abs(inspection.getJSONArray("minMm").getDouble(2)) < 0.001,
+            )
+
+            val outcome = OnDeviceSlicer.slice(transformedModel, options)
+            slicedOutput = outcome.output
+            assertTrue(
+                "Placed model must produce extrusion G-code",
+                outcome.output.readText().contains(";TYPE:Outer wall"),
+            )
+        } finally {
+            transformedModel.delete()
+            slicedOutput?.delete()
         }
     }
 
@@ -1911,9 +1987,9 @@ class NativeEngineInstrumentedTest {
                 detail = PreviewDetail.BALANCED,
             ),
         )
-        val gpuVertexCount = gpuStaging.remaining() / 7
+        val gpuVertexCount = gpuStaging.remaining() / 8
         assertTrue("ARM64 GPU staging must use direct memory", gpuStaging.isDirect)
-        assertTrue("ARM64 balanced preview must honor its geometry budget", gpuVertexCount < 600_000)
+        assertTrue("ARM64 balanced preview must honor its geometry budget", gpuVertexCount < 190_000)
     }
 
     private companion object {

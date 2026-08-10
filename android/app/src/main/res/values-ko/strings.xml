@@ -78,6 +78,10 @@
     <string name="auto_lay_working">안정적인 면을 찾는 중…</string>
     <string name="auto_lay_done">안정적인 면을 바닥에 놓았습니다.</string>
     <string name="auto_lay_error">이 모델을 자동으로 놓지 못했습니다.</string>
+    <string name="lay_on_face">선택한 면으로 놓기</string>
+    <string name="lay_on_face_hint">드래그해서 둘러보고 핀치로 확대하세요. 베드에 닿게 할 면을 탭하세요.</string>
+    <string name="lay_on_face_done">선택한 면을 베드에 놓았습니다.</string>
+    <string name="lay_on_face_error">선택한 면을 베드에 놓지 못했습니다.</string>
     <string name="split_to_objects">오브젝트로 분할</string>
     <string name="split_done">오브젝트 %1$d개를 만들었습니다.</string>
     <string name="split_done_painting_cleared">오브젝트 %1$d개를 만들었습니다. 오브젝트별 설정은 초기화했습니다.</string>

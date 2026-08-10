@@ -345,6 +345,24 @@ class AccessibilityInstrumentedTest {
         }
     }
 
+    @Test
+    fun selectedObjectExposesPlaceOnFaceModeAndTouchGuidance() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val placeOnFace = context.getString(R.string.lay_on_face)
+        val hint = context.getString(R.string.lay_on_face_hint)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use {
+            val tool = waitForNodes(setOf(placeOnFace)).firstOrNull {
+                it.isClickable && it.effectiveLabel().contains(placeOnFace)
+            }
+            assertNotNull("A selected object must expose Place on face", tool)
+            tapCenter(checkNotNull(tool))
+            assertTrue(
+                "Place on face mode must explain the next touch action",
+                waitForNodes(setOf(hint)).any { it.effectiveLabel().contains(hint) },
+            )
+        }
+    }
+
     private fun launchHarness(screen: String): ActivityScenario<AccessibilityHarnessActivity> {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         return ActivityScenario.launch(

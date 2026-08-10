@@ -22,6 +22,7 @@ const MAX_TEXT_LINE_BYTES: usize = 64 * 1024;
 const MAX_STL_COORDINATE_ABS_MM: f32 = 1_000_000.0;
 const MAX_GCODE_COORDINATE_ABS_MM: f32 = 1_000_000.0;
 const MAX_PREVIEW_SEGMENTS: usize = 120_000;
+const PREVIEW_COMPACTION_THRESHOLD: usize = MAX_PREVIEW_SEGMENTS * 2;
 const MAX_PREVIEW_LAYERS: usize = 1_000_000;
 const PREVIEW_PAYLOAD_MAGIC: f32 = 17_491.0;
 const PREVIEW_PAYLOAD_VERSION: f32 = 1.0;
@@ -83,6 +84,20 @@ struct SuccessResponse {
     ok: bool,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LayOnFaceRequest {
+    transform: StlTransform,
+    triangle: [f32; 9],
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LayOnFaceResponse {
+    ok: bool,
+    rotation_deg: [f32; 3],
+}
+
 struct GcodeLayerPreview {
     start_layer: usize,
     end_layer: usize,
@@ -90,6 +105,84 @@ struct GcodeLayerPreview {
     min_z_mm: f32,
     max_z_mm: f32,
     segments: Vec<[f32; 6]>,
+}
+
+#[derive(Debug)]
+struct PreviewPath {
+    order: usize,
+    layer: usize,
+    role: ToolpathRole,
+    segments: Vec<[f32; 6]>,
+}
+
+#[derive(Default)]
+struct PreviewPathAccumulator {
+    paths: Vec<PreviewPath>,
+    current: Option<PreviewPath>,
+    retained_segments: usize,
+    next_order: usize,
+}
+
+impl PreviewPathAccumulator {
+    fn push(&mut self, layer: usize, role: ToolpathRole, segment: [f32; 6]) {
+        let continues_current = self
+            .current
+            .as_ref()
+            .is_some_and(|path| path.layer == layer && path.role == role);
+        if !continues_current {
+            self.finish_current();
+            self.current = Some(PreviewPath {
+                order: self.next_order,
+                layer,
+                role,
+                segments: Vec::new(),
+            });
+            self.next_order = self.next_order.saturating_add(1);
+        }
+        let current = self.current.as_mut().expect("preview path was initialized");
+        current.segments.push(segment);
+        if current.segments.len() > PREVIEW_COMPACTION_THRESHOLD {
+            current.segments = simplify_continuous_path(
+                std::mem::take(&mut current.segments),
+                MAX_PREVIEW_SEGMENTS,
+            );
+        }
+    }
+
+    fn break_path(&mut self) {
+        self.finish_current();
+    }
+
+    fn finish(mut self) -> Vec<[f32; 6]> {
+        self.finish_current();
+        if self.retained_segments > MAX_PREVIEW_SEGMENTS {
+            self.compact();
+        }
+        self.paths.sort_by_key(|path| path.order);
+        self.paths
+            .into_iter()
+            .flat_map(|path| path.segments)
+            .collect()
+    }
+
+    fn finish_current(&mut self) {
+        let Some(path) = self.current.take() else {
+            return;
+        };
+        if path.segments.is_empty() {
+            return;
+        }
+        self.retained_segments = self.retained_segments.saturating_add(path.segments.len());
+        self.paths.push(path);
+        if self.retained_segments > PREVIEW_COMPACTION_THRESHOLD {
+            self.compact();
+        }
+    }
+
+    fn compact(&mut self) {
+        self.paths = compact_preview_paths(std::mem::take(&mut self.paths), MAX_PREVIEW_SEGMENTS);
+        self.retained_segments = self.paths.iter().map(|path| path.segments.len()).sum();
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -109,6 +202,8 @@ enum ToolpathRole {
 }
 
 impl ToolpathRole {
+    const COUNT: usize = 10;
+
     fn from_label(label: &str) -> Self {
         let normalized = label.trim().to_ascii_lowercase();
         if normalized.contains("outer wall") || normalized.contains("external perimeter") {
@@ -140,6 +235,110 @@ impl ToolpathRole {
     fn code(self) -> f32 {
         self as u8 as f32
     }
+}
+
+fn simplify_continuous_path(segments: Vec<[f32; 6]>, limit: usize) -> Vec<[f32; 6]> {
+    if segments.len() <= limit {
+        return segments;
+    }
+    if limit == 0 {
+        return Vec::new();
+    }
+
+    let source_count = segments.len();
+    let mut simplified = Vec::with_capacity(limit);
+    let mut start_x = segments[0][0];
+    let mut start_y = segments[0][1];
+    for selected_index in 0..limit {
+        let end_index = ((selected_index + 1) * source_count / limit)
+            .saturating_sub(1)
+            .min(source_count - 1);
+        let source = segments[end_index];
+        simplified.push([start_x, start_y, source[2], source[3], source[4], source[5]]);
+        start_x = source[2];
+        start_y = source[3];
+    }
+    simplified
+}
+
+fn compact_preview_paths(mut paths: Vec<PreviewPath>, limit: usize) -> Vec<PreviewPath> {
+    if limit == 0 {
+        return Vec::new();
+    }
+    let total_segments: usize = paths.iter().map(|path| path.segments.len()).sum();
+    if total_segments <= limit {
+        return paths;
+    }
+    if paths.len() == 1 {
+        paths[0].segments = simplify_continuous_path(std::mem::take(&mut paths[0].segments), limit);
+        return paths;
+    }
+
+    let average_path_size = total_segments as f64 / paths.len() as f64;
+    let target_path_count =
+        ((limit as f64 / average_path_size).floor() as usize).clamp(1, paths.len());
+    let mut candidates = Vec::with_capacity(target_path_count + ToolpathRole::COUNT * 2);
+    candidates.push(0);
+    candidates.push(paths.len() - 1);
+
+    for role_code in 0..ToolpathRole::COUNT {
+        if let Some(first) = paths
+            .iter()
+            .position(|path| path.role as usize == role_code)
+        {
+            candidates.push(first);
+        }
+        if let Some(last) = paths
+            .iter()
+            .rposition(|path| path.role as usize == role_code)
+        {
+            candidates.push(last);
+        }
+    }
+    if target_path_count > 1 {
+        for index in 0..target_path_count {
+            candidates.push(index * (paths.len() - 1) / (target_path_count - 1));
+        }
+    }
+
+    let mut selected = vec![false; paths.len()];
+    let mut candidate_seen = vec![false; paths.len()];
+    let mut used = 0usize;
+    for index in candidates {
+        if candidate_seen[index] {
+            continue;
+        }
+        candidate_seen[index] = true;
+        let path_size = paths[index].segments.len();
+        if path_size <= limit.saturating_sub(used) {
+            selected[index] = true;
+            used += path_size;
+        }
+    }
+    for (index, path) in paths.iter().enumerate() {
+        if !selected[index] && path.segments.len() <= limit.saturating_sub(used) {
+            selected[index] = true;
+            used += path.segments.len();
+        }
+    }
+
+    if used == 0 {
+        let smallest_index = paths
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, path)| path.segments.len())
+            .map(|(index, _)| index)
+            .expect("non-empty preview paths");
+        paths[smallest_index].segments =
+            simplify_continuous_path(std::mem::take(&mut paths[smallest_index].segments), limit);
+        selected[smallest_index] = true;
+    }
+
+    paths
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, path)| selected[index].then_some(path))
+        .collect()
 }
 
 #[derive(Serialize)]
@@ -422,6 +621,196 @@ fn triangle_normal(vertices: [[f32; 3]; 3]) -> [f32; 3] {
     }
 }
 
+type Matrix3 = [[f32; 3]; 3];
+
+fn rotation_matrix(rotation_deg: [f32; 3]) -> Matrix3 {
+    let x = rotate_vertex([1.0, 0.0, 0.0], rotation_deg);
+    let y = rotate_vertex([0.0, 1.0, 0.0], rotation_deg);
+    let z = rotate_vertex([0.0, 0.0, 1.0], rotation_deg);
+    [[x[0], y[0], z[0]], [x[1], y[1], z[1]], [x[2], y[2], z[2]]]
+}
+
+fn multiply_matrices(left: Matrix3, right: Matrix3) -> Matrix3 {
+    let mut result = [[0.0; 3]; 3];
+    for row in 0..3 {
+        for column in 0..3 {
+            result[row][column] = (0..3)
+                .map(|index| left[row][index] * right[index][column])
+                .sum();
+        }
+    }
+    result
+}
+
+fn normalize_vector(vector: [f32; 3]) -> Result<[f32; 3], EngineError> {
+    let length = vector.iter().map(|value| value * value).sum::<f32>().sqrt();
+    if !length.is_finite() || length <= 1.0e-6 {
+        return Err(EngineError::Parse(
+            "Selected face has no usable normal".to_owned(),
+        ));
+    }
+    Ok(vector.map(|value| value / length))
+}
+
+fn cross(left: [f32; 3], right: [f32; 3]) -> [f32; 3] {
+    [
+        left[1] * right[2] - left[2] * right[1],
+        left[2] * right[0] - left[0] * right[2],
+        left[0] * right[1] - left[1] * right[0],
+    ]
+}
+
+fn quaternion_between(from: [f32; 3], to: [f32; 3]) -> Result<[f32; 4], EngineError> {
+    let from = normalize_vector(from)?;
+    let to = normalize_vector(to)?;
+    let dot = from
+        .iter()
+        .zip(to)
+        .map(|(left, right)| left * right)
+        .sum::<f32>()
+        .clamp(-1.0, 1.0);
+    if dot >= 1.0 - 1.0e-6 {
+        return Ok([1.0, 0.0, 0.0, 0.0]);
+    }
+    if dot <= -1.0 + 1.0e-6 {
+        let basis = if from[0].abs() <= from[1].abs() && from[0].abs() <= from[2].abs() {
+            [1.0, 0.0, 0.0]
+        } else if from[1].abs() <= from[2].abs() {
+            [0.0, 1.0, 0.0]
+        } else {
+            [0.0, 0.0, 1.0]
+        };
+        let axis = normalize_vector(cross(from, basis))?;
+        return Ok([0.0, axis[0], axis[1], axis[2]]);
+    }
+    let axis = cross(from, to);
+    let quaternion = [1.0 + dot, axis[0], axis[1], axis[2]];
+    let length = quaternion
+        .iter()
+        .map(|value| value * value)
+        .sum::<f32>()
+        .sqrt();
+    Ok(quaternion.map(|value| value / length))
+}
+
+fn quaternion_matrix([w, x, y, z]: [f32; 4]) -> Matrix3 {
+    [
+        [
+            1.0 - 2.0 * (y * y + z * z),
+            2.0 * (x * y - z * w),
+            2.0 * (x * z + y * w),
+        ],
+        [
+            2.0 * (x * y + z * w),
+            1.0 - 2.0 * (x * x + z * z),
+            2.0 * (y * z - x * w),
+        ],
+        [
+            2.0 * (x * z - y * w),
+            2.0 * (y * z + x * w),
+            1.0 - 2.0 * (x * x + y * y),
+        ],
+    ]
+}
+
+fn matrix_to_euler_degrees(matrix: Matrix3) -> [f32; 3] {
+    let rotation_y = (-matrix[2][0]).clamp(-1.0, 1.0).asin();
+    let cosine_y = rotation_y.cos();
+    let (rotation_x, rotation_z) = if cosine_y.abs() > 1.0e-5 {
+        (
+            matrix[2][1].atan2(matrix[2][2]),
+            matrix[1][0].atan2(matrix[0][0]),
+        )
+    } else {
+        ((-matrix[1][2]).atan2(matrix[1][1]), 0.0)
+    };
+    [rotation_x, rotation_y, rotation_z].map(|radians| {
+        let normalized = (radians.to_degrees() + 180.0).rem_euclid(360.0) - 180.0;
+        if normalized.abs() < 1.0e-5 {
+            0.0
+        } else {
+            normalized
+        }
+    })
+}
+
+fn transformed_face_vertices(
+    triangle: [f32; 9],
+    transform: &StlTransform,
+    rotation_deg: [f32; 3],
+) -> [[f32; 3]; 3] {
+    let scales = transform.scales();
+    let signs = transform
+        .mirror
+        .map(|mirrored| if mirrored { -1.0 } else { 1.0 });
+    let mut vertices = std::array::from_fn(|index| {
+        rotate_vertex(
+            [
+                triangle[index * 3] * scales[0] * signs[0],
+                triangle[index * 3 + 1] * scales[1] * signs[1],
+                triangle[index * 3 + 2] * scales[2] * signs[2],
+            ],
+            rotation_deg,
+        )
+    });
+    if transform
+        .mirror
+        .iter()
+        .filter(|&&mirrored| mirrored)
+        .count()
+        % 2
+        == 1
+    {
+        vertices.swap(1, 2);
+    }
+    vertices
+}
+
+fn lay_on_face(request: &LayOnFaceRequest) -> Result<LayOnFaceResponse, EngineError> {
+    let transform = &request.transform;
+    if transform
+        .rotation_deg
+        .iter()
+        .chain(transform.scales().iter())
+        .any(|value| !value.is_finite())
+        || transform
+            .scales()
+            .iter()
+            .any(|scale| !(0.05..=10.0).contains(scale))
+        || request
+            .triangle
+            .iter()
+            .any(|value| !value.is_finite() || value.abs() > MAX_STL_COORDINATE_ABS_MM)
+    {
+        return Err(EngineError::Parse(
+            "Selected face transform is invalid".to_owned(),
+        ));
+    }
+    let current_vertices =
+        transformed_face_vertices(request.triangle, transform, transform.rotation_deg);
+    let current_normal = triangle_normal(current_vertices);
+    let alignment = quaternion_between(current_normal, [0.0, 0.0, -1.0])?;
+    let next_matrix = multiply_matrices(
+        quaternion_matrix(alignment),
+        rotation_matrix(transform.rotation_deg),
+    );
+    let rotation_deg = matrix_to_euler_degrees(next_matrix);
+    let next_normal = triangle_normal(transformed_face_vertices(
+        request.triangle,
+        transform,
+        rotation_deg,
+    ));
+    if next_normal[2] > -0.999 || next_normal[0].abs() > 0.002 || next_normal[1].abs() > 0.002 {
+        return Err(EngineError::Parse(
+            "Selected face could not be aligned to the bed".to_owned(),
+        ));
+    }
+    Ok(LayOnFaceResponse {
+        ok: true,
+        rotation_deg,
+    })
+}
+
 fn write_f32(writer: &mut impl Write, value: f32) -> Result<(), EngineError> {
     writer.write_all(&value.to_le_bytes())?;
     Ok(())
@@ -591,9 +980,7 @@ fn preview_gcode(
     let mut e = 0.0f32;
     let mut relative_extrusion = false;
     let mut toolpath_role = ToolpathRole::Other;
-    let mut segments = Vec::new();
-    let mut segment_stride = 1usize;
-    let mut seen_segments = 0usize;
+    let mut preview_paths = PreviewPathAccumulator::default();
     let mut line_buffer = Vec::with_capacity(256);
 
     loop {
@@ -613,6 +1000,7 @@ fn preview_gcode(
             .map_err(|_| EngineError::Parse("G-code contains invalid UTF-8".to_owned()))?;
         let trimmed = line.trim();
         if trimmed == ";LAYER_CHANGE" {
+            preview_paths.break_path();
             let next = current_layer
                 .map(|layer| layer.checked_add(1))
                 .unwrap_or(Some(0))
@@ -643,6 +1031,7 @@ fn preview_gcode(
             continue;
         }
         if let Some(value) = trimmed.strip_prefix(";TYPE:") {
+            preview_paths.break_path();
             toolpath_role = ToolpathRole::from_label(value);
             continue;
         }
@@ -684,18 +1073,13 @@ fn preview_gcode(
         let in_requested_range =
             current_layer.is_some_and(|layer| (start_layer..=end_layer).contains(&layer));
         if in_requested_range && extruding && (next_x != x || next_y != y) {
-            seen_segments = seen_segments.checked_add(1).ok_or_else(|| {
-                EngineError::Parse("G-code contains too many extrusion segments".to_owned())
-            })?;
-            if seen_segments.is_multiple_of(segment_stride) {
-                segments.push([x, y, next_x, next_y, layer_z, toolpath_role.code()]);
-            }
-            // Keep common full-model previews intact so Android can reduce whole
-            // layers instead of punching visual gaps through perimeter loops.
-            if segments.len() > MAX_PREVIEW_SEGMENTS {
-                segments = segments.into_iter().step_by(2).collect();
-                segment_stride = segment_stride.saturating_mul(2);
-            }
+            preview_paths.push(
+                current_layer.expect("requested preview motion has a layer"),
+                toolpath_role,
+                [x, y, next_x, next_y, layer_z, toolpath_role.code()],
+            );
+        } else if next_x != x || next_y != y {
+            preview_paths.break_path();
         }
 
         x = next_x;
@@ -722,7 +1106,7 @@ fn preview_gcode(
         layer_count,
         min_z_mm: min_requested_z.unwrap_or(0.0),
         max_z_mm: max_requested_z.unwrap_or(0.0),
-        segments,
+        segments: preview_paths.finish(),
     })
 }
 
@@ -837,6 +1221,24 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_transformStl(
             .map_err(|error| EngineError::Parse(error.to_string()))?;
         transform_stl(&input_path, &output_path, &transform)?;
         Ok(SuccessResponse { ok: true })
+    });
+    make_java_string(&env, &response)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_layOnFace(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    request_json: JString<'_>,
+) -> jstring {
+    let response = guarded_json(|| {
+        let request_json = env
+            .get_string(&request_json)
+            .map(|text| text.to_string_lossy().into_owned())
+            .map_err(|error| EngineError::Parse(error.to_string()))?;
+        let request: LayOnFaceRequest = serde_json::from_str(&request_json)
+            .map_err(|error| EngineError::Parse(error.to_string()))?;
+        lay_on_face(&request)
     });
     make_java_string(&env, &response)
 }
@@ -1063,6 +1465,87 @@ mod tests {
     }
 
     #[test]
+    fn oversized_gcode_preview_simplifies_a_path_without_turning_it_into_particles() {
+        let path = std::env::temp_dir().join(format!(
+            "duckyslicer-continuous-preview-{}.gcode",
+            std::process::id(),
+        ));
+        let mut file = File::create(&path).expect("create continuous G-code fixture");
+        writeln!(
+            file,
+            "M83\n;LAYER_CHANGE\n;Z:0.2\n;TYPE:Outer wall\nG1 X0 Y0"
+        )
+        .expect("write preview header");
+        for x in 1..=(MAX_PREVIEW_SEGMENTS + 1) {
+            writeln!(file, "G1 X{x} Y0 E1").expect("write continuous extrusion");
+        }
+        drop(file);
+
+        let preview = preview_gcode(path.to_str().expect("utf8 path"), 0, 0)
+            .expect("parse oversized preview");
+        std::fs::remove_file(path).expect("remove fixture");
+
+        assert_eq!(preview.segments.len(), MAX_PREVIEW_SEGMENTS);
+        assert_eq!(preview.segments.first().expect("first segment")[0], 0.0);
+        assert_eq!(
+            preview.segments.last().expect("last segment")[2],
+            (MAX_PREVIEW_SEGMENTS + 1) as f32,
+        );
+        assert!(
+            preview
+                .segments
+                .windows(2)
+                .all(|pair| pair[0][2] == pair[1][0] && pair[0][3] == pair[1][1])
+        );
+    }
+
+    #[test]
+    fn path_compaction_drops_complete_paths_instead_of_alternating_segments() {
+        let paths = (0..8)
+            .map(|path_index| PreviewPath {
+                order: path_index,
+                layer: path_index,
+                role: if path_index % 2 == 0 {
+                    ToolpathRole::OuterWall
+                } else {
+                    ToolpathRole::Infill
+                },
+                segments: (0..4)
+                    .map(|segment_index| {
+                        let x = (path_index * 10 + segment_index) as f32;
+                        [
+                            x,
+                            path_index as f32,
+                            x + 1.0,
+                            path_index as f32,
+                            path_index as f32,
+                            (path_index % 2 * 2) as f32,
+                        ]
+                    })
+                    .collect(),
+            })
+            .collect();
+
+        let compacted = compact_preview_paths(paths, 12);
+
+        assert!(
+            compacted
+                .iter()
+                .map(|path| path.segments.len())
+                .sum::<usize>()
+                <= 12
+        );
+        assert!(compacted.iter().all(|path| path.segments.len() == 4));
+        assert!(compacted.iter().all(|path| {
+            path.segments
+                .windows(2)
+                .all(|pair| pair[0][2] == pair[1][0] && pair[0][3] == pair[1][1])
+        }));
+        assert!(compacted.iter().any(|path| path.layer == 0));
+        assert!(compacted.iter().any(|path| path.layer == 7));
+    }
+
+    #[test]
     fn gcode_preview_rejects_an_oversized_single_line() {
         let path = std::env::temp_dir().join(format!(
             "duckyslicer-long-line-preview-{}.gcode",
@@ -1200,6 +1683,81 @@ mod tests {
             local_vertex([2.0, 4.0, 6.0], [1.0, 2.0, 3.0], &transform),
             [2.0, 6.0, 12.0],
         );
+    }
+
+    #[test]
+    fn lay_on_face_aligns_the_selected_transformed_normal_with_world_down() {
+        let transform = StlTransform {
+            bed_center_mm: [0.0, 0.0],
+            offset_mm: [0.0, 0.0],
+            offset_z_mm: 0.0,
+            rotation_deg: [0.0; 3],
+            scale: 1.0,
+            scale_axes: Some([1.0, 1.5, 2.0]),
+            mirror: [false; 3],
+        };
+        let request = LayOnFaceRequest {
+            transform,
+            triangle: [1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 1.0],
+        };
+
+        let result = lay_on_face(&request).expect("face should align");
+        let normal = triangle_normal(transformed_face_vertices(
+            request.triangle,
+            &request.transform,
+            result.rotation_deg,
+        ));
+
+        assert!(result.ok);
+        assert!(normal[0].abs() < 0.001, "normal={normal:?}");
+        assert!(normal[1].abs() < 0.001, "normal={normal:?}");
+        assert!((normal[2] + 1.0).abs() < 0.001, "normal={normal:?}");
+    }
+
+    #[test]
+    fn lay_on_face_handles_existing_rotation_non_uniform_scale_and_mirroring() {
+        let transform = StlTransform {
+            bed_center_mm: [0.0, 0.0],
+            offset_mm: [0.0, 0.0],
+            offset_z_mm: 0.0,
+            rotation_deg: [32.0, -21.0, 47.0],
+            scale: 1.4,
+            scale_axes: Some([1.4, 0.7, 2.2]),
+            mirror: [true, false, false],
+        };
+        let request = LayOnFaceRequest {
+            transform,
+            triangle: [0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0],
+        };
+
+        let result = lay_on_face(&request).expect("mirrored face should align");
+        let normal = triangle_normal(transformed_face_vertices(
+            request.triangle,
+            &request.transform,
+            result.rotation_deg,
+        ));
+
+        assert!(normal[0].abs() < 0.002, "normal={normal:?}");
+        assert!(normal[1].abs() < 0.002, "normal={normal:?}");
+        assert!((normal[2] + 1.0).abs() < 0.002, "normal={normal:?}");
+    }
+
+    #[test]
+    fn lay_on_face_rejects_a_degenerate_triangle() {
+        let request = LayOnFaceRequest {
+            transform: StlTransform {
+                bed_center_mm: [0.0, 0.0],
+                offset_mm: [0.0, 0.0],
+                offset_z_mm: 0.0,
+                rotation_deg: [0.0; 3],
+                scale: 1.0,
+                scale_axes: None,
+                mirror: [false; 3],
+            },
+            triangle: [0.0; 9],
+        };
+
+        assert!(lay_on_face(&request).is_err());
     }
 
     #[test]

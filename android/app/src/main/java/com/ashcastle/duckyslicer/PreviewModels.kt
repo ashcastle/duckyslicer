@@ -1,7 +1,6 @@
 package com.ashcastle.duckyslicer
 
 import kotlin.math.abs
-import kotlin.math.max
 import kotlin.math.roundToInt
 
 internal data class PreviewRenderPlan(
@@ -18,69 +17,101 @@ data class GcodeLayerPreview(
     val segments: FloatArray,
     val roleSegmentCounts: IntArray,
 ) {
-    internal fun buildRenderPlan(segmentBudget: Int): PreviewRenderPlan {
+    internal fun buildRenderPlan(
+        segmentBudget: Int,
+        visibleRoles: Set<Int>? = null,
+    ): PreviewRenderPlan {
         val totalSegments = segments.size / SEGMENT_STRIDE
         if (totalSegments == 0) return PreviewRenderPlan(IntArray(0), BooleanArray(0))
 
         val safeBudget = segmentBudget.coerceAtLeast(1)
-        if (totalSegments <= safeBudget) {
-            return planForOffsets(IntArray(totalSegments) { it * SEGMENT_STRIDE })
+        val paths = buildContinuousPaths().filter { path ->
+            visibleRoles == null || path.role in visibleRoles
+        }
+        val visibleSegmentCount = paths.sumOf(SegmentPath::size)
+        if (visibleSegmentCount == 0) return PreviewRenderPlan(IntArray(0), BooleanArray(0))
+        if (visibleSegmentCount <= safeBudget) return planForPaths(paths)
+
+        val presentRoles = ROLE_PRIORITY.filter { role -> paths.any { it.role == role } }
+        val selected = ArrayList<SegmentPath>()
+        val selectedStarts = HashSet<Int>()
+        val reservedPerRole = (safeBudget / (presentRoles.size * 4)).coerceAtLeast(1)
+        presentRoles.forEach { role ->
+            val chosen = chooseWholePaths(paths.filter { it.role == role }, reservedPerRole)
+            selected += chosen
+            chosen.forEach { selectedStarts += it.start }
         }
 
-        val layers = mutableListOf<SegmentLayer>()
-        var layerStart = 0
-        var layerZ = segments[4]
-        for (segmentIndex in 1 until totalSegments) {
-            val z = segments[segmentIndex * SEGMENT_STRIDE + 4]
-            if (abs(z - layerZ) > Z_EPSILON) {
-                layers += SegmentLayer(layerStart, segmentIndex)
-                layerStart = segmentIndex
-                layerZ = z
-            }
+        var remaining = (safeBudget - selected.sumOf(SegmentPath::size)).coerceAtLeast(0)
+        presentRoles.forEach { role ->
+            if (remaining <= 0) return@forEach
+            val rolePaths = paths.filter { it.role == role && it.start !in selectedStarts }
+            if (rolePaths.isEmpty()) return@forEach
+            val chosen = chooseWholePaths(rolePaths, remaining)
+            selected += chosen
+            chosen.forEach { selectedStarts += it.start }
+            remaining = (remaining - chosen.sumOf(SegmentPath::size)).coerceAtLeast(0)
         }
-        layers += SegmentLayer(layerStart, totalSegments)
-
-        val averageSegmentsPerLayer = totalSegments.toFloat() / layers.size
-        var selectedLayerCount = (safeBudget / averageSegmentsPerLayer)
-            .toInt()
-            .coerceIn(1, layers.size)
-        val maximumBudget = max(safeBudget, safeBudget * 5 / 4)
-        var selected = selectCompleteLayers(layers, selectedLayerCount)
-        while (selected.size > maximumBudget && selectedLayerCount > 1) {
-            selectedLayerCount -= 1
-            selected = selectCompleteLayers(layers, selectedLayerCount)
-        }
-        if (selected.size > maximumBudget) selected = sampleEvenly(selected, maximumBudget)
-
-        return planForOffsets(selected)
+        return planForPaths(selected.sortedBy(SegmentPath::start))
     }
 
-    private fun selectCompleteLayers(layers: List<SegmentLayer>, targetCount: Int): IntArray {
-        val layerIndices = if (targetCount == 1) {
-            intArrayOf(layers.lastIndex)
+    private fun buildContinuousPaths(): List<SegmentPath> {
+        val totalSegments = segments.size / SEGMENT_STRIDE
+        val paths = ArrayList<SegmentPath>()
+        var pathStart = 0
+        var pathRole = segments[5].toInt()
+        for (segmentIndex in 1 until totalSegments) {
+            val previousOffset = (segmentIndex - 1) * SEGMENT_STRIDE
+            val currentOffset = segmentIndex * SEGMENT_STRIDE
+            if (!segmentsConnect(previousOffset, currentOffset)) {
+                paths += SegmentPath(pathStart, segmentIndex, pathRole)
+                pathStart = segmentIndex
+                pathRole = segments[currentOffset + 5].toInt()
+            }
+        }
+        paths += SegmentPath(pathStart, totalSegments, pathRole)
+        return paths
+    }
+
+    private fun chooseWholePaths(paths: List<SegmentPath>, budget: Int): List<SegmentPath> {
+        if (paths.sumOf(SegmentPath::size) <= budget) return paths
+        val averageSize = paths.sumOf(SegmentPath::size).toFloat() / paths.size
+        val targetCount = (budget / averageSize).toInt().coerceIn(1, paths.size)
+        val indices = if (targetCount == 1) {
+            intArrayOf(paths.lastIndex)
         } else {
             IntArray(targetCount) { index ->
-                (index * layers.lastIndex.toFloat() / (targetCount - 1)).roundToInt()
+                (index * paths.lastIndex.toFloat() / (targetCount - 1)).roundToInt()
             }.distinct().toIntArray()
         }
-        val selectedCount = layerIndices.sumOf { layers[it].endExclusive - layers[it].start }
-        val selected = IntArray(selectedCount)
-        var writeIndex = 0
-        layerIndices.forEach { layerIndex ->
-            val layer = layers[layerIndex]
-            for (segmentIndex in layer.start until layer.endExclusive) {
-                selected[writeIndex++] = segmentIndex * SEGMENT_STRIDE
+        val selected = ArrayList<SegmentPath>(indices.size)
+        val selectedIndices = indices.toHashSet()
+        var used = 0
+        indices.forEach { index ->
+            val path = paths[index]
+            if (selected.isEmpty() || used + path.size <= budget) {
+                selected += path
+                used += path.size
+            }
+        }
+        paths.forEachIndexed { index, path ->
+            if (index !in selectedIndices && used + path.size <= budget) {
+                selected += path
+                used += path.size
             }
         }
         return selected
     }
 
-    private fun sampleEvenly(source: IntArray, budget: Int): IntArray {
-        if (source.size <= budget) return source
-        if (budget == 1) return intArrayOf(source.last())
-        return IntArray(budget) { index ->
-            source[(index * (source.lastIndex.toFloat() / (budget - 1))).roundToInt()]
+    private fun planForPaths(paths: List<SegmentPath>): PreviewRenderPlan {
+        val offsets = IntArray(paths.sumOf(SegmentPath::size))
+        var writeIndex = 0
+        paths.forEach { path ->
+            for (segmentIndex in path.start until path.endExclusive) {
+                offsets[writeIndex++] = segmentIndex * SEGMENT_STRIDE
+            }
         }
+        return planForOffsets(offsets)
     }
 
     private fun planForOffsets(offsets: IntArray): PreviewRenderPlan {
@@ -89,12 +120,7 @@ data class GcodeLayerPreview(
             val previous = offsets[index - 1]
             val current = offsets[index]
             if (current != previous + SEGMENT_STRIDE) continue
-            val previousRole = segments[previous + 5].toInt()
-            val currentRole = segments[current + 5].toInt()
-            connections[index] = previousRole == currentRole &&
-                abs(segments[previous + 2] - segments[current]) < Z_EPSILON &&
-                abs(segments[previous + 3] - segments[current + 1]) < Z_EPSILON &&
-                abs(segments[previous + 4] - segments[current + 4]) < Z_EPSILON
+            connections[index] = segmentsConnect(previous, current)
         }
         return PreviewRenderPlan(
             segmentOffsets = offsets,
@@ -102,11 +128,24 @@ data class GcodeLayerPreview(
         )
     }
 
-    private data class SegmentLayer(val start: Int, val endExclusive: Int)
+    private fun segmentsConnect(previous: Int, current: Int): Boolean =
+        segments[previous + 5].toInt() == segments[current + 5].toInt() &&
+            abs(segments[previous + 2] - segments[current]) < Z_EPSILON &&
+            abs(segments[previous + 3] - segments[current + 1]) < Z_EPSILON &&
+            abs(segments[previous + 4] - segments[current + 4]) < Z_EPSILON
+
+    private data class SegmentPath(
+        val start: Int,
+        val endExclusive: Int,
+        val role: Int,
+    ) {
+        val size: Int get() = endExclusive - start
+    }
 
     companion object {
         const val SEGMENT_STRIDE = 6
         private const val Z_EPSILON = 0.001f
+        private val ROLE_PRIORITY = intArrayOf(0, 3, 9, 1, 4, 6, 7, 5, 2, 8)
 
         fun fromNative(raw: FloatArray?): GcodeLayerPreview {
             checkNotNull(raw) { "preview_invalid" }
