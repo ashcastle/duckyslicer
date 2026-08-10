@@ -82,6 +82,12 @@
     <string name="lay_on_face_hint">드래그해서 둘러보고 핀치로 확대하세요. 베드에 닿게 할 면을 탭하세요.</string>
     <string name="lay_on_face_done">선택한 면을 베드에 놓았습니다.</string>
     <string name="lay_on_face_error">선택한 면을 베드에 놓지 못했습니다.</string>
+    <string name="measure_model">측정</string>
+    <string name="measure_hint">드래그해서 둘러보고 핀치로 확대하세요. 모델에서 두 점을 탭하세요.</string>
+    <string name="measure_second_point">첫 번째 점을 선택했습니다. 두 번째 점을 탭하세요.</string>
+    <string name="measure_distance">거리 %1$.2f mm</string>
+    <string name="measure_axes">X %1$.2f · Y %2$.2f · Z %3$.2f mm</string>
+    <string name="measure_clear">지우기</string>
     <string name="split_to_objects">오브젝트로 분할</string>
     <string name="split_done">오브젝트 %1$d개를 만들었습니다.</string>
     <string name="split_done_painting_cleared">오브젝트 %1$d개를 만들었습니다. 오브젝트별 설정은 초기화했습니다.</string>

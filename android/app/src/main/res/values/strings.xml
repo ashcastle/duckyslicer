@@ -82,6 +82,12 @@
     <string name="lay_on_face_hint">Drag to look around. Pinch to zoom. Tap the surface that should touch the bed.</string>
     <string name="lay_on_face_done">Selected surface placed on the bed.</string>
     <string name="lay_on_face_error">Couldn’t place the selected surface on the bed.</string>
+    <string name="measure_model">Measure</string>
+    <string name="measure_hint">Drag to look around. Pinch to zoom. Tap two points on the model.</string>
+    <string name="measure_second_point">First point selected. Tap the second point.</string>
+    <string name="measure_distance">Distance %1$.2f mm</string>
+    <string name="measure_axes">X %1$.2f · Y %2$.2f · Z %3$.2f mm</string>
+    <string name="measure_clear">Clear</string>
     <string name="split_to_objects">Split to objects</string>
     <string name="split_done">%1$d objects created.</string>
     <string name="split_done_painting_cleared">%1$d objects created. Object-specific settings were cleared.</string>
