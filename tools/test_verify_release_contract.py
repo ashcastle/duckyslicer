@@ -26,6 +26,11 @@ jobs:
           if [ "$package_name" != "com.ashcastle.duckyslicer" ]; then exit 1; fi
           if [ "$actual_version_code" != "$RELEASE_VERSION_CODE" ]; then exit 1; fi
           if [ "$actual_version_name" != "$version" ]; then exit 1; fi
+          echo "Release notes must describe the user-visible changes before signing"
+          test '<!-- duckyslicer-release-integrity -->'
+          echo "--jq '.body | @base64'"
+          release_notes_sha256=$(printf '%s' "$release_body_base64" | sha256sum)
+          echo "release_notes_sha256=$release_notes_sha256"
           "$build_tools/zipalign" -c -P 16 -v 4 "$unsigned_apk"
           "$build_tools/apksigner" verify "$unsigned_apk"
       - uses: actions/upload-artifact@0123456789012345678901234567890123456789
@@ -56,10 +61,20 @@ jobs:
       - run: |
           echo "Release tag changed after local artifact validation"
           echo "Release was published before the isolated signer completed"
+          echo "Release notes changed after local artifact validation"
           gh release upload "$RELEASE_TAG" "$signed_apk"
           gh release delete-asset "$RELEASE_TAG" "$UNSIGNED_ASSET"
           echo "Refusing to publish a release without exactly one signed APK"
+          echo 'RELEASE_NOTES_SHA256: ${{ needs.validate.outputs.release_notes_sha256 }}'
+          echo "Release notes changed while replacing the draft artifact"
+          signed_sha256=$(sha256sum "$signed_apk")
+          echo "Signer #1 certificate SHA-256 digest"
+          echo "$DUCKYSLICER_SIGNING_CERT_SHA256"
+          echo '<!-- duckyslicer-release-integrity -->'
+          printf 'APK SHA-256: `%s`' "$signed_sha256"
+          printf 'Signing certificate SHA-256: `%s`' "$actual_fingerprint"
           gh release edit "$RELEASE_TAG" \
+            --notes-file "$release_notes" \
             --draft=false
 """,
         "prepare_local_release.py": " ".join(
@@ -85,17 +100,22 @@ jobs:
         "RELEASING.md": (
             "Run python3 tools/prepare_local_release.py. GitHub Actions never builds the "
             "GitHub Release APK. A GitHub Release contains exactly one public asset: the "
-            "signed ARM64 APK. Use DuckySlicer_16KB_API35."
+            "signed ARM64 APK. Release notes must describe user-visible changes. The publisher "
+            "appends the signed APK SHA-256, signing-certificate fingerprint, and source tag. "
+            "Use DuckySlicer_16KB_API35."
         ),
         "SECURITY.md": (
             "The Release APK is built twice on the maintainer's local machine. "
             "SHA-256, package name, versionCode, versionName, and tag commit are pinned. "
-            "The GitHub Release exposes exactly one downloadable asset: the signed ARM64 APK."
+            "The GitHub Release exposes exactly one downloadable asset: the signed ARM64 APK. "
+            "Published Release notes contain the signed APK SHA-256, signing-certificate "
+            "SHA-256, and source tag."
         ),
         "CONTRIBUTING.md": (
             "Run python3 tools/run_local_gate.py and python3 tools/prepare_local_release.py. "
             "The GitHub Release APK must be built locally. The GitHub Release must contain "
-            "only the signed ARM64 APK."
+            "only the signed ARM64 APK. It publishes the APK SHA-256 and signing-certificate "
+            "fingerprint in the Release notes."
         ),
     }
 
@@ -148,6 +168,22 @@ class VerifyReleaseContractTest(unittest.TestCase):
         sources = valid_sources()
         sources["RELEASING.md"] = ""
         with self.assertRaisesRegex(VerificationError, "RELEASING.md"):
+            verify_release_contract(sources)
+
+    def test_rejects_missing_release_note_integrity_publication(self) -> None:
+        sources = valid_sources()
+        sources["sign-local-release.yml"] = sources["sign-local-release.yml"].replace(
+            'APK SHA-256: `%s`', "APK digest omitted"
+        )
+        with self.assertRaisesRegex(VerificationError, "APK SHA-256"):
+            verify_release_contract(sources)
+
+    def test_rejects_unpinned_release_notes(self) -> None:
+        sources = valid_sources()
+        sources["sign-local-release.yml"] = sources["sign-local-release.yml"].replace(
+            "Release notes changed after local artifact validation", "notes not pinned"
+        )
+        with self.assertRaisesRegex(VerificationError, "Release notes changed"):
             verify_release_contract(sources)
 
 

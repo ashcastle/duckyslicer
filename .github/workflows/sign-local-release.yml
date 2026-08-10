@@ -41,6 +41,7 @@ jobs:
       contents: write
     outputs:
       release_version: ${{ steps.identity.outputs.version }}
+      release_notes_sha256: ${{ steps.identity.outputs.release_notes_sha256 }}
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ inputs.tag }}
@@ -104,6 +105,18 @@ jobs:
             echo "Draft prerelease state does not match the SemVer tag" >&2
             exit 1
           fi
+          release_body_base64=$(gh release view "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" --json body --jq '.body | @base64')
+          release_body=$(printf '%s' "$release_body_base64" | base64 --decode)
+          if [ -z "$(printf '%s' "$release_body" | tr -d '[:space:]')" ]; then
+            echo "Release notes must describe the user-visible changes before signing" >&2
+            exit 1
+          fi
+          if printf '%s' "$release_body" | grep -Fq '<!-- duckyslicer-release-integrity -->'; then
+            echo "Draft release notes must not contain the publisher-owned integrity block" >&2
+            exit 1
+          fi
+          release_notes_sha256=$(printf '%s' "$release_body_base64" | sha256sum | cut -d ' ' -f 1)
           asset_count=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length')
           asset_name=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[0].name')
           if [ "$asset_count" != "1" ] || [ "$asset_name" != "$UNSIGNED_ASSET" ]; then
@@ -141,6 +154,7 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release_notes_sha256=$release_notes_sha256" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -251,6 +265,8 @@ jobs:
       UNSIGNED_ASSET: ${{ inputs.unsigned_asset }}
       SOURCE_COMMIT: ${{ inputs.source_commit }}
       DUCKYSLICER_RELEASE_VERSION: ${{ needs.validate.outputs.release_version }}
+      RELEASE_NOTES_SHA256: ${{ needs.validate.outputs.release_notes_sha256 }}
+      DUCKYSLICER_SIGNING_CERT_SHA256: ${{ vars.DUCKYSLICER_SIGNING_CERT_SHA256 }}
     steps:
       - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
         with:
@@ -270,8 +286,20 @@ jobs:
           signed_apk="signed/$signed_name"
           test -s "$signed_apk"
           build_tools="$ANDROID_HOME/build-tools/36.0.0"
-          "$build_tools/apksigner" verify --verbose --print-certs "$signed_apk"
+          signer_report=$("$build_tools/apksigner" verify --verbose --print-certs "$signed_apk")
+          printf '%s\n' "$signer_report"
+          actual_fingerprint=$(printf '%s\n' "$signer_report" \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
+            | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')
+          expected_fingerprint=$(printf '%s' "$DUCKYSLICER_SIGNING_CERT_SHA256" \
+            | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')
+          if [[ ! "$expected_fingerprint" =~ ^[0-9a-f]{64}$ ]] || \
+             [ "$actual_fingerprint" != "$expected_fingerprint" ]; then
+            echo "Published APK signing certificate does not match the pinned fingerprint" >&2
+            exit 1
+          fi
           "$build_tools/zipalign" -c -P 16 -v 4 "$signed_apk"
+          signed_sha256=$(sha256sum "$signed_apk" | cut -d ' ' -f 1)
 
           tag_commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq .sha)
           if [ "$tag_commit" != "$SOURCE_COMMIT" ]; then
@@ -288,6 +316,13 @@ jobs:
             echo "Draft assets changed after local artifact validation" >&2
             exit 1
           fi
+          release_body_base64=$(gh release view "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" --json body --jq '.body | @base64')
+          actual_notes_sha256=$(printf '%s' "$release_body_base64" | sha256sum | cut -d ' ' -f 1)
+          if [ "$actual_notes_sha256" != "$RELEASE_NOTES_SHA256" ]; then
+            echo "Release notes changed after local artifact validation" >&2
+            exit 1
+          fi
 
           gh release upload "$RELEASE_TAG" "$signed_apk" \
             --repo "$GITHUB_REPOSITORY" \
@@ -302,6 +337,30 @@ jobs:
             echo "Refusing to publish a release without exactly one signed APK" >&2
             exit 1
           fi
+          release_notes="$RUNNER_TEMP/duckyslicer-release-notes.md"
+          release_body_base64=$(gh release view "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" --json body --jq '.body | @base64')
+          actual_notes_sha256=$(printf '%s' "$release_body_base64" | sha256sum | cut -d ' ' -f 1)
+          if [ "$actual_notes_sha256" != "$RELEASE_NOTES_SHA256" ]; then
+            echo "Release notes changed while replacing the draft artifact" >&2
+            exit 1
+          fi
+          printf '%s' "$release_body_base64" | base64 --decode > "$release_notes"
+          if grep -Fq '<!-- duckyslicer-release-integrity -->' "$release_notes"; then
+            echo "Release integrity block changed after validation" >&2
+            exit 1
+          fi
+          {
+            printf '\n\n---\n\n'
+            printf '<!-- duckyslicer-release-integrity -->\n'
+            printf '## Verify this APK\n\n'
+            printf -- '- APK SHA-256: `%s`\n' "$signed_sha256"
+            printf -- '- Signing certificate SHA-256: `%s`\n' "$actual_fingerprint"
+            printf -- '- Source: [`%s`](https://github.com/%s/tree/%s)\n' \
+              "$RELEASE_TAG" "$GITHUB_REPOSITORY" "$RELEASE_TAG"
+            printf '<!-- /duckyslicer-release-integrity -->\n'
+          } >> "$release_notes"
           gh release edit "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
+            --notes-file "$release_notes" \
             --draft=false

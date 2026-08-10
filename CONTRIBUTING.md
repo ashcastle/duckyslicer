@@ -122,6 +122,9 @@ the `sign` job may receive signing secrets; it must not check out source, execut
 Gradle or repository scripts, or write the Release. Only `publish` may write the
 Release. The GitHub Release must contain only the signed ARM64 APK. The tag and
 recursive submodule pins remain the corresponding-source identity.
+Draft Release notes must describe user-visible changes without private data. The
+publisher preserves those notes and publishes the APK SHA-256 and signing-certificate
+fingerprint in the Release notes; do not add separate checksum or SBOM assets.
 Play AABs follow the same local-only rule. Build them with
 `python3 tools/prepare_local_play_bundle.py`; the local command runs the full gate,
 builds both Play artifacts twice, checks the universal delivery APK at 16 KB, and

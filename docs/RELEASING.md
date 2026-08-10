@@ -67,18 +67,22 @@ key prevents publishing a compatible update under the same Android identity.
    and G-code export smoke test with the locally installed Debug APK.
 4. Create and push an annotated `v<version>` tag at the exact `sourceCommit` recorded
    in the metadata. Create an unpublished draft GitHub Release for that tag containing
-   exactly the recorded unsigned APK; mark it as a prerelease when the SemVer has a
-   prerelease suffix.
+   concise user-visible Release notes and exactly the recorded unsigned APK; mark it as
+   a prerelease when the SemVer has a prerelease suffix. Remove private model names,
+   printer details, credentials, paths, and support logs from the notes.
 5. Dispatch `sign-local-release.yml` from `main` with the recorded tag, asset name,
    SHA-256, versionCode, and source commit. The workflow rejects every other ref;
    approve the protected `release` environment.
 6. The `validate` job checks the draft, tag commit, digest, package name, versionCode,
-   versionName, unsigned state, and 16 KB alignment. The isolated `sign` job signs
-   those exact bytes. The `publish` job rechecks the draft and tag, replaces the
-   unsigned asset, and publishes only the signed APK.
+   versionName, unsigned state, Release-note digest, and 16 KB alignment. The isolated
+   `sign` job signs those exact bytes. The `publish` job rechecks the draft, tag, and
+   notes, replaces the unsigned asset, and publishes only the signed APK.
 7. Verify that the GitHub Release contains exactly one asset and that its certificate
    fingerprint matches the pinned release key. Install it on a supported ARM64 device
-   and repeat the offline smoke test before announcing the release.
+   and repeat the offline smoke test before announcing the release. Release notes must
+   describe user-visible changes; the publisher preserves them and appends the signed
+   APK SHA-256, signing-certificate fingerprint, and source tag. This keeps the public
+   Release APK-only without hiding the information needed to verify its one download.
 
 ## Play Console bundle handoff
 

@@ -15,8 +15,12 @@ The Release APK is built twice on the maintainer's local machine and must be
 byte-for-byte reproducible. The local process records its SHA-256, package name,
 versionCode, versionName, and tag commit. GitHub validates those exact values but
 never builds the GitHub Release APK. The GitHub Release exposes exactly one
-downloadable asset: the signed ARM64 APK. The tagged repository plus its recursive
-submodule pins are the durable corresponding source.
+downloadable asset: the signed ARM64 APK. Published Release notes contain the signed
+APK SHA-256, signing-certificate SHA-256, and exact source tag. Empty notes and a
+maintainer-supplied integrity block are rejected; the keyless publisher appends the
+verified block immediately before publication. The reviewed note body is digest-pinned
+across validation and publication. The tagged repository plus its recursive submodule
+pins are the durable corresponding source.
 
 Validation has no signing key and never checks out repository code. GitHub requires
 push access to see draft releases, so its token is Release-capable, but policy checks

@@ -84,6 +84,11 @@ def verify_release_contract(sources: dict[str, str]) -> None:
             'package_name" != "com.ashcastle.duckyslicer"',
             'actual_version_code" != "$RELEASE_VERSION_CODE"',
             'actual_version_name" != "$version"',
+            "Release notes must describe the user-visible changes before signing",
+            "<!-- duckyslicer-release-integrity -->",
+            "--jq '.body | @base64'",
+            "release_notes_sha256=$(printf '%s' \"$release_body_base64\" | sha256sum",
+            "release_notes_sha256=$release_notes_sha256",
             'zipalign" -c -P 16 -v 4 "$unsigned_apk"',
             'apksigner" verify "$unsigned_apk"',
             "name: duckyslicer-local-unsigned-${{ github.run_id }}",
@@ -145,12 +150,34 @@ def verify_release_contract(sources: dict[str, str]) -> None:
             'gh release upload "$RELEASE_TAG" "$signed_apk"',
             'gh release delete-asset "$RELEASE_TAG" "$UNSIGNED_ASSET"',
             "Refusing to publish a release without exactly one signed APK",
+            "RELEASE_NOTES_SHA256: ${{ needs.validate.outputs.release_notes_sha256 }}",
+            "Release notes changed after local artifact validation",
+            "Release notes changed while replacing the draft artifact",
+            'signed_sha256=$(sha256sum "$signed_apk"',
+            "Signer #1 certificate SHA-256 digest",
+            "DUCKYSLICER_SIGNING_CERT_SHA256",
+            "<!-- duckyslicer-release-integrity -->",
+            'APK SHA-256: `%s`',
+            'Signing certificate SHA-256: `%s`',
+            '--notes-file "$release_notes"',
             'gh release edit "$RELEASE_TAG"',
             "--draft=false",
         ),
     )
     if "${{ secrets." in publish or "./gradlew" in publish or "actions/checkout@" in publish:
         raise VerificationError("publisher must not receive signing keys or build repository code")
+    ordered_publication = (
+        "Release notes changed after local artifact validation",
+        'gh release upload "$RELEASE_TAG" "$signed_apk"',
+        "Release notes changed while replacing the draft artifact",
+        "<!-- duckyslicer-release-integrity -->",
+        'gh release edit "$RELEASE_TAG"',
+    )
+    positions = [publish.index(marker) for marker in ordered_publication]
+    if positions != sorted(positions) or len(set(positions)) != len(positions):
+        raise VerificationError(
+            "publisher must pin notes before artifact mutation and recheck them before publication"
+        )
     if (
         workflow.count("contents: write") != 2
         or "contents: write" not in validate
@@ -192,18 +219,22 @@ def verify_release_contract(sources: dict[str, str]) -> None:
             "python3 tools/prepare_local_release.py",
             "github actions never builds the github release apk",
             "github release contains exactly one public asset: the signed arm64 apk",
+            "release notes must describe user-visible changes",
+            "appends the signed apk sha-256, signing-certificate fingerprint, and source tag",
             "duckyslicer_16kb_api35",
         ),
         "SECURITY.md": (
             "release apk is built twice on the maintainer's local machine",
             "sha-256, package name, versioncode, versionname, and tag commit",
             "release exposes exactly one downloadable asset: the signed arm64 apk",
+            "published release notes contain the signed apk sha-256, signing-certificate sha-256",
         ),
         "CONTRIBUTING.md": (
             "python3 tools/run_local_gate.py",
             "python3 tools/prepare_local_release.py",
             "github release apk must be built locally",
             "github release must contain only the signed arm64 apk",
+            "publishes the apk sha-256 and signing-certificate fingerprint in the release notes",
         ),
     }
     for source_name, markers in documentation_markers.items():
