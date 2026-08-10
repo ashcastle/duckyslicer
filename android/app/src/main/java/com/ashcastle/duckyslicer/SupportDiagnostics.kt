@@ -60,6 +60,7 @@ internal data class SupportReportSnapshot(
     val confirmRemotePrint: Boolean,
     val connectionTimeoutSeconds: Int,
     val events: List<SupportEventRecord>,
+    val processExits: List<SupportProcessExit>,
 )
 
 internal class SupportEventJournal(
@@ -117,13 +118,14 @@ internal fun createSupportReport(context: Context, settings: AppSettings): Strin
             confirmRemotePrint = settings.confirmBeforeRemotePrint,
             connectionTimeoutSeconds = settings.connectionTimeoutSeconds,
             events = SupportEventJournal(context.applicationContext).snapshot(),
+            processExits = readRecentProcessExits(context.applicationContext),
         ),
     )
 }
 
 internal fun renderSupportReport(snapshot: SupportReportSnapshot): String = buildString {
     appendLine("DuckySlicer support details")
-    appendLine("schema=1")
+    appendLine("schema=2")
     appendLine("generated_utc=${supportTimestamp(snapshot.generatedAtMillis)}")
     appendLine("app_version=${supportValue(snapshot.appVersion)}")
     appendLine("build_type=${supportValue(snapshot.buildType)}")
@@ -154,12 +156,25 @@ internal fun renderSupportReport(snapshot: SupportReportSnapshot): String = buil
         appendLine("recent_problem.$index.utc=${supportTimestamp(record.timestampMillis)}")
         appendLine("recent_problem.$index.code=${record.event.name}")
     }
+    appendLine(
+        "previous_exit_count=" +
+            snapshot.processExits.take(MAX_SUPPORT_PROCESS_EXITS).size,
+    )
+    snapshot.processExits.take(MAX_SUPPORT_PROCESS_EXITS).forEachIndexed { index, record ->
+        appendLine("previous_exit.$index.utc=${supportTimestamp(record.timestampMillis)}")
+        appendLine("previous_exit.$index.process=${record.process.name}")
+        appendLine("previous_exit.$index.reason=${record.reason.name}")
+    }
     appendLine("private_content_included=false")
     appendLine("models_included=false")
     appendLine("gcode_included=false")
     appendLine("file_names_included=false")
     appendLine("printer_addresses_included=false")
     appendLine("access_keys_included=false")
+    appendLine("raw_process_names_included=false")
+    appendLine("exit_descriptions_included=false")
+    appendLine("exit_traces_included=false")
+    appendLine("exit_memory_samples_included=false")
 }.also { report ->
     check(report.toByteArray(Charsets.UTF_8).size <= MAX_SUPPORT_REPORT_BYTES) {
         "support_report_too_large"
