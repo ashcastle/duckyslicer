@@ -11,9 +11,13 @@ def valid_sources() -> dict[str, str]:
             "private enum class SlicingSettingsSection { "
             "QUALITY(R.string.quality) STRENGTH(R.string.strength) SPEED(R.string.speed) "
             "SUPPORT(R.string.supports) OTHERS(R.string.others) } "
-            "private fun SlicingSettingsSheet( SlicingSettingsTabs( "
-            "SearchableGroupedProfileChoices( when (selectedSection) "
-            "SecondaryScrollableTabRow( "
+            "private fun SlicingSettingsSheet( CurrentProfileButton( SlicingSettingsTabs( "
+            "renderedSections.forEach ProfileChooserSheet( ProfileChooserSheet( "
+            "ProfileChooserSheet( ProfileChooserSheet( "
+            "settingQuery = settingsQuery onSettingQueryChanged = { settingsQuery = it } "
+            "LocalSettingsQuery provides settingQueryMatches( private fun <T> SettingChoices( "
+            + ("SettingChoices( " * 19)
+            + "SecondaryScrollableTabRow( "
             "selectedTabIndex = SlicingSettingsSection.entries.indexOf(selected) "
             "scrollKey = selectedSection SlicingSettingsSection.entries.forEach"
             " recentIds: List<String> val recentProfilesKey = \"recent-profiles\" "
@@ -49,19 +53,26 @@ def valid_sources() -> dict[str, str]:
             "changesStayStagedUntilApplied revertRestoresTheOpeningSnapshot "
             "applyPromotesWorkingValuesWithoutClosingTheSession"
         ),
+        "ProfileSettingsSearchTest.kt": (
+            "settingSearchTargetsOptionLabelsInsteadOfProfileNames "
+            'settingQueryMatches("Z distance", "Top Z distance") '
+            "blankSettingSearchKeepsTheWholeEditorVisible"
+        ),
         "SlicingSettingsSectionTest.kt": (
-            "processEditorUsesOrcaStyleSectionOrder "
+            "processEditorUsesExpectedSectionOrder "
             'listOf("QUALITY", "STRENGTH", "SPEED", "SUPPORT", "OTHERS") '
             "Every section must have its own localized title"
         ),
         "strings.xml": (
             'name="quality" name="strength" name="speed" name="supports" name="others" '
-            'name="recent_profiles" name="revert_changes" name="apply_changes"'
+            'name="recent_profiles" name="profile_list" name="search_settings" name="support_type" '
+            'name="revert_changes" name="apply_changes"'
             ' name="expanded_state" name="collapsed_state"'
         ),
         "strings-ko.xml": (
             'name="quality" name="strength" name="speed" name="supports" name="others" '
-            'name="recent_profiles" name="revert_changes" name="apply_changes"'
+            'name="recent_profiles" name="profile_list" name="search_settings" name="support_type" '
+            'name="revert_changes" name="apply_changes"'
             ' name="expanded_state" name="collapsed_state"'
         ),
         "CONTRIBUTING.md": "Quality Strength Speed Support Others",
@@ -69,7 +80,7 @@ def valid_sources() -> dict[str, str]:
 
 
 class VerifyProfileEditorTest(unittest.TestCase):
-    def test_accepts_orca_style_mobile_sections(self) -> None:
+    def test_accepts_mobile_slicing_sections(self) -> None:
         verify_profile_editor(valid_sources())
 
     def test_rejects_reordered_sections(self) -> None:

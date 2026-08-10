@@ -36,7 +36,9 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,6 +65,20 @@ private enum class ProfileSettingsKind {
     PRINTER,
     FILAMENT,
     SLICING,
+}
+
+private val LocalSettingsQuery = compositionLocalOf { "" }
+
+@Composable
+private fun settingMatchesQuery(label: String): Boolean {
+    return settingQueryMatches(LocalSettingsQuery.current, label)
+}
+
+internal fun settingQueryMatches(query: String, label: String): Boolean {
+    val normalized = query.trim().lowercase(Locale.ROOT)
+    if (normalized.isBlank()) return true
+    val candidate = label.lowercase(Locale.ROOT)
+    return normalized.split(' ').filter(String::isNotBlank).all(candidate::contains)
 }
 
 internal data class ProfileEditSession(
@@ -286,26 +302,24 @@ private fun PrinterSettingsSheet(
     onRevert: () -> Unit,
     onApply: () -> Unit,
     onDismiss: () -> Unit,
-) = SettingsSheet(
-    title = stringResource(R.string.printer_profile),
-    onDismiss = onDismiss,
-    dirty = dirty,
-    onRevert = onRevert,
-    onApply = onApply,
 ) {
-    SearchableGroupedProfileChoices(
-        entries = profiles,
-        selected = options.printerProfile,
-        recentIds = recentIds,
-        id = { it.id },
-        label = { profileLabel(it) },
-        brand = { it.brand },
-        builtIn = { it.builtIn },
-        searchTerms = {
-            listOf(it.name, it.brand.orEmpty(), it.nozzleDiameter.toString(), "nozzle")
+    var profilesOpen by remember { mutableStateOf(false) }
+    var settingsQuery by remember { mutableStateOf("") }
+    SettingsSheet(
+        title = stringResource(R.string.printer_profile),
+        onDismiss = onDismiss,
+        dirty = dirty,
+        onRevert = onRevert,
+        onApply = onApply,
+        settingQuery = settingsQuery,
+        onSettingQueryChanged = { settingsQuery = it },
+        header = {
+            CurrentProfileButton(
+                profile = profileLabel(options.printerProfile),
+                onClick = { profilesOpen = true },
+            )
         },
-        onSelected = onProfileSelected,
-    )
+    ) {
     Text(
         stringResource(
             R.string.build_volume_summary,
@@ -370,11 +384,11 @@ private fun PrinterSettingsSheet(
         steps = 499,
         onValueChange = { onOptionsChanged(options.copy(maxPrintHeight = it.roundToInt().toFloat())) },
     )
-    Text(stringResource(R.string.nozzle_diameter), fontWeight = FontWeight.SemiBold)
-    CompactChoices(
+    SettingChoices(
+        settingLabel = stringResource(R.string.nozzle_diameter),
         entries = listOf(0.2f, 0.4f, 0.6f, 0.8f),
         selected = options.nozzleDiameter,
-        label = { stringResource(R.string.millimeters_value_precise, it) },
+        optionLabel = { stringResource(R.string.millimeters_value_precise, it) },
         onSelected = {
             onOptionsChanged(
                 options.copy(nozzleDiameter = it)
@@ -382,11 +396,11 @@ private fun PrinterSettingsSheet(
             )
         },
     )
-    SettingsGroupTitle(stringResource(R.string.printer_firmware))
-    CompactChoices(
+    SettingChoices(
+        settingLabel = stringResource(R.string.printer_firmware),
         entries = listOf("marlin", "marlin2", "klipper"),
         selected = options.gcodeFlavor,
-        label = {
+        optionLabel = {
             when (it) {
                 "marlin2" -> "Marlin 2"
                 "klipper" -> "Klipper"
@@ -446,7 +460,27 @@ private fun PrinterSettingsSheet(
             )
         },
     )
-    SaveProfileField(onSave = { name -> onSave(name, options) }, onDismiss = onDismiss)
+        SaveProfileField(onSave = { name -> onSave(name, options) }, onDismiss = onDismiss)
+    }
+    if (profilesOpen) {
+        ProfileChooserSheet(
+            entries = profiles,
+            selected = options.printerProfile,
+            recentIds = recentIds,
+            id = { it.id },
+            label = { profileLabel(it) },
+            brand = { it.brand },
+            builtIn = { it.builtIn },
+            searchTerms = {
+                listOf(it.name, it.brand.orEmpty(), it.nozzleDiameter.toString(), "nozzle")
+            },
+            onSelected = {
+                onProfileSelected(it)
+                profilesOpen = false
+            },
+            onDismiss = { profilesOpen = false },
+        )
+    }
 }
 
 @Composable
@@ -462,6 +496,8 @@ private fun FilamentSettingsSheet(
     onDismiss: () -> Unit,
 ) {
     var selectedSlot by remember { mutableStateOf(0) }
+    var profilesOpen by remember { mutableStateOf(false) }
+    var settingsQuery by remember { mutableStateOf("") }
     val slots = options.resolvedFilamentSlots()
     LaunchedEffect(slots.size) {
         selectedSlot = selectedSlot.coerceIn(0, slots.lastIndex)
@@ -474,6 +510,14 @@ private fun FilamentSettingsSheet(
         dirty = dirty,
         onRevert = onRevert,
         onApply = onApply,
+        settingQuery = settingsQuery,
+        onSettingQueryChanged = { settingsQuery = it },
+        header = {
+            CurrentProfileButton(
+                profile = profileLabel(activeProfile),
+                onClick = { profilesOpen = true },
+            )
+        },
     ) {
         SecondaryScrollableTabRow(selectedTabIndex = selectedSlot.coerceAtMost(slots.lastIndex)) {
             slots.forEachIndexed { index, profile ->
@@ -498,19 +542,6 @@ private fun FilamentSettingsSheet(
                 Text(stringResource(R.string.add_filament_slot))
             }
         }
-        SearchableGroupedProfileChoices(
-            entries = profiles,
-            selected = activeProfile,
-            recentIds = recentIds,
-            id = { it.id },
-            label = { profileLabel(it) },
-            brand = { it.brand },
-            builtIn = { it.builtIn },
-            searchTerms = {
-                listOf(it.name, it.brand.orEmpty(), it.nativeName)
-            },
-            onSelected = { onOptionsChanged(options.updateFilamentSlot(selectedSlot, it)) },
-        )
         SettingSlider(
             label = stringResource(R.string.nozzle_temperature),
             valueText = stringResource(R.string.celsius_value, activeProfile.nozzleTemp),
@@ -734,7 +765,7 @@ private fun FilamentSettingsSheet(
                 )
             },
         )
-        if (activeProfile.pressureAdvanceEnabled) {
+        if (activeProfile.pressureAdvanceEnabled || settingsQuery.isNotBlank()) {
             SettingSlider(
                 label = stringResource(R.string.pressure_advance_value),
                 valueText = String.format(Locale.ROOT, "%.3f", activeProfile.pressureAdvance),
@@ -753,6 +784,23 @@ private fun FilamentSettingsSheet(
             onDismiss = onDismiss,
         )
     }
+    if (profilesOpen) {
+        ProfileChooserSheet(
+            entries = profiles,
+            selected = activeProfile,
+            recentIds = recentIds,
+            id = { it.id },
+            label = { profileLabel(it) },
+            brand = { it.brand },
+            builtIn = { it.builtIn },
+            searchTerms = { listOf(it.name, it.brand.orEmpty(), it.nativeName) },
+            onSelected = {
+                onOptionsChanged(options.updateFilamentSlot(selectedSlot, it))
+                profilesOpen = false
+            },
+            onDismiss = { profilesOpen = false },
+        )
+    }
 }
 
 @Composable
@@ -768,6 +816,8 @@ private fun SlicingSettingsSheet(
     onDismiss: () -> Unit,
 ) {
     var selectedSection by remember { mutableStateOf(SlicingSettingsSection.QUALITY) }
+    var profilesOpen by remember { mutableStateOf(false) }
+    var settingsQuery by remember { mutableStateOf("") }
     SettingsSheet(
         title = stringResource(R.string.slicing_profile),
         onDismiss = onDismiss,
@@ -775,6 +825,14 @@ private fun SlicingSettingsSheet(
         dirty = dirty,
         onRevert = onRevert,
         onApply = onApply,
+        settingQuery = settingsQuery,
+        onSettingQueryChanged = { settingsQuery = it },
+        header = {
+            CurrentProfileButton(
+                profile = profileLabel(options.quality),
+                onClick = { profilesOpen = true },
+            )
+        },
     ) {
         val maximumLayerHeight = (options.nozzleDiameter * 0.7f).coerceAtLeast(0.14f)
         val layerHeightSteps = ((maximumLayerHeight - 0.04f) / 0.01f).roundToInt().coerceAtLeast(2) - 1
@@ -822,24 +880,19 @@ private fun SlicingSettingsSheet(
             options.firstLayerAcceleration,
         ).maxOrNull() ?: 20_000f
         val featureAccelerationSteps = (maximumFeatureAcceleration / 100f).roundToInt().coerceAtLeast(2) - 1
-        SlicingSettingsTabs(
-            selected = selectedSection,
-            onSelected = { selectedSection = it },
-        )
-        SearchableGroupedProfileChoices(
-            entries = profiles,
-            selected = options.quality,
-            recentIds = recentIds,
-            id = { it.id },
-            label = { profileLabel(it) },
-            brand = { it.brand },
-            builtIn = { it.builtIn },
-            searchTerms = {
-                listOf(it.name, it.brand.orEmpty(), it.layerHeightMm.toString())
-            },
-            onSelected = { onOptionsChanged(options.selectQuality(it)) },
-        )
-        when (selectedSection) {
+        if (settingsQuery.isBlank()) {
+            SlicingSettingsTabs(
+                selected = selectedSection,
+                onSelected = { selectedSection = it },
+            )
+        }
+        val renderedSections = if (settingsQuery.isBlank()) {
+            listOf(selectedSection)
+        } else {
+            SlicingSettingsSection.entries
+        }
+        renderedSections.forEach { renderedSection ->
+            when (renderedSection) {
             SlicingSettingsSection.QUALITY -> {
                 SettingsGroupTitle(stringResource(R.string.quality))
                 SettingSlider(
@@ -906,11 +959,11 @@ private fun SlicingSettingsSheet(
                     steps = lineWidthSteps,
                     onValueChange = { onOptionsChanged(options.copy(internalSolidInfillLineWidth = it)) },
                 )
-                Text(stringResource(R.string.wall_generator), fontWeight = FontWeight.SemiBold)
-                CompactChoices(
+                SettingChoices(
+                    settingLabel = stringResource(R.string.wall_generator),
                     entries = listOf("arachne", "classic"),
                     selected = options.wallGenerator,
-                    label = {
+                    optionLabel = {
                         stringResource(
                             if (it == "classic") R.string.wall_generator_classic
                             else R.string.wall_generator_arachne,
@@ -918,7 +971,7 @@ private fun SlicingSettingsSheet(
                     },
                     onSelected = { onOptionsChanged(options.copy(wallGenerator = it)) },
                 )
-                if (options.wallGenerator == "arachne") {
+                if (options.wallGenerator == "arachne" || settingsQuery.isNotBlank()) {
                     SettingSlider(
                         label = stringResource(R.string.wall_transition_length),
                         valueText = stringResource(R.string.percent_value, options.wallTransitionLength.roundToInt()),
@@ -970,11 +1023,11 @@ private fun SlicingSettingsSheet(
                         },
                     )
                 }
-                Text(stringResource(R.string.wall_order), fontWeight = FontWeight.SemiBold)
-                CompactChoices(
+                SettingChoices(
+                    settingLabel = stringResource(R.string.wall_order),
                     entries = listOf("inner-outer", "outer-inner", "inner-outer-inner"),
                     selected = options.wallSequence,
-                    label = {
+                    optionLabel = {
                         stringResource(
                             when (it) {
                                 "outer-inner" -> R.string.wall_order_outer_inner
@@ -985,11 +1038,11 @@ private fun SlicingSettingsSheet(
                     },
                     onSelected = { onOptionsChanged(options.copy(wallSequence = it)) },
                 )
-                Text(stringResource(R.string.wall_direction), fontWeight = FontWeight.SemiBold)
-                CompactChoices(
+                SettingChoices(
+                    settingLabel = stringResource(R.string.wall_direction),
                     entries = listOf("auto", "ccw", "cw"),
                     selected = options.wallDirection,
-                    label = {
+                    optionLabel = {
                         stringResource(
                             when (it) {
                                 "ccw" -> R.string.wall_direction_counter_clockwise
@@ -1000,11 +1053,11 @@ private fun SlicingSettingsSheet(
                     },
                     onSelected = { onOptionsChanged(options.copy(wallDirection = it)) },
                 )
-                Text(stringResource(R.string.seam_position), fontWeight = FontWeight.SemiBold)
-                CompactChoices(
+                SettingChoices(
+                    settingLabel = stringResource(R.string.seam_position),
                     entries = listOf("aligned", "nearest", "back", "random"),
                     selected = options.seamPosition,
-                    label = { enumLabel(it) },
+                    optionLabel = { enumLabel(it) },
                     onSelected = { onOptionsChanged(options.copy(seamPosition = it)) },
                 )
                 SettingsSwitch(
@@ -1038,7 +1091,7 @@ private fun SlicingSettingsSheet(
                     checked = options.roleBasedWipeSpeed,
                     onCheckedChange = { onOptionsChanged(options.copy(roleBasedWipeSpeed = it)) },
                 )
-                if (!options.roleBasedWipeSpeed) {
+                if (!options.roleBasedWipeSpeed || settingsQuery.isNotBlank()) {
                     OverhangSpeedSetting(
                         label = stringResource(R.string.wipe_speed),
                         value = options.wipeSpeed,
@@ -1066,7 +1119,7 @@ private fun SlicingSettingsSheet(
                     checked = options.onlyOneWallOnTop,
                     onCheckedChange = { onOptionsChanged(options.copy(onlyOneWallOnTop = it)) },
                 )
-                if (options.onlyOneWallOnTop) {
+                if (options.onlyOneWallOnTop || settingsQuery.isNotBlank()) {
                     LengthOrPercentSetting(
                         label = stringResource(R.string.one_wall_threshold),
                         value = options.minWidthTopSurface,
@@ -1107,7 +1160,7 @@ private fun SlicingSettingsSheet(
                     checked = options.overhangReverse,
                     onCheckedChange = { onOptionsChanged(options.copy(overhangReverse = it)) },
                 )
-                if (options.overhangReverse) {
+                if (options.overhangReverse || settingsQuery.isNotBlank()) {
                     SettingsSwitch(
                         label = stringResource(R.string.reverse_internal_only),
                         checked = options.overhangReverseInternalOnly,
@@ -1156,11 +1209,11 @@ private fun SlicingSettingsSheet(
                     steps = ((max(0.1f, options.resolution) - 0.001f) / 0.001f).roundToInt().coerceAtLeast(2) - 1,
                     onValueChange = { onOptionsChanged(options.copy(resolution = (it * 1_000f).roundToInt() / 1_000f)) },
                 )
-                Text(stringResource(R.string.ensure_vertical_shell_thickness), fontWeight = FontWeight.SemiBold)
-                CompactChoices(
+                SettingChoices(
+                    settingLabel = stringResource(R.string.ensure_vertical_shell_thickness),
                     entries = listOf("none", "ensure_critical_only", "ensure_moderate", "ensure_all"),
                     selected = options.ensureVerticalShellThickness,
-                    label = {
+                    optionLabel = {
                         stringResource(
                             when (it) {
                                 "none" -> R.string.vertical_shell_none
@@ -1234,7 +1287,7 @@ private fun SlicingSettingsSheet(
                     steps = (max(1f, options.elephantFootCompensation) * 100f).roundToInt().coerceAtLeast(2) - 1,
                     onValueChange = { onOptionsChanged(options.copy(elephantFootCompensation = (it * 100f).roundToInt() / 100f)) },
                 )
-                if (options.elephantFootCompensation > 0f) {
+                if (options.elephantFootCompensation > 0f || settingsQuery.isNotBlank()) {
                     SettingSlider(
                         label = stringResource(R.string.elephant_foot_layers),
                         valueText = options.elephantFootCompensationLayers.toString(),
@@ -1248,35 +1301,35 @@ private fun SlicingSettingsSheet(
 
             SlicingSettingsSection.STRENGTH -> {
                 SettingsGroupTitle(stringResource(R.string.infill))
-                Text(stringResource(R.string.sparse_infill_pattern), fontWeight = FontWeight.SemiBold)
-                CompactChoices(
+                SettingChoices(
+                    settingLabel = stringResource(R.string.sparse_infill_pattern),
                     entries = listOf(
                         "crosshatch", "grid", "rectilinear", "gyroid", "cubic",
                         "alignedrectilinear", "triangles", "lightning",
                     ),
                     selected = options.fillPattern,
-                    label = { fillPatternLabel(it) },
+                    optionLabel = { fillPatternLabel(it) },
                     onSelected = { onOptionsChanged(options.copy(fillPattern = it)) },
                 )
-                Text(stringResource(R.string.top_surface_pattern), fontWeight = FontWeight.SemiBold)
-                CompactChoices(
+                SettingChoices(
+                    settingLabel = stringResource(R.string.top_surface_pattern),
                     entries = listOf("monotonicline", "monotonic", "rectilinear", "concentric"),
                     selected = options.topSurfacePattern,
-                    label = { fillPatternLabel(it) },
+                    optionLabel = { fillPatternLabel(it) },
                     onSelected = { onOptionsChanged(options.copy(topSurfacePattern = it)) },
                 )
-                Text(stringResource(R.string.bottom_surface_pattern), fontWeight = FontWeight.SemiBold)
-                CompactChoices(
+                SettingChoices(
+                    settingLabel = stringResource(R.string.bottom_surface_pattern),
                     entries = listOf("monotonic", "monotonicline", "rectilinear", "concentric"),
                     selected = options.bottomSurfacePattern,
-                    label = { fillPatternLabel(it) },
+                    optionLabel = { fillPatternLabel(it) },
                     onSelected = { onOptionsChanged(options.copy(bottomSurfacePattern = it)) },
                 )
-                Text(stringResource(R.string.internal_solid_pattern), fontWeight = FontWeight.SemiBold)
-                CompactChoices(
+                SettingChoices(
+                    settingLabel = stringResource(R.string.internal_solid_pattern),
                     entries = listOf("monotonic", "monotonicline", "rectilinear", "grid"),
                     selected = options.internalSolidInfillPattern,
-                    label = { fillPatternLabel(it) },
+                    optionLabel = { fillPatternLabel(it) },
                     onSelected = { onOptionsChanged(options.copy(internalSolidInfillPattern = it)) },
                 )
                 SettingsSwitch(
@@ -1305,7 +1358,7 @@ private fun SlicingSettingsSheet(
                     checked = options.infillCombination,
                     onCheckedChange = { onOptionsChanged(options.copy(infillCombination = it)) },
                 )
-                if (options.infillCombination) {
+                if (options.infillCombination || settingsQuery.isNotBlank()) {
                     LengthOrPercentSetting(
                         label = stringResource(R.string.combined_infill_max_height),
                         value = options.infillCombinationMaxLayerHeight,
@@ -1350,11 +1403,11 @@ private fun SlicingSettingsSheet(
                     steps = max(100f, options.minimumSparseInfillArea).roundToInt().coerceAtLeast(2) - 1,
                     onValueChange = { onOptionsChanged(options.copy(minimumSparseInfillArea = it.roundToInt().toFloat())) },
                 )
-                Text(stringResource(R.string.gap_fill_target), fontWeight = FontWeight.SemiBold)
-                CompactChoices(
+                SettingChoices(
+                    settingLabel = stringResource(R.string.gap_fill_target),
                     entries = listOf("everywhere", "topbottom", "nowhere"),
                     selected = options.gapFillTarget,
-                    label = {
+                    optionLabel = {
                         stringResource(
                             when (it) {
                                 "everywhere" -> R.string.gap_fill_everywhere
@@ -1492,7 +1545,7 @@ private fun SlicingSettingsSheet(
                     checked = options.reduceCrossingWall,
                     onCheckedChange = { onOptionsChanged(options.copy(reduceCrossingWall = it)) },
                 )
-                if (options.reduceCrossingWall) {
+                if (options.reduceCrossingWall || settingsQuery.isNotBlank()) {
                     LengthOrPercentSetting(
                         label = stringResource(R.string.maximum_travel_detour),
                         value = options.maxTravelDetourDistance,
@@ -1573,7 +1626,7 @@ private fun SlicingSettingsSheet(
                     checked = options.slowdownForCurledPerimeters,
                     onCheckedChange = { onOptionsChanged(options.copy(slowdownForCurledPerimeters = it)) },
                 )
-                if (options.overhangSpeedEnabled) {
+                if (options.overhangSpeedEnabled || settingsQuery.isNotBlank()) {
                     OverhangSpeedSetting(
                         label = stringResource(R.string.overhang_speed_1),
                         value = options.overhangSpeed1,
@@ -1656,11 +1709,11 @@ private fun SlicingSettingsSheet(
                     steps = 359,
                     onValueChange = { onOptionsChanged(options.copy(internalBridgeAngle = it.roundToInt().toFloat())) },
                 )
-                Text(stringResource(R.string.extra_bridge_layers), fontWeight = FontWeight.SemiBold)
-                CompactChoices(
+                SettingChoices(
+                    settingLabel = stringResource(R.string.extra_bridge_layers),
                     entries = listOf("disabled", "external_bridge_only", "internal_bridge_only", "apply_to_all"),
                     selected = options.extraBridgeLayer,
-                    label = {
+                    optionLabel = {
                         stringResource(
                             when (it) {
                                 "external_bridge_only" -> R.string.extra_bridge_external
@@ -1672,11 +1725,11 @@ private fun SlicingSettingsSheet(
                     },
                     onSelected = { onOptionsChanged(options.copy(extraBridgeLayer = it)) },
                 )
-                Text(stringResource(R.string.internal_bridge_filter), fontWeight = FontWeight.SemiBold)
-                CompactChoices(
+                SettingChoices(
+                    settingLabel = stringResource(R.string.internal_bridge_filter),
                     entries = listOf("disabled", "limited", "nofilter"),
                     selected = options.internalBridgeFilter,
-                    label = {
+                    optionLabel = {
                         stringResource(
                             when (it) {
                                 "limited" -> R.string.bridge_filter_limited
@@ -1687,11 +1740,11 @@ private fun SlicingSettingsSheet(
                     },
                     onSelected = { onOptionsChanged(options.copy(internalBridgeFilter = it)) },
                 )
-                Text(stringResource(R.string.counterbore_bridging), fontWeight = FontWeight.SemiBold)
-                CompactChoices(
+                SettingChoices(
+                    settingLabel = stringResource(R.string.counterbore_bridging),
                     entries = listOf("none", "partiallybridge", "sacrificiallayer"),
                     selected = options.counterboreHoleBridging,
-                    label = {
+                    optionLabel = {
                         stringResource(
                             when (it) {
                                 "partiallybridge" -> R.string.counterbore_partial
@@ -1717,19 +1770,19 @@ private fun SlicingSettingsSheet(
                     checked = options.thickInternalBridges,
                     onCheckedChange = { onOptionsChanged(options.copy(thickInternalBridges = it)) },
                 )
-                SettingsGroupTitle(stringResource(R.string.ironing))
-                CompactChoices(
+                SettingChoices(
+                    settingLabel = stringResource(R.string.ironing),
                     entries = listOf("no ironing", "top", "topmost", "solid"),
                     selected = options.ironingType,
-                    label = { enumLabel(it) },
+                    optionLabel = { enumLabel(it) },
                     onSelected = { onOptionsChanged(options.copy(ironingType = it)) },
                 )
-                if (options.ironingType != "no ironing") {
-                    Text(stringResource(R.string.ironing_pattern), fontWeight = FontWeight.SemiBold)
-                    CompactChoices(
+                if (options.ironingType != "no ironing" || settingsQuery.isNotBlank()) {
+                    SettingChoices(
+                        settingLabel = stringResource(R.string.ironing_pattern),
                         entries = listOf("rectilinear", "concentric"),
                         selected = options.ironingPattern,
-                        label = { fillPatternLabel(it) },
+                        optionLabel = { fillPatternLabel(it) },
                         onSelected = { onOptionsChanged(options.copy(ironingPattern = it)) },
                     )
                     SettingSlider(
@@ -1888,7 +1941,7 @@ private fun SlicingSettingsSheet(
                     checked = options.supportEnabled,
                     onCheckedChange = { onOptionsChanged(options.copy(supportEnabled = it)) },
                 )
-                if (options.supportEnabled) {
+                if (options.supportEnabled || settingsQuery.isNotBlank()) {
                     SettingSlider(
                         label = stringResource(R.string.support_speed),
                         valueText = stringResource(R.string.print_speed_value, options.supportSpeed),
@@ -1913,31 +1966,35 @@ private fun SlicingSettingsSheet(
                         steps = lineWidthSteps,
                         onValueChange = { onOptionsChanged(options.copy(supportLineWidth = it)) },
                     )
-                    CompactChoices(
+                    SettingChoices(
+                        settingLabel = stringResource(R.string.support_type),
                         entries = listOf("normal", "tree"),
                         selected = options.supportType,
-                        label = { if (it == "tree") stringResource(R.string.tree_support) else stringResource(R.string.normal_support) },
+                        optionLabel = {
+                            if (it == "tree") stringResource(R.string.tree_support)
+                            else stringResource(R.string.normal_support)
+                        },
                         onSelected = { onOptionsChanged(options.copy(supportType = it)) },
                     )
-                    Text(stringResource(R.string.support_style), fontWeight = FontWeight.SemiBold)
-                    CompactChoices(
+                    SettingChoices(
+                        settingLabel = stringResource(R.string.support_style),
                         entries = listOf("default", "grid", "snug", "organic", "tree_hybrid", "tree_slim"),
                         selected = options.supportStyle,
-                        label = { enumLabel(it) },
+                        optionLabel = { enumLabel(it) },
                         onSelected = { onOptionsChanged(options.copy(supportStyle = it)) },
                     )
-                    Text(stringResource(R.string.support_base_pattern), fontWeight = FontWeight.SemiBold)
-                    CompactChoices(
+                    SettingChoices(
+                        settingLabel = stringResource(R.string.support_base_pattern),
                         entries = listOf("default", "rectilinear", "rectilinear-grid", "lightning", "hollow"),
                         selected = options.supportBasePattern,
-                        label = { enumLabel(it) },
+                        optionLabel = { enumLabel(it) },
                         onSelected = { onOptionsChanged(options.copy(supportBasePattern = it)) },
                     )
-                    Text(stringResource(R.string.support_interface_pattern), fontWeight = FontWeight.SemiBold)
-                    CompactChoices(
+                    SettingChoices(
+                        settingLabel = stringResource(R.string.support_interface_pattern),
                         entries = listOf("auto", "rectilinear", "rectilinear_interlaced", "concentric", "grid"),
                         selected = options.supportInterfacePattern,
-                        label = { enumLabel(it) },
+                        optionLabel = { enumLabel(it) },
                         onSelected = { onOptionsChanged(options.copy(supportInterfacePattern = it)) },
                     )
                     SettingSlider(
@@ -2060,11 +2117,11 @@ private fun SlicingSettingsSheet(
                         onOptionsChanged(options.copy(draftShield = if (it) "enabled" else "disabled"))
                     },
                 )
-                Text(stringResource(R.string.brim_type), fontWeight = FontWeight.SemiBold)
-                CompactChoices(
+                SettingChoices(
+                    settingLabel = stringResource(R.string.brim_type),
                     entries = listOf("auto_brim", "brim_ears", "outer_only", "inner_only", "outer_and_inner", "no_brim"),
                     selected = options.brimType,
-                    label = {
+                    optionLabel = {
                         stringResource(
                             when (it) {
                                 "auto_brim" -> R.string.brim_auto
@@ -2078,7 +2135,7 @@ private fun SlicingSettingsSheet(
                     },
                     onSelected = { onOptionsChanged(options.copy(brimType = it)) },
                 )
-                if (options.brimType != "no_brim") {
+                if (options.brimType != "no_brim" || settingsQuery.isNotBlank()) {
                     SettingSlider(
                         label = stringResource(R.string.brim_width),
                         valueText = stringResource(R.string.millimeters_value_precise, options.brimWidth),
@@ -2105,7 +2162,7 @@ private fun SlicingSettingsSheet(
                     steps = max(20, options.raftLayers).coerceAtLeast(2) - 1,
                     onValueChange = { onOptionsChanged(options.copy(raftLayers = it.roundToInt())) },
                 )
-                if (options.raftLayers > 0) {
+                if (options.raftLayers > 0 || settingsQuery.isNotBlank()) {
                     SettingSlider(
                         label = stringResource(R.string.raft_contact_distance),
                         valueText = stringResource(R.string.millimeters_value_precise, options.raftContactDistance),
@@ -2142,8 +2199,28 @@ private fun SlicingSettingsSheet(
                     )
                 }
             }
+            }
         }
         SaveProfileField(onSave = { name -> onSave(name, options) }, onDismiss = onDismiss)
+    }
+    if (profilesOpen) {
+        ProfileChooserSheet(
+            entries = profiles,
+            selected = options.quality,
+            recentIds = recentIds,
+            id = { it.id },
+            label = { profileLabel(it) },
+            brand = { it.brand },
+            builtIn = { it.builtIn },
+            searchTerms = {
+                listOf(it.name, it.brand.orEmpty(), it.layerHeightMm.toString())
+            },
+            onSelected = {
+                onOptionsChanged(options.selectQuality(it))
+                profilesOpen = false
+            },
+            onDismiss = { profilesOpen = false },
+        )
     }
 }
 
@@ -2173,6 +2250,7 @@ private fun SlicingSettingsTabs(
 
 @Composable
 private fun SettingsGroupTitle(title: String) {
+    if (!settingMatchesQuery(title)) return
     Text(
         title,
         modifier = Modifier.semantics { heading() },
@@ -2184,6 +2262,7 @@ private fun SettingsGroupTitle(title: String) {
 
 @Composable
 internal fun SettingsSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    if (!settingMatchesQuery(label)) return
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -2214,6 +2293,7 @@ private fun OverhangSpeedSetting(
     onValueChange: (Float) -> Unit,
     onPercentChange: (Boolean, Float) -> Unit,
 ) {
+    if (!settingMatchesQuery(label)) return
     Text(label, fontWeight = FontWeight.SemiBold)
     CompactChoices(
         entries = listOf(false, true),
@@ -2248,6 +2328,7 @@ private fun AccelerationOrPercentSetting(
     onValueChange: (Float) -> Unit,
     onPercentChange: (Boolean, Float) -> Unit,
 ) {
+    if (!settingMatchesQuery(label)) return
     Text(label, fontWeight = FontWeight.SemiBold)
     CompactChoices(
         entries = listOf(false, true),
@@ -2285,6 +2366,7 @@ private fun LengthOrPercentSetting(
     onValueChange: (Float) -> Unit,
     onPercentChange: (Boolean, Float) -> Unit,
 ) {
+    if (!settingMatchesQuery(label)) return
     Text(label, fontWeight = FontWeight.SemiBold)
     CompactChoices(
         entries = listOf(false, true),
@@ -2307,6 +2389,24 @@ private fun LengthOrPercentSetting(
         range = 0f..maximum,
         steps = if (percent) maximumPercent.roundToInt().coerceIn(2, 1_000) - 1 else 199,
         onValueChange = { onValueChange(if (percent) it.roundToInt().toFloat() else it) },
+    )
+}
+
+@Composable
+private fun <T> SettingChoices(
+    settingLabel: String,
+    entries: List<T>,
+    selected: T,
+    optionLabel: @Composable (T) -> String,
+    onSelected: (T) -> Unit,
+) {
+    if (!settingMatchesQuery(settingLabel)) return
+    Text(settingLabel, fontWeight = FontWeight.SemiBold)
+    CompactChoices(
+        entries = entries,
+        selected = selected,
+        label = optionLabel,
+        onSelected = onSelected,
     )
 }
 
@@ -2354,6 +2454,84 @@ private fun enumLabel(value: String): String = value
     .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
 
 @Composable
+private fun CurrentProfileButton(
+    profile: String,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = Alignment.Start,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(stringResource(R.string.profile_list), fontWeight = FontWeight.SemiBold)
+            Text(
+                profile,
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+            )
+        }
+        Icon(Icons.Default.ChevronRight, contentDescription = null)
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun <T> ProfileChooserSheet(
+    entries: List<T>,
+    selected: T,
+    recentIds: List<String>,
+    id: (T) -> String,
+    label: @Composable (T) -> String,
+    brand: (T) -> String?,
+    builtIn: (T) -> Boolean,
+    searchTerms: (T) -> List<String>,
+    onSelected: (T) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetHeight = with(LocalDensity.current) {
+        LocalWindowInfo.current.containerSize.height.toDp()
+    } * 0.88f
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(sheetHeight)
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                stringResource(R.string.profile_list),
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            SearchableGroupedProfileChoices(
+                entries = entries,
+                selected = selected,
+                recentIds = recentIds,
+                id = id,
+                label = label,
+                brand = brand,
+                builtIn = builtIn,
+                searchTerms = searchTerms,
+                onSelected = onSelected,
+            )
+            Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.done))
+            }
+        }
+    }
+}
+
+@Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun SettingsSheet(
     title: String,
@@ -2362,6 +2540,9 @@ private fun SettingsSheet(
     dirty: Boolean,
     onRevert: () -> Unit,
     onApply: () -> Unit,
+    settingQuery: String,
+    onSettingQueryChanged: (String) -> Unit,
+    header: @Composable () -> Unit,
     content: @Composable () -> Unit,
 ) {
     val scrollState = rememberScrollState()
@@ -2391,7 +2572,20 @@ private fun SettingsSheet(
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                 )
-                content()
+                header()
+                OutlinedTextField(
+                    value = settingQuery,
+                    onValueChange = onSettingQueryChanged,
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    label = { Text(stringResource(R.string.search_settings)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                CompositionLocalProvider(
+                    LocalSettingsQuery provides settingQuery.trim().lowercase(Locale.ROOT),
+                ) {
+                    content()
+                }
                 Button(
                     onClick = onDismiss,
                     modifier = Modifier
@@ -2590,6 +2784,7 @@ internal fun <T> SearchableGroupedProfileChoices(
 
 @Composable
 private fun SaveProfileField(onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    if (LocalSettingsQuery.current.isNotBlank()) return
     var name by remember { mutableStateOf("") }
     HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
     OutlinedTextField(
@@ -2620,6 +2815,7 @@ internal fun SettingSlider(
     steps: Int,
     onValueChange: (Float) -> Unit,
 ) {
+    if (!settingMatchesQuery(label)) return
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(label, fontWeight = FontWeight.SemiBold)

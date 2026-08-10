@@ -313,6 +313,7 @@
     <string name="ironing_spacing">Ironing spacing</string>
     <string name="ironing_speed">Ironing speed</string>
     <string name="support_style">Support style</string>
+    <string name="support_type">Support type</string>
     <string name="support_base_pattern">Support base pattern</string>
     <string name="support_interface_pattern">Support interface pattern</string>
     <string name="enable_supports">Enable supports</string>
@@ -369,6 +370,8 @@
     <string name="toolpath_other">Other</string>
     <string name="profile_name">Profile name</string>
     <string name="search_profiles">Search profiles</string>
+    <string name="profile_list">Profile list</string>
+    <string name="search_settings">Search settings</string>
     <string name="expanded_state">Expanded</string>
     <string name="collapsed_state">Collapsed</string>
     <string name="recent_profiles">Recent</string>

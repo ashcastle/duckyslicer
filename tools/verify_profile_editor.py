@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enforce the mobile Orca-style slicing profile editor structure."""
+"""Enforce the DuckySlicer mobile profile editor structure."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "ProfileRecents.kt",
         "ProfileRecentsTest.kt",
         "ProfileEditSessionTest.kt",
+        "ProfileSettingsSearchTest.kt",
         "SlicingSettingsSectionTest.kt",
         "strings.xml",
         "strings-ko.xml",
@@ -49,11 +50,33 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         if marker not in editor:
             raise VerificationError(f"mobile slicing tabs are missing: {marker}")
     slicing_editor = editor.split("private fun SlicingSettingsSheet(", 1)[-1]
+    profile_button_position = slicing_editor.find("CurrentProfileButton(")
     tab_position = slicing_editor.find("SlicingSettingsTabs(")
-    profile_position = slicing_editor.find("SearchableGroupedProfileChoices(")
-    settings_position = slicing_editor.find("when (selectedSection)")
-    if not (0 <= tab_position < profile_position < settings_position):
-        raise VerificationError("slicing tabs and profile selection must precede section settings")
+    settings_position = slicing_editor.find("renderedSections.forEach")
+    chooser_position = slicing_editor.find("ProfileChooserSheet(")
+    if not (
+        0 <= profile_button_position < tab_position < settings_position < chooser_position
+    ):
+        raise VerificationError(
+            "the current-profile button, slicing tabs, settings, and separate profile list are out of order"
+        )
+    for marker in (
+        "settingQuery = settingsQuery",
+        "onSettingQueryChanged = { settingsQuery = it }",
+        "CurrentProfileButton(",
+        "ProfileChooserSheet(",
+        "private fun <T> SettingChoices(",
+        "LocalSettingsQuery provides",
+        "settingQueryMatches(",
+        "SlicingSettingsSection.entries",
+        "renderedSections.forEach",
+    ):
+        if marker not in editor:
+            raise VerificationError(f"separate profile and setting search is missing: {marker}")
+    if editor.count("ProfileChooserSheet(") < 4:
+        raise VerificationError("printer, filament, and slicing editors need separate profile lists")
+    if editor.count("SettingChoices(") < 20:
+        raise VerificationError("choice-based settings must participate in setting-name search")
 
     for marker in (
         "recentIds: List<String>",
@@ -152,6 +175,11 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
                 raise VerificationError(f"localized slicing tab title is missing from {source_name}: {resource}")
         if 'name="recent_profiles"' not in strings:
             raise VerificationError(f"localized recent profile title is missing from {source_name}")
+        for resource in ('name="profile_list"', 'name="search_settings"', 'name="support_type"'):
+            if resource not in strings:
+                raise VerificationError(
+                    f"localized separated profile/settings search label is missing from {source_name}: {resource}"
+                )
         for resource in ('name="revert_changes"', 'name="apply_changes"'):
             if resource not in strings:
                 raise VerificationError(f"localized profile action is missing from {source_name}: {resource}")
@@ -163,7 +191,7 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
 
     test = sources["SlicingSettingsSectionTest.kt"]
     for marker in (
-        "processEditorUsesOrcaStyleSectionOrder",
+        "processEditorUsesExpectedSectionOrder",
         'listOf("QUALITY", "STRENGTH", "SPEED", "SUPPORT", "OTHERS")',
         "Every section must have its own localized title",
     ):
@@ -188,10 +216,19 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         if marker not in edit_test:
             raise VerificationError(f"profile edit-session regression is missing: {marker}")
 
+    search_test = sources["ProfileSettingsSearchTest.kt"]
+    for marker in (
+        "settingSearchTargetsOptionLabelsInsteadOfProfileNames",
+        'settingQueryMatches("Z distance", "Top Z distance")',
+        "blankSettingSearchKeepsTheWholeEditorVisible",
+    ):
+        if marker not in search_test:
+            raise VerificationError(f"profile setting-search regression is missing: {marker}")
+
     for document in ("CONTRIBUTING.md",):
         lowered = sources[document].lower()
         if not all(term in lowered for term in ("quality", "strength", "speed", "support", "others")):
-            raise VerificationError(f"Orca-style slicing sections are not documented in {document}")
+            raise VerificationError(f"Slicing profile sections are not documented in {document}")
 
 
 def read_sources() -> dict[str, str]:
@@ -204,6 +241,9 @@ def read_sources() -> dict[str, str]:
         "ProfileRecents.kt": (main / "ProfileRecents.kt").read_text(encoding="utf-8"),
         "ProfileRecentsTest.kt": (tests / "ProfileRecentsTest.kt").read_text(encoding="utf-8"),
         "ProfileEditSessionTest.kt": (tests / "ProfileEditSessionTest.kt").read_text(
+            encoding="utf-8"
+        ),
+        "ProfileSettingsSearchTest.kt": (tests / "ProfileSettingsSearchTest.kt").read_text(
             encoding="utf-8"
         ),
         "SlicingSettingsSectionTest.kt": (tests / "SlicingSettingsSectionTest.kt").read_text(
@@ -220,7 +260,7 @@ def main() -> None:
         verify_profile_editor(read_sources())
     except (OSError, VerificationError) as error:
         raise SystemExit(f"Profile editor verification failed: {error}") from error
-    print("Verified localized, responsive, accessible Orca-style mobile slicing profiles")
+    print("Verified localized, responsive, accessible mobile slicing profiles")
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ import org.junit.Test
 
 class SlicingSettingsSectionTest {
     @Test
-    fun processEditorUsesOrcaStyleSectionOrder() {
+    fun processEditorUsesExpectedSectionOrder() {
         assertEquals(
             listOf("QUALITY", "STRENGTH", "SPEED", "SUPPORT", "OTHERS"),
             SlicingSettingsSection.entries.map(SlicingSettingsSection::name),

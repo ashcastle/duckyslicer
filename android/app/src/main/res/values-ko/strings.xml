@@ -313,6 +313,7 @@
     <string name="ironing_spacing">아이러닝 간격</string>
     <string name="ironing_speed">아이러닝 속도</string>
     <string name="support_style">서포트 형태</string>
+    <string name="support_type">서포트 유형</string>
     <string name="support_base_pattern">서포트 기본 패턴</string>
     <string name="support_interface_pattern">서포트 인터페이스 패턴</string>
     <string name="enable_supports">서포트 사용</string>
@@ -369,6 +370,8 @@
     <string name="toolpath_other">기타</string>
     <string name="profile_name">프로필 이름</string>
     <string name="search_profiles">프로필 검색</string>
+    <string name="profile_list">프로필 목록</string>
+    <string name="search_settings">설정 검색</string>
     <string name="expanded_state">펼쳐짐</string>
     <string name="collapsed_state">접힘</string>
     <string name="recent_profiles">최근 사용</string>
