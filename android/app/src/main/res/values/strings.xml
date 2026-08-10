@@ -79,6 +79,16 @@
     <string name="split_done_paint_cleared">%1$d objects created. Support painting was cleared.</string>
     <string name="split_not_possible">This model has no separate objects.</string>
     <string name="split_error">Couldn’t split this model.</string>
+    <string name="cut_model">Cut</string>
+    <string name="cut_model_title">Cut model</string>
+    <string name="cut_height">Cut height</string>
+    <string name="cut_height_value">%1$.1f mm · %2$d%%</string>
+    <string name="place_on_cut">Place cut faces on the bed</string>
+    <string name="cut_working">Cutting…</string>
+    <string name="cut_done">2 objects created.</string>
+    <string name="cut_done_paint_cleared">2 objects created. Support painting was cleared.</string>
+    <string name="cut_not_possible">The cut plane does not divide this model.</string>
+    <string name="cut_error">Couldn’t cut this model.</string>
     <string name="paint_support">Paint support</string>
     <string name="support_enforce">Add support</string>
     <string name="support_block">Block support</string>

@@ -1527,3 +1527,131 @@ diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil
  
  bool SlicerEngine::isVolumeSplittable(int objIdx, int volIdx) const {
      if (!f66_volIdxValid(objIdx, volIdx)) return false;
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -468,6 +468,12 @@ public:
+     struct SplitResult { int removedIdx; int addedCount; };
+     std::optional<SplitResult> splitObject(int objIdx);
+ 
++    // Cut one object with a horizontal plane positioned at `heightRatio`
++    // through its current world-space bounding box. Both solids are kept as
++    // separate objects. `placeOnCut` asks Orca to place both new cut faces on
++    // the bed. Returns the same replacement shape as splitObject.
++    std::optional<SplitResult> cutObject(int objIdx, float heightRatio, bool placeOnCut);
++
+     // Split one volume's mesh into multiple volumes within the same object.
+     // Returns the new volume count for the object on success, -1 on failure.
+     int splitVolume(int objIdx, int volIdx);
+diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil_arrange.cpp
+--- a/app/src/main/cpp/src/sapil_arrange.cpp
++++ b/app/src/main/cpp/src/sapil_arrange.cpp
+@@ -3,6 +3,7 @@
+ #include "libslic3r/Model.hpp"
+ #include "libslic3r/ModelArrange.hpp"
+ #include "libslic3r/Orient.hpp"
++#include "libslic3r/CutUtils.hpp"
+ #include <cmath>
+ #include "libslic3r/BoundingBox.hpp"
+ #include "libslic3r/TriangleMesh.hpp"
+@@ -687,6 +688,75 @@ std::optional<SlicerEngine::SplitResult> SlicerEngine::splitObject(int objIdx) {
+     return SplitResult{objIdx, (int)added};
+ }
+ 
++std::optional<SlicerEngine::SplitResult> SlicerEngine::cutObject(
++        int objIdx, float heightRatio, bool placeOnCut) {
++    if (!f66_objIdxValid(objIdx) || !std::isfinite(heightRatio) ||
++        heightRatio <= 0.0f || heightRatio >= 1.0f) {
++        return std::nullopt;
++    }
++    Slic3r::Model& model = getGlobalModel();
++    Slic3r::ModelObject* source = model.objects[objIdx];
++    if (source == nullptr || source->instances.empty()) return std::nullopt;
++
++    const Slic3r::BoundingBoxf3 bounds = source->instance_bounding_box(0);
++    if (!bounds.defined || !std::isfinite(bounds.min.z()) ||
++        !std::isfinite(bounds.max.z()) || bounds.size().z() <= 0.0) {
++        return std::nullopt;
++    }
++    const double cut_z = bounds.min.z() + bounds.size().z() * heightRatio;
++    Slic3r::Transform3d cut_matrix = Slic3r::Transform3d::Identity();
++    cut_matrix.translation() = Slic3r::Vec3d(0.0, 0.0, cut_z);
++    const Slic3r::ModelObjectCutAttributes attributes = placeOnCut ?
++        Slic3r::ModelObjectCutAttribute::KeepUpper |
++            Slic3r::ModelObjectCutAttribute::KeepLower |
++            Slic3r::ModelObjectCutAttribute::InvalidateCutInfo |
++            Slic3r::ModelObjectCutAttribute::PlaceOnCutUpper |
++            Slic3r::ModelObjectCutAttribute::PlaceOnCutLower :
++        Slic3r::ModelObjectCutAttribute::KeepUpper |
++            Slic3r::ModelObjectCutAttribute::KeepLower |
++            Slic3r::ModelObjectCutAttribute::InvalidateCutInfo;
++
++    Slic3r::Cut cut(source, 0, cut_matrix, attributes);
++    const Slic3r::ModelObjectPtrs& parts = cut.perform_with_plane();
++    if (parts.size() != 2 || parts[0] == nullptr || parts[1] == nullptr ||
++        parts[0]->volumes.empty() || parts[1]->volumes.empty()) {
++        return std::nullopt;
++    }
++
++    const size_t before_size = model.objects.size();
++    std::vector<Slic3r::ModelObject*> replacements;
++    replacements.reserve(parts.size());
++    for (const Slic3r::ModelObject* part : parts) {
++        Slic3r::ModelObject* replacement = model.add_object(*part);
++        if (replacement == nullptr) {
++            while (model.objects.size() > before_size) {
++                model.delete_object(model.objects.size() - 1);
++            }
++            return std::nullopt;
++        }
++        replacements.push_back(replacement);
++    }
++    model.objects.erase(model.objects.begin() + before_size, model.objects.end());
++    model.delete_object(static_cast<size_t>(objIdx));
++    model.objects.insert(
++        model.objects.begin() + objIdx,
++        replacements.begin(),
++        replacements.end());
++
++    const int new_vol_count = replacements.empty() ? 0 :
++        static_cast<int>(replacements.front()->volumes.size());
++    onSplitObjectReshape(objIdx, static_cast<int>(replacements.size()), new_vol_count);
++    resetLoadTimeScaleFactors();
++    resetRotationBases();
++    invalidatePreviewMeshCache();
++    SAPIL_LOGI(
++        "cutObject: cut %d at %.3f into %d objects",
++        objIdx,
++        heightRatio,
++        static_cast<int>(replacements.size()));
++    return SplitResult{objIdx, static_cast<int>(replacements.size())};
++}
++
+ std::optional<int> SlicerEngine::duplicateObject(int objIdx) {
+     if (!f66_objIdxValid(objIdx)) return std::nullopt;
+     Slic3r::Model& model = getGlobalModel();
+diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slicer_wrapper.cpp
+--- a/app/src/main/cpp/src/slicer_wrapper.cpp
++++ b/app/src/main/cpp/src/slicer_wrapper.cpp
+@@ -424,6 +424,21 @@ Java_com_u1_slicer_NativeLibrary_nativeSplitObject(JNIEnv* env, jobject, jint ob
+     return out;
+ }
+ 
++JNIEXPORT jintArray JNICALL
++Java_com_u1_slicer_NativeLibrary_nativeCutObject(
++        JNIEnv* env, jobject, jint objIdx, jfloat heightRatio, jboolean placeOnCut) {
++    if (!g_engine) return nullptr;
++    auto res = g_engine->cutObject(
++        static_cast<int>(objIdx),
++        static_cast<float>(heightRatio),
++        placeOnCut == JNI_TRUE);
++    if (!res) return nullptr;
++    jintArray out = env->NewIntArray(2);
++    jint vals[2] = { res->removedIdx, res->addedCount };
++    env->SetIntArrayRegion(out, 0, 2, vals);
++    return out;
++}
++
+ JNIEXPORT jint JNICALL
+ Java_com_u1_slicer_NativeLibrary_nativeSplitVolume(JNIEnv*, jobject, jint objIdx, jint volIdx) {
+     if (!g_engine) return -1;
