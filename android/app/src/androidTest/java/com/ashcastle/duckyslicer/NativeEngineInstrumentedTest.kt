@@ -14,6 +14,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -562,6 +564,59 @@ class NativeEngineInstrumentedTest {
             assertEquals(4_700f, restoredDocument.sliceOptions?.maxAccelerationTravel)
         } finally {
             root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun projectArchiveRoundTripReinspectsAndSlicesOnArm64() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val sourceRoot = File(context.cacheDir, "archive-source-${System.nanoTime()}")
+        val destinationRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        val inspector: (File) -> ModelInfo = { model ->
+            ModelInfo.fromJson(NativeEngine.inspectStl(model.absolutePath), model.absolutePath)
+        }
+        var gcode: File? = null
+        try {
+            destinationRoot.deleteRecursively()
+            val source = ProjectStore(sourceRoot, inspector)
+            val storedModel = source.createModelDestination("archive-box.stl")
+            fixtureModel().copyTo(storedModel)
+            val inspected = inspector(storedModel).copy(fileName = "archive-box.stl")
+            val transform = ModelTransform(offsetXmm = 8f, offsetYmm = -6f, rotationZdeg = 18f)
+            val paint = SupportPaint().paint(0, SupportPaintState.BLOCK)
+            val options = SliceOptions()
+                .selectQuality(QualityProfile.DRAFT)
+                .copy(fillDensity = 0.18f, supportEnabled = true)
+            val snapshot = ProjectSnapshot(
+                objects = listOf(ProjectObject("archive-object", inspected, transform, paint)),
+                selectedObjectId = "archive-object",
+            )
+            val archive = ByteArrayOutputStream().also { output ->
+                source.exportArchive(snapshot, options, output)
+            }.toByteArray()
+
+            val imported = ProjectStore(context).importArchive(
+                ByteArrayInputStream(archive),
+            )
+            val restoredObject = imported.snapshot.selectedObject
+            assertEquals("archive-object", restoredObject?.id)
+            assertEquals(transform, restoredObject?.transform)
+            assertEquals(paint, restoredObject?.supportPaint)
+            assertEquals(0.18f, imported.sliceOptions?.fillDensity)
+            assertTrue(restoredObject?.model?.previewTriangles?.isNotEmpty() == true)
+
+            val outcome = OnDeviceSlicer.slice(
+                imported.snapshot.objects,
+                requireNotNull(imported.sliceOptions),
+            )
+            gcode = outcome.output
+            assertTrue("A restored project must produce retained G-code", outcome.output.length() > 1_000L)
+            assertTrue("A restored project must retain a finite print estimate", outcome.estimatedSeconds.isFinite())
+            assertTrue("A restored project must retain a finite filament estimate", outcome.filamentMm.isFinite())
+        } finally {
+            gcode?.delete()
+            sourceRoot.deleteRecursively()
+            destinationRoot.deleteRecursively()
         }
     }
 

@@ -116,6 +116,10 @@ def main() -> None:
         "support-detail policy is unit tested": (
             "tools.test_verify_support_diagnostics"
         ),
+        "portable projects are bounded and atomic": (
+            "python3 tools/verify_project_archive.py"
+        ),
+        "project-archive policy is unit tested": "tools.test_verify_project_archive",
         "release publication contract is verified": (
             "python3 tools/verify_release_contract.py"
         ),
@@ -260,6 +264,10 @@ def main() -> None:
         "support-detail policy is unit tested": (
             "tools.test_verify_support_diagnostics"
         ),
+        "portable projects are bounded and atomic": (
+            "python3 tools/verify_project_archive.py"
+        ),
+        "project-archive policy is unit tested": "tools.test_verify_project_archive",
         "release publication contract is verified": (
             "python3 tools/verify_release_contract.py"
         ),
@@ -309,6 +317,9 @@ def main() -> None:
         ),
         "support details are privacy bounded": (
             "python3 tools/verify_support_diagnostics.py"
+        ),
+        "portable projects are bounded and atomic": (
+            "python3 tools/verify_project_archive.py"
         ),
         "signed Play artifact is retained": "name: duckyslicer-play-signed",
     }

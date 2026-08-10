@@ -38,8 +38,12 @@ DuckySlicer project.
 
 DuckySlicer sends data only when you choose an action that requires it:
 
-- Exported projects and G-code are written to the location you select. A storage
-  provider you select may process that file under its own privacy terms.
+- Exported DuckySlicer project files contain the model geometry, object placement,
+  support painting, and active printer, filament, and slicing settings needed to
+  reopen the project. They do not contain G-code, saved printer addresses, or printer
+  access keys. Project files and exported G-code are written only to the location you
+  select. A storage provider you select may process that file under its own privacy
+  terms.
 - Optional OctoPrint and Klipper connections send status requests, the access key
   required by your server, and G-code uploads directly to the printer address you
   configured. This traffic does not pass through a DuckySlicer-operated service.
@@ -120,8 +124,12 @@ Android 11 이상에서는 Android가 이전 앱 프로세스의 종료 이력�
 
 DuckySlicer는 사용자가 다음 동작을 선택한 경우에만 필요한 데이터를 전송합니다.
 
-- 내보낸 프로젝트와 G-code는 사용자가 선택한 위치에 저장됩니다. 선택한 저장
-  공간 제공자는 자체 개인정보처리방침에 따라 파일을 처리할 수 있습니다.
+- 내보낸 DuckySlicer 프로젝트 파일에는 프로젝트를 다시 여는 데 필요한 모델
+  형상, 오브젝트 배치, 서포트 채색, 현재 프린터·필라멘트·슬라이싱 설정이
+  포함됩니다. G-code, 저장된 프린터 주소 또는 프린터 접속 키는 포함되지
+  않습니다. 프로젝트 파일과 내보낸 G-code는 사용자가 선택한 위치에만
+  저장됩니다. 선택한 저장 공간 제공자는 자체 개인정보처리방침에 따라 파일을
+  처리할 수 있습니다.
 - 선택 기능인 OctoPrint 및 Klipper 연결은 상태 요청, 서버에 필요한 접속 키와
   G-code를 사용자가 설정한 프린터 주소로 직접 보냅니다. 이 트래픽은
   DuckySlicer가 운영하는 서비스를 거치지 않습니다. HTTPS 연결에는 Android의

@@ -31,6 +31,10 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                         SCREEN_PROFILE -> ProfileAccessibilityHarness()
                         SCREEN_DEVICE -> DeviceAccessibilityHarness()
                         SCREEN_SETTINGS -> SettingsAccessibilityHarness()
+                        SCREEN_PROJECT -> WorkspaceAccessibilityHarness(
+                            selectedTab = WorkspaceTab.PROJECT,
+                            projectObjects = listOf(accessibilityProjectObject()),
+                        )
                         SCREEN_WORKSPACE -> {
                             val density = LocalDensity.current
                             CompositionLocalProvider(
@@ -52,6 +56,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_PROFILE = "profile"
         const val SCREEN_DEVICE = "device"
         const val SCREEN_SETTINGS = "settings"
+        const val SCREEN_PROJECT = "project"
         const val SCREEN_WORKSPACE = "workspace"
     }
 }
@@ -146,11 +151,14 @@ private fun SettingsAccessibilityHarness() {
 }
 
 @Composable
-private fun WorkspaceAccessibilityHarness() {
+private fun WorkspaceAccessibilityHarness(
+    selectedTab: WorkspaceTab = WorkspaceTab.SLICE,
+    projectObjects: List<ProjectObject> = emptyList(),
+) {
     WorkspaceScreen(
-        selectedTab = WorkspaceTab.SLICE,
-        projectObjects = emptyList(),
-        selectedObjectId = null,
+        selectedTab = selectedTab,
+        projectObjects = projectObjects,
+        selectedObjectId = projectObjects.firstOrNull()?.id,
         sliceOptions = SliceOptions(),
         profileCatalog = ProfileCatalog(),
         profileRecents = ProfileRecents(),
@@ -178,6 +186,8 @@ private fun WorkspaceAccessibilityHarness() {
         canRedo = false,
         onTabSelected = {},
         onChoose = {},
+        onOpenProject = {},
+        onSaveProject = {},
         onObjectSelected = {},
         onModelTransformChanged = {},
         onModelTransformPreview = {},
@@ -210,6 +220,19 @@ private fun WorkspaceAccessibilityHarness() {
         onRemoteCancel = {},
     )
 }
+
+private fun accessibilityProjectObject() = ProjectObject(
+    id = "accessibility-project-object",
+    model = ModelInfo(
+        fileName = "accessibility.stl",
+        triangles = 1,
+        dimensions = listOf(1.0, 1.0, 1.0),
+        localPath = "",
+        minMm = listOf(0.0, 0.0, 0.0),
+        maxMm = listOf(1.0, 1.0, 1.0),
+        previewTriangles = floatArrayOf(0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f),
+    ),
+)
 
 internal const val TEST_SETTING_LABEL = "Accessibility setting"
 internal const val TEST_SWITCH_LABEL = "Accessibility switch"

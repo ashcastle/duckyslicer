@@ -2,6 +2,11 @@ package com.ashcastle.duckyslicer
 
 import android.content.Context
 import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.UUID
 import org.json.JSONArray
 import org.json.JSONObject
@@ -30,6 +35,66 @@ internal class ProjectStore(
             .takeLast(160)
             .ifBlank { "model.stl" }
         return File(modelsDirectory, "${UUID.randomUUID()}-$safeName")
+    }
+
+    @Synchronized
+    fun exportArchive(
+        snapshot: ProjectSnapshot,
+        sliceOptions: SliceOptions,
+        output: OutputStream,
+    ) {
+        val modelRoot = modelsDirectory.canonicalFile
+        snapshot.objects.forEach { projectObject ->
+            val modelFile = File(projectObject.model.localPath).canonicalFile
+            require(modelFile.parentFile == modelRoot && modelFile.isFile) {
+                "Project model is outside private storage"
+            }
+        }
+        ProjectArchiveCodec.write(snapshot, sliceOptions, output)
+    }
+
+    @Synchronized
+    fun importArchive(input: InputStream): StoredProjectDocument {
+        check(projectRoot.isDirectory || projectRoot.mkdirs()) { "Project storage is unavailable" }
+        val staging = File(projectRoot, ".archive-${UUID.randomUUID()}")
+        val installed = ArrayList<File>()
+        try {
+            check(staging.mkdirs()) { "Project import storage is unavailable" }
+            val decoded = ProjectArchiveCodec.read(input, staging, inspectModel)
+            val installedModels = LinkedHashMap<String, Pair<File, ModelInfo>>()
+            decoded.models.forEach { (entryName, stagedModel) ->
+                val displayName = decoded.objects.first { it.modelEntry == entryName }.displayName
+                val destination = createModelDestination(displayName)
+                moveArchiveModel(stagedModel.file, destination)
+                installed += destination
+                installedModels[entryName] = destination to stagedModel.info
+            }
+            val snapshot = ProjectSnapshot(
+                objects = decoded.objects.map { archived ->
+                    val (file, info) = requireNotNull(installedModels[archived.modelEntry])
+                    ProjectObject(
+                        id = archived.id,
+                        model = info.copy(
+                            fileName = archived.displayName,
+                            localPath = file.canonicalPath,
+                        ),
+                        transform = archived.transform,
+                        supportPaint = archived.supportPaint,
+                    )
+                },
+                selectedObjectId = decoded.selectedObjectId,
+            )
+            save(snapshot, decoded.sliceOptions)
+            // The imported generation is already durable. Cleanup is best-effort so a
+            // filesystem cleanup hiccup cannot turn a committed project into a false failure.
+            runCatching { pruneUnreferencedModels(snapshot) }
+            return StoredProjectDocument(snapshot = snapshot, sliceOptions = decoded.sliceOptions)
+        } catch (failure: Throwable) {
+            installed.forEach(File::delete)
+            throw failure
+        } finally {
+            staging.deleteRecursively()
+        }
     }
 
     @Synchronized
@@ -172,6 +237,18 @@ internal class ProjectStore(
         return runCatching { File(modelsDirectory, storedName).canonicalFile }
             .getOrNull()
             ?.takeIf { it.parentFile == modelRoot && it.isFile }
+    }
+
+    private fun moveArchiveModel(source: File, destination: File) {
+        try {
+            Files.move(
+                source.toPath(),
+                destination.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+            )
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(source.toPath(), destination.toPath())
+        }
     }
 
     private fun validateProjectRoot(root: JSONObject): JSONObject? = runCatching {
