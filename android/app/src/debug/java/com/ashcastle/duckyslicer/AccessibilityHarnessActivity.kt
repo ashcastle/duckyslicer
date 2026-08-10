@@ -195,6 +195,7 @@ private fun WorkspaceAccessibilityHarness(
         remoteUploadProgress = null,
         remoteMessage = null,
         remoteMessageIsError = false,
+        profileBusy = false,
         sliceOutcome = null,
         layerPreview = null,
         importing = false,

@@ -22,11 +22,19 @@ def valid_sources() -> dict[str, str]:
     event_enum = "\n".join(f"    {event}," for event in sorted(EXPECTED_EVENTS))
     remote_events = {event for event in EXPECTED_EVENTS if event.startswith("REMOTE_")}
     project_events = {"PROJECT_SAVE_FAILED", "PROJECT_STORAGE_UNAVAILABLE"}
+    profile_events = {
+        "FILAMENT_PROFILE_SAVE_FAILED",
+        "PRINTER_PROFILE_SAVE_FAILED",
+        "PROFILE_STORAGE_UNAVAILABLE",
+        "SLICING_PROFILE_SAVE_FAILED",
+    }
     event_calls = " ".join(
-        f"SupportEvent.{event}" for event in EXPECTED_EVENTS - remote_events - project_events
+        f"SupportEvent.{event}"
+        for event in EXPECTED_EVENTS - remote_events - project_events - profile_events
     )
     project_event_calls = " ".join(f"SupportEvent.{event}" for event in project_events)
     remote_event_calls = " ".join(f"SupportEvent.{event}" for event in remote_events)
+    profile_event_calls = " ".join(f"SupportEvent.{event}" for event in profile_events)
     string_calls = " ".join(f"R.string.{name}" for name in REQUIRED_STRINGS)
     exit_reasons = "\n".join(
         f"    {name}({code})," for name, code in EXPECTED_EXIT_REASONS.items()
@@ -84,6 +92,7 @@ def valid_sources() -> dict[str, str]:
         "MainActivity.kt": event_calls,
         "ProjectTransfer.kt": project_event_calls,
         "RemoteOperationViewModel.kt": remote_event_calls,
+        "ProfileLibraryViewModel.kt": profile_event_calls,
         "AppSettingsSheet.kt": (
             'ActivityResultContracts.CreateDocument("text/plain") '
             "createSupportReport(context.applicationContext, settings) "

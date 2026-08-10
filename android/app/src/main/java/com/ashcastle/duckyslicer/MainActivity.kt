@@ -109,6 +109,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val sliceOperationModel = ViewModelProvider(this)[SliceOperationViewModel::class.java]
         val remoteOperationModel = ViewModelProvider(this)[RemoteOperationViewModel::class.java]
+        val profileLibraryModel = ViewModelProvider(this)[ProfileLibraryViewModel::class.java]
         externalProjectModel = ViewModelProvider(this)[ExternalProjectRequestViewModel::class.java]
         projectTransferModel = ViewModelProvider(this)[ProjectTransferViewModel::class.java]
         if (savedInstanceState == null) externalProjectModel.enqueue(intent)
@@ -123,6 +124,7 @@ class MainActivity : ComponentActivity() {
                 DuckySlicerScreen(
                     sliceOperationModel = sliceOperationModel,
                     remoteOperationModel = remoteOperationModel,
+                    profileLibraryModel = profileLibraryModel,
                     projectTransferModel = projectTransferModel,
                     externalProjectRequest = externalProjectRequest,
                     onExternalProjectRequestConsumed = externalProjectModel::consume,
@@ -142,6 +144,7 @@ class MainActivity : ComponentActivity() {
 private fun DuckySlicerScreen(
     sliceOperationModel: SliceOperationViewModel,
     remoteOperationModel: RemoteOperationViewModel,
+    profileLibraryModel: ProfileLibraryViewModel,
     projectTransferModel: ProjectTransferViewModel,
     externalProjectRequest: ExternalProjectRequest?,
     onExternalProjectRequestConsumed: (Long) -> Unit,
@@ -210,19 +213,17 @@ private fun DuckySlicerScreen(
     val projectHistory = projectTransferState.history
     val projectRestored = projectTransferState.restored
     val remoteOperationState by remoteOperationModel.state.collectAsStateWithLifecycle()
+    val profileLibraryState by profileLibraryModel.state.collectAsStateWithLifecycle()
     val sliceOptions = projectTransferState.sliceOptions
     val projectObjects = projectHistory.current.objects
     val selectedProjectObject = projectHistory.current.selectedObject
     val model = selectedProjectObject?.model ?: projectObjects.firstOrNull()?.model
     val modelTransform = selectedProjectObject?.transform ?: ModelTransform()
-    val profileStore = remember(context.applicationContext) { ProfileStore(context.applicationContext) }
-    val profileRecentStore = remember(context.applicationContext) {
-        ProfileRecentStore(context.applicationContext)
-    }
     val projectStore = remember(context.applicationContext) { ProjectStore(context.applicationContext) }
-    var profileCatalog by remember { mutableStateOf(ProfileCatalog()) }
-    var profileRecents by remember { mutableStateOf(ProfileRecents()) }
-    var profileRecentsLoaded by remember { mutableStateOf(false) }
+    val profileCatalog = profileLibraryState.catalog
+    val profileRecents = profileLibraryState.recents
+    val profileRecentsLoaded = profileLibraryState.recentsLoaded
+    val profileBusy = profileLibraryState.busy || profileLibraryState.completion != null
     val appSettingsStore = remember(context.applicationContext) {
         AppSettingsStore(context.applicationContext)
     }
@@ -296,21 +297,6 @@ private fun DuckySlicerScreen(
         projectTransferModel.consumeCompletion(completion.id)
     }
 
-    LaunchedEffect(profileStore) {
-        profileCatalog = withContext(Dispatchers.IO) { profileStore.load() }
-        if (profileStore.storageUnavailable) {
-            supportEvents.record(SupportEvent.PROFILE_STORAGE_UNAVAILABLE)
-            error = savedDataUnavailable
-        }
-    }
-    LaunchedEffect(profileRecentStore) {
-        profileRecents = withContext(Dispatchers.IO) { profileRecentStore.load() }
-        profileRecentsLoaded = true
-        if (profileRecentStore.storageUnavailable) {
-            supportEvents.record(SupportEvent.PROFILE_STORAGE_UNAVAILABLE)
-            error = savedDataUnavailable
-        }
-    }
     LaunchedEffect(sliceOutcome?.output?.absolutePath) {
         val restored = sliceOutcome ?: return@LaunchedEffect
         if (!restored.isRestorableFrom(context.filesDir)) {
@@ -354,19 +340,17 @@ private fun DuckySlicerScreen(
     }
     LaunchedEffect(projectRestored, profileRecentsLoaded) {
         if (projectRestored && profileRecentsLoaded) {
-            profileRecents = profileRecents.record(sliceOptions)
+            profileLibraryModel.recordSelection(sliceOptions)
         }
     }
-    LaunchedEffect(profileRecents, profileRecentsLoaded) {
-        if (!profileRecentsLoaded || profileRecentStore.storageUnavailable) return@LaunchedEffect
-        delay(350)
-        runCatching {
-            withContext(Dispatchers.IO) { profileRecentStore.save(profileRecents) }
-        }.onFailure {
-            supportEvents.record(SupportEvent.PROFILE_STORAGE_UNAVAILABLE)
-            error = savedDataUnavailable
-            notice = null
+    LaunchedEffect(profileLibraryState.message) {
+        val message = profileLibraryState.message ?: return@LaunchedEffect
+        error = when (message) {
+            ProfileLibraryMessage.STORAGE_UNAVAILABLE -> savedDataUnavailable
+            ProfileLibraryMessage.SAVE_FAILED -> profileSaveError
         }
+        notice = null
+        profileLibraryModel.consumeMessage(message)
     }
     LaunchedEffect(remoteOperationState.profilesLoaded, remoteOperationState.storageUnavailable) {
         if (remoteOperationState.profilesLoaded && remoteOperationState.storageUnavailable) {
@@ -380,7 +364,7 @@ private fun DuckySlicerScreen(
 
     val keepScreenAwake = appSettings.keepScreenAwakeWhileWorking &&
         (importing || projectTransferBusy || autoLaying || arranging || splitting || cutting || slicing ||
-            previewLoading || remoteBusy)
+            previewLoading || remoteBusy || profileBusy)
     DisposableEffect(keepScreenAwake) {
         val window = (context as? MainActivity)?.window
         if (keepScreenAwake) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -398,19 +382,6 @@ private fun DuckySlicerScreen(
         val session = projectTransferModel.state.value
         val previous = session.sliceOptions
         if (options != previous) {
-            var nextRecents = profileRecents
-            if (options.printerProfile.id != previous.printerProfile.id) {
-                nextRecents = nextRecents.recordPrinter(options.printerProfile.id)
-            }
-            val previousFilamentIds = previous.resolvedFilamentSlots().mapTo(mutableSetOf()) { it.id }
-            options.resolvedFilamentSlots().forEach { filament ->
-                if (filament.id !in previousFilamentIds) {
-                    nextRecents = nextRecents.recordFilament(filament.id)
-                }
-            }
-            if (options.quality.id != previous.quality.id) {
-                nextRecents = nextRecents.recordSlicing(options.quality.id)
-            }
             val nextHistory = session.history.constrainFilamentSlots(
                 options.resolvedFilamentSlots().size,
             )
@@ -422,11 +393,20 @@ private fun DuckySlicerScreen(
                     nextOptions = options,
                 )
             ) {
-                profileRecents = nextRecents
+                profileLibraryModel.recordSelection(options)
                 clearCompletedSlice()
                 notice = null
             }
         }
+    }
+
+    LaunchedEffect(profileLibraryState.completion?.id) {
+        val completion = profileLibraryState.completion ?: return@LaunchedEffect
+        val session = projectTransferModel.state.value
+        completion.optionsForSession(session.sessionRevision)?.let(::applyOptions)
+        notice = profileSavedNotice
+        error = null
+        profileLibraryModel.consumeCompletion(completion.id)
     }
 
     fun applyModelTransform(transform: ModelTransform, recordHistory: Boolean = true) {
@@ -935,6 +915,7 @@ private fun DuckySlicerScreen(
         remoteUploadProgress = remoteUploadProgress,
         remoteMessage = remoteMessage,
         remoteMessageIsError = remoteMessageIsError,
+        profileBusy = profileBusy,
         sliceOutcome = sliceOutcome,
         layerPreview = layerPreview,
         importing = importing || projectTransferBusy || !projectRestored,
@@ -1163,60 +1144,40 @@ private fun DuckySlicerScreen(
         onSave = saveGcode,
         onSliceOptionsChanged = ::applyOptions,
         onSavePrinterProfile = { name, options ->
-            scope.launch {
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        profileStore.savePrinter(name, options) to profileStore.load()
-                    }
-                }.onSuccess { (saved, catalog) ->
-                    profileCatalog = catalog
-                    applyOptions(options.selectPrinter(saved))
-                    notice = profileSavedNotice
-                    error = null
-                }
-                    .onFailure {
-                        supportEvents.record(SupportEvent.PRINTER_PROFILE_SAVE_FAILED)
-                        error = profileSaveError
-                        notice = null
-                    }
+            if (
+                !profileLibraryModel.savePrinter(
+                    name,
+                    options,
+                    projectTransferModel.state.value.sessionRevision,
+                )
+            ) {
+                error = profileSaveError
+                notice = null
             }
         },
         onSaveFilamentProfile = { name, options, slot ->
-            scope.launch {
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        profileStore.saveFilament(name, options, slot) to profileStore.load()
-                    }
-                }.onSuccess { (saved, catalog) ->
-                    profileCatalog = catalog
-                    applyOptions(options.updateFilamentSlot(slot, saved))
-                    notice = profileSavedNotice
-                    error = null
-                }
-                    .onFailure {
-                        supportEvents.record(SupportEvent.FILAMENT_PROFILE_SAVE_FAILED)
-                        error = profileSaveError
-                        notice = null
-                    }
+            if (
+                !profileLibraryModel.saveFilament(
+                    name,
+                    options,
+                    slot,
+                    projectTransferModel.state.value.sessionRevision,
+                )
+            ) {
+                error = profileSaveError
+                notice = null
             }
         },
         onSaveSlicingProfile = { name, options ->
-            scope.launch {
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        profileStore.saveSlicing(name, options) to profileStore.load()
-                    }
-                }.onSuccess { (saved, catalog) ->
-                    profileCatalog = catalog
-                    applyOptions(options.selectQuality(saved))
-                    notice = profileSavedNotice
-                    error = null
-                }
-                    .onFailure {
-                        supportEvents.record(SupportEvent.SLICING_PROFILE_SAVE_FAILED)
-                        error = profileSaveError
-                        notice = null
-                    }
+            if (
+                !profileLibraryModel.saveSlicing(
+                    name,
+                    options,
+                    projectTransferModel.state.value.sessionRevision,
+                )
+            ) {
+                error = profileSaveError
+                notice = null
             }
         },
         onLayerRangeSelected = loadPreviewRange,

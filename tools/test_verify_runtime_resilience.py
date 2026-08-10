@@ -19,6 +19,13 @@ def valid_sources() -> dict[str, str]:
             "projectStore.save(document.history.current, document.sliceOptions)"
         ),
         "ProfileStore.kt": "DurableJsonFile(",
+        "ProfileLibraryViewModel.kt": (
+            "class ProfileLibraryViewModel(application: Application) : AndroidViewModel(application) "
+            "viewModelScope.launch private val profileStore = ProfileStore(application) "
+            "private val recentStore = ProfileRecentStore(application) fun savePrinter( "
+            "fun saveFilament( fun saveSlicing( fun recordSelection( activeOperationId "
+            "optionsForSession RECENT_PROFILE_SAVE_DEBOUNCE_MILLIS"
+        ),
         "RemoteDevice.kt": (
             "DurableJsonFile( MAX_REMOTE_RESPONSE_BYTES MAX_REMOTE_CREDENTIAL_BYTES "
             "MAX_REMOTE_GCODE_BYTES readBoundedBytes parseBoundedJsonObject "
@@ -49,7 +56,11 @@ def valid_sources() -> dict[str, str]:
             "ViewModelProvider(this)[RemoteOperationViewModel::class.java] "
             "remoteOperationModel.state.collectAsStateWithLifecycle() "
             "selectedRemoteDeviceId = remoteOperationState.selectedProfileId "
-            "remoteOperationModel.invalidateUpload()"
+            "remoteOperationModel.invalidateUpload() "
+            "ViewModelProvider(this)[ProfileLibraryViewModel::class.java] "
+            "profileLibraryModel.state.collectAsStateWithLifecycle() "
+            "completion.optionsForSession(session.sessionRevision) "
+            "profileLibraryModel.recordSelection(options)"
         ),
         "DeviceSheet.kt": ".selectable( selected = true enabled = !busy ),",
         "DurableJsonFileTest.kt": (
@@ -58,6 +69,10 @@ def valid_sources() -> dict[str, str]:
         ),
         "ProjectStoreTest.kt": "unreadablePrimaryAndBackupBlockAutosave",
         "ProfileStoreMigrationTest.kt": "unreadableOrFutureProfilesAreNotOverwritten",
+        "ProfileLibraryViewModelTest.kt": (
+            "savedProfileAppliesOnlyToTheSessionRevisionThatStartedTheSave "
+            "eachSavedProfileKindBuildsItsExpectedSelection"
+        ),
         "RemoteDeviceClientTest.kt": (
             "remoteResultsOnlyBelongToTheirOriginatingSelection "
             "redirectsOversizedResponsesAndDeepJsonFailClosed unsafeServerUploadPathIsRejected "
@@ -86,13 +101,21 @@ def valid_sources() -> dict[str, str]:
             "remoteDeviceMetadataRecoversFromLastKnownGoodBackup "
             "cleartextHostnameRequestUsesOneValidatedPinnedAddress"
         ),
+        "ProfileLibraryInstrumentedTest.kt": (
+            "profileSaveAndRecentSelectionSurviveImmediateActivityRecreation "
+            "lateProfileSaveCannotReplaceNewerProjectSettings "
+            "The profile save must be active before recreation "
+            "The profile save must be active before the newer edit"
+        ),
         "CONTRIBUTING.md": (
             "pin the connection target and bypass system proxies "
             "bind a replacement printer credential generation "
             "Bind every remote status, upload-progress, and command result "
             "Remote operations and their busy state must "
             "must never become eligible for Start Print "
-            "must share that same retained"
+            "must share that same retained "
+            "Profile catalog loading, recent selections, and user-profile saves must share one "
+            "only in the project session revision that"
         ),
         "SECURITY.md": (
             "every current DNS answer DNS rebinding bypass system proxies "

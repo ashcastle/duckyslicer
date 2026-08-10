@@ -20,6 +20,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "ProjectStore.kt",
         "ProjectTransfer.kt",
         "ProfileStore.kt",
+        "ProfileLibraryViewModel.kt",
         "RemoteDevice.kt",
         "RemoteOperationViewModel.kt",
         "MainActivity.kt",
@@ -27,10 +28,12 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "DurableJsonFileTest.kt",
         "ProjectStoreTest.kt",
         "ProfileStoreMigrationTest.kt",
+        "ProfileLibraryViewModelTest.kt",
         "RemoteDeviceClientTest.kt",
         "RemoteOperationViewModelTest.kt",
         "RemoteDeviceStoreTest.kt",
         "RemoteDeviceInstrumentedTest.kt",
+        "ProfileLibraryInstrumentedTest.kt",
         "CONTRIBUTING.md",
         "SECURITY.md",
         "strings.xml",
@@ -139,6 +142,33 @@ def verify_resilience(sources: dict[str, str]) -> None:
     if "RemoteDeviceStore(" in main or "remoteProfileBusy" in main:
         raise VerificationError("remote profile persistence is still owned by the Activity composition")
 
+    profile_library = sources["ProfileLibraryViewModel.kt"]
+    for marker in (
+        "class ProfileLibraryViewModel(application: Application) : AndroidViewModel(application)",
+        "viewModelScope.launch",
+        "private val profileStore = ProfileStore(application)",
+        "private val recentStore = ProfileRecentStore(application)",
+        "fun savePrinter(",
+        "fun saveFilament(",
+        "fun saveSlicing(",
+        "fun recordSelection(",
+        "activeOperationId",
+        "optionsForSession",
+        "RECENT_PROFILE_SAVE_DEBOUNCE_MILLIS",
+    ):
+        if marker not in profile_library:
+            raise VerificationError(f"profile library lifecycle contract is missing: {marker}")
+    for marker in (
+        "ViewModelProvider(this)[ProfileLibraryViewModel::class.java]",
+        "profileLibraryModel.state.collectAsStateWithLifecycle()",
+        "completion.optionsForSession(session.sessionRevision)",
+        "profileLibraryModel.recordSelection(options)",
+    ):
+        if marker not in main:
+            raise VerificationError(f"profile library Activity-recreation contract is missing: {marker}")
+    if "ProfileStore(" in main or "ProfileRecentStore(" in main:
+        raise VerificationError("profile library persistence is still owned by the Activity composition")
+
     device_sheet = sources["DeviceSheet.kt"]
     selection_start = device_sheet.find(".selectable(")
     selection_end = device_sheet.find("),", selection_start)
@@ -222,6 +252,16 @@ def verify_resilience(sources: dict[str, str]) -> None:
             "remoteDeviceMetadataRecoversFromLastKnownGoodBackup",
             "cleartextHostnameRequestUsesOneValidatedPinnedAddress",
         ),
+        "ProfileLibraryViewModelTest.kt": (
+            "savedProfileAppliesOnlyToTheSessionRevisionThatStartedTheSave",
+            "eachSavedProfileKindBuildsItsExpectedSelection",
+        ),
+        "ProfileLibraryInstrumentedTest.kt": (
+            "profileSaveAndRecentSelectionSurviveImmediateActivityRecreation",
+            "lateProfileSaveCannotReplaceNewerProjectSettings",
+            "The profile save must be active before recreation",
+            "The profile save must be active before the newer edit",
+        ),
     }
     for source_name, markers in test_markers.items():
         for marker in markers:
@@ -246,6 +286,12 @@ def verify_resilience(sources: dict[str, str]) -> None:
         raise VerificationError("contributor guidance does not reject stale uploaded G-code")
     if "must share that same retained" not in sources["CONTRIBUTING.md"]:
         raise VerificationError("contributor guidance does not retain device-profile persistence")
+    if "Profile catalog loading, recent selections, and user-profile saves must share one" not in sources[
+        "CONTRIBUTING.md"
+    ]:
+        raise VerificationError("contributor guidance does not retain profile-library persistence")
+    if "only in the project session revision that" not in sources["CONTRIBUTING.md"]:
+        raise VerificationError("contributor guidance does not bind late profile-save completion")
     security = sources["SECURITY.md"]
     for marker in (
         "every current DNS answer",
@@ -269,6 +315,9 @@ def read_sources() -> dict[str, str]:
         "ProjectStore.kt": (main / "ProjectStore.kt").read_text(encoding="utf-8"),
         "ProjectTransfer.kt": (main / "ProjectTransfer.kt").read_text(encoding="utf-8"),
         "ProfileStore.kt": (main / "ProfileStore.kt").read_text(encoding="utf-8"),
+        "ProfileLibraryViewModel.kt": (main / "ProfileLibraryViewModel.kt").read_text(
+            encoding="utf-8"
+        ),
         "RemoteDevice.kt": (main / "RemoteDevice.kt").read_text(encoding="utf-8"),
         "RemoteOperationViewModel.kt": (main / "RemoteOperationViewModel.kt").read_text(
             encoding="utf-8"
@@ -280,6 +329,9 @@ def read_sources() -> dict[str, str]:
         "ProfileStoreMigrationTest.kt": (tests / "ProfileStoreMigrationTest.kt").read_text(
             encoding="utf-8"
         ),
+        "ProfileLibraryViewModelTest.kt": (
+            tests / "ProfileLibraryViewModelTest.kt"
+        ).read_text(encoding="utf-8"),
         "RemoteDeviceClientTest.kt": (tests / "RemoteDeviceClientTest.kt").read_text(
             encoding="utf-8"
         ),
@@ -291,6 +343,9 @@ def read_sources() -> dict[str, str]:
         ),
         "RemoteDeviceInstrumentedTest.kt": (
             device_tests / "RemoteDeviceInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "ProfileLibraryInstrumentedTest.kt": (
+            device_tests / "ProfileLibraryInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),
         "SECURITY.md": (ROOT / "SECURITY.md").read_text(encoding="utf-8"),

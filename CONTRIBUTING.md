@@ -38,6 +38,10 @@ avoid introducing an account or cloud requirement.
 - Project history, active slicing options, restoration, and debounced persistence must
   share the same Activity-retained owner. Rotation must preserve unsaved edits and undo
   history, while the durable project generation remains the process-death recovery path.
+- Profile catalog loading, recent selections, and user-profile saves must share one
+  Activity-retained owner. A saved profile may update the catalog after rotation, but
+  its late completion may select that profile only in the project session revision that
+  started the save.
 - Keep every external activity intent inside the reviewed Manifest allowlist. Explicit
   notification and test launches must match the activity's declared action and
   category so strict intent matching can remain enabled.
