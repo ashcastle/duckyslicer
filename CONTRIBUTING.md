@@ -111,6 +111,10 @@ Reconstructable VBOs must be released when Android
 reports that the UI is hidden or the process is in the background, then rebuilt lazily on
 the first visible frame. Keep this policy pure and host-tested alongside the real ARM64
 EGL renderer regression.
+If the ES3 context, shaders, attributes, buffer upload, or first draw fails, the preview
+must use the bounded compatibility fallback for the current session instead of
+leaving a blank surface. Keep the user's renderer preference unchanged so an explicit
+mode toggle or a later app session can retry the depth path.
 
 The mobile slicing-profile editor keeps the Orca mental model in five horizontally
 scrollable sections: Quality, Strength, Speed, Support, and Others. Keep profile

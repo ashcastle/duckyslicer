@@ -7,9 +7,12 @@ import android.content.res.Configuration
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
-import android.view.View
+import android.util.Log
 import android.view.MotionEvent
+import android.view.SurfaceHolder
+import android.view.View
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import java.nio.ByteBuffer
@@ -36,10 +39,14 @@ internal fun DepthTestedToolpathScene(
     depthContrast: Float,
     visibleRoles: Set<Int>,
     detail: PreviewDetail,
+    onUnavailable: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val currentOnUnavailable = rememberUpdatedState(onUnavailable)
     AndroidView(
-        factory = { context -> ToolpathSurfaceView(context) },
+        factory = { context ->
+            ToolpathSurfaceView(context) { currentOnUnavailable.value() }
+        },
         update = { view ->
             view.submit(
                 preview,
@@ -63,11 +70,25 @@ internal fun supportsDepthTestedPreview(context: Context): Boolean {
     return (manager?.deviceConfigurationInfo?.reqGlEsVersion ?: 0) >= 0x00030000
 }
 
-private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
+private class ToolpathSurfaceView(
+    context: Context,
+    private val onUnavailable: () -> Unit,
+) : GLSurfaceView(context) {
     private val applicationContext = context.applicationContext
-    private val toolpathRenderer = ToolpathRenderer {
-        post { requestRender() }
+    private var rendererReady = false
+    private var unavailableReported = false
+    private var sceneSubmitted = false
+    private var startupWatchdogScheduled = false
+    private val startupWatchdog = Runnable {
+        startupWatchdogScheduled = false
+        if (!rendererReady) reportUnavailableOnce()
     }
+    private val toolpathRenderer = ToolpathRenderer(
+        requestPrewarmFrame = { post { requestRender() } },
+        reportRendererStarting = { post { markRendererStarting() } },
+        reportFrameReady = { post(::markRendererReady) },
+        reportUnavailable = { post(::reportUnavailableOnce) },
+    )
     private val memoryCallbacks = object : ComponentCallbacks2 {
         override fun onConfigurationChanged(newConfig: Configuration) = Unit
 
@@ -109,6 +130,7 @@ private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
         visibleRoles: Set<Int>,
         detail: PreviewDetail,
     ) {
+        sceneSubmitted = true
         toolpathRenderer.submit(
             ToolpathScene(
                 preview = preview,
@@ -123,6 +145,7 @@ private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
                 visibleRoles = visibleRoles,
             ),
         )
+        scheduleStartupWatchdog()
         requestRender()
     }
 
@@ -185,6 +208,7 @@ private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
 
     override fun onDetachedFromWindow() {
         removeCallbacks(restoreDetail)
+        cancelStartupWatchdog()
         if (memoryCallbacksRegistered) {
             applicationContext.unregisterComponentCallbacks(memoryCallbacks)
             memoryCallbacksRegistered = false
@@ -199,11 +223,30 @@ private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
             applicationContext.registerComponentCallbacks(memoryCallbacks)
             memoryCallbacksRegistered = true
         }
+        scheduleStartupWatchdog()
     }
 
     override fun onWindowVisibilityChanged(visibility: Int) {
         super.onWindowVisibilityChanged(visibility)
-        if (visibility == View.VISIBLE) requestRender()
+        if (visibility == View.VISIBLE) {
+            scheduleStartupWatchdog()
+            requestRender()
+        } else {
+            cancelStartupWatchdog()
+        }
+    }
+
+    override fun surfaceCreated(holder: SurfaceHolder) {
+        rendererReady = false
+        toolpathRenderer.expectFirstFrame()
+        super.surfaceCreated(holder)
+        scheduleStartupWatchdog()
+    }
+
+    override fun surfaceDestroyed(holder: SurfaceHolder) {
+        rendererReady = false
+        cancelStartupWatchdog()
+        super.surfaceDestroyed(holder)
     }
 
     private fun releaseGpuMemory() {
@@ -221,8 +264,44 @@ private class ToolpathSurfaceView(context: Context) : GLSurfaceView(context) {
         lastCenterY = (y0 + y1) / 2f
     }
 
+    private fun scheduleStartupWatchdog() {
+        if (
+            rendererReady || unavailableReported || !sceneSubmitted ||
+            !isAttachedToWindow || windowVisibility != View.VISIBLE || startupWatchdogScheduled
+        ) {
+            return
+        }
+        startupWatchdogScheduled = true
+        postDelayed(startupWatchdog, RENDERER_STARTUP_TIMEOUT_MS)
+    }
+
+    private fun cancelStartupWatchdog() {
+        removeCallbacks(startupWatchdog)
+        startupWatchdogScheduled = false
+    }
+
+    private fun markRendererReady() {
+        if (unavailableReported) return
+        rendererReady = true
+        cancelStartupWatchdog()
+    }
+
+    private fun markRendererStarting() {
+        if (unavailableReported) return
+        rendererReady = false
+        scheduleStartupWatchdog()
+    }
+
+    private fun reportUnavailableOnce() {
+        if (unavailableReported) return
+        unavailableReported = true
+        cancelStartupWatchdog()
+        onUnavailable()
+    }
+
     private companion object {
         const val DETAIL_RESTORE_DELAY_MS = 220L
+        const val RENDERER_STARTUP_TIMEOUT_MS = 5_000L
     }
 }
 
@@ -244,6 +323,10 @@ internal data class ToolpathScene(
 
 internal class ToolpathRenderer(
     private val requestPrewarmFrame: () -> Unit = {},
+    private val reportRendererStarting: () -> Unit = {},
+    private val reportFrameReady: () -> Unit = {},
+    private val reportUnavailable: () -> Unit = {},
+    private val programFactory: ((String, String) -> Int)? = null,
 ) : GLSurfaceView.Renderer {
     @Volatile
     private var latestScene: ToolpathScene? = null
@@ -269,12 +352,19 @@ internal class ToolpathRenderer(
     private var panX = 0f
     private var panY = 0f
     private var geometryUploadCount = 0
+    private var rendererUnavailable = false
+    @Volatile
+    private var frameReadyReported = false
     @Volatile
     private var interactionActive = false
 
     internal fun geometryUploadCountForTest(): Int = geometryUploadCount
 
     internal fun cachedGeometryCountForTest(): Int = gpuGeometry.size
+
+    internal fun expectFirstFrame() {
+        frameReadyReported = false
+    }
 
     internal fun releaseGpuGeometryForMemoryPressure() {
         gpuGeometry.values.forEach(::deleteGeometry)
@@ -308,28 +398,24 @@ internal class ToolpathRenderer(
     }
 
     override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {
+        frameReadyReported = false
+        reportRendererStarting()
         bedProgram = 0
         toolpathProgram = 0
         geometryUploadCount = 0
         pendingPrewarmScene = null
         gpuGeometry.clear()
         uploadState.invalidate()
+        if (rendererUnavailable) return
         GLES30.glClearColor(0.098f, 0.102f, 0.094f, 1f)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         GLES30.glDepthFunc(GLES30.GL_LEQUAL)
         GLES30.glEnable(GLES30.GL_BLEND)
         GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
-        bedProgram = runCatching {
-            createProgram(BED_VERTEX_SHADER, FRAGMENT_SHADER)
-        }.getOrDefault(0)
-        toolpathProgram = runCatching {
-            createProgram(TOOLPATH_VERTEX_SHADER, FRAGMENT_SHADER)
-        }.getOrDefault(0)
+        bedProgram = createProgramSafely(BED_VERTEX_SHADER, FRAGMENT_SHADER)
+        toolpathProgram = createProgramSafely(TOOLPATH_VERTEX_SHADER, FRAGMENT_SHADER)
         if (bedProgram == 0 || toolpathProgram == 0) {
-            if (bedProgram != 0) GLES30.glDeleteProgram(bedProgram)
-            if (toolpathProgram != 0) GLES30.glDeleteProgram(toolpathProgram)
-            bedProgram = 0
-            toolpathProgram = 0
+            failRenderer("program_creation")
             return
         }
         bedPositionLocation = GLES30.glGetAttribLocation(bedProgram, "aPosition")
@@ -341,17 +427,37 @@ internal class ToolpathRenderer(
         toolpathHalfWidthLocation = GLES30.glGetAttribLocation(toolpathProgram, "aHalfWidth")
         toolpathColorLocation = GLES30.glGetAttribLocation(toolpathProgram, "aColor")
         toolpathMatrixLocation = GLES30.glGetUniformLocation(toolpathProgram, "uMvp")
+        val requiredLocations = intArrayOf(
+            bedPositionLocation,
+            bedColorLocation,
+            bedAcrossLocation,
+            bedMatrixLocation,
+            toolpathStartLocation,
+            toolpathEndLocation,
+            toolpathHalfWidthLocation,
+            toolpathColorLocation,
+            toolpathMatrixLocation,
+        )
+        if (requiredLocations.any { it < 0 } || !glOperationSucceeded("program_locations")) {
+            failRenderer("program_locations")
+        }
     }
 
     override fun onSurfaceChanged(unused: GL10?, width: Int, height: Int) {
+        if (rendererUnavailable) return
         viewportWidth = width.coerceAtLeast(1)
         viewportHeight = height.coerceAtLeast(1)
         GLES30.glViewport(0, 0, viewportWidth, viewportHeight)
+        glOperationSucceeded("viewport")
     }
 
     override fun onDrawFrame(unused: GL10?) {
+        if (rendererUnavailable) return
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
-        if (bedProgram == 0 || toolpathProgram == 0) return
+        if (bedProgram == 0 || toolpathProgram == 0) {
+            failRenderer("missing_program")
+            return
+        }
         val sourceScene = latestScene ?: return
         val prewarmAtFrameStart = pendingPrewarmScene
         pendingPrewarmScene = null
@@ -372,6 +478,11 @@ internal class ToolpathRenderer(
         val matrix = cameraMatrix(scene)
         drawBed(geometry, matrix)
         drawToolpaths(geometry, matrix)
+        if (!glOperationSucceeded("frame_draw")) return
+        if (!frameReadyReported) {
+            frameReadyReported = true
+            reportFrameReady()
+        }
 
         if (!interactionActive && interactionScene != sourceScene) {
             if (uploadState.needsUpload(interactionScene)) {
@@ -509,11 +620,17 @@ internal class ToolpathRenderer(
     }
 
     private fun uploadGeometry(scene: ToolpathScene): ToolpathGpuGeometry? {
-        val payload = ToolpathMeshBuilder.build(scene)
+        val payload = try {
+            ToolpathMeshBuilder.build(scene)
+        } catch (failure: RuntimeException) {
+            failRenderer("geometry_build", failure)
+            return null
+        }
         val buffers = IntArray(2)
         GLES30.glGenBuffers(buffers.size, buffers, 0)
-        if (buffers.any { it == 0 }) {
+        if (buffers.any { it == 0 } || GLES30.glGetError() != GLES30.GL_NO_ERROR) {
             GLES30.glDeleteBuffers(buffers.size, buffers, 0)
+            failRenderer("buffer_allocation")
             return null
         }
         val geometry = ToolpathGpuGeometry(
@@ -537,6 +654,11 @@ internal class ToolpathRenderer(
             GLES30.GL_STATIC_DRAW,
         )
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+        if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
+            deleteGeometry(geometry)
+            failRenderer("buffer_upload")
+            return null
+        }
         uploadState.markUploaded(scene)?.let { evictedScene ->
             gpuGeometry.remove(evictedScene)?.let(::deleteGeometry)
         }
@@ -590,29 +712,81 @@ internal class ToolpathRenderer(
     }
 
     private fun createProgram(vertexSource: String, fragmentSource: String): Int {
-        val vertex = compileShader(GLES30.GL_VERTEX_SHADER, vertexSource)
-        val fragment = compileShader(GLES30.GL_FRAGMENT_SHADER, fragmentSource)
-        return GLES30.glCreateProgram().also { created ->
+        var vertex = 0
+        var fragment = 0
+        var created = 0
+        try {
+            vertex = compileShader(GLES30.GL_VERTEX_SHADER, vertexSource)
+            fragment = compileShader(GLES30.GL_FRAGMENT_SHADER, fragmentSource)
+            created = GLES30.glCreateProgram()
+            check(created != 0) { "Unable to create an OpenGL program" }
             GLES30.glAttachShader(created, vertex)
             GLES30.glAttachShader(created, fragment)
             GLES30.glLinkProgram(created)
             val status = IntArray(1)
             GLES30.glGetProgramiv(created, GLES30.GL_LINK_STATUS, status, 0)
             check(status[0] == GLES30.GL_TRUE) { GLES30.glGetProgramInfoLog(created) }
-            GLES30.glDeleteShader(vertex)
-            GLES30.glDeleteShader(fragment)
+            return created
+        } catch (failure: RuntimeException) {
+            if (created != 0) GLES30.glDeleteProgram(created)
+            throw failure
+        } finally {
+            if (vertex != 0) GLES30.glDeleteShader(vertex)
+            if (fragment != 0) GLES30.glDeleteShader(fragment)
         }
     }
 
-    private fun compileShader(type: Int, source: String): Int = GLES30.glCreateShader(type).also { shader ->
+    private fun compileShader(type: Int, source: String): Int {
+        val shader = GLES30.glCreateShader(type)
+        check(shader != 0) { "Unable to create an OpenGL shader" }
         GLES30.glShaderSource(shader, source)
         GLES30.glCompileShader(shader)
         val status = IntArray(1)
         GLES30.glGetShaderiv(shader, GLES30.GL_COMPILE_STATUS, status, 0)
-        check(status[0] == GLES30.GL_TRUE) { GLES30.glGetShaderInfoLog(shader) }
+        if (status[0] != GLES30.GL_TRUE) {
+            val log = GLES30.glGetShaderInfoLog(shader)
+            GLES30.glDeleteShader(shader)
+            error(log)
+        }
+        return shader
+    }
+
+    private fun createProgramSafely(vertexSource: String, fragmentSource: String): Int = try {
+        programFactory?.invoke(vertexSource, fragmentSource)
+            ?: createProgram(vertexSource, fragmentSource)
+    } catch (failure: RuntimeException) {
+        Log.w(RENDERER_LOG_TAG, "Depth preview program creation failed", failure)
+        0
+    }
+
+    private fun glOperationSucceeded(stage: String): Boolean {
+        val error = GLES30.glGetError()
+        if (error == GLES30.GL_NO_ERROR) return true
+        failRenderer(stage, IllegalStateException("OpenGL error 0x${error.toString(16)}"))
+        return false
+    }
+
+    private fun failRenderer(stage: String, failure: Throwable? = null) {
+        if (rendererUnavailable) return
+        rendererUnavailable = true
+        if (failure == null) {
+            Log.w(RENDERER_LOG_TAG, "Depth preview unavailable at $stage")
+        } else {
+            Log.w(RENDERER_LOG_TAG, "Depth preview unavailable at $stage", failure)
+        }
+        gpuGeometry.values.forEach(::deleteGeometry)
+        gpuGeometry.clear()
+        uploadState.invalidate()
+        pendingPrewarmScene = null
+        if (bedProgram != 0) GLES30.glDeleteProgram(bedProgram)
+        if (toolpathProgram != 0) GLES30.glDeleteProgram(toolpathProgram)
+        bedProgram = 0
+        toolpathProgram = 0
+        reportUnavailable()
     }
 
     private companion object {
+        const val RENDERER_LOG_TAG = "DuckyPreview"
         const val GPU_GEOMETRY_CACHE_SIZE = 2
         const val BED_FLOATS_PER_VERTEX = 8
         const val BED_STRIDE_BYTES = BED_FLOATS_PER_VERTEX * Float.SIZE_BYTES

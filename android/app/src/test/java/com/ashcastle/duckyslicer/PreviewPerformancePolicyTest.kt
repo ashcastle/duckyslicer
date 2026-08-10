@@ -1,6 +1,8 @@
 package com.ashcastle.duckyslicer
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PreviewPerformancePolicyTest {
@@ -70,5 +72,37 @@ class PreviewPerformancePolicyTest {
         assertEquals(120_000, depthPreviewSegmentBudget(PreviewDetail.DETAIL))
         assertEquals(250, compatibilityPreviewSegmentBudget(PreviewDetail.PERFORMANCE, refined = false))
         assertEquals(8_000, compatibilityPreviewSegmentBudget(PreviewDetail.DETAIL, refined = true))
+    }
+
+    @Test
+    fun depthRendererFailureFallsBackWithoutOverwritingTheUserPreference() {
+        assertTrue(
+            shouldUseDepthTestedPreview(
+                PreviewRenderingMode.DEPTH_TESTED,
+                deviceSupported = true,
+                runtimeAvailable = true,
+            ),
+        )
+        assertFalse(
+            shouldUseDepthTestedPreview(
+                PreviewRenderingMode.DEPTH_TESTED,
+                deviceSupported = true,
+                runtimeAvailable = false,
+            ),
+        )
+        assertFalse(
+            shouldUseDepthTestedPreview(
+                PreviewRenderingMode.DEPTH_TESTED,
+                deviceSupported = false,
+                runtimeAvailable = true,
+            ),
+        )
+        assertFalse(
+            shouldUseDepthTestedPreview(
+                PreviewRenderingMode.COMPATIBILITY,
+                deviceSupported = true,
+                runtimeAvailable = true,
+            ),
+        )
     }
 }

@@ -62,7 +62,11 @@ def valid_sources() -> dict[str, str]:
             ".allocateDirect(capacity * Float.SIZE_BYTES) .allocateDirect(capacity) "
             "setInteractionActive(true) postDelayed(restoreDetail, DETAIL_RESTORE_DELAY_MS) "
             "previewDetailForInteraction(sourceScene.detail, interactionActive) "
-            "depthPreviewSegmentBudget(scene.detail)"
+            "depthPreviewSegmentBudget(scene.detail) "
+            "reportFrameReady reportRendererStarting reportUnavailable "
+            "override fun surfaceDestroyed(holder: SurfaceHolder) "
+            "RENDERER_STARTUP_TIMEOUT_MS = 5_000L "
+            "GLES30.glGetError() failRenderer(\"program_creation\")"
         ),
         "WorkspaceScreen.kt": (
             "previewDeviceCapabilities(context) resolvePreviewDetail(previewDetail, previewCapabilities) "
@@ -74,6 +78,8 @@ def valid_sources() -> dict[str, str]:
             "var previewControlsExpanded by rememberSaveable PreviewSummaryHeader( "
             "Icons.Default.ExpandLess Icons.Default.ExpandMore "
             "summary.filamentGrams summary.filamentMeters"
+            " shouldUseDepthTestedPreview( depthPreviewRuntimeAvailable "
+            "onUnavailable = { depthPreviewRuntimeAvailable = false }"
             " private fun TransformSlider( modifier = Modifier.semantics "
             "contentDescription = label stateDescription = valueText @Composable"
             " private fun PreviewExportSplitButton( .width(48.dp) .height(50.dp) "
@@ -140,6 +146,7 @@ def valid_sources() -> dict[str, str]:
             "Slice outcome must retain Orca's print-time estimate "
             "Slice outcome must retain Orca's filament-length estimate "
             "Slice outcome must retain Orca's filament-mass estimate"
+            " A failed depth renderer must request compatibility fallback exactly once"
         ),
         "AccessibilityInstrumentedTest.kt": (
             "appSettingsExposeNamedSlidersWholeRowSwitchesAndHeadings "
@@ -168,7 +175,8 @@ def valid_sources() -> dict[str, str]:
             "automaticUsesBalancedQualityWhenTheDeviceHasHeadroom "
             "explicitQualityAlwaysWinsOverAutomaticDeviceSelection "
             "gesturesTemporarilyUseOneLowerGeometryTier "
-            "segmentBudgetsStayBoundedForBothRenderers"
+            "segmentBudgetsStayBoundedForBothRenderers "
+            "depthRendererFailureFallsBackWithoutOverwritingTheUserPreference"
         ),
         "ToolpathMeshBuilderTest.kt": (
             "balancedModeCapsDensePreviewGeometry "
@@ -211,7 +219,7 @@ def valid_sources() -> dict[str, str]:
             'name="toolpath_visibility_control" name="toolpath_depth_contrast_control" '
             'name="connection_timeout_control"'
         ),
-        "CONTRIBUTING.md": "Preview FloatArray VBO Automatic instanced 32-byte",
+        "CONTRIBUTING.md": "Preview FloatArray VBO Automatic instanced 32-byte fallback",
     }
 
 
@@ -301,6 +309,22 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "sourceScene.detail",
         )
         with self.assertRaisesRegex(VerificationError, "previewDetailForInteraction"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_missing_depth_renderer_failure_callback(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            "onUnavailable = { depthPreviewRuntimeAvailable = false }", ""
+        )
+        with self.assertRaisesRegex(VerificationError, "depthPreviewRuntimeAvailable"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_missing_depth_renderer_startup_watchdog(self) -> None:
+        sources = valid_sources()
+        sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
+            "RENDERER_STARTUP_TIMEOUT_MS = 5_000L", ""
+        )
+        with self.assertRaisesRegex(VerificationError, "RENDERER_STARTUP_TIMEOUT_MS"):
             verify_preview_boundary(sources)
 
     def test_rejects_missing_preview_export_split_button(self) -> None:

@@ -116,6 +116,13 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "postDelayed(restoreDetail, DETAIL_RESTORE_DELAY_MS)",
         "previewDetailForInteraction(sourceScene.detail, interactionActive)",
         "depthPreviewSegmentBudget(scene.detail)",
+        "reportFrameReady",
+        "reportRendererStarting",
+        "reportUnavailable",
+        "override fun surfaceDestroyed(holder: SurfaceHolder)",
+        "RENDERER_STARTUP_TIMEOUT_MS = 5_000L",
+        "GLES30.glGetError()",
+        'failRenderer("program_creation")',
     ):
         if marker not in renderer:
             raise VerificationError(f"GPU preview upload contract is missing: {marker}")
@@ -146,6 +153,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "Icons.Default.ExpandMore",
         "summary.filamentGrams",
         "summary.filamentMeters",
+        "shouldUseDepthTestedPreview(",
+        "depthPreviewRuntimeAvailable",
+        "onUnavailable = { depthPreviewRuntimeAvailable = false }",
     ):
         if marker not in workspace:
             raise VerificationError(f"preview device policy is not connected to the UI: {marker}")
@@ -391,6 +401,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "Slice outcome must retain Orca's print-time estimate",
         "Slice outcome must retain Orca's filament-length estimate",
         "Slice outcome must retain Orca's filament-mass estimate",
+        "A failed depth renderer must request compatibility fallback exactly once",
     ):
         if marker not in device:
             raise VerificationError(f"ARM64 GPU preview regression is missing: {marker}")
@@ -425,6 +436,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "explicitQualityAlwaysWinsOverAutomaticDeviceSelection",
         "gesturesTemporarilyUseOneLowerGeometryTier",
         "segmentBudgetsStayBoundedForBothRenderers",
+        "depthRendererFailureFallsBackWithoutOverwritingTheUserPreference",
     ):
         if marker not in policy_tests:
             raise VerificationError(f"adaptive preview host regression is missing: {marker}")
@@ -438,6 +450,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
             or "automatic" not in lowered
             or "instanced" not in lowered
             or "32-byte" not in lowered
+            or "fallback" not in lowered
         ):
             raise VerificationError(f"primitive preview boundary is not documented in {document}")
 
@@ -508,7 +521,7 @@ def main() -> None:
         raise SystemExit(f"Preview boundary verification failed: {error}") from error
     print(
         "Verified bounded FloatArray preview, responsive controls, adaptive detail, "
-        "compact instanced toolpaths, and a bounded prewarmed two-tier GPU cache"
+        "compact instanced toolpaths, bounded GPU caching, and automatic compatibility fallback"
     )
 
 

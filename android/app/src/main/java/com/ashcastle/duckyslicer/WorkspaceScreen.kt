@@ -167,6 +167,13 @@ internal fun workspaceEditingBusy(
     previewLoading: Boolean,
 ): Boolean = autoLaying || arranging || slicing || previewLoading
 
+internal fun shouldUseDepthTestedPreview(
+    renderingMode: PreviewRenderingMode,
+    deviceSupported: Boolean,
+    runtimeAvailable: Boolean,
+): Boolean = renderingMode == PreviewRenderingMode.DEPTH_TESTED &&
+    deviceSupported && runtimeAvailable
+
 internal fun filamentSlotColor(slot: Int): Color =
     FilamentSlotColors[Math.floorMod(slot, FilamentSlotColors.size)]
 
@@ -2074,14 +2081,16 @@ private fun BedScene(
 ) {
     val context = LocalContext.current
     val depthPreviewSupported = remember(context) { supportsDepthTestedPreview(context) }
+    var depthPreviewRuntimeAvailable by remember(previewRenderingMode) { mutableStateOf(true) }
     val previewCapabilities = remember(context) { previewDeviceCapabilities(context) }
     val effectivePreviewDetail = remember(previewDetail, previewCapabilities) {
         resolvePreviewDetail(previewDetail, previewCapabilities)
     }
-    if (
-        preview != null &&
-        previewRenderingMode == PreviewRenderingMode.DEPTH_TESTED &&
-        depthPreviewSupported
+    if (preview != null && shouldUseDepthTestedPreview(
+            renderingMode = previewRenderingMode,
+            deviceSupported = depthPreviewSupported,
+            runtimeAvailable = depthPreviewRuntimeAvailable,
+        )
     ) {
         DepthTestedToolpathScene(
             preview = preview,
@@ -2094,6 +2103,7 @@ private fun BedScene(
             depthContrast = toolpathDepthContrast,
             visibleRoles = visibleToolpathRoles,
             detail = effectivePreviewDetail,
+            onUnavailable = { depthPreviewRuntimeAvailable = false },
             modifier = modifier,
         )
         return

@@ -267,6 +267,21 @@ class NativeEngineInstrumentedTest {
                 GLES30.GL_NO_ERROR,
                 GLES30.glGetError(),
             )
+
+            var rendererFailures = 0
+            val failingRenderer = ToolpathRenderer(
+                reportUnavailable = { rendererFailures += 1 },
+                programFactory = { _, _ -> 0 },
+            )
+            failingRenderer.submit(scene)
+            failingRenderer.onSurfaceCreated(null, null)
+            failingRenderer.onSurfaceChanged(null, framebufferSize, framebufferSize)
+            failingRenderer.onDrawFrame(null)
+            assertEquals(
+                "A failed depth renderer must request compatibility fallback exactly once",
+                1,
+                rendererFailures,
+            )
         } finally {
             EGL14.eglMakeCurrent(
                 display,
