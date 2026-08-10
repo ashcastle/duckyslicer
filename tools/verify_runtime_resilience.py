@@ -20,12 +20,14 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "ProjectStore.kt",
         "ProfileStore.kt",
         "RemoteDevice.kt",
+        "RemoteOperationViewModel.kt",
         "MainActivity.kt",
         "DeviceSheet.kt",
         "DurableJsonFileTest.kt",
         "ProjectStoreTest.kt",
         "ProfileStoreMigrationTest.kt",
         "RemoteDeviceClientTest.kt",
+        "RemoteOperationViewModelTest.kt",
         "RemoteDeviceStoreTest.kt",
         "RemoteDeviceInstrumentedTest.kt",
         "CONTRIBUTING.md",
@@ -91,11 +93,33 @@ def verify_resilience(sources: dict[str, str]) -> None:
     if "remoteResultBelongsToSelection" not in remote:
         raise VerificationError("remote operation results are not bound to their printer profile")
 
+    remote_operation = sources["RemoteOperationViewModel.kt"]
+    for marker in (
+        "viewModelScope.launch",
+        "beginRemoteOperation",
+        "finishRemoteOperation",
+        "activeArtifactRevision",
+        "invalidateRemoteUpload",
+        "withRemoteUploadProgress",
+        "RemoteStatusSnapshot",
+        "SupportEvent.REMOTE_COMMAND_FAILED",
+    ):
+        if marker not in remote_operation:
+            raise VerificationError(f"remote operation lifecycle contract is missing: {marker}")
+    if remote_operation.count("remoteResultBelongsToSelection") < 4:
+        raise VerificationError("remote operation state can escape profile binding")
+
     main = sources["MainActivity.kt"]
-    if main.count("remoteResultBelongsToSelection") < 7:
-        raise VerificationError("remote result and progress callbacks can escape profile binding")
-    if "remoteUploadProgress = null\n            remoteMessage = null" not in main:
-        raise VerificationError("printer selection does not clear operation progress")
+    for marker in (
+        "ViewModelProvider(this)[RemoteOperationViewModel::class.java]",
+        "remoteOperationModel.state.collectAsStateWithLifecycle()",
+        "selectedRemoteDeviceId by rememberSaveable",
+        "remoteOperationModel.invalidateUpload()",
+    ):
+        if marker not in main:
+            raise VerificationError(f"remote operation Activity-recreation contract is missing: {marker}")
+    if "RemoteDeviceClient(" in main:
+        raise VerificationError("remote network work is still owned by the Activity composition")
 
     device_sheet = sources["DeviceSheet.kt"]
     selection_start = device_sheet.find(".selectable(")
@@ -158,6 +182,12 @@ def verify_resilience(sources: dict[str, str]) -> None:
             "cleartextDnsResultsAreValidatedAndPinnedBeforeCredentialsAreAttached",
             "cleartextHostnameRequestUsesThePinnedResolverAddress",
         ),
+        "RemoteOperationViewModelTest.kt": (
+            "resultsAreVisibleOnlyForTheirOriginatingProfile",
+            "staleCompletionCannotFinishANewerOperation",
+            "invalidatedUploadCannotBecomePrintable",
+            "commandCompletionRetainsFileAndUpdatesState",
+        ),
         "RemoteDeviceStoreTest.kt": (
             "credentialsUseGenerationsAndDoNotFollowAChangedEndpoint",
             "legacyProfileCredentialsMigrateWithoutEnteringPlaintextMetadata",
@@ -167,6 +197,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
             "orphanCleanupFailureKeepsProfilesVisibleAndRetriesLater",
         ),
         "RemoteDeviceInstrumentedTest.kt": (
+            "remoteRefreshSurvivesActivityRecreationAndRejectsDuplicateWork",
             "remoteDeviceMetadataRecoversFromLastKnownGoodBackup",
             "cleartextHostnameRequestUsesOneValidatedPinnedAddress",
         ),
@@ -188,6 +219,10 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "CONTRIBUTING.md"
     ]:
         raise VerificationError("contributor guidance does not preserve printer result binding")
+    if "Remote operations and their busy state must" not in sources["CONTRIBUTING.md"]:
+        raise VerificationError("contributor guidance does not preserve remote operation lifetime")
+    if "must never become eligible for Start Print" not in sources["CONTRIBUTING.md"]:
+        raise VerificationError("contributor guidance does not reject stale uploaded G-code")
     security = sources["SECURITY.md"]
     for marker in (
         "every current DNS answer",
@@ -211,6 +246,9 @@ def read_sources() -> dict[str, str]:
         "ProjectStore.kt": (main / "ProjectStore.kt").read_text(encoding="utf-8"),
         "ProfileStore.kt": (main / "ProfileStore.kt").read_text(encoding="utf-8"),
         "RemoteDevice.kt": (main / "RemoteDevice.kt").read_text(encoding="utf-8"),
+        "RemoteOperationViewModel.kt": (main / "RemoteOperationViewModel.kt").read_text(
+            encoding="utf-8"
+        ),
         "MainActivity.kt": (main / "MainActivity.kt").read_text(encoding="utf-8"),
         "DeviceSheet.kt": (main / "DeviceSheet.kt").read_text(encoding="utf-8"),
         "DurableJsonFileTest.kt": (tests / "DurableJsonFileTest.kt").read_text(encoding="utf-8"),
@@ -221,6 +259,9 @@ def read_sources() -> dict[str, str]:
         "RemoteDeviceClientTest.kt": (tests / "RemoteDeviceClientTest.kt").read_text(
             encoding="utf-8"
         ),
+        "RemoteOperationViewModelTest.kt": (
+            tests / "RemoteOperationViewModelTest.kt"
+        ).read_text(encoding="utf-8"),
         "RemoteDeviceStoreTest.kt": (tests / "RemoteDeviceStoreTest.kt").read_text(
             encoding="utf-8"
         ),

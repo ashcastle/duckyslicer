@@ -1,9 +1,13 @@
 package com.ashcastle.duckyslicer
 
+import android.os.SystemClock
+import androidx.lifecycle.ViewModelProvider
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -13,11 +17,85 @@ import java.net.ServerSocket
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import org.json.JSONObject
 
 @RunWith(AndroidJUnit4::class)
 class RemoteDeviceInstrumentedTest {
+    @Test
+    fun remoteRefreshSurvivesActivityRecreationAndRejectsDuplicateWork() {
+        val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        val requestAccepted = CountDownLatch(1)
+        val releaseResponse = CountDownLatch(1)
+        val serverFailure = AtomicReference<Throwable?>(null)
+        val worker = Thread {
+            runCatching {
+                server.accept().use { socket ->
+                    val input = BufferedInputStream(socket.getInputStream())
+                    val received = StringBuilder()
+                    var current: Int
+                    while (input.read().also { current = it } >= 0) {
+                        received.append(current.toChar())
+                        if (received.endsWith("\r\n\r\n")) break
+                    }
+                    requestAccepted.countDown()
+                    check(releaseResponse.await(5, TimeUnit.SECONDS))
+                    val body = """{"state":"Operational"}""".toByteArray(StandardCharsets.UTF_8)
+                    socket.getOutputStream().use { output ->
+                        output.write("HTTP/1.1 200 OK\r\n".toByteArray())
+                        output.write("Content-Type: application/json\r\n".toByteArray())
+                        output.write("Content-Length: ${body.size}\r\n".toByteArray())
+                        output.write("Connection: close\r\n\r\n".toByteArray())
+                        output.write(body)
+                    }
+                }
+            }.onFailure(serverFailure::set)
+        }.apply { start() }
+        val profile = RemoteDeviceProfile(
+            id = "retained-refresh",
+            name = "Retained printer",
+            kind = RemoteDeviceKind.OCTOPRINT,
+            baseUrl = "http://127.0.0.1:${server.localPort}",
+        )
+        val retainedModel = AtomicReference<RemoteOperationViewModel>()
+
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    val model = ViewModelProvider(activity)[RemoteOperationViewModel::class.java]
+                    retainedModel.set(model)
+                    assertTrue(model.refresh(profile, timeoutSeconds = 5))
+                }
+                assertTrue("Remote request did not start", requestAccepted.await(3, TimeUnit.SECONDS))
+
+                scenario.recreate()
+                scenario.onActivity { recreated ->
+                    val model = ViewModelProvider(recreated)[RemoteOperationViewModel::class.java]
+                    assertSame(retainedModel.get(), model)
+                    assertTrue(model.state.value.busy)
+                    assertFalse("Recreation allowed duplicate remote work", model.refresh(profile, 5))
+                }
+
+                releaseResponse.countDown()
+                val deadline = SystemClock.elapsedRealtime() + 5_000
+                val model = retainedModel.get()
+                while (model.state.value.busy && SystemClock.elapsedRealtime() < deadline) {
+                    SystemClock.sleep(25)
+                }
+                assertFalse("Retained remote request did not finish", model.state.value.busy)
+                assertEquals("Operational", model.state.value.statusFor(profile.id)?.state)
+            }
+        } finally {
+            releaseResponse.countDown()
+            worker.join(5_000)
+            server.close()
+        }
+        serverFailure.get()?.let { throw AssertionError("Local printer server failed", it) }
+        assertFalse("Local printer server did not stop", worker.isAlive)
+    }
+
     @Test
     fun octoPrintStatusUsesApiKeyAndParsesProgress() {
         withServer(

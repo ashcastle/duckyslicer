@@ -27,7 +27,9 @@ avoid introducing an account or cloud requirement.
 - Bind every remote status, upload-progress, and command result to the printer profile
   that started it. A late result must never update another selected printer or expose
   pause, resume, or cancel controls for the wrong device; keep profile changes disabled
-  while a remote operation is active.
+  while a remote operation is active. Remote operations and their busy state must
+  survive Activity recreation, and an upload completed after the project or slicing
+  inputs change must never become eligible for Start Print.
 - Keep Orca work off every Android main thread. New long-running operations must
   retain request-scoped cancellation, terminate only the isolated worker, and prove
   a clean follow-up operation on ARM64.

@@ -38,7 +38,8 @@ def valid_sources() -> dict[str, str]:
         ),
         "DeviceSheet.kt": (
             "profiles.forEach .selectable( role = Role.RadioButton "
-            "RadioButton(selected = isSelected, onClick = null) if (selected != null)"
+            "RadioButton(selected = isSelected, onClick = null, enabled = !busy) "
+            "if (selected != null)"
         ),
         "ProfileRecents.kt": (
             "data class ProfileRecents( MAX_RECENT_PROFILES = 5 class ProfileRecentStore "
@@ -167,7 +168,7 @@ class VerifyProfileEditorTest(unittest.TestCase):
     def test_rejects_duplicate_remote_device_radio_action(self) -> None:
         sources = valid_sources()
         sources["DeviceSheet.kt"] = sources["DeviceSheet.kt"].replace(
-            "RadioButton(selected = isSelected, onClick = null)",
+            "RadioButton(selected = isSelected, onClick = null",
             "RadioButton(selected = isSelected, onClick = { onSelect(profile.id) })",
         )
         with self.assertRaisesRegex(VerificationError, "remote device selection accessibility"):

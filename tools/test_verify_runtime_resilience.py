@@ -30,10 +30,18 @@ def valid_sources() -> dict[str, str]:
             "fun credential(profile: RemoteDeviceProfile) REMOTE_DEVICE_SCHEMA_VERSION = 2"
             " remoteResultBelongsToSelection"
         ),
+        "RemoteOperationViewModel.kt": (
+            "viewModelScope.launch beginRemoteOperation finishRemoteOperation "
+            "activeArtifactRevision invalidateRemoteUpload withRemoteUploadProgress "
+            "RemoteStatusSnapshot SupportEvent.REMOTE_COMMAND_FAILED "
+            + "remoteResultBelongsToSelection " * 4
+        ),
         "MainActivity.kt": (
             "projectPersistenceBlocked saved_data_unavailable "
-            + "remoteResultBelongsToSelection " * 7
-            + "remoteUploadProgress = null\n            remoteMessage = null"
+            "ViewModelProvider(this)[RemoteOperationViewModel::class.java] "
+            "remoteOperationModel.state.collectAsStateWithLifecycle() "
+            "selectedRemoteDeviceId by rememberSaveable "
+            "remoteOperationModel.invalidateUpload()"
         ),
         "DeviceSheet.kt": ".selectable( selected = true enabled = !busy ),",
         "DurableJsonFileTest.kt": (
@@ -48,6 +56,12 @@ def valid_sources() -> dict[str, str]:
             "cleartextDnsResultsAreValidatedAndPinnedBeforeCredentialsAreAttached "
             "cleartextHostnameRequestUsesThePinnedResolverAddress"
         ),
+        "RemoteOperationViewModelTest.kt": (
+            "resultsAreVisibleOnlyForTheirOriginatingProfile "
+            "staleCompletionCannotFinishANewerOperation "
+            "invalidatedUploadCannotBecomePrintable "
+            "commandCompletionRetainsFileAndUpdatesState"
+        ),
         "RemoteDeviceStoreTest.kt": (
             "credentialsUseGenerationsAndDoNotFollowAChangedEndpoint "
             "legacyProfileCredentialsMigrateWithoutEnteringPlaintextMetadata "
@@ -57,13 +71,16 @@ def valid_sources() -> dict[str, str]:
             "orphanCleanupFailureKeepsProfilesVisibleAndRetriesLater"
         ),
         "RemoteDeviceInstrumentedTest.kt": (
+            "remoteRefreshSurvivesActivityRecreationAndRejectsDuplicateWork "
             "remoteDeviceMetadataRecoversFromLastKnownGoodBackup "
             "cleartextHostnameRequestUsesOneValidatedPinnedAddress"
         ),
         "CONTRIBUTING.md": (
             "pin the connection target and bypass system proxies "
             "bind a replacement printer credential generation "
-            "Bind every remote status, upload-progress, and command result"
+            "Bind every remote status, upload-progress, and command result "
+            "Remote operations and their busy state must "
+            "must never become eligible for Start Print"
         ),
         "SECURITY.md": (
             "every current DNS answer DNS rebinding bypass system proxies "
@@ -96,10 +113,24 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
 
     def test_rejects_remote_results_without_profile_binding(self) -> None:
         sources = valid_sources()
-        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+        sources["RemoteOperationViewModel.kt"] = sources["RemoteOperationViewModel.kt"].replace(
             "remoteResultBelongsToSelection", "unboundRemoteResult", 1
         )
         with self.assertRaisesRegex(VerificationError, "profile binding"):
+            verify_resilience(sources)
+
+    def test_rejects_activity_owned_remote_network_work(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] += " RemoteDeviceClient(15000)"
+        with self.assertRaisesRegex(VerificationError, "Activity composition"):
+            verify_resilience(sources)
+
+    def test_rejects_remote_operations_without_artifact_revision(self) -> None:
+        sources = valid_sources()
+        sources["RemoteOperationViewModel.kt"] = sources["RemoteOperationViewModel.kt"].replace(
+            "activeArtifactRevision", "unboundArtifactRevision"
+        )
+        with self.assertRaisesRegex(VerificationError, "lifecycle contract"):
             verify_resilience(sources)
 
     def test_rejects_printer_selection_during_remote_operation(self) -> None:

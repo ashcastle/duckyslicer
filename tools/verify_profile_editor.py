@@ -150,7 +150,8 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
     for marker in (
         ".selectable(",
         "role = Role.RadioButton",
-        "RadioButton(selected = isSelected, onClick = null)",
+        "RadioButton(selected = isSelected, onClick = null",
+        "enabled = !busy",
     ):
         if marker not in device_choices:
             raise VerificationError(f"remote device selection accessibility is missing: {marker}")

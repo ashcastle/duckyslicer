@@ -143,6 +143,7 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
         "ProcessExitHistory.kt",
         "ProcessExitHistoryApi30.kt",
         "MainActivity.kt",
+        "RemoteOperationViewModel.kt",
         "AppSettingsSheet.kt",
         "SupportDiagnosticsTest.kt",
         "SupportDiagnosticsInstrumentedTest.kt",
@@ -237,8 +238,10 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
             "support event allowlist changed without a privacy review: "
             f"expected={sorted(EXPECTED_EVENTS)}, found={sorted(events)}"
         )
-    main = sources["MainActivity.kt"]
-    unrecorded = sorted(event for event in events if f"SupportEvent.{event}" not in main)
+    event_recorders = sources["MainActivity.kt"] + sources["RemoteOperationViewModel.kt"]
+    unrecorded = sorted(
+        event for event in events if f"SupportEvent.{event}" not in event_recorders
+    )
     if unrecorded:
         raise VerificationError(f"support problem categories are never recorded: {unrecorded}")
 
@@ -320,6 +323,9 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "MainActivity.kt": (package / "MainActivity.kt").read_text(encoding="utf-8"),
+        "RemoteOperationViewModel.kt": (package / "RemoteOperationViewModel.kt").read_text(
+            encoding="utf-8"
+        ),
         "AppSettingsSheet.kt": (package / "AppSettingsSheet.kt").read_text(encoding="utf-8"),
         "SupportDiagnosticsTest.kt": (
             ROOT
