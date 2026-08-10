@@ -213,6 +213,7 @@ internal fun WorkspaceScreen(
     importing: Boolean,
     autoLaying: Boolean,
     arranging: Boolean,
+    splitting: Boolean,
     slicing: Boolean,
     sliceCancellationRequested: Boolean,
     sliceProgress: Int,
@@ -234,6 +235,7 @@ internal fun WorkspaceScreen(
     onDuplicate: () -> Unit,
     onArrange: () -> Unit,
     onAutoLay: () -> Unit,
+    onSplit: () -> Unit,
     onSupportPaintPreview: (String, Int, SupportPaintState?) -> Unit,
     onSupportPaintCommitted: (String, SupportPaint) -> Unit,
     onRemoveModel: () -> Unit,
@@ -259,7 +261,7 @@ internal fun WorkspaceScreen(
     val selectedObject = projectObjects.firstOrNull { it.id == selectedObjectId }
     val model = selectedObject?.model ?: projectObjects.firstOrNull()?.model
     val modelTransform = selectedObject?.transform ?: ModelTransform()
-    val editingBusy = workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading)
+    val editingBusy = workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading) || splitting
     val tabletLayout = useWorkspaceNavigationRail(maxWidth.value, maxHeight.value)
     val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
     var showModelTools by remember { mutableStateOf(false) }
@@ -484,9 +486,15 @@ internal fun WorkspaceScreen(
             transform = modelTransform,
             bedSizeX = sliceOptions.bedSizeX,
             bedSizeY = sliceOptions.bedSizeY,
+            maxPrintHeight = sliceOptions.maxPrintHeight,
             bedPolygon = sliceOptions.bedPolygon,
             autoLaying = autoLaying,
+            splitting = splitting,
             onAutoLay = onAutoLay,
+            onSplit = {
+                showModelTools = false
+                onSplit()
+            },
             onTransformChanged = onModelTransformChanged,
             onRemoveModel = {
                 showModelTools = false
@@ -503,9 +511,12 @@ private fun ModelTransformSheet(
     transform: ModelTransform,
     bedSizeX: Float,
     bedSizeY: Float,
+    maxPrintHeight: Float,
     bedPolygon: List<Float>,
     autoLaying: Boolean,
+    splitting: Boolean,
     onAutoLay: () -> Unit,
+    onSplit: () -> Unit,
     onTransformChanged: (ModelTransform) -> Unit,
     onRemoveModel: () -> Unit,
     onDismiss: () -> Unit,
@@ -558,6 +569,14 @@ private fun ModelTransformSheet(
                 range = -bedSizeY / 2f..bedSizeY / 2f,
                 enabled = !autoLaying,
                 onValueChange = { onTransformChanged(constrainedTransform(transform.offsetXmm, it)) },
+            )
+            TransformSlider(
+                label = stringResource(R.string.move_z),
+                valueText = stringResource(R.string.millimeters_value, transform.offsetZmm),
+                value = transform.offsetZmm,
+                range = -maxPrintHeight..maxPrintHeight,
+                enabled = !autoLaying,
+                onValueChange = { onTransformChanged(transform.copy(offsetZmm = it)) },
             )
             TransformSlider(
                 label = stringResource(R.string.rotate_x),
@@ -619,7 +638,7 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onAutoLay,
-                enabled = !autoLaying,
+                enabled = !autoLaying && !splitting,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = WorkspaceYellow,
@@ -639,6 +658,19 @@ private fun ModelTransformSheet(
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.auto_lay))
                 }
+            }
+            Button(
+                onClick = onSplit,
+                enabled = !autoLaying && !splitting,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF3A3B37),
+                    contentColor = Color(0xFFF4F4EE),
+                ),
+            ) {
+                Icon(Icons.Default.Layers, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.split_to_objects))
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),

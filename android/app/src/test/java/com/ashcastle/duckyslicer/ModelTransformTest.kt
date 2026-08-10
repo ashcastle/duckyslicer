@@ -10,10 +10,12 @@ class ModelTransformTest {
         val transform = ModelTransform(
             offsetXmm = 12f,
             offsetYmm = -8f,
+            offsetZmm = 7f,
             rotationXdeg = 5f,
             rotationYdeg = 10f,
             rotationZdeg = 15f,
             scale = 1.5f,
+            mirrorX = true,
         )
         val orientation = OrcaOrientation(
             doubleArrayOf(Math.PI / 2.0, -Math.PI / 6.0, Math.PI / 2.0),
@@ -23,10 +25,12 @@ class ModelTransformTest {
             ModelTransform(
                 offsetXmm = 12f,
                 offsetYmm = -8f,
+                offsetZmm = 7f,
                 rotationXdeg = 90f,
                 rotationYdeg = -30f,
                 rotationZdeg = 90f,
                 scale = 1.5f,
+                mirrorX = true,
             ),
             transform.withOrcaOrientation(orientation),
         )

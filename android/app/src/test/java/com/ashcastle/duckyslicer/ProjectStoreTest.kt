@@ -36,6 +36,7 @@ class ProjectStoreTest {
                     transform = ModelTransform(
                         offsetXmm = 12f,
                         offsetYmm = -7f,
+                        offsetZmm = 9f,
                         rotationZdeg = 45f,
                         scale = 1.25f,
                         mirrorX = true,

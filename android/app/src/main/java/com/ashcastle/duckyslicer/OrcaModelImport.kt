@@ -170,7 +170,9 @@ private fun importedTransforms(
         pointInsideBedPolygon(minX, minY, machinePolygon) &&
             pointInsideBedPolygon(minX, maxY, machinePolygon) &&
             pointInsideBedPolygon(maxX, minY, machinePolygon) &&
-            pointInsideBedPolygon(maxX, maxY, machinePolygon)
+            pointInsideBedPolygon(maxX, maxY, machinePolygon) &&
+            geometry.model.minMm[2] >= 0.0 &&
+            geometry.model.maxMm[2] <= options.maxPrintHeight.toDouble()
     }
     val groupCenterX = (imported.minOf { it.model.minMm[0] } +
         imported.maxOf { it.model.maxMm[0] }).toFloat() / 2f
@@ -178,6 +180,7 @@ private fun importedTransforms(
         imported.maxOf { it.model.maxMm[1] }).toFloat() / 2f
     val targetCenterX = options.bedOriginX + options.bedSizeX / 2f
     val targetCenterY = options.bedOriginY + options.bedSizeY / 2f
+    val groupMinimumZ = imported.minOf { it.model.minMm[2] }.toFloat()
     return imported.map { geometry ->
         val centerX = if (preserveProjectPlacement) geometry.originalCenterX else {
             targetCenterX + geometry.originalCenterX - groupCenterX
@@ -188,6 +191,8 @@ private fun importedTransforms(
         ModelTransform(
             offsetXmm = centerX - targetCenterX,
             offsetYmm = centerY - targetCenterY,
+            offsetZmm = geometry.model.minMm[2].toFloat() -
+                if (preserveProjectPlacement) 0f else groupMinimumZ,
         )
     }
 }
