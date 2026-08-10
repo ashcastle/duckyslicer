@@ -21,6 +21,9 @@ Imported models, projects, printer and filament profiles, slicing settings, rece
 choices, generated G-code, and printer connection details are stored in the app's
 private storage. Printer access keys are protected with Android Keystore and are not
 included in exported printer profiles. Android backup is disabled for the app.
+A bounded history of recent problem categories and times is also kept locally so you
+can choose to create support details without installing a tracking service. It does
+not store error messages, stack traces, file names, printer addresses, or access keys.
 
 Background slicing uses an Android notification to show progress and let you reopen
 the app or cancel the current slice. It does not send models or G-code to the
@@ -39,6 +42,12 @@ DuckySlicer sends data only when you choose an action that requires it:
   local-network HTTP connection, that local traffic is not encrypted.
 - The source-code page opens GitHub in your browser only when you tap it. Your browser
   and GitHub then handle the request under their own privacy terms.
+- Support details are written only to a location you select. They contain the app and
+  Android versions, device manufacturer and model, memory and storage capacity,
+  non-sensitive display and connection preferences, and the fixed categories and
+  times of recent problems. They do not contain models, G-code, file names, printer
+  addresses, access keys, free-form error text, or stack traces. The DuckySlicer
+  project receives this report only if you choose to share it.
 
 Printer servers and selected storage providers may keep uploaded files or connection
 logs. DuckySlicer does not control their retention practices.
@@ -87,6 +96,9 @@ DuckySlicer 클라우드 서비스가 없습니다. DuckySlicer 프로젝트는 
 내용, 생성된 G-code와 프린터 연결 정보는 앱 전용 저장 공간에 보관됩니다.
 프린터 접속 키는 Android Keystore로 보호되며 내보낸 프린터 프로필에 포함되지
 않습니다. 이 앱은 Android 백업을 사용하지 않습니다.
+추적 서비스를 설치하지 않고도 지원 정보를 만들 수 있도록 최근 문제의 고정된
+분류와 발생 시각을 제한된 개수만 기기에 저장합니다. 오류 메시지, 스택 트레이스,
+파일 이름, 프린터 주소 또는 접속 키는 저장하지 않습니다.
 
 백그라운드 슬라이싱은 진행 상태를 보여주고 앱을 다시 열거나 현재 슬라이싱을
 취소할 수 있도록 Android 알림을 사용합니다. 모델이나 G-code를 DuckySlicer
@@ -105,6 +117,11 @@ DuckySlicer는 사용자가 다음 동작을 선택한 경우에만 필요한 �
   연결을 선택하면 해당 로컬 트래픽은 암호화되지 않습니다.
 - 소스 코드 페이지는 사용자가 누른 경우에만 브라우저에서 GitHub를 엽니다.
   이후 요청은 브라우저와 GitHub의 개인정보처리방침에 따라 처리됩니다.
+- 지원 정보는 사용자가 선택한 위치에만 저장됩니다. 앱 및 Android 버전, 기기
+  제조사와 모델, 메모리 및 저장 공간 용량, 민감하지 않은 화면·연결 설정, 최근
+  문제의 고정된 분류와 발생 시각이 포함됩니다. 모델, G-code, 파일 이름, 프린터
+  주소, 접속 키, 자유 형식 오류 내용 또는 스택 트레이스는 포함되지 않습니다.
+  사용자가 직접 공유한 경우에만 DuckySlicer 프로젝트가 이 정보를 받습니다.
 
 프린터 서버와 사용자가 선택한 저장 공간 제공자는 업로드된 파일이나 연결 로그를
 보관할 수 있습니다. DuckySlicer는 해당 서비스의 보관 방식을 통제하지 않습니다.

@@ -179,6 +179,9 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
     val appSettingsStore = remember(context.applicationContext) {
         AppSettingsStore(context.applicationContext)
     }
+    val supportEvents = remember(context.applicationContext) {
+        SupportEventJournal(context.applicationContext)
+    }
     var appSettings by remember { mutableStateOf(appSettingsStore.load()) }
     val remoteDeviceStore = remember(context.applicationContext) {
         RemoteDeviceStore(context.applicationContext)
@@ -200,19 +203,28 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
 
     LaunchedEffect(profileStore) {
         profileCatalog = withContext(Dispatchers.IO) { profileStore.load() }
-        if (profileStore.storageUnavailable) error = savedDataUnavailable
+        if (profileStore.storageUnavailable) {
+            supportEvents.record(SupportEvent.PROFILE_STORAGE_UNAVAILABLE)
+            error = savedDataUnavailable
+        }
     }
     LaunchedEffect(profileRecentStore) {
         profileRecents = withContext(Dispatchers.IO) { profileRecentStore.load() }
         profileRecentsLoaded = true
-        if (profileRecentStore.storageUnavailable) error = savedDataUnavailable
+        if (profileRecentStore.storageUnavailable) {
+            supportEvents.record(SupportEvent.PROFILE_STORAGE_UNAVAILABLE)
+            error = savedDataUnavailable
+        }
     }
     LaunchedEffect(projectStore) {
         val restored = withContext(Dispatchers.IO) { projectStore.loadProject() }
         projectHistory = ProjectHistoryState(current = restored.snapshot)
         restored.sliceOptions?.let { sliceOptions = it }
         projectPersistenceBlocked = restored.storageUnavailable
-        if (restored.storageUnavailable) error = savedDataUnavailable
+        if (restored.storageUnavailable) {
+            supportEvents.record(SupportEvent.PROJECT_STORAGE_UNAVAILABLE)
+            error = savedDataUnavailable
+        }
         projectRestored = true
     }
     LaunchedEffect(sliceOutcome?.output?.absolutePath) {
@@ -236,10 +248,12 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
                 error = null
             }
             SliceTerminalStatus.SLICE_FAILED -> {
+                supportEvents.record(SupportEvent.SLICE_FAILED)
                 error = sliceError
                 notice = null
             }
             SliceTerminalStatus.PREVIEW_FAILED -> {
+                supportEvents.record(SupportEvent.PREVIEW_FAILED)
                 error = previewError
                 notice = null
             }
@@ -254,6 +268,7 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
                 projectStore.save(projectHistory.current, sliceOptions)
             }
         }.onFailure {
+            supportEvents.record(SupportEvent.PROJECT_SAVE_FAILED)
             error = projectSaveError
             notice = null
         }
@@ -269,13 +284,17 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
         runCatching {
             withContext(Dispatchers.IO) { profileRecentStore.save(profileRecents) }
         }.onFailure {
+            supportEvents.record(SupportEvent.PROFILE_STORAGE_UNAVAILABLE)
             error = savedDataUnavailable
             notice = null
         }
     }
     LaunchedEffect(remoteDeviceStore) {
         remoteDevices = withContext(Dispatchers.IO) { remoteDeviceStore.load() }
-        if (remoteDeviceStore.storageUnavailable) error = savedDataUnavailable
+        if (remoteDeviceStore.storageUnavailable) {
+            supportEvents.record(SupportEvent.REMOTE_STORAGE_UNAVAILABLE)
+            error = savedDataUnavailable
+        }
         selectedRemoteDeviceId = selectedRemoteDeviceId
             ?.takeIf { selected -> remoteDevices.any { it.id == selected } }
             ?: remoteDevices.firstOrNull()?.id
@@ -359,6 +378,7 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
                 }
             }.onFailure { failure ->
                 if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Automatic lay failed", failure)
+                supportEvents.record(SupportEvent.AUTO_LAY_FAILED)
                 error = autoLayError
                 notice = null
             }
@@ -393,6 +413,7 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
                 }
             }.onFailure { failure ->
                 if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Automatic arrangement failed", failure)
+                supportEvents.record(SupportEvent.ARRANGE_FAILED)
                 error = arrangeError
                 notice = null
             }
@@ -429,7 +450,13 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
                         selectedTab = WorkspaceTab.SLICE
                     }
                     .onFailure { failure ->
-                        error = if (failure is ModelTooLargeException) modelTooLargeError else modelReadError
+                        if (failure is ModelTooLargeException) {
+                            supportEvents.record(SupportEvent.MODEL_TOO_LARGE)
+                            error = modelTooLargeError
+                        } else {
+                            supportEvents.record(SupportEvent.MODEL_IMPORT_FAILED)
+                            error = modelReadError
+                        }
                     }
                 importing = false
             }
@@ -455,6 +482,7 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
                     notice = savedNotice
                     error = null
                 }.onFailure {
+                    supportEvents.record(SupportEvent.GCODE_EXPORT_FAILED)
                     error = saveError
                     notice = null
                 }
@@ -569,6 +597,16 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
                 remoteMessage = successMessage
                 remoteMessageIsError = false
             }.onFailure { failure ->
+                supportEvents.record(
+                    if (
+                        failure is RemoteDeviceException &&
+                        failure.statusCode in setOf(401, 403)
+                    ) {
+                        SupportEvent.REMOTE_AUTH_FAILED
+                    } else {
+                        SupportEvent.REMOTE_COMMAND_FAILED
+                    },
+                )
                 remoteMessage = if (failure is RemoteDeviceException && failure.statusCode in setOf(401, 403)) {
                     remoteUnauthorizedError
                 } else if (failure is RemoteDeviceException) {
@@ -690,6 +728,7 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
                     error = null
                 }
                     .onFailure {
+                        supportEvents.record(SupportEvent.PRINTER_PROFILE_SAVE_FAILED)
                         error = profileSaveError
                         notice = null
                     }
@@ -708,6 +747,7 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
                     error = null
                 }
                     .onFailure {
+                        supportEvents.record(SupportEvent.FILAMENT_PROFILE_SAVE_FAILED)
                         error = profileSaveError
                         notice = null
                     }
@@ -726,6 +766,7 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
                     error = null
                 }
                     .onFailure {
+                        supportEvents.record(SupportEvent.SLICING_PROFILE_SAVE_FAILED)
                         error = profileSaveError
                         notice = null
                     }
@@ -759,6 +800,7 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
                         remoteMessage = remoteSavedNotice
                         remoteMessageIsError = false
                     }.onFailure {
+                        supportEvents.record(SupportEvent.REMOTE_PROFILE_SAVE_FAILED)
                         remoteMessage = remoteSaveError
                         remoteMessageIsError = true
                     }
@@ -785,6 +827,7 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
                         remoteMessage = remoteDeletedNotice
                         remoteMessageIsError = false
                     }.onFailure {
+                        supportEvents.record(SupportEvent.REMOTE_PROFILE_SAVE_FAILED)
                         remoteMessage = remoteSaveError
                         remoteMessageIsError = true
                     }
@@ -813,6 +856,16 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
                         remoteMessageIsError = false
                     }.onFailure { failure ->
                         remoteStatus = null
+                        supportEvents.record(
+                            if (
+                                failure is RemoteDeviceException &&
+                                failure.statusCode in setOf(401, 403)
+                            ) {
+                                SupportEvent.REMOTE_AUTH_FAILED
+                            } else {
+                                SupportEvent.REMOTE_CONNECTION_FAILED
+                            },
+                        )
                         remoteMessage = if (
                             failure is RemoteDeviceException && failure.statusCode in setOf(401, 403)
                         ) remoteUnauthorizedError else remoteConnectionError
@@ -844,6 +897,16 @@ private fun DuckySlicerScreen(sliceOperationModel: SliceOperationViewModel) {
                         remoteMessage = remoteUploadNotice
                         remoteMessageIsError = false
                     }.onFailure { failure ->
+                        supportEvents.record(
+                            if (
+                                failure is RemoteDeviceException &&
+                                failure.statusCode in setOf(401, 403)
+                            ) {
+                                SupportEvent.REMOTE_AUTH_FAILED
+                            } else {
+                                SupportEvent.REMOTE_CONNECTION_FAILED
+                            },
+                        )
                         remoteMessage = if (
                             failure is RemoteDeviceException && failure.statusCode in setOf(401, 403)
                         ) remoteUnauthorizedError else remoteConnectionError

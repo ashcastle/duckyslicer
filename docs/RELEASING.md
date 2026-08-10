@@ -135,6 +135,7 @@ python3 tools/verify_slice_storage.py
 python3 tools/verify_preview_boundary.py
 python3 tools/verify_runtime_resilience.py
 python3 tools/verify_data_practices.py
+python3 tools/verify_support_diagnostics.py
 python3 tools/verify_release_contract.py
 python3 tools/verify_play_bundle_workflow.py
 python3 tools/verify_workflows.py
