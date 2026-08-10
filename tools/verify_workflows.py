@@ -241,6 +241,12 @@ def main() -> None:
         "community contribution policy is unit tested": (
             "tools.test_verify_community_health"
         ),
+        "Google Play listing assets are verified": (
+            "python3 tools/verify_store_listing.py"
+        ),
+        "Google Play listing policy is unit tested": (
+            "tools.test_verify_store_listing"
+        ),
     }
     for description, marker in required_android_gates.items():
         if marker not in android_source:

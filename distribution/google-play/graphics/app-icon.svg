@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">DuckySlicer app icon</title>
+  <desc id="desc">A dark duck silhouette inside a yellow circle.</desc>
+  <circle cx="256" cy="256" r="224" fill="#F6C945"/>
+  <path fill="#202124" d="M160 245c0-75 43-128 107-128 53 0 85 32 85 75 43 0 75 21 85 53-32 21-75 32-117 21-11 64-53 107-117 107-53 0-96-32-107-85 21-21 43-32 64-43z"/>
+  <circle cx="288" cy="181" r="21" fill="#FFF9E8"/>
+</svg>

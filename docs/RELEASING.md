@@ -170,6 +170,17 @@ and [User Data policy](https://support.google.com/googleplay/android-developer/a
 when completing that review; do not rely on a previous Console submission after app
 behavior or Play definitions change.
 
+The reviewed English and Korean listing copy, declarations, icon, feature graphic,
+and five phone screenshots live under `distribution/google-play/`. Run
+`python3 tools/verify_store_listing.py` before opening Play Console. The verifier
+enforces the current text limits, image formats and dimensions, localized alt text,
+no-data declarations, and public test-model capture provenance. The screenshots are
+actual 1080 × 1920 app screens from the local Android 15 ARM64 16 KB emulator; do not
+replace them with private models or identifying printer information. Recheck the
+current official [listing field limits](https://support.google.com/googleplay/android-developer/answer/9859152?hl=en)
+and [preview asset requirements](https://support.google.com/googleplay/android-developer/answer/9866151?hl=en)
+before each submission because Console policy can change independently of the source.
+
 ## Local release output
 
 The default output directory is `build/local-release/<version>/`. It contains the

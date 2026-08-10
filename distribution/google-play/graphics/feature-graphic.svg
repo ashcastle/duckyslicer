@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="500" viewBox="0 0 1024 500" role="img" aria-labelledby="title desc">
+  <title id="title">DuckySlicer feature graphic</title>
+  <desc id="desc">A dark printer bed with a colorful layered toolpath and a small duck mark.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFE17A"/>
+      <stop offset="0.52" stop-color="#F6C945"/>
+      <stop offset="1" stop-color="#E7A51E"/>
+    </linearGradient>
+    <linearGradient id="bed" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#343832"/>
+      <stop offset="1" stop-color="#202124"/>
+    </linearGradient>
+    <clipPath id="bed-clip">
+      <polygon points="512,38 930,250 512,462 94,250"/>
+    </clipPath>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="500" fill="url(#background)"/>
+  <ellipse cx="512" cy="438" rx="350" ry="34" fill="#202124" opacity="0.28"/>
+  <polygon points="512,38 930,250 512,462 94,250" fill="url(#bed)" stroke="#FFF4C2" stroke-width="6"/>
+  <g clip-path="url(#bed-clip)" stroke="#747B70" stroke-width="2" opacity="0.72">
+    <path d="M-30 164L512 440L1054 164M-30 116L512 392L1054 116M-30 68L512 344L1054 68M-30 20L512 296L1054 20"/>
+    <path d="M-30 336L512 60L1054 336M-30 384L512 108L1054 384M-30 432L512 156L1054 432M-30 480L512 204L1054 480"/>
+  </g>
+  <g filter="url(#shadow)">
+    <path d="M376 277L512 208L648 277L512 346Z" fill="#8C7428" stroke="#F6C945" stroke-width="10"/>
+    <path d="M376 259L512 190L648 259L512 328Z" fill="#917728" stroke="#F6C945" stroke-width="10"/>
+    <path d="M376 241L512 172L648 241L512 310Z" fill="#252824" stroke="#F6C945" stroke-width="10"/>
+    <path d="M395 241L512 182L629 241L512 300Z" fill="none" stroke="#39C7EA" stroke-width="9"/>
+    <path d="M421 241L512 195L603 241L512 287Z" fill="none" stroke="#F04FC2" stroke-width="8"/>
+    <path d="M447 241L512 208L577 241L512 274Z" fill="#F6C945" opacity="0.92"/>
+  </g>
+  <g transform="translate(484 212) scale(1.15)">
+    <circle cx="24" cy="24" r="21" fill="#F6C945"/>
+    <path fill="#202124" d="M15 23c0-7 4-12 10-12 5 0 8 3 8 7 4 0 7 2 8 5-3 2-7 3-11 2-1 6-5 10-11 10-5 0-9-3-10-8 2-2 4-3 6-4z"/>
+    <circle cx="27" cy="17" r="2" fill="#FFF9E8"/>
+  </g>
+</svg>

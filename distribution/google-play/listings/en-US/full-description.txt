@@ -1,0 +1,21 @@
+Prepare 3D prints directly on your Android phone or tablet, fully offline.
+
+DuckySlicer lets you import a model, choose printer and filament profiles, slice on your device, inspect every layer, and export G-code. Your projects stay on your device unless you choose to export them or send G-code to a printer.
+
+What you can do
+• Import STL, OBJ, and 3MF models
+• Move, rotate, scale, arrange, split, and cut objects
+• Paint supports, seams, and filament colors
+• Choose from broad printer, filament, and slicing profile libraries
+• Adjust detailed quality, strength, speed, support, and other settings
+• Preview the full layer range with toolpath colors, time, and filament estimates
+• Export G-code
+• Optionally connect directly to OctoPrint or Klipper/Moonraker
+
+Made for mobile
+• One-finger and two-finger controls
+• Phone layout and a wider tablet layout
+• Device-language localization with English as the default
+• No account or DuckySlicer cloud service required
+
+DuckySlicer is an open-source project under active development. Check printer compatibility and review G-code before printing.

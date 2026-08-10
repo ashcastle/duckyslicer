@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "packageName": "com.ashcastle.duckyslicer",
+  "defaultLocale": "en-US",
+  "listingLocales": [
+    "en-US",
+    "ko-KR"
+  ],
+  "privacyPolicyUrl": "https://github.com/ashcastle/duckyslicer/blob/main/PRIVACY.md",
+  "supportUrl": "https://github.com/ashcastle/duckyslicer/issues/new?template=support_question.yml",
+  "appAccess": {
+    "loginRequired": false
+  },
+  "monetization": {
+    "containsAds": false
+  },
+  "dataSafety": {
+    "collectsData": false,
+    "sharesData": false
+  }
+}

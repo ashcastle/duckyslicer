@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "capture": {
+    "device": "Android 15 ARM64 16 KB emulator",
+    "resolution": "1080x1920",
+    "sourceModel": "tests/data/test_stl/ASCII/20mmbox-LF.stl",
+    "containsPrivateData": false
+  },
+  "appIcon": "graphics/app-icon.png",
+  "featureGraphic": "graphics/feature-graphic.png",
+  "phoneScreenshots": [
+    {
+      "path": "graphics/phone-screenshots/01-prepare.png",
+      "altText": {
+        "en-US": "A calibration cube on the print bed with printer, filament, and slicing profile controls.",
+        "ko-KR": "프린터, 필라멘트, 슬라이싱 프로필 설정과 출력 베드 위의 캘리브레이션 큐브."
+      }
+    },
+    {
+      "path": "graphics/phone-screenshots/02-printer-profiles.png",
+      "altText": {
+        "en-US": "Printer profiles grouped by brand with search and a Recent section.",
+        "ko-KR": "검색과 최근 항목을 제공하고 브랜드별로 접힌 프린터 프로필 목록."
+      }
+    },
+    {
+      "path": "graphics/phone-screenshots/03-slicing-profiles.png",
+      "altText": {
+        "en-US": "Slicing settings with profile and setting search plus Quality, Strength, Speed, and Supports tabs.",
+        "ko-KR": "프로필 및 설정 검색과 품질, 강도, 속도, 서포트 탭이 있는 슬라이싱 설정 화면."
+      }
+    },
+    {
+      "path": "graphics/phone-screenshots/04-layer-preview.png",
+      "altText": {
+        "en-US": "Full layered G-code preview of a calibration cube with print time and filament estimates.",
+        "ko-KR": "예상 출력 시간과 필라멘트 사용량이 표시된 캘리브레이션 큐브의 전체 G-code 레이어 미리보기."
+      }
+    },
+    {
+      "path": "graphics/phone-screenshots/05-preview-controls.png",
+      "altText": {
+        "en-US": "Layer range, visibility, height contrast, and color legend over the full preview.",
+        "ko-KR": "전체 미리보기 위에 펼쳐진 레이어 범위, 표시 강도, 높이 명암, 색상 범례."
+      }
+    }
+  ]
+}

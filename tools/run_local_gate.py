@@ -35,6 +35,7 @@ STATIC_VERIFIERS = (
     "verify_play_bundle_workflow.py",
     "verify_localization.py",
     "verify_community_health.py",
+    "verify_store_listing.py",
 )
 
 
