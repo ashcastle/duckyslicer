@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -12,6 +13,7 @@ WORKFLOW_ROOT = ROOT / ".github/workflows"
 PINNED_REF = re.compile(r"[0-9a-f]{40}")
 USES = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)", re.MULTILINE)
 JOB = re.compile(r"^  ([A-Za-z0-9_-]+):\s*$", re.MULTILINE)
+RUN = re.compile(r"^(?P<indent>\s*)(?:-\s*)?run:\s*\|\s*$")
 
 
 def job_sections(workflow: str) -> dict[str, str]:
@@ -27,19 +29,54 @@ def job_sections(workflow: str) -> dict[str, str]:
     }
 
 
-def literal_block(section: str, marker: str) -> list[str]:
-    _, separator, remainder = section.partition(marker + "\n")
-    if not separator:
-        return []
-    indentation = len(marker) - len(marker.lstrip()) + 2
-    values: list[str] = []
-    for line in remainder.splitlines():
-        if not line.strip():
+def literal_run_blocks(workflow: str) -> tuple[str, ...]:
+    """Return YAML literal `run: |` blocks without requiring a YAML dependency."""
+    lines = workflow.splitlines()
+    blocks: list[str] = []
+    for index, line in enumerate(lines):
+        match = RUN.match(line)
+        if match is None:
             continue
-        if len(line) - len(line.lstrip()) < indentation:
-            break
-        values.append(line.strip())
-    return values
+        parent_indent = len(match.group("indent"))
+        raw: list[str] = []
+        for candidate in lines[index + 1 :]:
+            indentation = len(candidate) - len(candidate.lstrip())
+            if candidate.strip() and indentation <= parent_indent:
+                break
+            raw.append(candidate)
+        content_indents = [
+            len(candidate) - len(candidate.lstrip())
+            for candidate in raw
+            if candidate.strip()
+        ]
+        if not content_indents:
+            blocks.append("")
+            continue
+        content_indent = min(content_indents)
+        blocks.append(
+            "\n".join(
+                candidate[content_indent:] if candidate.strip() else ""
+                for candidate in raw
+            ).rstrip()
+            + "\n"
+        )
+    return tuple(blocks)
+
+
+def shell_syntax_errors(name: str, workflow: str) -> list[str]:
+    errors: list[str] = []
+    for index, script in enumerate(literal_run_blocks(workflow), start=1):
+        result = subprocess.run(
+            ("bash", "-n"),
+            input=script,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or "unknown Bash parser error"
+            errors.append(f"{name}: run block {index} has invalid Bash syntax: {detail}")
+    return errors
 
 
 def main() -> None:
@@ -50,6 +87,7 @@ def main() -> None:
         raise SystemExit("No GitHub Actions workflows found")
     for workflow in workflows:
         source = workflow.read_text(encoding="utf-8")
+        errors.extend(shell_syntax_errors(workflow.name, source))
         for reference in USES.findall(source):
             if reference.startswith("./"):
                 continue
@@ -62,16 +100,29 @@ def main() -> None:
                 errors.append(f"{workflow.name}: Action is not pinned to a full commit: {reference}")
 
     android_source = (WORKFLOW_ROOT / "android.yml").read_text(encoding="utf-8")
-    release_source = (WORKFLOW_ROOT / "release.yml").read_text(encoding="utf-8")
+    release_source = (WORKFLOW_ROOT / "sign-local-release.yml").read_text(encoding="utf-8")
     play_source = (WORKFLOW_ROOT / "play-bundle.yml").read_text(encoding="utf-8")
     android_jobs = job_sections(android_source)
     release_jobs = job_sections(release_source)
-    expected_release_jobs = {"build", "sign", "publish"}
+    expected_release_jobs = {"validate", "sign", "publish"}
     if set(release_jobs) != expected_release_jobs:
         errors.append(
-            "release.yml: expected build, sign, and publish jobs; "
+            "sign-local-release.yml: expected validate, sign, and publish jobs; "
             f"found {sorted(release_jobs)}"
         )
+    release_header, release_separator, _ = release_source.partition("\njobs:\n")
+    if not release_separator or "workflow_dispatch:" not in release_header:
+        errors.append("sign-local-release.yml: release signing must be manually dispatched")
+    for automatic_trigger in ("pull_request:", "push:", "schedule:"):
+        if automatic_trigger in release_header:
+            errors.append(
+                "sign-local-release.yml: release signing must not use automatic trigger: "
+                + automatic_trigger
+            )
+    for workflow in workflows:
+        header = workflow.read_text(encoding="utf-8").partition("\njobs:\n")[0]
+        if "tags:" in header:
+            errors.append(f"{workflow.name}: tag-triggered hosted releases are not allowed")
     required_android_gates = {
         "Gradle uses strict dependency verification": (
             "./gradlew --dependency-verification=strict"
@@ -102,6 +153,12 @@ def main() -> None:
         "source bundle policy is unit tested": "tools.test_generate_source_bundle",
         "release reproducibility policy is unit tested": (
             "tools.test_verify_reproducible_release"
+        ),
+        "local release preparation is unit tested": (
+            "tools.test_prepare_local_release"
+        ),
+        "workflow shell syntax verification is unit tested": (
+            "tools.test_verify_workflows"
         ),
         "runtime resilience policy is unit tested": (
             "tools.test_verify_runtime_resilience"
@@ -206,105 +263,57 @@ def main() -> None:
     if "device-tests" in android_jobs or "runs-on: macos-14" in android_source:
         errors.append("android.yml: hosted emulator jobs are not allowed")
     if "app-release.aab" in release_jobs.get("publish", ""):
-        errors.append("release.yml: GitHub Releases must remain APK-only")
+        errors.append("sign-local-release.yml: GitHub Releases must remain APK-only")
 
     required_release_gates = {
-        "sign depends on build": "  sign:\n    needs: build\n",
-        "publish depends on build and signer": (
-            "  publish:\n    needs: [build, sign]\n"
+        "validate accepts the local artifact digest": "unsigned_sha256:",
+        "validate accepts the Android version code": "version_code:",
+        "validate accepts the exact source commit": "source_commit:",
+        "validate requires a main-branch dispatch": (
+            'if [ "$GITHUB_REF" != "refs/heads/main" ]'
         ),
-        "publish has attestation permission": "      attestations: write\n",
+        "validate checks the tag commit": (
+            'gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq .sha'
+        ),
+        "validate checks the local SHA-256": (
+            'if [ "$actual_sha256" != "$UNSIGNED_SHA256" ]'
+        ),
+        "validate checks package identity": (
+            'package_name" != "com.ashcastle.duckyslicer"'
+        ),
+        "validate checks version code": (
+            'actual_version_code" != "$RELEASE_VERSION_CODE"'
+        ),
+        "validate checks version name": (
+            'actual_version_name" != "$version"'
+        ),
+        "validate checks 16 KB alignment": (
+            'zipalign" -c -P 16 -v 4 "$unsigned_apk"'
+        ),
+        "validate rejects a pre-signed input": (
+            'apksigner" verify "$unsigned_apk"'
+        ),
+        "validate retains the exact unsigned bytes": (
+            "name: duckyslicer-local-unsigned-${{ github.run_id }}"
+        ),
+        "sign depends on validation": "  sign:\n    needs: validate\n",
+        "publish depends on validation and signer": (
+            "  publish:\n    needs: [validate, sign]\n"
+        ),
         "publish has release permission": "      contents: write\n",
-        "signed release APK runs structural verifier": (
-            'python3 tools/verify_apk.py "${release_apks[0]}"'
+        "publish rechecks the tag commit": (
+            "Release tag changed after local artifact validation"
         ),
-        "build provenance covers only the published APK": (
-            'subject-path: "release/DuckySlicer-*-arm64.apk"'
+        "publish requires the draft to remain unpublished": (
+            "Release was published before the isolated signer completed"
         ),
-        "Gradle uses strict dependency verification": (
-            "./gradlew --dependency-verification=strict"
-        ),
-        "Gradle trust data is structurally verified": (
-            "python3 tools/verify_gradle_supply_chain.py"
-        ),
-        "credential-bearing signed URLs are rejected": (
-            "python3 tools/verify_no_embedded_credentials.py"
-        ),
-        "Rust compiler is pinned": "toolchain: 1.91.1",
-        "Rust JNI failure containment is verified": (
-            "python3 tools/verify_native_safety.py"
-        ),
-        "Orca runtime process isolation is verified": (
-            "python3 tools/verify_android_isolation.py"
-        ),
-        "offline open-source distribution is verified": (
-            "python3 tools/verify_open_source_distribution.py"
-        ),
-        "runtime persistence and LAN inputs are bounded": (
-            "python3 tools/verify_runtime_resilience.py"
-        ),
-        "component license inventory is generated": (
-            "python3 tools/generate_license_inventory.py"
-        ),
-        "offline license policy is unit tested": "tools.test_generate_offline_licenses",
-        "source bundle policy is unit tested": "tools.test_generate_source_bundle",
-        "release reproducibility policy is unit tested": (
-            "tools.test_verify_reproducible_release"
-        ),
-        "runtime resilience policy is unit tested": (
-            "tools.test_verify_runtime_resilience"
-        ),
-        "data-practice explanation is verified": (
-            "python3 tools/verify_data_practices.py"
-        ),
-        "data-practice policy is unit tested": "tools.test_verify_data_practices",
-        "support details are privacy bounded": (
-            "python3 tools/verify_support_diagnostics.py"
-        ),
-        "support-detail policy is unit tested": (
-            "tools.test_verify_support_diagnostics"
-        ),
-        "portable projects are bounded and atomic": (
-            "python3 tools/verify_project_archive.py"
-        ),
-        "project-archive policy is unit tested": "tools.test_verify_project_archive",
-        "release publication contract is verified": (
-            "python3 tools/verify_release_contract.py"
-        ),
-        "release publication contract is unit tested": (
-            "tools.test_verify_release_contract"
-        ),
-        "Play bundle isolation is verified": (
-            "python3 tools/verify_play_bundle_workflow.py"
-        ),
-        "Play bundle isolation is unit tested": (
-            "tools.test_verify_play_bundle_workflow"
-        ),
-        "generated G-code storage policy is verified": (
-            "python3 tools/verify_slice_storage.py"
-        ),
-        "generated G-code storage policy is unit tested": (
-            "tools.test_verify_slice_storage"
-        ),
-        "primitive preview boundary is verified": (
-            "python3 tools/verify_preview_boundary.py"
-        ),
-        "primitive preview boundary is unit tested": (
-            "tools.test_verify_preview_boundary"
-        ),
-        "unsigned release is rebuilt without the build cache": (
-            "Rebuild and verify reproducible unsigned release"
-        ),
-        "unsigned release bytes are compared": (
-            "python3 tools/verify_reproducible_release.py"
-        ),
-        "recursive corresponding source is generated": (
-            "python3 tools/generate_source_bundle.py"
+        "publish checks exactly one signed asset": (
+            "Refusing to publish a release without exactly one signed APK"
         ),
     }
     for description, marker in required_release_gates.items():
         if marker not in release_source:
-            errors.append(f"release.yml: missing gate: {description}")
+            errors.append(f"sign-local-release.yml: missing gate: {description}")
 
     required_play_gates = {
         "manual dispatch only": "  workflow_dispatch:\n",
@@ -327,20 +336,21 @@ def main() -> None:
         if marker not in play_source:
             errors.append(f"play-bundle.yml: missing gate: {description}")
 
-    build = release_jobs.get("build", "")
+    validate = release_jobs.get("validate", "")
     signer = release_jobs.get("sign", "")
     publish = release_jobs.get("publish", "")
-    release_assets = literal_block(publish, "          files: |")
-    if release_assets != ["release/DuckySlicer-*-arm64.apk"]:
-        errors.append(
-            "release.yml: GitHub Release assets must contain exactly the signed ARM64 APK; "
-            f"found {release_assets}"
-        )
     isolated_signing_rules = {
-        "build produces an unsigned release": (
-            "app-release-unsigned.apk" in build
-            and "${{ secrets." not in build
-            and "apksigner sign" not in build
+        "validation has read-only source access": (
+            "permissions:\n      contents: read" in validate
+            and "contents: write" not in validate
+            and "environment: release" not in validate
+            and "${{ secrets." not in validate
+        ),
+        "validation does not build or execute repository code": (
+            "actions/checkout@" not in validate
+            and "./gradlew" not in validate
+            and "cargo " not in validate
+            and "python3 tools/" not in validate
         ),
         "signer uses the protected release environment": "environment: release" in signer,
         "signer has artifact-read permission only": (
@@ -350,7 +360,8 @@ def main() -> None:
             and "attestations:" not in signer
         ),
         "signer receives all secrets only in its own section": (
-            signer.count("${{ secrets.") == 4 and "${{ secrets." not in publish
+            signer.count("${{ secrets.") == 4
+            and release_source.count("${{ secrets.") == 4
         ),
         "signer does not checkout or execute project build code": (
             "actions/checkout@" not in signer
@@ -365,63 +376,44 @@ def main() -> None:
         "signer removes its temporary keystore before later actions": (
             "trap 'rm -f \"$key_file\"' EXIT" in signer
         ),
+        "signer rechecks the validated unsigned digest": (
+            "Validated unsigned artifact changed before signing" in signer
+        ),
         "hosted emulator jobs are absent": (
             "device-tests" not in release_jobs
             and "runs-on: macos-14" not in release_source
             and "system-images;android-35;google_apis_ps16k" not in release_source
         ),
-        "publish regenerates the SBOM from the signed artifact": (
-            "tools/generate_sbom.py" in publish
-            and "duckyslicer-release-signed" in publish
-        ),
-        "publish verifies a release checksum manifest": (
-            "SHA256SUMS.txt" in publish and "sha256sum --check" in publish
-        ),
-        "build publishes recursive corresponding source": (
-            "duckyslicer-release-source" in build
-            and "DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-source.tar.gz" in build
-            and "DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-SOURCE-MANIFEST.json" in build
-        ),
-        "publish verifies corresponding source before release": (
-            "duckyslicer-release-source" in publish
-            and "tools/generate_source_bundle.py --verify" in publish
-            and "source.tar.gz" in publish
-            and "SOURCE-MANIFEST.json" in publish
-        ),
-        "release checksums cover corresponding source": (
-            '"DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-source.tar.gz"' in publish
-            and '"DuckySlicer-$DUCKYSLICER_RELEASE_VERSION-SOURCE-MANIFEST.json"'
-            in publish
+        "publish has no signing secrets or repository code": (
+            "${{ secrets." not in publish
+            and "actions/checkout@" not in publish
+            and "./gradlew" not in publish
+            and "python3 tools/" not in publish
         ),
         "only publish can write releases": (
             release_source.count("contents: write") == 1
             and "contents: write" in publish
-            and release_source.count("attestations: write") == 1
-            and "attestations: write" in publish
+            and "contents: write" not in signer
+            and "attestations: write" not in release_source
+        ),
+        "GitHub never builds the release candidate": (
+            "./gradlew" not in release_source
+            and "assembleRelease" not in release_source
+            and "actions/checkout@" not in release_source
         ),
     }
     for description, valid in isolated_signing_rules.items():
         if not valid:
-            errors.append(f"release.yml: isolated signing invariant failed: {description}")
-
-    reproducibility_order = (
-        build.find("Stage first release build"),
-        build.find("Rebuild and verify reproducible unsigned release"),
-        build.find("Generate recursive corresponding source"),
-    )
-    if min(reproducibility_order) < 0 or reproducibility_order != tuple(
-        sorted(reproducibility_order)
-    ):
-        errors.append(
-            "release.yml: first build staging, independent rebuild, and source generation "
-            "must run in that order"
-        )
+            errors.append(
+                "sign-local-release.yml: isolated signing invariant failed: "
+                + description
+            )
 
     if errors:
         raise SystemExit("Workflow verification failed:\n- " + "\n- ".join(errors))
     print(
         f"Verified {len(workflows)} workflows and {action_count} immutable Action references; "
-        "CodeQL, isolated signing, and static ARM64 16 KB checks are enforced"
+        "CodeQL, local-only release signing, and static ARM64 16 KB checks are enforced"
     )
 
 
