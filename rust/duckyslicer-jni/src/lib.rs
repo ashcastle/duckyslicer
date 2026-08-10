@@ -139,13 +139,14 @@ impl PreviewPathAccumulator {
             });
             self.next_order = self.next_order.saturating_add(1);
         }
-        let current = self.current.as_mut().expect("preview path was initialized");
-        current.segments.push(segment);
-        if current.segments.len() > PREVIEW_COMPACTION_THRESHOLD {
-            current.segments = simplify_continuous_path(
-                std::mem::take(&mut current.segments),
-                MAX_PREVIEW_SEGMENTS,
-            );
+        if let Some(current) = self.current.as_mut() {
+            current.segments.push(segment);
+            if current.segments.len() > PREVIEW_COMPACTION_THRESHOLD {
+                current.segments = simplify_continuous_path(
+                    std::mem::take(&mut current.segments),
+                    MAX_PREVIEW_SEGMENTS,
+                );
+            }
         }
     }
 
@@ -322,13 +323,13 @@ fn compact_preview_paths(mut paths: Vec<PreviewPath>, limit: usize) -> Vec<Previ
         }
     }
 
-    if used == 0 {
-        let smallest_index = paths
+    if used == 0
+        && let Some(smallest_index) = paths
             .iter()
             .enumerate()
             .min_by_key(|(_, path)| path.segments.len())
             .map(|(index, _)| index)
-            .expect("non-empty preview paths");
+    {
         paths[smallest_index].segments =
             simplify_continuous_path(std::mem::take(&mut paths[smallest_index].segments), limit);
         selected[smallest_index] = true;
@@ -1070,15 +1071,20 @@ fn preview_gcode(
             }
         });
 
-        let in_requested_range =
-            current_layer.is_some_and(|layer| (start_layer..=end_layer).contains(&layer));
-        if in_requested_range && extruding && (next_x != x || next_y != y) {
-            preview_paths.push(
-                current_layer.expect("requested preview motion has a layer"),
-                toolpath_role,
-                [x, y, next_x, next_y, layer_z, toolpath_role.code()],
-            );
-        } else if next_x != x || next_y != y {
+        let moved = next_x != x || next_y != y;
+        let requested_layer =
+            current_layer.filter(|layer| (start_layer..=end_layer).contains(layer));
+        if extruding && moved {
+            if let Some(layer) = requested_layer {
+                preview_paths.push(
+                    layer,
+                    toolpath_role,
+                    [x, y, next_x, next_y, layer_z, toolpath_role.code()],
+                );
+            } else {
+                preview_paths.break_path();
+            }
+        } else if moved {
             preview_paths.break_path();
         }
 
