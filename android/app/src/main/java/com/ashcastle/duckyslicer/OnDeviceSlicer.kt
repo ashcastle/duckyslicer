@@ -1240,6 +1240,11 @@ object OnDeviceSlicer {
                 range.layerHeightMm in 0.04f..maximumLayerHeight
             }
         }) { "Variable layer height is unavailable for this nozzle" }
+        require(objects.all { projectObject ->
+            projectObject.processOverrides.layerHeightMm?.let {
+                it in 0.04f..maximumLayerHeight
+            } != false
+        }) { "Object layer height is unavailable for this nozzle" }
 
         return withTransformedModels(
             objects,
@@ -1290,6 +1295,17 @@ object OnDeviceSlicer {
                         ).also(it::writeSidecar)
                     }
             }
+            val processOverrideFiles = objects.mapIndexed { index, projectObject ->
+                projectObject.processOverrides
+                    .takeUnless(ObjectProcessOverrides::isEmpty)
+                    ?.let {
+                        File.createTempFile(
+                            "slice-process-$index-",
+                            ".bin",
+                            File(projectObject.model.localPath).parentFile,
+                        ).also(it::writeSidecar)
+                    }
+            }
             try {
                 SlicerProcessClient.slice(
                     transformedModels,
@@ -1297,6 +1313,7 @@ object OnDeviceSlicer {
                     seamPaintFiles,
                     multiColorPaintFiles,
                     variableLayerHeightFiles,
+                    processOverrideFiles,
                     options,
                     filamentSlots = objects.map(ProjectObject::filamentSlot).toIntArray(),
                     foregroundSession = foregroundSession,
@@ -1308,6 +1325,7 @@ object OnDeviceSlicer {
                 seamPaintFiles.filterNotNull().forEach(File::delete)
                 multiColorPaintFiles.filterNotNull().forEach(File::delete)
                 variableLayerHeightFiles.filterNotNull().forEach(File::delete)
+                processOverrideFiles.filterNotNull().forEach(File::delete)
             }
         }
     }

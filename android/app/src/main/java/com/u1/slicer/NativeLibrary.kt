@@ -33,6 +33,7 @@ class NativeLibrary(
     external fun applySeamPaint(objectIndex: Int, sidecarPath: String): Boolean
     external fun applyMultiColorPaint(objectIndex: Int, sidecarPath: String): Boolean
     external fun applyVariableLayerHeights(objectIndex: Int, sidecarPath: String): Boolean
+    external fun applyObjectProcessOverrides(objectIndex: Int, sidecarPath: String): Boolean
     external fun getObjectBoundingBoxes(): FloatArray
     external fun nativeGetObjectWorldAABBMins(): FloatArray
     external fun nativeExportLoadedObjects(outputDirectory: String): Array<String>?

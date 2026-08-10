@@ -520,4 +520,14 @@
     <string name="object_filament">Object filament</string>
     <string name="filament_tool_summary">T%1$d · %2$s</string>
     <string name="filament_slot_unavailable">No filament slot is available for this printer.</string>
+    <string name="object_process_settings">Object settings</string>
+    <string name="object_process_settings_summary">Use different process values for this object while the rest of the plate keeps the selected profile.</string>
+    <string name="object_setting_profile_value">Profile · %1$s</string>
+    <string name="object_setting_override_value">This object · %1$s</string>
+    <string name="object_setting_on">On</string>
+    <string name="object_setting_off">Off</string>
+    <string name="enable_for_object">Generate support for this object</string>
+    <string name="wall_loops">Wall loops</string>
+    <string name="sparse_infill_density">Sparse infill density</string>
+    <string name="outer_wall_speed">Outer wall speed</string>
 </resources>

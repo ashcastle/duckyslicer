@@ -35,6 +35,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                             selectedTab = WorkspaceTab.PROJECT,
                             projectObjects = listOf(accessibilityProjectObject()),
                         )
+                        SCREEN_OBJECT_SETTINGS -> ObjectSettingsAccessibilityHarness()
                         SCREEN_WORKSPACE -> {
                             val density = LocalDensity.current
                             CompositionLocalProvider(
@@ -58,7 +59,19 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_SETTINGS = "settings"
         const val SCREEN_PROJECT = "project"
         const val SCREEN_WORKSPACE = "workspace"
+        const val SCREEN_OBJECT_SETTINGS = "object-settings"
     }
+}
+
+@Composable
+private fun ObjectSettingsAccessibilityHarness() {
+    var overrides by remember { mutableStateOf(ObjectProcessOverrides()) }
+    ObjectProcessSettingsSheet(
+        current = overrides,
+        options = SliceOptions(),
+        onApply = { overrides = it },
+        onDismiss = {},
+    )
 }
 
 @Composable
@@ -209,6 +222,7 @@ private fun WorkspaceAccessibilityHarness(
         onMultiColorPaintPreview = { _, _, _ -> },
         onMultiColorPaintCommitted = { _, _ -> },
         onVariableLayerHeightsChanged = {},
+        onObjectProcessOverridesChanged = {},
         onRemoveModel = {},
         onSlice = {},
         onCancelSlice = {},

@@ -120,6 +120,7 @@ internal class ProjectStore(
                         seamPaint = archived.seamPaint,
                         multiColorPaint = archived.multiColorPaint,
                         variableLayerHeights = archived.variableLayerHeights,
+                        processOverrides = archived.processOverrides,
                         filamentSlot = archived.filamentSlot,
                     )
                 },
@@ -285,6 +286,9 @@ internal class ProjectStore(
         val variableLayerHeights = value.optJSONArray("variableLayerHeights")
             ?.toVariableLayerHeights()
             ?: VariableLayerHeights()
+        val processOverrides = value.optJSONObject("processOverrides")
+            ?.toObjectProcessOverrides()
+            ?: ObjectProcessOverrides()
         val filamentSlot = value.optInt("filamentSlot", 0)
         require(filamentSlot in 0 until MAX_FILAMENT_SLOTS) { "Filament slot is invalid" }
         return ProjectObject(
@@ -295,6 +299,7 @@ internal class ProjectStore(
             seamPaint = seamPaint,
             multiColorPaint = multiColorPaint,
             variableLayerHeights = variableLayerHeights,
+            processOverrides = processOverrides,
             filamentSlot = filamentSlot,
         )
     }
@@ -351,6 +356,9 @@ internal class ProjectStore(
             if (schemaVersion >= 6) {
                 require(value.optJSONArray("multiColorPaint")?.isValidMultiColorPaintArray() == true)
             }
+            if (schemaVersion >= 7) {
+                require(value.optJSONObject("processOverrides")?.toObjectProcessOverrides() != null)
+            }
             require(value.optInt("filamentSlot", 0) in 0 until MAX_FILAMENT_SLOTS)
         }
         val selected = root.takeUnless { it.isNull("selectedObjectId") }
@@ -380,6 +388,7 @@ internal class ProjectStore(
             .put("seamPaint", seamPaint.toStoredJson())
             .put("multiColorPaint", multiColorPaint.toStoredJson())
             .put("variableLayerHeights", variableLayerHeights.toStoredJson())
+            .put("processOverrides", processOverrides.toProjectJson())
             .put("filamentSlot", filamentSlot.takeIf { it in 0 until MAX_FILAMENT_SLOTS }
                 ?: error("Invalid filament slot"))
     }
@@ -590,7 +599,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 6
+        const val SCHEMA_VERSION = 7
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"
