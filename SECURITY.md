@@ -38,6 +38,12 @@ and cleanup can inspect or remove the private draft but receive no signing mater
 the signer can read only the validated Actions artifact. The workflow has no Play
 Console credentials and cannot select a track or start a rollout.
 
+Release and Play preparation inspect the final merged APK manifest produced after
+dependency manifest merging. The gate requires API 36 targeting, the exact permission
+and component allowlists, disabled backup and release debugging, isolated slicer service
+attributes, and content-only external project imports. A new transitive component or
+permission fails the build until it is reviewed explicitly.
+
 The same Gradle build used by pull-request verification is traced by CodeQL for
 Java and Kotlin using the extended security query suite. Analysis runs for trusted
 repository pull requests and every push to `main`; untrusted fork pull requests do
