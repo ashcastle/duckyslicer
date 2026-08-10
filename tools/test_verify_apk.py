@@ -30,6 +30,31 @@ def synthetic_elf(*, machine: int = 183, alignment: int = PAGE_ALIGNMENT) -> byt
     return bytes(data)
 
 
+def synthetic_elf_with_debug_section() -> bytes:
+    data = bytearray(synthetic_elf())
+    section_offset = len(data)
+    section_count = 3
+    data.extend(bytes(64 * section_count))
+    strings = b"\0.shstrtab\0.debug_info\0"
+    strings_offset = len(data)
+    data.extend(strings)
+    struct.pack_into("<Q", data, 40, section_offset)
+    struct.pack_into("<H", data, 58, 64)
+    struct.pack_into("<H", data, 60, section_count)
+    struct.pack_into("<H", data, 62, 1)
+
+    string_header = section_offset + 64
+    struct.pack_into("<I", data, string_header, 1)
+    struct.pack_into("<I", data, string_header + 4, 3)
+    struct.pack_into("<Q", data, string_header + 24, strings_offset)
+    struct.pack_into("<Q", data, string_header + 32, len(strings))
+
+    debug_header = section_offset + 128
+    struct.pack_into("<I", data, debug_header, 11)
+    struct.pack_into("<I", data, debug_header + 4, 1)
+    return bytes(data)
+
+
 class VerifyApkTest(unittest.TestCase):
     def test_accepts_16_kb_aarch64_load_segment(self) -> None:
         self.assertEqual(1, inspect_elf(synthetic_elf(), "valid.so"))
@@ -45,6 +70,10 @@ class VerifyApkTest(unittest.TestCase):
     def test_rejects_truncated_program_header_table(self) -> None:
         with self.assertRaisesRegex(VerificationError, "truncated ELF"):
             inspect_elf(synthetic_elf()[:-1], "truncated.so")
+
+    def test_rejects_unstripped_debug_sections_in_packaged_library(self) -> None:
+        with self.assertRaisesRegex(VerificationError, "unstripped debug sections"):
+            inspect_elf(synthetic_elf_with_debug_section(), "debug.so")
 
     def test_accepts_complete_offline_legal_assets(self) -> None:
         inspect_legal_assets(

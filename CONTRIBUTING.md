@@ -129,7 +129,9 @@ GitHub Release APK must be built locally with
 `python3 tools/prepare_local_release.py`; tag-triggered or manually dispatched hosted
 APK builds are not allowed. The local command runs the complete Android 16/API 36
 ARM64 16 KB gate,
-builds the unsigned release twice, and rejects any byte difference.
+builds the unsigned release twice, and rejects any byte difference. The two builds
+must also produce identical local R8 mapping and native debug symbol files; retain
+them with the private release record and never upload them as public Release assets.
 The signing workflow must preserve validate → isolated sign → publish ordering. Only
 the `sign` job may receive signing secrets; it must not check out source, execute
 Gradle or repository scripts, or write the Release. Only `publish` may write the
@@ -142,7 +144,9 @@ Play AABs follow the same local-only rule. Build them with
 `python3 tools/prepare_local_play_bundle.py`; the local command runs the full gate,
 requires the same API 36 runtime, builds both Play artifacts twice, checks the
 universal delivery APK at 16 KB, and
-rejects byte differences. GitHub never builds the Play AAB. Its manual workflow may
+rejects byte differences. The AAB must embed its R8 mapping and full native debug
+symbols for the owned Rust and inherited slicer libraries. GitHub never builds the
+Play AAB. Its manual workflow may
 only validate the private draft, sign the exact digest in the protected `play`
 environment, retain the signed AAB plus checksum as an Actions artifact, and remove
 the draft without deleting its source tag. It must use a separate Play upload key and

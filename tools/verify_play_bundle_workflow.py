@@ -54,6 +54,9 @@ def verify_play_bundle_workflow(sources: dict[str, str]) -> None:
         "play-bundle.yml",
         "sign-local-release.yml",
         "prepare_local_play_bundle.py",
+        "build.gradle.kts",
+        "Cargo.toml",
+        "build.sh",
         "RELEASING.md",
         "SECURITY.md",
         "CONTRIBUTING.md",
@@ -225,9 +228,35 @@ def verify_play_bundle_workflow(sources: dict[str, str]) -> None:
             "verify_unsigned_apk(delivery_apk",
             "SIGNING_ENVIRONMENT",
             "play_transport_tag",
+            "R8_MAPPING_ENTRY",
+            "REQUIRED_DEBUG_SYMBOL_ENTRIES",
+            "missing production diagnostics",
         ),
         "Local Play preparer",
     )
+    _require(
+        sources["build.gradle.kts"],
+        ('ndk.debugSymbolLevel = "FULL"',),
+        "Release Gradle configuration",
+    )
+    _require(
+        sources["Cargo.toml"],
+        ("[profile.release]", 'debug = 1'),
+        "Rust release profile",
+    )
+    if "strip =" in sources["Cargo.toml"]:
+        raise VerificationError("Rust release profile must preserve native debug symbols")
+    _require(
+        sources["build.sh"],
+        (
+            'cp "$runtime_so" "$output_so"',
+            "runtime is missing its native symbol table",
+            "runtime is missing full debug information",
+        ),
+        "Inherited slicer runtime build",
+    )
+    if "--strip-unneeded" in sources["build.sh"]:
+        raise VerificationError("Inherited slicer runtime must reach Gradle with symbols")
 
     release_publish = _job_sections(sources["sign-local-release.yml"]).get(
         "publish", ""
@@ -250,6 +279,8 @@ def verify_play_bundle_workflow(sources: dict[str, str]) -> None:
         "never uploads to play console",
         "duckyslicer-play-signed",
         "api 36",
+        "native debug symbols",
+        "r8 mapping",
     ):
         if marker not in documentation:
             raise VerificationError(f"Play handoff documentation is missing: {marker}")
@@ -266,6 +297,15 @@ def read_sources() -> dict[str, str]:
         "prepare_local_play_bundle.py": (
             ROOT / "tools/prepare_local_play_bundle.py"
         ).read_text(encoding="utf-8"),
+        "build.gradle.kts": (ROOT / "android/app/build.gradle.kts").read_text(
+            encoding="utf-8"
+        ),
+        "Cargo.toml": (ROOT / "rust/duckyslicer-jni/Cargo.toml").read_text(
+            encoding="utf-8"
+        ),
+        "build.sh": (ROOT / "native/slicer-runtime/build.sh").read_text(
+            encoding="utf-8"
+        ),
         "RELEASING.md": (ROOT / "docs/RELEASING.md").read_text(encoding="utf-8"),
         "SECURITY.md": (ROOT / "SECURITY.md").read_text(encoding="utf-8"),
         "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),

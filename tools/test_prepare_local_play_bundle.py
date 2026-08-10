@@ -9,6 +9,8 @@ from unittest.mock import patch
 
 from tools.prepare_local_play_bundle import (
     EXPECTED_NATIVE_ENTRIES,
+    R8_MAPPING_ENTRY,
+    REQUIRED_DEBUG_SYMBOL_ENTRIES,
     PlayBundleIdentity,
     gradle_play_command,
     play_transport_tag,
@@ -17,6 +19,29 @@ from tools.prepare_local_play_bundle import (
     verify_unsigned_bundle,
 )
 from tools.prepare_local_release import PACKAGE_NAME, ReleasePreparationError
+
+
+def write_bundle(
+    path: Path,
+    *,
+    extra_entries: dict[str, bytes] | None = None,
+    omitted_entries: frozenset[str] = frozenset(),
+) -> None:
+    entries = {
+        "BundleConfig.pb": b"config",
+        "base/manifest/AndroidManifest.xml": b"manifest",
+        R8_MAPPING_ENTRY: b"# compiler: R8\n",
+        **{name: b"elf" for name in EXPECTED_NATIVE_ENTRIES},
+        **{
+            name: b"\x7fELF" + bytes(60)
+            for name in REQUIRED_DEBUG_SYMBOL_ENTRIES
+        },
+        **(extra_entries or {}),
+    }
+    with zipfile.ZipFile(path, "w") as archive:
+        for name, data in entries.items():
+            if name not in omitted_entries:
+                archive.writestr(name, data)
 
 
 class PrepareLocalPlayBundleTest(unittest.TestCase):
@@ -52,32 +77,35 @@ class PrepareLocalPlayBundleTest(unittest.TestCase):
     def test_accepts_only_unsigned_arm64_bundle_structure(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             bundle = Path(directory) / "candidate.aab"
-            with zipfile.ZipFile(bundle, "w") as archive:
-                archive.writestr("BundleConfig.pb", b"config")
-                archive.writestr("base/manifest/AndroidManifest.xml", b"manifest")
-                for name in EXPECTED_NATIVE_ENTRIES:
-                    archive.writestr(name, b"elf")
+            write_bundle(bundle)
             verify_unsigned_bundle(bundle)
 
             signed = Path(directory) / "signed.aab"
-            with zipfile.ZipFile(signed, "w") as archive:
-                archive.writestr("BundleConfig.pb", b"config")
-                archive.writestr("base/manifest/AndroidManifest.xml", b"manifest")
-                for name in EXPECTED_NATIVE_ENTRIES:
-                    archive.writestr(name, b"elf")
-                archive.writestr("META-INF/UPLOAD.RSA", b"signature")
+            write_bundle(signed, extra_entries={"META-INF/UPLOAD.RSA": b"signature"})
             with self.assertRaisesRegex(ReleasePreparationError, "remain unsigned"):
                 verify_unsigned_bundle(signed)
 
             wrong_abi = Path(directory) / "wrong-abi.aab"
-            with zipfile.ZipFile(wrong_abi, "w") as archive:
-                archive.writestr("BundleConfig.pb", b"config")
-                archive.writestr("base/manifest/AndroidManifest.xml", b"manifest")
-                for name in EXPECTED_NATIVE_ENTRIES:
-                    archive.writestr(name, b"elf")
-                archive.writestr("base/lib/x86_64/libextra.so", b"elf")
+            write_bundle(
+                wrong_abi,
+                extra_entries={"base/lib/x86_64/libextra.so": b"elf"},
+            )
             with self.assertRaisesRegex(ReleasePreparationError, "ARM64 allowlist"):
                 verify_unsigned_bundle(wrong_abi)
+
+    def test_rejects_missing_or_invalid_play_diagnostics(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            missing = root / "missing.aab"
+            write_bundle(missing, omitted_entries=frozenset({R8_MAPPING_ENTRY}))
+            with self.assertRaisesRegex(ReleasePreparationError, "diagnostics"):
+                verify_unsigned_bundle(missing)
+
+            invalid = root / "invalid.aab"
+            symbol = next(iter(REQUIRED_DEBUG_SYMBOL_ENTRIES))
+            write_bundle(invalid, extra_entries={symbol: b"not an ELF"})
+            with self.assertRaisesRegex(ReleasePreparationError, "debug symbols"):
+                verify_unsigned_bundle(invalid)
 
     def test_metadata_pins_source_bundle_delivery_and_transport(self) -> None:
         identity = PlayBundleIdentity(

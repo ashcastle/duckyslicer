@@ -302,7 +302,7 @@ build_occt() {
 }
 
 build_runtime() {
-    local runtime_build unstripped_so stripped_so readelf strip_tool elf_header load_count needed unexpected
+    local runtime_build runtime_so output_so readelf elf_header sections load_count needed unexpected
     runtime_build="$BUILD_ROOT/runtime"
     cmake -S "$SOURCE_ROOT/app/src/main/cpp" -B "$runtime_build" -GNinja \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
@@ -312,27 +312,28 @@ build_runtime() {
         -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384"
     cmake --build "$runtime_build" --parallel "$JOBS"
 
-    unstripped_so="$runtime_build/libprusaslicer-jni.so"
-    stripped_so="$OUTPUT_ROOT/libprusaslicer-jni.so"
+    runtime_so="$runtime_build/libprusaslicer-jni.so"
+    output_so="$OUTPUT_ROOT/libprusaslicer-jni.so"
     readelf="$(host_toolchain)/bin/llvm-readelf"
-    strip_tool="$(host_toolchain)/bin/llvm-strip"
     mkdir -p "$OUTPUT_ROOT"
-    cp "$unstripped_so" "$stripped_so"
-    "$strip_tool" --strip-unneeded "$stripped_so"
+    cp "$runtime_so" "$output_so"
 
     # Capture the complete output before matching. With `set -o pipefail`, piping
     # readelf directly into `grep -q` can report SIGPIPE after grep finds an early
     # match, turning a valid ELF into a false failure.
-    elf_header="$("$readelf" -h "$stripped_so")"
+    elf_header="$("$readelf" -h "$output_so")"
     grep -q 'Machine:.*AArch64' <<< "$elf_header" || die "runtime is not AArch64"
-    load_count="$("$readelf" -l "$stripped_so" | awk '$1 == "LOAD" { count += 1; if ($NF != "0x4000") bad += 1 } END { if (bad) exit 1; print count + 0 }')" || \
+    sections="$("$readelf" -S "$output_so")"
+    grep -q '\.symtab' <<< "$sections" || die "runtime is missing its native symbol table"
+    grep -q '\.debug_info' <<< "$sections" || die "runtime is missing full debug information"
+    load_count="$("$readelf" -l "$output_so" | awk '$1 == "LOAD" { count += 1; if ($NF != "0x4000") bad += 1 } END { if (bad) exit 1; print count + 0 }')" || \
         die "runtime contains a LOAD segment without 16 KB alignment"
     [ "$load_count" -gt 0 ] || die "runtime has no LOAD segments"
-    needed="$("$readelf" -d "$stripped_so" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p')"
+    needed="$("$readelf" -d "$output_so" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p')"
     unexpected="$(printf '%s\n' "$needed" | grep -Ev '^(libc\.so|libc\+\+_shared\.so|libdl\.so|liblog\.so|libm\.so)$' || true)"
     [ -z "$unexpected" ] || die "unexpected shared-library dependency: $unexpected"
-    echo "Built $stripped_so"
-    echo "SHA-256: $(sha256_file "$stripped_so")"
+    echo "Built $output_so with full symbols for Gradle release extraction"
+    echo "SHA-256: $(sha256_file "$output_so")"
 }
 
 main() {

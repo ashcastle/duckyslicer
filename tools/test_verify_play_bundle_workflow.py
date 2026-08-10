@@ -105,11 +105,22 @@ verify_reproducible(candidate_bundle, RELEASE_AAB)
 verify_reproducible(candidate_delivery, DELIVERY_APK)
 verify_unsigned_apk(delivery_apk
 play_transport_tag
+R8_MAPPING_ENTRY
+REQUIRED_DEBUG_SYMBOL_ENTRIES
+missing production diagnostics
+""",
+        "build.gradle.kts": 'ndk.debugSymbolLevel = "FULL"',
+        "Cargo.toml": "[profile.release]\ndebug = 1\n",
+        "build.sh": """
+cp "$runtime_so" "$output_so"
+runtime is missing its native symbol table
+runtime is missing full debug information
 """,
         "RELEASING.md": """
 Run prepare_local_play_bundle.py; it is built twice. GitHub never builds the Play AAB.
 Use a separate Play upload key. It never uploads to Play Console.
 Download duckyslicer-play-signed. The local gate requires API 36.
+The AAB contains native debug symbols and an R8 mapping.
 """,
         "SECURITY.md": "local-only Play signing",
         "CONTRIBUTING.md": "local-only Play signing",
@@ -181,6 +192,25 @@ class VerifyPlayBundleWorkflowTest(unittest.TestCase):
             "prepare_local_play_bundle.py"
         ].replace("--require-api-36", "--host-only")
         with self.assertRaisesRegex(VerificationError, "require-api-36"):
+            verify_play_bundle_workflow(sources)
+
+    def test_rejects_prestripped_owned_native_libraries(self) -> None:
+        for source_name, marker in (
+            ("Cargo.toml", 'strip = "symbols"'),
+            ("build.sh", '"$strip_tool" --strip-unneeded "$output_so"'),
+        ):
+            with self.subTest(source_name=source_name):
+                sources = valid_sources()
+                sources[source_name] += "\n" + marker
+                with self.assertRaisesRegex(VerificationError, "symbols"):
+                    verify_play_bundle_workflow(sources)
+
+    def test_rejects_non_full_gradle_native_metadata(self) -> None:
+        sources = valid_sources()
+        sources["build.gradle.kts"] = sources["build.gradle.kts"].replace(
+            '"FULL"', '"SYMBOL_TABLE"'
+        )
+        with self.assertRaisesRegex(VerificationError, "FULL"):
             verify_play_bundle_workflow(sources)
 
     def test_rejects_aab_in_github_release(self) -> None:

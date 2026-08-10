@@ -13,6 +13,7 @@ from pathlib import Path, PurePosixPath
 ANDROID_ARM64_MACHINE = 183
 ELF64_HEADER_SIZE = 64
 ELF64_PROGRAM_HEADER_SIZE = 56
+ELF64_SECTION_HEADER_SIZE = 64
 PAGE_ALIGNMENT = 0x4000
 PT_LOAD = 1
 ZIP_LOCAL_HEADER_SIZE = 30
@@ -59,6 +60,45 @@ REQUIRED_LEGAL_ASSETS = {
 
 class VerificationError(ValueError):
     """The APK violates a release invariant."""
+
+
+def elf_section_names(data: bytes, name: str) -> frozenset[str]:
+    section_offset = struct.unpack_from("<Q", data, 40)[0]
+    section_entry_size = struct.unpack_from("<H", data, 58)[0]
+    section_count = struct.unpack_from("<H", data, 60)[0]
+    string_table_index = struct.unpack_from("<H", data, 62)[0]
+    if section_offset == 0 and section_count == 0:
+        return frozenset()
+    if section_entry_size < ELF64_SECTION_HEADER_SIZE or section_count == 0:
+        raise VerificationError(f"{name}: invalid ELF section-header table")
+    table_end = section_offset + section_entry_size * section_count
+    if section_offset < ELF64_HEADER_SIZE or table_end > len(data):
+        raise VerificationError(f"{name}: truncated ELF section-header table")
+    if string_table_index >= section_count:
+        raise VerificationError(f"{name}: invalid ELF section-name table index")
+
+    string_header = section_offset + string_table_index * section_entry_size
+    strings_offset = struct.unpack_from("<Q", data, string_header + 24)[0]
+    strings_size = struct.unpack_from("<Q", data, string_header + 32)[0]
+    strings_end = strings_offset + strings_size
+    if strings_end > len(data):
+        raise VerificationError(f"{name}: truncated ELF section-name table")
+    strings = data[strings_offset:strings_end]
+
+    names: set[str] = set()
+    for index in range(section_count):
+        header = section_offset + index * section_entry_size
+        name_offset = struct.unpack_from("<I", data, header)[0]
+        if name_offset >= len(strings):
+            raise VerificationError(f"{name}: invalid ELF section-name offset")
+        terminator = strings.find(b"\0", name_offset)
+        if terminator < 0:
+            raise VerificationError(f"{name}: unterminated ELF section name")
+        try:
+            names.add(strings[name_offset:terminator].decode("ascii"))
+        except UnicodeDecodeError as error:
+            raise VerificationError(f"{name}: non-ASCII ELF section name") from error
+    return frozenset(names)
 
 
 def inspect_legal_assets(entries: dict[str, bytes]) -> None:
@@ -109,6 +149,18 @@ def inspect_elf(data: bytes, name: str) -> int:
         load_count += 1
     if load_count == 0:
         raise VerificationError(f"{name}: contains no LOAD segments")
+    forbidden_sections = sorted(
+        section
+        for section in elf_section_names(data, name)
+        if section == ".symtab"
+        or section.startswith(".debug_")
+        or section.startswith(".zdebug_")
+    )
+    if forbidden_sections:
+        raise VerificationError(
+            f"{name}: packaged library contains unstripped debug sections: "
+            + ", ".join(forbidden_sections)
+        )
     return load_count
 
 

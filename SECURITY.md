@@ -21,6 +21,9 @@ maintainer-supplied integrity block are rejected; the keyless publisher appends 
 verified block immediately before publication. The reviewed note body is digest-pinned
 across validation and publication. The tagged repository plus its recursive submodule
 pins are the durable corresponding source.
+The same two local builds must also produce identical R8 mapping and native debug
+symbol files. Their names and SHA-256 values are retained in local release metadata
+for crash diagnosis and are never added to the APK-only public Release.
 
 Validation has no signing key and never checks out repository code. GitHub requires
 push access to see draft releases, so its token is Release-capable, but policy checks
@@ -42,6 +45,10 @@ upload-certificate fingerprint, and stops at a signed Actions artifact. Validati
 and cleanup can inspect or remove the private draft but receive no signing material;
 the signer can read only the validated Actions artifact. The workflow has no Play
 Console credentials and cannot select a track or start a rollout.
+The unsigned AAB is rejected unless it embeds its R8 mapping and full native debug
+symbols for DuckySlicer's Rust boundary and inherited slicer runtime. Those diagnostics
+are uploaded only as AAB metadata for Play crash symbolication and are not app code or
+an additional public Release asset.
 
 Release and Play preparation inspect the final merged APK manifest produced after
 dependency manifest merging. The gate requires API 36 targeting, the exact permission

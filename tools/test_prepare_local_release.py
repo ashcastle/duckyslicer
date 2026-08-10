@@ -3,10 +3,12 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
 from tools.prepare_local_release import (
+    EXPECTED_NATIVE_SYMBOL_ENTRIES,
     MAX_VERSION_CODE,
     PACKAGE_NAME,
     ReleaseIdentity,
@@ -17,6 +19,7 @@ from tools.prepare_local_release import (
     prepare_release,
     signing_variables,
     validate_release_inputs,
+    verify_release_diagnostics,
 )
 
 
@@ -85,10 +88,14 @@ class PrepareLocalReleaseTest(unittest.TestCase):
             source_commit="a" * 40,
             unsigned_asset="DuckySlicer-1.2.3-arm64-unsigned.apk",
             unsigned_sha256="b" * 64,
+            local_r8_mapping="DuckySlicer-1.2.3-LOCAL-R8-MAPPING.txt",
+            local_r8_mapping_sha256="c" * 64,
+            local_native_symbols="DuckySlicer-1.2.3-LOCAL-NATIVE-SYMBOLS.zip",
+            local_native_symbols_sha256="d" * 64,
         )
         self.assertEqual(
             {
-                "schemaVersion": 1,
+                "schemaVersion": 2,
                 "project": "DuckySlicer",
                 "packageName": PACKAGE_NAME,
                 "versionName": "1.2.3",
@@ -96,19 +103,58 @@ class PrepareLocalReleaseTest(unittest.TestCase):
                 "sourceCommit": "a" * 40,
                 "unsignedAsset": "DuckySlicer-1.2.3-arm64-unsigned.apk",
                 "unsignedSha256": "b" * 64,
+                "localR8Mapping": "DuckySlicer-1.2.3-LOCAL-R8-MAPPING.txt",
+                "localR8MappingSha256": "c" * 64,
+                "localNativeSymbols": "DuckySlicer-1.2.3-LOCAL-NATIVE-SYMBOLS.zip",
+                "localNativeSymbolsSha256": "d" * 64,
             },
             identity.document(),
         )
+
+    def test_release_diagnostics_require_r8_and_all_native_symbols(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mapping = root / "mapping.txt"
+            symbols = root / "symbols.zip"
+            mapping.write_bytes(b"# compiler: R8\n# compiler_version: test\n")
+            with zipfile.ZipFile(symbols, "w") as archive:
+                for name in EXPECTED_NATIVE_SYMBOL_ENTRIES:
+                    archive.writestr(name, b"\x7fELF" + bytes(60))
+            verify_release_diagnostics(mapping, symbols)
+
+            mapping.write_text("not a mapping\n", encoding="utf-8")
+            with self.assertRaisesRegex(ReleasePreparationError, "R8 mapping"):
+                verify_release_diagnostics(mapping, symbols)
+
+            mapping.write_bytes(b"# compiler: R8\n")
+            with zipfile.ZipFile(symbols, "w") as archive:
+                archive.writestr(
+                    next(iter(EXPECTED_NATIVE_SYMBOL_ENTRIES)),
+                    b"\x7fELF" + bytes(60),
+                )
+            with self.assertRaisesRegex(ReleasePreparationError, "allowlist"):
+                verify_release_diagnostics(mapping, symbols)
 
     def test_failed_metadata_commit_removes_partial_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             release_apk = root / "app-release-unsigned.apk"
+            release_mapping = root / "mapping.txt"
+            release_symbols = root / "native-debug-symbols.zip"
             output = root / "output"
             release_apk.write_bytes(b"reproducible release")
+            release_mapping.write_bytes(b"# compiler: R8\n")
+            with zipfile.ZipFile(release_symbols, "w") as archive:
+                for name in EXPECTED_NATIVE_SYMBOL_ENTRIES:
+                    archive.writestr(name, b"\x7fELF" + bytes(60))
             with (
                 patch.dict(os.environ, {}, clear=True),
                 patch("tools.prepare_local_release.RELEASE_APK", release_apk),
+                patch("tools.prepare_local_release.RELEASE_MAPPING", release_mapping),
+                patch(
+                    "tools.prepare_local_release.RELEASE_NATIVE_SYMBOLS",
+                    release_symbols,
+                ),
                 patch(
                     "tools.prepare_local_release.verify_checkout",
                     return_value="a" * 40,

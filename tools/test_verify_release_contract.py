@@ -85,6 +85,9 @@ jobs:
                 '":app:clean",',
                 'command.append(":app:assembleRelease")',
                 "verify_reproducible(candidate_output, RELEASE_APK)",
+                "verify_reproducible(candidate_mapping, RELEASE_MAPPING)",
+                "verify_reproducible(candidate_symbols, RELEASE_NATIVE_SYMBOLS)",
+                "verify_release_diagnostics(RELEASE_MAPPING, RELEASE_NATIVE_SYMBOLS)",
                 'ROOT / "tools/verify_apk.py"',
                 'ROOT / "tools/verify_artifact_manifest.py"',
                 'ROOT / "tools/verify_artifact_localization.py"',
@@ -96,6 +99,8 @@ jobs:
                 '"DUCKYSLICER_KEYSTORE_BASE64"',
                 '"sourceCommit": self.source_commit',
                 '"unsignedSha256": self.unsigned_sha256',
+                '"localR8MappingSha256": self.local_r8_mapping_sha256',
+                '"localNativeSymbolsSha256": self.local_native_symbols_sha256',
             )
         ),
         "RELEASING.md": (
@@ -103,7 +108,9 @@ jobs:
             "GitHub Release APK. A GitHub Release contains exactly one public asset: the "
             "signed ARM64 APK. Release notes must describe user-visible changes. The publisher "
             "appends the signed APK SHA-256, signing-certificate fingerprint, and source tag. "
-            "Use DuckySlicer_16KB_API36 on Android 16/API 36."
+            "Use DuckySlicer_16KB_API36 on Android 16/API 36. Preserve the "
+            "LOCAL-NATIVE-SYMBOLS and LOCAL-R8-MAPPING files; they must not be uploaded "
+            "to the public GitHub Release."
         ),
         "SECURITY.md": (
             "The Release APK is built twice on the maintainer's local machine. "
@@ -177,6 +184,14 @@ class VerifyReleaseContractTest(unittest.TestCase):
             '"--require-api-36"', '"--host-only"'
         )
         with self.assertRaisesRegex(VerificationError, "require-api-36"):
+            verify_release_contract(sources)
+
+    def test_rejects_release_without_reproducible_local_diagnostics(self) -> None:
+        sources = valid_sources()
+        sources["prepare_local_release.py"] = sources["prepare_local_release.py"].replace(
+            "verify_reproducible(candidate_symbols, RELEASE_NATIVE_SYMBOLS)", ""
+        )
+        with self.assertRaisesRegex(VerificationError, "candidate_symbols"):
             verify_release_contract(sources)
 
     def test_rejects_missing_release_note_integrity_publication(self) -> None:

@@ -23,5 +23,5 @@ cc = "1.2.41"
 [profile.release]
 lto = "thin"
 codegen-units = 1
-strip = "symbols"
+debug = 1
 panic = "unwind"

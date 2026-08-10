@@ -11,9 +11,10 @@ import re
 import shutil
 import subprocess
 import sys
+import zipfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -24,6 +25,17 @@ from tools.verify_reproducible_release import verify_reproducible
 
 ANDROID = ROOT / "android"
 RELEASE_APK = ANDROID / "app/build/outputs/apk/release/app-release-unsigned.apk"
+RELEASE_MAPPING = ANDROID / "app/build/outputs/mapping/release/mapping.txt"
+RELEASE_NATIVE_SYMBOLS = (
+    ANDROID / "app/build/outputs/native-debug-symbols/release/native-debug-symbols.zip"
+)
+EXPECTED_NATIVE_SYMBOL_ENTRIES = frozenset(
+    {
+        "arm64-v8a/libc++_shared.so.dbg",
+        "arm64-v8a/libduckyslicer.so.dbg",
+        "arm64-v8a/libprusaslicer-jni.so.dbg",
+    }
+)
 PACKAGE_NAME = "com.ashcastle.duckyslicer"
 MAX_VERSION_CODE = 2_100_000_000
 SEMVER = re.compile(
@@ -54,10 +66,14 @@ class ReleaseIdentity:
     source_commit: str
     unsigned_asset: str
     unsigned_sha256: str
+    local_r8_mapping: str
+    local_r8_mapping_sha256: str
+    local_native_symbols: str
+    local_native_symbols_sha256: str
 
     def document(self) -> dict[str, object]:
         return {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "project": "DuckySlicer",
             "packageName": PACKAGE_NAME,
             "versionName": self.version_name,
@@ -65,6 +81,10 @@ class ReleaseIdentity:
             "sourceCommit": self.source_commit,
             "unsignedAsset": self.unsigned_asset,
             "unsignedSha256": self.unsigned_sha256,
+            "localR8Mapping": self.local_r8_mapping,
+            "localR8MappingSha256": self.local_r8_mapping_sha256,
+            "localNativeSymbols": self.local_native_symbols,
+            "localNativeSymbolsSha256": self.local_native_symbols_sha256,
         }
 
 
@@ -271,6 +291,47 @@ def verify_unsigned_apk(
         raise ReleasePreparationError("Local release candidate must remain unsigned")
 
 
+def verify_release_diagnostics(mapping: Path, native_symbols: Path) -> None:
+    if not mapping.is_file() or mapping.stat().st_size <= 0:
+        raise ReleasePreparationError(f"R8 mapping is missing: {mapping}")
+    with mapping.open("rb") as source:
+        if source.readline().rstrip(b"\r\n") != b"# compiler: R8":
+            raise ReleasePreparationError("R8 mapping does not identify the R8 compiler")
+
+    if not native_symbols.is_file() or native_symbols.stat().st_size <= 0:
+        raise ReleasePreparationError(f"Native debug symbols are missing: {native_symbols}")
+    try:
+        with zipfile.ZipFile(native_symbols) as archive:
+            entries = archive.infolist()
+            names = [entry.filename for entry in entries]
+            if len(names) != len(set(names)):
+                raise ReleasePreparationError("Native debug symbols contain duplicate entries")
+            for name in names:
+                path = PurePosixPath(name)
+                if path.is_absolute() or ".." in path.parts or "\\" in name:
+                    raise ReleasePreparationError(
+                        f"Native debug symbols contain an unsafe path: {name}"
+                    )
+            if frozenset(names) != EXPECTED_NATIVE_SYMBOL_ENTRIES:
+                raise ReleasePreparationError(
+                    "Native debug symbol allowlist changed: " + ", ".join(sorted(names))
+                )
+            for entry in entries:
+                with archive.open(entry) as source:
+                    header = source.read(4)
+                if entry.file_size < 64 or header != b"\x7fELF":
+                    raise ReleasePreparationError(
+                        f"Native debug symbol is not an ELF file: {entry.filename}"
+                    )
+            corrupt = archive.testzip()
+    except (OSError, zipfile.BadZipFile) as error:
+        raise ReleasePreparationError(
+            f"Native debug symbols are not a valid ZIP: {native_symbols}"
+        ) from error
+    if corrupt is not None:
+        raise ReleasePreparationError(f"Native debug symbol is corrupt: {corrupt}")
+
+
 def write_metadata(path: Path, identity: ReleaseIdentity) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(
@@ -293,12 +354,26 @@ def prepare_release(version_name: str, version_code: int, output_root: Path) -> 
     output = output_root.resolve()
     output.mkdir(parents=True, exist_ok=True)
     unsigned_name = f"DuckySlicer-{version_name}-arm64-unsigned.apk"
+    mapping_name = f"DuckySlicer-{version_name}-LOCAL-R8-MAPPING.txt"
+    symbols_name = f"DuckySlicer-{version_name}-LOCAL-NATIVE-SYMBOLS.zip"
     unsigned_output = output / unsigned_name
+    mapping_output = output / mapping_name
+    symbols_output = output / symbols_name
     candidate_output = output / f".{unsigned_name}.candidate"
+    candidate_mapping = output / f".{mapping_name}.candidate"
+    candidate_symbols = output / f".{symbols_name}.candidate"
     metadata_output = output / f"DuckySlicer-{version_name}-LOCAL-RELEASE.json"
     collisions = [
         path
-        for path in (unsigned_output, candidate_output, metadata_output)
+        for path in (
+            unsigned_output,
+            mapping_output,
+            symbols_output,
+            candidate_output,
+            candidate_mapping,
+            candidate_symbols,
+            metadata_output,
+        )
         if path.exists()
     ]
     if collisions:
@@ -317,11 +392,17 @@ def prepare_release(version_name: str, version_code: int, output_root: Path) -> 
         )
         run(gradle_release_command(version_name, version_code, rebuild=False), cwd=ANDROID)
         verify_unsigned_apk(RELEASE_APK, version_name, version_code, build_tools)
+        verify_release_diagnostics(RELEASE_MAPPING, RELEASE_NATIVE_SYMBOLS)
         shutil.copyfile(RELEASE_APK, candidate_output)
+        shutil.copyfile(RELEASE_MAPPING, candidate_mapping)
+        shutil.copyfile(RELEASE_NATIVE_SYMBOLS, candidate_symbols)
 
         run(gradle_release_command(version_name, version_code, rebuild=True), cwd=ANDROID)
         verify_unsigned_apk(RELEASE_APK, version_name, version_code, build_tools)
+        verify_release_diagnostics(RELEASE_MAPPING, RELEASE_NATIVE_SYMBOLS)
         verify_reproducible(candidate_output, RELEASE_APK)
+        verify_reproducible(candidate_mapping, RELEASE_MAPPING)
+        verify_reproducible(candidate_symbols, RELEASE_NATIVE_SYMBOLS)
 
         identity = ReleaseIdentity(
             version_name=version_name,
@@ -329,15 +410,25 @@ def prepare_release(version_name: str, version_code: int, output_root: Path) -> 
             source_commit=source_commit,
             unsigned_asset=unsigned_name,
             unsigned_sha256=sha256(candidate_output),
+            local_r8_mapping=mapping_name,
+            local_r8_mapping_sha256=sha256(candidate_mapping),
+            local_native_symbols=symbols_name,
+            local_native_symbols_sha256=sha256(candidate_symbols),
         )
         os.replace(candidate_output, unsigned_output)
+        os.replace(candidate_mapping, mapping_output)
+        os.replace(candidate_symbols, symbols_output)
         write_metadata(metadata_output, identity)
         completed = True
         return identity
     finally:
         candidate_output.unlink(missing_ok=True)
+        candidate_mapping.unlink(missing_ok=True)
+        candidate_symbols.unlink(missing_ok=True)
         if not completed:
             unsigned_output.unlink(missing_ok=True)
+            mapping_output.unlink(missing_ok=True)
+            symbols_output.unlink(missing_ok=True)
             metadata_output.unlink(missing_ok=True)
             metadata_output.with_suffix(metadata_output.suffix + ".tmp").unlink(
                 missing_ok=True

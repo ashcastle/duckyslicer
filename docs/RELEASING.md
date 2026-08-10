@@ -8,7 +8,10 @@ asset: the signed ARM64 APK.
 APK twice with identical version inputs, starts both builds clean with the Gradle
 build cache disabled, and rejects any byte difference. It also verifies
 the package identity, unsigned state, APK structure, and 16 KB alignment, then records
-the SHA-256 and exact source commit in local release metadata.
+the SHA-256 and exact source commit in local release metadata. It also preserves a
+reproducible `LOCAL-R8-MAPPING` file and `LOCAL-NATIVE-SYMBOLS` archive, with their
+digests, for diagnosing that exact build. These local support files must not be
+uploaded to the public GitHub Release.
 
 The manually dispatched GitHub workflow only validates those pinned inputs, signs in
 the protected `release` environment, and publishes. GitHub exposes drafts only to a
@@ -70,8 +73,10 @@ key prevents publishing a compatible update under the same Android identity.
    ```
 
 3. Review the generated `LOCAL-RELEASE.json`, source diff, dependency changes, license
-   notices, and profile catalog. Perform an offline import, slice, full-layer preview,
-   and G-code export smoke test with the locally installed Debug APK.
+   notices, and profile catalog. Archive the named local R8 mapping and native symbols
+   with the private release record, but upload only the recorded unsigned APK to the
+   draft Release. Perform an offline import, slice, full-layer preview, and G-code
+   export smoke test with the locally installed Debug APK.
 4. Create and push an annotated `v<version>` tag at the exact `sourceCommit` recorded
    in the metadata. Create an unpublished draft GitHub Release for that tag containing
    concise user-visible Release notes and exactly the recorded unsigned APK; mark it as
@@ -99,7 +104,9 @@ API 36 ARM64 16 KB gate, builds the unsigned AAB and its universal delivery APK 
 from clean inputs with the Gradle build cache disabled, and rejects any byte
 difference. The delivery APK is checked for package and version identity, unsigned
 state, ARM64-only native libraries, and 16 KB alignment. It remains local and is
-never uploaded.
+never uploaded. The AAB must contain its R8 mapping and full native debug symbols for
+the owned Rust and inherited slicer libraries so Play can symbolize production
+crashes without changing the delivered APK size.
 
 GitHub never builds the Play AAB. The manually dispatched **Sign Local Play Bundle**
 workflow only downloads a digest-pinned AAB from a private draft, validates its source

@@ -12,7 +12,7 @@ import sys
 import zipfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -44,6 +44,15 @@ EXPECTED_NATIVE_ENTRIES = {
     "base/lib/arm64-v8a/libduckyslicer.so",
     "base/lib/arm64-v8a/libprusaslicer-jni.so",
 }
+R8_MAPPING_ENTRY = "BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map"
+REQUIRED_DEBUG_SYMBOL_ENTRIES = frozenset(
+    {
+        "BUNDLE-METADATA/com.android.tools.build.debugsymbols/arm64-v8a/"
+        "libduckyslicer.so.dbg",
+        "BUNDLE-METADATA/com.android.tools.build.debugsymbols/arm64-v8a/"
+        "libprusaslicer-jni.so.dbg",
+    }
+)
 SIGNING_ENVIRONMENT = (
     "DUCKYSLICER_KEYSTORE_FILE",
     "DUCKYSLICER_KEYSTORE_BASE64",
@@ -127,8 +136,26 @@ def verify_unsigned_bundle(bundle: Path) -> None:
         raise ReleasePreparationError(f"Unsigned Play bundle is missing: {bundle}")
     try:
         with zipfile.ZipFile(bundle) as archive:
-            names = archive.namelist()
+            entries = archive.infolist()
+            names = [entry.filename for entry in entries]
+            if len(names) != len(set(names)):
+                raise ReleasePreparationError("Play bundle contains duplicate ZIP entries")
+            for name in names:
+                path = PurePosixPath(name)
+                if path.is_absolute() or ".." in path.parts or "\\" in name:
+                    raise ReleasePreparationError(
+                        f"Play bundle contains an unsafe ZIP path: {name}"
+                    )
             corrupt = archive.testzip()
+            mapping_header = None
+            if R8_MAPPING_ENTRY in names:
+                with archive.open(R8_MAPPING_ENTRY) as source:
+                    mapping_header = source.read(64)
+            symbol_headers: dict[str, bytes] = {}
+            for name in REQUIRED_DEBUG_SYMBOL_ENTRIES:
+                if name in names:
+                    with archive.open(name) as source:
+                        symbol_headers[name] = source.read(4)
     except (OSError, zipfile.BadZipFile) as error:
         raise ReleasePreparationError(f"Play bundle is not a valid ZIP: {bundle}") from error
     if corrupt is not None:
@@ -143,6 +170,24 @@ def verify_unsigned_bundle(bundle: Path) -> None:
     if missing:
         raise ReleasePreparationError(
             "Play bundle is missing required entries: " + ", ".join(missing)
+        )
+    missing_diagnostics = sorted(
+        {R8_MAPPING_ENTRY, *REQUIRED_DEBUG_SYMBOL_ENTRIES} - set(names)
+    )
+    if missing_diagnostics:
+        raise ReleasePreparationError(
+            "Play bundle is missing production diagnostics: "
+            + ", ".join(missing_diagnostics)
+        )
+    if mapping_header is None or not mapping_header.startswith(b"# compiler: R8\n"):
+        raise ReleasePreparationError("Play bundle contains an invalid R8 mapping")
+    invalid_symbols = sorted(
+        name for name, header in symbol_headers.items() if header != b"\x7fELF"
+    )
+    if invalid_symbols:
+        raise ReleasePreparationError(
+            "Play bundle contains invalid native debug symbols: "
+            + ", ".join(invalid_symbols)
         )
     native_entries = {name for name in names if name.startswith("base/lib/")}
     if native_entries != EXPECTED_NATIVE_ENTRIES:
