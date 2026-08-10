@@ -56,13 +56,14 @@ index 963808df..e2c066c6 100644
      )
  else()
      target_link_libraries(libslic3r PRIVATE
-@@ -1123,6 +1141,10 @@ add_library(prusaslicer-jni SHARED
+@@ -1123,6 +1141,11 @@ add_library(prusaslicer-jni SHARED
      src/sapil_arrange.cpp
      src/sapil_bambu_snapshot.cpp
      src/sapil_bambu_volumes.cpp
 +    src/sapil_support_paint.cpp
 +    src/sapil_multi_color_paint.cpp
 +    src/sapil_variable_layer_height.cpp
++    src/sapil_object_process_overrides.cpp
 +    src/sapil_model_export.cpp
      src/sapil_bambu_project.cpp
      src/sapil_bambu_plate.cpp
@@ -1737,6 +1738,144 @@ index 00000000..9d941c00
 +    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
 +    if (path == nullptr) return JNI_FALSE;
 +    const bool result = apply_variable_layer_heights(
++        static_cast<int>(object_index), std::string(path));
++    env->ReleaseStringUTFChars(sidecar_path, path);
++    return result ? JNI_TRUE : JNI_FALSE;
++}
+diff --git a/app/src/main/cpp/src/sapil_object_process_overrides.cpp b/app/src/main/cpp/src/sapil_object_process_overrides.cpp
+new file mode 100644
+index 00000000..34483c04
+--- /dev/null
++++ b/app/src/main/cpp/src/sapil_object_process_overrides.cpp
+@@ -0,0 +1,132 @@
++#include <jni.h>
++
++#include <array>
++#include <cmath>
++#include <cstdint>
++#include <cstring>
++#include <fstream>
++#include <string>
++
++#include "libslic3r/Model.hpp"
++
++namespace sapil {
++extern Slic3r::Model g_model;
++}
++
++namespace {
++
++constexpr std::array<unsigned char, 4> MAGIC{'D', 'P', 'O', '1'};
++constexpr std::uint32_t LAYER_HEIGHT_BIT = 1U << 0;
++constexpr std::uint32_t WALL_LOOPS_BIT = 1U << 1;
++constexpr std::uint32_t TOP_SHELL_LAYERS_BIT = 1U << 2;
++constexpr std::uint32_t BOTTOM_SHELL_LAYERS_BIT = 1U << 3;
++constexpr std::uint32_t INFILL_DENSITY_BIT = 1U << 4;
++constexpr std::uint32_t OUTER_WALL_SPEED_BIT = 1U << 5;
++constexpr std::uint32_t INNER_WALL_SPEED_BIT = 1U << 6;
++constexpr std::uint32_t INFILL_SPEED_BIT = 1U << 7;
++constexpr std::uint32_t SUPPORT_ENABLED_BIT = 1U << 8;
++constexpr std::uint32_t ALL_BITS = (1U << 9) - 1U;
++constexpr std::uint64_t SIDECAR_BYTES = 41;
++
++bool read_u32_be(std::istream& input, std::uint32_t& value)
++{
++    std::array<unsigned char, 4> bytes{};
++    if (!input.read(reinterpret_cast<char*>(bytes.data()), bytes.size())) return false;
++    value = (static_cast<std::uint32_t>(bytes[0]) << 24) |
++            (static_cast<std::uint32_t>(bytes[1]) << 16) |
++            (static_cast<std::uint32_t>(bytes[2]) << 8) |
++            static_cast<std::uint32_t>(bytes[3]);
++    return true;
++}
++
++bool read_f32_be(std::istream& input, float& value)
++{
++    std::uint32_t bits = 0;
++    if (!read_u32_be(input, bits)) return false;
++    static_assert(sizeof(bits) == sizeof(value));
++    std::memcpy(&value, &bits, sizeof(value));
++    return true;
++}
++
++bool apply_object_process_overrides(int object_index, const std::string& sidecar_path)
++{
++    if (object_index < 0 || static_cast<std::size_t>(object_index) >= sapil::g_model.objects.size()) {
++        return false;
++    }
++    Slic3r::ModelObject* object = sapil::g_model.objects[static_cast<std::size_t>(object_index)];
++    if (object == nullptr) return false;
++
++    std::ifstream input(sidecar_path, std::ios::binary | std::ios::ate);
++    if (!input || static_cast<std::uint64_t>(input.tellg()) != SIDECAR_BYTES) return false;
++    input.seekg(0, std::ios::beg);
++
++    std::array<unsigned char, 4> magic{};
++    if (!input.read(reinterpret_cast<char*>(magic.data()), magic.size()) || magic != MAGIC) return false;
++    std::uint32_t mask = 0;
++    std::uint32_t wall_loops = 0;
++    std::uint32_t top_shell_layers = 0;
++    std::uint32_t bottom_shell_layers = 0;
++    float layer_height = 0.0F;
++    float infill_density = 0.0F;
++    float outer_wall_speed = 0.0F;
++    float inner_wall_speed = 0.0F;
++    float infill_speed = 0.0F;
++    unsigned char support_enabled = 0;
++    if (!read_u32_be(input, mask) || mask == 0 || (mask & ~ALL_BITS) != 0 ||
++        !read_f32_be(input, layer_height) || !read_u32_be(input, wall_loops) ||
++        !read_u32_be(input, top_shell_layers) || !read_u32_be(input, bottom_shell_layers) ||
++        !read_f32_be(input, infill_density) || !read_f32_be(input, outer_wall_speed) ||
++        !read_f32_be(input, inner_wall_speed) || !read_f32_be(input, infill_speed) ||
++        !input.read(reinterpret_cast<char*>(&support_enabled), 1)) {
++        return false;
++    }
++    if ((mask & LAYER_HEIGHT_BIT) &&
++        (!std::isfinite(layer_height) || layer_height < 0.01F || layer_height > 2.0F)) return false;
++    if ((mask & WALL_LOOPS_BIT) && wall_loops > 20U) return false;
++    if ((mask & TOP_SHELL_LAYERS_BIT) && top_shell_layers > 100U) return false;
++    if ((mask & BOTTOM_SHELL_LAYERS_BIT) && bottom_shell_layers > 100U) return false;
++    if ((mask & INFILL_DENSITY_BIT) &&
++        (!std::isfinite(infill_density) || infill_density < 0.0F || infill_density > 100.0F)) return false;
++    const auto invalid_speed = [](float speed) {
++        return !std::isfinite(speed) || speed < 1.0F || speed > 1000.0F;
++    };
++    if ((mask & OUTER_WALL_SPEED_BIT) && invalid_speed(outer_wall_speed)) return false;
++    if ((mask & INNER_WALL_SPEED_BIT) && invalid_speed(inner_wall_speed)) return false;
++    if ((mask & INFILL_SPEED_BIT) && invalid_speed(infill_speed)) return false;
++    if (support_enabled > 1U) return false;
++
++    if (mask & LAYER_HEIGHT_BIT) object->config.set_key_value(
++        "layer_height", new Slic3r::ConfigOptionFloat(static_cast<double>(layer_height)));
++    if (mask & WALL_LOOPS_BIT) object->config.set_key_value(
++        "wall_loops", new Slic3r::ConfigOptionInt(static_cast<int>(wall_loops)));
++    if (mask & TOP_SHELL_LAYERS_BIT) object->config.set_key_value(
++        "top_shell_layers", new Slic3r::ConfigOptionInt(static_cast<int>(top_shell_layers)));
++    if (mask & BOTTOM_SHELL_LAYERS_BIT) object->config.set_key_value(
++        "bottom_shell_layers", new Slic3r::ConfigOptionInt(static_cast<int>(bottom_shell_layers)));
++    if (mask & INFILL_DENSITY_BIT) object->config.set_key_value(
++        "sparse_infill_density", new Slic3r::ConfigOptionPercent(static_cast<double>(infill_density)));
++    if (mask & OUTER_WALL_SPEED_BIT) object->config.set_key_value(
++        "outer_wall_speed", new Slic3r::ConfigOptionFloat(static_cast<double>(outer_wall_speed)));
++    if (mask & INNER_WALL_SPEED_BIT) object->config.set_key_value(
++        "inner_wall_speed", new Slic3r::ConfigOptionFloat(static_cast<double>(inner_wall_speed)));
++    if (mask & INFILL_SPEED_BIT) object->config.set_key_value(
++        "sparse_infill_speed", new Slic3r::ConfigOptionFloat(static_cast<double>(infill_speed)));
++    if (mask & SUPPORT_ENABLED_BIT) object->config.set_key_value(
++        "enable_support", new Slic3r::ConfigOptionBool(support_enabled != 0));
++    return true;
++}
++
++} // namespace
++
++extern "C" JNIEXPORT jboolean JNICALL
++Java_com_u1_slicer_NativeLibrary_applyObjectProcessOverrides(
++        JNIEnv* env, jobject, jint object_index, jstring sidecar_path)
++{
++    if (sidecar_path == nullptr) return JNI_FALSE;
++    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
++    if (path == nullptr) return JNI_FALSE;
++    const bool result = apply_object_process_overrides(
 +        static_cast<int>(object_index), std::string(path));
 +    env->ReleaseStringUTFChars(sidecar_path, path);
 +    return result ? JNI_TRUE : JNI_FALSE;

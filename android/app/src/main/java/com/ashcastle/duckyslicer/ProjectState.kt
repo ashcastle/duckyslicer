@@ -8,6 +8,7 @@ data class ProjectObject(
     val seamPaint: SeamPaint = SeamPaint(),
     val multiColorPaint: MultiColorPaint = MultiColorPaint(),
     val variableLayerHeights: VariableLayerHeights = VariableLayerHeights(),
+    val processOverrides: ObjectProcessOverrides = ObjectProcessOverrides(),
     val filamentSlot: Int = 0,
 )
 
@@ -315,6 +316,24 @@ data class ProjectHistoryState(
                 objects = current.objects.map { projectObject ->
                     if (projectObject.id == selected.id) {
                         projectObject.copy(variableLayerHeights = variableLayerHeights)
+                    } else {
+                        projectObject
+                    }
+                },
+            ),
+        )
+    }
+
+    fun updateSelectedProcessOverrides(
+        processOverrides: ObjectProcessOverrides,
+    ): ProjectHistoryState {
+        val selected = current.selectedObject ?: return this
+        if (selected.processOverrides == processOverrides) return this
+        return record(
+            current.copy(
+                objects = current.objects.map { projectObject ->
+                    if (projectObject.id == selected.id) {
+                        projectObject.copy(processOverrides = processOverrides)
                     } else {
                         projectObject
                     }
