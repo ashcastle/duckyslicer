@@ -61,6 +61,7 @@ class ProjectArchiveTest {
                 ),
                 supportPaint = SupportPaint().paint(1, SupportPaintState.ENFORCE),
                 seamPaint = SeamPaint().paint(0, SeamPaintState.ENFORCE),
+                multiColorPaint = MultiColorPaint().paint(1, 1),
                 variableLayerHeights = VariableLayerHeights(
                     listOf(VariableLayerRange(0.2f, 0.7f, 0.08f)),
                 ),
@@ -71,6 +72,7 @@ class ProjectArchiveTest {
                 transform = ModelTransform(offsetXmm = -18f, rotationXdeg = 90f),
                 supportPaint = SupportPaint().paint(0, SupportPaintState.BLOCK),
                 seamPaint = SeamPaint().paint(1, SeamPaintState.BLOCK),
+                multiColorPaint = MultiColorPaint().paint(0, 1),
                 variableLayerHeights = VariableLayerHeights(
                     listOf(VariableLayerRange(0.1f, 0.4f, 0.12f)),
                 ),
@@ -98,7 +100,7 @@ class ProjectArchiveTest {
             assertEquals(
                 setOf(
                     "id", "displayName", "modelEntry", "transform", "supportPaint", "seamPaint",
-                    "variableLayerHeights", "filamentSlot",
+                    "multiColorPaint", "variableLayerHeights", "filamentSlot",
                 ),
                 manifest.getJSONArray("objects").getJSONObject(0).keys().asSequence().toSet(),
             )
@@ -116,6 +118,8 @@ class ProjectArchiveTest {
             assertEquals(second.supportPaint, imported.snapshot.objects[1].supportPaint)
             assertEquals(first.seamPaint, imported.snapshot.objects[0].seamPaint)
             assertEquals(second.seamPaint, imported.snapshot.objects[1].seamPaint)
+            assertEquals(first.multiColorPaint, imported.snapshot.objects[0].multiColorPaint)
+            assertEquals(second.multiColorPaint, imported.snapshot.objects[1].multiColorPaint)
             assertEquals(
                 first.variableLayerHeights,
                 imported.snapshot.objects[0].variableLayerHeights,
@@ -141,6 +145,7 @@ class ProjectArchiveTest {
                 val objects = getJSONArray("objects")
                 for (index in 0 until objects.length()) {
                     objects.getJSONObject(index).remove("seamPaint")
+                    objects.getJSONObject(index).remove("multiColorPaint")
                     objects.getJSONObject(index).remove("variableLayerHeights")
                 }
             }
@@ -150,6 +155,7 @@ class ProjectArchiveTest {
             )
             val legacy = destination.importArchive(ByteArrayInputStream(legacyArchive))
             assertTrue(legacy.snapshot.objects.all { it.seamPaint.facets.isEmpty() })
+            assertTrue(legacy.snapshot.objects.all { it.multiColorPaint.facets.isEmpty() })
             assertTrue(legacy.snapshot.objects.all { it.variableLayerHeights.ranges.isEmpty() })
             assertEquals(
                 1,

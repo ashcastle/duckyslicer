@@ -56,11 +56,12 @@ index 963808df..e2c066c6 100644
      )
  else()
      target_link_libraries(libslic3r PRIVATE
-@@ -1123,6 +1141,9 @@ add_library(prusaslicer-jni SHARED
+@@ -1123,6 +1141,10 @@ add_library(prusaslicer-jni SHARED
      src/sapil_arrange.cpp
      src/sapil_bambu_snapshot.cpp
      src/sapil_bambu_volumes.cpp
 +    src/sapil_support_paint.cpp
++    src/sapil_multi_color_paint.cpp
 +    src/sapil_variable_layer_height.cpp
 +    src/sapil_model_export.cpp
      src/sapil_bambu_project.cpp
@@ -1497,6 +1498,117 @@ index 00000000..bebc6734
 +    if (path == nullptr) return JNI_FALSE;
 +    const bool result = apply_facet_paint(
 +        static_cast<int>(object_index), std::string(path), SEAM_PAINT_MAGIC, true);
++    env->ReleaseStringUTFChars(sidecar_path, path);
++    return result ? JNI_TRUE : JNI_FALSE;
++}
+diff --git a/app/src/main/cpp/src/sapil_multi_color_paint.cpp b/app/src/main/cpp/src/sapil_multi_color_paint.cpp
+new file mode 100644
+index 00000000..4b25f9ad
+--- /dev/null
++++ b/app/src/main/cpp/src/sapil_multi_color_paint.cpp
+@@ -0,0 +1,105 @@
++#include <jni.h>
++
++#include <array>
++#include <cstdint>
++#include <fstream>
++#include <string>
++
++#include "libslic3r/Model.hpp"
++#include "libslic3r/TriangleSelector.hpp"
++
++namespace sapil {
++extern Slic3r::Model g_model;
++}
++
++namespace {
++
++constexpr std::array<unsigned char, 4> MAGIC{'D', 'M', 'C', '1'};
++constexpr std::uint32_t MAX_PAINTED_FACETS = 100000;
++constexpr std::uint32_t MAX_FILAMENT_SLOTS = 16;
++constexpr std::uint64_t HEADER_BYTES = 8;
++constexpr std::uint64_t ENTRY_BYTES = 5;
++
++bool read_u32_be(std::istream& input, std::uint32_t& value)
++{
++    std::array<unsigned char, 4> bytes{};
++    if (!input.read(reinterpret_cast<char*>(bytes.data()), bytes.size())) return false;
++    value = (static_cast<std::uint32_t>(bytes[0]) << 24) |
++            (static_cast<std::uint32_t>(bytes[1]) << 16) |
++            (static_cast<std::uint32_t>(bytes[2]) << 8) |
++            static_cast<std::uint32_t>(bytes[3]);
++    return true;
++}
++
++bool apply_multi_color_paint(int object_index, const std::string& sidecar_path)
++{
++    if (object_index < 0 || static_cast<std::size_t>(object_index) >= sapil::g_model.objects.size()) {
++        return false;
++    }
++    Slic3r::ModelObject* object = sapil::g_model.objects[static_cast<std::size_t>(object_index)];
++    if (object == nullptr) return false;
++    Slic3r::ModelVolume* volume = nullptr;
++    for (Slic3r::ModelVolume* candidate : object->volumes) {
++        if (candidate != nullptr && candidate->is_model_part()) {
++            if (volume != nullptr) return false;
++            volume = candidate;
++        }
++    }
++    if (volume == nullptr) return false;
++
++    std::ifstream input(sidecar_path, std::ios::binary | std::ios::ate);
++    if (!input) return false;
++    const std::streamoff size = input.tellg();
++    if (size < static_cast<std::streamoff>(HEADER_BYTES)) return false;
++    input.seekg(0, std::ios::beg);
++
++    std::array<unsigned char, 4> magic{};
++    if (!input.read(reinterpret_cast<char*>(magic.data()), magic.size()) || magic != MAGIC) {
++        return false;
++    }
++    std::uint32_t count = 0;
++    if (!read_u32_be(input, count) || count > MAX_PAINTED_FACETS) return false;
++    const std::uint64_t expected_size =
++        HEADER_BYTES + static_cast<std::uint64_t>(count) * ENTRY_BYTES;
++    if (static_cast<std::uint64_t>(size) != expected_size) return false;
++
++    const std::size_t triangle_count = volume->mesh().its.indices.size();
++    Slic3r::TriangleSelector selector(volume->mesh());
++    std::uint32_t previous_index = 0;
++    bool has_previous = false;
++    for (std::uint32_t entry = 0; entry < count; ++entry) {
++        std::uint32_t facet_index = 0;
++        unsigned char state = 0;
++        if (!read_u32_be(input, facet_index) ||
++            !input.read(reinterpret_cast<char*>(&state), 1)) {
++            return false;
++        }
++        if (static_cast<std::size_t>(facet_index) >= triangle_count ||
++            (has_previous && facet_index <= previous_index) ||
++            state == 0 || state > MAX_FILAMENT_SLOTS) {
++            return false;
++        }
++        selector.set_facet(
++            static_cast<int>(facet_index),
++            static_cast<Slic3r::EnforcerBlockerType>(state));
++        previous_index = facet_index;
++        has_previous = true;
++    }
++    const bool changed = volume->mmu_segmentation_facets.set(selector);
++    return changed || count == 0;
++}
++
++} // namespace
++
++extern "C" JNIEXPORT jboolean JNICALL
++Java_com_u1_slicer_NativeLibrary_applyMultiColorPaint(
++        JNIEnv* env, jobject, jint object_index, jstring sidecar_path)
++{
++    if (sidecar_path == nullptr) return JNI_FALSE;
++    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
++    if (path == nullptr) return JNI_FALSE;
++    const bool result = apply_multi_color_paint(
++        static_cast<int>(object_index), std::string(path));
 +    env->ReleaseStringUTFChars(sidecar_path, path);
 +    return result ? JNI_TRUE : JNI_FALSE;
 +}

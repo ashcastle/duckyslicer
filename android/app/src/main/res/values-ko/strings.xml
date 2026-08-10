@@ -90,6 +90,9 @@
     <string name="cut_not_possible">이 높이에서는 모델이 나뉘지 않습니다.</string>
     <string name="cut_error">이 모델을 자르지 못했습니다.</string>
     <string name="paint_support">서포트 채색</string>
+    <string name="paint_color">색상 채색</string>
+    <string name="color_paint_erase">지우기</string>
+    <string name="color_paint_hint">필라멘트를 고른 뒤 모델 표면을 칠하세요.</string>
     <string name="paint_seam">심 채색</string>
     <string name="variable_layer_height">가변 레이어 높이</string>
     <string name="variable_layer_height_hint">필요한 높이 구간만 더 촘촘하게 출력합니다.</string>

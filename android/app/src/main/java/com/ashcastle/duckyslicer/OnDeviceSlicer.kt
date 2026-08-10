@@ -1228,6 +1228,12 @@ object OnDeviceSlicer {
         require(objects.all { projectObject ->
             projectObject.seamPaint.facets.keys.all { it in 0 until projectObject.model.triangles }
         }) { "Seam paint references an unavailable facet" }
+        val availableFilamentSlots = options.resolvedFilamentSlots().indices
+        require(objects.all { projectObject ->
+            projectObject.multiColorPaint.facets.keys.all {
+                it in 0 until projectObject.model.triangles
+            } && projectObject.multiColorPaint.facets.values.all { it in availableFilamentSlots }
+        }) { "Multi-color paint references unavailable geometry or filament" }
         val maximumLayerHeight = options.nozzleDiameter * 0.7f
         require(objects.all { projectObject ->
             projectObject.variableLayerHeights.ranges.all { range ->
@@ -1273,11 +1279,23 @@ object OnDeviceSlicer {
                         ).also(it::writeSidecar)
                     }
             }
+            val multiColorPaintFiles = objects.mapIndexed { index, projectObject ->
+                projectObject.multiColorPaint
+                    .takeIf { it.facets.isNotEmpty() }
+                    ?.let {
+                        File.createTempFile(
+                            "slice-colors-$index-",
+                            ".bin",
+                            File(projectObject.model.localPath).parentFile,
+                        ).also(it::writeSidecar)
+                    }
+            }
             try {
                 SlicerProcessClient.slice(
                     transformedModels,
                     supportPaintFiles,
                     seamPaintFiles,
+                    multiColorPaintFiles,
                     variableLayerHeightFiles,
                     options,
                     filamentSlots = objects.map(ProjectObject::filamentSlot).toIntArray(),
@@ -1288,6 +1306,7 @@ object OnDeviceSlicer {
             } finally {
                 supportPaintFiles.filterNotNull().forEach(File::delete)
                 seamPaintFiles.filterNotNull().forEach(File::delete)
+                multiColorPaintFiles.filterNotNull().forEach(File::delete)
                 variableLayerHeightFiles.filterNotNull().forEach(File::delete)
             }
         }
