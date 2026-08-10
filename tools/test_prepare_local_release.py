@@ -8,6 +8,7 @@ from tools.prepare_local_release import (
     ReleaseIdentity,
     ReleasePreparationError,
     gradle_release_command,
+    mismatched_submodules,
     parse_badging,
     signing_variables,
     validate_release_inputs,
@@ -15,6 +16,16 @@ from tools.prepare_local_release import (
 
 
 class PrepareLocalReleaseTest(unittest.TestCase):
+    def test_preserves_clean_submodule_status_prefix(self) -> None:
+        clean = " 0123456789abcdef third_party/runtime (heads/main)\n"
+        self.assertEqual([], mismatched_submodules(clean))
+
+        invalid = (
+            "+123456789abcdef0 third_party/a (heads/main)\n"
+            "-abcdef0123456789 third_party/b\n"
+        )
+        self.assertEqual(invalid.splitlines(), mismatched_submodules(invalid))
+
     def test_accepts_semver_and_bounded_version_code(self) -> None:
         validate_release_inputs("1.2.3", 1)
         validate_release_inputs("1.2.3-rc.4", MAX_VERSION_CODE)
