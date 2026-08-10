@@ -212,6 +212,7 @@ internal class ToolpathRenderer(
     private var program = 0
     private var positionLocation = 0
     private var colorLocation = 0
+    private var acrossLocation = 0
     private var matrixLocation = 0
     private var viewportWidth = 1
     private var viewportHeight = 1
@@ -267,6 +268,7 @@ internal class ToolpathRenderer(
         if (program == 0) return
         positionLocation = GLES30.glGetAttribLocation(program, "aPosition")
         colorLocation = GLES30.glGetAttribLocation(program, "aColor")
+        acrossLocation = GLES30.glGetAttribLocation(program, "aAcross")
         matrixLocation = GLES30.glGetUniformLocation(program, "uMvp")
     }
 
@@ -317,6 +319,15 @@ internal class ToolpathRenderer(
             COLOR_OFFSET_BYTES,
         )
         GLES30.glEnableVertexAttribArray(colorLocation)
+        GLES30.glVertexAttribPointer(
+            acrossLocation,
+            1,
+            GLES30.GL_FLOAT,
+            false,
+            STRIDE_BYTES,
+            ACROSS_OFFSET_BYTES,
+        )
+        GLES30.glEnableVertexAttribArray(acrossLocation)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, geometry.vertexCount)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
 
@@ -438,25 +449,35 @@ internal class ToolpathRenderer(
 
     private companion object {
         const val GPU_GEOMETRY_CACHE_SIZE = 2
-        const val FLOATS_PER_VERTEX = 7
+        const val FLOATS_PER_VERTEX = 8
         const val STRIDE_BYTES = FLOATS_PER_VERTEX * 4
         const val POSITION_OFFSET_BYTES = 0
         const val COLOR_OFFSET_BYTES = 3 * 4
+        const val ACROSS_OFFSET_BYTES = 7 * 4
         const val VERTEX_SHADER = """#version 300 es
             uniform mat4 uMvp;
             in vec3 aPosition;
             in vec4 aColor;
+            in float aAcross;
             out vec4 vColor;
+            out float vAcross;
             void main() {
                 gl_Position = uMvp * vec4(aPosition, 1.0);
                 vColor = aColor;
+                vAcross = aAcross;
             }
         """
         const val FRAGMENT_SHADER = """#version 300 es
             precision mediump float;
             in vec4 vColor;
+            in float vAcross;
             out vec4 outColor;
-            void main() { outColor = vColor; }
+            void main() {
+                float edge = smoothstep(0.68, 0.98, abs(vAcross));
+                float crown = (1.0 - abs(vAcross)) * 0.08;
+                vec3 core = min(vColor.rgb * (1.0 + crown), vec3(1.0));
+                outColor = vec4(mix(core, vColor.rgb * 0.14, edge), vColor.a);
+            }
         """
     }
 }
@@ -512,8 +533,8 @@ internal object ToolpathMeshBuilder {
 
     fun build(scene: ToolpathScene): FloatBuffer {
         val budget = depthPreviewSegmentBudget(scene.detail)
-        val plan = scene.preview.buildRenderPlan(budget)
-        val builder = FloatBuilder(plan.segmentOffsets.size * 36 * 7 + 2_000)
+        val plan = scene.preview.buildRenderPlan(budget, scene.visibleRoles)
+        val builder = FloatBuilder(plan.segmentOffsets.size * 6 * 8 + 2_400)
         addBed(builder, scene.bedSizeX, scene.bedSizeY, scene.bedPolygon)
         val zSpan = (scene.preview.maxZMm - scene.preview.minZMm).coerceAtLeast(0.001f)
         plan.segmentOffsets.forEach { offset ->
@@ -530,39 +551,30 @@ internal object ToolpathMeshBuilder {
             if (length < 0.001f) return@forEach
             val nx = -dy / length
             val ny = dx / length
+            val tx = dx / length
+            val ty = dy / length
             val normalizedHeight = ((z - scene.preview.minZMm) / zSpan).coerceIn(0f, 1f)
             val base = roleColors[role]
-            addRibbon(
-                builder,
-                x1,
-                y1,
-                x2,
-                y2,
-                z,
-                nx,
-                ny,
-                roleWidths[role] / 2f + 0.06f,
-                floatArrayOf(base[0] * 0.10f, base[1] * 0.10f, base[2] * 0.10f),
-                scene.opacity,
-            )
             val shade = scene.depthContrast * (1f - normalizedHeight) * 0.56f
             val color = floatArrayOf(
                 base[0] * (1f - shade),
                 base[1] * (1f - shade),
                 base[2] * (1f - shade),
             )
-            addBead(
+            val halfWidth = roleWidths[role] / 2f
+            addRibbon(
                 builder,
-                x1,
-                y1,
-                x2,
-                y2,
+                x1 - tx * halfWidth,
+                y1 - ty * halfWidth,
+                x2 + tx * halfWidth,
+                y2 + ty * halfWidth,
                 z + 0.024f,
                 nx,
                 ny,
-                roleWidths[role] / 2f,
+                halfWidth,
                 color,
                 scene.opacity,
+                outlined = true,
             )
         }
         return builder.finish()
@@ -633,6 +645,7 @@ internal object ToolpathMeshBuilder {
         halfWidth: Float,
         color: FloatArray,
         alpha: Float,
+        outlined: Boolean = false,
     ) = addQuad(
         builder,
         x1 + nx * halfWidth, y1 + ny * halfWidth, z,
@@ -641,63 +654,11 @@ internal object ToolpathMeshBuilder {
         x1 - nx * halfWidth, y1 - ny * halfWidth, z,
         color,
         alpha,
+        across1 = if (outlined) -1f else 0f,
+        across2 = if (outlined) -1f else 0f,
+        across3 = if (outlined) 1f else 0f,
+        across4 = if (outlined) 1f else 0f,
     )
-
-    private fun addBead(
-        builder: FloatBuilder,
-        x1: Float,
-        y1: Float,
-        x2: Float,
-        y2: Float,
-        topZ: Float,
-        nx: Float,
-        ny: Float,
-        halfWidth: Float,
-        color: FloatArray,
-        alpha: Float,
-    ) {
-        val bottomZ = topZ - 0.14f
-        val ax = x1 + nx * halfWidth
-        val ay = y1 + ny * halfWidth
-        val bx = x2 + nx * halfWidth
-        val by = y2 + ny * halfWidth
-        val cx = x2 - nx * halfWidth
-        val cy = y2 - ny * halfWidth
-        val dx = x1 - nx * halfWidth
-        val dy = y1 - ny * halfWidth
-        addQuad(
-            builder,
-            ax, ay, topZ, bx, by, topZ, cx, cy, topZ, dx, dy, topZ,
-            color,
-            alpha,
-        )
-        val lightSide = floatArrayOf(color[0] * 0.58f, color[1] * 0.58f, color[2] * 0.58f)
-        val darkSide = floatArrayOf(color[0] * 0.34f, color[1] * 0.34f, color[2] * 0.34f)
-        addQuad(
-            builder,
-            ax, ay, topZ, ax, ay, bottomZ, bx, by, bottomZ, bx, by, topZ,
-            lightSide,
-            alpha,
-        )
-        addQuad(
-            builder,
-            dx, dy, topZ, cx, cy, topZ, cx, cy, bottomZ, dx, dy, bottomZ,
-            darkSide,
-            alpha,
-        )
-        addQuad(
-            builder,
-            ax, ay, topZ, dx, dy, topZ, dx, dy, bottomZ, ax, ay, bottomZ,
-            darkSide,
-            alpha,
-        )
-        addQuad(
-            builder,
-            bx, by, topZ, bx, by, bottomZ, cx, cy, bottomZ, cx, cy, topZ,
-            lightSide,
-            alpha,
-        )
-    }
 
     private fun addQuad(
         builder: FloatBuilder,
@@ -707,21 +668,32 @@ internal object ToolpathMeshBuilder {
         x4: Float, y4: Float, z4: Float,
         color: FloatArray,
         alpha: Float,
+        across1: Float = 0f,
+        across2: Float = 0f,
+        across3: Float = 0f,
+        across4: Float = 0f,
     ) {
-        builder.vertex(x1, y1, z1, color, alpha)
-        builder.vertex(x2, y2, z2, color, alpha)
-        builder.vertex(x3, y3, z3, color, alpha)
-        builder.vertex(x1, y1, z1, color, alpha)
-        builder.vertex(x3, y3, z3, color, alpha)
-        builder.vertex(x4, y4, z4, color, alpha)
+        builder.vertex(x1, y1, z1, color, alpha, across1)
+        builder.vertex(x2, y2, z2, color, alpha, across2)
+        builder.vertex(x3, y3, z3, color, alpha, across3)
+        builder.vertex(x1, y1, z1, color, alpha, across1)
+        builder.vertex(x3, y3, z3, color, alpha, across3)
+        builder.vertex(x4, y4, z4, color, alpha, across4)
     }
 }
 
 private class FloatBuilder(initialCapacity: Int) {
     private var values = allocate(initialCapacity.coerceAtLeast(64))
 
-    fun vertex(x: Float, y: Float, z: Float, color: FloatArray, alpha: Float) {
-        ensure(7)
+    fun vertex(
+        x: Float,
+        y: Float,
+        z: Float,
+        color: FloatArray,
+        alpha: Float,
+        across: Float = 0f,
+    ) {
+        ensure(8)
         values.put(x)
         values.put(y)
         values.put(z)
@@ -729,6 +701,7 @@ private class FloatBuilder(initialCapacity: Int) {
         values.put(color[1])
         values.put(color[2])
         values.put(alpha)
+        values.put(across)
     }
 
     fun finish(): FloatBuffer = values.apply { flip() }

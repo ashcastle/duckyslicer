@@ -151,6 +151,8 @@ private fun DuckySlicerScreen(
     val shapeError = stringResource(R.string.shape_error)
     val autoLayDone = stringResource(R.string.auto_lay_done)
     val autoLayError = stringResource(R.string.auto_lay_error)
+    val layOnFaceDone = stringResource(R.string.lay_on_face_done)
+    val layOnFaceError = stringResource(R.string.lay_on_face_error)
     val arrangeDone = stringResource(R.string.arrange_done)
     val arrangeError = stringResource(R.string.arrange_error)
     val splitNotPossible = stringResource(R.string.split_not_possible)
@@ -469,6 +471,28 @@ private fun DuckySlicerScreen(
             }
             autoLaying = false
         }
+    }
+
+    fun laySelectedFaceOnBed(objectId: String, triangle: FloatArray) {
+        if (autoLaying || arranging || splitting || cutting || importing || slicing || previewLoading) return
+        val target = projectHistory.current.objects.firstOrNull { it.id == objectId } ?: return
+        runCatching { target.transform.withFaceOnBed(triangle) }
+            .onSuccess { transform ->
+                val nextHistory = projectHistory.updateTransform(objectId, transform)
+                if (nextHistory != projectHistory) {
+                    projectHistory = nextHistory
+                    clearCompletedSlice()
+                    remoteUpload = null
+                }
+                notice = layOnFaceDone
+                error = null
+            }
+            .onFailure { failure ->
+                if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Place on face failed", failure)
+                supportEvents.record(SupportEvent.LAY_ON_FACE_FAILED)
+                error = layOnFaceError
+                notice = null
+            }
     }
 
     fun arrangeProjectObjects() {
@@ -1024,6 +1048,7 @@ private fun DuckySlicerScreen(
         },
         onArrange = ::arrangeProjectObjects,
         onAutoLay = ::autoLaySelectedModel,
+        onLayOnFace = ::laySelectedFaceOnBed,
         onSplit = ::splitSelectedModel,
         onCut = ::cutSelectedModel,
         onSupportPaintPreview = { objectId, facetIndex, state ->

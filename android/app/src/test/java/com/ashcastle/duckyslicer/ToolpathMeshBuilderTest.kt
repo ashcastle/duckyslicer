@@ -50,7 +50,7 @@ class ToolpathMeshBuilderTest {
     }
 
     @Test
-    fun densePreviewKeepsCompleteRepresentativeLayers() {
+    fun densePreviewKeepsWholeOuterWallPathsAcrossTheFullHeight() {
         val layerCount = 8
         val segmentsPerLayer = 10
         val segments = FloatArray(layerCount * segmentsPerLayer * GcodeLayerPreview.SEGMENT_STRIDE)
@@ -59,26 +59,66 @@ class ToolpathMeshBuilderTest {
             repeat(segmentsPerLayer) { line ->
                 val segment = layer * segmentsPerLayer + line
                 val offset = segment * GcodeLayerPreview.SEGMENT_STRIDE
-                segments[offset] = line.toFloat()
+                val pathLine = line % 5
+                segments[offset] = pathLine.toFloat()
                 segments[offset + 1] = layer.toFloat()
-                segments[offset + 2] = line + 1f
+                segments[offset + 2] = pathLine + 1f
                 segments[offset + 3] = layer.toFloat()
                 segments[offset + 4] = 0.2f * (layer + 1)
-                segments[offset + 5] = (line % 2).toFloat()
-                roleCounts[line % 2] += 1
+                val role = if (line < 5) 0 else 2
+                segments[offset + 5] = role.toFloat()
+                roleCounts[role] += 1
             }
         }
         val preview = GcodeLayerPreview(0, 7, 8, 0.2f, 1.6f, segments, roleCounts)
         val plan = preview.buildRenderPlan(20)
         val selectedZ = plan.segmentOffsets.map { segments[it + 4] }
+        val selectedRoles = plan.segmentOffsets.map { segments[it + 5].toInt() }
 
-        assertTrue("The first layer must stay intact", selectedZ.count { it == 0.2f } == 10)
-        assertTrue("The last layer must stay intact", selectedZ.count { it == 1.6f } == 10)
-        assertTrue("LOD must choose whole layers, not alternating path fragments", selectedZ.distinct().size == 2)
+        assertTrue("The preview must retain geometry near the first layer", selectedZ.any { it == 0.2f })
+        assertTrue("The preview must retain geometry near the last layer", selectedZ.any { it == 1.6f })
+        assertEquals("Every visible toolpath role keeps a coherent representative path", setOf(0, 2), selectedRoles.toSet())
+        assertTrue(
+            "Outer walls must retain more of the mobile budget than internal infill",
+            selectedRoles.count { it == 0 } > selectedRoles.count { it == 2 },
+        )
+        selectedZ.zip(selectedRoles).groupingBy { it }.eachCount().values.forEach { count ->
+            assertEquals("LOD must retain complete five-segment paths", 5, count)
+        }
+        assertTrue("Every retained path segment must remain connected", plan.connectsToPrevious.count { it } >= 16)
     }
 
     @Test
-    fun toolpathsBecomeOutlinedHeightSeparatedTriangles() {
+    fun oneContinuousExtrusionPathIsNeverSampledIntoParticles() {
+        val segmentCount = 30
+        val segments = FloatArray(segmentCount * GcodeLayerPreview.SEGMENT_STRIDE)
+        repeat(segmentCount) { index ->
+            val offset = index * GcodeLayerPreview.SEGMENT_STRIDE
+            segments[offset] = index.toFloat()
+            segments[offset + 1] = 10f
+            segments[offset + 2] = index + 1f
+            segments[offset + 3] = 10f
+            segments[offset + 4] = 0.2f
+            segments[offset + 5] = 0f
+        }
+        val preview = GcodeLayerPreview(
+            0,
+            0,
+            1,
+            0.2f,
+            0.2f,
+            segments,
+            intArrayOf(30, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+        )
+
+        val plan = preview.buildRenderPlan(segmentBudget = 5)
+
+        assertEquals("A path may exceed LOD rather than becoming dotted", 30, plan.segmentOffsets.size)
+        assertEquals(29, plan.connectsToPrevious.count { it })
+    }
+
+    @Test
+    fun toolpathsBecomeFlatOutlinedRibbonsInsteadOfDisconnectedBoxes() {
         val preview = GcodeLayerPreview(
             startLayer = 0,
             endLayer = 1,
@@ -96,13 +136,16 @@ class ToolpathMeshBuilderTest {
         )
         val values = FloatArray(buffer.remaining()).also(buffer::get)
         val zValues = values.indices
-            .filter { it % 7 == 2 }
+            .filter { it % 8 == 2 }
+            .map(values::get)
+        val acrossValues = values.indices
+            .filter { it % 8 == 7 }
             .map(values::get)
 
         assertTrue("The mesh must include the bed below Z=0", zValues.any { it < 0f })
-        assertTrue("Each path must include a dark outline at its real layer", zValues.any { it == 0.2f })
-        assertTrue("Colored ribbons must sit above outlines without Z fighting", zValues.any { it > 0.4f })
-        assertTrue("Every draw vertex must contain XYZ and RGBA", values.size % 7 == 0)
+        assertTrue("Toolpath ribbons must retain real separated heights", zValues.any { it > 0.4f })
+        assertTrue("The shader must receive both ribbon edges", -1f in acrossValues && 1f in acrossValues)
+        assertTrue("Every draw vertex must contain XYZ, RGBA, and lateral position", values.size % 8 == 0)
         assertTrue("GPU staging geometry must use direct native memory", buffer.isDirect)
     }
 
@@ -171,10 +214,10 @@ class ToolpathMeshBuilderTest {
         val buffer = ToolpathMeshBuilder.build(
             ToolpathScene(preview, 220f, 220f, 0.92f, 0.78f, PreviewDetail.BALANCED),
         )
-        val vertexCount = buffer.remaining() / 7
+        val vertexCount = buffer.remaining() / 8
 
-        assertTrue("Balanced rendering must stay under its mobile geometry budget", vertexCount < 600_000)
-        assertTrue("Dense previews must still retain substantial visible detail", vertexCount > 400_000)
+        assertTrue("One flat ribbon must replace each former 36-vertex segment box", vertexCount < 190_000)
+        assertTrue("Dense previews must retain every segment at this size", vertexCount > 180_000)
     }
 
     @Test
