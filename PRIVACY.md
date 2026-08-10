@@ -76,7 +76,7 @@ receive app data, it has no developer-held app data to delete on your behalf.
 
 For a privacy question that contains no personal or sensitive information, submit an
 inquiry through the project's
-[issue tracker](https://github.com/ashcastle/duckyslicer/issues/new). Do not post
+[support-question form](https://github.com/ashcastle/duckyslicer/issues/new?template=support_question.yml). Do not post
 personal data, printer credentials, private models, or G-code in a public issue. For
 a sensitive privacy or security concern, follow the private-contact process in
 [SECURITY.md](https://github.com/ashcastle/duckyslicer/blob/main/SECURITY.md).
@@ -160,7 +160,7 @@ DuckySlicer는 사용자가 다음 동작을 선택한 경우에만 필요한 �
 ## 개인정보 문의 및 방침 변경
 
 개인정보나 민감한 정보가 포함되지 않은 문의는 프로젝트
-[이슈 트래커](https://github.com/ashcastle/duckyslicer/issues/new)에 남길 수
+[지원 질문 양식](https://github.com/ashcastle/duckyslicer/issues/new?template=support_question.yml)에 남길 수
 있습니다. 공개 이슈에 개인정보, 프린터 접속 정보, 비공개 모델 또는 G-code를
 게시하지 마세요. 민감한 개인정보 또는 보안 문제는
 [SECURITY.md](https://github.com/ashcastle/duckyslicer/blob/main/SECURITY.md)의

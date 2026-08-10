@@ -1,45 +1,67 @@
 name: Feature request
-description: Suggest an improvement for DuckySlicer on Android
+description: Propose a focused improvement to the offline-first Android slicer.
+title: "[Feature] "
 labels: ["enhancement"]
 body:
-  - type: checkboxes
+  - type: markdown
     attributes:
-      label: Before submitting
-      options:
-        - label: I searched existing issues for the same request.
-          required: true
+      value: |
+        Describe the printing workflow, not private project content. Do not include
+        private models, private or identifying G-code, printer addresses, access keys,
+        or personal data.
+
   - type: textarea
     id: problem
     attributes:
-      label: Problem
-      description: Describe the mobile slicing task that is difficult today.
+      label: Workflow problem
+      description: What are you trying to accomplish, and what blocks you today?
     validations:
       required: true
+
   - type: textarea
-    id: solution
+    id: proposal
     attributes:
-      label: Suggested experience
-      description: Describe the result from a user's point of view.
+      label: Proposed experience
+      description: Describe what the user should see and be able to do.
     validations:
       required: true
+
   - type: dropdown
     id: area
     attributes:
-      label: Area
+      label: Affected area
       options:
-        - Slice
+        - Model import and Prepare
+        - Slicing
         - Preview
-        - Profiles
-        - Project
+        - Printer, filament, or process profiles
+        - Device connection or upload
+        - Projects and export
         - Settings
-        - Accessibility and localization
         - Other
     validations:
       required: true
+
+  - type: textarea
+    id: offline
+    attributes:
+      label: Offline behavior
+      description: Explain how this works without an account or cloud service. If LAN access is needed, explain why.
+    validations:
+      required: true
+
   - type: textarea
     id: context
     attributes:
-      label: Additional context
-      description: Add screenshots, mockups, or printer/profile details if useful.
-    validations:
-      required: false
+      label: Optional context
+      description: Add a public mockup, reference, or compatibility detail when useful.
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Public request safety
+      options:
+        - label: I removed private models, private or identifying G-code, printer addresses, access keys, and personal data.
+          required: true
+        - label: I searched existing issues for the same request.
+          required: true

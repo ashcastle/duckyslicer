@@ -235,6 +235,12 @@ def main() -> None:
         "debug APK language resources are verified": (
             "python3 tools/verify_artifact_localization.py"
         ),
+        "safe community contribution routes are verified": (
+            "python3 tools/verify_community_health.py"
+        ),
+        "community contribution policy is unit tested": (
+            "tools.test_verify_community_health"
+        ),
     }
     for description, marker in required_android_gates.items():
         if marker not in android_source:

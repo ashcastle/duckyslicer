@@ -55,11 +55,13 @@ static analysis only and does not replace the local ARM64 16 KB functional gate.
 Do not publish exploit details, private data, or a proof-of-concept in a public
 issue.
 
-1. Check the repository's **Security** page for a private vulnerability-reporting
-   form.
-2. If private reporting is not available, open a minimal issue that asks the
-   maintainer for a private contact channel. Include no sensitive details in that
-   issue.
+1. Check the repository's
+   [Security Advisories page](https://github.com/ashcastle/duckyslicer/security/advisories)
+   and use **Report a vulnerability** when that private option is available.
+2. If private reporting is not available, use the public
+   [support-question form](https://github.com/ashcastle/duckyslicer/issues/new?template=support_question.yml)
+   only to ask the maintainer for a private contact channel. Include no sensitive
+   details in that issue.
 3. In the private report, include the affected commit or APK version, Android
    version and device, impact, reproduction steps, and the smallest safe test file
    needed to reproduce the problem.

@@ -3,12 +3,42 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+      timezone: "Asia/Seoul"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps(actions)"
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "cargo"
+    directory: "/rust/duckyslicer-jni"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:30"
+      timezone: "Asia/Seoul"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps(rust)"
+    groups:
+      rust:
+        patterns:
+          - "*"
+
   - package-ecosystem: "gradle"
     directory: "/android"
     schedule:
       interval: "monthly"
-  - package-ecosystem: "cargo"
-    directory: "/rust/duckyslicer-jni"
-    schedule:
-      interval: "monthly"
+      time: "04:00"
+      timezone: "Asia/Seoul"
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "deps(android)"
+
+# Every Gradle update PR must regenerate and review dependency locks and clean-room
+# verification metadata together before it can pass the supply-chain gate.
