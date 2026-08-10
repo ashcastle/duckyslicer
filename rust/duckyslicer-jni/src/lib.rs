@@ -1,5 +1,6 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
+use std::collections::{HashMap, HashSet};
 use std::ffi::{CStr, c_char};
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
@@ -20,6 +21,9 @@ unsafe extern "C" {
 const MAX_MODEL_IMPORT_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_TEXT_LINE_BYTES: usize = 64 * 1024;
 const MAX_STL_COORDINATE_ABS_MM: f32 = 1_000_000.0;
+const PREVIEW_TRIANGLE_LIMIT: usize = 3_500;
+const PREVIEW_CLUSTER_START_RESOLUTION: u16 = 36;
+const PREVIEW_CLUSTER_WORK_LIMIT: usize = PREVIEW_TRIANGLE_LIMIT * 8;
 const MAX_GCODE_COORDINATE_ABS_MM: f32 = 1_000_000.0;
 const MAX_PREVIEW_SEGMENTS: usize = 120_000;
 const PREVIEW_COMPACTION_THRESHOLD: usize = MAX_PREVIEW_SEGMENTS * 2;
@@ -52,6 +56,29 @@ struct StlInspection {
     max_mm: [f32; 3],
     preview_triangles: Vec<[f32; 9]>,
     preview_triangle_indices: Vec<usize>,
+}
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+struct PreviewCell {
+    x: u16,
+    y: u16,
+    z: u16,
+}
+
+#[derive(Default)]
+struct PreviewCellAccumulator {
+    sums: [f64; 3],
+    samples: u64,
+}
+
+struct PreviewClusterTriangle {
+    cells: [PreviewCell; 3],
+    source_index: usize,
+}
+
+struct PreviewClusterResult {
+    triangles: Vec<[f32; 9]>,
+    source_indices: Vec<usize>,
 }
 
 #[derive(Deserialize)]
@@ -493,7 +520,6 @@ fn create_temporary_output(output_path: &Path) -> Result<(File, TemporaryOutput)
 }
 
 fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
-    const PREVIEW_TRIANGLE_LIMIT: usize = 3_500;
     let mut file = open_stl_input(path)?;
     let triangles = stl_io::create_stl_reader(&mut file)
         .map_err(|error| EngineError::Parse(error.to_string()))?;
@@ -502,7 +528,6 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
     let mut max = [f32::NEG_INFINITY; 3];
     let mut preview_triangles = Vec::with_capacity(PREVIEW_TRIANGLE_LIMIT);
     let mut preview_triangle_indices = Vec::with_capacity(PREVIEW_TRIANGLE_LIMIT);
-    let mut preview_stride = 1usize;
 
     for triangle in triangles {
         let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
@@ -518,19 +543,20 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
                 max[axis] = max[axis].max(vertex[axis]);
             }
         }
-        if ordinal.is_multiple_of(preview_stride) {
+        if preview_triangles.len() < PREVIEW_TRIANGLE_LIMIT {
             let [a, b, c] = vertices;
             preview_triangles.push([a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]]);
             preview_triangle_indices.push(ordinal);
         }
-        if preview_triangles.len() > PREVIEW_TRIANGLE_LIMIT {
-            preview_triangles = preview_triangles.into_iter().step_by(2).collect();
-            preview_triangle_indices = preview_triangle_indices.into_iter().step_by(2).collect();
-            preview_stride = preview_stride.saturating_mul(2);
-        }
     }
     if triangle_count == 0 {
         return Err(EngineError::Empty);
+    }
+
+    if triangle_count > PREVIEW_TRIANGLE_LIMIT {
+        let clustered = clustered_stl_preview(path, min, max)?;
+        preview_triangles = clustered.triangles;
+        preview_triangle_indices = clustered.source_indices;
     }
 
     Ok(StlInspection {
@@ -547,6 +573,127 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
         preview_triangles,
         preview_triangle_indices,
     })
+}
+
+fn clustered_stl_preview(
+    path: &str,
+    min: [f32; 3],
+    max: [f32; 3],
+) -> Result<PreviewClusterResult, EngineError> {
+    // Keeping every Nth source triangle produces isolated flakes on dense meshes.
+    // Vertex clustering instead collapses neighboring facets onto shared cells so
+    // the bounded Android preview remains a connected, opaque surface.
+    let mut resolution = PREVIEW_CLUSTER_START_RESOLUTION;
+    loop {
+        if let Some(result) = clustered_stl_preview_at_resolution(path, min, max, resolution)? {
+            if result.triangles.len() <= PREVIEW_TRIANGLE_LIMIT || resolution <= 2 {
+                return Ok(result);
+            }
+            let ratio =
+                (PREVIEW_TRIANGLE_LIMIT as f64 / result.triangles.len() as f64).sqrt() * 0.9;
+            let next =
+                ((resolution as f64 * ratio).floor() as u16).clamp(2, resolution.saturating_sub(1));
+            resolution = next;
+        } else {
+            resolution = (resolution / 2).max(2);
+        }
+    }
+}
+
+fn clustered_stl_preview_at_resolution(
+    path: &str,
+    min: [f32; 3],
+    max: [f32; 3],
+    resolution: u16,
+) -> Result<Option<PreviewClusterResult>, EngineError> {
+    let mut file = open_stl_input(path)?;
+    let triangles = stl_io::create_stl_reader(&mut file)
+        .map_err(|error| EngineError::Parse(error.to_string()))?;
+    let mut cells = HashMap::<PreviewCell, PreviewCellAccumulator>::new();
+    let mut seen_triangles = HashSet::<[PreviewCell; 3]>::new();
+    let mut clustered_triangles = Vec::new();
+
+    for (source_index, triangle) in triangles.enumerate() {
+        let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
+        validate_triangle(&triangle)?;
+        let vertices = triangle.vertices.map(|vertex| vertex.0);
+        let triangle_cells = vertices.map(|vertex| preview_cell(vertex, min, max, resolution));
+        for (cell, vertex) in triangle_cells.into_iter().zip(vertices) {
+            let accumulator = cells.entry(cell).or_default();
+            for (axis, value) in vertex.into_iter().enumerate() {
+                accumulator.sums[axis] += value as f64;
+            }
+            accumulator.samples = accumulator.samples.saturating_add(1);
+        }
+        if triangle_cells[0] == triangle_cells[1]
+            || triangle_cells[1] == triangle_cells[2]
+            || triangle_cells[2] == triangle_cells[0]
+        {
+            continue;
+        }
+        let mut canonical = triangle_cells;
+        canonical.sort_unstable();
+        if seen_triangles.insert(canonical) {
+            clustered_triangles.push(PreviewClusterTriangle {
+                cells: triangle_cells,
+                source_index,
+            });
+            if clustered_triangles.len() > PREVIEW_CLUSTER_WORK_LIMIT {
+                return Ok(None);
+            }
+        }
+    }
+
+    let mut preview_triangles = Vec::with_capacity(clustered_triangles.len());
+    let mut source_indices = Vec::with_capacity(clustered_triangles.len());
+    for triangle in clustered_triangles {
+        let vertices = triangle.cells.map(|cell| {
+            let accumulator = cells
+                .get(&cell)
+                .expect("cluster triangle must reference an accumulated cell");
+            accumulator
+                .sums
+                .map(|sum| (sum / accumulator.samples as f64) as f32)
+        });
+        if triangle_area_squared(vertices) <= f32::EPSILON {
+            continue;
+        }
+        let [a, b, c] = vertices;
+        preview_triangles.push([a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]]);
+        source_indices.push(triangle.source_index);
+    }
+    Ok(Some(PreviewClusterResult {
+        triangles: preview_triangles,
+        source_indices,
+    }))
+}
+
+fn preview_cell(vertex: [f32; 3], min: [f32; 3], max: [f32; 3], resolution: u16) -> PreviewCell {
+    let coordinate = |axis: usize| {
+        let span = max[axis] - min[axis];
+        if span <= f32::EPSILON {
+            return 0;
+        }
+        (((vertex[axis] - min[axis]) / span * resolution as f32).floor() as i32)
+            .clamp(0, resolution as i32 - 1) as u16
+    };
+    PreviewCell {
+        x: coordinate(0),
+        y: coordinate(1),
+        z: coordinate(2),
+    }
+}
+
+fn triangle_area_squared(vertices: [[f32; 3]; 3]) -> f32 {
+    let [a, b, c] = vertices;
+    let ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    let ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    let cross = [
+        ab[1] * ac[2] - ab[2] * ac[1],
+        ab[2] * ac[0] - ab[0] * ac[2],
+        ab[0] * ac[1] - ab[1] * ac[0],
+    ];
+    cross.into_iter().map(|value| value * value).sum()
 }
 
 fn rotate_vertex(mut vertex: [f32; 3], rotation_deg: [f32; 3]) -> [f32; 3] {
@@ -1336,6 +1483,73 @@ mod tests {
                 .all(|indices| indices[0] < indices[1])
         );
         assert!(inspection.dimensions_mm[0] > 79.0);
+    }
+
+    #[test]
+    fn dense_stl_preview_keeps_a_connected_surface_instead_of_scattered_facets() {
+        let path = std::env::temp_dir().join(format!(
+            "duckyslicer-connected-inspection-{}.stl",
+            std::process::id(),
+        ));
+        let mut file = File::create(&path).expect("create dense STL fixture");
+        writeln!(file, "solid grid").expect("write header");
+        for y in 0..72 {
+            for x in 0..72 {
+                let x0 = x as f32;
+                let x1 = x0 + 1.0;
+                let y0 = y as f32;
+                let y1 = y0 + 1.0;
+                writeln!(
+                    file,
+                    "facet normal 0 0 1\nouter loop\nvertex {x0} {y0} 0\nvertex {x1} {y0} 0\nvertex {x1} {y1} 0\nendloop\nendfacet\nfacet normal 0 0 1\nouter loop\nvertex {x0} {y0} 0\nvertex {x1} {y1} 0\nvertex {x0} {y1} 0\nendloop\nendfacet",
+                )
+                .expect("write grid triangles");
+            }
+        }
+        writeln!(file, "endsolid grid").expect("write footer");
+        drop(file);
+
+        let inspection = inspect_stl(path.to_str().expect("utf8 path")).expect("inspect STL");
+        std::fs::remove_file(path).expect("remove fixture");
+
+        assert_eq!(inspection.triangles, 72 * 72 * 2);
+        assert!(!inspection.preview_triangles.is_empty());
+        assert!(inspection.preview_triangles.len() <= PREVIEW_TRIANGLE_LIMIT);
+        let vertex = |values: &[f32; 9], offset: usize| {
+            (
+                values[offset].to_bits(),
+                values[offset + 1].to_bits(),
+                values[offset + 2].to_bits(),
+            )
+        };
+        let mut edges = HashMap::new();
+        for triangle in &inspection.preview_triangles {
+            let vertices = [
+                vertex(triangle, 0),
+                vertex(triangle, 3),
+                vertex(triangle, 6),
+            ];
+            for edge in [(0, 1), (1, 2), (2, 0)] {
+                let mut endpoints = [vertices[edge.0], vertices[edge.1]];
+                endpoints.sort_unstable();
+                *edges.entry(endpoints).or_insert(0usize) += 1;
+            }
+        }
+        let shared_edges = edges.values().filter(|count| **count >= 2).count();
+        assert!(
+            shared_edges > inspection.preview_triangles.len() / 2,
+            "clustered preview should retain a visibly connected surface",
+        );
+        let preview_x = inspection
+            .preview_triangles
+            .iter()
+            .flat_map(|triangle| [triangle[0], triangle[3], triangle[6]]);
+        let preview_y = inspection
+            .preview_triangles
+            .iter()
+            .flat_map(|triangle| [triangle[1], triangle[4], triangle[7]]);
+        assert!(preview_x.clone().fold(f32::NEG_INFINITY, f32::max) > 70.0);
+        assert!(preview_y.clone().fold(f32::NEG_INFINITY, f32::max) > 70.0);
     }
 
     #[test]
