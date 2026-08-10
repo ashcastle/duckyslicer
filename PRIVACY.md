@@ -39,7 +39,7 @@ DuckySlicer project.
 DuckySlicer sends data only when you choose an action that requires it:
 
 - Exported DuckySlicer project files contain the model geometry, object placement,
-  support painting, and active printer, filament, and slicing settings needed to
+  support and seam painting, and active printer, filament, and slicing settings needed to
   reopen the project. They do not contain G-code, saved printer addresses, or printer
   access keys. Project files and exported G-code are written only to the location you
   select. A storage provider you select may process that file under its own privacy
@@ -125,7 +125,7 @@ Android 11 이상에서는 Android가 이전 앱 프로세스의 종료 이력�
 DuckySlicer는 사용자가 다음 동작을 선택한 경우에만 필요한 데이터를 전송합니다.
 
 - 내보낸 DuckySlicer 프로젝트 파일에는 프로젝트를 다시 여는 데 필요한 모델
-  형상, 오브젝트 배치, 서포트 채색, 현재 프린터·필라멘트·슬라이싱 설정이
+  형상, 오브젝트 배치, 서포트·심 채색, 현재 프린터·필라멘트·슬라이싱 설정이
   포함됩니다. G-code, 저장된 프린터 주소 또는 프린터 접속 키는 포함되지
   않습니다. 프로젝트 파일과 내보낸 G-code는 사용자가 선택한 위치에만
   저장됩니다. 선택한 저장 공간 제공자는 자체 개인정보처리방침에 따라 파일을

@@ -60,12 +60,14 @@ class ProjectArchiveTest {
                     mirrorY = true,
                 ),
                 supportPaint = SupportPaint().paint(1, SupportPaintState.ENFORCE),
+                seamPaint = SeamPaint().paint(0, SeamPaintState.ENFORCE),
             )
             val second = first.copy(
                 id = "duck-b",
                 model = first.model.copy(fileName = "duck-copy.stl"),
                 transform = ModelTransform(offsetXmm = -18f, rotationXdeg = 90f),
                 supportPaint = SupportPaint().paint(0, SupportPaintState.BLOCK),
+                seamPaint = SeamPaint().paint(1, SeamPaintState.BLOCK),
                 filamentSlot = 1,
             )
             val snapshot = ProjectSnapshot(listOf(first, second), selectedObjectId = second.id)
@@ -88,7 +90,10 @@ class ProjectArchiveTest {
                 manifest.keys().asSequence().toSet(),
             )
             assertEquals(
-                setOf("id", "displayName", "modelEntry", "transform", "supportPaint", "filamentSlot"),
+                setOf(
+                    "id", "displayName", "modelEntry", "transform", "supportPaint", "seamPaint",
+                    "filamentSlot",
+                ),
                 manifest.getJSONArray("objects").getJSONObject(0).keys().asSequence().toSet(),
             )
 
@@ -103,6 +108,8 @@ class ProjectArchiveTest {
             assertEquals(second.transform, imported.snapshot.objects[1].transform)
             assertEquals(first.supportPaint, imported.snapshot.objects[0].supportPaint)
             assertEquals(second.supportPaint, imported.snapshot.objects[1].supportPaint)
+            assertEquals(first.seamPaint, imported.snapshot.objects[0].seamPaint)
+            assertEquals(second.seamPaint, imported.snapshot.objects[1].seamPaint)
             assertEquals(0, imported.snapshot.objects[0].filamentSlot)
             assertEquals(1, imported.snapshot.objects[1].filamentSlot)
             assertEquals(
@@ -114,6 +121,20 @@ class ProjectArchiveTest {
                 imported.sliceOptions?.toProjectJson()?.toString(),
             )
             assertEquals("solid duck\nendsolid duck\n", File(imported.snapshot.objects[0].model.localPath).readText())
+
+            val legacyManifest = JSONObject(manifest.toString()).apply {
+                put("schemaVersion", 1)
+                val objects = getJSONArray("objects")
+                for (index in 0 until objects.length()) {
+                    objects.getJSONObject(index).remove("seamPaint")
+                }
+            }
+            val legacyArchive = zipOf(
+                "manifest.json" to legacyManifest.toString().toByteArray(),
+                "models/000.stl" to requireNotNull(archiveEntries["models/000.stl"]),
+            )
+            val legacy = destination.importArchive(ByteArrayInputStream(legacyArchive))
+            assertTrue(legacy.snapshot.objects.all { it.seamPaint.facets.isEmpty() })
             assertEquals(
                 1,
                 File(destinationRoot, ProjectStore.MODELS_DIRECTORY).listFiles().orEmpty().size,

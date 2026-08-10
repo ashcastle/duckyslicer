@@ -1225,6 +1225,9 @@ object OnDeviceSlicer {
         require(objects.all { projectObject ->
             projectObject.supportPaint.facets.keys.all { it in 0 until projectObject.model.triangles }
         }) { "Support paint references an unavailable facet" }
+        require(objects.all { projectObject ->
+            projectObject.seamPaint.facets.keys.all { it in 0 until projectObject.model.triangles }
+        }) { "Seam paint references an unavailable facet" }
 
         return withTransformedModels(
             objects,
@@ -1242,10 +1245,22 @@ object OnDeviceSlicer {
                         ).also(it::writeSidecar)
                     }
             }
+            val seamPaintFiles = objects.mapIndexed { index, projectObject ->
+                projectObject.seamPaint
+                    .takeIf { it.facets.isNotEmpty() }
+                    ?.let {
+                        File.createTempFile(
+                            "slice-seam-$index-",
+                            ".bin",
+                            File(projectObject.model.localPath).parentFile,
+                        ).also(it::writeSidecar)
+                    }
+            }
             try {
                 SlicerProcessClient.slice(
                     transformedModels,
                     supportPaintFiles,
+                    seamPaintFiles,
                     options,
                     filamentSlots = objects.map(ProjectObject::filamentSlot).toIntArray(),
                     foregroundSession = foregroundSession,
@@ -1254,6 +1269,7 @@ object OnDeviceSlicer {
                 )
             } finally {
                 supportPaintFiles.filterNotNull().forEach(File::delete)
+                seamPaintFiles.filterNotNull().forEach(File::delete)
             }
         }
     }

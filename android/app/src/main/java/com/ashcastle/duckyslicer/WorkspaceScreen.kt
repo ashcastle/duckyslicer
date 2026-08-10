@@ -168,6 +168,12 @@ private enum class SupportPaintTool(val state: SupportPaintState?, val label: In
     ERASE(null, R.string.support_erase),
 }
 
+private enum class SeamPaintTool(val state: SeamPaintState?, val label: Int) {
+    ENFORCE(SeamPaintState.ENFORCE, R.string.seam_enforce),
+    BLOCK(SeamPaintState.BLOCK, R.string.seam_block),
+    ERASE(null, R.string.seam_erase),
+}
+
 internal data class ModelScreenTriangle(
     val sourceFacetIndex: Int,
     val a: Offset,
@@ -256,6 +262,8 @@ internal fun WorkspaceScreen(
     onCut: (Float, Boolean) -> Unit,
     onSupportPaintPreview: (String, Int, SupportPaintState?) -> Unit,
     onSupportPaintCommitted: (String, SupportPaint) -> Unit,
+    onSeamPaintPreview: (String, Int, SeamPaintState?) -> Unit,
+    onSeamPaintCommitted: (String, SeamPaint) -> Unit,
     onRemoveModel: () -> Unit,
     onSlice: () -> Unit,
     onCancelSlice: () -> Unit,
@@ -287,10 +295,13 @@ internal fun WorkspaceScreen(
     var showCutTool by remember { mutableStateOf(false) }
     var supportPainting by remember { mutableStateOf(false) }
     var supportPaintTool by remember { mutableStateOf(SupportPaintTool.ENFORCE) }
+    var seamPainting by remember { mutableStateOf(false) }
+    var seamPaintTool by remember { mutableStateOf(SeamPaintTool.ENFORCE) }
     var visibleToolpathRoles by remember { mutableStateOf(ToolpathStyles.indices.toSet()) }
     var previewControlsExpanded by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(selectedObjectId, selectedTab) {
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) supportPainting = false
+        if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) seamPainting = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showFilamentPicker = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showCutTool = false
     }
@@ -324,11 +335,15 @@ internal fun WorkspaceScreen(
                         !importing && !editingBusy && !slicing && !previewLoading,
                     supportPaintObjectId = selectedObjectId.takeIf { supportPainting },
                     supportPaintState = supportPaintTool.state,
+                    seamPaintObjectId = selectedObjectId.takeIf { seamPainting },
+                    seamPaintState = seamPaintTool.state,
                     onObjectSelected = onObjectSelected,
                     onModelTransformPreview = onModelTransformPreview,
                     onModelTransformCommitted = onModelTransformCommitted,
                     onSupportPaintPreview = onSupportPaintPreview,
                     onSupportPaintCommitted = onSupportPaintCommitted,
+                    onSeamPaintPreview = onSeamPaintPreview,
+                    onSeamPaintCommitted = onSeamPaintCommitted,
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -347,7 +362,10 @@ internal fun WorkspaceScreen(
                     .padding(16.dp),
             )
 
-            if (selectedObject != null && selectedTab == WorkspaceTab.SLICE && !supportPainting) {
+            if (
+                selectedObject != null && selectedTab == WorkspaceTab.SLICE &&
+                !supportPainting && !seamPainting
+            ) {
                 ObjectToolRail(
                     canUndo = canUndo,
                     canRedo = canRedo,
@@ -357,7 +375,10 @@ internal fun WorkspaceScreen(
                     onAutoLay = onAutoLay,
                     autoLaying = autoLaying,
                     editingBusy = editingBusy,
-                    onSupportPaint = { supportPainting = true },
+                    onSupportPaint = {
+                        seamPainting = false
+                        supportPainting = true
+                    },
                     onMore = { showModelTools = true },
                     onRemove = {
                         onRemoveModel()
@@ -371,6 +392,15 @@ internal fun WorkspaceScreen(
                     selectedTool = supportPaintTool,
                     onToolSelected = { supportPaintTool = it },
                     onDone = { supportPainting = false },
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
+                )
+            }
+
+            if (selectedObject != null && selectedTab == WorkspaceTab.SLICE && seamPainting) {
+                SeamPaintPalette(
+                    selectedTool = seamPaintTool,
+                    onToolSelected = { seamPaintTool = it },
+                    onDone = { seamPainting = false },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
                 )
             }
@@ -527,6 +557,11 @@ internal fun WorkspaceScreen(
                 showModelTools = false
                 showCutTool = true
             },
+            onSeamPaint = {
+                showModelTools = false
+                supportPainting = false
+                seamPainting = true
+            },
             onChooseFilament = {
                 showModelTools = false
                 showFilamentPicker = true
@@ -580,6 +615,7 @@ private fun ModelTransformSheet(
     onAutoLay: () -> Unit,
     onSplit: () -> Unit,
     onCut: () -> Unit,
+    onSeamPaint: () -> Unit,
     onChooseFilament: () -> Unit,
     onTransformChanged: (ModelTransform) -> Unit,
     onRemoveModel: () -> Unit,
@@ -773,6 +809,19 @@ private fun ModelTransformSheet(
                 Icon(Icons.Default.ContentCut, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.cut_model))
+            }
+            Button(
+                onClick = onSeamPaint,
+                enabled = !autoLaying && !splitting && !cutting,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF3A3B37),
+                    contentColor = Color(0xFFF4F4EE),
+                ),
+            ) {
+                Icon(Icons.Default.Brush, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.paint_seam))
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1236,11 +1285,15 @@ private fun BedScene(
     objectManipulationEnabled: Boolean,
     supportPaintObjectId: String?,
     supportPaintState: SupportPaintState?,
+    seamPaintObjectId: String?,
+    seamPaintState: SeamPaintState?,
     onObjectSelected: (String?) -> Unit,
     onModelTransformPreview: (ModelTransform) -> Unit,
     onModelTransformCommitted: (ModelTransform) -> Unit,
     onSupportPaintPreview: (String, Int, SupportPaintState?) -> Unit,
     onSupportPaintCommitted: (String, SupportPaint) -> Unit,
+    onSeamPaintPreview: (String, Int, SeamPaintState?) -> Unit,
+    onSeamPaintCommitted: (String, SeamPaint) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -1286,6 +1339,8 @@ private fun BedScene(
     val currentTransformCommitCallback by rememberUpdatedState(onModelTransformCommitted)
     val currentSupportPaintPreviewCallback by rememberUpdatedState(onSupportPaintPreview)
     val currentSupportPaintCommitCallback by rememberUpdatedState(onSupportPaintCommitted)
+    val currentSeamPaintPreviewCallback by rememberUpdatedState(onSeamPaintPreview)
+    val currentSeamPaintCommitCallback by rememberUpdatedState(onSeamPaintCommitted)
     val effectiveBedPolygon = remember(bedPolygon, bedSizeX, bedSizeY) {
         bedPolygon.takeIf { bedPolygonIsValid(it, bedSizeX, bedSizeY) }
             ?: rectangularBedPolygon(bedSizeX, bedSizeY)
@@ -1314,12 +1369,24 @@ private fun BedScene(
     }
 
     Canvas(
-        modifier.pointerInput(objectIds, preview, objectManipulationEnabled, supportPaintObjectId, supportPaintState) {
+        modifier.pointerInput(
+            objectIds,
+            preview,
+            objectManipulationEnabled,
+            supportPaintObjectId,
+            supportPaintState,
+            seamPaintObjectId,
+            seamPaintState,
+        ) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
-                val paintingObject = supportPaintObjectId?.let { objectId ->
+                val supportPaintingObject = supportPaintObjectId?.let { objectId ->
                     currentObjects.firstOrNull { it.id == objectId }
                 }
+                val seamPaintingObject = seamPaintObjectId?.let { objectId ->
+                    currentObjects.firstOrNull { it.id == objectId }
+                }
+                val paintingObject = supportPaintingObject ?: seamPaintingObject
                 val hitObjectId = if (objectManipulationEnabled && paintingObject == null) {
                     modelScreenBounds.entries.toList().asReversed().firstOrNull { (_, bounds) ->
                         bounds.inflate(14.dp.toPx()).contains(down.position)
@@ -1330,7 +1397,8 @@ private fun BedScene(
                 val dragStartTransform = currentObjects
                     .firstOrNull { it.id == hitObjectId }
                     ?.transform
-                val paintStart = paintingObject?.supportPaint
+                val supportPaintStart = supportPaintingObject?.supportPaint
+                val seamPaintStart = seamPaintingObject?.seamPaint
                 val paintedFacets = HashSet<Int>()
                 fun paintAt(position: Offset) {
                     val objectId = paintingObject?.id ?: return
@@ -1340,7 +1408,11 @@ private fun BedScene(
                         18.dp.toPx(),
                     ) ?: return
                     if (paintedFacets.add(hit)) {
-                        currentSupportPaintPreviewCallback(objectId, hit, supportPaintState)
+                        if (supportPaintingObject != null) {
+                            currentSupportPaintPreviewCallback(objectId, hit, supportPaintState)
+                        } else if (seamPaintingObject != null) {
+                            currentSeamPaintPreviewCallback(objectId, hit, seamPaintState)
+                        }
                     }
                 }
                 if (hitObjectId != null) currentSelectionCallback(hitObjectId)
@@ -1404,8 +1476,16 @@ private fun BedScene(
                     } while (event.changes.any { it.pressed })
                 } finally {
                     interactionActive = false
-                    if (paintingObject != null && paintStart != null && paintedFacets.isNotEmpty()) {
-                        currentSupportPaintCommitCallback(paintingObject.id, paintStart)
+                    if (
+                        supportPaintingObject != null && supportPaintStart != null &&
+                        paintedFacets.isNotEmpty()
+                    ) {
+                        currentSupportPaintCommitCallback(supportPaintingObject.id, supportPaintStart)
+                    } else if (
+                        seamPaintingObject != null && seamPaintStart != null &&
+                        paintedFacets.isNotEmpty()
+                    ) {
+                        currentSeamPaintCommitCallback(seamPaintingObject.id, seamPaintStart)
                     } else if (hitObjectId != null && dragStartTransform != null && movement >= 1f) {
                         currentTransformCommitCallback(dragStartTransform)
                     } else if (hitObjectId == null && paintingObject == null && movement < 12f) {
@@ -1551,6 +1631,8 @@ private fun BedScene(
                 val meshPath = Path()
                 val enforcePaintPath = Path()
                 val blockPaintPath = Path()
+                val seamEnforcePaintPath = Path()
+                val seamBlockPaintPath = Path()
                 val screenTriangles = ArrayList<ModelScreenTriangle>(model.previewTriangleIndices.size)
                 var triangleIndex = 0
                 var minimumScreenX = Float.POSITIVE_INFINITY
@@ -1616,6 +1698,11 @@ private fun BedScene(
                         SupportPaintState.BLOCK -> blockPaintPath.addTriangle(a, b, c)
                         null -> Unit
                     }
+                    when (projectObject.seamPaint.facets[sourceFacetIndex]) {
+                        SeamPaintState.ENFORCE -> seamEnforcePaintPath.addTriangle(a, b, c)
+                        SeamPaintState.BLOCK -> seamBlockPaintPath.addTriangle(a, b, c)
+                        null -> Unit
+                    }
                     triangleIndex += 9
                 }
                 if (minimumScreenX.isFinite()) {
@@ -1644,6 +1731,18 @@ private fun BedScene(
                 drawPath(
                     blockPaintPath,
                     Color(0xFF541F1F),
+                    style = Stroke(1.2.dp.toPx()),
+                )
+                drawPath(seamEnforcePaintPath, Color(0xFF4CC9F0).copy(alpha = 0.9f))
+                drawPath(
+                    seamEnforcePaintPath,
+                    Color(0xFF153B4A),
+                    style = Stroke(1.2.dp.toPx()),
+                )
+                drawPath(seamBlockPaintPath, Color(0xFFFF9F43).copy(alpha = 0.9f))
+                drawPath(
+                    seamBlockPaintPath,
+                    Color(0xFF563217),
                     style = Stroke(1.2.dp.toPx()),
                 )
             }
@@ -1747,6 +1846,55 @@ private fun SupportPaintPalette(
             }
             Text(
                 stringResource(R.string.support_paint_hint),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SeamPaintPalette(
+    selectedTool: SeamPaintTool,
+    onToolSelected: (SeamPaintTool) -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.widthIn(max = 560.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = Color.Black.copy(alpha = 0.88f),
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SeamPaintTool.entries.forEach { tool ->
+                    TextButton(
+                        onClick = { onToolSelected(tool) },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.textButtonColors(
+                            containerColor = if (selectedTool == tool) {
+                                when (tool) {
+                                    SeamPaintTool.ENFORCE -> Color(0xFF205B70)
+                                    SeamPaintTool.BLOCK -> Color(0xFF75451D)
+                                    SeamPaintTool.ERASE -> Color(0xFF555752)
+                                }
+                            } else {
+                                Color.Transparent
+                            },
+                            contentColor = Color(0xFFF4F4EE),
+                        ),
+                    ) {
+                        Text(stringResource(tool.label), maxLines = 1)
+                    }
+                }
+                TextButton(onClick = onDone) {
+                    Text(stringResource(R.string.done), color = WorkspaceYellow)
+                }
+            }
+            Text(
+                stringResource(R.string.seam_paint_hint),
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                 color = Color(0xFFC8C9C2),
                 style = MaterialTheme.typography.bodySmall,

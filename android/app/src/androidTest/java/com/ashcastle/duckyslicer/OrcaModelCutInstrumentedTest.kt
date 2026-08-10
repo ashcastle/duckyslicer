@@ -37,6 +37,7 @@ class OrcaModelCutInstrumentedTest {
                 model = model,
                 transform = ModelTransform(offsetXmm = 7f, offsetYmm = -4f, offsetZmm = 3f),
                 supportPaint = SupportPaint().paint(0, SupportPaintState.ENFORCE),
+                seamPaint = SeamPaint().paint(1, SeamPaintState.BLOCK),
                 filamentSlot = 1,
             )
             val expectedFile = File(context.cacheDir, "expected-cut-parent.stl")
@@ -57,8 +58,13 @@ class OrcaModelCutInstrumentedTest {
             val cut = cutProjectObject(parent, store, options, 0.5f, placeOnCut = false)
 
             assertEquals(2, cut.objects.size)
-            assertTrue(cut.clearedSupportPaint)
-            assertTrue(cut.objects.all { it.supportPaint.facets.isEmpty() && it.filamentSlot == 1 })
+            assertTrue(cut.clearedFacetPaint)
+            assertTrue(
+                cut.objects.all {
+                    it.supportPaint.facets.isEmpty() && it.seamPaint.facets.isEmpty() &&
+                        it.filamentSlot == 1
+                },
+            )
             val placed = cut.objects.mapIndexed { index, projectObject ->
                 val output = File(context.cacheDir, "placed-cut-$index.stl")
                 assertTrue(

@@ -204,6 +204,8 @@ private fun WorkspaceAccessibilityHarness(
         onCut = { _, _ -> },
         onSupportPaintPreview = { _, _, _ -> },
         onSupportPaintCommitted = { _, _ -> },
+        onSeamPaintPreview = { _, _, _ -> },
+        onSeamPaintCommitted = { _, _ -> },
         onRemoveModel = {},
         onSlice = {},
         onCancelSlice = {},
