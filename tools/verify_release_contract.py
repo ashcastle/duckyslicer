@@ -74,6 +74,7 @@ def verify_release_contract(sources: dict[str, str]) -> None:
         "local release validator",
         validate,
         (
+            "permissions:\n      contents: write",
             "UNSIGNED_SHA256: ${{ inputs.unsigned_sha256 }}",
             "RELEASE_VERSION_CODE: ${{ inputs.version_code }}",
             "SOURCE_COMMIT: ${{ inputs.source_commit }}",
@@ -90,9 +91,21 @@ def verify_release_contract(sources: dict[str, str]) -> None:
     )
     if any(
         marker in validate
-        for marker in ("${{ secrets.", "environment: release", "contents: write", "./gradlew")
+        for marker in ("${{ secrets.", "environment: release", "./gradlew", "actions/checkout@")
     ):
-        raise VerificationError("validation must not receive signing keys, write, or build")
+        raise VerificationError("validation must not receive signing keys or execute builds")
+    if any(
+        marker in validate
+        for marker in (
+            "gh release edit",
+            "gh release upload",
+            "gh release delete",
+            "gh api --method",
+            "git push",
+            "curl -X",
+        )
+    ):
+        raise VerificationError("validation may inspect but must not mutate the draft release")
 
     signer_rules = {
         "depends on validation": "needs: validate" in signer,
@@ -138,8 +151,15 @@ def verify_release_contract(sources: dict[str, str]) -> None:
     )
     if "${{ secrets." in publish or "./gradlew" in publish or "actions/checkout@" in publish:
         raise VerificationError("publisher must not receive signing keys or build repository code")
-    if workflow.count("contents: write") != 1 or "contents: write" not in publish:
-        raise VerificationError("only the publisher may write the GitHub Release")
+    if (
+        workflow.count("contents: write") != 2
+        or "contents: write" not in validate
+        or "contents: write" not in publish
+        or "contents: write" in signer
+    ):
+        raise VerificationError(
+            "only draft validation and publication may receive Release-capable tokens"
+        )
     if any(marker in workflow for marker in ("assembleRelease", "app-release.aab", "tags:")):
         raise VerificationError("GitHub release automation must not build or publish non-APK artifacts")
 
