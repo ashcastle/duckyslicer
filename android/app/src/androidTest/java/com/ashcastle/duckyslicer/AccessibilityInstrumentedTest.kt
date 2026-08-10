@@ -379,9 +379,10 @@ class AccessibilityInstrumentedTest {
                 "Measure mode must explain how to choose both surface points",
                 nodes.any { it.effectiveLabel().contains(hint) },
             )
+            val heading = waitForNode(measure) { it.isHeading }
             assertTrue(
                 "Measure must expose its result panel as a navigable heading",
-                nodes.any { it.isHeading && it.effectiveLabel().contains(measure) },
+                heading.effectiveLabel().contains(measure),
             )
         }
     }
@@ -418,6 +419,21 @@ class AccessibilityInstrumentedTest {
 
     private fun scrollUntilClickable(label: String): AccessibilityNodeInfo {
         return scrollUntilNode(label) { it.isClickable }
+    }
+
+    private fun waitForNode(
+        label: String,
+        matches: (AccessibilityNodeInfo) -> Boolean,
+    ): AccessibilityNodeInfo {
+        val deadline = SystemClock.elapsedRealtime() + NODE_TIMEOUT_MILLIS
+        do {
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            currentNodes().firstOrNull { node ->
+                matches(node) && node.isVisibleToUser && node.effectiveLabel().contains(label)
+            }?.let { return it }
+            SystemClock.sleep(NODE_POLL_MILLIS)
+        } while (SystemClock.elapsedRealtime() < deadline)
+        throw AssertionError("Timed out waiting for accessibility node: $label")
     }
 
     private fun scrollUntilNode(
