@@ -149,8 +149,8 @@ def verify_release_contract(sources: dict[str, str]) -> None:
         preparation,
         (
             'run((sys.executable, str(ROOT / "tools/run_local_gate.py")))',
-            'command.append("--no-build-cache")',
-            'command.append(":app:clean")',
+            '"--no-build-cache",',
+            '":app:clean",',
             'command.append(":app:assembleRelease")',
             "verify_reproducible(candidate_output, RELEASE_APK)",
             'ROOT / "tools/verify_apk.py"',

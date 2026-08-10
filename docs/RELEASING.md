@@ -5,8 +5,8 @@ never builds the GitHub Release APK. A GitHub Release contains exactly one publi
 asset: the signed ARM64 APK.
 
 `tools/prepare_local_release.py` runs the complete local gate, assembles the unsigned
-APK twice with identical version inputs, performs the second build after a clean with
-the Gradle build cache disabled, and rejects any byte difference. It also verifies
+APK twice with identical version inputs, starts both builds clean with the Gradle
+build cache disabled, and rejects any byte difference. It also verifies
 the package identity, unsigned state, APK structure, and 16 KB alignment, then records
 the SHA-256 and exact source commit in local release metadata.
 
