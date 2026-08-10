@@ -363,6 +363,29 @@ class AccessibilityInstrumentedTest {
         }
     }
 
+    @Test
+    fun selectedObjectExposesMeasureModeAndTouchGuidance() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val measure = context.getString(R.string.measure_model)
+        val hint = context.getString(R.string.measure_hint)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use {
+            val tool = waitForNodes(setOf(measure)).firstOrNull {
+                it.isClickable && it.effectiveLabel().contains(measure)
+            }
+            assertNotNull("A selected object must expose Measure", tool)
+            tapCenter(checkNotNull(tool))
+            val nodes = waitForNodes(setOf(hint))
+            assertTrue(
+                "Measure mode must explain how to choose both surface points",
+                nodes.any { it.effectiveLabel().contains(hint) },
+            )
+            assertTrue(
+                "Measure must expose its result panel as a navigable heading",
+                nodes.any { it.isHeading && it.effectiveLabel().contains(measure) },
+            )
+        }
+    }
+
     private fun launchHarness(screen: String): ActivityScenario<AccessibilityHarnessActivity> {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         return ActivityScenario.launch(
