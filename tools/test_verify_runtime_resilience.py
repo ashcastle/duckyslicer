@@ -17,7 +17,10 @@ def valid_sources() -> dict[str, str]:
         "RemoteDevice.kt": (
             "DurableJsonFile( MAX_REMOTE_RESPONSE_BYTES MAX_REMOTE_CREDENTIAL_BYTES "
             "MAX_REMOTE_GCODE_BYTES readBoundedBytes parseBoundedJsonObject "
-            "instanceFollowRedirects = false safeRemotePath connection.disconnect()"
+            "instanceFollowRedirects = false resolveRemoteEndpoint "
+            "addresses.all(::isPrivateOrLocalAddress) val url = endpoint.uri.toURL() "
+            "url.openConnection(Proxy.NO_PROXY) "
+            "endpoint.hostHeader?.let isUniqueLocalIpv6 safeRemotePath connection.disconnect()"
         ),
         "MainActivity.kt": "projectPersistenceBlocked saved_data_unavailable",
         "DurableJsonFileTest.kt": (
@@ -27,10 +30,18 @@ def valid_sources() -> dict[str, str]:
         "ProjectStoreTest.kt": "unreadablePrimaryAndBackupBlockAutosave",
         "ProfileStoreMigrationTest.kt": "unreadableOrFutureProfilesAreNotOverwritten",
         "RemoteDeviceClientTest.kt": (
-            "redirectsOversizedResponsesAndDeepJsonFailClosed unsafeServerUploadPathIsRejected"
+            "redirectsOversizedResponsesAndDeepJsonFailClosed unsafeServerUploadPathIsRejected "
+            "cleartextDnsResultsAreValidatedAndPinnedBeforeCredentialsAreAttached "
+            "cleartextHostnameRequestUsesThePinnedResolverAddress"
         ),
         "RemoteDeviceInstrumentedTest.kt": (
-            "remoteDeviceMetadataRecoversFromLastKnownGoodBackup"
+            "remoteDeviceMetadataRecoversFromLastKnownGoodBackup "
+            "cleartextHostnameRequestUsesOneValidatedPinnedAddress"
+        ),
+        "CONTRIBUTING.md": "pin the connection target and bypass system proxies",
+        "SECURITY.md": (
+            "every current DNS answer DNS rebinding bypass system proxies "
+            "platform certificate verifier remains authoritative"
         ),
         "strings.xml": "saved_data_unavailable",
         "strings-ko.xml": "saved_data_unavailable",
@@ -53,6 +64,15 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
             "projectPersistenceBlocked", ""
         )
         with self.assertRaisesRegex(VerificationError, "autosave"):
+            verify_resilience(sources)
+
+    def test_rejects_cleartext_connection_without_dns_pinning(self) -> None:
+        sources = valid_sources()
+        sources["RemoteDevice.kt"] = sources["RemoteDevice.kt"].replace(
+            "url.openConnection(Proxy.NO_PROXY)",
+            "url.openConnection()",
+        )
+        with self.assertRaisesRegex(VerificationError, "remote input containment"):
             verify_resilience(sources)
 
 
