@@ -1,0 +1,86 @@
+{
+  "results": [
+    {
+      "packages": [
+        {
+          "package": {
+            "name": "github.com/AngusJohnson/Clipper2",
+            "commit": "f9c5eb6e14a59f6f5d65fbfb3564519a561cf4fd"
+          }
+        },
+        {
+          "package": {
+            "name": "github.com/libexpat/libexpat",
+            "commit": "c61098da494eea1cbd091118118dcee417faacea"
+          }
+        },
+        {
+          "package": {
+            "name": "github.com/libjpeg-turbo/libjpeg-turbo",
+            "commit": "ec32420f6b5dfa4e86883d42b209e8371e55aeb5"
+          }
+        },
+        {
+          "package": {
+            "name": "github.com/madler/zlib",
+            "commit": "da607da739fa6047df13e66a2af6b8bec7c2a498"
+          }
+        },
+        {
+          "package": {
+            "name": "github.com/moritz-wundke/Boost-for-Android",
+            "commit": "7943955c4d11a5bd61381a8b200c28619323eb0f"
+          }
+        },
+        {
+          "package": {
+            "name": "github.com/nlohmann/json",
+            "commit": "9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03"
+          }
+        },
+        {
+          "package": {
+            "name": "github.com/oneapi-src/oneTBB",
+            "commit": "8b829acc65569019edb896c5150d427f288e8aba"
+          }
+        },
+        {
+          "package": {
+            "name": "github.com/Open-Cascade-SAS/OCCT",
+            "commit": "bd2a789f15235755ce4d1a3b07379a2e062fdc2e"
+          }
+        },
+        {
+          "package": {
+            "name": "github.com/stevengj/nlopt",
+            "commit": "24fc75fa160978e0f3d757cbe54e8d858bd25ac9"
+          }
+        },
+        {
+          "package": {
+            "name": "github.com/taylormadearmy/OrcaSlicer",
+            "commit": "2c8a5385bc53cbc16211b4dd36ef9963ee185f4a"
+          }
+        },
+        {
+          "package": {
+            "name": "github.com/taylormadearmy/u1-slicer-for-android",
+            "commit": "6f64367361c4bd56bacc97a991874ce1f4b837b4"
+          }
+        },
+        {
+          "package": {
+            "name": "github.com/USCiLab/cereal",
+            "commit": "22a1b369f39be918ca79206a83c4facd759f9105"
+          }
+        },
+        {
+          "package": {
+            "name": "gitlab.com/libeigen/eigen",
+            "commit": "3147391d946bb4b6c68edd901f2add6ac1f31f8c"
+          }
+        }
+      ]
+    }
+  ]
+}

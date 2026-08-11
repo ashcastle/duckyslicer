@@ -130,6 +130,12 @@ def main() -> None:
         "Gradle trust data is structurally verified": (
             "python3 tools/verify_gradle_supply_chain.py"
         ),
+        "locked dependency vulnerabilities are audited": (
+            "python3 tools/verify_dependency_audit.py"
+        ),
+        "dependency audit policy is unit tested": (
+            "tools.test_verify_dependency_audit"
+        ),
         "credential-bearing signed URLs are rejected": (
             "python3 tools/verify_no_embedded_credentials.py"
         ),

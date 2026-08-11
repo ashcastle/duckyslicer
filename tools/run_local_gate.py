@@ -26,6 +26,7 @@ STATIC_VERIFIERS = (
     "verify_workflows.py",
     "verify_no_embedded_credentials.py",
     "verify_gradle_supply_chain.py",
+    "verify_dependency_audit.py",
     "verify_native_safety.py",
     "verify_android_isolation.py",
     "verify_slice_storage.py",
