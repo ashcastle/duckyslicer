@@ -51,6 +51,11 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                             onApply = {},
                             onDismiss = {},
                         )
+                        SCREEN_SPLIT_PARTS -> SplitPartsSheet(
+                            projectObject = accessibilityProjectObject(),
+                            onApply = {},
+                            onDismiss = {},
+                        )
                         SCREEN_MODEL_TRANSFORM -> WorkspaceAccessibilityHarness(
                             projectObjects = listOf(accessibilityProjectObject()),
                         )
@@ -107,6 +112,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_OBJECT_SETTINGS = "object-settings"
         const val SCREEN_SHAPES = "shapes"
         const val SCREEN_SIMPLIFY = "simplify"
+        const val SCREEN_SPLIT_PARTS = "split-parts"
         const val SCREEN_MODEL_TRANSFORM = "model-transform"
         const val SCREEN_GCODE_EXPORT = "gcode-export"
         const val SCREEN_PROJECT_EXPORT = "project-export"
@@ -304,6 +310,7 @@ private fun WorkspaceAccessibilityHarness(
         onAutoLay = {},
         onLayOnFace = { _, _ -> },
         onSplit = {},
+        onSplitParts = {},
         onCut = { _, _ -> },
         onSimplify = {},
         onCancelProjectEdit = {},

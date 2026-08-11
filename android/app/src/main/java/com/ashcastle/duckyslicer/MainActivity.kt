@@ -190,6 +190,8 @@ private fun DuckySlicerScreen(
     val arrangeError = stringResource(R.string.arrange_error)
     val splitNotPossible = stringResource(R.string.split_not_possible)
     val splitError = stringResource(R.string.split_error)
+    val splitPartsNotPossible = stringResource(R.string.split_parts_not_possible)
+    val splitPartsError = stringResource(R.string.split_parts_error)
     val cutNotPossible = stringResource(R.string.cut_not_possible)
     val cutError = stringResource(R.string.cut_error)
     val simplifyError = stringResource(R.string.simplify_error)
@@ -261,7 +263,8 @@ private fun DuckySlicerScreen(
         visibleEdit == ProjectEditKind.PRIMITIVE
     val autoLaying = visibleEdit == ProjectEditKind.AUTO_LAY
     val arranging = visibleEdit == ProjectEditKind.ARRANGE
-    val splitting = visibleEdit == ProjectEditKind.SPLIT
+    val splitting = visibleEdit == ProjectEditKind.SPLIT ||
+        visibleEdit == ProjectEditKind.SPLIT_PARTS
     val cutting = visibleEdit == ProjectEditKind.CUT
     val simplifying = visibleEdit == ProjectEditKind.SIMPLIFY
     val projectFileBusy = !projectTransferState.restored ||
@@ -397,6 +400,14 @@ private fun DuckySlicerScreen(
                     },
                     completion.objectCount,
                 )
+                ProjectEditKind.SPLIT_PARTS -> resources.getString(
+                    if (completion.clearedObjectSettings) {
+                        R.string.split_parts_done_painting_cleared
+                    } else {
+                        R.string.split_parts_done
+                    },
+                    completion.objectCount,
+                )
                 ProjectEditKind.CUT -> resources.getString(
                     if (completion.clearedObjectSettings) {
                         R.string.cut_done_painting_cleared
@@ -419,7 +430,13 @@ private fun DuckySlicerScreen(
             error = when (completion.failure) {
                 ProjectEditFailure.CANCELED -> null
                 ProjectEditFailure.MODEL_TOO_LARGE -> modelTooLargeError
-                ProjectEditFailure.NOT_SPLITTABLE -> splitNotPossible
+                ProjectEditFailure.NOT_SPLITTABLE -> if (
+                    completion.kind == ProjectEditKind.SPLIT_PARTS
+                ) {
+                    splitPartsNotPossible
+                } else {
+                    splitNotPossible
+                }
                 ProjectEditFailure.NOT_CUTTABLE -> cutNotPossible
                 ProjectEditFailure.GENERIC -> when (completion.kind) {
                     ProjectEditKind.MODEL_IMPORT -> modelReadError
@@ -427,6 +444,7 @@ private fun DuckySlicerScreen(
                     ProjectEditKind.AUTO_LAY -> autoLayError
                     ProjectEditKind.ARRANGE -> arrangeError
                     ProjectEditKind.SPLIT -> splitError
+                    ProjectEditKind.SPLIT_PARTS -> splitPartsError
                     ProjectEditKind.CUT -> cutError
                     ProjectEditKind.SIMPLIFY -> simplifyError
                 }
@@ -667,6 +685,21 @@ private fun DuckySlicerScreen(
         if (projectTransferModel.splitSelectedModel()) {
             clearCompletedSlice()
             error = null
+            notice = null
+        }
+    }
+
+    fun splitSelectedVolume(volumeId: String) {
+        if (
+            projectHistory.current.selectedObject?.volumes?.none { it.id == volumeId } != false ||
+            projectTransferBusy || importing || slicing || previewLoading
+        ) return
+        if (projectTransferModel.splitSelectedVolume(volumeId)) {
+            clearCompletedSlice()
+            error = null
+            notice = null
+        } else {
+            error = splitPartsError
             notice = null
         }
     }
@@ -1068,6 +1101,7 @@ private fun DuckySlicerScreen(
         onAutoLay = ::autoLaySelectedModel,
         onLayOnFace = ::laySelectedFaceOnBed,
         onSplit = ::splitSelectedModel,
+        onSplitParts = ::splitSelectedVolume,
         onCut = ::cutSelectedModel,
         onSimplify = ::simplifySelectedModel,
         onCancelProjectEdit = projectTransferModel::cancelActiveEdit,

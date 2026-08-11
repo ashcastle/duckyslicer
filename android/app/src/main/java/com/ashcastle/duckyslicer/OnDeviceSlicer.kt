@@ -1362,18 +1362,16 @@ object OnDeviceSlicer {
                 SlicerProcessClient.projectRequestCancellationRequested(requestId)
             },
         ) { transformedModels ->
-            require(transformedModels.objectVolumeCounts.all { it == 1 }) {
-                "Multi-volume arrangement is not available yet"
-            }
             SlicerProcessClient.autoArrange(
-                transformedModels.files,
-                options.bedSizeX,
-                options.bedSizeY,
-                options.bedOriginX,
-                options.bedOriginY,
-                options.bedPolygon,
-                minimumGap,
-                requestId,
+                transformedModels = transformedModels.files,
+                bedSizeX = options.bedSizeX,
+                bedSizeY = options.bedSizeY,
+                bedOriginX = options.bedOriginX,
+                bedOriginY = options.bedOriginY,
+                bedPolygon = options.bedPolygon,
+                objectVolumeCounts = transformedModels.objectVolumeCounts,
+                minimumGap = minimumGap,
+                requestId = requestId,
             )
         }
     }

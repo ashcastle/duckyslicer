@@ -26,6 +26,18 @@ internal fun legacyProjectVolumeId(objectId: String, index: Int = 0): String =
         "com.ashcastle.duckyslicer:$objectId:volume:$index".toByteArray(Charsets.UTF_8),
     ).toString()
 
+internal fun splitProjectVolumeId(
+    objectId: String,
+    sourceVolumeId: String,
+    partIndex: Int,
+): String {
+    require(partIndex > 0) { "Split part index is invalid" }
+    return UUID.nameUUIDFromBytes(
+        "com.ashcastle.duckyslicer:$objectId:split:$sourceVolumeId:$partIndex"
+            .toByteArray(Charsets.UTF_8),
+    ).toString()
+}
+
 data class ProjectObject(
     val id: String,
     val volumes: List<ProjectVolume>,

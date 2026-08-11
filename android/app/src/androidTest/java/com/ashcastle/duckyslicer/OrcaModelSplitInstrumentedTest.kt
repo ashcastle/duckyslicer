@@ -13,6 +13,125 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class OrcaModelSplitInstrumentedTest {
     @Test
+    fun selectedVolumeSplitsIntoStablePartsAndStillSlicesAsOneObject() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        val store = ProjectStore(context)
+        var gcode: File? = null
+        projectRoot.deleteRecursively()
+        try {
+            val sourceFile = store.createModelDestination("compound-volume.stl").apply {
+                writeText(cubeStl(0f) + cubeStl(30f, includeEnvelope = false))
+            }
+            val sourceModel = ModelInfo.fromJson(
+                NativeEngine.inspectStl(sourceFile.absolutePath),
+                sourceFile.absolutePath,
+            ).copy(fileName = "compound-volume.stl")
+            val siblingFile = store.createModelDestination("sibling-volume.stl").apply {
+                writeText(cubeStl(60f) + "endsolid compound\n")
+            }
+            val siblingModel = ModelInfo.fromJson(
+                NativeEngine.inspectStl(siblingFile.absolutePath),
+                siblingFile.absolutePath,
+            ).copy(fileName = "sibling-volume.stl")
+            val sourceVolume = ProjectVolume(
+                id = "source-volume",
+                model = sourceModel,
+                supportPaint = SupportPaint().paint(0, SupportPaintState.ENFORCE),
+                filamentSlot = 0,
+            )
+            val siblingVolume = ProjectVolume(
+                id = "sibling-volume",
+                model = siblingModel,
+                seamPaint = SeamPaint().paint(0, SeamPaintState.BLOCK),
+                filamentSlot = 0,
+            )
+            val parent = ProjectObject(
+                id = "multipart-object",
+                volumes = listOf(sourceVolume, siblingVolume),
+                transform = ModelTransform(
+                    offsetXmm = 6f,
+                    offsetYmm = -4f,
+                    rotationZdeg = 20f,
+                    scale = 0.8f,
+                ),
+                variableLayerHeights = VariableLayerHeights(
+                    listOf(VariableLayerRange(0.2f, 0.8f, 0.12f)),
+                ),
+                processOverrides = ObjectProcessOverrides(sparseInfillDensityPercent = 22f),
+            )
+            val originalGeometry = parent.geometry()
+
+            val canceledRequestId = "split-parts-canceled-before-start"
+            assertTrue(SlicerProcessClient.cancelProjectRequestAsync(canceledRequestId))
+            val canceled = runCatching {
+                splitProjectObjectVolume(
+                    projectObject = parent,
+                    sourceVolumeId = sourceVolume.id,
+                    projectStore = store,
+                    requestId = canceledRequestId,
+                )
+            }
+            assertTrue(canceled.exceptionOrNull() is ProjectEditCancelledException)
+            SlicerProcessClient.releaseProjectRequest(canceledRequestId)
+            assertTrue(sourceFile.isFile && siblingFile.isFile)
+
+            val result = splitProjectObjectVolume(
+                projectObject = parent,
+                sourceVolumeId = sourceVolume.id,
+                projectStore = store,
+            )
+
+            val split = result.projectObject
+            assertEquals(2, result.createdPartCount)
+            assertTrue(result.clearedSurfacePaint)
+            assertEquals(parent.id, split.id)
+            assertEquals(parent.transform, split.transform)
+            assertEquals(parent.variableLayerHeights, split.variableLayerHeights)
+            assertEquals(parent.processOverrides, split.processOverrides)
+            assertEquals(3, split.volumes.size)
+            assertEquals(sourceVolume.id, split.volumes[0].id)
+            assertEquals(
+                splitProjectVolumeId(parent.id, sourceVolume.id, 1),
+                split.volumes[1].id,
+            )
+            assertEquals(siblingVolume, split.volumes[2])
+            assertTrue(split.volumes.take(2).all { it.supportPaint.facets.isEmpty() })
+            assertTrue(split.volumes.take(2).all { it.filamentSlot == sourceVolume.filamentSlot })
+            val splitGeometry = split.geometry()
+            assertEquals(originalGeometry.minX.toDouble(), splitGeometry.minX.toDouble(), 0.01)
+            assertEquals(originalGeometry.maxX.toDouble(), splitGeometry.maxX.toDouble(), 0.01)
+            assertEquals(originalGeometry.minY.toDouble(), splitGeometry.minY.toDouble(), 0.01)
+            assertEquals(originalGeometry.maxY.toDouble(), splitGeometry.maxY.toDouble(), 0.01)
+            assertEquals(originalGeometry.minZ.toDouble(), splitGeometry.minZ.toDouble(), 0.01)
+            assertEquals(originalGeometry.maxZ.toDouble(), splitGeometry.maxZ.toDouble(), 0.01)
+
+            var history = ProjectHistoryState().add(parent)
+            history = history.replaceSelected(listOf(split))
+            assertEquals(3, history.current.selectedObject!!.volumes.size)
+            assertEquals(parent, history.undo().current.selectedObject)
+            assertEquals(split, history.undo().redo().current.selectedObject)
+
+            store.save(history.current, SliceOptions())
+            val restored = store.load().selectedObject!!
+            assertEquals(split.volumes.map(ProjectVolume::id), restored.volumes.map(ProjectVolume::id))
+            assertEquals(split.transform, restored.transform)
+
+            val options = SliceOptions().copy(
+                bedSizeX = 120f,
+                bedSizeY = 120f,
+                bedPolygon = rectangularBedPolygon(120f, 120f),
+            )
+            val outcome = OnDeviceSlicer.slice(listOf(split), options)
+            gcode = outcome.output
+            assertTrue("Split parts must produce real Orca G-code", outcome.output.length() > 1_000L)
+        } finally {
+            gcode?.delete()
+            projectRoot.deleteRecursively()
+        }
+    }
+
+    @Test
     fun disconnectedShellsSplitThroughOrcaWithoutChangingTheirMachinePose() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)

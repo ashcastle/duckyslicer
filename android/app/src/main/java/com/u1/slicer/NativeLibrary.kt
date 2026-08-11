@@ -26,6 +26,8 @@ class NativeLibrary(
         minimumGap: Float,
     ): FloatArray?
     external fun nativeSplitObject(objectIndex: Int): IntArray?
+    external fun nativeIsVolumeSplittable(objectIndex: Int, volumeIndex: Int): Boolean
+    external fun nativeSplitVolume(objectIndex: Int, volumeIndex: Int): Int
     external fun nativeCutObject(objectIndex: Int, heightRatio: Float, placeOnCut: Boolean): IntArray?
     external fun nativeSimplifyObject(objectIndex: Int, targetTriangles: Int): Int
     external fun nativeAddModelPartVolume(objectIndex: Int, path: String, name: String): Int
@@ -40,6 +42,12 @@ class NativeLibrary(
     external fun getObjectBoundingBoxes(): FloatArray
     external fun nativeGetObjectWorldAABBMins(): FloatArray
     external fun nativeExportLoadedObjects(outputDirectory: String): Array<String>?
+    external fun nativeExportObjectVolumeRange(
+        outputDirectory: String,
+        objectIndex: Int,
+        startVolumeIndex: Int,
+        volumeCount: Int,
+    ): Array<String>?
     external fun clearModel()
     external fun getModelInfo(): ModelInfo?
     external fun slice(config: SliceConfig): SliceResult?

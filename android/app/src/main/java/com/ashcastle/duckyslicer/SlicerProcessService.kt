@@ -204,6 +204,36 @@ internal object SlicerProcessClient {
             requestId = requestId,
         )
 
+    /** Splits one selected model-part volume inside a reconstructed Orca ModelObject. */
+    fun splitModelVolume(
+        models: List<File>,
+        sourceVolumeIndex: Int,
+        stagingDirectory: File,
+        requestId: String = UUID.randomUUID().toString(),
+    ): List<OrcaImportedObject> {
+        require(models.size in 1..MAX_PROJECT_VOLUMES_PER_OBJECT) {
+            "Project object volume count is invalid"
+        }
+        require(sourceVolumeIndex in models.indices) { "Source volume is unavailable" }
+        require(encodedRequestBytes(models.map(File::getAbsolutePath), "") <=
+            SlicerProcessContract.MAX_REQUEST_BYTES) {
+            "Split request is too large"
+        }
+        return runModelOperation(
+            message = SlicerProcessContract.MESSAGE_SPLIT_MODEL_VOLUME,
+            model = null,
+            stagingDirectory = stagingDirectory,
+            fallbackError = "OrcaSlicer could not split the part",
+            requestId = requestId,
+        ) {
+            putStringArrayList(
+                SlicerProcessContract.KEY_MODEL_PATHS,
+                ArrayList(models.map(File::getAbsolutePath)),
+            )
+            putInt(SlicerProcessContract.KEY_VOLUME_INDEX, sourceVolumeIndex)
+        }
+    }
+
     /** Uses Orca's inherited planar Cut and exports the two resulting solids. */
     fun cutModel(
         model: File,
@@ -359,6 +389,7 @@ internal object SlicerProcessClient {
         bedOriginX: Float,
         bedOriginY: Float,
         bedPolygon: List<Float>,
+        objectVolumeCounts: IntArray = IntArray(transformedModels.size) { 1 },
         minimumGap: Float = 6f,
         requestId: String = UUID.randomUUID().toString(),
     ): OrcaArrangement {
@@ -366,6 +397,11 @@ internal object SlicerProcessClient {
             "Automatic arrangement must run outside the application main thread"
         }
         require(transformedModels.size >= 2) { "At least two models are required" }
+        require(
+            objectVolumeCounts.size >= 2 &&
+                objectVolumeCounts.all { it in 1..MAX_PROJECT_VOLUMES_PER_OBJECT } &&
+                objectVolumeCounts.sum() == transformedModels.size,
+        ) { "Object volume counts do not match models" }
         requireValidRequestId(requestId)
         throwIfProjectRequestCanceled(requestId)
         val modelPaths = transformedModels.map(File::getAbsolutePath)
@@ -383,6 +419,10 @@ internal object SlicerProcessClient {
                     data = Bundle().apply {
                         putString(SlicerProcessContract.KEY_REQUEST_ID, requestId)
                         putStringArrayList(SlicerProcessContract.KEY_MODEL_PATHS, ArrayList(modelPaths))
+                        putIntArray(
+                            SlicerProcessContract.KEY_OBJECT_VOLUME_COUNTS,
+                            objectVolumeCounts,
+                        )
                         putFloat(SlicerProcessContract.KEY_BED_SIZE_X, bedSizeX)
                         putFloat(SlicerProcessContract.KEY_BED_SIZE_Y, bedSizeY)
                         putFloat(SlicerProcessContract.KEY_BED_ORIGIN_X, bedOriginX)
@@ -967,6 +1007,7 @@ internal object SlicerProcessClient {
                 what == SlicerProcessContract.MESSAGE_AUTO_ARRANGE ||
                 what == SlicerProcessContract.MESSAGE_NORMALIZE_MODEL ||
                 what == SlicerProcessContract.MESSAGE_SPLIT_MODEL ||
+                what == SlicerProcessContract.MESSAGE_SPLIT_MODEL_VOLUME ||
                 what == SlicerProcessContract.MESSAGE_CUT_MODEL ||
                 what == SlicerProcessContract.MESSAGE_SIMPLIFY_MODEL ||
                 what == SlicerProcessContract.MESSAGE_CREATE_PRIMITIVE ||
@@ -1328,6 +1369,8 @@ class SlicerProcessService : Service() {
                 startWork(message, WorkOperation.NORMALIZE_MODEL)
             SlicerProcessContract.MESSAGE_SPLIT_MODEL ->
                 startWork(message, WorkOperation.SPLIT_MODEL)
+            SlicerProcessContract.MESSAGE_SPLIT_MODEL_VOLUME ->
+                startWork(message, WorkOperation.SPLIT_MODEL_VOLUME)
             SlicerProcessContract.MESSAGE_CUT_MODEL ->
                 startWork(message, WorkOperation.CUT_MODEL)
             SlicerProcessContract.MESSAGE_SIMPLIFY_MODEL ->
@@ -1495,6 +1538,7 @@ class SlicerProcessService : Service() {
                 WorkOperation.AUTO_ARRANGE -> runAutoArrange(requestData)
                 WorkOperation.NORMALIZE_MODEL -> runNormalizeModel(requestData)
                 WorkOperation.SPLIT_MODEL -> runSplitModel(requestData)
+                WorkOperation.SPLIT_MODEL_VOLUME -> runSplitModelVolume(requestData)
                 WorkOperation.CUT_MODEL -> runCutModel(requestData)
                 WorkOperation.SIMPLIFY_MODEL -> runSimplifyModel(requestData)
                 WorkOperation.CREATE_PRIMITIVE -> runCreatePrimitive(requestData)
@@ -1885,6 +1929,61 @@ class SlicerProcessService : Service() {
         failure(error.message ?: "OrcaSlicer could not split the model")
     }
 
+    private fun runSplitModelVolume(extras: Bundle): Bundle = try {
+        val paths = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_MODEL_PATHS),
+        ) { "Model paths are unavailable" }
+        require(paths.size in 1..MAX_PROJECT_VOLUMES_PER_OBJECT) {
+            "Invalid model volume count"
+        }
+        require(encodedRequestBytes(paths, "") <= SlicerProcessContract.MAX_REQUEST_BYTES) {
+            "Split request is too large"
+        }
+        val models = paths.map(::validateModel)
+        val sourceVolumeIndex = extras.getInt(SlicerProcessContract.KEY_VOLUME_INDEX, -1)
+        require(sourceVolumeIndex in models.indices) { "Source volume is unavailable" }
+        val outputPath = requireNotNull(
+            extras.getString(SlicerProcessContract.KEY_MODEL_OUTPUT_DIRECTORY),
+        ) { "Model output is unavailable" }
+        val outputDirectory = validateModelImportDirectory(outputPath)
+        val runtime = createNativeRuntime()
+        try {
+            loadNativeObjects(runtime, models, intArrayOf(models.size))
+            if (!runtime.nativeIsVolumeSplittable(0, sourceVolumeIndex)) {
+                return failure("Part has no separate pieces").apply {
+                    putBoolean(SlicerProcessContract.KEY_MODEL_NOT_SPLITTABLE, true)
+                }
+            }
+            val resultingVolumeCount = runtime.nativeSplitVolume(0, sourceVolumeIndex)
+            require(
+                resultingVolumeCount in (models.size + 1)..MAX_PROJECT_VOLUMES_PER_OBJECT,
+            ) { "Invalid split part count" }
+            val createdPartCount = resultingVolumeCount - models.size + 1
+            val records = requireNotNull(
+                runtime.nativeExportObjectVolumeRange(
+                    outputDirectory.absolutePath,
+                    objectIndex = 0,
+                    startVolumeIndex = sourceVolumeIndex,
+                    volumeCount = createdPartCount,
+                ),
+            ) { "Split parts could not be exported" }
+            require(records.size == createdPartCount) { "Split part export count changed" }
+            Bundle().apply {
+                putBoolean(SlicerProcessContract.KEY_OK, true)
+                putInt(SlicerProcessContract.KEY_PID, Process.myPid())
+                putStringArrayList(
+                    SlicerProcessContract.KEY_NORMALIZED_MODELS,
+                    ArrayList(records.toList()),
+                )
+            }
+        } finally {
+            runtime.clearModel()
+        }
+    } catch (error: Exception) {
+        if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Model part split failed", error)
+        failure(error.message ?: "OrcaSlicer could not split the part")
+    }
+
     private fun runCutModel(extras: Bundle): Bundle = try {
         val sourcePath = requireNotNull(extras.getString(SlicerProcessContract.KEY_MODEL_PATH)) {
             "Model path is unavailable"
@@ -2016,6 +2115,14 @@ class SlicerProcessService : Service() {
             "Arrange request is too large"
         }
         val models = paths.map(::validateModel)
+        val objectVolumeCounts = requireNotNull(
+            extras.getIntArray(SlicerProcessContract.KEY_OBJECT_VOLUME_COUNTS),
+        ) { "Object volume counts are unavailable" }
+        require(
+            objectVolumeCounts.size in 2..MAX_OBJECTS &&
+                objectVolumeCounts.all { it in 1..MAX_PROJECT_VOLUMES_PER_OBJECT } &&
+                objectVolumeCounts.sum() == models.size,
+        ) { "Object volume counts do not match models" }
         val bedSizeX = extras.getFloat(SlicerProcessContract.KEY_BED_SIZE_X)
         val bedSizeY = extras.getFloat(SlicerProcessContract.KEY_BED_SIZE_Y)
         val bedOriginX = extras.getFloat(SlicerProcessContract.KEY_BED_ORIGIN_X)
@@ -2035,26 +2142,32 @@ class SlicerProcessService : Service() {
 
         val runtime = createNativeRuntime()
         try {
-            check(runtime.loadModel(models.first().absolutePath)) { "Model could not be prepared" }
-            models.drop(1).forEach { model ->
-                check(runtime.addModel(model.absolutePath)) { "Additional model could not be prepared" }
-            }
+            loadNativeObjects(runtime, models, objectVolumeCounts)
             val sizes = runtime.getObjectBoundingBoxes()
-            require(sizes.size == models.size * 3 && sizes.all { it.isFinite() && it > 0f }) {
+            require(
+                sizes.size == objectVolumeCounts.size * 3 &&
+                    sizes.all { it.isFinite() && it > 0f },
+            ) {
                 "OrcaSlicer returned invalid object sizes"
             }
             val originalLowerLeft = runtime.nativeGetObjectWorldAABBMins()
-            require(originalLowerLeft.size == models.size * 2 && originalLowerLeft.all(Float::isFinite)) {
+            require(
+                originalLowerLeft.size == objectVolumeCounts.size * 2 &&
+                    originalLowerLeft.all(Float::isFinite),
+            ) {
                 "OrcaSlicer returned invalid source positions"
             }
             val machinePolygon = machineBedPolygon(bedPolygon, bedOriginX, bedOriginY)
             val machineLowerLeft = requireNotNull(
                 runtime.nativeAutoArrangeObjects(machinePolygon.toFloatArray(), minimumGap),
             ) { "The objects do not fit on this bed" }
-            require(machineLowerLeft.size == models.size * 2 && machineLowerLeft.all { it.isFinite() }) {
+            require(
+                machineLowerLeft.size == objectVolumeCounts.size * 2 &&
+                    machineLowerLeft.all { it.isFinite() },
+            ) {
                 "OrcaSlicer returned an invalid arrangement"
             }
-            repeat(models.size) { index ->
+            repeat(objectVolumeCounts.size) { index ->
                 val x = machineLowerLeft[index * 2]
                 val y = machineLowerLeft[index * 2 + 1]
                 val width = sizes[index * 3]
@@ -2104,36 +2217,9 @@ class SlicerProcessService : Service() {
         artifactStore.prepareForSlice()
         val runtime = createNativeRuntime(onProgress)
         return try {
-            val volumeObjectIndices = IntArray(models.size)
-            val nativeVolumeIndices = IntArray(models.size)
-            var flatVolumeIndex = 0
-            objectVolumeCounts.forEachIndexed { objectIndex, volumeCount ->
-                val firstVolume = models[flatVolumeIndex]
-                val loaded = if (objectIndex == 0) {
-                    runtime.loadModel(firstVolume.absolutePath)
-                } else {
-                    runtime.addModel(firstVolume.absolutePath)
-                }
-                check(loaded) { "Model object could not be prepared" }
-                volumeObjectIndices[flatVolumeIndex] = objectIndex
-                nativeVolumeIndices[flatVolumeIndex] = 0
-                flatVolumeIndex += 1
-                repeat(volumeCount - 1) { volumeOffset ->
-                    volumeObjectIndices[flatVolumeIndex] = objectIndex
-                    val nativeVolumeIndex = runtime.nativeAddModelPartVolume(
-                        objectIndex,
-                        models[flatVolumeIndex].absolutePath,
-                        "Part ${volumeOffset + 2}",
-                    )
-                    check(nativeVolumeIndex >= 0) { "Model volume could not be prepared" }
-                    nativeVolumeIndices[flatVolumeIndex] = nativeVolumeIndex
-                    flatVolumeIndex += 1
-                }
-            }
-            check(flatVolumeIndex == models.size) { "Native volume count does not match the request" }
-            check(runtime.getObjectBoundingBoxes().size == objectVolumeCounts.size * 3) {
-                "Native model count does not match the request"
-            }
+            val mapping = loadNativeObjects(runtime, models, objectVolumeCounts)
+            val volumeObjectIndices = mapping.objectIndices
+            val nativeVolumeIndices = mapping.volumeIndices
             filamentSlots.forEachIndexed { volumeIndex, slot ->
                 check(
                     runtime.nativeSetVolumeExtruder(
@@ -2239,6 +2325,49 @@ class SlicerProcessService : Service() {
         } finally {
             runtime.clearModel()
         }
+    }
+
+    private fun loadNativeObjects(
+        runtime: NativeLibrary,
+        models: List<File>,
+        objectVolumeCounts: IntArray,
+    ): NativeVolumeMapping {
+        require(
+            objectVolumeCounts.isNotEmpty() &&
+                objectVolumeCounts.all { it in 1..MAX_PROJECT_VOLUMES_PER_OBJECT } &&
+                objectVolumeCounts.sum() == models.size,
+        ) { "Object volume counts do not match models" }
+        val objectIndices = IntArray(models.size)
+        val volumeIndices = IntArray(models.size)
+        var flatVolumeIndex = 0
+        objectVolumeCounts.forEachIndexed { objectIndex, volumeCount ->
+            val firstVolume = models[flatVolumeIndex]
+            val loaded = if (objectIndex == 0) {
+                runtime.loadModel(firstVolume.absolutePath)
+            } else {
+                runtime.addModel(firstVolume.absolutePath)
+            }
+            check(loaded) { "Model object could not be prepared" }
+            objectIndices[flatVolumeIndex] = objectIndex
+            volumeIndices[flatVolumeIndex] = 0
+            flatVolumeIndex += 1
+            repeat(volumeCount - 1) { volumeOffset ->
+                objectIndices[flatVolumeIndex] = objectIndex
+                val nativeVolumeIndex = runtime.nativeAddModelPartVolume(
+                    objectIndex,
+                    models[flatVolumeIndex].absolutePath,
+                    "Part ${volumeOffset + 2}",
+                )
+                check(nativeVolumeIndex >= 0) { "Model volume could not be prepared" }
+                volumeIndices[flatVolumeIndex] = nativeVolumeIndex
+                flatVolumeIndex += 1
+            }
+        }
+        check(flatVolumeIndex == models.size) { "Native volume count does not match the request" }
+        check(runtime.getObjectBoundingBoxes().size == objectVolumeCounts.size * 3) {
+            "Native model count does not match the request"
+        }
+        return NativeVolumeMapping(objectIndices, volumeIndices)
     }
 
     private fun validateModel(path: String): File {
@@ -2547,6 +2676,7 @@ class SlicerProcessService : Service() {
         AUTO_ARRANGE,
         NORMALIZE_MODEL,
         SPLIT_MODEL,
+        SPLIT_MODEL_VOLUME,
         CUT_MODEL,
         SIMPLIFY_MODEL,
         CREATE_PRIMITIVE,
@@ -2568,6 +2698,11 @@ class SlicerProcessService : Service() {
     private data class ValidatedVariableLayerHeights(val file: File)
 
     private data class ValidatedObjectProcessOverrides(val file: File)
+
+    private data class NativeVolumeMapping(
+        val objectIndices: IntArray,
+        val volumeIndices: IntArray,
+    )
 }
 
 private object SlicerProcessContract {
@@ -2586,6 +2721,7 @@ private object SlicerProcessContract {
     const val MESSAGE_CUT_MODEL = 13
     const val MESSAGE_CREATE_PRIMITIVE = 14
     const val MESSAGE_SIMPLIFY_MODEL = 15
+    const val MESSAGE_SPLIT_MODEL_VOLUME = 16
     const val KEY_REQUEST_ID = "requestId"
     const val KEY_MODEL_PATH = "modelPath"
     const val KEY_MODEL_PATHS = "modelPaths"
@@ -2598,6 +2734,7 @@ private object SlicerProcessContract {
     const val KEY_CUT_HEIGHT_RATIO = "cutHeightRatio"
     const val KEY_PLACE_ON_CUT = "placeOnCut"
     const val KEY_TARGET_TRIANGLES = "targetTriangles"
+    const val KEY_VOLUME_INDEX = "volumeIndex"
     const val KEY_PRIMITIVE_TYPE = "primitiveType"
     const val KEY_PRIMITIVE_SIZE_MM = "primitiveSizeMm"
     const val KEY_SUPPORT_PAINT_PATHS = "supportPaintPaths"

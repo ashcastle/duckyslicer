@@ -13,6 +13,61 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class OrcaMultiVolumeInstrumentedTest {
     @Test
+    fun automaticArrangementTreatsMultiVolumeGeometryAsOneAggregateObject() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val source = File(context.cacheDir, "arrange-volume-source.stl")
+        val leftFile = File(context.cacheDir, "arrange-volume-left.stl")
+        val rightFile = File(context.cacheDir, "arrange-volume-right.stl")
+        val singleFile = File(context.cacheDir, "arrange-volume-single.stl")
+        try {
+            instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
+                source.outputStream().use(input::copyTo)
+            }
+            transform(source, leftFile, -18f)
+            transform(source, rightFile, 18f)
+            transform(source, singleFile, 0f)
+            val multi = ProjectObject(
+                id = "arrange-multi",
+                volumes = listOf(
+                    ProjectVolume("arrange-left", inspect(leftFile)),
+                    ProjectVolume("arrange-right", inspect(rightFile)),
+                ),
+            )
+            val single = ProjectObject("arrange-single", inspect(singleFile))
+            val options = SliceOptions().copy(
+                bedSizeX = 120f,
+                bedSizeY = 100f,
+                bedPolygon = rectangularBedPolygon(120f, 100f),
+            )
+
+            val arrangement = OnDeviceSlicer.arrange(
+                listOf(multi, single),
+                options,
+                minimumGap = 6f,
+            )
+
+            assertEquals("Orca must return one placement per owning object", 2, arrangement.objectCount)
+            assertEquals(6, arrangement.sizesMm.size)
+            assertTrue(
+                "The first footprint must include both model-part volumes",
+                arrangement.sizesMm[0] > 50f,
+            )
+            val arranged = ProjectHistoryState()
+                .add(multi)
+                .add(single)
+                .applyOrcaArrangement(arrangement, options.bedSizeX, options.bedSizeY)
+            assertEquals(2, arranged.current.objects.size)
+            assertEquals(2, arranged.current.objects.first().volumes.size)
+        } finally {
+            source.delete()
+            leftFile.delete()
+            rightFile.delete()
+            singleFile.delete()
+        }
+    }
+
+    @Test
     fun oneVolumeCompatibilityConstructorKeepsTheSameOrcaToolpaths() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

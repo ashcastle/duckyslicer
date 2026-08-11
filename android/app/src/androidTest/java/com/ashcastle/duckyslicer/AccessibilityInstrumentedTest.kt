@@ -530,6 +530,23 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun splitPartsSheetRequiresAnExplicitVolumeChoiceAndApplyAction() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val splitParts = context.getString(R.string.split_to_parts)
+        val hint = context.getString(R.string.split_parts_hint)
+        val summary = context.getString(R.string.split_part_summary, 1, 1)
+        val cancel = context.getString(R.string.cancel)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_SPLIT_PARTS).use {
+            val nodes = waitForNodes(setOf(splitParts, hint, summary, cancel))
+            assertTrue(nodes.any { it.isHeading && it.effectiveLabel() == splitParts })
+            assertTrue(nodes.any { it.effectiveLabel().contains(hint) })
+            assertTrue(nodes.any { it.isCheckable && it.effectiveLabel().contains(summary) })
+            assertTrue(nodes.any { it.isClickable && it.effectiveLabel() == cancel })
+            assertTrue(nodes.any { it.isClickable && it.effectiveLabel() == splitParts })
+        }
+    }
+
+    @Test
     fun selectedObjectExposesPlaceOnFaceModeAndTouchGuidance() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val placeOnFace = context.getString(R.string.lay_on_face)

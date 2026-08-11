@@ -105,6 +105,15 @@
     <string name="split_done_painting_cleared">오브젝트 %1$d개를 만들었습니다. 오브젝트별 설정은 초기화했습니다.</string>
     <string name="split_not_possible">이 모델에는 분리된 오브젝트가 없습니다.</string>
     <string name="split_error">이 모델을 분할하지 못했습니다.</string>
+    <string name="split_to_parts">파트로 분할</string>
+    <string name="split_parts_title">파트로 분할</string>
+    <string name="split_parts_hint">서로 떨어진 조각이 들어 있는 파트를 선택하세요. 조각은 하나의 오브젝트 안에 유지됩니다.</string>
+    <string name="split_part_summary">파트 %1$d · 면 %2$,d개</string>
+    <string name="split_parts_paint_warning">이 파트의 서포트, 심, 색상 채색 영역은 초기화됩니다.</string>
+    <string name="split_parts_done">오브젝트 안에 파트 %1$d개를 만들었습니다.</string>
+    <string name="split_parts_done_painting_cleared">오브젝트 안에 파트 %1$d개를 만들었습니다. 채색 영역은 초기화했습니다.</string>
+    <string name="split_parts_not_possible">이 파트에는 서로 떨어진 조각이 없습니다.</string>
+    <string name="split_parts_error">이 파트를 분할하지 못했습니다.</string>
     <string name="cut_model">자르기</string>
     <string name="cut_model_title">모델 자르기</string>
     <string name="cut_height">자르기 높이</string>

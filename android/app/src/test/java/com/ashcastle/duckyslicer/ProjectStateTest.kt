@@ -121,6 +121,30 @@ class ProjectStateTest {
     }
 
     @Test
+    fun splitPartsKeepObjectIdentityAndUseDeterministicVolumeIdsAcrossUndoRedo() {
+        val before = projectObject("compound")
+        val source = before.singleVolume
+        val secondPart = source.copy(
+            id = splitProjectVolumeId(before.id, source.id, 1),
+            model = source.model.copy(fileName = "compound part 2.stl"),
+        )
+        val replacement = before.copy(volumes = listOf(source, secondPart))
+        var state = ProjectHistoryState().add(before)
+
+        state = state.replaceSelected(listOf(replacement))
+
+        assertEquals("compound", state.current.selectedObjectId)
+        assertEquals(
+            splitProjectVolumeId(before.id, source.id, 1),
+            state.current.selectedObject!!.volumes[1].id,
+        )
+        state = state.undo()
+        assertEquals(1, state.current.selectedObject!!.volumes.size)
+        state = state.redo()
+        assertEquals(replacement, state.current.selectedObject)
+    }
+
+    @Test
     fun asynchronousPlacementUpdatesTheRequestedObjectEvenIfSelectionChanges() {
         var state = ProjectHistoryState()
             .add(projectObject("first"))

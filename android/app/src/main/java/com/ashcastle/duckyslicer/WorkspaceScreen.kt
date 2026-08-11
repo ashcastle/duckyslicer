@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -411,6 +412,7 @@ internal fun WorkspaceScreen(
     onAutoLay: () -> Unit,
     onLayOnFace: (String, FloatArray) -> Unit,
     onSplit: () -> Unit,
+    onSplitParts: (String) -> Unit,
     onCut: (Float, Boolean) -> Unit,
     onSimplify: (Int) -> Unit,
     onCancelProjectEdit: () -> Unit,
@@ -463,6 +465,7 @@ internal fun WorkspaceScreen(
     var showFilamentPicker by remember { mutableStateOf(false) }
     var showCutTool by remember { mutableStateOf(false) }
     var showSimplifyTool by remember { mutableStateOf(false) }
+    var showSplitPartsTool by remember { mutableStateOf(false) }
     var showVariableLayerHeightTool by remember { mutableStateOf(false) }
     var showObjectProcessSettings by remember { mutableStateOf(false) }
     var showPrimitivePicker by remember { mutableStateOf(false) }
@@ -489,6 +492,7 @@ internal fun WorkspaceScreen(
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showFilamentPicker = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showCutTool = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showSimplifyTool = false
+        if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showSplitPartsTool = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) {
             showVariableLayerHeightTool = false
             showObjectProcessSettings = false
@@ -586,7 +590,7 @@ internal fun WorkspaceScreen(
                 onExport = onSave,
                 onCancelGcodeExport = onCancelGcodeExport,
                 canArrange = projectObjects.size > 1 &&
-                    projectObjects.all { it.singleVolumeOrNull != null },
+                    projectObjects.sumOf { it.volumes.size } <= ProjectStore.MAX_PROJECT_VOLUMES,
                 onArrange = onArrange,
                 onCancelProjectEdit = onCancelProjectEdit,
                 onCancelProjectImport = onCancelProjectImport,
@@ -886,6 +890,10 @@ internal fun WorkspaceScreen(
                 showModelTools = false
                 onSplit()
             },
+            onSplitParts = {
+                showModelTools = false
+                showSplitPartsTool = true
+            },
             onCut = {
                 showModelTools = false
                 showCutTool = true
@@ -956,6 +964,16 @@ internal fun WorkspaceScreen(
                 onSimplify(keepPercent)
             },
             onDismiss = { showSimplifyTool = false },
+        )
+    }
+    if (showSplitPartsTool && selectedObject != null) {
+        SplitPartsSheet(
+            projectObject = selectedObject,
+            onApply = { volumeId ->
+                showSplitPartsTool = false
+                onSplitParts(volumeId)
+            },
+            onDismiss = { showSplitPartsTool = false },
         )
     }
     if (showVariableLayerHeightTool && selectedObject != null) {
@@ -1200,6 +1218,118 @@ internal fun SimplifyModelSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+internal fun SplitPartsSheet(
+    projectObject: ProjectObject,
+    onApply: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var selectedVolumeId by rememberSaveable(
+        projectObject.id,
+        projectObject.volumes.map(ProjectVolume::id),
+    ) {
+        mutableStateOf(projectObject.volumes.first().id)
+    }
+    val selectedVolume = projectObject.volumes.first { it.id == selectedVolumeId }
+    val clearsPaint = selectedVolume.supportPaint.facets.isNotEmpty() ||
+        selectedVolume.seamPaint.facets.isNotEmpty() ||
+        selectedVolume.multiColorPaint.facets.isNotEmpty()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Color(0xFF282925),
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                stringResource(R.string.split_parts_title),
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                stringResource(R.string.split_parts_hint),
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            projectObject.volumes.forEachIndexed { index, volume ->
+                val isSelected = volume.id == selectedVolumeId
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(
+                            selected = isSelected,
+                            role = Role.RadioButton,
+                            onClick = { selectedVolumeId = volume.id },
+                        ),
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (isSelected) Color(0xFF4A4430) else Color(0xFF343530),
+                    contentColor = if (isSelected) WorkspaceYellow else Color(0xFFF4F4EE),
+                ) {
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                        Text(
+                            volume.model.fileName,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            stringResource(
+                                R.string.split_part_summary,
+                                index + 1,
+                                volume.model.triangles,
+                            ),
+                            color = if (isSelected) {
+                                WorkspaceYellow.copy(alpha = 0.82f)
+                            } else {
+                                Color(0xFFB8BAB3)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+            if (clearsPaint) {
+                Text(
+                    stringResource(R.string.split_parts_paint_warning),
+                    color = Color(0xFFFFC66D),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(0.3f).heightIn(min = 52.dp),
+                ) {
+                    Text(stringResource(R.string.cancel))
+                }
+                Button(
+                    onClick = { onApply(selectedVolumeId) },
+                    modifier = Modifier.weight(0.7f).heightIn(min = 52.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = WorkspaceYellow,
+                        contentColor = WorkspaceBlack,
+                    ),
+                ) {
+                    Text(stringResource(R.string.split_to_parts))
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun ModelTransformSheet(
     transform: ModelTransform,
     filamentSlot: Int,
@@ -1218,6 +1348,7 @@ private fun ModelTransformSheet(
     onLayOnFace: () -> Unit,
     onMeasure: () -> Unit,
     onSplit: () -> Unit,
+    onSplitParts: () -> Unit,
     onCut: () -> Unit,
     onSimplify: () -> Unit,
     onSeamPaint: () -> Unit,
@@ -1550,6 +1681,19 @@ private fun ModelTransformSheet(
                 Icon(Icons.Default.Layers, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.split_to_objects))
+            }
+            Button(
+                onClick = onSplitParts,
+                enabled = !modelEditBusy,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF3A3B37),
+                    contentColor = Color(0xFFF4F4EE),
+                ),
+            ) {
+                Icon(Icons.Default.Layers, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.split_to_parts))
             }
             Button(
                 onClick = onCut,

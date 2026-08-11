@@ -38,6 +38,7 @@ internal enum class ProjectEditKind {
     AUTO_LAY,
     ARRANGE,
     SPLIT,
+    SPLIT_PARTS,
     CUT,
     SIMPLIFY,
 }
@@ -379,7 +380,10 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     @Synchronized
     fun arrangeProjectObjects(): Boolean {
         val currentObjects = mutableState.value.history.current.objects
-        if (currentObjects.size < 2 || currentObjects.any { it.singleVolumeOrNull == null }) return false
+        if (
+            currentObjects.size < 2 ||
+            currentObjects.sumOf { it.volumes.size } > ProjectStore.MAX_PROJECT_VOLUMES
+        ) return false
         val baseline = startEditLocked(ProjectEditKind.ARRANGE) ?: return false
         val targets = baseline.history.current.objects
         viewModelScope.launch(Dispatchers.IO) {
@@ -441,6 +445,54 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 throw failure
             } catch (failure: Exception) {
                 installed.deleteInstalledModels()
+                completeEditFailure(baseline, failure)
+            } finally {
+                SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId)
+            }
+        }
+        return true
+    }
+
+    @Synchronized
+    fun splitSelectedVolume(sourceVolumeId: String): Boolean {
+        val current = mutableState.value
+        val target = current.history.current.selectedObject ?: return false
+        if (target.volumes.none { it.id == sourceVolumeId }) return false
+        val otherVolumeCount = current.history.current.objects.sumOf { it.volumes.size } -
+            target.volumes.size
+        val maximumResultingVolumes = minOf(
+            MAX_PROJECT_VOLUMES_PER_OBJECT,
+            ProjectStore.MAX_PROJECT_VOLUMES - otherVolumeCount,
+        )
+        if (maximumResultingVolumes <= target.volumes.size) return false
+        val baseline = startEditLocked(ProjectEditKind.SPLIT_PARTS) ?: return false
+        viewModelScope.launch(Dispatchers.IO) {
+            var installedPaths = emptyList<String>()
+            try {
+                val result = splitProjectObjectVolume(
+                    projectObject = target,
+                    sourceVolumeId = sourceVolumeId,
+                    projectStore = projectStore,
+                    maximumResultingVolumes = maximumResultingVolumes,
+                    requestId = baseline.operation.requestId,
+                )
+                installedPaths = result.installedModelPaths
+                val nextHistory = baseline.history.replaceSelected(listOf(result.projectObject))
+                if (
+                    !completeEditSuccess(
+                        baseline,
+                        nextHistory,
+                        objectCount = result.createdPartCount,
+                        clearedObjectSettings = result.clearedSurfacePaint,
+                    )
+                ) {
+                    installedPaths.deleteInstalledModelPaths()
+                }
+            } catch (failure: CancellationException) {
+                installedPaths.deleteInstalledModelPaths()
+                throw failure
+            } catch (failure: Exception) {
+                installedPaths.deleteInstalledModelPaths()
                 completeEditFailure(baseline, failure)
             } finally {
                 SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId)
@@ -1142,6 +1194,12 @@ private fun ProjectTransferState.hasUnpersistedSession(): Boolean =
 private fun List<ProjectObject>.deleteInstalledModels() {
     flatMap(ProjectObject::volumes)
         .map { volume -> File(volume.model.localPath) }
+        .distinctBy { file -> runCatching { file.canonicalPath }.getOrDefault(file.absolutePath) }
+        .forEach(File::delete)
+}
+
+private fun List<String>.deleteInstalledModelPaths() {
+    map(::File)
         .distinctBy { file -> runCatching { file.canonicalPath }.getOrDefault(file.absolutePath) }
         .forEach(File::delete)
 }

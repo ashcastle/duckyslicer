@@ -105,6 +105,15 @@
     <string name="split_done_painting_cleared">%1$d objects created. Object-specific settings were cleared.</string>
     <string name="split_not_possible">This model has no separate objects.</string>
     <string name="split_error">Couldn’t split this model.</string>
+    <string name="split_to_parts">Split into parts</string>
+    <string name="split_parts_title">Split into parts</string>
+    <string name="split_parts_hint">Choose the part that contains separate pieces. The pieces stay together as one object.</string>
+    <string name="split_part_summary">Part %1$d · %2$,d faces</string>
+    <string name="split_parts_paint_warning">Painted support, seam, and color areas on this part will be cleared.</string>
+    <string name="split_parts_done">%1$d parts created inside the object.</string>
+    <string name="split_parts_done_painting_cleared">%1$d parts created inside the object. Painted areas were cleared.</string>
+    <string name="split_parts_not_possible">This part has no separate pieces.</string>
+    <string name="split_parts_error">Couldn’t split this part.</string>
     <string name="cut_model">Cut</string>
     <string name="cut_model_title">Cut model</string>
     <string name="cut_height">Cut height</string>
