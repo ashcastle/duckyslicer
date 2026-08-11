@@ -1,7 +1,9 @@
 package com.ashcastle.duckyslicer
 
+import android.app.Application
 import android.os.SystemClock
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -15,6 +17,42 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ProfileLibraryInstrumentedTest {
+    @Test
+    fun clearingRetainedOwnerFlushesRecentProfilesBeforeDebounce() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val profileRoot = File(context.filesDir, "profiles")
+        val owner = ViewModelStore()
+        profileRoot.deleteRecursively()
+        try {
+            val application = context.applicationContext as Application
+            val library = ViewModelProvider(
+                owner,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[ProfileLibraryViewModel::class.java]
+            waitUntil("profile recents did not load") {
+                library.state.value.recentsLoaded
+            }
+            val selection = SliceOptions()
+                .selectPrinter(PrinterProfile.U1_06)
+                .selectFilament(FilamentProfile.PETG)
+                .selectQuality(QualityProfile.DRAFT_06)
+            assertTrue(library.recordSelection(selection))
+            val dirty = library.state.value
+            assertTrue(dirty.recentsRevision > dirty.persistedRecentsRevision)
+
+            // Clear immediately, before the 350 ms recent-profile save can run.
+            owner.clear()
+
+            val restored = ProfileRecentStore(context).load()
+            assertEquals(PrinterProfile.U1_06.id, restored.printerIds.firstOrNull())
+            assertEquals(FilamentProfile.PETG.id, restored.filamentIds.firstOrNull())
+            assertEquals(QualityProfile.DRAFT_06.id, restored.slicingIds.firstOrNull())
+        } finally {
+            owner.clear()
+            profileRoot.deleteRecursively()
+        }
+    }
+
     @Test
     fun profileSaveAndRecentSelectionSurviveImmediateActivityRecreation() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

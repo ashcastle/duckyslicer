@@ -61,6 +61,8 @@ internal data class ProfileLibraryState(
     val catalogLoaded: Boolean = false,
     val recents: ProfileRecents = ProfileRecents(),
     val recentsLoaded: Boolean = false,
+    val recentsRevision: Long = 0,
+    val persistedRecentsRevision: Long = 0,
     val storageUnavailable: Boolean = false,
     val completion: ProfileSaveCompletion? = null,
     val message: ProfileLibraryMessage? = null,
@@ -135,8 +137,12 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
         if (!current.recentsLoaded) return false
         val next = current.recents.record(options)
         if (next == current.recents) return true
-        mutableState.value = current.copy(recents = next)
-        scheduleRecentPersistenceLocked(next)
+        val updated = current.copy(
+            recents = next,
+            recentsRevision = current.recentsRevision + 1,
+        )
+        mutableState.value = updated
+        scheduleRecentPersistenceLocked(next, updated.recentsRevision)
         return true
     }
 
@@ -245,11 +251,27 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
         return true
     }
 
-    private fun scheduleRecentPersistenceLocked(recents: ProfileRecents) {
+    @Synchronized
+    fun flushRecentPersistence(): Boolean {
+        val current = mutableState.value
+        if (!current.hasDirtyRecents() || recentStore.storageUnavailable) return false
+        scheduleRecentPersistenceLocked(
+            recents = current.recents,
+            expectedRevision = current.recentsRevision,
+            delayMillis = 0L,
+        )
+        return true
+    }
+
+    private fun scheduleRecentPersistenceLocked(
+        recents: ProfileRecents,
+        expectedRevision: Long,
+        delayMillis: Long = RECENT_PROFILE_SAVE_DEBOUNCE_MILLIS,
+    ) {
         recentPersistenceJob?.cancel()
         if (recentStore.storageUnavailable) return
         recentPersistenceJob = viewModelScope.launch {
-            delay(RECENT_PROFILE_SAVE_DEBOUNCE_MILLIS)
+            if (delayMillis > 0L) delay(delayMillis)
             val failed = try {
                 withContext(Dispatchers.IO) { recentStore.save(recents) }
                 false
@@ -260,14 +282,46 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
             }
             if (failed) {
                 supportEvents.record(SupportEvent.PROFILE_STORAGE_UNAVAILABLE)
-                synchronized(this@ProfileLibraryViewModel) {
-                    if (mutableState.value.recents == recents) {
-                        mutableState.value = mutableState.value.copy(
-                            message = ProfileLibraryMessage.STORAGE_UNAVAILABLE,
-                        )
-                    }
+            }
+            synchronized(this@ProfileLibraryViewModel) {
+                val current = mutableState.value
+                if (
+                    current.recentsRevision != expectedRevision ||
+                    current.recents != recents
+                ) {
+                    return@synchronized
+                }
+                if (failed) {
+                    mutableState.value = current.copy(
+                        message = ProfileLibraryMessage.STORAGE_UNAVAILABLE,
+                    )
+                } else {
+                    mutableState.value = current.copy(
+                        persistedRecentsRevision = expectedRevision,
+                    )
                 }
             }
+        }
+    }
+
+    override fun onCleared() {
+        val pending = synchronized(this) {
+            recentPersistenceJob?.cancel()
+            recentPersistenceJob = null
+            mutableState.value.takeIf { current ->
+                current.hasDirtyRecents() && !recentStore.storageUnavailable
+            }
+        }
+        try {
+            if (pending != null) {
+                try {
+                    recentStore.save(pending.recents)
+                } catch (_: Exception) {
+                    supportEvents.record(SupportEvent.PROFILE_STORAGE_UNAVAILABLE)
+                }
+            }
+        } finally {
+            super.onCleared()
         }
     }
 
@@ -286,3 +340,6 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
         const val RECENT_PROFILE_SAVE_DEBOUNCE_MILLIS = 350L
     }
 }
+
+private fun ProfileLibraryState.hasDirtyRecents(): Boolean =
+    recentsLoaded && recentsRevision != persistedRecentsRevision

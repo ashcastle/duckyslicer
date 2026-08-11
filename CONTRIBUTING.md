@@ -54,7 +54,8 @@ avoid introducing an account or cloud requirement.
 - Profile catalog loading, recent selections, and user-profile saves must share one
   Activity-retained owner. A saved profile may update the catalog after rotation, but
   its late completion may select that profile only in the project session revision that
-  started the save.
+  started the save. Track recent-selection persistence revisions and flush the newest
+  dirty `Recent` list when the app enters the background or that owner is finally cleared.
 - Live app settings and their debounced persistence must share one Activity-retained
   owner. Rotation must preserve the latest slider and toggle values before disk commit,
   and only the newest revision may report a persistence result.

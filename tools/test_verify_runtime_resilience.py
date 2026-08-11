@@ -33,7 +33,9 @@ def valid_sources() -> dict[str, str]:
             "viewModelScope.launch private val profileStore = ProfileStore(application) "
             "private val recentStore = ProfileRecentStore(application) fun savePrinter( "
             "fun saveFilament( fun saveSlicing( fun recordSelection( activeOperationId "
-            "optionsForSession RECENT_PROFILE_SAVE_DEBOUNCE_MILLIS"
+            "optionsForSession val recentsRevision: Long "
+            "val persistedRecentsRevision: Long fun flushRecentPersistence() "
+            "override fun onCleared() hasDirtyRecents RECENT_PROFILE_SAVE_DEBOUNCE_MILLIS"
         ),
         "AppSettings.kt": (
             "fun AppSettings.normalized() fun save(settings: AppSettings): Boolean .commit()"
@@ -79,6 +81,7 @@ def valid_sources() -> dict[str, str]:
             "profileLibraryModel.state.collectAsStateWithLifecycle() "
             "completion.optionsForSession(session.sessionRevision) "
             "profileLibraryModel.recordSelection(options) "
+            "profileLibraryModel.flushRecentPersistence() "
             "ViewModelProvider(this)[AppSettingsViewModel::class.java] "
             "appSettingsModel.state.collectAsStateWithLifecycle() "
             "appSettingsModel.updateSettings(next) "
@@ -135,6 +138,7 @@ def valid_sources() -> dict[str, str]:
         ),
         "ProfileLibraryInstrumentedTest.kt": (
             "profileSaveAndRecentSelectionSurviveImmediateActivityRecreation "
+            "clearingRetainedOwnerFlushesRecentProfilesBeforeDebounce "
             "lateProfileSaveCannotReplaceNewerProjectSettings "
             "The profile save must be active before recreation "
             "The profile save must be active before the newer edit"
@@ -157,6 +161,8 @@ def valid_sources() -> dict[str, str]:
             "must share that same retained "
             "Profile catalog loading, recent selections, and user-profile saves must share one "
             "only in the project session revision that "
+            "Track recent-selection persistence revisions dirty `Recent` list "
+            "app enters the background owner is finally cleared "
             "Live app settings and their debounced persistence must share one "
             "Fixed support-event writers must serialize through the process-wide journal boundary "
             "Flush the latest dirty revision app enters the background owner is finally cleared "
@@ -239,6 +245,22 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
         sources = valid_sources()
         sources["MainActivity.kt"] += " SlicerProcessClient.autoOrient(File(path))"
         with self.assertRaisesRegex(VerificationError, "Activity composition"):
+            verify_resilience(sources)
+
+    def test_rejects_recent_profiles_without_final_owner_flush(self) -> None:
+        sources = valid_sources()
+        sources["ProfileLibraryViewModel.kt"] = sources["ProfileLibraryViewModel.kt"].replace(
+            "override fun onCleared()", "drop pending recents on clear"
+        )
+        with self.assertRaisesRegex(VerificationError, "profile library lifecycle"):
+            verify_resilience(sources)
+
+    def test_rejects_background_transition_without_recent_profile_flush(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+            "profileLibraryModel.flushRecentPersistence()", "leave recent save pending"
+        )
+        with self.assertRaisesRegex(VerificationError, "profile library Activity-recreation"):
             verify_resilience(sources)
 
     def test_rejects_ui_disposal_canceling_retained_native_work(self) -> None:

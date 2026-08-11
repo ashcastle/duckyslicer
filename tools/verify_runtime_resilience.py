@@ -205,6 +205,11 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "fun recordSelection(",
         "activeOperationId",
         "optionsForSession",
+        "val recentsRevision: Long",
+        "val persistedRecentsRevision: Long",
+        "fun flushRecentPersistence()",
+        "override fun onCleared()",
+        "hasDirtyRecents",
         "RECENT_PROFILE_SAVE_DEBOUNCE_MILLIS",
     ):
         if marker not in profile_library:
@@ -214,6 +219,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "profileLibraryModel.state.collectAsStateWithLifecycle()",
         "completion.optionsForSession(session.sessionRevision)",
         "profileLibraryModel.recordSelection(options)",
+        "profileLibraryModel.flushRecentPersistence()",
     ):
         if marker not in main:
             raise VerificationError(f"profile library Activity-recreation contract is missing: {marker}")
@@ -339,6 +345,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         ),
         "ProfileLibraryInstrumentedTest.kt": (
             "profileSaveAndRecentSelectionSurviveImmediateActivityRecreation",
+            "clearingRetainedOwnerFlushesRecentProfilesBeforeDebounce",
             "lateProfileSaveCannotReplaceNewerProjectSettings",
             "The profile save must be active before recreation",
             "The profile save must be active before the newer edit",
@@ -391,6 +398,16 @@ def verify_resilience(sources: dict[str, str]) -> None:
         raise VerificationError("contributor guidance does not retain profile-library persistence")
     if "only in the project session revision that" not in sources["CONTRIBUTING.md"]:
         raise VerificationError("contributor guidance does not bind late profile-save completion")
+    for marker in (
+        "Track recent-selection persistence revisions",
+        "dirty `Recent` list",
+        "app enters the background",
+        "owner is finally cleared",
+    ):
+        if marker not in sources["CONTRIBUTING.md"]:
+            raise VerificationError(
+                f"contributor guidance does not preserve recent-profile durability: {marker}"
+            )
     if "Live app settings and their debounced persistence must share one" not in sources[
         "CONTRIBUTING.md"
     ]:

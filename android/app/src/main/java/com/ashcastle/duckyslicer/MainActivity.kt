@@ -97,13 +97,14 @@ data class ModelInfo(
 
 class MainActivity : ComponentActivity() {
     private lateinit var externalProjectModel: ExternalProjectRequestViewModel
+    private lateinit var profileLibraryModel: ProfileLibraryViewModel
     private lateinit var projectTransferModel: ProjectTransferViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val sliceOperationModel = ViewModelProvider(this)[SliceOperationViewModel::class.java]
         val remoteOperationModel = ViewModelProvider(this)[RemoteOperationViewModel::class.java]
-        val profileLibraryModel = ViewModelProvider(this)[ProfileLibraryViewModel::class.java]
+        profileLibraryModel = ViewModelProvider(this)[ProfileLibraryViewModel::class.java]
         val appSettingsModel = ViewModelProvider(this)[AppSettingsViewModel::class.java]
         val gcodeExportModel = ViewModelProvider(this)[GcodeExportViewModel::class.java]
         val supportReportExportModel =
@@ -142,6 +143,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         projectTransferModel.flushPersistence()
+        profileLibraryModel.flushRecentPersistence()
         super.onStop()
     }
 }
