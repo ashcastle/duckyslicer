@@ -67,6 +67,9 @@ def valid_sources() -> dict[str, str]:
             "addresses.all(::isPrivateOrLocalAddress) val url = endpoint.uri.toURL() "
             "url.openConnection(Proxy.NO_PROXY) "
             "endpoint.hostHeader?.let isUniqueLocalIpv6 safeRemotePath connection.disconnect() "
+            "class RemoteUploadCancellation connection?.disconnect() "
+            "cancellation.attach(connection) cancellation.throwIfRequested() "
+            "cancellation.complete() RemoteUploadCancelledException "
             "fun save(draft: RemoteDeviceDraft) endpointChanged stagedCredential "
             "credentialKey = credentialKey stagedCredential?.let write(profiles.sortedBy "
             "secrets.remove(stagedCredentialKey) return load().first "
@@ -81,6 +84,9 @@ def valid_sources() -> dict[str, str]:
             "activeArtifactRevision invalidateRemoteUpload withRemoteUploadProgress "
             "RemoteStatusSnapshot SupportEvent.REMOTE_COMMAND_FAILED "
             "fun saveProfile( fun deleteProfile( profilesLoaded selectedProfileId "
+            "ActiveRemoteUpload activeRemoteUpload fun cancelUpload() "
+            "withRemoteUploadCancellationRequested RemoteOperationOutcome.UploadCanceled "
+            "finishOperation( override fun onCleared() "
             "remoteDeviceStore.load() remoteDeviceStore.save(draft) "
             "remoteDeviceStore.delete(profileId) "
             + "remoteResultBelongsToSelection " * 4
@@ -91,6 +97,7 @@ def valid_sources() -> dict[str, str]:
             "remoteOperationModel.state.collectAsStateWithLifecycle() "
             "selectedRemoteDeviceId = remoteOperationState.selectedProfileId "
             "remoteOperationModel.invalidateUpload() "
+            "remoteOperationModel.cancelUpload() "
             "ViewModelProvider(this)[ProfileLibraryViewModel::class.java] "
             "profileLibraryModel.state.collectAsStateWithLifecycle() "
             "completion.optionsForSession(session.sessionRevision) "
@@ -113,7 +120,11 @@ def valid_sources() -> dict[str, str]:
             "onCancelProjectEdit: () -> Unit R.string.cancel_model_edit "
             "R.string.canceling_model_edit"
         ),
-        "DeviceSheet.kt": ".selectable( selected = true enabled = !busy ),",
+        "DeviceSheet.kt": (
+            ".selectable( selected = true enabled = !busy ), "
+            "uploadActive: Boolean uploadCancellationRequested: Boolean "
+            "onCancelUpload: () -> Unit R.string.cancel_upload R.string.canceling_upload"
+        ),
         "DurableJsonFileTest.kt": (
             "validPrimaryCreatesBackupAndCorruptionRecoversIt "
             "unreadableGenerationsAreNeverOverwritten"
@@ -134,11 +145,14 @@ def valid_sources() -> dict[str, str]:
             "redirectsOversizedResponsesAndDeepJsonFailClosed unsafeServerUploadPathIsRejected "
             "cleartextDnsResultsAreValidatedAndPinnedBeforeCredentialsAreAttached "
             "cleartextHostnameRequestUsesThePinnedResolverAddress"
+            " cancelingUploadDisconnectsItsSocketAndDoesNotPoisonTheNextUpload"
         ),
         "RemoteOperationViewModelTest.kt": (
             "resultsAreVisibleOnlyForTheirOriginatingProfile "
             "staleCompletionCannotFinishANewerOperation "
             "invalidatedUploadCannotBecomePrintable "
+            "explicitUploadCancellationStopsProgressAndReportsOneTerminalNotice "
+            "invalidatingAnActiveUploadKeepsItsCancellationSilent "
             "commandCompletionRetainsFileAndUpdatesState "
             "profileSaveSelectsTheDurableResultAndClearsOldPrinterState "
             "deletingTheSelectedProfileChoosesTheFirstRemainingProfile"
@@ -152,6 +166,7 @@ def valid_sources() -> dict[str, str]:
             "orphanCleanupFailureKeepsProfilesVisibleAndRetriesLater"
         ),
         "RemoteDeviceInstrumentedTest.kt": (
+            "retainedUploadCancellationStopsItsConnectionAcrossActivityRecreation "
             "remoteRefreshSurvivesActivityRecreationAndRejectsDuplicateWork "
             "remoteProfileSaveAndSelectionSurviveActivityRecreation "
             "remoteDeviceMetadataRecoversFromLastKnownGoodBackup "
@@ -205,6 +220,8 @@ def valid_sources() -> dict[str, str]:
             "request-scoped cancellation preserve the starting project on cancellation "
             "remove every generated model that was not accepted Final retained-owner clearance "
             "ordinary Activity recreation must not"
+            " disconnecting only its request-bound connection"
+            " stale cancellation must never stop a later upload or printer command"
         ),
         "SECURITY.md": (
             "every current DNS answer DNS rebinding bypass system proxies "
@@ -213,10 +230,12 @@ def valid_sources() -> dict[str, str]:
             "never carried to a changed connection type or address"
         ),
         "strings.xml": (
-            "saved_data_unavailable settings_save_error cancel_model_edit model_edit_canceled"
+            "saved_data_unavailable settings_save_error cancel_model_edit model_edit_canceled "
+            "cancel_upload canceling_upload upload_canceled"
         ),
         "strings-ko.xml": (
-            "saved_data_unavailable settings_save_error cancel_model_edit model_edit_canceled"
+            "saved_data_unavailable settings_save_error cancel_model_edit model_edit_canceled "
+            "cancel_upload canceling_upload upload_canceled"
         ),
     }
 
@@ -371,6 +390,22 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
             "activeArtifactRevision", "unboundArtifactRevision"
         )
         with self.assertRaisesRegex(VerificationError, "lifecycle contract"):
+            verify_resilience(sources)
+
+    def test_rejects_remote_upload_without_request_scoped_socket_cancellation(self) -> None:
+        sources = valid_sources()
+        sources["RemoteDevice.kt"] = sources["RemoteDevice.kt"].replace(
+            "connection?.disconnect()", "leave stale upload connected"
+        )
+        with self.assertRaisesRegex(VerificationError, "remote input containment"):
+            verify_resilience(sources)
+
+    def test_rejects_remote_upload_cancellation_without_reachable_ui(self) -> None:
+        sources = valid_sources()
+        sources["DeviceSheet.kt"] = sources["DeviceSheet.kt"].replace(
+            "onCancelUpload: () -> Unit", "hide upload cancellation"
+        )
+        with self.assertRaisesRegex(VerificationError, "cancellation UI"):
             verify_resilience(sources)
 
     def test_rejects_printer_selection_during_remote_operation(self) -> None:

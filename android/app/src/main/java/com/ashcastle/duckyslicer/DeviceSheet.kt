@@ -59,6 +59,8 @@ internal fun DeviceSheet(
     gcodeAvailable: Boolean,
     busy: Boolean,
     uploadProgress: Int?,
+    uploadActive: Boolean,
+    uploadCancellationRequested: Boolean,
     message: String?,
     isError: Boolean,
     confirmBeforePrint: Boolean,
@@ -67,6 +69,7 @@ internal fun DeviceSheet(
     onDelete: (String) -> Unit,
     onRefresh: () -> Unit,
     onUpload: () -> Unit,
+    onCancelUpload: () -> Unit,
     onStart: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
@@ -214,6 +217,28 @@ internal fun DeviceSheet(
                             modifier = Modifier.fillMaxWidth(),
                             color = Color(0xFFF6C945),
                         )
+                    }
+                    if (uploadActive) {
+                        TextButton(
+                            onClick = onCancelUpload,
+                            enabled = !uploadCancellationRequested,
+                            modifier = Modifier.align(Alignment.End),
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (uploadCancellationRequested) {
+                                        R.string.canceling_upload
+                                    } else {
+                                        R.string.cancel_upload
+                                    },
+                                ),
+                                color = if (uploadCancellationRequested) {
+                                    Color(0xFFC8C9C2)
+                                } else {
+                                    Color(0xFFFF8A80)
+                                },
+                            )
+                        }
                     }
                 }
 

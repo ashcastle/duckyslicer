@@ -60,7 +60,52 @@ class RemoteOperationViewModelTest {
         )
 
         assertNull(invalidated.uploadProgress)
+        assertTrue(invalidated.cancellationRequested)
         assertEquals(invalidated, afterLateProgress)
+        assertFalse(completed.busy)
+        assertNull(completed.uploadFor("printer-a"))
+        assertNull(completed.messageFor("printer-a"))
+    }
+
+    @Test
+    fun explicitUploadCancellationStopsProgressAndReportsOneTerminalNotice() {
+        val active = RemoteOperationState()
+            .beginRemoteOperation(7, "printer-a", uploadOperation = true)
+            .withRemoteUploadProgress(7, "printer-a", 35)
+        val canceling = active.withRemoteUploadCancellationRequested(7, "printer-a")
+        val duplicate = canceling.withRemoteUploadCancellationRequested(7, "printer-a")
+        val afterLateProgress = duplicate.withRemoteUploadProgress(7, "printer-a", 90)
+        val completed = afterLateProgress.finishRemoteOperation(
+            7,
+            "printer-a",
+            RemoteOperationOutcome.UploadCanceled,
+        )
+
+        assertTrue(canceling.cancellationRequested)
+        assertNull(canceling.uploadProgress)
+        assertEquals(canceling, duplicate)
+        assertEquals(canceling, afterLateProgress)
+        assertFalse(completed.busy)
+        assertFalse(completed.cancellationRequested)
+        assertEquals(
+            RemoteOperationMessage.UPLOAD_CANCELED,
+            completed.messageFor("printer-a"),
+        )
+        assertNull(completed.invalidateRemoteUpload().messageFor("printer-a"))
+    }
+
+    @Test
+    fun invalidatingAnActiveUploadKeepsItsCancellationSilent() {
+        val invalidated = RemoteOperationState()
+            .beginRemoteOperation(8, "printer-a", uploadOperation = true)
+            .invalidateRemoteUpload()
+        val completed = invalidated.finishRemoteOperation(
+            8,
+            "printer-a",
+            RemoteOperationOutcome.UploadCanceled,
+        )
+
+        assertTrue(invalidated.cancellationRequested)
         assertFalse(completed.busy)
         assertNull(completed.uploadFor("printer-a"))
         assertNull(completed.messageFor("printer-a"))

@@ -7,11 +7,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.BufferedInputStream
 import java.io.File
+import java.io.RandomAccessFile
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 class RemoteDeviceClientTest {
@@ -244,6 +247,84 @@ class RemoteDeviceClientTest {
             }
         } finally {
             gcode.delete()
+        }
+    }
+
+    @Test
+    fun cancelingUploadDisconnectsItsSocketAndDoesNotPoisonTheNextUpload() {
+        val gcode = Files.createTempFile("ducky-cancel-upload-", ".gcode").toFile()
+        RandomAccessFile(gcode, "rw").use { it.setLength(32L * 1_024 * 1_024) }
+        val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        val accepted = CountDownLatch(1)
+        val releaseServer = CountDownLatch(1)
+        val serverFailure = AtomicReference<Throwable?>(null)
+        val serverWorker = Thread {
+            runCatching {
+                server.accept().use {
+                    accepted.countDown()
+                    check(releaseServer.await(10, TimeUnit.SECONDS))
+                }
+            }.onFailure(serverFailure::set)
+        }.apply { start() }
+        val cancellation = RemoteUploadCancellation()
+        val uploadFailure = AtomicReference<Throwable?>(null)
+        val profile = RemoteDeviceProfile(
+            "cancel-upload",
+            "Cancel upload",
+            RemoteDeviceKind.OCTOPRINT,
+            "http://127.0.0.1:${server.localPort}",
+        )
+        val uploadWorker = Thread {
+            uploadFailure.set(
+                runCatching {
+                    RemoteDeviceClient(30_000).upload(
+                        profile,
+                        "",
+                        gcode,
+                        {},
+                        cancellation,
+                    )
+                }.exceptionOrNull(),
+            )
+        }.apply { start() }
+
+        var stoppedPromptly = false
+        try {
+            assertTrue("Upload never opened its printer socket", accepted.await(3, TimeUnit.SECONDS))
+            assertTrue("The active upload must accept one cancellation", cancellation.cancel())
+            uploadWorker.join(3_000)
+            stoppedPromptly = !uploadWorker.isAlive
+            assertFalse("A completed cancellation must not be reusable", cancellation.cancel())
+        } finally {
+            releaseServer.countDown()
+            server.close()
+            uploadWorker.join(5_000)
+            serverWorker.join(5_000)
+            gcode.delete()
+        }
+
+        assertTrue("Disconnecting the exact upload socket must stop it promptly", stoppedPromptly)
+        assertTrue(uploadFailure.get() is RemoteUploadCancelledException)
+        serverFailure.get()?.let { throw AssertionError("Blocked printer server failed", it) }
+        assertFalse("Blocked printer server did not stop", serverWorker.isAlive)
+
+        val followUp = Files.createTempFile("ducky-follow-up-upload-", ".gcode").toFile().apply {
+            writeText("G28\n")
+        }
+        try {
+            withServer("""{"files":{"local":{"path":"follow-up.gcode"}}}""") { baseUrl, _ ->
+                val nextProfile = profile.copy(baseUrl = baseUrl)
+                val uploaded = RemoteDeviceClient(2_000).upload(
+                    nextProfile,
+                    "",
+                    followUp,
+                    {},
+                    RemoteUploadCancellation(),
+                )
+                assertEquals("follow-up.gcode", uploaded.remotePath)
+            }
+        } finally {
+            followUp.delete()
         }
     }
 

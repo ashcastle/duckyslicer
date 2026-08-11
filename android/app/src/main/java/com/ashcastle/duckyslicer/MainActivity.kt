@@ -200,6 +200,7 @@ private fun DuckySlicerScreen(
     val remotePausedNotice = stringResource(R.string.print_paused)
     val remoteResumedNotice = stringResource(R.string.print_resumed)
     val remoteCanceledNotice = stringResource(R.string.print_canceled)
+    val remoteUploadCanceledNotice = stringResource(R.string.upload_canceled)
     val remoteConnectionError = stringResource(R.string.device_connection_error)
     val remoteUnauthorizedError = stringResource(R.string.device_access_denied)
     val remoteCommandError = stringResource(R.string.device_command_error)
@@ -259,6 +260,9 @@ private fun DuckySlicerScreen(
     val remoteStatus = remoteOperationState.statusFor(selectedRemoteDeviceId)
     val remoteUpload = remoteOperationState.uploadFor(selectedRemoteDeviceId)
     val remoteUploadProgress = remoteOperationState.progressFor(selectedRemoteDeviceId)
+    val remoteUploadActive = remoteOperationState.uploadActiveFor(selectedRemoteDeviceId)
+    val remoteUploadCancellationRequested =
+        remoteOperationState.uploadCancellationRequestedFor(selectedRemoteDeviceId)
     val remoteOperationMessage = remoteOperationState.messageFor(selectedRemoteDeviceId)
     val remoteMessage = when (remoteOperationMessage) {
         RemoteOperationMessage.CONNECTED -> remoteConnectedNotice
@@ -267,6 +271,7 @@ private fun DuckySlicerScreen(
         RemoteOperationMessage.PAUSED -> remotePausedNotice
         RemoteOperationMessage.RESUMED -> remoteResumedNotice
         RemoteOperationMessage.CANCELED -> remoteCanceledNotice
+        RemoteOperationMessage.UPLOAD_CANCELED -> remoteUploadCanceledNotice
         RemoteOperationMessage.PROFILE_SAVED -> remoteSavedNotice
         RemoteOperationMessage.PROFILE_DELETED -> remoteDeletedNotice
         RemoteOperationMessage.ACCESS_DENIED -> remoteUnauthorizedError
@@ -764,6 +769,8 @@ private fun DuckySlicerScreen(
         remoteUpload = remoteUpload,
         remoteBusy = remoteBusy,
         remoteUploadProgress = remoteUploadProgress,
+        remoteUploadActive = remoteUploadActive,
+        remoteUploadCancellationRequested = remoteUploadCancellationRequested,
         remoteMessage = remoteMessage,
         remoteMessageIsError = remoteMessageIsError,
         profileBusy = profileBusy,
@@ -1069,6 +1076,9 @@ private fun DuckySlicerScreen(
                     appSettings.connectionTimeoutSeconds,
                 )
             }
+        },
+        onRemoteCancelUpload = {
+            remoteOperationModel.cancelUpload()
         },
         onRemoteStart = {
             val profile = selectedRemoteDevice()

@@ -7,11 +7,14 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.BufferedInputStream
+import java.io.File
+import java.io.RandomAccessFile
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.URI
@@ -24,6 +27,124 @@ import org.json.JSONObject
 
 @RunWith(AndroidJUnit4::class)
 class RemoteDeviceInstrumentedTest {
+    @Test
+    fun retainedUploadCancellationStopsItsConnectionAcrossActivityRecreation() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val gcode = File(
+            instrumentation.targetContext.cacheDir,
+            "cancel-upload-${UUID.randomUUID()}.gcode",
+        )
+        RandomAccessFile(gcode, "rw").use { it.setLength(32L * 1_024 * 1_024) }
+        val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        val requestAccepted = CountDownLatch(1)
+        val releaseServer = CountDownLatch(1)
+        val serverFailure = AtomicReference<Throwable?>(null)
+        val worker = Thread {
+            runCatching {
+                server.accept().use {
+                    requestAccepted.countDown()
+                    check(releaseServer.await(10, TimeUnit.SECONDS))
+                }
+            }.onFailure(serverFailure::set)
+        }.apply { start() }
+        val profile = RemoteDeviceProfile(
+            id = "retained-upload-cancel",
+            name = "Retained upload",
+            kind = RemoteDeviceKind.OCTOPRINT,
+            baseUrl = "http://127.0.0.1:${server.localPort}",
+        )
+        val retainedModel = AtomicReference<RemoteOperationViewModel>()
+
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    retainedModel.set(
+                        ViewModelProvider(activity)[RemoteOperationViewModel::class.java],
+                    )
+                }
+                val model = retainedModel.get()
+                waitForRemoteState(model, "Remote profiles did not finish loading") {
+                    it.profilesLoaded && !it.busy
+                }
+                scenario.onActivity {
+                    assertTrue(model.upload(profile, gcode, timeoutSeconds = 30))
+                }
+                assertTrue(
+                    "Upload did not open its printer socket",
+                    requestAccepted.await(3, TimeUnit.SECONDS),
+                )
+
+                scenario.recreate()
+                scenario.onActivity { recreated ->
+                    val recreatedModel =
+                        ViewModelProvider(recreated)[RemoteOperationViewModel::class.java]
+                    assertSame(model, recreatedModel)
+                    assertTrue(recreatedModel.state.value.uploadActiveFor(profile.id))
+                    assertTrue(recreatedModel.cancelUpload())
+                    assertFalse("Duplicate upload cancellation was accepted", recreatedModel.cancelUpload())
+                }
+
+                waitForRemoteState(model, "Canceled upload did not release its connection") {
+                    !it.busy
+                }
+                assertEquals(
+                    RemoteOperationMessage.UPLOAD_CANCELED,
+                    model.state.value.messageFor(profile.id),
+                )
+                assertNull(model.state.value.uploadFor(profile.id))
+
+                val staleServer = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+                val staleAccepted = CountDownLatch(1)
+                val releaseStaleServer = CountDownLatch(1)
+                val staleServerFailure = AtomicReference<Throwable?>(null)
+                val staleWorker = Thread {
+                    runCatching {
+                        staleServer.accept().use {
+                            staleAccepted.countDown()
+                            check(releaseStaleServer.await(10, TimeUnit.SECONDS))
+                        }
+                    }.onFailure(staleServerFailure::set)
+                }.apply { start() }
+                val staleProfile = profile.copy(
+                    id = "invalidated-upload",
+                    baseUrl = "http://127.0.0.1:${staleServer.localPort}",
+                )
+                try {
+                    scenario.onActivity {
+                        assertTrue(model.upload(staleProfile, gcode, timeoutSeconds = 30))
+                    }
+                    assertTrue(
+                        "Follow-up upload did not open its printer socket",
+                        staleAccepted.await(3, TimeUnit.SECONDS),
+                    )
+                    scenario.onActivity { model.invalidateUpload() }
+                    waitForRemoteState(
+                        model,
+                        "Invalidated upload did not release its connection",
+                    ) { !it.busy }
+                    assertNull(model.state.value.uploadFor(staleProfile.id))
+                    assertNull(model.state.value.messageFor(staleProfile.id))
+                } finally {
+                    releaseStaleServer.countDown()
+                    staleWorker.join(5_000)
+                    staleServer.close()
+                }
+                staleServerFailure.get()?.let {
+                    throw AssertionError("Invalidated printer server failed", it)
+                }
+                assertFalse("Invalidated printer server did not stop", staleWorker.isAlive)
+            }
+        } finally {
+            retainedModel.get()?.cancelUpload()
+            releaseServer.countDown()
+            worker.join(5_000)
+            server.close()
+            gcode.delete()
+        }
+        serverFailure.get()?.let { throw AssertionError("Blocked printer server failed", it) }
+        assertFalse("Blocked printer server did not stop", worker.isAlive)
+    }
+
     @Test
     fun remoteRefreshSurvivesActivityRecreationAndRejectsDuplicateWork() {
         val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))

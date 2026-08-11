@@ -193,6 +193,12 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "isUniqueLocalIpv6",
         "safeRemotePath",
         "connection.disconnect()",
+        "class RemoteUploadCancellation",
+        "connection?.disconnect()",
+        "cancellation.attach(connection)",
+        "cancellation.throwIfRequested()",
+        "cancellation.complete()",
+        "RemoteUploadCancelledException",
     ):
         if marker not in remote:
             raise VerificationError(f"remote input containment is missing: {marker}")
@@ -215,6 +221,13 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "fun deleteProfile(",
         "profilesLoaded",
         "selectedProfileId",
+        "ActiveRemoteUpload",
+        "activeRemoteUpload",
+        "fun cancelUpload()",
+        "withRemoteUploadCancellationRequested",
+        "RemoteOperationOutcome.UploadCanceled",
+        "finishOperation(",
+        "override fun onCleared()",
         "remoteDeviceStore.load()",
         "remoteDeviceStore.save(draft)",
         "remoteDeviceStore.delete(profileId)",
@@ -230,6 +243,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "remoteOperationModel.state.collectAsStateWithLifecycle()",
         "selectedRemoteDeviceId = remoteOperationState.selectedProfileId",
         "remoteOperationModel.invalidateUpload()",
+        "remoteOperationModel.cancelUpload()",
     ):
         if marker not in main:
             raise VerificationError(f"remote operation Activity-recreation contract is missing: {marker}")
@@ -304,6 +318,15 @@ def verify_resilience(sources: dict[str, str]) -> None:
         raise VerificationError("app-settings persistence is still owned by the Activity composition")
 
     device_sheet = sources["DeviceSheet.kt"]
+    for marker in (
+        "uploadActive: Boolean",
+        "uploadCancellationRequested: Boolean",
+        "onCancelUpload: () -> Unit",
+        "R.string.cancel_upload",
+        "R.string.canceling_upload",
+    ):
+        if marker not in device_sheet:
+            raise VerificationError(f"remote upload cancellation UI is missing: {marker}")
     selection_start = device_sheet.find(".selectable(")
     selection_end = device_sheet.find("),", selection_start)
     if selection_start < 0 or selection_end < 0 or "enabled = !busy" not in device_sheet[
@@ -363,11 +386,14 @@ def verify_resilience(sources: dict[str, str]) -> None:
             "unsafeServerUploadPathIsRejected",
             "cleartextDnsResultsAreValidatedAndPinnedBeforeCredentialsAreAttached",
             "cleartextHostnameRequestUsesThePinnedResolverAddress",
+            "cancelingUploadDisconnectsItsSocketAndDoesNotPoisonTheNextUpload",
         ),
         "RemoteOperationViewModelTest.kt": (
             "resultsAreVisibleOnlyForTheirOriginatingProfile",
             "staleCompletionCannotFinishANewerOperation",
             "invalidatedUploadCannotBecomePrintable",
+            "explicitUploadCancellationStopsProgressAndReportsOneTerminalNotice",
+            "invalidatingAnActiveUploadKeepsItsCancellationSilent",
             "commandCompletionRetainsFileAndUpdatesState",
             "profileSaveSelectsTheDurableResultAndClearsOldPrinterState",
             "deletingTheSelectedProfileChoosesTheFirstRemainingProfile",
@@ -381,6 +407,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
             "orphanCleanupFailureKeepsProfilesVisibleAndRetriesLater",
         ),
         "RemoteDeviceInstrumentedTest.kt": (
+            "retainedUploadCancellationStopsItsConnectionAcrossActivityRecreation",
             "remoteRefreshSurvivesActivityRecreationAndRejectsDuplicateWork",
             "remoteProfileSaveAndSelectionSurviveActivityRecreation",
             "remoteDeviceMetadataRecoversFromLastKnownGoodBackup",
@@ -438,6 +465,9 @@ def verify_resilience(sources: dict[str, str]) -> None:
                 "settings_save_error",
                 "cancel_model_edit",
                 "model_edit_canceled",
+                "cancel_upload",
+                "canceling_upload",
+                "upload_canceled",
             )
         ):
             raise VerificationError(f"saved-data recovery copy is missing from {strings}")
@@ -456,6 +486,14 @@ def verify_resilience(sources: dict[str, str]) -> None:
         raise VerificationError("contributor guidance does not reject stale uploaded G-code")
     if "must share that same retained" not in sources["CONTRIBUTING.md"]:
         raise VerificationError("contributor guidance does not retain device-profile persistence")
+    for marker in (
+        "disconnecting only its request-bound connection",
+        "stale cancellation must never stop a later upload or printer command",
+    ):
+        if marker not in sources["CONTRIBUTING.md"]:
+            raise VerificationError(
+                f"contributor guidance does not scope remote upload cancellation: {marker}"
+            )
     if "Profile catalog loading, recent selections, and user-profile saves must share one" not in sources[
         "CONTRIBUTING.md"
     ]:

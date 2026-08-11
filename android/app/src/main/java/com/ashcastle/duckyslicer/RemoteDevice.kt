@@ -85,6 +85,66 @@ data class RemoteUpload(
     val displayName: String,
 )
 
+internal class RemoteUploadCancelledException : Exception("remote_upload_canceled")
+
+internal class RemoteUploadCancellation {
+    private val lock = Any()
+
+    @Volatile
+    private var cancellationRequested = false
+    private var activeConnection: HttpURLConnection? = null
+    private var completed = false
+
+    fun cancel(): Boolean {
+        val connection = synchronized(lock) {
+            if (completed || cancellationRequested) return false
+            cancellationRequested = true
+            activeConnection
+        }
+        connection?.disconnect()
+        return true
+    }
+
+    fun throwIfRequested() {
+        if (cancellationRequested) throw RemoteUploadCancelledException()
+    }
+
+    fun attach(connection: HttpURLConnection) {
+        synchronized(lock) {
+            if (cancellationRequested) {
+                connection.disconnect()
+                throw RemoteUploadCancelledException()
+            }
+            check(!completed && activeConnection == null) { "remote_upload_lifecycle_invalid" }
+            activeConnection = connection
+        }
+    }
+
+    fun detach(connection: HttpURLConnection) {
+        synchronized(lock) {
+            if (activeConnection === connection) activeConnection = null
+        }
+    }
+
+    fun complete() {
+        synchronized(lock) {
+            if (cancellationRequested) throw RemoteUploadCancelledException()
+            check(!completed) { "remote_upload_lifecycle_invalid" }
+            completed = true
+            activeConnection = null
+        }
+    }
+
+    fun close() {
+        synchronized(lock) {
+            completed = true
+            activeConnection = null
+        }
+    }
+
+    fun wasRequested(): Boolean = cancellationRequested
+}
+
 internal fun remoteResultBelongsToSelection(
     operationProfileId: String,
     selectedProfileId: String?,
@@ -450,7 +510,22 @@ class RemoteDeviceClient(
         credential: String,
         gcode: File,
         onProgress: (Int) -> Unit = {},
+    ): RemoteUpload = upload(
+        profile,
+        credential,
+        gcode,
+        onProgress,
+        RemoteUploadCancellation(),
+    )
+
+    internal fun upload(
+        profile: RemoteDeviceProfile,
+        credential: String,
+        gcode: File,
+        onProgress: (Int) -> Unit,
+        cancellation: RemoteUploadCancellation,
     ): RemoteUpload {
+        cancellation.throwIfRequested()
         require(gcode.isFile) { "gcode_missing" }
         require(gcode.length() in 1..MAX_REMOTE_GCODE_BYTES) { "gcode_size_invalid" }
         val endpoint = when (profile.kind) {
@@ -462,7 +537,8 @@ class RemoteDeviceClient(
             RemoteDeviceKind.KLIPPER -> mapOf("root" to "gcodes", "path" to "")
         }
         val response = SliceArtifactLease.acquire(gcode).use {
-            multipart(profile, credential, endpoint, fields, gcode, onProgress)
+            cancellation.throwIfRequested()
+            multipart(profile, credential, endpoint, fields, gcode, onProgress, cancellation)
         }
         val remotePath = when (profile.kind) {
             RemoteDeviceKind.OCTOPRINT -> response.optJSONObject("files")
@@ -470,6 +546,7 @@ class RemoteDeviceClient(
             RemoteDeviceKind.KLIPPER -> response.optJSONObject("result")
                 ?.optJSONObject("item")?.optString("path")
         }.orEmpty().ifBlank { gcode.name }.let(::safeRemotePath)
+        cancellation.complete()
         return RemoteUpload(profile.id, remotePath, gcode.name)
     }
 
@@ -575,6 +652,7 @@ class RemoteDeviceClient(
         fields: Map<String, String>,
         file: File,
         onProgress: (Int) -> Unit,
+        cancellation: RemoteUploadCancellation,
     ): JSONObject {
         val boundary = "DuckySlicer-${UUID.randomUUID()}"
         val preamble = buildString {
@@ -599,6 +677,8 @@ class RemoteDeviceClient(
             setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
         }
         return try {
+            cancellation.attach(connection)
+            cancellation.throwIfRequested()
             BufferedOutputStream(connection.outputStream).use { output ->
                 output.write(preamble)
                 var sent = 0L
@@ -606,8 +686,10 @@ class RemoteDeviceClient(
                 file.inputStream().buffered().use { input ->
                     val buffer = ByteArray(64 * 1024)
                     while (true) {
+                        cancellation.throwIfRequested()
                         val count = input.read(buffer)
                         if (count < 0) break
+                        cancellation.throwIfRequested()
                         output.write(buffer, 0, count)
                         sent += count
                         val progress = ((sent * 100) / file.length().coerceAtLeast(1L))
@@ -618,12 +700,19 @@ class RemoteDeviceClient(
                         }
                     }
                 }
+                cancellation.throwIfRequested()
                 output.write(closing)
             }
+            cancellation.throwIfRequested()
             connection.readJsonResponse()
-        } catch (failure: Throwable) {
-            connection.disconnect()
+        } catch (failure: Exception) {
+            if (cancellation.wasRequested() && failure !is RemoteUploadCancelledException) {
+                throw RemoteUploadCancelledException()
+            }
             throw failure
+        } finally {
+            cancellation.detach(connection)
+            connection.disconnect()
         }
     }
 

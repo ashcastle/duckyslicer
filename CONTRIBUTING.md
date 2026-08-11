@@ -32,6 +32,8 @@ avoid introducing an account or cloud requirement.
   inputs change must never become eligible for Start Print. Device-profile loading,
   selection, saving, deletion, and credential metadata must share that same retained
   owner so a recreated Activity cannot race or replace a newer durable profile list.
+  Cancel or invalidate an upload by disconnecting only its request-bound connection;
+  a stale cancellation must never stop a later upload or printer command.
 - Keep Orca work off every Android main thread. New long-running operations must
   retain request-scoped cancellation, terminate only the isolated worker, and prove
   a clean follow-up operation on ARM64. Foreground-slice cancellation must carry its
