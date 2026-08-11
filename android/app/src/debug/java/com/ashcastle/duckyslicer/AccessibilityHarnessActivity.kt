@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import java.io.File
 
 /** Debug-only host for deterministic device accessibility regressions. */
 class AccessibilityHarnessActivity : ComponentActivity() {
@@ -44,6 +45,17 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                         )
                         SCREEN_MODEL_TRANSFORM -> WorkspaceAccessibilityHarness(
                             projectObjects = listOf(accessibilityProjectObject()),
+                        )
+                        SCREEN_GCODE_EXPORT -> WorkspaceAccessibilityHarness(
+                            selectedTab = WorkspaceTab.PREVIEW,
+                            sliceOutcome = SliceOutcome(
+                                File(cacheDir, "accessibility-export.gcode"),
+                                10,
+                                60f,
+                                1_000f,
+                                3f,
+                            ),
+                            exportingGcode = true,
                         )
                         SCREEN_WORKSPACE -> {
                             val density = LocalDensity.current
@@ -71,6 +83,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_OBJECT_SETTINGS = "object-settings"
         const val SCREEN_SHAPES = "shapes"
         const val SCREEN_MODEL_TRANSFORM = "model-transform"
+        const val SCREEN_GCODE_EXPORT = "gcode-export"
     }
 }
 
@@ -184,6 +197,8 @@ private fun SettingsAccessibilityHarness() {
 private fun WorkspaceAccessibilityHarness(
     selectedTab: WorkspaceTab = WorkspaceTab.SLICE,
     projectObjects: List<ProjectObject> = emptyList(),
+    sliceOutcome: SliceOutcome? = null,
+    exportingGcode: Boolean = false,
 ) {
     WorkspaceScreen(
         selectedTab = selectedTab,
@@ -206,7 +221,7 @@ private fun WorkspaceAccessibilityHarness(
         profileBusy = false,
         appSettingsSaveFailed = false,
         supportReportExportState = SupportReportExportState(),
-        sliceOutcome = null,
+        sliceOutcome = sliceOutcome,
         layerPreview = null,
         importing = false,
         autoLaying = false,
@@ -219,7 +234,8 @@ private fun WorkspaceAccessibilityHarness(
         sliceCancellationRequested = false,
         sliceProgress = 0,
         previewLoading = false,
-        exportingGcode = false,
+        exportingGcode = exportingGcode,
+        gcodeExportCancellationRequested = false,
         error = null,
         notice = null,
         canUndo = false,
@@ -255,6 +271,7 @@ private fun WorkspaceAccessibilityHarness(
         onSlice = {},
         onCancelSlice = {},
         onSave = {},
+        onCancelGcodeExport = {},
         onSliceOptionsChanged = {},
         onSavePrinterProfile = { _, _ -> },
         onSaveFilamentProfile = { _, _, _ -> },

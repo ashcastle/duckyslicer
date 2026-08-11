@@ -18,6 +18,20 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class AccessibilityInstrumentedTest {
     @Test
+    fun cancelGcodeExportActionIsReachable() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val label = context.getString(R.string.cancel_gcode_export)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_GCODE_EXPORT).use {
+            val nodes = waitForNodes(setOf(label))
+            assertEquals(
+                "An active G-code export must expose one named cancel action",
+                1,
+                nodes.count { it.isClickable && it.effectiveLabel().contains(label) },
+            )
+        }
+    }
+
+    @Test
     fun previewRangeAndDisplaySlidersExposeDistinctNames() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val previewLabels = setOf(

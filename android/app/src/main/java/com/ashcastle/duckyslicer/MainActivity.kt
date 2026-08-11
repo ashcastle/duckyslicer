@@ -182,6 +182,7 @@ private fun DuckySlicerScreen(
     val modelEditCanceledNotice = stringResource(R.string.model_edit_canceled)
     val saveError = stringResource(R.string.save_error)
     val savedNotice = stringResource(R.string.gcode_saved)
+    val gcodeExportCanceledNotice = stringResource(R.string.gcode_export_canceled)
     val profileSavedNotice = stringResource(R.string.profile_saved)
     val profileSaveError = stringResource(R.string.profile_save_error)
     val filamentSlotUnavailable = stringResource(R.string.filament_slot_unavailable)
@@ -242,6 +243,7 @@ private fun DuckySlicerScreen(
     val supportReportExportState by
         supportReportExportModel.state.collectAsStateWithLifecycle()
     val exportingGcode = gcodeExportState.busy
+    val gcodeExportCancellationRequested = gcodeExportState.cancellationRequested
     val sliceOptions = projectTransferState.sliceOptions
     val projectObjects = projectHistory.current.objects
     val selectedProjectObject = projectHistory.current.selectedObject
@@ -379,12 +381,19 @@ private fun DuckySlicerScreen(
 
     LaunchedEffect(gcodeExportState.completion?.id) {
         val completion = gcodeExportState.completion ?: return@LaunchedEffect
-        if (completion.succeeded) {
-            notice = savedNotice
-            error = null
-        } else {
-            notice = null
-            error = saveError
+        when (completion.result) {
+            GcodeExportResult.SAVED -> {
+                notice = savedNotice
+                error = null
+            }
+            GcodeExportResult.CANCELED -> {
+                notice = gcodeExportCanceledNotice
+                error = null
+            }
+            GcodeExportResult.FAILED -> {
+                notice = null
+                error = saveError
+            }
         }
         gcodeExportModel.consumeCompletion(completion.id)
     }
@@ -451,7 +460,7 @@ private fun DuckySlicerScreen(
     }
     val keepScreenAwake = appSettings.keepScreenAwakeWhileWorking &&
         (importing || projectTransferBusy || autoLaying || arranging || splitting || cutting || slicing ||
-            previewLoading || remoteBusy || profileBusy)
+            previewLoading || exportingGcode || remoteBusy || profileBusy)
     DisposableEffect(keepScreenAwake) {
         val window = (context as? MainActivity)?.window
         if (keepScreenAwake) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -790,6 +799,7 @@ private fun DuckySlicerScreen(
         sliceProgress = sliceProgress,
         previewLoading = previewLoading,
         exportingGcode = exportingGcode,
+        gcodeExportCancellationRequested = gcodeExportCancellationRequested,
         error = error,
         notice = notice,
         onTabSelected = { tab ->
@@ -1006,6 +1016,7 @@ private fun DuckySlicerScreen(
         onSlice = startSlice,
         onCancelSlice = cancelSlice,
         onSave = saveGcode,
+        onCancelGcodeExport = gcodeExportModel::cancelActiveExport,
         onSliceOptionsChanged = ::applyOptions,
         onSavePrinterProfile = { name, options ->
             if (

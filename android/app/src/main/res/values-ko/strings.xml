@@ -27,6 +27,9 @@
     <string name="slice_error">이 모델을 슬라이스하지 못했습니다.</string>
     <string name="save_error">G-code를 저장하지 못했습니다.</string>
     <string name="gcode_saved">G-code를 저장했습니다.</string>
+    <string name="cancel_gcode_export">G-code 저장 중지</string>
+    <string name="canceling_gcode_export">G-code 저장을 중지하는 중…</string>
+    <string name="gcode_export_canceled">G-code 저장을 중지했습니다.</string>
     <string name="slicing_progress">슬라이스 중… %1$d%%</string>
     <string name="canceling_slice">취소 중…</string>
     <string name="slice_canceled">슬라이스를 취소했습니다.</string>

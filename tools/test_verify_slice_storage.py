@@ -29,7 +29,12 @@ def valid_sources() -> dict[str, str]:
             "GCODE_DOCUMENT_MIME_TYPE = \"application/octet-stream\" "
             "CreateDocument(GCODE_DOCUMENT_MIME_TYPE) "
             "ViewModelProvider(this)[GcodeExportViewModel::class.java] "
-            "gcodeExportModel.export(uri, completed)"
+            "gcodeExportModel.export(uri, completed) gcodeExportModel::cancelActiveExport"
+        ),
+        "WorkspaceScreen.kt": (
+            "gcodeExportCancellationRequested: Boolean onCancelGcodeExport: () -> Unit "
+            "R.string.cancel_gcode_export R.string.canceling_gcode_export "
+            "if (exporting) onCancelExport() else onExport()"
         ),
         "SliceOperationViewModel.kt": "SliceArtifactLease.acquire(outcome.output)",
         "CreatedDocument.kt": (
@@ -40,7 +45,12 @@ def valid_sources() -> dict[str, str]:
         "GcodeExportViewModel.kt": (
             "class GcodeExportViewModel(application: Application) : AndroidViewModel(application) "
             "viewModelScope.launch(Dispatchers.IO) SliceArtifactLease.acquire(source) "
-            "openOutputStream(uri, \"wt\") deleteFailedCreatedDocument(application, uri) "
+            "class GcodeExportCancellation CancellationSignal() providerSignal.cancel() "
+            "resources.first.closeQuietly() resources.second.closeQuietly() "
+            "openAssetFileDescriptor( \"wt\", "
+            "copyCancellable( fun cancelActiveExport(): Boolean override fun onCleared() "
+            "if (activeExport?.id == operationId) activeExport = null "
+            "deleteFailedCreatedDocument(application, uri) "
             "SupportEvent.GCODE_EXPORT_FAILED"
         ),
         "RemoteDevice.kt": "SliceArtifactLease.acquire(gcode)",
@@ -60,8 +70,12 @@ def valid_sources() -> dict[str, str]:
         ),
         "GcodeExportLifecycleInstrumentedTest.kt": (
             "gcodeExportSurvivesActivityRecreationAndCopiesTheExactArtifactOnce "
-            "assertSame( assertFalse(retainedModel.export( KEY_SHA256"
+            "retainedCancellationStopsTheExactCopyAndDeletesThePartialDocument "
+            "finalOwnerClearStopsItsCopyAndDeletesThePartialDocument "
+            "assertSame( assertFalse(retainedModel.export( retainedModel.cancelActiveExport() "
+            "store.clear() KEY_DELETED KEY_SHA256"
         ),
+        "AccessibilityInstrumentedTest.kt": "cancelGcodeExportActionIsReachable",
         "SECURITY.md": "G-code reader lease RLIMIT_FSIZE",
         "CONTRIBUTING.md": "G-code reader lease RLIMIT_FSIZE",
     }
@@ -109,6 +123,28 @@ class VerifySliceStorageTest(unittest.TestCase):
             "deleteFailedCreatedDocument(application, uri)", "leave partial output"
         )
         with self.assertRaisesRegex(VerificationError, "retained G-code export"):
+            verify_slice_storage(sources)
+
+    def test_rejects_non_interruptible_gcode_export(self) -> None:
+        sources = valid_sources()
+        sources["GcodeExportViewModel.kt"] = sources["GcodeExportViewModel.kt"].replace(
+            "class GcodeExportCancellation", "blocking copy without request cancellation"
+        )
+        with self.assertRaisesRegex(VerificationError, "retained G-code export"):
+            verify_slice_storage(sources)
+
+    def test_rejects_missing_gcode_export_cancel_action(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            "onCancelGcodeExport: () -> Unit", "no cancel action"
+        )
+        with self.assertRaisesRegex(VerificationError, "cancellation UI"):
+            verify_slice_storage(sources)
+
+    def test_rejects_missing_accessible_gcode_export_cancel_regression(self) -> None:
+        sources = valid_sources()
+        sources["AccessibilityInstrumentedTest.kt"] = "missing accessibility regression"
+        with self.assertRaisesRegex(VerificationError, "accessible G-code"):
             verify_slice_storage(sources)
 
     def test_rejects_text_plain_gcode_export(self) -> None:

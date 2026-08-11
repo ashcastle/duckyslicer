@@ -377,6 +377,7 @@ internal fun WorkspaceScreen(
     sliceProgress: Int,
     previewLoading: Boolean,
     exportingGcode: Boolean,
+    gcodeExportCancellationRequested: Boolean,
     error: String?,
     notice: String?,
     canUndo: Boolean,
@@ -412,6 +413,7 @@ internal fun WorkspaceScreen(
     onSlice: () -> Unit,
     onCancelSlice: () -> Unit,
     onSave: () -> Unit,
+    onCancelGcodeExport: () -> Unit,
     onSliceOptionsChanged: (SliceOptions) -> Unit,
     onSavePrinterProfile: (String, SliceOptions) -> Unit,
     onSaveFilamentProfile: (String, SliceOptions, Int) -> Unit,
@@ -546,9 +548,12 @@ internal fun WorkspaceScreen(
                 slicing = slicing,
                 previewLoading = previewLoading,
                 canExport = sliceOutcome != null && !exportingGcode,
+                exportingGcode = exportingGcode,
+                gcodeExportCancellationRequested = gcodeExportCancellationRequested,
                 onImport = onChoose,
                 onAddShape = { showPrimitivePicker = true },
                 onExport = onSave,
+                onCancelGcodeExport = onCancelGcodeExport,
                 canArrange = projectObjects.size > 1,
                 onArrange = onArrange,
                 onCancelProjectEdit = onCancelProjectEdit,
@@ -660,8 +665,10 @@ internal fun WorkspaceScreen(
                 PreviewExportSplitButton(
                     canExport = sliceOutcome != null && !exportingGcode,
                     exporting = exportingGcode,
+                    cancellationRequested = gcodeExportCancellationRequested,
                     canSend = sliceOutcome != null && selectedRemoteDeviceId != null && !remoteBusy,
                     onExport = onSave,
+                    onCancelExport = onCancelGcodeExport,
                     onSend = onRemoteUpload,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -1864,10 +1871,13 @@ private fun WorkspaceMenu(
     slicing: Boolean,
     previewLoading: Boolean,
     canExport: Boolean,
+    exportingGcode: Boolean,
+    gcodeExportCancellationRequested: Boolean,
     canArrange: Boolean,
     onImport: () -> Unit,
     onAddShape: () -> Unit,
     onExport: () -> Unit,
+    onCancelGcodeExport: () -> Unit,
     onArrange: () -> Unit,
     onCancelProjectEdit: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1938,12 +1948,28 @@ private fun WorkspaceMenu(
                 },
             )
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.export_gcode)) },
-                leadingIcon = { Icon(Icons.Default.SaveAlt, null) },
-                enabled = canExport,
+                text = {
+                    Text(
+                        stringResource(
+                            when {
+                                gcodeExportCancellationRequested -> R.string.canceling_gcode_export
+                                exportingGcode -> R.string.cancel_gcode_export
+                                else -> R.string.export_gcode
+                            },
+                        ),
+                    )
+                },
+                leadingIcon = {
+                    Icon(if (exportingGcode) Icons.Default.Close else Icons.Default.SaveAlt, null)
+                },
+                enabled = if (exportingGcode) {
+                    !gcodeExportCancellationRequested
+                } else {
+                    canExport
+                },
                 onClick = {
                     expanded = false
-                    onExport()
+                    if (exportingGcode) onCancelGcodeExport() else onExport()
                 },
             )
         }
@@ -1954,8 +1980,10 @@ private fun WorkspaceMenu(
 private fun PreviewExportSplitButton(
     canExport: Boolean,
     exporting: Boolean,
+    cancellationRequested: Boolean,
     canSend: Boolean,
     onExport: () -> Unit,
+    onCancelExport: () -> Unit,
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1996,13 +2024,29 @@ private fun PreviewExportSplitButton(
                 shape = RoundedCornerShape(50),
                 modifier = Modifier.size(50.dp),
             ) {
-                IconButton(enabled = canExport, onClick = onExport) {
+                IconButton(
+                    enabled = if (exporting) !cancellationRequested else canExport,
+                    onClick = { if (exporting) onCancelExport() else onExport() },
+                ) {
                     if (exporting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(22.dp),
-                            color = WorkspaceBlack,
-                            strokeWidth = 2.dp,
-                        )
+                        Box(contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(28.dp),
+                                color = WorkspaceBlack,
+                                strokeWidth = 2.dp,
+                            )
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = stringResource(
+                                    if (cancellationRequested) {
+                                        R.string.canceling_gcode_export
+                                    } else {
+                                        R.string.cancel_gcode_export
+                                    },
+                                ),
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
                     } else {
                         Icon(
                             Icons.Default.SaveAlt,
@@ -2014,12 +2058,24 @@ private fun PreviewExportSplitButton(
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.export_gcode)) },
-                leadingIcon = { Icon(Icons.Default.SaveAlt, null) },
-                enabled = canExport,
+                text = {
+                    Text(
+                        stringResource(
+                            when {
+                                cancellationRequested -> R.string.canceling_gcode_export
+                                exporting -> R.string.cancel_gcode_export
+                                else -> R.string.export_gcode
+                            },
+                        ),
+                    )
+                },
+                leadingIcon = {
+                    Icon(if (exporting) Icons.Default.Close else Icons.Default.SaveAlt, null)
+                },
+                enabled = if (exporting) !cancellationRequested else canExport,
                 onClick = {
                     expanded = false
-                    onExport()
+                    if (exporting) onCancelExport() else onExport()
                 },
             )
             DropdownMenuItem(

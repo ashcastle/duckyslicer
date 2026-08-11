@@ -1,8 +1,10 @@
 package com.ashcastle.duckyslicer
 
+import android.app.Application
 import android.os.Bundle
 import android.os.SystemClock
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -62,6 +64,94 @@ class GcodeExportLifecycleInstrumentedTest {
                 assertEquals(sha256(payload), status.getString(BlockingExportProvider.KEY_SHA256))
             }
         } finally {
+            resolver.call(
+                BlockingExportProvider.URI,
+                BlockingExportProvider.METHOD_RELEASE,
+                null,
+                null,
+            )
+            output.delete()
+        }
+    }
+
+    @Test
+    fun retainedCancellationStopsTheExactCopyAndDeletesThePartialDocument() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        resolver.call(BlockingExportProvider.URI, BlockingExportProvider.METHOD_PREPARE, null, null)
+        val output = File(context.filesDir, SliceArtifactStore.OUTPUT_DIRECTORY)
+            .apply(File::mkdirs)
+            .resolve("cancel-retained-export.gcode")
+        val payload = buildPayload()
+        output.writeBytes(payload)
+        val outcome = SliceOutcome(output, 10, 12f, 34f, 0.1f)
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                lateinit var retainedModel: GcodeExportViewModel
+                scenario.onActivity { activity ->
+                    retainedModel = ViewModelProvider(activity)[GcodeExportViewModel::class.java]
+                    assertTrue(retainedModel.export(BlockingExportProvider.URI, outcome))
+                }
+                waitForProvider { status -> status.getBoolean(BlockingExportProvider.KEY_STARTED) }
+
+                scenario.recreate()
+                scenario.onActivity { recreated ->
+                    assertSame(
+                        retainedModel,
+                        ViewModelProvider(recreated)[GcodeExportViewModel::class.java],
+                    )
+                    assertTrue(retainedModel.cancelActiveExport())
+                    assertFalse(retainedModel.cancelActiveExport())
+                }
+                waitForExport(retainedModel)
+                val status = waitForProvider { value ->
+                    value.getBoolean(BlockingExportProvider.KEY_DELETED) &&
+                        value.getBoolean(BlockingExportProvider.KEY_COMPLETED)
+                }
+                assertTrue(status.getInt(BlockingExportProvider.KEY_BYTES) < payload.size)
+                assertTrue(output.isFile)
+            }
+        } finally {
+            resolver.call(
+                BlockingExportProvider.URI,
+                BlockingExportProvider.METHOD_RELEASE,
+                null,
+                null,
+            )
+            output.delete()
+        }
+    }
+
+    @Test
+    fun finalOwnerClearStopsItsCopyAndDeletesThePartialDocument() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        resolver.call(BlockingExportProvider.URI, BlockingExportProvider.METHOD_PREPARE, null, null)
+        val output = File(context.filesDir, SliceArtifactStore.OUTPUT_DIRECTORY)
+            .apply(File::mkdirs)
+            .resolve("clear-retained-export.gcode")
+        output.writeBytes(buildPayload())
+        val outcome = SliceOutcome(output, 10, 12f, 34f, 0.1f)
+        val store = ViewModelStore()
+        try {
+            val application = context.applicationContext as Application
+            val model = ViewModelProvider(
+                store,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[GcodeExportViewModel::class.java]
+            assertTrue(model.export(BlockingExportProvider.URI, outcome))
+            waitForProvider { status -> status.getBoolean(BlockingExportProvider.KEY_STARTED) }
+
+            store.clear()
+
+            val status = waitForProvider { value ->
+                value.getBoolean(BlockingExportProvider.KEY_DELETED) &&
+                    value.getBoolean(BlockingExportProvider.KEY_COMPLETED)
+            }
+            assertTrue(status.getInt(BlockingExportProvider.KEY_BYTES) < PAYLOAD_BYTES)
+            assertTrue(output.isFile)
+        } finally {
+            store.clear()
             resolver.call(
                 BlockingExportProvider.URI,
                 BlockingExportProvider.METHOD_RELEASE,

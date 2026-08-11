@@ -27,6 +27,9 @@
     <string name="slice_error">Couldn’t slice this model.</string>
     <string name="save_error">Couldn’t save G-code.</string>
     <string name="gcode_saved">G-code saved.</string>
+    <string name="cancel_gcode_export">Stop saving G-code</string>
+    <string name="canceling_gcode_export">Stopping G-code save…</string>
+    <string name="gcode_export_canceled">G-code save stopped.</string>
     <string name="slicing_progress">Slicing… %1$d%%</string>
     <string name="canceling_slice">Canceling…</string>
     <string name="slice_canceled">Slice canceled.</string>

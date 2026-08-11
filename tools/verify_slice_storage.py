@@ -21,6 +21,7 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "SlicerProcessService.kt",
         "runtime.patch",
         "MainActivity.kt",
+        "WorkspaceScreen.kt",
         "SliceOperationViewModel.kt",
         "CreatedDocument.kt",
         "GcodeExportViewModel.kt",
@@ -28,6 +29,7 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "SliceArtifactStoreTest.kt",
         "NativeEngineInstrumentedTest.kt",
         "GcodeExportLifecycleInstrumentedTest.kt",
+        "AccessibilityInstrumentedTest.kt",
         "SECURITY.md",
         "CONTRIBUTING.md",
     }
@@ -97,6 +99,7 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         raise VerificationError("native compatibility preview reads the complete G-code")
 
     main_activity = sources["MainActivity.kt"]
+    workspace = sources["WorkspaceScreen.kt"]
     exporter = sources["GcodeExportViewModel.kt"]
     created_document = sources["CreatedDocument.kt"]
     for marker in (
@@ -111,7 +114,17 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "class GcodeExportViewModel(application: Application) : AndroidViewModel(application)",
         "viewModelScope.launch(Dispatchers.IO)",
         "SliceArtifactLease.acquire(source)",
-        'openOutputStream(uri, "wt")',
+        "class GcodeExportCancellation",
+        "CancellationSignal()",
+        "providerSignal.cancel()",
+        "resources.first.closeQuietly()",
+        "resources.second.closeQuietly()",
+        "openAssetFileDescriptor(",
+        '"wt",',
+        "copyCancellable(",
+        "fun cancelActiveExport(): Boolean",
+        "if (activeExport?.id == operationId) activeExport = null",
+        "override fun onCleared()",
         "deleteFailedCreatedDocument(application, uri)",
         "SupportEvent.GCODE_EXPORT_FAILED",
     ):
@@ -120,6 +133,7 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
     for marker in (
         "ViewModelProvider(this)[GcodeExportViewModel::class.java]",
         "gcodeExportModel.export(uri, completed)",
+        "gcodeExportModel::cancelActiveExport",
     ):
         if marker not in main_activity:
             raise VerificationError(f"retained G-code export dispatch is missing: {marker}")
@@ -130,6 +144,15 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
     ):
         if forbidden in main_activity:
             raise VerificationError("G-code export is still owned by the Activity composition")
+    for marker in (
+        "gcodeExportCancellationRequested: Boolean",
+        "onCancelGcodeExport: () -> Unit",
+        "R.string.cancel_gcode_export",
+        "R.string.canceling_gcode_export",
+        "if (exporting) onCancelExport() else onExport()",
+    ):
+        if marker not in workspace:
+            raise VerificationError(f"G-code export cancellation UI is missing: {marker}")
     preview_operation = sources["SliceOperationViewModel.kt"]
     if "SliceArtifactLease.acquire(outcome.output)" not in preview_operation:
         raise VerificationError("Preview generation does not lease its retained artifact")
@@ -164,12 +187,19 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
     export_tests = sources["GcodeExportLifecycleInstrumentedTest.kt"]
     for marker in (
         "gcodeExportSurvivesActivityRecreationAndCopiesTheExactArtifactOnce",
+        "retainedCancellationStopsTheExactCopyAndDeletesThePartialDocument",
+        "finalOwnerClearStopsItsCopyAndDeletesThePartialDocument",
         "assertSame(",
         "assertFalse(retainedModel.export(",
+        "retainedModel.cancelActiveExport()",
+        "store.clear()",
+        "KEY_DELETED",
         "KEY_SHA256",
     ):
         if marker not in export_tests:
             raise VerificationError(f"retained G-code export regression is missing: {marker}")
+    if "cancelGcodeExportActionIsReachable" not in sources["AccessibilityInstrumentedTest.kt"]:
+        raise VerificationError("accessible G-code export cancellation regression is missing")
 
     for document in ("SECURITY.md", "CONTRIBUTING.md"):
         if "G-code" not in sources[document] or "lease" not in sources[document].lower():
@@ -193,6 +223,7 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "MainActivity.kt": (main / "MainActivity.kt").read_text(encoding="utf-8"),
+        "WorkspaceScreen.kt": (main / "WorkspaceScreen.kt").read_text(encoding="utf-8"),
         "SliceOperationViewModel.kt": (main / "SliceOperationViewModel.kt").read_text(
             encoding="utf-8"
         ),
@@ -209,6 +240,9 @@ def read_sources() -> dict[str, str]:
         ).read_text(encoding="utf-8"),
         "GcodeExportLifecycleInstrumentedTest.kt": (
             device_tests / "GcodeExportLifecycleInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "AccessibilityInstrumentedTest.kt": (
+            device_tests / "AccessibilityInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "SECURITY.md": (ROOT / "SECURITY.md").read_text(encoding="utf-8"),
         "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),

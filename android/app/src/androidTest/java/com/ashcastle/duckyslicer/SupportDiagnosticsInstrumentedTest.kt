@@ -98,8 +98,7 @@ class SupportDiagnosticsInstrumentedTest {
         val report = createSupportReport(context, AppSettings())
 
         assertEquals(platformExits.take(MAX_SUPPORT_PROCESS_EXITS).size, exits.size)
-        assertTrue(report.contains("previous_exit_count=${exits.size}"))
-        platformExits.zip(exits).forEachIndexed { index, (platformExit, exit) ->
+        platformExits.zip(exits).forEach { (platformExit, exit) ->
             assertTrue(exit.timestampMillis >= 0L)
             assertEquals(platformExit.timestamp.coerceAtLeast(0L), exit.timestampMillis)
             assertEquals(
@@ -107,12 +106,33 @@ class SupportDiagnosticsInstrumentedTest {
                 exit.process,
             )
             assertEquals(SupportExitReason.fromPlatformCode(platformExit.reason), exit.reason)
-            assertTrue(report.contains("previous_exit.$index.process=${exit.process.name}"))
-            assertTrue(report.contains("previous_exit.$index.reason=${exit.reason.name}"))
             assertFalse(report.contains(platformExit.processName))
             platformExit.description?.takeIf(String::isNotBlank)?.let { description ->
                 assertFalse(report.contains(description))
             }
+        }
+        val reportValues = report.lineSequence()
+            .mapNotNull { line ->
+                val separator = line.indexOf('=')
+                if (separator <= 0) {
+                    null
+                } else {
+                    line.substring(0, separator) to line.substring(separator + 1)
+                }
+            }
+            .toMap()
+        val reportExitCount = requireNotNull(reportValues["previous_exit_count"]).toInt()
+        assertTrue(reportExitCount in 0..MAX_SUPPORT_PROCESS_EXITS)
+        repeat(reportExitCount) { index ->
+            assertTrue(reportValues.containsKey("previous_exit.$index.utc"))
+            assertTrue(
+                reportValues["previous_exit.$index.process"] in
+                    SupportProcessKind.entries.map(SupportProcessKind::name),
+            )
+            assertTrue(
+                reportValues["previous_exit.$index.reason"] in
+                    SupportExitReason.entries.map(SupportExitReason::name),
+            )
         }
     }
 }

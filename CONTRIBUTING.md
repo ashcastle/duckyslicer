@@ -54,7 +54,9 @@ avoid introducing an account or cloud requirement.
   remove every generated model that was not accepted. Final retained-owner clearance
   must cancel that exact request; ordinary Activity recreation must not.
 - User-selected G-code export must run through its retained owner, hold a reader lease,
-  reject duplicate copies, and clean up a newly created document after failure.
+  reject duplicate copies, and expose request-scoped cancellation that interrupts the
+  exact provider open and copy streams. Rotation must retain that operation; final owner
+  clearance must stop it. Cancellation or failure must delete the partial document.
 - Every `CreateDocument` writer must accept only its returned `content://` URI, truncate
   the new target, and delete it after cancellation or failure so partial exports never
   look like valid G-code, project archives, or support details.
