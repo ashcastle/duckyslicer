@@ -268,8 +268,14 @@ private data class ActiveProjectDocumentTransfer(
     val cancellation: DocumentTransferCancellation,
 )
 
+private data class ActiveModelImportTransfer(
+    val operation: ActiveProjectEdit,
+    val cancellation: DocumentTransferCancellation,
+)
+
 private data class FinalProjectOwnerCleanup(
     val transfer: ActiveProjectDocumentTransfer?,
+    val modelImport: ActiveModelImportTransfer?,
     val pendingProject: ProjectTransferState?,
 )
 
@@ -281,6 +287,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     private var nextOperationId = 0L
     private var persistenceJob: Job? = null
     private var activeProjectDocumentTransfer: ActiveProjectDocumentTransfer? = null
+    private var activeModelImportTransfer: ActiveModelImportTransfer? = null
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -542,9 +549,12 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
 
     @Synchronized
     fun importModels(uri: Uri): Boolean {
+        if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
         val objectCount = mutableState.value.history.current.objects.size
         if (objectCount >= ProjectStore.MAX_PROJECT_OBJECTS) return false
         val baseline = startEditLocked(ProjectEditKind.MODEL_IMPORT) ?: return false
+        val cancellation = DocumentTransferCancellation()
+        activeModelImportTransfer = ActiveModelImportTransfer(baseline.operation, cancellation)
         viewModelScope.launch(Dispatchers.IO) {
             var installed = emptyList<ProjectObject>()
             try {
@@ -554,6 +564,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                     projectStore,
                     baseline.options,
                     baseline.operation.requestId,
+                    cancellation,
                 )
                 installed = imported
                 require(objectCount + imported.size <= ProjectStore.MAX_PROJECT_OBJECTS) {
@@ -573,6 +584,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                     )
                 }
                 val nextHistory = baseline.history.addAll(placed)
+                cancellation.complete()
                 if (
                     !completeEditSuccess(
                         baseline,
@@ -587,8 +599,24 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 throw failure
             } catch (failure: Exception) {
                 installed.deleteInstalledModels()
-                completeEditFailure(baseline, failure)
+                completeEditFailure(
+                    baseline,
+                    if (
+                        cancellation.wasRequested() ||
+                        failure is DocumentTransferCancelledException
+                    ) {
+                        ProjectEditCancelledException()
+                    } else {
+                        failure
+                    },
+                )
             } finally {
+                synchronized(this@ProjectTransferViewModel) {
+                    if (activeModelImportTransfer?.operation?.matches(baseline.operation) == true) {
+                        activeModelImportTransfer = null
+                    }
+                }
+                cancellation.close()
                 SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId)
             }
         }
@@ -796,12 +824,18 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         mutableState.value = current.copy(editCompletion = null)
     }
 
-    @Synchronized
     fun cancelActiveEdit(): Boolean {
-        val operation = mutableState.value.activeEdit ?: return false
-        val updated = mutableState.value.withEditCancellationRequested(operation.id) ?: return false
-        mutableState.value = updated
-        return SlicerProcessClient.cancelProjectRequestAsync(operation.requestId)
+        val (operation, modelImport) = synchronized(this) {
+            val operation = mutableState.value.activeEdit ?: return false
+            val updated = mutableState.value.withEditCancellationRequested(operation.id) ?: return false
+            mutableState.value = updated
+            operation to activeModelImportTransfer?.takeIf {
+                it.operation.matches(operation)
+            }
+        }
+        val providerCanceled = modelImport?.cancellation?.cancel() ?: false
+        val nativeCanceled = SlicerProcessClient.cancelProjectRequestAsync(operation.requestId)
+        return providerCanceled || nativeCanceled
     }
 
     @Synchronized
@@ -993,18 +1027,29 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             persistenceJob?.cancel()
             persistenceJob = null
             val current = mutableState.value
-            val activeRequestId = current.activeEdit?.requestId
-            activeRequestId?.let(SlicerProcessClient::cancelProjectRequestAsync)
-            val pending = current.takeIf { state ->
+            val activeEdit = current.activeEdit
+            if (activeEdit != null) {
+                mutableState.value.withEditCancellationRequested(activeEdit.id)?.let { canceling ->
+                    mutableState.value = canceling
+                }
+                SlicerProcessClient.cancelProjectRequestAsync(activeEdit.requestId)
+            }
+            val cancelingCurrent = mutableState.value
+            val pending = cancelingCurrent.takeIf { state ->
                 state.hasPersistableChanges(allowActiveTransfer = true) ||
                     (
                         state.activeTransferDirection == ProjectTransferDirection.IMPORT &&
                             state.hasUnpersistedSession()
                         )
             }
-            FinalProjectOwnerCleanup(activeProjectDocumentTransfer, pending)
+            FinalProjectOwnerCleanup(
+                activeProjectDocumentTransfer,
+                activeModelImportTransfer,
+                pending,
+            )
         }
         cleanup.transfer?.cancellation?.cancel()
+        cleanup.modelImport?.cancellation?.cancel()
         val pending = cleanup.pendingProject?.takeUnless {
             cleanup.transfer?.operation?.direction == ProjectTransferDirection.IMPORT &&
                 cleanup.transfer.cancellation.completionWasClaimed()

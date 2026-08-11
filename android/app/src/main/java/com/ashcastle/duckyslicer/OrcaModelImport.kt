@@ -1,5 +1,6 @@
 package com.ashcastle.duckyslicer
 
+import android.content.ContentProviderClient
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -23,58 +24,86 @@ internal suspend fun importOrcaModels(
     projectStore: ProjectStore,
     options: SliceOptions,
     requestId: String = UUID.randomUUID().toString(),
+    transferCancellation: DocumentTransferCancellation? = null,
 ): List<ProjectObject> = withContext(Dispatchers.IO) {
-    fun cancellationRequested(): Boolean =
+    val cancellation = transferCancellation ?: DocumentTransferCancellation()
+    fun cancellationRequested(): Boolean = cancellation.wasRequested() ||
         SlicerProcessClient.projectRequestCancellationRequested(requestId)
-    if (cancellationRequested()) throw ProjectEditCancelledException()
-    val metadata = queryModelMetadata(context, uri)
-    val format = modelFormat(metadata.displayName, metadata.mimeType)
-        ?: throw UnsupportedModelFormatException()
-    metadata.size?.let { size ->
-        if (size > MAX_MODEL_IMPORT_BYTES) throw ModelTooLargeException()
+    fun throwIfCancellationRequested() {
+        if (cancellationRequested()) throw ProjectEditCancelledException()
     }
-    val staging = projectStore.createModelImportStaging()
-    val installed = ArrayList<File>()
     try {
-        val source = File(staging, "source.${format.extension}")
-        context.contentResolver.openInputStream(uri).use { input ->
-            requireNotNull(input) { "model_unreadable" }
-            source.outputStream().use { output ->
-                copyModelWithLimit(input, output, cancellationRequested = ::cancellationRequested)
+        throwIfCancellationRequested()
+        val provider = requireNotNull(
+            context.contentResolver.acquireContentProviderClient(uri),
+        ) { "model_provider_unavailable" }
+        provider.use {
+            val metadata = queryModelMetadata(provider, uri, cancellation)
+            val format = modelFormat(metadata.displayName, metadata.mimeType)
+                ?: throw UnsupportedModelFormatException()
+            metadata.size?.let { size ->
+                if (size > MAX_MODEL_IMPORT_BYTES) throw ModelTooLargeException()
+            }
+            val staging = projectStore.createModelImportStaging()
+            val installed = ArrayList<File>()
+            try {
+                val source = File(staging, "source.${format.extension}")
+                throwIfCancellationRequested()
+                val descriptor = requireNotNull(
+                    provider.openAssetFile(uri, "r", cancellation.providerSignal),
+                ) { "model_unreadable" }
+                descriptor.use {
+                    descriptor.createInputStream().use { input ->
+                        cancellation.attachInput(input)
+                        try {
+                            source.outputStream().use { output ->
+                                copyModelWithLimit(
+                                    input,
+                                    output,
+                                    cancellationRequested = ::cancellationRequested,
+                                )
+                            }
+                        } finally {
+                            cancellation.detachInput(input)
+                        }
+                    }
+                }
+                throwIfCancellationRequested()
+                val exported = if (format == OrcaModelFormat.STL) {
+                    listOf(OrcaImportedObject(source, metadata.displayName, 0f, 0f))
+                } else {
+                    SlicerProcessClient.normalizeModel(source, staging, requestId)
+                }
+                val imported = exported.mapIndexed { index, normalized ->
+                    throwIfCancellationRequested()
+                    val displayName = importedObjectName(
+                        sourceName = metadata.displayName,
+                        objectName = normalized.displayName,
+                        index = index,
+                        objectCount = exported.size,
+                    )
+                    val model = projectStore.installImportedModel(normalized.file, displayName)
+                    installed += File(model.localPath)
+                    ImportedGeometry(model, normalized.centerXmm, normalized.centerYmm)
+                }
+                throwIfCancellationRequested()
+                val transforms = importedTransforms(imported, format, options)
+                imported.mapIndexed { index, geometry ->
+                    ProjectObject(
+                        id = UUID.randomUUID().toString(),
+                        model = geometry.model,
+                        transform = transforms[index],
+                    )
+                }
+            } catch (failure: Throwable) {
+                installed.forEach(File::delete)
+                throw failure
+            } finally {
+                staging.deleteRecursively()
             }
         }
-        if (cancellationRequested()) throw ProjectEditCancelledException()
-        val exported = if (format == OrcaModelFormat.STL) {
-            listOf(OrcaImportedObject(source, metadata.displayName, 0f, 0f))
-        } else {
-            SlicerProcessClient.normalizeModel(source, staging, requestId)
-        }
-        val imported = exported.mapIndexed { index, normalized ->
-            if (cancellationRequested()) throw ProjectEditCancelledException()
-            val displayName = importedObjectName(
-                sourceName = metadata.displayName,
-                objectName = normalized.displayName,
-                index = index,
-                objectCount = exported.size,
-            )
-            val model = projectStore.installImportedModel(normalized.file, displayName)
-            installed += File(model.localPath)
-            ImportedGeometry(model, normalized.centerXmm, normalized.centerYmm)
-        }
-        if (cancellationRequested()) throw ProjectEditCancelledException()
-        val transforms = importedTransforms(imported, format, options)
-        imported.mapIndexed { index, geometry ->
-            ProjectObject(
-                id = UUID.randomUUID().toString(),
-                model = geometry.model,
-                transform = transforms[index],
-            )
-        }
-    } catch (failure: Throwable) {
-        installed.forEach(File::delete)
-        throw failure
     } finally {
-        staging.deleteRecursively()
+        if (transferCancellation == null) cancellation.close()
     }
 }
 
@@ -90,14 +119,19 @@ private data class ImportedGeometry(
     val originalCenterY: Float,
 )
 
-private fun queryModelMetadata(context: Context, uri: Uri): ModelDocumentMetadata {
-    val row = runCatching {
-        context.contentResolver.query(
+private fun queryModelMetadata(
+    provider: ContentProviderClient,
+    uri: Uri,
+    cancellation: DocumentTransferCancellation,
+): ModelDocumentMetadata {
+    val row = try {
+        provider.query(
             uri,
             arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
             null,
             null,
             null,
+            cancellation.providerSignal,
         )?.use { cursor ->
             if (!cursor.moveToFirst()) return@use null
             val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
@@ -106,8 +140,14 @@ private fun queryModelMetadata(context: Context, uri: Uri): ModelDocumentMetadat
             val size = sizeIndex.takeIf { it >= 0 && !cursor.isNull(it) }?.let(cursor::getLong)
             name to size
         }
-    }.getOrNull()
-    val mimeType = context.contentResolver.getType(uri)
+    } catch (failure: Exception) {
+        if (cancellation.wasRequested()) throw ProjectEditCancelledException()
+        null
+    }
+    cancellation.throwIfRequested()
+    val inferredFromName = modelFormat(row?.first, null)
+    val mimeType = if (inferredFromName != null) null else runCatching { provider.getType(uri) }
+        .getOrNull()
         ?.substringBefore(';')
         ?.trim()
         ?.lowercase(Locale.ROOT)

@@ -48,6 +48,9 @@ avoid introducing an account or cloud requirement.
 - Model import, primitive creation, automatic lay, arrangement, split, and cut must run
   through that retained project owner. Bind each result to its starting history and
   options, reject duplicate work after rotation, and delete every unaccepted model file.
+  Ordinary STL, 3MF, and OBJ import cancellation must interrupt the exact provider open
+  and input stream as well as the matching isolated-worker request; final-owner cleanup
+  must remove its staging data without deleting the user-selected source document.
 - UI disposal must not issue a process-wide slicer cancellation. Only the retained
   owner of an active operation may cancel it. Long-running project edits must expose
   request-scoped cancellation, preserve the starting project on cancellation, and

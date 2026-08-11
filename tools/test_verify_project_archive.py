@@ -105,7 +105,7 @@ def valid_sources() -> dict[str, str]:
                 "ProjectTransferCompletion.Canceled fun cancelProjectExport(): Boolean "
                 "fun cancelProjectImport(): Boolean "
                 "activeProjectDocumentTransfer?.operation == operation "
-                "FinalProjectOwnerCleanup(activeProjectDocumentTransfer, pending) "
+                "FinalProjectOwnerCleanup( activeProjectDocumentTransfer, pending, "
                 "cleanup.transfer?.cancellation?.cancel() "
                 "completionWasClaimed() hasUnpersistedSession() "
                 "hasPersistableChanges(allowActiveTransfer = true) "

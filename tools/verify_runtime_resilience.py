@@ -19,7 +19,9 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "DurableJsonFile.kt",
         "ProjectStore.kt",
         "ProjectTransfer.kt",
+        "CreatedDocument.kt",
         "ModelImport.kt",
+        "OrcaModelImport.kt",
         "SlicerProcessService.kt",
         "ProfileStore.kt",
         "ProfileLibraryViewModel.kt",
@@ -44,6 +46,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "AppSettingsLifecycleInstrumentedTest.kt",
         "ProjectArchiveIntentInstrumentedTest.kt",
         "ProjectEditCancellationInstrumentedTest.kt",
+        "BlockingImportProvider.java",
         "CONTRIBUTING.md",
         "SECURITY.md",
         "strings.xml",
@@ -105,7 +108,12 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "fun cancelActiveEdit()",
         "SlicerProcessClient.cancelProjectRequestAsync(operation.requestId)",
         "SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId)",
-        "activeRequestId?.let(SlicerProcessClient::cancelProjectRequestAsync)",
+        "mutableState.value.withEditCancellationRequested(activeEdit.id)",
+        "SlicerProcessClient.cancelProjectRequestAsync(activeEdit.requestId)",
+        "private var activeModelImportTransfer: ActiveModelImportTransfer?",
+        "activeModelImportTransfer = ActiveModelImportTransfer(baseline.operation, cancellation)",
+        "val providerCanceled = modelImport?.cancellation?.cancel() ?: false",
+        "cleanup.modelImport?.cancellation?.cancel()",
     ):
         if marker not in project_session:
             raise VerificationError(f"project autosave corruption guard is missing: {marker}")
@@ -139,6 +147,33 @@ def verify_resilience(sources: dict[str, str]) -> None:
     ):
         if marker not in model_import:
             raise VerificationError(f"model import cancellation contract is missing: {marker}")
+
+    document_transfer = sources["CreatedDocument.kt"]
+    for marker in (
+        "class DocumentTransferCancellation",
+        "val providerSignal = CancellationSignal()",
+        "fun attachInput(value: InputStream)",
+        "resources.second.closeQuietly()",
+    ):
+        if marker not in document_transfer:
+            raise VerificationError(f"model document interruption primitive is missing: {marker}")
+
+    orca_import = sources["OrcaModelImport.kt"]
+    for marker in (
+        "transferCancellation: DocumentTransferCancellation? = null",
+        "context.contentResolver.acquireContentProviderClient(uri)",
+        "provider.query(",
+        "cancellation.providerSignal",
+        'provider.openAssetFile(uri, "r", cancellation.providerSignal)',
+        "cancellation.attachInput(input)",
+        "cancellation.detachInput(input)",
+        "cancellationRequested = ::cancellationRequested",
+        "if (transferCancellation == null) cancellation.close()",
+    ):
+        if marker not in orca_import:
+            raise VerificationError(f"model provider cancellation contract is missing: {marker}")
+    if "contentResolver.openInputStream(uri)" in orca_import:
+        raise VerificationError("model import bypasses provider-open cancellation")
 
     slicer_process = sources["SlicerProcessService.kt"]
     for marker in (
@@ -446,10 +481,19 @@ def verify_resilience(sources: dict[str, str]) -> None:
         ),
         "ProjectEditCancellationInstrumentedTest.kt": (
             "retainedOwnerCancelsOnlyItsNativeEditAndKeepsTheProjectUnchanged",
+            "retainedModelImportCancellationInterruptsProviderOpenAcrossRecreation",
+            "finalProjectOwnerStopsBlockedModelReadAndRemovesItsStaging",
+            "BlockingImportProvider.MODEL_URI",
+            "waitForModelStagingCleanup",
             "Canceling the exact edit request must restart the isolated worker",
             "Pre-bind cancellation must be accepted",
             "Clearing the final owner did not stop its exact native edit",
             "assertEquals(baseline.history, completed.history)",
+        ),
+        "BlockingImportProvider.java": (
+            "MODEL_URI",
+            "signal.setOnCancelListener(target.release::countDown)",
+            'target.error = "OperationCanceledException"',
         ),
     }
     for source_name, markers in test_markers.items():
@@ -543,6 +587,15 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "CONTRIBUTING.md"
     ]:
         raise VerificationError("contributor guidance does not retain project edit operations")
+    for marker in (
+        "Ordinary STL, 3MF, and OBJ import cancellation must interrupt the exact provider open",
+        "matching isolated-worker request",
+        "without deleting the user-selected source document",
+    ):
+        if marker not in sources["CONTRIBUTING.md"]:
+            raise VerificationError(
+                f"contributor guidance does not interrupt model import: {marker}"
+            )
     if "UI disposal must not issue a process-wide slicer cancellation" not in sources[
         "CONTRIBUTING.md"
     ]:
@@ -588,7 +641,9 @@ def read_sources() -> dict[str, str]:
         "DurableJsonFile.kt": (main / "DurableJsonFile.kt").read_text(encoding="utf-8"),
         "ProjectStore.kt": (main / "ProjectStore.kt").read_text(encoding="utf-8"),
         "ProjectTransfer.kt": (main / "ProjectTransfer.kt").read_text(encoding="utf-8"),
+        "CreatedDocument.kt": (main / "CreatedDocument.kt").read_text(encoding="utf-8"),
         "ModelImport.kt": (main / "ModelImport.kt").read_text(encoding="utf-8"),
+        "OrcaModelImport.kt": (main / "OrcaModelImport.kt").read_text(encoding="utf-8"),
         "SlicerProcessService.kt": (main / "SlicerProcessService.kt").read_text(
             encoding="utf-8"
         ),
@@ -642,6 +697,9 @@ def read_sources() -> dict[str, str]:
         ).read_text(encoding="utf-8"),
         "ProjectEditCancellationInstrumentedTest.kt": (
             device_tests / "ProjectEditCancellationInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "BlockingImportProvider.java": (
+            device_tests / "BlockingImportProvider.java"
         ).read_text(encoding="utf-8"),
         "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),
         "SECURITY.md": (ROOT / "SECURITY.md").read_text(encoding="utf-8"),

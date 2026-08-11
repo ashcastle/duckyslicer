@@ -4,11 +4,13 @@ import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.content.res.AssetFileDescriptor;
 import android.database.Cursor;
+import android.database.MatrixCursor;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.os.OperationCanceledException;
 import android.os.ParcelFileDescriptor;
+import android.provider.OpenableColumns;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -19,6 +21,7 @@ import java.util.concurrent.TimeUnit;
 public final class BlockingImportProvider extends ContentProvider {
     public static final String AUTHORITY = "com.ashcastle.duckyslicer.test.blocking-import";
     public static final Uri URI = Uri.parse("content://" + AUTHORITY + "/project.duckyproject");
+    public static final Uri MODEL_URI = Uri.parse("content://" + AUTHORITY + "/blocked-model.stl");
     public static final String METHOD_PREPARE = "prepare";
     public static final String METHOD_PREPARE_OPEN_BLOCK = "prepare_open_block";
     public static final String METHOD_RELEASE = "release";
@@ -40,7 +43,9 @@ public final class BlockingImportProvider extends ContentProvider {
 
     @Override
     public String getType(Uri uri) {
-        return "application/vnd.duckyslicer.project+zip";
+        return MODEL_URI.equals(uri)
+                ? "model/stl"
+                : "application/vnd.duckyslicer.project+zip";
     }
 
     @Override
@@ -51,7 +56,21 @@ public final class BlockingImportProvider extends ContentProvider {
             String[] selectionArgs,
             String sortOrder
     ) {
-        return null;
+        String[] columns = projection == null
+                ? new String[]{OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE}
+                : projection;
+        MatrixCursor cursor = new MatrixCursor(columns, 1);
+        MatrixCursor.RowBuilder row = cursor.newRow();
+        for (String column : columns) {
+            if (OpenableColumns.DISPLAY_NAME.equals(column)) {
+                row.add(MODEL_URI.equals(uri) ? "blocked-model.stl" : "project.duckyproject");
+            } else if (OpenableColumns.SIZE.equals(column)) {
+                row.add(current.source == null ? null : current.source.getStatSize());
+            } else {
+                row.add(null);
+            }
+        }
+        return cursor;
     }
 
     @Override

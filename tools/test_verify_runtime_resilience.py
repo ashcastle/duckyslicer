@@ -29,11 +29,29 @@ def valid_sources() -> dict[str, str]:
             "val cancellationRequested: Boolean ProjectEditFailure.CANCELED "
             "fun cancelActiveEdit() SlicerProcessClient.cancelProjectRequestAsync(operation.requestId) "
             "SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId) "
-            "activeRequestId?.let(SlicerProcessClient::cancelProjectRequestAsync)"
+            "mutableState.value.withEditCancellationRequested(activeEdit.id) "
+            "SlicerProcessClient.cancelProjectRequestAsync(activeEdit.requestId) "
+            "private var activeModelImportTransfer: ActiveModelImportTransfer? "
+            "activeModelImportTransfer = ActiveModelImportTransfer(baseline.operation, cancellation) "
+            "val providerCanceled = modelImport?.cancellation?.cancel() ?: false "
+            "cleanup.modelImport?.cancellation?.cancel()"
+        ),
+        "CreatedDocument.kt": (
+            "class DocumentTransferCancellation val providerSignal = CancellationSignal() "
+            "fun attachInput(value: InputStream) resources.second.closeQuietly()"
         ),
         "ModelImport.kt": (
             "cancellationRequested: () -> Boolean "
             "if (cancellationRequested()) throw ProjectEditCancelledException()"
+        ),
+        "OrcaModelImport.kt": (
+            "transferCancellation: DocumentTransferCancellation? = null "
+            "context.contentResolver.acquireContentProviderClient(uri) provider.query( "
+            "cancellation.providerSignal "
+            'provider.openAssetFile(uri, "r", cancellation.providerSignal) '
+            "cancellation.attachInput(input) cancellation.detachInput(input) "
+            "cancellationRequested = ::cancellationRequested "
+            "if (transferCancellation == null) cancellation.close()"
         ),
         "SlicerProcessService.kt": (
             "cancelledProjectRequestIds fun cancelProjectRequestAsync(requestId: String) "
@@ -192,10 +210,17 @@ def valid_sources() -> dict[str, str]:
         ),
         "ProjectEditCancellationInstrumentedTest.kt": (
             "retainedOwnerCancelsOnlyItsNativeEditAndKeepsTheProjectUnchanged "
+            "retainedModelImportCancellationInterruptsProviderOpenAcrossRecreation "
+            "finalProjectOwnerStopsBlockedModelReadAndRemovesItsStaging "
+            "BlockingImportProvider.MODEL_URI waitForModelStagingCleanup "
             "Canceling the exact edit request must restart the isolated worker "
             "Pre-bind cancellation must be accepted "
             "Clearing the final owner did not stop its exact native edit "
             "assertEquals(baseline.history, completed.history)"
+        ),
+        "BlockingImportProvider.java": (
+            "MODEL_URI signal.setOnCancelListener(target.release::countDown) "
+            'target.error = "OperationCanceledException"'
         ),
         "CONTRIBUTING.md": (
             "pin the connection target and bypass system proxies "
@@ -219,7 +244,9 @@ def valid_sources() -> dict[str, str]:
             "idle or stale slice owner must never cancel a later "
             "request-scoped cancellation preserve the starting project on cancellation "
             "remove every generated model that was not accepted Final retained-owner clearance "
-            "ordinary Activity recreation must not"
+            "ordinary Activity recreation must not "
+            "Ordinary STL, 3MF, and OBJ import cancellation must interrupt the exact provider open "
+            "matching isolated-worker request without deleting the user-selected source document"
             " disconnecting only its request-bound connection"
             " stale cancellation must never stop a later upload or printer command"
         ),
@@ -325,8 +352,49 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
     def test_rejects_final_project_owner_leaving_native_edit_running(self) -> None:
         sources = valid_sources()
         sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
-            "activeRequestId?.let(SlicerProcessClient::cancelProjectRequestAsync)",
+            "SlicerProcessClient.cancelProjectRequestAsync(activeEdit.requestId)",
             "leave final native edit running",
+        )
+        with self.assertRaisesRegex(VerificationError, "autosave corruption guard"):
+            verify_resilience(sources)
+
+    def test_rejects_final_project_owner_accepting_late_edit_success(self) -> None:
+        sources = valid_sources()
+        sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
+            "mutableState.value.withEditCancellationRequested(activeEdit.id)",
+            "leave final edit state active",
+        )
+        with self.assertRaisesRegex(VerificationError, "autosave corruption guard"):
+            verify_resilience(sources)
+
+    def test_rejects_model_import_without_provider_open_cancellation(self) -> None:
+        sources = valid_sources()
+        sources["OrcaModelImport.kt"] = sources["OrcaModelImport.kt"].replace(
+            'provider.openAssetFile(uri, "r", cancellation.providerSignal)',
+            'provider.openAssetFile(uri, "r", null)',
+        )
+        with self.assertRaisesRegex(VerificationError, "model provider cancellation"):
+            verify_resilience(sources)
+
+    def test_rejects_model_import_without_bound_input_stream(self) -> None:
+        sources = valid_sources()
+        sources["OrcaModelImport.kt"] = sources["OrcaModelImport.kt"].replace(
+            "cancellation.attachInput(input)", "leave model input unbound"
+        )
+        with self.assertRaisesRegex(VerificationError, "model provider cancellation"):
+            verify_resilience(sources)
+
+    def test_rejects_model_import_using_uncancelable_resolver_stream(self) -> None:
+        sources = valid_sources()
+        sources["OrcaModelImport.kt"] += " contentResolver.openInputStream(uri)"
+        with self.assertRaisesRegex(VerificationError, "bypasses provider-open"):
+            verify_resilience(sources)
+
+    def test_rejects_final_project_owner_leaving_model_provider_blocked(self) -> None:
+        sources = valid_sources()
+        sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
+            "cleanup.modelImport?.cancellation?.cancel()",
+            "leave final model provider blocked",
         )
         with self.assertRaisesRegex(VerificationError, "autosave corruption guard"):
             verify_resilience(sources)
@@ -345,6 +413,15 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
             "onCancelProjectEdit: () -> Unit", "hide project cancellation"
         )
         with self.assertRaisesRegex(VerificationError, "cancellation UI"):
+            verify_resilience(sources)
+
+    def test_rejects_contributor_guidance_leaving_model_provider_blocked(self) -> None:
+        sources = valid_sources()
+        sources["CONTRIBUTING.md"] = sources["CONTRIBUTING.md"].replace(
+            "Ordinary STL, 3MF, and OBJ import cancellation must interrupt the exact provider open",
+            "Model import may leave a provider open running",
+        )
+        with self.assertRaisesRegex(VerificationError, "interrupt model import"):
             verify_resilience(sources)
 
     def test_rejects_recent_profiles_without_final_owner_flush(self) -> None:
