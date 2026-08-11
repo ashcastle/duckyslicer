@@ -9,11 +9,11 @@ import java.io.Closeable
 import java.io.InputStream
 import java.io.OutputStream
 
-internal class CreatedDocumentWriteCancelledException :
-    Exception("created_document_write_canceled")
+internal class DocumentTransferCancelledException :
+    Exception("document_transfer_canceled")
 
-/** Interrupts only the provider open and streams belonging to one created document. */
-internal class CreatedDocumentWriteCancellation {
+/** Interrupts only the provider open and streams belonging to one document transfer. */
+internal class DocumentTransferCancellation {
     private val lock = Any()
     val providerSignal = CancellationSignal()
 
@@ -22,6 +22,7 @@ internal class CreatedDocumentWriteCancellation {
     private var input: InputStream? = null
     private var output: OutputStream? = null
     private var completed = false
+    private var completionClaimed = false
 
     fun cancel(): Boolean {
         val resources = synchronized(lock) {
@@ -36,7 +37,7 @@ internal class CreatedDocumentWriteCancellation {
     }
 
     fun throwIfRequested() {
-        if (cancellationRequested) throw CreatedDocumentWriteCancelledException()
+        if (cancellationRequested) throw DocumentTransferCancelledException()
     }
 
     fun attachInput(value: InputStream) = attach(value, outputStream = false)
@@ -49,8 +50,9 @@ internal class CreatedDocumentWriteCancellation {
 
     fun complete() {
         synchronized(lock) {
-            if (cancellationRequested) throw CreatedDocumentWriteCancelledException()
-            check(!completed) { "created_document_write_lifecycle_invalid" }
+            if (cancellationRequested) throw DocumentTransferCancelledException()
+            check(!completed) { "document_transfer_lifecycle_invalid" }
+            completionClaimed = true
             completed = true
             input = null
             output = null
@@ -67,16 +69,18 @@ internal class CreatedDocumentWriteCancellation {
 
     fun wasRequested(): Boolean = cancellationRequested
 
+    fun completionWasClaimed(): Boolean = synchronized(lock) { completionClaimed }
+
     private fun attach(value: Closeable, outputStream: Boolean) {
         val rejected = synchronized(lock) {
             if (cancellationRequested || completed) {
                 true
             } else {
                 if (outputStream) {
-                    check(output == null) { "created_document_write_lifecycle_invalid" }
+                    check(output == null) { "document_transfer_lifecycle_invalid" }
                     output = value as OutputStream
                 } else {
-                    check(input == null) { "created_document_write_lifecycle_invalid" }
+                    check(input == null) { "document_transfer_lifecycle_invalid" }
                     input = value as InputStream
                 }
                 false
@@ -84,7 +88,7 @@ internal class CreatedDocumentWriteCancellation {
         }
         if (rejected) {
             value.closeQuietly()
-            throw CreatedDocumentWriteCancelledException()
+            throw DocumentTransferCancelledException()
         }
     }
 

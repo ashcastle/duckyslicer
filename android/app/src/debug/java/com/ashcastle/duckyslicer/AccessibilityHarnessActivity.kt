@@ -61,6 +61,10 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                             selectedTab = WorkspaceTab.PROJECT,
                             projectExporting = true,
                         )
+                        SCREEN_PROJECT_IMPORT -> WorkspaceAccessibilityHarness(
+                            selectedTab = WorkspaceTab.PROJECT,
+                            projectImporting = true,
+                        )
                         SCREEN_WORKSPACE -> {
                             val density = LocalDensity.current
                             CompositionLocalProvider(
@@ -89,6 +93,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_MODEL_TRANSFORM = "model-transform"
         const val SCREEN_GCODE_EXPORT = "gcode-export"
         const val SCREEN_PROJECT_EXPORT = "project-export"
+        const val SCREEN_PROJECT_IMPORT = "project-import"
     }
 }
 
@@ -204,6 +209,7 @@ private fun WorkspaceAccessibilityHarness(
     projectObjects: List<ProjectObject> = emptyList(),
     sliceOutcome: SliceOutcome? = null,
     exportingGcode: Boolean = false,
+    projectImporting: Boolean = false,
     projectExporting: Boolean = false,
 ) {
     WorkspaceScreen(
@@ -236,8 +242,9 @@ private fun WorkspaceAccessibilityHarness(
         cutting = false,
         projectEditActive = false,
         projectEditCancellationRequested = false,
+        projectImporting = projectImporting,
         projectExporting = projectExporting,
-        projectExportCancellationRequested = false,
+        projectTransferCancellationRequested = false,
         slicing = false,
         sliceCancellationRequested = false,
         sliceProgress = 0,
@@ -267,6 +274,7 @@ private fun WorkspaceAccessibilityHarness(
         onSplit = {},
         onCut = { _, _ -> },
         onCancelProjectEdit = {},
+        onCancelProjectImport = {},
         onCancelProjectExport = {},
         onSupportPaintPreview = { _, _, _ -> },
         onSupportPaintCommitted = { _, _ -> },

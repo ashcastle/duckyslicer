@@ -94,23 +94,37 @@ internal class ProjectStore(
     }
 
     @Synchronized
-    fun importArchive(input: InputStream): StoredProjectDocument {
+    fun importArchive(
+        input: InputStream,
+        checkCancellation: () -> Unit = {},
+        beginCommit: () -> Unit = {},
+    ): StoredProjectDocument {
+        checkCancellation()
         check(projectRoot.isDirectory || projectRoot.mkdirs()) { "Project storage is unavailable" }
         val staging = File(projectRoot, ".archive-${UUID.randomUUID()}")
         val installed = ArrayList<File>()
         try {
             check(staging.mkdirs()) { "Project import storage is unavailable" }
-            val decoded = ProjectArchiveCodec.read(input, staging, inspectModel)
+            val decoded = ProjectArchiveCodec.read(
+                input,
+                staging,
+                inspectModel,
+                checkCancellation,
+            )
             val installedModels = LinkedHashMap<String, Pair<File, ModelInfo>>()
             decoded.models.forEach { (entryName, stagedModel) ->
+                checkCancellation()
                 val displayName = decoded.objects.first { it.modelEntry == entryName }.displayName
                 val destination = createModelDestination(displayName)
                 moveArchiveModel(stagedModel.file, destination)
                 installed += destination
                 installedModels[entryName] = destination to stagedModel.info
+                checkCancellation()
             }
+            checkCancellation()
             val snapshot = ProjectSnapshot(
                 objects = decoded.objects.map { archived ->
+                    checkCancellation()
                     val (file, info) = requireNotNull(installedModels[archived.modelEntry])
                     ProjectObject(
                         id = archived.id,
@@ -129,6 +143,8 @@ internal class ProjectStore(
                 },
                 selectedObjectId = decoded.selectedObjectId,
             )
+            checkCancellation()
+            beginCommit()
             save(snapshot, decoded.sliceOptions)
             // The imported generation is already durable. Cleanup is best-effort so a
             // filesystem cleanup hiccup cannot turn a committed project into a false failure.

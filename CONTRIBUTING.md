@@ -60,6 +60,11 @@ avoid introducing an account or cloud requirement.
 - Project archive export must follow the same retained-owner lifecycle. Cancellation
   must interrupt the exact provider open and ZIP write, including each copied model,
   survive rotation, stop on final owner clearance, and delete the partial document.
+- Project archive import must bind cancellation to the exact provider open, input
+  stream, and ZIP read. An accepted cancellation must win before the atomic commit
+  gate, preserve the current project, and remove all staged or installed import files.
+  Rotation retains the import; final owner clearance stops it without deleting the
+  user-selected source document.
 - Every `CreateDocument` writer must accept only its returned `content://` URI, truncate
   the new target, and delete it after cancellation or failure so partial exports never
   look like valid G-code, project archives, or support details.

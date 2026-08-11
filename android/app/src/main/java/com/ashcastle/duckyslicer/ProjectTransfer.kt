@@ -127,11 +127,11 @@ internal fun ProjectTransferState.withStartedTransfer(
 }
 
 internal fun ProjectTransferState.withTransferCancellationRequested(
-    operationId: Long,
+    operation: ActiveProjectTransfer,
 ): ProjectTransferState? {
     if (
-        !busy || activeTransferId != operationId ||
-        activeTransferDirection != ProjectTransferDirection.EXPORT ||
+        !busy || activeTransferId != operation.id ||
+        activeTransferDirection != operation.direction ||
         transferCancellationRequested || completion != null
     ) {
         return null
@@ -157,10 +157,10 @@ internal fun ProjectTransferState.withCompletedTransfer(
         is ProjectTransferCompletion.Failed -> requestedCompletion.direction
     }
     if (completionDirection != operation.direction) return null
-    val completion = if (
-        transferCancellationRequested &&
-        requestedCompletion is ProjectTransferCompletion.Exported
-    ) {
+    val successfulCompletion =
+        requestedCompletion is ProjectTransferCompletion.Exported ||
+            requestedCompletion is ProjectTransferCompletion.Imported
+    val completion = if (transferCancellationRequested && successfulCompletion) {
         ProjectTransferCompletion.Canceled(
             operation.id,
             requestedCompletion.uri,
@@ -263,9 +263,14 @@ private data class ProjectEditBaseline(
     val options: SliceOptions,
 )
 
-private data class ActiveProjectExport(
+private data class ActiveProjectDocumentTransfer(
     val operation: ActiveProjectTransfer,
-    val cancellation: CreatedDocumentWriteCancellation,
+    val cancellation: DocumentTransferCancellation,
+)
+
+private data class FinalProjectOwnerCleanup(
+    val transfer: ActiveProjectDocumentTransfer?,
+    val pendingProject: ProjectTransferState?,
 )
 
 internal class ProjectTransferViewModel(application: Application) : AndroidViewModel(application) {
@@ -275,7 +280,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     val state: StateFlow<ProjectTransferState> = mutableState.asStateFlow()
     private var nextOperationId = 0L
     private var persistenceJob: Job? = null
-    private var activeProjectExport: ActiveProjectExport? = null
+    private var activeProjectDocumentTransfer: ActiveProjectDocumentTransfer? = null
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -592,6 +597,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
 
     @Synchronized
     fun importProject(uri: Uri): Boolean {
+        if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
         val operation = ActiveProjectTransfer(
             id = ++nextOperationId,
             direction = ProjectTransferDirection.IMPORT,
@@ -600,24 +606,60 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         val pendingPersistence = persistenceJob
         pendingPersistence?.cancel()
         persistenceJob = null
+        val cancellation = DocumentTransferCancellation()
+        activeProjectDocumentTransfer = ActiveProjectDocumentTransfer(operation, cancellation)
         mutableState.value = started
         viewModelScope.launch(Dispatchers.IO) {
             pendingPersistence?.join()
+            val application = getApplication<Application>()
             val completion = try {
-                val document = getApplication<Application>().contentResolver.openInputStream(uri).use { input ->
-                    projectStore.importArchive(requireNotNull(input) { "input_unavailable" })
+                cancellation.throwIfRequested()
+                val provider = requireNotNull(
+                    application.contentResolver.acquireContentProviderClient(uri),
+                ) { "input_provider_unavailable" }
+                val descriptor = requireNotNull(
+                    provider.use {
+                        provider.openAssetFile(uri, "r", cancellation.providerSignal)
+                    },
+                ) { "input_unavailable" }
+                val document = descriptor.use {
+                    descriptor.createInputStream().use { input ->
+                        cancellation.attachInput(input)
+                        try {
+                            projectStore.importArchive(
+                                input,
+                                cancellation::throwIfRequested,
+                                cancellation::complete,
+                            )
+                        } finally {
+                            cancellation.detachInput(input)
+                        }
+                    }
                 }
                 ProjectTransferCompletion.Imported(operation.id, uri, document)
-            } catch (failure: CancellationException) {
-                throw failure
-            } catch (_: Exception) {
-                ProjectTransferCompletion.Failed(
-                    operation.id,
-                    uri,
-                    ProjectTransferDirection.IMPORT,
-                )
+            } catch (_: CancellationException) {
+                cancellation.cancel()
+                ProjectTransferCompletion.Canceled(operation.id, uri, operation.direction)
+            } catch (failure: Exception) {
+                if (
+                    cancellation.wasRequested() ||
+                    failure is DocumentTransferCancelledException
+                ) {
+                    ProjectTransferCompletion.Canceled(operation.id, uri, operation.direction)
+                } else {
+                    ProjectTransferCompletion.Failed(
+                        operation.id,
+                        uri,
+                        operation.direction,
+                    )
+                }
+            } finally {
+                cancellation.close()
             }
             synchronized(this@ProjectTransferViewModel) {
+                if (activeProjectDocumentTransfer?.operation == operation) {
+                    activeProjectDocumentTransfer = null
+                }
                 val current = mutableState.value
                 val settled = current.withCompletedTransfer(operation, completion)
                     ?: return@synchronized
@@ -653,8 +695,8 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             direction = ProjectTransferDirection.EXPORT,
         )
         val started = mutableState.value.withStartedTransfer(operation) ?: return false
-        val cancellation = CreatedDocumentWriteCancellation()
-        activeProjectExport = ActiveProjectExport(operation, cancellation)
+        val cancellation = DocumentTransferCancellation()
+        activeProjectDocumentTransfer = ActiveProjectDocumentTransfer(operation, cancellation)
         mutableState.value = started
         viewModelScope.launch(Dispatchers.IO) {
             val application = getApplication<Application>()
@@ -691,7 +733,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             } catch (failure: Exception) {
                 if (
                     cancellation.wasRequested() ||
-                    failure is CreatedDocumentWriteCancelledException
+                    failure is DocumentTransferCancelledException
                 ) {
                     deleteFailedCreatedDocument(application, uri)
                     ProjectTransferCompletion.Canceled(operation.id, uri, operation.direction)
@@ -708,7 +750,9 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 cancellation.close()
             }
             synchronized(this@ProjectTransferViewModel) {
-                if (activeProjectExport?.operation == operation) activeProjectExport = null
+                if (activeProjectDocumentTransfer?.operation == operation) {
+                    activeProjectDocumentTransfer = null
+                }
                 val settled = mutableState.value.withCompletedTransfer(operation, completion)
                     ?: return@synchronized
                 mutableState.value = settled
@@ -719,10 +763,20 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     }
 
     fun cancelProjectExport(): Boolean {
-        val active = synchronized(this) { activeProjectExport } ?: return false
+        return cancelProjectTransfer(ProjectTransferDirection.EXPORT)
+    }
+
+    fun cancelProjectImport(): Boolean {
+        return cancelProjectTransfer(ProjectTransferDirection.IMPORT)
+    }
+
+    private fun cancelProjectTransfer(direction: ProjectTransferDirection): Boolean {
+        val active = synchronized(this) {
+            activeProjectDocumentTransfer?.takeIf { it.operation.direction == direction }
+        } ?: return false
         if (!active.cancellation.cancel()) return false
         synchronized(this) {
-            mutableState.value.withTransferCancellationRequested(active.operation.id)
+            mutableState.value.withTransferCancellationRequested(active.operation)
                 ?.let { canceling -> mutableState.value = canceling }
         }
         return true
@@ -942,12 +996,19 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             val activeRequestId = current.activeEdit?.requestId
             activeRequestId?.let(SlicerProcessClient::cancelProjectRequestAsync)
             val pending = current.takeIf { state ->
-                state.hasPersistableChanges(allowActiveTransfer = true)
+                state.hasPersistableChanges(allowActiveTransfer = true) ||
+                    (
+                        state.activeTransferDirection == ProjectTransferDirection.IMPORT &&
+                            state.hasUnpersistedSession()
+                        )
             }
-            activeProjectExport?.cancellation to pending
+            FinalProjectOwnerCleanup(activeProjectDocumentTransfer, pending)
         }
-        cleanup.first?.cancel()
-        val pending = cleanup.second
+        cleanup.transfer?.cancellation?.cancel()
+        val pending = cleanup.pendingProject?.takeUnless {
+            cleanup.transfer?.operation?.direction == ProjectTransferDirection.IMPORT &&
+                cleanup.transfer.cancellation.completionWasClaimed()
+        }
         try {
             if (pending != null) {
                 try {
@@ -968,11 +1029,14 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
 
 private fun ProjectTransferState.hasPersistableChanges(
     allowActiveTransfer: Boolean,
-): Boolean = restored && !persistenceBlocked && sessionRevision != persistedRevision &&
+): Boolean = hasUnpersistedSession() &&
     (
         !busy || activeEdit != null ||
             (allowActiveTransfer && activeTransferDirection == ProjectTransferDirection.EXPORT)
     )
+
+private fun ProjectTransferState.hasUnpersistedSession(): Boolean =
+    restored && !persistenceBlocked && sessionRevision != persistedRevision
 
 private fun List<ProjectObject>.deleteInstalledModels() {
     forEach { projectObject -> File(projectObject.model.localPath).delete() }

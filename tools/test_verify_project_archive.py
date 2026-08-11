@@ -26,7 +26,7 @@ def valid_sources() -> dict[str, str]:
                 'Regex("models/[0-9]{3}\\\\.stl")',
                 "require(!entry.isDirectory require(entries.add(entry.name))",
                 "entry.method == ZipEntry.DEFLATED || entry.method == ZipEntry.STORED",
-                "readArchiveBytes(archive, MAX_PROJECT_ARCHIVE_MANIFEST_BYTES)",
+                "readArchiveBytes(",
                 "MAX_MODEL_IMPORT_BYTES checkedArchiveTotal",
                 "require(referencedEntries == models.keys)",
                 "output.fd.sync() parseBoundedJsonObject require(info.triangles > 0)",
@@ -39,13 +39,15 @@ def valid_sources() -> dict[str, str]:
                 'getJSONObject("processOverrides").toObjectProcessOverrides()',
                 "checkCancellation: () -> Unit = {}",
                 "copyArchiveBytes(input, archive, model.length(), checkCancellation)",
-                "catch (failure: CreatedDocumentWriteCancelledException)",
+                "val copied = copyArchiveBytes(",
+                "val info = inspectModel(file)",
+                "catch (failure: DocumentTransferCancelledException)",
             )
         ),
         "ProjectStore.kt": " ".join(
             (
                 'File(projectRoot, ".archive-${UUID.randomUUID()}")',
-                "ProjectArchiveCodec.read(input, staging, inspectModel)",
+                "ProjectArchiveCodec.read(",
                 "moveArchiveModel(stagedModel.file, destination)",
                 "save(snapshot, decoded.sliceOptions)",
                 "pruneUnreferencedModels(snapshot)",
@@ -57,6 +59,7 @@ def valid_sources() -> dict[str, str]:
                 "UUID.fromString(identifier) !Files.isSymbolicLink(candidate.toPath())",
                 "checkCancellation: () -> Unit = {}",
                 "ProjectArchiveCodec.write(snapshot, sliceOptions, output, checkCancellation)",
+                "beginCommit: () -> Unit = {} beginCommit()",
             )
         ),
         "ProjectOpenRequest.kt": " ".join(
@@ -91,13 +94,20 @@ def valid_sources() -> dict[str, str]:
                 "pendingPersistence?.join() fun flushPersistence() "
                 "override fun onCleared() hasPersistableChanges",
                 "mutableState.value.completion != null",
-                "openInputStream(uri) projectStore.importArchive",
+                "projectStore.importArchive",
                 "uri.scheme != ContentResolver.SCHEME_CONTENT "
-                "CreatedDocumentWriteCancellation() openAssetFileDescriptor( \"wt\", "
-                "cancellation.providerSignal projectStore.exportArchive "
-                "cancellation::throwIfRequested CreatedDocumentWriteCancelledException "
+                "DocumentTransferCancellation() openAssetFileDescriptor( \"wt\", "
+                "acquireContentProviderClient(uri) "
+                "provider.openAssetFile(uri, \"r\", cancellation.providerSignal) "
+                "cancellation.providerSignal cancellation.attachInput(input) "
+                "cancellation::complete projectStore.exportArchive "
+                "cancellation::throwIfRequested DocumentTransferCancelledException "
                 "ProjectTransferCompletion.Canceled fun cancelProjectExport(): Boolean "
-                "activeProjectExport?.operation == operation activeProjectExport?.cancellation "
+                "fun cancelProjectImport(): Boolean "
+                "activeProjectDocumentTransfer?.operation == operation "
+                "FinalProjectOwnerCleanup(activeProjectDocumentTransfer, pending) "
+                "cleanup.transfer?.cancellation?.cancel() "
+                "completionWasClaimed() hasUnpersistedSession() "
                 "hasPersistableChanges(allowActiveTransfer = true) "
                 "deleteFailedCreatedDocument(application, uri) "
                 "SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED",
@@ -107,8 +117,9 @@ def valid_sources() -> dict[str, str]:
         "CreatedDocument.kt": (
             "fun deleteFailedCreatedDocument(context: Context, uri: Uri) "
             "ContentResolver.SCHEME_CONTENT DocumentsContract.deleteDocument "
-            "resolver.delete(uri, null, null) class CreatedDocumentWriteCancelledException "
-            "class CreatedDocumentWriteCancellation CancellationSignal() providerSignal.cancel()"
+            "resolver.delete(uri, null, null) class DocumentTransferCancelledException "
+            "class DocumentTransferCancellation CancellationSignal() providerSignal.cancel() "
+            "completionClaimed = true fun completionWasClaimed(): Boolean"
         ),
         "MainActivity.kt": " ".join(
             (
@@ -124,14 +135,17 @@ def valid_sources() -> dict[str, str]:
                 "projectHistory = projectTransferState.history "
                 "sliceOptions = projectTransferState.sliceOptions "
                 "projectRestored = projectTransferState.restored "
-                "projectTransferModel.updateHistory( projectTransferModel::cancelProjectExport "
+                "projectTransferModel.updateHistory( projectTransferModel::cancelProjectImport "
+                "projectTransferModel::cancelProjectExport "
                 "ProjectTransferCompletion.Canceled",
             )
         ),
         "WorkspaceScreen.kt": (
             "ProjectSheet( onOpenProject onSaveProject confirmReplacement "
             "R.string.replace_project_title R.string.replace_project_body "
-            "projectExportCancellationRequested: Boolean onCancelProjectExport: () -> Unit "
+            "projectImporting: Boolean projectTransferCancellationRequested: Boolean "
+            "onCancelProjectImport: () -> Unit onCancelProjectExport: () -> Unit "
+            "R.string.cancel_project_import R.string.canceling_project_import "
             "R.string.cancel_project_export R.string.canceling_project_export "
             "if (exporting) onCancelProjectExport() else onSaveProject()"
         ),
@@ -139,12 +153,15 @@ def valid_sources() -> dict[str, str]:
             "projectArchiveRoundTripsModelsTransformsPaintAndResolvedProfilesDeterministically "
             "invalidArchiveCannotEscapeStagingOrReplaceTheCurrentProject "
             "oversizedManifestIsRejectedBeforeProjectStateChanges "
-            "startupRecoveryRemovesOnlyExactAbandonedArchiveDirectories"
+            "startupRecoveryRemovesOnlyExactAbandonedArchiveDirectories "
+            "canceledArchiveCopyRemovesStagingAndPreservesTheCurrentProject "
+            "cancellationWinningTheCommitGateRemovesInstalledModelsAndPreservesCurrentProject"
         ),
         "ProjectTransferStateTest.kt": (
             "retainedSessionMutationKeepsHistoryAndOptionsTogether "
             "staleOrBusySessionMutationIsRejected withUpdatedSession "
-            "projectExportCancellationIsBoundToTheExactActiveTransfer"
+            "projectExportCancellationIsBoundToTheExactActiveTransfer "
+            "projectImportCancellationIsBoundToTheExactActiveTransfer"
         ),
         "ProjectArchiveIntentInstrumentedTest.kt": (
             "customProjectIntentSurvivesRecreationRestoresAndSlices "
@@ -166,11 +183,27 @@ def valid_sources() -> dict[str, str]:
             "BlockingExportProvider.METHOD_PREPARE_OPEN_BLOCK scenario.recreate() "
             "retained.cancelProjectExport() store.clear()"
         ),
+        "ProjectImportLifecycleInstrumentedTest.kt": (
+            "projectImportCancellationSurvivesRecreationAndPreservesTheCurrentProject "
+            "projectImportCancellationInterruptsProviderOpen "
+            "finalProjectOwnerClearStopsItsImportAndPreservesTheCurrentProject "
+            "BlockingImportProvider.METHOD_PREPARE "
+            "BlockingImportProvider.METHOD_PREPARE_OPEN_BLOCK "
+            "retained.cancelProjectImport() store.clear() model.updateSession( "
+            "unsavedOptions waitForStagingCleanup()"
+        ),
         "BlockingExportProvider.java": (
             "openAssetFile( CancellationSignal signal "
             "signal.setOnCancelListener(target.release::countDown) signal.throwIfCanceled()"
         ),
-        "AccessibilityInstrumentedTest.kt": "cancelProjectExportActionIsReachable",
+        "BlockingImportProvider.java": (
+            "openAssetFile( CancellationSignal signal "
+            "signal.setOnCancelListener(target.release::countDown) signal.throwIfCanceled() "
+            "ParcelFileDescriptor.createPipe() Blocking import provider is read-only"
+        ),
+        "AccessibilityInstrumentedTest.kt": (
+            "cancelProjectImportActionIsReachable cancelProjectExportActionIsReachable"
+        ),
         "NativeEngineInstrumentedTest.kt": (
             "projectArchiveRoundTripReinspectsAndSlicesOnArm64 "
             "NativeEngine.inspectStl OnDeviceSlicer.slice("
@@ -195,6 +228,10 @@ def valid_sources() -> dict[str, str]:
             '<data android:pathPattern=".*\\.duckyproject" />'
             '<data android:scheme="content" /></intent-filter>'
             "</activity></application></manifest>"
+        ),
+        "AndroidTestManifest.xml": (
+            '<manifest><application><provider android:authorities="'
+            'com.ashcastle.duckyslicer.test.blocking-import" /></application></manifest>'
         ),
         "PRIVACY.md": (
             "Exported DuckySlicer project files contain the model geometry\n"
@@ -221,7 +258,8 @@ def valid_sources() -> dict[str, str]:
             "Flush the latest dirty revision app enters the background owner is finally cleared "
             "archive import commits cancel and join any older metadata write "
             "Every `CreateDocument` writer delete it after cancellation or failure "
-            "Project archive export exact provider open and ZIP write"
+            "Project archive export exact provider open and ZIP write "
+            "Project archive import atomic commit"
         ),
     }
 
@@ -336,7 +374,7 @@ class VerifyProjectArchiveTest(unittest.TestCase):
     def test_rejects_project_export_without_provider_cancellation(self) -> None:
         sources = valid_sources()
         sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
-            "CreatedDocumentWriteCancellation()", "non_interruptible_writer"
+            "DocumentTransferCancellation()", "non_interruptible_writer"
         )
         with self.assertRaisesRegex(VerificationError, "safeguards"):
             verify_project_archive(sources)
@@ -371,6 +409,66 @@ class VerifyProjectArchiveTest(unittest.TestCase):
     def test_rejects_missing_accessible_project_export_cancel_regression(self) -> None:
         sources = valid_sources()
         sources["AccessibilityInstrumentedTest.kt"] = "missing accessibility regression"
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_project_import_without_bound_input_cancellation(self) -> None:
+        sources = valid_sources()
+        sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
+            "cancellation.attachInput(input)", "unbound_import_input"
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_project_import_through_the_read_typed_asset_shortcut(self) -> None:
+        sources = valid_sources()
+        sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
+            "provider.openAssetFile(uri, \"r\", cancellation.providerSignal)",
+            "resolver.openAssetFileDescriptor(uri, \"r\", cancellation.providerSignal)",
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_project_import_without_atomic_commit_gate(self) -> None:
+        sources = valid_sources()
+        sources["ProjectStore.kt"] = sources["ProjectStore.kt"].replace(
+            "beginCommit()", "commit_without_cancellation_gate"
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_missing_project_import_cancel_action(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            "onCancelProjectImport: () -> Unit", "no_import_cancel_action"
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_missing_project_import_lifecycle_regression(self) -> None:
+        sources = valid_sources()
+        sources["ProjectImportLifecycleInstrumentedTest.kt"] = sources[
+            "ProjectImportLifecycleInstrumentedTest.kt"
+        ].replace(
+            "projectImportCancellationSurvivesRecreationAndPreservesTheCurrentProject",
+            "missing_import_rotation_regression",
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_final_owner_import_cleanup_that_can_overwrite_a_committed_import(self) -> None:
+        sources = valid_sources()
+        sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
+            "completionWasClaimed()", "always_restore_the_old_project"
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_missing_accessible_project_import_cancel_regression(self) -> None:
+        sources = valid_sources()
+        sources["AccessibilityInstrumentedTest.kt"] = sources[
+            "AccessibilityInstrumentedTest.kt"
+        ].replace("cancelProjectImportActionIsReachable", "missing_import_accessibility")
         with self.assertRaisesRegex(VerificationError, "safeguards"):
             verify_project_archive(sources)
 

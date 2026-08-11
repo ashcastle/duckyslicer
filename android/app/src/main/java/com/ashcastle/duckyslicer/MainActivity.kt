@@ -191,6 +191,7 @@ private fun DuckySlicerScreen(
     val projectSavedNotice = stringResource(R.string.project_saved)
     val projectOpenError = stringResource(R.string.project_open_error)
     val projectExportError = stringResource(R.string.project_export_error)
+    val projectImportCanceledNotice = stringResource(R.string.project_import_canceled)
     val projectExportCanceledNotice = stringResource(R.string.project_export_canceled)
     val savedDataUnavailable = stringResource(R.string.saved_data_unavailable)
     val previewError = stringResource(R.string.preview_error)
@@ -225,9 +226,11 @@ private fun DuckySlicerScreen(
     val projectEditActive = projectTransferState.activeEdit != null
     val projectEditCancellationRequested =
         projectTransferState.activeEdit?.cancellationRequested == true
+    val projectImporting =
+        projectTransferState.activeTransferDirection == ProjectTransferDirection.IMPORT
     val projectExporting =
         projectTransferState.activeTransferDirection == ProjectTransferDirection.EXPORT
-    val projectExportCancellationRequested =
+    val projectTransferCancellationRequested =
         projectTransferState.transferCancellationRequested
     val visibleEdit = projectTransferState.activeEdit?.kind
         ?: projectTransferState.editCompletion?.kind
@@ -315,7 +318,15 @@ private fun DuckySlicerScreen(
                 error = null
             }
             is ProjectTransferCompletion.Canceled -> {
-                notice = projectExportCanceledNotice
+                if (completion.direction == ProjectTransferDirection.IMPORT) {
+                    notice = projectImportCanceledNotice
+                    externalProjectConfirmation = null
+                    if (externalProjectRequest?.uri == completion.uri) {
+                        onExternalProjectRequestConsumed(externalProjectRequest.id)
+                    }
+                } else {
+                    notice = projectExportCanceledNotice
+                }
                 error = null
             }
             is ProjectTransferCompletion.Failed -> {
@@ -803,8 +814,9 @@ private fun DuckySlicerScreen(
         cutting = cutting,
         projectEditActive = projectEditActive,
         projectEditCancellationRequested = projectEditCancellationRequested,
+        projectImporting = projectImporting,
         projectExporting = projectExporting,
-        projectExportCancellationRequested = projectExportCancellationRequested,
+        projectTransferCancellationRequested = projectTransferCancellationRequested,
         slicing = slicing,
         sliceCancellationRequested = sliceCancellationRequested,
         sliceProgress = sliceProgress,
@@ -900,6 +912,7 @@ private fun DuckySlicerScreen(
         onSplit = ::splitSelectedModel,
         onCut = ::cutSelectedModel,
         onCancelProjectEdit = projectTransferModel::cancelActiveEdit,
+        onCancelProjectImport = projectTransferModel::cancelProjectImport,
         onCancelProjectExport = projectTransferModel::cancelProjectExport,
         onSupportPaintPreview = { objectId, facetIndex, state ->
             val current = projectTransferModel.state.value.history

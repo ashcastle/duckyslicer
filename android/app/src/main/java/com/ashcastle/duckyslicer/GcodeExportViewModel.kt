@@ -60,7 +60,7 @@ internal fun GcodeExportState.withCompletedExport(
 
 private data class ActiveGcodeExport(
     val id: Long,
-    val cancellation: CreatedDocumentWriteCancellation,
+    val cancellation: DocumentTransferCancellation,
 )
 
 /** Owns one user-selected G-code copy independently of Activity configuration changes. */
@@ -82,7 +82,7 @@ internal class GcodeExportViewModel(application: Application) : AndroidViewModel
         }
         val operationId = ++nextOperationId
         val started = mutableState.value.withStartedExport(operationId) ?: return false
-        val cancellation = CreatedDocumentWriteCancellation()
+        val cancellation = DocumentTransferCancellation()
         activeExport = ActiveGcodeExport(operationId, cancellation)
         mutableState.value = started
         viewModelScope.launch(Dispatchers.IO) {
@@ -97,7 +97,7 @@ internal class GcodeExportViewModel(application: Application) : AndroidViewModel
             } catch (failure: Exception) {
                 if (
                     cancellation.wasRequested() ||
-                    failure is CreatedDocumentWriteCancelledException
+                    failure is DocumentTransferCancelledException
                 ) {
                     deleteFailedCreatedDocument(application, uri)
                     GcodeExportResult.CANCELED
@@ -148,7 +148,7 @@ internal class GcodeExportViewModel(application: Application) : AndroidViewModel
         contentResolver: ContentResolver,
         uri: Uri,
         source: File,
-        cancellation: CreatedDocumentWriteCancellation,
+        cancellation: DocumentTransferCancellation,
     ) {
         try {
             cancellation.throwIfRequested()
@@ -181,7 +181,7 @@ internal class GcodeExportViewModel(application: Application) : AndroidViewModel
                 }
             }
         } catch (failure: Exception) {
-            if (cancellation.wasRequested()) throw CreatedDocumentWriteCancelledException()
+            if (cancellation.wasRequested()) throw DocumentTransferCancelledException()
             throw failure
         }
     }
@@ -189,7 +189,7 @@ internal class GcodeExportViewModel(application: Application) : AndroidViewModel
     private fun copyCancellable(
         input: InputStream,
         output: OutputStream,
-        cancellation: CreatedDocumentWriteCancellation,
+        cancellation: DocumentTransferCancellation,
     ) {
         val buffer = ByteArray(COPY_BUFFER_BYTES)
         while (true) {

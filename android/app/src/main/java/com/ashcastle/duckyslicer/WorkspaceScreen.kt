@@ -372,8 +372,9 @@ internal fun WorkspaceScreen(
     cutting: Boolean,
     projectEditActive: Boolean,
     projectEditCancellationRequested: Boolean,
+    projectImporting: Boolean,
     projectExporting: Boolean,
-    projectExportCancellationRequested: Boolean,
+    projectTransferCancellationRequested: Boolean,
     slicing: Boolean,
     sliceCancellationRequested: Boolean,
     sliceProgress: Int,
@@ -403,6 +404,7 @@ internal fun WorkspaceScreen(
     onSplit: () -> Unit,
     onCut: (Float, Boolean) -> Unit,
     onCancelProjectEdit: () -> Unit,
+    onCancelProjectImport: () -> Unit,
     onCancelProjectExport: () -> Unit,
     onSupportPaintPreview: (String, Int, SupportPaintState?) -> Unit,
     onSupportPaintCommitted: (String, SupportPaint) -> Unit,
@@ -548,8 +550,9 @@ internal fun WorkspaceScreen(
                 editingBusy = editingBusy,
                 projectEditActive = projectEditActive,
                 cancellationRequested = projectEditCancellationRequested,
+                projectImporting = projectImporting,
                 projectExporting = projectExporting,
-                projectExportCancellationRequested = projectExportCancellationRequested,
+                projectTransferCancellationRequested = projectTransferCancellationRequested,
                 slicing = slicing,
                 previewLoading = previewLoading,
                 canExport = sliceOutcome != null && !exportingGcode,
@@ -562,6 +565,7 @@ internal fun WorkspaceScreen(
                 canArrange = projectObjects.size > 1,
                 onArrange = onArrange,
                 onCancelProjectEdit = onCancelProjectEdit,
+                onCancelProjectImport = onCancelProjectImport,
                 onCancelProjectExport = onCancelProjectExport,
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -790,11 +794,13 @@ internal fun WorkspaceScreen(
                     selectedObjectId = selectedObjectId,
                     outcome = sliceOutcome,
                     busy = importing || editingBusy,
+                    importing = projectImporting,
                     exporting = projectExporting,
-                    cancellationRequested = projectExportCancellationRequested,
+                    cancellationRequested = projectTransferCancellationRequested,
                     onObjectSelected = onObjectSelected,
                     onOpenProject = onOpenProject,
                     onSaveProject = onSaveProject,
+                    onCancelProjectImport = onCancelProjectImport,
                     onCancelProjectExport = onCancelProjectExport,
                     modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
                 )
@@ -1877,8 +1883,9 @@ private fun WorkspaceMenu(
     editingBusy: Boolean,
     projectEditActive: Boolean,
     cancellationRequested: Boolean,
+    projectImporting: Boolean,
     projectExporting: Boolean,
-    projectExportCancellationRequested: Boolean,
+    projectTransferCancellationRequested: Boolean,
     slicing: Boolean,
     previewLoading: Boolean,
     canExport: Boolean,
@@ -1891,6 +1898,7 @@ private fun WorkspaceMenu(
     onCancelGcodeExport: () -> Unit,
     onArrange: () -> Unit,
     onCancelProjectEdit: () -> Unit,
+    onCancelProjectImport: () -> Unit,
     onCancelProjectExport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1932,24 +1940,27 @@ private fun WorkspaceMenu(
                     },
                 )
             }
-            if (projectExporting) {
+            if (projectImporting || projectExporting) {
                 DropdownMenuItem(
                     text = {
                         Text(
                             stringResource(
-                                if (projectExportCancellationRequested) {
-                                    R.string.canceling_project_export
-                                } else {
-                                    R.string.cancel_project_export
+                                when {
+                                    projectTransferCancellationRequested && projectImporting ->
+                                        R.string.canceling_project_import
+                                    projectTransferCancellationRequested ->
+                                        R.string.canceling_project_export
+                                    projectImporting -> R.string.cancel_project_import
+                                    else -> R.string.cancel_project_export
                                 },
                             ),
                         )
                     },
                     leadingIcon = { Icon(Icons.Default.Close, null) },
-                    enabled = !projectExportCancellationRequested,
+                    enabled = !projectTransferCancellationRequested,
                     onClick = {
                         expanded = false
-                        onCancelProjectExport()
+                        if (projectImporting) onCancelProjectImport() else onCancelProjectExport()
                     },
                 )
             }
@@ -3895,11 +3906,13 @@ private fun ProjectSheet(
     selectedObjectId: String?,
     outcome: SliceOutcome?,
     busy: Boolean,
+    importing: Boolean,
     exporting: Boolean,
     cancellationRequested: Boolean,
     onObjectSelected: (String) -> Unit,
     onOpenProject: () -> Unit,
     onSaveProject: () -> Unit,
+    onCancelProjectImport: () -> Unit,
     onCancelProjectExport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -3942,24 +3955,44 @@ private fun ProjectSheet(
         ) {
             Button(
                 onClick = {
-                    if (objects.isEmpty()) onOpenProject() else confirmReplacement = true
+                    when {
+                        importing -> onCancelProjectImport()
+                        objects.isEmpty() -> onOpenProject()
+                        else -> confirmReplacement = true
+                    }
                 },
-                enabled = !busy && !exporting,
+                enabled = if (importing) !cancellationRequested else !busy && !exporting,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF454640),
                     contentColor = Color(0xFFF4F4EE),
                 ),
                 modifier = Modifier.weight(1f),
             ) {
-                Icon(Icons.Default.FileOpen, contentDescription = null)
+                if (importing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = Color(0xFFF4F4EE),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(Icons.Default.FileOpen, contentDescription = null)
+                }
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.open_project))
+                Text(
+                    stringResource(
+                        when {
+                            cancellationRequested && importing -> R.string.canceling_project_import
+                            importing -> R.string.cancel_project_import
+                            else -> R.string.open_project
+                        },
+                    ),
+                )
             }
             Button(
                 onClick = {
                     if (exporting) onCancelProjectExport() else onSaveProject()
                 },
-                enabled = if (exporting) !cancellationRequested else !busy,
+                enabled = if (exporting) !cancellationRequested else !busy && !importing,
                 colors = primaryButtonColors(),
                 modifier = Modifier.weight(1f),
             ) {

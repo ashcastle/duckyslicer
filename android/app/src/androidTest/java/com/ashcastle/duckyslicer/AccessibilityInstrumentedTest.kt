@@ -46,6 +46,20 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun cancelProjectImportActionIsReachable() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val label = context.getString(R.string.cancel_project_import)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_PROJECT_IMPORT).use {
+            val nodes = waitForNodes(setOf(label))
+            assertEquals(
+                "An active project import must expose one named cancel action",
+                1,
+                nodes.count { it.isClickable && it.effectiveLabel().contains(label) },
+            )
+        }
+    }
+
+    @Test
     fun previewRangeAndDisplaySlidersExposeDistinctNames() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val previewLabels = setOf(

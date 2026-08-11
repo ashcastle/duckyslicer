@@ -227,6 +227,113 @@ class ProjectArchiveTest {
     }
 
     @Test
+    fun canceledArchiveCopyRemovesStagingAndPreservesTheCurrentProject() {
+        val sourceRoot = Files.createTempDirectory("ducky-project-cancel-source-").toFile()
+        val destinationRoot = Files.createTempDirectory("ducky-project-cancel-destination-").toFile()
+        try {
+            val source = ProjectStore(sourceRoot, ::inspectedModel)
+            val sourceModel = source.createModelDestination("incoming.stl").apply {
+                writeBytes(ByteArray(128 * 1_024) { index -> (index * 31).toByte() })
+            }
+            val archive = ByteArrayOutputStream().also { output ->
+                source.exportArchive(
+                    ProjectSnapshot(
+                        listOf(ProjectObject("incoming", inspectedModel(sourceModel))),
+                        "incoming",
+                    ),
+                    restoredSettingsFixture(),
+                    output,
+                )
+            }.toByteArray()
+            val destination = ProjectStore(destinationRoot, ::inspectedModel)
+            val currentModel = destination.createModelDestination("current.stl").apply {
+                writeText("current")
+            }
+            val current = ProjectSnapshot(
+                listOf(ProjectObject("current", inspectedModel(currentModel))),
+                "current",
+            )
+            destination.save(current, restoredSettingsFixture())
+            val primaryBefore = File(destinationRoot, ProjectStore.PROJECT_FILE).readBytes()
+            var sawPartialModel = false
+
+            assertThrows(DocumentTransferCancelledException::class.java) {
+                destination.importArchive(
+                    ByteArrayInputStream(archive),
+                    checkCancellation = {
+                        sawPartialModel = destinationRoot.listFiles().orEmpty()
+                            .filter { it.name.startsWith(".archive-") }
+                            .flatMap { it.listFiles().orEmpty().asList() }
+                            .any { it.length() > 0L }
+                        if (sawPartialModel) throw DocumentTransferCancelledException()
+                    },
+                )
+            }
+
+            assertTrue(sawPartialModel)
+            assertArrayEquals(primaryBefore, File(destinationRoot, ProjectStore.PROJECT_FILE).readBytes())
+            assertEquals("current", destination.load().selectedObjectId)
+            assertTrue(currentModel.isFile)
+            assertTrue(destinationRoot.listFiles().orEmpty().none { it.name.startsWith(".archive-") })
+        } finally {
+            sourceRoot.deleteRecursively()
+            destinationRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun cancellationWinningTheCommitGateRemovesInstalledModelsAndPreservesCurrentProject() {
+        val sourceRoot = Files.createTempDirectory("ducky-project-gate-source-").toFile()
+        val destinationRoot = Files.createTempDirectory("ducky-project-gate-destination-").toFile()
+        try {
+            val source = ProjectStore(sourceRoot, ::inspectedModel)
+            val sourceModel = source.createModelDestination("incoming.stl").apply {
+                writeText("solid incoming\nendsolid incoming\n")
+            }
+            val archive = ByteArrayOutputStream().also { output ->
+                source.exportArchive(
+                    ProjectSnapshot(
+                        listOf(ProjectObject("incoming", inspectedModel(sourceModel))),
+                        "incoming",
+                    ),
+                    restoredSettingsFixture(),
+                    output,
+                )
+            }.toByteArray()
+            val destination = ProjectStore(destinationRoot, ::inspectedModel)
+            val currentModel = destination.createModelDestination("current.stl").apply {
+                writeText("current")
+            }
+            val current = ProjectSnapshot(
+                listOf(ProjectObject("current", inspectedModel(currentModel))),
+                "current",
+            )
+            destination.save(current, restoredSettingsFixture())
+            val primaryBefore = File(destinationRoot, ProjectStore.PROJECT_FILE).readBytes()
+
+            assertThrows(DocumentTransferCancelledException::class.java) {
+                destination.importArchive(
+                    ByteArrayInputStream(archive),
+                    beginCommit = { throw DocumentTransferCancelledException() },
+                )
+            }
+
+            assertArrayEquals(primaryBefore, File(destinationRoot, ProjectStore.PROJECT_FILE).readBytes())
+            assertEquals("current", destination.load().selectedObjectId)
+            assertTrue(currentModel.isFile)
+            assertEquals(
+                setOf(currentModel.canonicalPath),
+                File(destinationRoot, ProjectStore.MODELS_DIRECTORY)
+                    .listFiles().orEmpty().map(File::getCanonicalPath).toSet(),
+            )
+            assertTrue(destinationRoot.listFiles().orEmpty().none { it.name.startsWith(".archive-") })
+        } finally {
+            sourceRoot.deleteRecursively()
+            destinationRoot.deleteRecursively()
+        }
+    }
+
+    @Test
     fun oversizedManifestIsRejectedBeforeProjectStateChanges() {
         val root = Files.createTempDirectory("ducky-project-oversized-").toFile()
         try {

@@ -15,6 +15,8 @@ COMPATIBLE_MIME_TYPES = {
     "application/octet-stream",
 }
 REQUIRED_STRINGS = {
+    "cancel_project_import",
+    "canceling_project_import",
     "cancel_project_export",
     "canceling_project_export",
     "open_project",
@@ -24,6 +26,7 @@ REQUIRED_STRINGS = {
     "project_opened",
     "project_saved",
     "project_open_error",
+    "project_import_canceled",
     "project_export_error",
     "project_export_canceled",
 }
@@ -61,11 +64,14 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "MainActivity.kt",
         "WorkspaceScreen.kt",
         "AndroidManifest.xml",
+        "AndroidTestManifest.xml",
         "ProjectArchiveTest.kt",
         "ProjectTransferStateTest.kt",
         "ProjectArchiveIntentInstrumentedTest.kt",
         "CreatedDocumentLifecycleInstrumentedTest.kt",
+        "ProjectImportLifecycleInstrumentedTest.kt",
         "BlockingExportProvider.java",
+        "BlockingImportProvider.java",
         "AccessibilityInstrumentedTest.kt",
         "NativeEngineInstrumentedTest.kt",
         "strings.xml",
@@ -97,7 +103,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "require(!entry.isDirectory",
             "require(entries.add(entry.name))",
             "entry.method == ZipEntry.DEFLATED || entry.method == ZipEntry.STORED",
-            "readArchiveBytes(archive, MAX_PROJECT_ARCHIVE_MANIFEST_BYTES)",
+            "readArchiveBytes(",
             "MAX_MODEL_IMPORT_BYTES",
             "checkedArchiveTotal",
             "require(referencedEntries == models.keys)",
@@ -113,7 +119,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             'getJSONObject("processOverrides").toObjectProcessOverrides()',
             "checkCancellation: () -> Unit = {}",
             "copyArchiveBytes(input, archive, model.length(), checkCancellation)",
-            "catch (failure: CreatedDocumentWriteCancelledException)",
+            "val copied = copyArchiveBytes(",
+            "val info = inspectModel(file)",
+            "catch (failure: DocumentTransferCancelledException)",
         ),
     )
 
@@ -123,7 +131,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         store,
         (
             'File(projectRoot, ".archive-${UUID.randomUUID()}")',
-            "ProjectArchiveCodec.read(input, staging, inspectModel)",
+            "ProjectArchiveCodec.read(",
             "moveArchiveModel(stagedModel.file, destination)",
             "save(snapshot, decoded.sliceOptions)",
             "pruneUnreferencedModels(snapshot)",
@@ -139,6 +147,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "!Files.isSymbolicLink(candidate.toPath())",
             "checkCancellation: () -> Unit = {}",
             "ProjectArchiveCodec.write(snapshot, sliceOptions, output, checkCancellation)",
+            "beginCommit: () -> Unit = {}",
+            "beginCommit()",
         ),
     )
     if store.index("save(snapshot, decoded.sliceOptions)") > store.index(
@@ -193,20 +203,27 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "override fun onCleared()",
             "hasPersistableChanges",
             "completion != null",
-            "openInputStream(uri)",
             "projectStore.importArchive",
             "uri.scheme != ContentResolver.SCHEME_CONTENT",
-            "CreatedDocumentWriteCancellation()",
+            "DocumentTransferCancellation()",
             "openAssetFileDescriptor(",
+            "acquireContentProviderClient(uri)",
+            'provider.openAssetFile(uri, "r", cancellation.providerSignal)',
             '"wt",',
             "cancellation.providerSignal",
+            "cancellation.attachInput(input)",
+            "cancellation::complete",
             "projectStore.exportArchive",
             "cancellation::throwIfRequested",
-            "CreatedDocumentWriteCancelledException",
+            "DocumentTransferCancelledException",
             "ProjectTransferCompletion.Canceled",
             "fun cancelProjectExport(): Boolean",
-            "activeProjectExport?.operation == operation",
-            "activeProjectExport?.cancellation",
+            "fun cancelProjectImport(): Boolean",
+            "activeProjectDocumentTransfer?.operation == operation",
+            "FinalProjectOwnerCleanup(activeProjectDocumentTransfer, pending)",
+            "cleanup.transfer?.cancellation?.cancel()",
+            "completionWasClaimed()",
+            "hasUnpersistedSession()",
             "hasPersistableChanges(allowActiveTransfer = true)",
             "deleteFailedCreatedDocument(application, uri)",
             "SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED",
@@ -225,10 +242,12 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "ContentResolver.SCHEME_CONTENT",
             "DocumentsContract.deleteDocument",
             "resolver.delete(uri, null, null)",
-            "class CreatedDocumentWriteCancelledException",
-            "class CreatedDocumentWriteCancellation",
+            "class DocumentTransferCancelledException",
+            "class DocumentTransferCancellation",
             "CancellationSignal()",
             "providerSignal.cancel()",
+            "completionClaimed = true",
+            "fun completionWasClaimed(): Boolean",
         ),
     )
 
@@ -329,6 +348,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "sliceOptions = projectTransferState.sliceOptions",
             "projectRestored = projectTransferState.restored",
             "projectTransferModel.updateHistory(",
+            "projectTransferModel::cancelProjectImport",
             "projectTransferModel::cancelProjectExport",
             "ProjectTransferCompletion.Canceled",
             "ProjectReplacementDialog(",
@@ -357,8 +377,12 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "confirmReplacement",
             "R.string.replace_project_title",
             "R.string.replace_project_body",
-            "projectExportCancellationRequested: Boolean",
+            "projectImporting: Boolean",
+            "projectTransferCancellationRequested: Boolean",
+            "onCancelProjectImport: () -> Unit",
             "onCancelProjectExport: () -> Unit",
+            "R.string.cancel_project_import",
+            "R.string.canceling_project_import",
             "R.string.cancel_project_export",
             "R.string.canceling_project_export",
             "if (exporting) onCancelProjectExport() else onSaveProject()",
@@ -420,6 +444,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "invalidArchiveCannotEscapeStagingOrReplaceTheCurrentProject",
             "oversizedManifestIsRejectedBeforeProjectStateChanges",
             "startupRecoveryRemovesOnlyExactAbandonedArchiveDirectories",
+            "canceledArchiveCopyRemovesStagingAndPreservesTheCurrentProject",
+            "cancellationWinningTheCommitGateRemovesInstalledModelsAndPreservesCurrentProject",
         ),
     )
     _require_markers(
@@ -430,6 +456,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "staleOrBusySessionMutationIsRejected",
             "withUpdatedSession",
             "projectExportCancellationIsBoundToTheExactActiveTransfer",
+            "projectImportCancellationIsBoundToTheExactActiveTransfer",
         ),
     )
     _require_markers(
@@ -447,6 +474,36 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "OnDeviceSlicer.slice(",
         ),
     )
+    _require_markers(
+        "ProjectImportLifecycleInstrumentedTest.kt",
+        sources["ProjectImportLifecycleInstrumentedTest.kt"],
+        (
+            "projectImportCancellationSurvivesRecreationAndPreservesTheCurrentProject",
+            "projectImportCancellationInterruptsProviderOpen",
+            "finalProjectOwnerClearStopsItsImportAndPreservesTheCurrentProject",
+            "BlockingImportProvider.METHOD_PREPARE",
+            "BlockingImportProvider.METHOD_PREPARE_OPEN_BLOCK",
+            "retained.cancelProjectImport()",
+            "store.clear()",
+            "model.updateSession(",
+            "unsavedOptions",
+            "waitForStagingCleanup()",
+        ),
+    )
+    _require_markers(
+        "BlockingImportProvider.java",
+        sources["BlockingImportProvider.java"],
+        (
+            "openAssetFile(",
+            "CancellationSignal signal",
+            "signal.setOnCancelListener(target.release::countDown)",
+            "signal.throwIfCanceled()",
+            "ParcelFileDescriptor.createPipe()",
+            "Blocking import provider is read-only",
+        ),
+    )
+    if "com.ashcastle.duckyslicer.test.blocking-import" not in sources["AndroidTestManifest.xml"]:
+        raise VerificationError("AndroidTestManifest.xml is missing the blocking import provider")
     _require_markers(
         "CreatedDocumentLifecycleInstrumentedTest.kt",
         sources["CreatedDocumentLifecycleInstrumentedTest.kt"],
@@ -478,7 +535,10 @@ def verify_project_archive(sources: dict[str, str]) -> None:
     _require_markers(
         "AccessibilityInstrumentedTest.kt",
         sources["AccessibilityInstrumentedTest.kt"],
-        ("cancelProjectExportActionIsReachable",),
+        (
+            "cancelProjectImportActionIsReachable",
+            "cancelProjectExportActionIsReachable",
+        ),
     )
     _require_markers(
         "CONTRIBUTING.md",
@@ -491,6 +551,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "delete it after cancellation or failure",
             "Project archive export",
             "exact provider open and ZIP write",
+            "Project archive import",
+            "atomic commit",
         ),
     )
     _require_markers(
@@ -516,6 +578,9 @@ def read_sources() -> dict[str, str]:
         "MainActivity.kt": (package / "MainActivity.kt").read_text(encoding="utf-8"),
         "WorkspaceScreen.kt": (package / "WorkspaceScreen.kt").read_text(encoding="utf-8"),
         "AndroidManifest.xml": (tests / "main/AndroidManifest.xml").read_text(encoding="utf-8"),
+        "AndroidTestManifest.xml": (tests / "androidTest/AndroidManifest.xml").read_text(
+            encoding="utf-8"
+        ),
         "ProjectArchiveTest.kt": (
             tests / "test/java/com/ashcastle/duckyslicer/ProjectArchiveTest.kt"
         ).read_text(encoding="utf-8"),
@@ -530,8 +595,15 @@ def read_sources() -> dict[str, str]:
             tests
             / "androidTest/java/com/ashcastle/duckyslicer/CreatedDocumentLifecycleInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
+        "ProjectImportLifecycleInstrumentedTest.kt": (
+            tests
+            / "androidTest/java/com/ashcastle/duckyslicer/ProjectImportLifecycleInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
         "BlockingExportProvider.java": (
             tests / "androidTest/java/com/ashcastle/duckyslicer/BlockingExportProvider.java"
+        ).read_text(encoding="utf-8"),
+        "BlockingImportProvider.java": (
+            tests / "androidTest/java/com/ashcastle/duckyslicer/BlockingImportProvider.java"
         ).read_text(encoding="utf-8"),
         "AccessibilityInstrumentedTest.kt": (
             tests / "androidTest/java/com/ashcastle/duckyslicer/AccessibilityInstrumentedTest.kt"

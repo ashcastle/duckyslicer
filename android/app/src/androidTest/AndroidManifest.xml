@@ -5,5 +5,9 @@
             android:name="com.ashcastle.duckyslicer.BlockingExportProvider"
             android:authorities="com.ashcastle.duckyslicer.test.blocking-export"
             android:exported="true" />
+        <provider
+            android:name="com.ashcastle.duckyslicer.BlockingImportProvider"
+            android:authorities="com.ashcastle.duckyslicer.test.blocking-import"
+            android:exported="true" />
     </application>
 </manifest>

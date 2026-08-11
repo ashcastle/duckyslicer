@@ -399,6 +399,9 @@
     <string name="project_saved">프로젝트를 저장했습니다.</string>
     <string name="project_open_error">이 프로젝트를 열지 못했습니다. 현재 프로젝트는 그대로 두었습니다.</string>
     <string name="project_export_error">프로젝트 파일을 저장하지 못했습니다.</string>
+    <string name="cancel_project_import">프로젝트 열기 중지</string>
+    <string name="canceling_project_import">프로젝트 열기를 중지하는 중…</string>
+    <string name="project_import_canceled">프로젝트 열기를 중지했습니다. 현재 프로젝트는 그대로 두었습니다.</string>
     <string name="cancel_project_export">프로젝트 저장 중지</string>
     <string name="canceling_project_export">프로젝트 저장을 중지하는 중…</string>
     <string name="project_export_canceled">프로젝트 저장을 중지했습니다.</string>

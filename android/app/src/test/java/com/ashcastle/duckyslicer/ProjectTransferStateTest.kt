@@ -17,13 +17,32 @@ class ProjectTransferStateTest {
 
         assertTrue(started.busy)
         assertEquals(operation.id, started.activeTransferId)
-        assertNull(started.withTransferCancellationRequested(operation.id - 1))
+        assertNull(
+            started.withTransferCancellationRequested(operation.copy(id = operation.id - 1)),
+        )
         val canceling = requireNotNull(
-            started.withTransferCancellationRequested(operation.id),
+            started.withTransferCancellationRequested(operation),
         )
         assertTrue(canceling.transferCancellationRequested)
-        assertNull(canceling.withTransferCancellationRequested(operation.id))
+        assertNull(canceling.withTransferCancellationRequested(operation))
         assertEquals(ProjectTransferDirection.EXPORT, canceling.activeTransferDirection)
+    }
+
+    @Test
+    fun projectImportCancellationIsBoundToTheExactActiveTransfer() {
+        val operation = ActiveProjectTransfer(92, ProjectTransferDirection.IMPORT)
+        val started = requireNotNull(
+            ProjectTransferState(restored = true).withStartedTransfer(operation),
+        )
+
+        assertNull(
+            started.withTransferCancellationRequested(
+                operation.copy(direction = ProjectTransferDirection.EXPORT),
+            ),
+        )
+        val canceling = requireNotNull(started.withTransferCancellationRequested(operation))
+        assertTrue(canceling.transferCancellationRequested)
+        assertEquals(ProjectTransferDirection.IMPORT, canceling.activeTransferDirection)
     }
 
     @Test

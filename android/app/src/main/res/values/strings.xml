@@ -399,6 +399,9 @@
     <string name="project_saved">Project saved.</string>
     <string name="project_open_error">Couldn’t open this project. Your current project was left unchanged.</string>
     <string name="project_export_error">Couldn’t save a project file.</string>
+    <string name="cancel_project_import">Stop opening project</string>
+    <string name="canceling_project_import">Stopping project open…</string>
+    <string name="project_import_canceled">Project open stopped. Your current project was left unchanged.</string>
     <string name="cancel_project_export">Stop saving project</string>
     <string name="canceling_project_export">Stopping project save…</string>
     <string name="project_export_canceled">Project save stopped.</string>

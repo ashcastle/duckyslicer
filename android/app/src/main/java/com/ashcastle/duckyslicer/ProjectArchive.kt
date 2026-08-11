@@ -130,7 +130,9 @@ internal object ProjectArchiveCodec {
         input: InputStream,
         stagingDirectory: File,
         inspectModel: (File) -> ModelInfo,
+        checkCancellation: () -> Unit = {},
     ): DecodedProjectArchive = archiveBoundary {
+        checkCancellation()
         require(stagingDirectory.isDirectory)
         val entries = HashSet<String>()
         val models = LinkedHashMap<String, File>()
@@ -139,7 +141,9 @@ internal object ProjectArchiveCodec {
         val limitedInput = ArchiveInputLimit(input, MAX_PROJECT_ARCHIVE_FILE_BYTES)
         ZipInputStream(BufferedInputStream(limitedInput)).use { archive ->
             while (true) {
+                checkCancellation()
                 val entry = archive.nextEntry ?: break
+                checkCancellation()
                 require(entries.size < MAX_PROJECT_ARCHIVE_ENTRIES)
                 require(!entry.isDirectory && entry.name.length in 1..MAX_PROJECT_ARCHIVE_ENTRY_NAME)
                 require(entries.add(entry.name))
@@ -147,7 +151,11 @@ internal object ProjectArchiveCodec {
                 when {
                     entry.name == PROJECT_ARCHIVE_MANIFEST -> {
                         require(manifestBytes == null)
-                        manifestBytes = readArchiveBytes(archive, MAX_PROJECT_ARCHIVE_MANIFEST_BYTES)
+                        manifestBytes = readArchiveBytes(
+                            archive,
+                            MAX_PROJECT_ARCHIVE_MANIFEST_BYTES,
+                            checkCancellation,
+                        )
                         totalContentBytes = checkedArchiveTotal(
                             totalContentBytes,
                             requireNotNull(manifestBytes).size.toLong(),
@@ -165,6 +173,7 @@ internal object ProjectArchiveCodec {
                                     MAX_MODEL_IMPORT_BYTES,
                                     MAX_PROJECT_ARCHIVE_CONTENT_BYTES - totalContentBytes,
                                 ),
+                                checkCancellation,
                             )
                             require(copied > 0L)
                             totalContentBytes = checkedArchiveTotal(totalContentBytes, copied)
@@ -176,9 +185,11 @@ internal object ProjectArchiveCodec {
                     else -> throw ProjectArchiveException()
                 }
                 require(totalContentBytes <= MAX_PROJECT_ARCHIVE_CONTENT_BYTES)
+                checkCancellation()
                 archive.closeEntry()
             }
         }
+        checkCancellation()
         val manifest = parseBoundedJsonObject(
             requireNotNull(manifestBytes),
             MAX_PROJECT_ARCHIVE_MANIFEST_BYTES,
@@ -187,17 +198,21 @@ internal object ProjectArchiveCodec {
         val referencedEntries = metadata.objects.mapTo(HashSet(), ArchivedProjectObject::modelEntry)
         require(referencedEntries == models.keys)
         val inspected = models.mapValues { (_, file) ->
+            checkCancellation()
             val info = inspectModel(file)
+            checkCancellation()
             require(info.triangles > 0)
             StagedArchiveModel(file, info)
         }
         val validatedObjects = metadata.objects.map { archived ->
+            checkCancellation()
             val triangleCount = requireNotNull(inspected[archived.modelEntry]).info.triangles
             require(archived.supportPaint.facets.keys.all { it in 0 until triangleCount })
             require(archived.seamPaint.facets.keys.all { it in 0 until triangleCount })
             require(archived.multiColorPaint.facets.keys.all { it in 0 until triangleCount })
             archived
         }
+        checkCancellation()
         DecodedProjectArchive(
             objects = validatedObjects,
             selectedObjectId = metadata.selectedObjectId,
@@ -466,15 +481,19 @@ private fun copyArchiveBytes(
     return total
 }
 
-private fun readArchiveBytes(input: InputStream, maximumBytes: Int): ByteArray {
+private fun readArchiveBytes(
+    input: InputStream,
+    maximumBytes: Int,
+    checkCancellation: () -> Unit = {},
+): ByteArray {
     val output = java.io.ByteArrayOutputStream(minOf(maximumBytes, DEFAULT_BUFFER_SIZE))
-    copyArchiveBytes(input, output, maximumBytes.toLong())
+    copyArchiveBytes(input, output, maximumBytes.toLong(), checkCancellation)
     return output.toByteArray()
 }
 
 private inline fun <T> archiveBoundary(block: () -> T): T = try {
     block()
-} catch (failure: CreatedDocumentWriteCancelledException) {
+} catch (failure: DocumentTransferCancelledException) {
     throw failure
 } catch (failure: ProjectArchiveException) {
     throw failure
