@@ -1087,6 +1087,7 @@ private fun DuckySlicerScreen(
         onSupportReportExport = { uri ->
             supportReportExportModel.export(uri, appSettings)
         },
+        onCancelSupportReportExport = supportReportExportModel::cancel,
         onRemoteDeviceSelected = { id ->
             remoteOperationModel.selectionChanged(id)
         },

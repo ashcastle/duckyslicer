@@ -13,7 +13,10 @@ REQUIRED_STRINGS = {
     "help",
     "support_details_summary",
     "save_support_details",
+    "stop_support_details_save",
+    "stopping_support_details_save",
     "support_details_saved",
+    "support_details_save_canceled",
     "support_details_save_error",
 }
 EXPECTED_EVENTS = {
@@ -274,7 +277,21 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
         "class SupportReportExportViewModel(application: Application) : AndroidViewModel(application)",
         "viewModelScope.launch(Dispatchers.IO)",
         "uri.scheme != ContentResolver.SCHEME_CONTENT",
-        'openOutputStream(uri, "wt")',
+        "SupportReportExportOutcome.CANCELED",
+        "withSupportReportCancellationRequested(",
+        "ActiveSupportReportExport(",
+        "DocumentTransferCancellation()",
+        "application.contentResolver.openAssetFileDescriptor(",
+        'uri,\n                        "wt",\n                        cancellation.providerSignal',
+        "cancellation.attachOutput(output)",
+        "cancellation.detachOutput(output)",
+        "cancellation.complete()",
+        "cancellation.wasRequested()",
+        "failure is DocumentTransferCancelledException",
+        "cancellation.close()",
+        "fun cancel(): Boolean",
+        "override fun onCleared()",
+        "active?.cancellation?.cancel()",
         "createSupportReport(application, snapshot)",
         "writeSupportReport(",
         "deleteFailedCreatedDocument(application, uri)",
@@ -282,8 +299,17 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
     ):
         if marker not in exporter:
             raise VerificationError(f"retained support export is missing: {marker}")
+    if "openOutputStream" in exporter:
+        raise VerificationError(
+            "support export bypasses provider and stream cancellation"
+        )
     created_document = sources["CreatedDocument.kt"]
     for marker in (
+        "class DocumentTransferCancellation",
+        "val providerSignal = CancellationSignal()",
+        "fun cancel(): Boolean",
+        "fun attachOutput(value: OutputStream)",
+        "fun complete()",
         "fun deleteFailedCreatedDocument(context: Context, uri: Uri)",
         "DocumentsContract.deleteDocument",
         "resolver.delete(uri, null, null)",
@@ -295,6 +321,8 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
         'ActivityResultContracts.CreateDocument("text/plain")',
         "supportReportExportState",
         "onSupportReportExport",
+        "onCancelSupportReportExport",
+        "supportReportExportState.cancellationRequested",
         'SUPPORT_REPORT_FILE_NAME = "DuckySlicer-support.txt"',
     ):
         if marker not in settings:
@@ -310,6 +338,7 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
     for marker in (
         "ViewModelProvider(this)[SupportReportExportViewModel::class.java]",
         "supportReportExportModel.export(uri, appSettings)",
+        "supportReportExportModel::cancel",
     ):
         if marker not in main_activity:
             raise VerificationError(f"retained support export dispatch is missing: {marker}")
@@ -371,13 +400,26 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
     ):
         if marker not in device_test:
             raise VerificationError(f"support ARM64 regression is missing: {marker}")
-    if "appSettingsExposeAVisibleSupportDetailsAction" not in accessibility_test:
-        raise VerificationError("support accessibility regression is missing")
+    for marker in (
+        "appSettingsExposeAVisibleSupportDetailsAction",
+        "cancelSupportDetailsSaveActionIsReachable",
+        "R.string.stop_support_details_save",
+    ):
+        if marker not in accessibility_test:
+            raise VerificationError(f"support accessibility regression is missing: {marker}")
     lifecycle_test = sources["CreatedDocumentLifecycleInstrumentedTest.kt"]
     for marker in (
         "supportReportExportSurvivesActivityRecreationAndRejectsDuplicateWork",
+        "supportReportCancellationSurvivesRecreationAndDeletesThePartialDocument",
+        "finalSupportReportOwnerStopsProviderOpenAndDeletesThePartialDocument",
         "assertSame(",
         "assertFalse(retained.export(",
+        "assertTrue(retained.cancel())",
+        "assertFalse(retained.cancel())",
+        "store.clear()",
+        "BlockingExportProvider.KEY_DELETED",
+        "BlockingExportProvider.KEY_COMPLETED",
+        '"OperationCanceledException"',
         "MAX_SUPPORT_REPORT_BYTES",
     ):
         if marker not in lifecycle_test:

@@ -596,6 +596,9 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 }
             } catch (failure: CancellationException) {
                 installed.deleteInstalledModels()
+                if (cancellation.wasRequested()) {
+                    completeEditFailure(baseline, ProjectEditCancelledException())
+                }
                 throw failure
             } catch (failure: Exception) {
                 installed.deleteInstalledModels()

@@ -15,7 +15,7 @@ class SupportReportExportStateTest {
         assertTrue(started.busy)
         assertNull(started.withStartedSupportReportExport(13))
         val completed = requireNotNull(
-            started.withCompletedSupportReportExport(12, succeeded = true),
+            started.withCompletedSupportReportExport(12, SupportReportExportOutcome.SAVED),
         )
         assertFalse(completed.busy)
         assertTrue(requireNotNull(completed.completion).succeeded)
@@ -31,8 +31,30 @@ class SupportReportExportStateTest {
             SupportReportExportState().withStartedSupportReportExport(8),
         )
 
-        assertNull(started.withCompletedSupportReportExport(7, succeeded = true))
+        assertNull(
+            started.withCompletedSupportReportExport(7, SupportReportExportOutcome.SAVED),
+        )
         assertTrue(started.busy)
         assertNull(started.completion)
+    }
+
+    @Test
+    fun cancellationIsExactAndRejectsALateSuccessfulWrite() {
+        val started = requireNotNull(
+            SupportReportExportState().withStartedSupportReportExport(24),
+        )
+
+        assertNull(started.withSupportReportCancellationRequested(23))
+        val canceling = requireNotNull(started.withSupportReportCancellationRequested(24))
+        assertTrue(canceling.cancellationRequested)
+        assertNull(canceling.withSupportReportCancellationRequested(24))
+        val completed = requireNotNull(
+            canceling.withCompletedSupportReportExport(24, SupportReportExportOutcome.SAVED),
+        )
+
+        assertFalse(completed.busy)
+        assertFalse(completed.cancellationRequested)
+        assertFalse(requireNotNull(completed.completion).succeeded)
+        assertTrue(completed.completion.outcome == SupportReportExportOutcome.CANCELED)
     }
 }

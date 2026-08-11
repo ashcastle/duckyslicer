@@ -31,7 +31,7 @@ public final class BlockingImportProvider extends ContentProvider {
     public static final String KEY_BYTES = "bytes";
     public static final String KEY_ERROR = "error";
     public static final String KEY_SOURCE_DESCRIPTOR = "source_descriptor";
-    private static final long TIMEOUT_SECONDS = 20L;
+    private static final long TIMEOUT_SECONDS = 120L;
     private static final int MODE_STREAM = 0;
     private static final int MODE_OPEN_BLOCK = 1;
     private static volatile Session current = new Session(MODE_STREAM, null);
@@ -166,8 +166,11 @@ public final class BlockingImportProvider extends ContentProvider {
         }
         try {
             ParcelFileDescriptor[] pipe = ParcelFileDescriptor.createPipe();
+            if (signal != null) {
+                signal.setOnCancelListener(target.release::countDown);
+            }
             new Thread(
-                    () -> streamArchive(pipe[1], target),
+                    () -> streamArchive(pipe[1], target, signal),
                     "Ducky blocking import provider"
             ).start();
             return new AssetFileDescriptor(pipe[0], 0, AssetFileDescriptor.UNKNOWN_LENGTH);
@@ -203,12 +206,17 @@ public final class BlockingImportProvider extends ContentProvider {
         current = new Session(mode, source);
     }
 
-    private static void streamArchive(ParcelFileDescriptor writeSide, Session target) {
+    private static void streamArchive(
+            ParcelFileDescriptor writeSide,
+            Session target,
+            CancellationSignal signal
+    ) {
         try (ParcelFileDescriptor.AutoCloseInputStream input =
                      new ParcelFileDescriptor.AutoCloseInputStream(target.source);
              OutputStream output = new ParcelFileDescriptor.AutoCloseOutputStream(writeSide)) {
             byte[] buffer = new byte[8192];
             int count;
+            boolean awaitingCancellation = true;
             while ((count = input.read(buffer)) >= 0) {
                 if (count == 0) {
                     continue;
@@ -216,11 +224,22 @@ public final class BlockingImportProvider extends ContentProvider {
                 output.write(buffer, 0, count);
                 target.bytes += count;
                 target.started = true;
-                Thread.sleep(20L);
+                if (awaitingCancellation) {
+                    awaitingCancellation = false;
+                    if (!target.release.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                        throw new IOException("Blocking import was not released");
+                    }
+                    if (signal != null) {
+                        signal.throwIfCanceled();
+                    }
+                }
             }
         } catch (Exception error) {
             target.error = error.getClass().getSimpleName();
         } finally {
+            if (signal != null) {
+                signal.setOnCancelListener(null);
+            }
             target.completed = true;
         }
     }

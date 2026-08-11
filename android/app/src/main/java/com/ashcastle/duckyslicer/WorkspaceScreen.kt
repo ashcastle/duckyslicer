@@ -426,6 +426,7 @@ internal fun WorkspaceScreen(
     onLayerRangeSelected: (Int, Int) -> Unit,
     onAppSettingsChanged: (AppSettings) -> Unit,
     onSupportReportExport: (Uri) -> Unit,
+    onCancelSupportReportExport: () -> Unit,
     onRemoteDeviceSelected: (String) -> Unit,
     onRemoteDeviceSaved: (RemoteDeviceDraft) -> Unit,
     onRemoteDeviceDeleted: (String) -> Unit,
@@ -811,6 +812,7 @@ internal fun WorkspaceScreen(
                     supportReportExportState = supportReportExportState,
                     onSettingsChanged = onAppSettingsChanged,
                     onSupportReportExport = onSupportReportExport,
+                    onCancelSupportReportExport = onCancelSupportReportExport,
                     modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
                 )
             }

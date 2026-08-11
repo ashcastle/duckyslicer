@@ -112,7 +112,8 @@ def valid_sources() -> dict[str, str]:
         "MainActivity.kt": (
             event_calls +
             " ViewModelProvider(this)[SupportReportExportViewModel::class.java] "
-            "supportReportExportModel.export(uri, appSettings)"
+            "supportReportExportModel.export(uri, appSettings) "
+            "supportReportExportModel::cancel"
         ),
         "ProjectTransfer.kt": project_event_calls,
         "RemoteOperationViewModel.kt": remote_event_calls,
@@ -123,17 +124,30 @@ def valid_sources() -> dict[str, str]:
             "class SupportReportExportViewModel(application: Application) : "
             "AndroidViewModel(application) viewModelScope.launch(Dispatchers.IO) "
             "uri.scheme != ContentResolver.SCHEME_CONTENT "
-            "openOutputStream(uri, \"wt\") createSupportReport(application, snapshot) "
-            "writeSupportReport( deleteFailedCreatedDocument(application, uri) "
+            "SupportReportExportOutcome.CANCELED "
+            "withSupportReportCancellationRequested( ActiveSupportReportExport( "
+            "DocumentTransferCancellation() "
+            "application.contentResolver.openAssetFileDescriptor( "
+            "uri,\n                        \"wt\",\n                        cancellation.providerSignal "
+            "cancellation.attachOutput(output) cancellation.detachOutput(output) "
+            "cancellation.complete() cancellation.wasRequested() "
+            "failure is DocumentTransferCancelledException cancellation.close() "
+            "fun cancel(): Boolean override fun onCleared() active?.cancellation?.cancel() "
+            "createSupportReport(application, snapshot) writeSupportReport( "
+            "deleteFailedCreatedDocument(application, uri) "
             f"{support_export_event_calls}"
         ),
         "CreatedDocument.kt": (
+            "class DocumentTransferCancellation "
+            "val providerSignal = CancellationSignal() fun cancel(): Boolean "
+            "fun attachOutput(value: OutputStream) fun complete() "
             "fun deleteFailedCreatedDocument(context: Context, uri: Uri) "
             "DocumentsContract.deleteDocument resolver.delete(uri, null, null)"
         ),
         "AppSettingsSheet.kt": (
             'ActivityResultContracts.CreateDocument("text/plain") '
-            "supportReportExportState onSupportReportExport "
+            "supportReportExportState onSupportReportExport onCancelSupportReportExport "
+            "supportReportExportState.cancellationRequested "
             'SUPPORT_REPORT_FILE_NAME = "DuckySlicer-support.txt" '
             f"{string_calls}"
         ),
@@ -155,9 +169,17 @@ def valid_sources() -> dict[str, str]:
         ),
         "CreatedDocumentLifecycleInstrumentedTest.kt": (
             "supportReportExportSurvivesActivityRecreationAndRejectsDuplicateWork "
-            "assertSame( assertFalse(retained.export( MAX_SUPPORT_REPORT_BYTES"
+            "supportReportCancellationSurvivesRecreationAndDeletesThePartialDocument "
+            "finalSupportReportOwnerStopsProviderOpenAndDeletesThePartialDocument "
+            "assertSame( assertFalse(retained.export( assertTrue(retained.cancel()) "
+            "assertFalse(retained.cancel()) store.clear() "
+            "BlockingExportProvider.KEY_DELETED BlockingExportProvider.KEY_COMPLETED "
+            '"OperationCanceledException" MAX_SUPPORT_REPORT_BYTES'
         ),
-        "AccessibilityInstrumentedTest.kt": "appSettingsExposeAVisibleSupportDetailsAction",
+        "AccessibilityInstrumentedTest.kt": (
+            "appSettingsExposeAVisibleSupportDetailsAction "
+            "cancelSupportDetailsSaveActionIsReachable R.string.stop_support_details_save"
+        ),
         "strings.xml": string_resources(),
         "strings-ko.xml": string_resources(),
         "PRIVACY.md": (
@@ -237,6 +259,55 @@ class VerifySupportDiagnosticsTest(unittest.TestCase):
             "SupportReportExportViewModel.kt"
         ].replace("deleteFailedCreatedDocument(application, uri)", "leave partial report")
         with self.assertRaisesRegex(VerificationError, "retained support export"):
+            verify_support_diagnostics(sources)
+
+    def test_rejects_uncancelable_support_output_stream(self) -> None:
+        sources = valid_sources()
+        sources["SupportReportExportViewModel.kt"] += ' openOutputStream(uri, "wt")'
+        with self.assertRaisesRegex(VerificationError, "bypasses provider"):
+            verify_support_diagnostics(sources)
+
+    def test_rejects_support_provider_open_without_exact_signal(self) -> None:
+        sources = valid_sources()
+        sources["SupportReportExportViewModel.kt"] = sources[
+            "SupportReportExportViewModel.kt"
+        ].replace("cancellation.providerSignal", "no provider cancellation")
+        with self.assertRaisesRegex(VerificationError, "retained support export"):
+            verify_support_diagnostics(sources)
+
+    def test_rejects_unbound_support_output_stream(self) -> None:
+        sources = valid_sources()
+        sources["SupportReportExportViewModel.kt"] = sources[
+            "SupportReportExportViewModel.kt"
+        ].replace("cancellation.attachOutput(output)", "unbound output")
+        with self.assertRaisesRegex(VerificationError, "retained support export"):
+            verify_support_diagnostics(sources)
+
+    def test_rejects_missing_final_support_owner_cancellation(self) -> None:
+        sources = valid_sources()
+        sources["SupportReportExportViewModel.kt"] = sources[
+            "SupportReportExportViewModel.kt"
+        ].replace("override fun onCleared()", "owner leaked")
+        with self.assertRaisesRegex(VerificationError, "retained support export"):
+            verify_support_diagnostics(sources)
+
+    def test_rejects_missing_support_cancel_action(self) -> None:
+        sources = valid_sources()
+        sources["AppSettingsSheet.kt"] = sources["AppSettingsSheet.kt"].replace(
+            "onCancelSupportReportExport", "cancel callback missing"
+        )
+        with self.assertRaisesRegex(VerificationError, "user-chosen support export"):
+            verify_support_diagnostics(sources)
+
+    def test_rejects_missing_support_cancellation_lifecycle_regression(self) -> None:
+        sources = valid_sources()
+        sources["CreatedDocumentLifecycleInstrumentedTest.kt"] = sources[
+            "CreatedDocumentLifecycleInstrumentedTest.kt"
+        ].replace(
+            "supportReportCancellationSurvivesRecreationAndDeletesThePartialDocument",
+            "cancellation regression missing",
+        )
+        with self.assertRaisesRegex(VerificationError, "retained support export regression"):
             verify_support_diagnostics(sources)
 
     def test_rejects_fixed_page_size_device_regression(self) -> None:

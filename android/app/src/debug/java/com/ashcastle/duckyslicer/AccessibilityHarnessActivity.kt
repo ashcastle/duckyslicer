@@ -32,6 +32,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                         SCREEN_PROFILE -> ProfileAccessibilityHarness()
                         SCREEN_DEVICE -> DeviceAccessibilityHarness()
                         SCREEN_SETTINGS -> SettingsAccessibilityHarness()
+                        SCREEN_SUPPORT_EXPORT -> SettingsAccessibilityHarness(supportExporting = true)
                         SCREEN_PROJECT -> WorkspaceAccessibilityHarness(
                             selectedTab = WorkspaceTab.PROJECT,
                             projectObjects = listOf(accessibilityProjectObject()),
@@ -86,6 +87,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_PROFILE = "profile"
         const val SCREEN_DEVICE = "device"
         const val SCREEN_SETTINGS = "settings"
+        const val SCREEN_SUPPORT_EXPORT = "support-export"
         const val SCREEN_PROJECT = "project"
         const val SCREEN_WORKSPACE = "workspace"
         const val SCREEN_OBJECT_SETTINGS = "object-settings"
@@ -192,14 +194,17 @@ private fun DeviceAccessibilityHarness() {
 }
 
 @Composable
-private fun SettingsAccessibilityHarness() {
+private fun SettingsAccessibilityHarness(supportExporting: Boolean = false) {
     var settings by remember { mutableStateOf(AppSettings()) }
     AppSettingsSheet(
         settings = settings,
         saveFailed = false,
-        supportReportExportState = SupportReportExportState(),
+        supportReportExportState = SupportReportExportState(
+            activeId = 1L.takeIf { supportExporting },
+        ),
         onSettingsChanged = { settings = it },
         onSupportReportExport = {},
+        onCancelSupportReportExport = {},
     )
 }
 
@@ -296,6 +301,7 @@ private fun WorkspaceAccessibilityHarness(
         onLayerRangeSelected = { _, _ -> },
         onAppSettingsChanged = {},
         onSupportReportExport = {},
+        onCancelSupportReportExport = {},
         onRemoteDeviceSelected = {},
         onRemoteDeviceSaved = {},
         onRemoteDeviceDeleted = {},

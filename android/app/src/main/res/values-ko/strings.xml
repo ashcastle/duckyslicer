@@ -498,7 +498,10 @@
     <string name="help">도움말</string>
     <string name="support_details_summary">앱과 기기 정보, 최근 문제와 앱이 종료된 방식의 짧은 기록을 저장합니다. 모델, G-code, 파일 이름, 프린터 주소, 접속 키는 포함하지 않습니다.</string>
     <string name="save_support_details">지원 정보 저장</string>
+    <string name="stop_support_details_save">저장 중단</string>
+    <string name="stopping_support_details_save">중단 중…</string>
     <string name="support_details_saved">지원 정보를 저장했습니다.</string>
+    <string name="support_details_save_canceled">지원 정보 저장을 중단했습니다.</string>
     <string name="support_details_save_error">지원 정보를 저장하지 못했습니다.</string>
     <string name="about">정보</string>
     <string name="app_version">DuckySlicer %1$s</string>

@@ -15,11 +15,15 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class CreatedDocumentLifecycleInstrumentedTest {
+    @get:Rule
+    val blockingProviderProcess = BlockingProviderProcessRule()
+
     @Test
     fun supportReportExportSurvivesActivityRecreationAndRejectsDuplicateWork() {
         val resolver = InstrumentationRegistry.getInstrumentation().targetContext.contentResolver
@@ -61,6 +65,91 @@ class CreatedDocumentLifecycleInstrumentedTest {
                 assertTrue(status.getString(BlockingExportProvider.KEY_SHA256).orEmpty().isNotBlank())
             }
         } finally {
+            releaseProvider()
+        }
+    }
+
+    @Test
+    fun supportReportCancellationSurvivesRecreationAndDeletesThePartialDocument() {
+        val resolver = InstrumentationRegistry.getInstrumentation().targetContext.contentResolver
+        resolver.call(
+            BlockingExportProvider.URI,
+            BlockingExportProvider.METHOD_PREPARE_OPEN_BLOCK,
+            null,
+            null,
+        )
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                lateinit var retained: SupportReportExportViewModel
+                scenario.onActivity { activity ->
+                    retained = ViewModelProvider(activity)[SupportReportExportViewModel::class.java]
+                    assertTrue(retained.export(BlockingExportProvider.URI, AppSettings()))
+                }
+                waitForProvider { it.getBoolean(BlockingExportProvider.KEY_STARTED) }
+
+                scenario.recreate()
+                scenario.onActivity { recreated ->
+                    assertSame(
+                        retained,
+                        ViewModelProvider(recreated)[SupportReportExportViewModel::class.java],
+                    )
+                    assertTrue(retained.cancel())
+                    assertFalse(retained.cancel())
+                }
+
+                waitUntil("support report cancellation did not settle") {
+                    retained.state.value.completion?.outcome ==
+                        SupportReportExportOutcome.CANCELED
+                }
+                val status = waitForProvider {
+                    it.getBoolean(BlockingExportProvider.KEY_DELETED) &&
+                        it.getBoolean(BlockingExportProvider.KEY_COMPLETED)
+                }
+                assertEquals(0, status.getInt(BlockingExportProvider.KEY_BYTES))
+                assertEquals(
+                    "OperationCanceledException",
+                    status.getString(BlockingExportProvider.KEY_ERROR),
+                )
+            }
+        } finally {
+            releaseProvider()
+        }
+    }
+
+    @Test
+    fun finalSupportReportOwnerStopsProviderOpenAndDeletesThePartialDocument() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        context.contentResolver.call(
+            BlockingExportProvider.URI,
+            BlockingExportProvider.METHOD_PREPARE_OPEN_BLOCK,
+            null,
+            null,
+        )
+        val store = ViewModelStore()
+        var storeCleared = false
+        try {
+            val application = context.applicationContext as Application
+            val model = ViewModelProvider(
+                store,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[SupportReportExportViewModel::class.java]
+            assertTrue(model.export(BlockingExportProvider.URI, AppSettings()))
+            waitForProvider { it.getBoolean(BlockingExportProvider.KEY_STARTED) }
+
+            store.clear()
+            storeCleared = true
+
+            val status = waitForProvider {
+                it.getBoolean(BlockingExportProvider.KEY_DELETED) &&
+                    it.getBoolean(BlockingExportProvider.KEY_COMPLETED)
+            }
+            assertEquals(0, status.getInt(BlockingExportProvider.KEY_BYTES))
+            assertEquals(
+                "OperationCanceledException",
+                status.getString(BlockingExportProvider.KEY_ERROR),
+            )
+        } finally {
+            if (!storeCleared) store.clear()
             releaseProvider()
         }
     }
@@ -118,7 +207,7 @@ class CreatedDocumentLifecycleInstrumentedTest {
         val resolver = context.contentResolver
         resolver.call(
             BlockingExportProvider.URI,
-            BlockingExportProvider.METHOD_PREPARE,
+            BlockingExportProvider.METHOD_PREPARE_OPEN_BLOCK,
             null,
             null,
         )

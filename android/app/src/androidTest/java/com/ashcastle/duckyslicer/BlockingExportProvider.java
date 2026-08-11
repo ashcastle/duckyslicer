@@ -31,7 +31,7 @@ public final class BlockingExportProvider extends ContentProvider {
     public static final String KEY_BYTES = "bytes";
     public static final String KEY_SHA256 = "sha256";
     public static final String KEY_ERROR = "error";
-    private static final long TIMEOUT_SECONDS = 20L;
+    private static final long TIMEOUT_SECONDS = 120L;
     private static final int MODE_STREAM_BLOCK = 0;
     private static final int MODE_OPEN_BLOCK = 1;
     private static final int MODE_FAIL_OPEN = 2;

@@ -18,6 +18,29 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class AccessibilityInstrumentedTest {
     @Test
+    fun cancelSupportDetailsSaveActionIsReachable() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val label = context.getString(R.string.stop_support_details_save)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_SUPPORT_EXPORT).use {
+            val cancelButton = scrollUntilClickable(label, fastScroll = true)
+            assertTrue(
+                "The support-details cancel action must be visible",
+                cancelButton.isVisibleToUser,
+            )
+            assertTrue(
+                "The support-details cancel action must be keyboard and switch-access focusable",
+                cancelButton.isFocusable,
+            )
+            val nodes = waitForNodes(setOf(label))
+            assertEquals(
+                "An active support-details save must expose one named cancel action",
+                1,
+                nodes.count { it.isClickable && it.effectiveLabel().contains(label) },
+            )
+        }
+    }
+
+    @Test
     fun cancelGcodeExportActionIsReachable() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val label = context.getString(R.string.cancel_gcode_export)
@@ -468,7 +491,6 @@ class AccessibilityInstrumentedTest {
     ): List<AccessibilityNodeInfo> {
         val deadline = SystemClock.elapsedRealtime() + NODE_TIMEOUT_MILLIS
         do {
-            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
             val nodes = currentNodes()
             val windowBounds = nodes.firstOrNull()?.screenBounds()
             val orientationMatches = !requireLandscape ||
@@ -484,8 +506,11 @@ class AccessibilityInstrumentedTest {
         throw AssertionError("Timed out waiting for accessibility labels: $labels")
     }
 
-    private fun scrollUntilClickable(label: String): AccessibilityNodeInfo {
-        return scrollUntilNode(label) { it.isClickable }
+    private fun scrollUntilClickable(
+        label: String,
+        fastScroll: Boolean = false,
+    ): AccessibilityNodeInfo {
+        return scrollUntilNode(label, fastScroll) { it.isClickable }
     }
 
     private fun waitForNode(
@@ -494,7 +519,6 @@ class AccessibilityInstrumentedTest {
     ): AccessibilityNodeInfo {
         val deadline = SystemClock.elapsedRealtime() + NODE_TIMEOUT_MILLIS
         do {
-            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
             currentNodes().firstOrNull { node ->
                 matches(node) && node.isVisibleToUser && node.effectiveLabel().contains(label)
             }?.let { return it }
@@ -505,11 +529,11 @@ class AccessibilityInstrumentedTest {
 
     private fun scrollUntilNode(
         label: String,
+        fastScroll: Boolean = false,
         matches: (AccessibilityNodeInfo) -> Boolean,
     ): AccessibilityNodeInfo {
         val deadline = SystemClock.elapsedRealtime() + NODE_TIMEOUT_MILLIS
         do {
-            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
             val nodes = currentNodes()
             nodes.firstOrNull { node ->
                 matches(node) && node.isVisibleToUser && node.effectiveLabel().contains(label)
@@ -524,9 +548,9 @@ class AccessibilityInstrumentedTest {
                 .maxByOrNull { node ->
                     val bounds = node.screenBounds()
                     bounds.width().toLong() * bounds.height()
-                }
+            }
             if (scrollable != null) {
-                swipeForward(scrollable)
+                swipeForward(scrollable, fastScroll)
             }
             SystemClock.sleep(SCROLL_SETTLE_MILLIS)
         } while (SystemClock.elapsedRealtime() < deadline)
@@ -534,6 +558,7 @@ class AccessibilityInstrumentedTest {
     }
 
     private fun currentNodes(): List<AccessibilityNodeInfo> {
+        // The 3D workspace continuously renders; bounded polling must not wait for global idleness.
         val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow
             ?: return emptyList()
         val result = ArrayList<AccessibilityNodeInfo>()
@@ -550,12 +575,17 @@ class AccessibilityInstrumentedTest {
         executeShellInput("input tap ${bounds.centerX()} ${bounds.centerY()}")
     }
 
-    private fun swipeForward(node: AccessibilityNodeInfo) {
+    private fun swipeForward(node: AccessibilityNodeInfo, fastScroll: Boolean) {
         val bounds = node.screenBounds()
-        val travel = (bounds.height() / 6).coerceAtLeast(1)
+        val travel = if (fastScroll) {
+            bounds.height() * 2 / 5
+        } else {
+            bounds.height() / 6
+        }.coerceAtLeast(1)
+        val durationMillis = if (fastScroll) 120 else 220
         executeShellInput(
             "input swipe ${bounds.centerX()} ${bounds.centerY() + travel} " +
-                "${bounds.centerX()} ${bounds.centerY() - travel} 220",
+                "${bounds.centerX()} ${bounds.centerY() - travel} $durationMillis",
         )
     }
 

@@ -19,11 +19,15 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ProjectEditCancellationInstrumentedTest {
+    @get:Rule
+    val blockingProviderProcess = BlockingProviderProcessRule()
+
     @Test
     fun retainedModelImportCancellationInterruptsProviderOpenAcrossRecreation() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -53,14 +57,6 @@ class ProjectEditCancellationInstrumentedTest {
                     assertFalse(retained.cancelActiveEdit())
                 }
 
-                waitUntil("Model provider-open cancellation did not settle") {
-                    !retained.state.value.busy && retained.state.value.editCompletion != null
-                }
-                val completed = retained.state.value
-                assertEquals(ProjectEditFailure.CANCELED, completed.editCompletion?.failure)
-                assertFalse(requireNotNull(completed.editCompletion).sessionChanged)
-                assertEquals(baseline.history, completed.history)
-                assertEquals(baseline.sliceOptions, completed.sliceOptions)
                 val status = waitForProvider {
                     it.getBoolean(BlockingImportProvider.KEY_COMPLETED)
                 }
@@ -69,6 +65,17 @@ class ProjectEditCancellationInstrumentedTest {
                     "OperationCanceledException",
                     status.getString(BlockingImportProvider.KEY_ERROR),
                 )
+                waitUntil(
+                    "Canceled model import did not publish its terminal state",
+                    timeoutMillis = 30_000L,
+                ) {
+                    !retained.state.value.busy && retained.state.value.editCompletion != null
+                }
+                val completed = retained.state.value
+                assertEquals(ProjectEditFailure.CANCELED, completed.editCompletion?.failure)
+                assertFalse(requireNotNull(completed.editCompletion).sessionChanged)
+                assertEquals(baseline.history, completed.history)
+                assertEquals(baseline.sliceOptions, completed.sliceOptions)
                 waitForModelStagingCleanup()
                 assertTrue(source.isFile)
             }
@@ -203,12 +210,16 @@ class ProjectEditCancellationInstrumentedTest {
         }
     }
 
-    private fun waitUntil(message: String, predicate: () -> Boolean) {
-        val deadline = SystemClock.elapsedRealtime() + 15_000L
+    private fun waitUntil(
+        message: String,
+        timeoutMillis: Long = 15_000L,
+        predicate: () -> Boolean,
+    ) {
+        val deadline = SystemClock.elapsedRealtime() + timeoutMillis
         while (!predicate() && SystemClock.elapsedRealtime() < deadline) {
             SystemClock.sleep(20)
         }
-        assertTrue(message, predicate())
+        if (!predicate()) throw AssertionError(message)
     }
 
     private fun prepareProvider(method: String, source: File) {

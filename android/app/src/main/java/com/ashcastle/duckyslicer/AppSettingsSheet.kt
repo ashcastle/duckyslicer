@@ -70,6 +70,7 @@ internal fun AppSettingsSheet(
     supportReportExportState: SupportReportExportState,
     onSettingsChanged: (AppSettings) -> Unit,
     onSupportReportExport: (Uri) -> Unit,
+    onCancelSupportReportExport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -300,8 +301,14 @@ internal fun AppSettingsSheet(
                 style = MaterialTheme.typography.bodySmall,
             )
             TextButton(
-                enabled = !supportReportExportState.busy,
-                onClick = { supportReportLauncher.launch(SUPPORT_REPORT_FILE_NAME) },
+                enabled = !supportReportExportState.cancellationRequested,
+                onClick = {
+                    if (supportReportExportState.busy) {
+                        onCancelSupportReportExport()
+                    } else {
+                        supportReportLauncher.launch(SUPPORT_REPORT_FILE_NAME)
+                    }
+                },
             ) {
                 if (supportReportExportState.busy) {
                     CircularProgressIndicator(
@@ -309,18 +316,33 @@ internal fun AppSettingsSheet(
                         strokeWidth = 2.dp,
                     )
                 }
-                Text(stringResource(R.string.save_support_details))
-            }
-            supportReportExportState.completion?.succeeded?.let { saved ->
                 Text(
                     stringResource(
-                        if (saved) {
-                            R.string.support_details_saved
-                        } else {
-                            R.string.support_details_save_error
+                        when {
+                            supportReportExportState.cancellationRequested ->
+                                R.string.stopping_support_details_save
+                            supportReportExportState.busy -> R.string.stop_support_details_save
+                            else -> R.string.save_support_details
                         },
                     ),
-                    color = if (saved) Color(0xFF9FE2A2) else MaterialTheme.colorScheme.error,
+                )
+            }
+            supportReportExportState.completion?.outcome?.let { outcome ->
+                Text(
+                    stringResource(
+                        when (outcome) {
+                            SupportReportExportOutcome.SAVED -> R.string.support_details_saved
+                            SupportReportExportOutcome.CANCELED ->
+                                R.string.support_details_save_canceled
+                            SupportReportExportOutcome.FAILED ->
+                                R.string.support_details_save_error
+                        },
+                    ),
+                    color = when (outcome) {
+                        SupportReportExportOutcome.SAVED -> Color(0xFF9FE2A2)
+                        SupportReportExportOutcome.CANCELED -> Color(0xFFC8C9C2)
+                        SupportReportExportOutcome.FAILED -> MaterialTheme.colorScheme.error
+                    },
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

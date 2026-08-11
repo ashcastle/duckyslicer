@@ -498,7 +498,10 @@
     <string name="help">Help</string>
     <string name="support_details_summary">Save app and device details with a short history of recent problems and how the app last closed. Models, G-code, file names, printer addresses, and access keys are never included.</string>
     <string name="save_support_details">Save support details</string>
+    <string name="stop_support_details_save">Stop saving</string>
+    <string name="stopping_support_details_save">Stopping…</string>
     <string name="support_details_saved">Support details saved.</string>
+    <string name="support_details_save_canceled">Support details save stopped.</string>
     <string name="support_details_save_error">Couldn’t save support details.</string>
     <string name="about">About</string>
     <string name="app_version">DuckySlicer %1$s</string>
