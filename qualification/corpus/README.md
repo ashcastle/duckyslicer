@@ -15,5 +15,16 @@ For a local desktop-engine comparison, add `--retain-gcode build/qualification/a
 The option copies validation G-code out of app-private storage; it is never enabled by the app.
 After building the pinned desktop CLI, run `python3 tools/run_desktop_orca_qualification.py`.
 
+The release-candidate hardware gate deliberately refuses emulators and requires one explicitly
+selected ARM64 API 30+ phone. It records per-case slicing and Preview parsing time, dense Preview
+frame pacing, peak PSS, thermal state, and crash/ANR evidence in an ignored local report:
+
+```sh
+python3 tools/run_physical_qualification.py --serial <physical-adb-serial>
+```
+
+The first representative-device run establishes the performance baseline; the runner does not
+invent pass thresholds from emulator measurements.
+
 Use `python3 tools/qualification_corpus.py --check` after editing a fixture. Reports and
 G-code are local build evidence and are intentionally not committed.

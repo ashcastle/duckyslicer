@@ -1,10 +1,15 @@
 package com.ashcastle.duckyslicer
 
+import android.opengl.EGL14
+import android.opengl.EGLExt
+import android.opengl.GLES30
+import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.u1.slicer.NativeLibrary
 import java.io.File
 import java.security.MessageDigest
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 import org.json.JSONArray
 import org.json.JSONObject
@@ -34,10 +39,33 @@ class OrcaQualificationCorpusInstrumentedTest {
         val fingerprintKeys = manifest.getJSONArray("profileFingerprintKeys").strings()
         val requestedCase = InstrumentationRegistry.getArguments().getString("corpusCase")
             ?: "simple-part"
-        val retainGcode = InstrumentationRegistry.getArguments()
+        val arguments = InstrumentationRegistry.getArguments()
+        val retainGcode = arguments
             .getString("retainCorpusGcode")
             ?.toBooleanStrictOrNull()
             ?: false
+        val measurePhysical = arguments
+            .getString("measurePhysical")
+            ?.toBooleanStrictOrNull()
+            ?: false
+        val measurementWidth = arguments.boundedInt(
+            "measurementWidth",
+            DEFAULT_FRAMEBUFFER_WIDTH,
+            128,
+            DEFAULT_FRAMEBUFFER_WIDTH,
+        )
+        val measurementHeight = arguments.boundedInt(
+            "measurementHeight",
+            DEFAULT_FRAMEBUFFER_HEIGHT,
+            128,
+            DEFAULT_FRAMEBUFFER_HEIGHT,
+        )
+        val measurementFrameCount = arguments.boundedInt(
+            "measurementFrameCount",
+            MEASURED_FRAME_COUNT,
+            2,
+            MEASURED_FRAME_COUNT,
+        )
         val cases = manifest.getJSONArray("cases").objects().filter { case ->
             case.getString("id") == requestedCase
         }
@@ -72,7 +100,9 @@ class OrcaQualificationCorpusInstrumentedTest {
                     supportEnabled = case.optBoolean("supportEnabled", false),
                     supportType = "normal",
                 )
+                val sliceStarted = SystemClock.elapsedRealtimeNanos()
                 val outcome = OnDeviceSlicer.slice(objects, options)
+                val sliceElapsedMs = elapsedMillis(sliceStarted)
                 outputs += outcome.output
                 if (retainGcode) {
                     val retained = File(context.filesDir, "$GCODE_DIRECTORY/$identifier.gcode")
@@ -82,10 +112,32 @@ class OrcaQualificationCorpusInstrumentedTest {
                     outcome.output.copyTo(staging, overwrite = true)
                     check(staging.renameTo(retained)) { "Could not retain qualification G-code" }
                 }
+                val previewStarted = SystemClock.elapsedRealtimeNanos()
                 val preview = GcodeLayerPreview.fromNative(
                     NativeEngine.previewGcodeRange(outcome.output.absolutePath, 0, Int.MAX_VALUE),
                 )
-                val metrics = metrics(identifier, objects.size, outcome, preview, fingerprintKeys)
+                val previewParseElapsedMs = elapsedMillis(previewStarted)
+                val renderMetrics = if (measurePhysical && identifier == "dense-preview") {
+                    benchmarkDensePreview(
+                        preview,
+                        options,
+                        measurementWidth,
+                        measurementHeight,
+                        measurementFrameCount,
+                    )
+                } else {
+                    null
+                }
+                val metrics = metrics(
+                    identifier,
+                    objects.size,
+                    outcome,
+                    preview,
+                    fingerprintKeys,
+                    sliceElapsedMs,
+                    previewParseElapsedMs,
+                    renderMetrics,
+                )
                 enforce(case.getJSONObject("expected"), metrics)
                 results.put(metrics)
             }
@@ -97,6 +149,7 @@ class OrcaQualificationCorpusInstrumentedTest {
                 .put("runtimeVersion", NativeLibrary().getCoreVersion())
                 .put("manifestSha256", sha256(manifestBytes))
                 .put("effectiveProfile", profile)
+                .put("physicalMeasurementRequested", measurePhysical)
                 .put("cases", results)
             reportFile.parentFile?.mkdirs()
             reportFile.writeText(report.toString(2) + "\n")
@@ -144,6 +197,9 @@ class OrcaQualificationCorpusInstrumentedTest {
         outcome: SliceOutcome,
         preview: GcodeLayerPreview,
         fingerprintKeys: List<String>,
+        sliceElapsedMs: Double,
+        previewParseElapsedMs: Double,
+        renderMetrics: JSONObject?,
     ): JSONObject {
         val roleMotions = ROLE_NAMES.associateWith { 0 }.toMutableMap()
         var activeRole = "other"
@@ -199,6 +255,7 @@ class OrcaQualificationCorpusInstrumentedTest {
             .put("id", identifier)
             .put("modelCount", modelCount)
             .put("layers", outcome.layers)
+            .put("sliceElapsedMs", sliceElapsedMs)
             .put("estimatedSeconds", outcome.estimatedSeconds.toDouble())
             .put("filamentMm", outcome.filamentMm.toDouble())
             .put("filamentGrams", outcome.filamentGrams.toDouble())
@@ -211,6 +268,7 @@ class OrcaQualificationCorpusInstrumentedTest {
             .put("previewStartLayer", preview.startLayer)
             .put("previewEndLayer", preview.endLayer)
             .put("previewSegments", preview.segments.size / GcodeLayerPreview.SEGMENT_STRIDE)
+            .put("previewParseElapsedMs", previewParseElapsedMs)
             .put("previewCoveredZ", coveredZ.size)
             .put(
                 "previewLayerCoverage",
@@ -219,7 +277,170 @@ class OrcaQualificationCorpusInstrumentedTest {
             .put("roleSegments", roleSegments)
             .put("profileFingerprint", sha256(fingerprint))
             .put("profileValues", profileJson)
+            .also { metrics -> renderMetrics?.let { metrics.put("previewRender", it) } }
     }
+
+    private fun benchmarkDensePreview(
+        preview: GcodeLayerPreview,
+        options: SliceOptions,
+        width: Int,
+        height: Int,
+        frameCount: Int,
+    ): JSONObject {
+        val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
+        assertTrue(
+            "Physical Preview measurement requires an EGL display",
+            display != EGL14.EGL_NO_DISPLAY,
+        )
+        val version = IntArray(2)
+        assertTrue(
+            "Physical Preview measurement requires EGL initialization",
+            EGL14.eglInitialize(display, version, 0, version, 1),
+        )
+        val configs = arrayOfNulls<android.opengl.EGLConfig>(1)
+        val configCount = IntArray(1)
+        val attributes = intArrayOf(
+            EGL14.EGL_RENDERABLE_TYPE,
+            EGLExt.EGL_OPENGL_ES3_BIT_KHR,
+            EGL14.EGL_SURFACE_TYPE,
+            EGL14.EGL_PBUFFER_BIT,
+            EGL14.EGL_RED_SIZE,
+            8,
+            EGL14.EGL_GREEN_SIZE,
+            8,
+            EGL14.EGL_BLUE_SIZE,
+            8,
+            EGL14.EGL_DEPTH_SIZE,
+            24,
+            EGL14.EGL_NONE,
+        )
+        assertTrue(
+            "Physical Preview measurement requires an OpenGL ES 3 pbuffer config",
+            EGL14.eglChooseConfig(
+                display,
+                attributes,
+                0,
+                configs,
+                0,
+                configs.size,
+                configCount,
+                0,
+            ) && configCount[0] == 1,
+        )
+        val config = checkNotNull(configs[0])
+        val context = EGL14.eglCreateContext(
+            display,
+            config,
+            EGL14.EGL_NO_CONTEXT,
+            intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 3, EGL14.EGL_NONE),
+            0,
+        )
+        assertTrue(
+            "Physical Preview measurement requires an OpenGL ES 3 context",
+            context != EGL14.EGL_NO_CONTEXT,
+        )
+        val surface = EGL14.eglCreatePbufferSurface(
+            display,
+            config,
+            intArrayOf(
+                EGL14.EGL_WIDTH,
+                width,
+                EGL14.EGL_HEIGHT,
+                height,
+                EGL14.EGL_NONE,
+            ),
+            0,
+        )
+        assertTrue("Physical Preview measurement requires a pbuffer", surface != EGL14.EGL_NO_SURFACE)
+        try {
+            assertTrue(
+                "Physical Preview measurement pbuffer must become current",
+                EGL14.eglMakeCurrent(display, surface, surface, context),
+            )
+            val renderer = ToolpathRenderer()
+            renderer.submit(
+                ToolpathScene(
+                    preview = preview,
+                    bedSizeX = options.bedSizeX,
+                    bedSizeY = options.bedSizeY,
+                    opacity = 1f,
+                    depthContrast = 0.8f,
+                    detail = PreviewDetail.DETAIL,
+                    bedPolygon = options.bedPolygon,
+                    bedOriginX = options.bedOriginX,
+                    bedOriginY = options.bedOriginY,
+                ),
+            )
+            renderer.onSurfaceCreated(null, null)
+            renderer.onSurfaceChanged(null, width, height)
+            val firstFrameMs = timedFrame(renderer)
+            timedFrame(renderer) // Prewarm the lower-detail interaction geometry.
+            val settledFrames = List(frameCount) {
+                renderer.orbitBy(1.5f, -0.5f)
+                timedFrame(renderer)
+            }
+            renderer.setInteractionActive(true)
+            val interactionFrames = List(frameCount) {
+                renderer.orbitBy(-1.25f, 0.4f)
+                timedFrame(renderer)
+            }
+            renderer.setInteractionActive(false)
+            timedFrame(renderer)
+            val gpuRenderer = GLES30.glGetString(GLES30.GL_RENDERER).orEmpty()
+            val glError = GLES30.glGetError()
+            renderer.releaseGpuGeometryForMemoryPressure()
+            assertEquals(
+                "Physical Preview measurement must finish without a GL error",
+                GLES30.GL_NO_ERROR,
+                glError,
+            )
+            return JSONObject()
+                .put("framebufferWidth", width)
+                .put("framebufferHeight", height)
+                .put("frameCountPerPhase", frameCount)
+                .put("detail", PreviewDetail.DETAIL.name)
+                .put("gpuRenderer", gpuRenderer)
+                .put("firstFrameMs", firstFrameMs)
+                .put("settledFrameP50Ms", percentile(settledFrames, 0.50))
+                .put("settledFrameP95Ms", percentile(settledFrames, 0.95))
+                .put("interactionFrameP50Ms", percentile(interactionFrames, 0.50))
+                .put("interactionFrameP95Ms", percentile(interactionFrames, 0.95))
+                .put("geometryUploads", renderer.geometryUploadCountForTest())
+        } finally {
+            EGL14.eglMakeCurrent(
+                display,
+                EGL14.EGL_NO_SURFACE,
+                EGL14.EGL_NO_SURFACE,
+                EGL14.EGL_NO_CONTEXT,
+            )
+            EGL14.eglDestroySurface(display, surface)
+            EGL14.eglDestroyContext(display, context)
+            EGL14.eglTerminate(display)
+        }
+    }
+
+    private fun timedFrame(renderer: ToolpathRenderer): Double {
+        val started = SystemClock.elapsedRealtimeNanos()
+        renderer.onDrawFrame(null)
+        GLES30.glFinish()
+        return elapsedMillis(started)
+    }
+
+    private fun percentile(samples: List<Double>, fraction: Double): Double {
+        val sorted = samples.sorted()
+        val index = (ceil(sorted.size * fraction).toInt() - 1).coerceIn(0, sorted.lastIndex)
+        return sorted[index]
+    }
+
+    private fun elapsedMillis(startedNanos: Long): Double =
+        (SystemClock.elapsedRealtimeNanos() - startedNanos) / 1_000_000.0
+
+    private fun android.os.Bundle.boundedInt(
+        key: String,
+        default: Int,
+        minimum: Int,
+        maximum: Int,
+    ): Int = getString(key)?.toIntOrNull()?.coerceIn(minimum, maximum) ?: default
 
     private fun enforce(expected: JSONObject, metrics: JSONObject) {
         val identifier = metrics.getString("id")
@@ -331,6 +552,9 @@ class OrcaQualificationCorpusInstrumentedTest {
         private const val MANIFEST_ASSET = "manifest.json"
         private const val REPORT_PATH = "qualification/corpus-report.json"
         private const val GCODE_DIRECTORY = "qualification/gcode"
+        private const val DEFAULT_FRAMEBUFFER_WIDTH = 720
+        private const val DEFAULT_FRAMEBUFFER_HEIGHT = 1280
+        private const val MEASURED_FRAME_COUNT = 30
         private val ROLE_NAMES = listOf(
             "outerWall",
             "innerWall",
