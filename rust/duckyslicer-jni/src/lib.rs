@@ -214,6 +214,14 @@ struct StlTransform {
     mirror: [bool; 3],
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StlGroupTransformRequest {
+    input_paths: Vec<String>,
+    output_paths: Vec<String>,
+    transform: StlTransform,
+}
+
 impl StlTransform {
     fn scales(&self) -> [f32; 3] {
         self.scale_axes.unwrap_or([self.scale; 3])
@@ -1312,6 +1320,173 @@ fn transform_stl(
     Ok(())
 }
 
+fn transform_stl_group(
+    input_paths: &[String],
+    output_paths: &[String],
+    transform: &StlTransform,
+) -> Result<(), EngineError> {
+    const MAX_GROUP_VOLUMES: usize = 64;
+    if input_paths.is_empty()
+        || input_paths.len() > MAX_GROUP_VOLUMES
+        || input_paths.len() != output_paths.len()
+    {
+        return Err(EngineError::Parse(
+            "STL volume group has an invalid size".to_owned(),
+        ));
+    }
+    if output_paths.iter().collect::<HashSet<_>>().len() != output_paths.len() {
+        return Err(EngineError::Parse(
+            "STL volume group contains duplicate outputs".to_owned(),
+        ));
+    }
+    for (input_path, output_path) in input_paths.iter().zip(output_paths) {
+        let input = Path::new(input_path);
+        let output = Path::new(output_path);
+        if input == output
+            || std::fs::canonicalize(input)
+                .ok()
+                .zip(std::fs::canonicalize(output).ok())
+                .is_some_and(|(input, output)| input == output)
+        {
+            return Err(EngineError::Parse(
+                "Input and output STL paths must be different".to_owned(),
+            ));
+        }
+    }
+    if !transform.scale.is_finite()
+        || transform
+            .scales()
+            .iter()
+            .any(|scale| !scale.is_finite() || !(0.05..=10.0).contains(scale))
+    {
+        return Err(EngineError::Parse(
+            "Axis scales must be between 5% and 1000%".to_owned(),
+        ));
+    }
+    if transform
+        .bed_center_mm
+        .iter()
+        .chain(transform.offset_mm.iter())
+        .chain(std::iter::once(&transform.offset_z_mm))
+        .chain(transform.rotation_deg.iter())
+        .any(|value| !value.is_finite() || value.abs() > MAX_STL_COORDINATE_ABS_MM)
+    {
+        return Err(EngineError::Parse(
+            "Transform contains an invalid value".to_owned(),
+        ));
+    }
+
+    let mut triangle_counts = Vec::with_capacity(input_paths.len());
+    let mut min = [f32::INFINITY; 3];
+    let mut max = [f32::NEG_INFINITY; 3];
+    for input_path in input_paths {
+        let mut first_pass_file = open_stl_input(input_path)?;
+        let first_pass = stl_io::create_stl_reader(&mut first_pass_file)
+            .map_err(|error| EngineError::Parse(error.to_string()))?;
+        let mut triangle_count = 0u32;
+        for triangle in first_pass {
+            let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
+            validate_triangle(&triangle)?;
+            triangle_count = triangle_count
+                .checked_add(1)
+                .ok_or_else(|| EngineError::Parse("STL contains too many triangles".to_owned()))?;
+            for vertex in triangle.vertices.map(|vertex| vertex.0) {
+                for axis in 0..3 {
+                    min[axis] = min[axis].min(vertex[axis]);
+                    max[axis] = max[axis].max(vertex[axis]);
+                }
+            }
+        }
+        if triangle_count == 0 {
+            return Err(EngineError::Empty);
+        }
+        triangle_counts.push(triangle_count);
+    }
+
+    let source_center = [
+        (min[0] + max[0]) / 2.0,
+        (min[1] + max[1]) / 2.0,
+        (min[2] + max[2]) / 2.0,
+    ];
+    let mut transformed_min_z = f32::INFINITY;
+    for input_path in input_paths {
+        let mut minimum_pass_file = open_stl_input(input_path)?;
+        let minimum_pass = stl_io::create_stl_reader(&mut minimum_pass_file)
+            .map_err(|error| EngineError::Parse(error.to_string()))?;
+        for triangle in minimum_pass {
+            let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
+            validate_triangle(&triangle)?;
+            for vertex in triangle.vertices {
+                let local = local_vertex(vertex.0, source_center, transform);
+                transformed_min_z =
+                    transformed_min_z.min(rotate_vertex(local, transform.rotation_deg)[2]);
+            }
+        }
+    }
+    if !transformed_min_z.is_finite() {
+        return Err(EngineError::Parse(
+            "STL transform produced an invalid coordinate".to_owned(),
+        ));
+    }
+
+    let reverses_winding = transform
+        .mirror
+        .iter()
+        .filter(|mirrored| **mirrored)
+        .count()
+        % 2
+        == 1;
+    let mut temporary_outputs = Vec::with_capacity(input_paths.len());
+    for ((input_path, output_path), triangle_count) in
+        input_paths.iter().zip(output_paths).zip(triangle_counts)
+    {
+        let output = Path::new(output_path);
+        let mut output_pass_file = open_stl_input(input_path)?;
+        let output_pass = stl_io::create_stl_reader(&mut output_pass_file)
+            .map_err(|error| EngineError::Parse(error.to_string()))?;
+        let (output_file, temporary) = create_temporary_output(output)?;
+        let mut writer = BufWriter::new(output_file);
+        writer.write_all(&[0u8; 80])?;
+        writer.write_all(&triangle_count.to_le_bytes())?;
+        for triangle in output_pass {
+            let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
+            validate_triangle(&triangle)?;
+            let mut vertices = triangle.vertices.map(|vertex| {
+                transformed_vertex(vertex.0, source_center, transformed_min_z, transform)
+            });
+            if reverses_winding {
+                vertices.swap(1, 2);
+            }
+            if vertices.iter().flatten().any(|value| {
+                !value.is_finite()
+                    || value.abs() > MAX_STL_COORDINATE_ABS_MM * transform.maximum_scale().max(1.0)
+            }) {
+                return Err(EngineError::Parse(
+                    "STL transform produced an invalid or out-of-range coordinate".to_owned(),
+                ));
+            }
+            for value in triangle_normal(vertices) {
+                write_f32(&mut writer, value)?;
+            }
+            for vertex in vertices {
+                for value in vertex {
+                    write_f32(&mut writer, value)?;
+                }
+            }
+            writer.write_all(&0u16.to_le_bytes())?;
+        }
+        writer.flush()?;
+        writer.get_ref().sync_all()?;
+        drop(writer);
+        temporary_outputs.push((temporary, output.to_path_buf()));
+    }
+    for (mut temporary, output) in temporary_outputs {
+        std::fs::rename(&temporary.path, output)?;
+        temporary.committed = true;
+    }
+    Ok(())
+}
+
 fn parse_axis(line: &str, axis: char) -> Option<f32> {
     line.split_ascii_whitespace()
         .find(|token| token.starts_with(axis))
@@ -1729,6 +1904,29 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_transformStl(
         let transform: StlTransform = serde_json::from_str(&transform_json)
             .map_err(|error| EngineError::Parse(error.to_string()))?;
         transform_stl(&input_path, &output_path, &transform)?;
+        Ok(SuccessResponse { ok: true })
+    });
+    make_java_string(&env, &response)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_transformStlGroup(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    request_json: JString<'_>,
+) -> jstring {
+    let response = guarded_json(|| {
+        let request_json = env
+            .get_string(&request_json)
+            .map(|text| text.to_string_lossy().into_owned())
+            .map_err(|error| EngineError::Parse(error.to_string()))?;
+        let request: StlGroupTransformRequest = serde_json::from_str(&request_json)
+            .map_err(|error| EngineError::Parse(error.to_string()))?;
+        transform_stl_group(
+            &request.input_paths,
+            &request.output_paths,
+            &request.transform,
+        )?;
         Ok(SuccessResponse { ok: true })
     });
     make_java_string(&env, &response)
@@ -2359,6 +2557,61 @@ mod tests {
         assert!((inspection.min_mm[0] - 101.0).abs() < 0.001);
         assert!((inspection.max_mm[1] - 99.0).abs() < 0.001);
         assert_eq!(inspection.min_mm[2], 7.0);
+    }
+
+    #[test]
+    fn stl_group_transform_preserves_volume_separation_under_one_object_center() {
+        let root = std::env::temp_dir();
+        let process = std::process::id();
+        let left_input = root.join(format!("duckyslicer-group-left-input-{process}.stl"));
+        let right_input = root.join(format!("duckyslicer-group-right-input-{process}.stl"));
+        let left_output = root.join(format!("duckyslicer-group-left-output-{process}.stl"));
+        let right_output = root.join(format!("duckyslicer-group-right-output-{process}.stl"));
+        let write_triangle = |path: &Path, offset_x: f32| {
+            let mut file = File::create(path).expect("create group fixture");
+            writeln!(
+                file,
+                "solid model\nfacet normal 0 0 1\nouter loop\nvertex {offset_x} 0 0\nvertex {} 0 0\nvertex {offset_x} 1 0\nendloop\nendfacet\nendsolid model",
+                offset_x + 1.0,
+            )
+            .expect("write group fixture");
+        };
+        write_triangle(&left_input, 0.0);
+        write_triangle(&right_input, 10.0);
+        let inputs = vec![
+            left_input.to_string_lossy().into_owned(),
+            right_input.to_string_lossy().into_owned(),
+        ];
+        let outputs = vec![
+            left_output.to_string_lossy().into_owned(),
+            right_output.to_string_lossy().into_owned(),
+        ];
+
+        transform_stl_group(
+            &inputs,
+            &outputs,
+            &StlTransform {
+                bed_center_mm: [50.0, 50.0],
+                offset_mm: [0.0, 0.0],
+                offset_z_mm: 0.0,
+                rotation_deg: [0.0; 3],
+                scale: 1.0,
+                scale_axes: None,
+                mirror: [false; 3],
+            },
+        )
+        .expect("transform volume group");
+        let left = inspect_stl(&outputs[0]).expect("inspect left volume");
+        let right = inspect_stl(&outputs[1]).expect("inspect right volume");
+
+        for path in [&left_input, &right_input, &left_output, &right_output] {
+            std::fs::remove_file(path).expect("remove group fixture");
+        }
+        assert!((left.min_mm[0] - 44.5).abs() < 0.001);
+        assert!((right.min_mm[0] - 54.5).abs() < 0.001);
+        assert!((right.min_mm[0] - left.min_mm[0] - 10.0).abs() < 0.001);
+        assert_eq!(left.min_mm[2], 0.0);
+        assert_eq!(right.min_mm[2], 0.0);
     }
 
     #[test]

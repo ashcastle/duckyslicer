@@ -28,12 +28,13 @@ class NativeLibrary(
     external fun nativeSplitObject(objectIndex: Int): IntArray?
     external fun nativeCutObject(objectIndex: Int, heightRatio: Float, placeOnCut: Boolean): IntArray?
     external fun nativeSimplifyObject(objectIndex: Int, targetTriangles: Int): Int
+    external fun nativeAddModelPartVolume(objectIndex: Int, path: String, name: String): Int
     external fun nativeCreatePrimitive(primitiveType: Int, sizeMm: Float, outputPath: String): Boolean
     external fun nativeIsObjectSplittable(objectIndex: Int): Boolean
     external fun nativeSetVolumeExtruder(objectIndex: Int, volumeIndex: Int, slot: Int): Boolean
-    external fun applySupportPaint(objectIndex: Int, sidecarPath: String): Boolean
-    external fun applySeamPaint(objectIndex: Int, sidecarPath: String): Boolean
-    external fun applyMultiColorPaint(objectIndex: Int, sidecarPath: String): Boolean
+    external fun applySupportPaint(objectIndex: Int, volumeIndex: Int, sidecarPath: String): Boolean
+    external fun applySeamPaint(objectIndex: Int, volumeIndex: Int, sidecarPath: String): Boolean
+    external fun applyMultiColorPaint(objectIndex: Int, volumeIndex: Int, sidecarPath: String): Boolean
     external fun applyVariableLayerHeights(objectIndex: Int, sidecarPath: String): Boolean
     external fun applyObjectProcessOverrides(objectIndex: Int, sidecarPath: String): Boolean
     external fun getObjectBoundingBoxes(): FloatArray

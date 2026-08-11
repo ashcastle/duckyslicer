@@ -23,6 +23,7 @@ EXPECTED_ENTRYPOINTS = {
     "Java_com_ashcastle_duckyslicer_NativeEngine_vulkanCapabilities",
     "Java_com_ashcastle_duckyslicer_NativeEngine_inspectStl",
     "Java_com_ashcastle_duckyslicer_NativeEngine_transformStl",
+    "Java_com_ashcastle_duckyslicer_NativeEngine_transformStlGroup",
     "Java_com_ashcastle_duckyslicer_NativeEngine_layOnFace",
     "Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRange",
 }

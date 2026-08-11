@@ -56,7 +56,7 @@ index 963808df..e2c066c6 100644
      )
  else()
      target_link_libraries(libslic3r PRIVATE
-@@ -1123,6 +1141,13 @@ add_library(prusaslicer-jni SHARED
+@@ -1123,6 +1141,14 @@ add_library(prusaslicer-jni SHARED
      src/sapil_arrange.cpp
      src/sapil_bambu_snapshot.cpp
      src/sapil_bambu_volumes.cpp
@@ -67,6 +67,7 @@ index 963808df..e2c066c6 100644
 +    src/sapil_primitive.cpp
 +    src/sapil_model_export.cpp
 +    src/sapil_model_simplify.cpp
++    src/sapil_model_volume.cpp
      src/sapil_bambu_project.cpp
      src/sapil_bambu_plate.cpp
      src/sapil_bambu_objects.cpp
@@ -1417,6 +1418,7 @@ index 00000000..bebc6734
 +
 +bool apply_facet_paint(
 +    int object_index,
++    int volume_index,
 +    const std::string& sidecar_path,
 +    const std::array<unsigned char, 4>& expected_magic,
 +    bool seam_paint)
@@ -1426,14 +1428,11 @@ index 00000000..bebc6734
 +    }
 +    Slic3r::ModelObject* object = sapil::g_model.objects[static_cast<std::size_t>(object_index)];
 +    if (object == nullptr) return false;
-+    Slic3r::ModelVolume* volume = nullptr;
-+    for (Slic3r::ModelVolume* candidate : object->volumes) {
-+        if (candidate != nullptr && candidate->is_model_part()) {
-+            if (volume != nullptr) return false;
-+            volume = candidate;
-+        }
++    if (volume_index < 0 || static_cast<std::size_t>(volume_index) >= object->volumes.size()) {
++        return false;
 +    }
-+    if (volume == nullptr) return false;
++    Slic3r::ModelVolume* volume = object->volumes[static_cast<std::size_t>(volume_index)];
++    if (volume == nullptr || !volume->is_model_part()) return false;
 +
 +    std::ifstream input(sidecar_path, std::ios::binary | std::ios::ate);
 +    if (!input) return false;
@@ -1481,26 +1480,28 @@ index 00000000..bebc6734
 +
 +extern "C" JNIEXPORT jboolean JNICALL
 +Java_com_u1_slicer_NativeLibrary_applySupportPaint(
-+        JNIEnv* env, jobject, jint object_index, jstring sidecar_path)
++        JNIEnv* env, jobject, jint object_index, jint volume_index, jstring sidecar_path)
 +{
 +    if (sidecar_path == nullptr) return JNI_FALSE;
 +    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
 +    if (path == nullptr) return JNI_FALSE;
 +    const bool result = apply_facet_paint(
-+        static_cast<int>(object_index), std::string(path), SUPPORT_PAINT_MAGIC, false);
++        static_cast<int>(object_index), static_cast<int>(volume_index),
++        std::string(path), SUPPORT_PAINT_MAGIC, false);
 +    env->ReleaseStringUTFChars(sidecar_path, path);
 +    return result ? JNI_TRUE : JNI_FALSE;
 +}
 +
 +extern "C" JNIEXPORT jboolean JNICALL
 +Java_com_u1_slicer_NativeLibrary_applySeamPaint(
-+        JNIEnv* env, jobject, jint object_index, jstring sidecar_path)
++        JNIEnv* env, jobject, jint object_index, jint volume_index, jstring sidecar_path)
 +{
 +    if (sidecar_path == nullptr) return JNI_FALSE;
 +    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
 +    if (path == nullptr) return JNI_FALSE;
 +    const bool result = apply_facet_paint(
-+        static_cast<int>(object_index), std::string(path), SEAM_PAINT_MAGIC, true);
++        static_cast<int>(object_index), static_cast<int>(volume_index),
++        std::string(path), SEAM_PAINT_MAGIC, true);
 +    env->ReleaseStringUTFChars(sidecar_path, path);
 +    return result ? JNI_TRUE : JNI_FALSE;
 +}
@@ -1509,7 +1510,7 @@ new file mode 100644
 index 00000000..4b25f9ad
 --- /dev/null
 +++ b/app/src/main/cpp/src/sapil_multi_color_paint.cpp
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,102 @@
 +#include <jni.h>
 +
 +#include <array>
@@ -1543,21 +1544,18 @@ index 00000000..4b25f9ad
 +    return true;
 +}
 +
-+bool apply_multi_color_paint(int object_index, const std::string& sidecar_path)
++bool apply_multi_color_paint(int object_index, int volume_index, const std::string& sidecar_path)
 +{
 +    if (object_index < 0 || static_cast<std::size_t>(object_index) >= sapil::g_model.objects.size()) {
 +        return false;
 +    }
 +    Slic3r::ModelObject* object = sapil::g_model.objects[static_cast<std::size_t>(object_index)];
 +    if (object == nullptr) return false;
-+    Slic3r::ModelVolume* volume = nullptr;
-+    for (Slic3r::ModelVolume* candidate : object->volumes) {
-+        if (candidate != nullptr && candidate->is_model_part()) {
-+            if (volume != nullptr) return false;
-+            volume = candidate;
-+        }
++    if (volume_index < 0 || static_cast<std::size_t>(volume_index) >= object->volumes.size()) {
++        return false;
 +    }
-+    if (volume == nullptr) return false;
++    Slic3r::ModelVolume* volume = object->volumes[static_cast<std::size_t>(volume_index)];
++    if (volume == nullptr || !volume->is_model_part()) return false;
 +
 +    std::ifstream input(sidecar_path, std::ios::binary | std::ios::ate);
 +    if (!input) return false;
@@ -1605,13 +1603,13 @@ index 00000000..4b25f9ad
 +
 +extern "C" JNIEXPORT jboolean JNICALL
 +Java_com_u1_slicer_NativeLibrary_applyMultiColorPaint(
-+        JNIEnv* env, jobject, jint object_index, jstring sidecar_path)
++        JNIEnv* env, jobject, jint object_index, jint volume_index, jstring sidecar_path)
 +{
 +    if (sidecar_path == nullptr) return JNI_FALSE;
 +    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
 +    if (path == nullptr) return JNI_FALSE;
 +    const bool result = apply_multi_color_paint(
-+        static_cast<int>(object_index), std::string(path));
++        static_cast<int>(object_index), static_cast<int>(volume_index), std::string(path));
 +    env->ReleaseStringUTFChars(sidecar_path, path);
 +    return result ? JNI_TRUE : JNI_FALSE;
 +}

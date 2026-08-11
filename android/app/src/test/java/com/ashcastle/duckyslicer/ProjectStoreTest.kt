@@ -1,5 +1,6 @@
 package com.ashcastle.duckyslicer
 
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
@@ -218,7 +219,7 @@ class ProjectStoreTest {
     }
 
     @Test
-    fun multiVolumeProjectCannotPersistBeforeRendererAndSlicerIndexingIsEnabled() =
+    fun multiVolumeProjectPersistsAndArchivesAfterRendererAndSlicerIndexingIsEnabled() =
         withStore { root, store ->
             val first = store.createModelDestination("first.stl").apply { writeText("solid first") }
             val second = store.createModelDestination("second.stl").apply { writeText("solid second") }
@@ -235,11 +236,40 @@ class ProjectStoreTest {
                 selectedObjectId = "compound",
             )
 
-            assertThrows(IllegalArgumentException::class.java) { store.save(snapshot) }
-            assertThrows(IllegalArgumentException::class.java) {
-                store.exportArchive(snapshot, SliceOptions(), ByteArrayOutputStream())
+            store.save(snapshot)
+            val restored = store.load()
+            assertEquals("compound", restored.selectedObjectId)
+            assertEquals(
+                listOf("first-volume", "second-volume"),
+                restored.selectedObject!!.volumes.map(ProjectVolume::id),
+            )
+            assertEquals(
+                listOf(first.canonicalPath, second.canonicalPath),
+                restored.selectedObject!!.volumes.map { it.model.localPath },
+            )
+
+            val archive = ByteArrayOutputStream().also {
+                store.exportArchive(snapshot, SliceOptions(), it)
+            }.toByteArray()
+            val destinationRoot = Files.createTempDirectory("ducky-multi-volume-import-").toFile()
+            try {
+                val imported = ProjectStore(destinationRoot, ::inspectedModel)
+                    .importArchive(ByteArrayInputStream(archive))
+                assertEquals(1, imported.snapshot.objects.size)
+                assertEquals(
+                    listOf("first-volume", "second-volume"),
+                    imported.snapshot.selectedObject!!.volumes.map(ProjectVolume::id),
+                )
+                assertEquals(
+                    listOf("solid first", "solid second"),
+                    imported.snapshot.selectedObject!!.volumes.map {
+                        File(it.model.localPath).readText()
+                    },
+                )
+            } finally {
+                destinationRoot.deleteRecursively()
             }
-            assertFalse(File(root, ProjectStore.PROJECT_FILE).isFile)
+            assertTrue(File(root, ProjectStore.PROJECT_FILE).isFile)
         }
 
     @Test

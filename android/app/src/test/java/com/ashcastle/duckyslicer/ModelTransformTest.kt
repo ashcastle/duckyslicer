@@ -99,6 +99,41 @@ class ModelTransformTest {
     }
 
     @Test
+    fun multipleVolumesShareOneObjectCenterAndBedPlacement() {
+        fun volume(id: String, minX: Float) = ProjectVolume(
+            id = id,
+            model = ModelInfo(
+                fileName = "$id.stl",
+                triangles = 1,
+                dimensions = listOf(1.0, 1.0, 1.0),
+                localPath = "/tmp/$id.stl",
+                minMm = listOf(minX.toDouble(), 0.0, 0.0),
+                maxMm = listOf((minX + 1f).toDouble(), 1.0, 1.0),
+                previewTriangles = floatArrayOf(
+                    minX, 0f, 0f,
+                    minX + 1f, 0f, 0f,
+                    minX, 1f, 0f,
+                ),
+            ),
+        )
+        val projectObject = ProjectObject(
+            id = "assembly",
+            volumes = listOf(volume("left", 0f), volume("right", 10f)),
+        )
+        val transform = ModelTransform()
+        val geometry = projectObject.geometry()
+        val minimumZ = transform.minimumRotatedZ(projectObject)
+
+        val left = transform.placeVertex(0f, 0f, 0f, geometry, 100f, 100f, minimumZ)
+        val right = transform.placeVertex(10f, 0f, 0f, geometry, 100f, 100f, minimumZ)
+
+        assertEquals(44.5f, left[0], 0.0001f)
+        assertEquals(54.5f, right[0], 0.0001f)
+        assertEquals(10f, right[0] - left[0], 0.0001f)
+        assertEquals(0f, left[2], 0.0001f)
+    }
+
+    @Test
     fun orcaArrangementRejectsCountAndGeometryMismatches() {
         val malformed = listOf(
             { OrcaArrangement(floatArrayOf(), floatArrayOf(), floatArrayOf()) },

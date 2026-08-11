@@ -199,6 +199,8 @@ internal data class ModelScreenTriangle(
     val depth: Float,
     val previewTriangleIndex: Int = sourceFacetIndex,
     val surfaceShade: Float = 1f,
+    val volumeId: String = "",
+    val filamentSlot: Int = 0,
 )
 
 internal data class ModelMeshEdge(
@@ -414,12 +416,12 @@ internal fun WorkspaceScreen(
     onCancelProjectEdit: () -> Unit,
     onCancelProjectImport: () -> Unit,
     onCancelProjectExport: () -> Unit,
-    onSupportPaintPreview: (String, Int, SupportPaintState?) -> Unit,
-    onSupportPaintCommitted: (String, SupportPaint) -> Unit,
-    onSeamPaintPreview: (String, Int, SeamPaintState?) -> Unit,
-    onSeamPaintCommitted: (String, SeamPaint) -> Unit,
-    onMultiColorPaintPreview: (String, Int, Int?) -> Unit,
-    onMultiColorPaintCommitted: (String, MultiColorPaint) -> Unit,
+    onSupportPaintPreview: (String, String, Int, SupportPaintState?) -> Unit,
+    onSupportPaintCommitted: (String, String, SupportPaint) -> Unit,
+    onSeamPaintPreview: (String, String, Int, SeamPaintState?) -> Unit,
+    onSeamPaintCommitted: (String, String, SeamPaint) -> Unit,
+    onMultiColorPaintPreview: (String, String, Int, Int?) -> Unit,
+    onMultiColorPaintCommitted: (String, String, MultiColorPaint) -> Unit,
     onVariableLayerHeightsChanged: (VariableLayerHeights) -> Unit,
     onObjectProcessOverridesChanged: (ObjectProcessOverrides) -> Unit,
     onRemoveModel: () -> Unit,
@@ -447,8 +449,11 @@ internal fun WorkspaceScreen(
     onRemoteCancel: () -> Unit,
 ) = BoxWithConstraints {
     val selectedObject = projectObjects.firstOrNull { it.id == selectedObjectId }
+    val selectedSingleVolume = selectedObject?.singleVolumeOrNull
     val availableFilaments = sliceOptions.resolvedFilamentSlots()
-    val model = selectedObject?.model ?: projectObjects.firstOrNull()?.model
+    val modelDimensions = (selectedObject ?: projectObjects.firstOrNull())?.geometry()?.let {
+        listOf(it.maxX - it.minX, it.maxY - it.minY, it.maxZ - it.minZ)
+    }
     val modelTransform = selectedObject?.transform ?: ModelTransform()
     val editingBusy = workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading) ||
         splitting || cutting || simplifying
@@ -580,7 +585,8 @@ internal fun WorkspaceScreen(
                 onAddShape = { showPrimitivePicker = true },
                 onExport = onSave,
                 onCancelGcodeExport = onCancelGcodeExport,
-                canArrange = projectObjects.size > 1,
+                canArrange = projectObjects.size > 1 &&
+                    projectObjects.all { it.singleVolumeOrNull != null },
                 onArrange = onArrange,
                 onCancelProjectEdit = onCancelProjectEdit,
                 onCancelProjectImport = onCancelProjectImport,
@@ -602,6 +608,7 @@ internal fun WorkspaceScreen(
                     onRedo = onRedo,
                     onDuplicate = onDuplicate,
                     onAutoLay = onAutoLay,
+                    canAutoLay = selectedSingleVolume != null,
                     onLayOnFace = {
                         measuring = false
                         measurementPoints = emptyList()
@@ -713,7 +720,7 @@ internal fun WorkspaceScreen(
                         .widthIn(max = 280.dp),
                 ) {
                     Text(
-                        text = selectedObject?.model?.fileName
+                        text = selectedObject?.volumes?.firstOrNull()?.model?.fileName
                             ?: if (projectObjects.isEmpty()) {
                                 stringResource(R.string.no_model)
                             } else {
@@ -729,7 +736,7 @@ internal fun WorkspaceScreen(
 
             when (selectedTab) {
                 WorkspaceTab.SLICE -> SliceSheet(
-                    model = model,
+                    modelDimensions = modelDimensions,
                     options = sliceOptions,
                     catalog = profileCatalog,
                     recents = profileRecents,
@@ -839,10 +846,11 @@ internal fun WorkspaceScreen(
     }
     if (showModelTools && selectedObject != null) {
         val filamentSlots = sliceOptions.resolvedFilamentSlots()
+        val selectedFilamentSlot = selectedObject.volumes.first().filamentSlot
         ModelTransformSheet(
             transform = modelTransform,
-            filamentSlot = selectedObject.filamentSlot,
-            filamentProfile = filamentSlots.getOrElse(selectedObject.filamentSlot) {
+            filamentSlot = selectedFilamentSlot,
+            filamentProfile = filamentSlots.getOrElse(selectedFilamentSlot) {
                 filamentSlots.first()
             },
             bedSizeX = sliceOptions.bedSizeX,
@@ -853,7 +861,8 @@ internal fun WorkspaceScreen(
             splitting = splitting,
             cutting = cutting,
             simplifying = simplifying,
-            triangleCount = selectedObject.model.triangles,
+            triangleCount = selectedObject.volumes.sumOf { it.model.triangles },
+            canEditSingleVolumeModel = selectedSingleVolume != null,
             onAutoLay = onAutoLay,
             onLayOnFace = {
                 showModelTools = false
@@ -915,7 +924,7 @@ internal fun WorkspaceScreen(
     }
     if (showFilamentPicker && selectedObject != null) {
         FilamentAssignmentSheet(
-            selectedSlot = selectedObject.filamentSlot,
+            selectedSlot = selectedObject.volumes.first().filamentSlot,
             options = sliceOptions,
             catalog = profileCatalog,
             recentIds = profileRecents.filamentIds,
@@ -926,9 +935,9 @@ internal fun WorkspaceScreen(
             onDismiss = { showFilamentPicker = false },
         )
     }
-    if (showCutTool && selectedObject != null) {
+    if (showCutTool && selectedSingleVolume != null) {
         CutObjectSheet(
-            modelHeightMm = selectedObject.model.dimensions[2].toFloat(),
+            modelHeightMm = selectedSingleVolume.model.dimensions[2].toFloat(),
             onCut = { heightRatio, placeOnCut ->
                 showCutTool = false
                 onCut(heightRatio, placeOnCut)
@@ -936,12 +945,12 @@ internal fun WorkspaceScreen(
             onDismiss = { showCutTool = false },
         )
     }
-    if (showSimplifyTool && selectedObject != null) {
+    if (showSimplifyTool && selectedSingleVolume != null) {
         SimplifyModelSheet(
-            originalTriangleCount = selectedObject.model.triangles,
-            hasSurfacePaint = selectedObject.supportPaint.facets.isNotEmpty() ||
-                selectedObject.seamPaint.facets.isNotEmpty() ||
-                selectedObject.multiColorPaint.facets.isNotEmpty(),
+            originalTriangleCount = selectedSingleVolume.model.triangles,
+            hasSurfacePaint = selectedSingleVolume.supportPaint.facets.isNotEmpty() ||
+                selectedSingleVolume.seamPaint.facets.isNotEmpty() ||
+                selectedSingleVolume.multiColorPaint.facets.isNotEmpty(),
             onApply = { keepPercent ->
                 showSimplifyTool = false
                 onSimplify(keepPercent)
@@ -1204,6 +1213,7 @@ private fun ModelTransformSheet(
     cutting: Boolean,
     simplifying: Boolean,
     triangleCount: Int,
+    canEditSingleVolumeModel: Boolean,
     onAutoLay: () -> Unit,
     onLayOnFace: () -> Unit,
     onMeasure: () -> Unit,
@@ -1467,7 +1477,7 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onAutoLay,
-                enabled = !modelEditBusy,
+                enabled = canEditSingleVolumeModel && !modelEditBusy,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = WorkspaceYellow,
@@ -1516,7 +1526,8 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onSimplify,
-                enabled = !modelEditBusy && triangleCount >= MINIMUM_SIMPLIFIABLE_TRIANGLES,
+                enabled = canEditSingleVolumeModel && !modelEditBusy &&
+                    triangleCount >= MINIMUM_SIMPLIFIABLE_TRIANGLES,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF3A3B37),
@@ -1529,7 +1540,7 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onSplit,
-                enabled = !modelEditBusy,
+                enabled = canEditSingleVolumeModel && !modelEditBusy,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF3A3B37),
@@ -1542,7 +1553,7 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onCut,
-                enabled = !modelEditBusy,
+                enabled = canEditSingleVolumeModel && !modelEditBusy,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF3A3B37),
@@ -2447,12 +2458,12 @@ private fun BedScene(
     onModelTransformCommitted: (ModelTransform) -> Unit,
     onLayOnFace: (String, FloatArray) -> Unit,
     onMeasurePoint: (ModelPoint3) -> Unit,
-    onSupportPaintPreview: (String, Int, SupportPaintState?) -> Unit,
-    onSupportPaintCommitted: (String, SupportPaint) -> Unit,
-    onSeamPaintPreview: (String, Int, SeamPaintState?) -> Unit,
-    onSeamPaintCommitted: (String, SeamPaint) -> Unit,
-    onMultiColorPaintPreview: (String, Int, Int?) -> Unit,
-    onMultiColorPaintCommitted: (String, MultiColorPaint) -> Unit,
+    onSupportPaintPreview: (String, String, Int, SupportPaintState?) -> Unit,
+    onSupportPaintCommitted: (String, String, SupportPaint) -> Unit,
+    onSeamPaintPreview: (String, String, Int, SeamPaintState?) -> Unit,
+    onSeamPaintCommitted: (String, String, SeamPaint) -> Unit,
+    onMultiColorPaintPreview: (String, String, Int, Int?) -> Unit,
+    onMultiColorPaintCommitted: (String, String, MultiColorPaint) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -2491,11 +2502,15 @@ private fun BedScene(
     var interactionActive by remember { mutableStateOf(false) }
     var refinedPreview by remember { mutableStateOf(true) }
     val objectIds = projectObjects.map(ProjectObject::id)
-    val modelTopology = projectObjects.map { projectObject -> projectObject.id to projectObject.model }
+    val modelTopology = projectObjects.flatMap { projectObject ->
+        projectObject.volumes.map { volume -> (projectObject.id to volume.id) to volume.model }
+    }
     val modelMeshEdges = remember(modelTopology) {
-        projectObjects.associate { projectObject ->
-            projectObject.id to buildModelMeshEdges(projectObject.model.previewTriangles)
-        }
+        projectObjects.flatMap { projectObject ->
+            projectObject.volumes.map { volume ->
+                (projectObject.id to volume.id) to buildModelMeshEdges(volume.model.previewTriangles)
+            }
+        }.toMap()
     }
     var modelScreenBounds by remember(objectIds) { mutableStateOf<Map<String, Rect>>(emptyMap()) }
     var modelScreenTriangles by remember(objectIds) {
@@ -2610,22 +2625,27 @@ private fun BedScene(
                             18.dp.toPx(),
                         )
                         if (hit != null) {
+                            val activeVolume = activeObject.volumes.firstOrNull {
+                                it.id == hit.volumeId
+                            }
+                            if (activeVolume == null) return@awaitEachGesture
+                            val model = activeVolume.model
                             val start = hit.previewTriangleIndex * 9
-                            if (start >= 0 && start + 9 <= activeObject.model.previewTriangles.size) {
+                            if (start >= 0 && start + 9 <= model.previewTriangles.size) {
                                 if (layOnFaceObject != null) {
                                     currentLayOnFaceCallback(
                                         layOnFaceObject.id,
-                                        layOnFaceObject.model.previewTriangles.copyOfRange(start, start + 9),
+                                        model.previewTriangles.copyOfRange(start, start + 9),
                                     )
                                 } else {
-                                    val model = activeObject.model
                                     val transform = activeObject.transform
-                                    val minimumRotatedZ = transform.minimumRotatedZ(model)
+                                    val geometry = activeObject.geometry()
+                                    val minimumRotatedZ = transform.minimumRotatedZ(activeObject)
                                     val worldA = transform.placeVertex(
                                         model.previewTriangles[start],
                                         model.previewTriangles[start + 1],
                                         model.previewTriangles[start + 2],
-                                        model,
+                                        geometry,
                                         bedSizeX,
                                         bedSizeY,
                                         minimumRotatedZ,
@@ -2634,7 +2654,7 @@ private fun BedScene(
                                         model.previewTriangles[start + 3],
                                         model.previewTriangles[start + 4],
                                         model.previewTriangles[start + 5],
-                                        model,
+                                        geometry,
                                         bedSizeX,
                                         bedSizeY,
                                         minimumRotatedZ,
@@ -2643,7 +2663,7 @@ private fun BedScene(
                                         model.previewTriangles[start + 6],
                                         model.previewTriangles[start + 7],
                                         model.previewTriangles[start + 8],
-                                        model,
+                                        geometry,
                                         bedSizeX,
                                         bedSizeY,
                                         minimumRotatedZ,
@@ -2666,24 +2686,52 @@ private fun BedScene(
                 val dragStartTransform = currentObjects
                     .firstOrNull { it.id == hitObjectId }
                     ?.transform
-                val supportPaintStart = supportPaintingObject?.supportPaint
-                val seamPaintStart = seamPaintingObject?.seamPaint
-                val multiColorPaintStart = multiColorPaintingObject?.multiColorPaint
-                val paintedFacets = HashSet<Int>()
+                var paintedVolumeId: String? = null
+                var supportPaintStart: SupportPaint? = null
+                var seamPaintStart: SeamPaint? = null
+                var multiColorPaintStart: MultiColorPaint? = null
+                val paintedFacets = HashSet<Pair<String, Int>>()
                 fun paintAt(position: Offset) {
                     val objectId = paintingObject?.id ?: return
-                    val hit = closestPaintFacet(
+                    val hit = closestModelTriangle(
                         modelScreenTriangles[objectId].orEmpty(),
                         position,
                         18.dp.toPx(),
                     ) ?: return
-                    if (paintedFacets.add(hit)) {
+                    if (paintedVolumeId == null) {
+                        val volume = paintingObject.volumes.firstOrNull { it.id == hit.volumeId }
+                            ?: return
+                        paintedVolumeId = volume.id
+                        supportPaintStart = volume.supportPaint.takeIf { supportPaintingObject != null }
+                        seamPaintStart = volume.seamPaint.takeIf { seamPaintingObject != null }
+                        multiColorPaintStart = volume.multiColorPaint.takeIf {
+                            multiColorPaintingObject != null
+                        }
+                    }
+                    if (paintedVolumeId != hit.volumeId) return
+                    val paintedFacet = hit.volumeId to hit.sourceFacetIndex
+                    if (paintedFacets.add(paintedFacet)) {
                         if (supportPaintingObject != null) {
-                            currentSupportPaintPreviewCallback(objectId, hit, supportPaintState)
+                            currentSupportPaintPreviewCallback(
+                                objectId,
+                                hit.volumeId,
+                                hit.sourceFacetIndex,
+                                supportPaintState,
+                            )
                         } else if (seamPaintingObject != null) {
-                            currentSeamPaintPreviewCallback(objectId, hit, seamPaintState)
+                            currentSeamPaintPreviewCallback(
+                                objectId,
+                                hit.volumeId,
+                                hit.sourceFacetIndex,
+                                seamPaintState,
+                            )
                         } else if (multiColorPaintingObject != null) {
-                            currentMultiColorPaintPreviewCallback(objectId, hit, multiColorPaintSlot)
+                            currentMultiColorPaintPreviewCallback(
+                                objectId,
+                                hit.volumeId,
+                                hit.sourceFacetIndex,
+                                multiColorPaintSlot,
+                            )
                         }
                     }
                 }
@@ -2750,21 +2798,30 @@ private fun BedScene(
                     interactionActive = false
                     if (
                         supportPaintingObject != null && supportPaintStart != null &&
-                        paintedFacets.isNotEmpty()
+                        paintedFacets.isNotEmpty() && paintedVolumeId != null
                     ) {
-                        currentSupportPaintCommitCallback(supportPaintingObject.id, supportPaintStart)
+                        currentSupportPaintCommitCallback(
+                            supportPaintingObject.id,
+                            checkNotNull(paintedVolumeId),
+                            checkNotNull(supportPaintStart),
+                        )
                     } else if (
                         seamPaintingObject != null && seamPaintStart != null &&
-                        paintedFacets.isNotEmpty()
+                        paintedFacets.isNotEmpty() && paintedVolumeId != null
                     ) {
-                        currentSeamPaintCommitCallback(seamPaintingObject.id, seamPaintStart)
+                        currentSeamPaintCommitCallback(
+                            seamPaintingObject.id,
+                            checkNotNull(paintedVolumeId),
+                            checkNotNull(seamPaintStart),
+                        )
                     } else if (
                         multiColorPaintingObject != null && multiColorPaintStart != null &&
-                        paintedFacets.isNotEmpty()
+                        paintedFacets.isNotEmpty() && paintedVolumeId != null
                     ) {
                         currentMultiColorPaintCommitCallback(
                             multiColorPaintingObject.id,
-                            multiColorPaintStart,
+                            checkNotNull(paintedVolumeId),
+                            checkNotNull(multiColorPaintStart),
                         )
                     } else if (hitObjectId != null && dragStartTransform != null && movement >= 1f) {
                         currentTransformCommitCallback(dragStartTransform)
@@ -2903,28 +2960,35 @@ private fun BedScene(
             val nextBounds = mutableMapOf<String, Rect>()
             val nextScreenTriangles = mutableMapOf<String, List<ModelScreenTriangle>>()
             projectObjects.forEach { projectObject ->
-                val model = projectObject.model
                 val modelTransform = projectObject.transform
                 val objectSelected = projectObject.id == selectedObjectId
-                val objectColor = filamentSlotColor(projectObject.filamentSlot)
-                val minimumRotatedZ = modelTransform.minimumRotatedZ(model)
+                val objectGeometry = projectObject.geometry()
+                val minimumRotatedZ = modelTransform.minimumRotatedZ(projectObject)
                 val enforcePaintPath = Path()
                 val blockPaintPath = Path()
                 val seamEnforcePaintPath = Path()
                 val seamBlockPaintPath = Path()
                 val multiColorPaintPaths = mutableMapOf<Int, Path>()
-                val screenTriangles = ArrayList<ModelScreenTriangle>(model.previewTriangleIndices.size)
-                var triangleIndex = 0
+                val screenTriangles = ArrayList<ModelScreenTriangle>(
+                    projectObject.volumes.sumOf { it.model.previewTriangleIndices.size },
+                )
+                val screenTrianglesByVolume = mutableMapOf<String, List<ModelScreenTriangle>>()
                 var minimumScreenX = Float.POSITIVE_INFINITY
                 var minimumScreenY = Float.POSITIVE_INFINITY
                 var maximumScreenX = Float.NEGATIVE_INFINITY
                 var maximumScreenY = Float.NEGATIVE_INFINITY
-                while (triangleIndex + 8 < model.previewTriangles.size) {
+                projectObject.volumes.forEach { volume ->
+                    val model = volume.model
+                    val volumeScreenTriangles = ArrayList<ModelScreenTriangle>(
+                        model.previewTriangleIndices.size,
+                    )
+                    var triangleIndex = 0
+                    while (triangleIndex + 8 < model.previewTriangles.size) {
                     val aPosition = modelTransform.placeVertex(
                         model.previewTriangles[triangleIndex],
                         model.previewTriangles[triangleIndex + 1],
                         model.previewTriangles[triangleIndex + 2],
-                        model,
+                        objectGeometry,
                         bedSizeX,
                         bedSizeY,
                         minimumRotatedZ,
@@ -2933,7 +2997,7 @@ private fun BedScene(
                         model.previewTriangles[triangleIndex + 3],
                         model.previewTriangles[triangleIndex + 4],
                         model.previewTriangles[triangleIndex + 5],
-                        model,
+                        objectGeometry,
                         bedSizeX,
                         bedSizeY,
                         minimumRotatedZ,
@@ -2942,7 +3006,7 @@ private fun BedScene(
                         model.previewTriangles[triangleIndex + 6],
                         model.previewTriangles[triangleIndex + 7],
                         model.previewTriangles[triangleIndex + 8],
-                        model,
+                        objectGeometry,
                         bedSizeX,
                         bedSizeY,
                         minimumRotatedZ,
@@ -2952,7 +3016,7 @@ private fun BedScene(
                     val c = project(cPosition[0], cPosition[1], cPosition[2])
                     val sourceFacetIndex = model.previewTriangleIndices
                         .getOrElse(triangleIndex / 9) { triangleIndex / 9 }
-                    screenTriangles += ModelScreenTriangle(
+                    val screenTriangle = ModelScreenTriangle(
                         sourceFacetIndex = sourceFacetIndex,
                         previewTriangleIndex = triangleIndex / 9,
                         a = a,
@@ -2964,27 +3028,33 @@ private fun BedScene(
                                 cameraDepth(cPosition[0], cPosition[1], cPosition[2])
                             ) / 3f,
                         surfaceShade = modelSurfaceShade(aPosition, bPosition, cPosition),
+                        volumeId = volume.id,
+                        filamentSlot = volume.filamentSlot,
                     )
+                    screenTriangles += screenTriangle
+                    volumeScreenTriangles += screenTriangle
                     listOf(a, b, c).forEach { point ->
                         minimumScreenX = min(minimumScreenX, point.x)
                         minimumScreenY = min(minimumScreenY, point.y)
                         maximumScreenX = max(maximumScreenX, point.x)
                         maximumScreenY = max(maximumScreenY, point.y)
                     }
-                    when (projectObject.supportPaint.facets[sourceFacetIndex]) {
+                    when (volume.supportPaint.facets[sourceFacetIndex]) {
                         SupportPaintState.ENFORCE -> enforcePaintPath.addTriangle(a, b, c)
                         SupportPaintState.BLOCK -> blockPaintPath.addTriangle(a, b, c)
                         null -> Unit
                     }
-                    when (projectObject.seamPaint.facets[sourceFacetIndex]) {
+                    when (volume.seamPaint.facets[sourceFacetIndex]) {
                         SeamPaintState.ENFORCE -> seamEnforcePaintPath.addTriangle(a, b, c)
                         SeamPaintState.BLOCK -> seamBlockPaintPath.addTriangle(a, b, c)
                         null -> Unit
                     }
-                    projectObject.multiColorPaint.facets[sourceFacetIndex]?.let { filamentSlot ->
+                    volume.multiColorPaint.facets[sourceFacetIndex]?.let { filamentSlot ->
                         multiColorPaintPaths.getOrPut(filamentSlot, ::Path).addTriangle(a, b, c)
                     }
                     triangleIndex += 9
+                    }
+                    screenTrianglesByVolume[volume.id] = volumeScreenTriangles
                 }
                 if (minimumScreenX.isFinite()) {
                     nextBounds[projectObject.id] = Rect(
@@ -3006,22 +3076,29 @@ private fun BedScene(
                     }
                     drawPath(
                         facePath,
-                        lerp(Color(0xFF11130F), objectColor, light.coerceIn(0f, 1f))
+                        lerp(
+                            Color(0xFF11130F),
+                            filamentSlotColor(triangle.filamentSlot),
+                            light.coerceIn(0f, 1f),
+                        )
                             .copy(alpha = 0.98f),
                     )
                 }
                 val featureEdgePath = Path()
-                modelMeshEdges[projectObject.id].orEmpty().forEach { edge ->
-                    val triangle = screenTriangles.getOrNull(edge.triangleIndex)
-                        ?: return@forEach
-                    val adjacent = edge.adjacentTriangleIndex?.let(screenTriangles::getOrNull)
-                    val silhouette = adjacent == null ||
-                        triangle.screenOrientation() * adjacent.screenOrientation() < 0f
-                    if (!edge.sharp && !silhouette) return@forEach
-                    val start = triangle.vertex(edge.startVertex)
-                    val end = triangle.vertex(edge.endVertex)
-                    featureEdgePath.moveTo(start.x, start.y)
-                    featureEdgePath.lineTo(end.x, end.y)
+                projectObject.volumes.forEach { volume ->
+                    val volumeTriangles = screenTrianglesByVolume[volume.id].orEmpty()
+                    modelMeshEdges[projectObject.id to volume.id].orEmpty().forEach { edge ->
+                        val triangle = volumeTriangles.getOrNull(edge.triangleIndex)
+                            ?: return@forEach
+                        val adjacent = edge.adjacentTriangleIndex?.let(volumeTriangles::getOrNull)
+                        val silhouette = adjacent == null ||
+                            triangle.screenOrientation() * adjacent.screenOrientation() < 0f
+                        if (!edge.sharp && !silhouette) return@forEach
+                        val start = triangle.vertex(edge.startVertex)
+                        val end = triangle.vertex(edge.endVertex)
+                        featureEdgePath.moveTo(start.x, start.y)
+                        featureEdgePath.lineTo(end.x, end.y)
+                    }
                 }
                 drawPath(
                     featureEdgePath,
@@ -3570,6 +3647,7 @@ private fun ObjectToolRail(
     onRedo: () -> Unit,
     onDuplicate: () -> Unit,
     onAutoLay: () -> Unit,
+    canAutoLay: Boolean,
     onLayOnFace: () -> Unit,
     onMeasure: () -> Unit,
     autoLaying: Boolean,
@@ -3602,7 +3680,7 @@ private fun ObjectToolRail(
             IconButton(onClick = onDuplicate, enabled = !editingBusy) {
                 Icon(Icons.Default.ContentCopy, stringResource(R.string.duplicate_object))
             }
-            IconButton(onClick = onAutoLay, enabled = !editingBusy) {
+            IconButton(onClick = onAutoLay, enabled = canAutoLay && !editingBusy) {
                 if (autoLaying) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 } else {
@@ -3636,7 +3714,7 @@ private fun ObjectToolRail(
 
 @Composable
 private fun SliceSheet(
-    model: ModelInfo?,
+    modelDimensions: List<Float>?,
     options: SliceOptions,
     catalog: ProfileCatalog,
     recents: ProfileRecents,
@@ -3670,9 +3748,11 @@ private fun SliceSheet(
             onSaveFilament = onSaveFilament,
             onSaveSlicing = onSaveSlicing,
         )
-        if (model != null) {
+        if (modelDimensions != null) {
             Text(
-                model.dimensions.joinToString(" × ") { String.format(Locale.getDefault(), "%.1f", it) } + " mm",
+                modelDimensions.joinToString(" × ") {
+                    String.format(Locale.getDefault(), "%.1f", it)
+                } + " mm",
                 color = Color(0xFFC8C9C2),
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -3722,7 +3802,7 @@ private fun SliceSheet(
                 )
             }
         }
-        if (model != null) {
+        if (modelDimensions != null) {
             Button(
                 onClick = onSlice,
                 enabled = !slicing && !importing && !previewLoading,
@@ -4151,7 +4231,7 @@ private fun ProjectSheet(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    projectObject.model.fileName,
+                    projectObject.volumes.first().model.fileName,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

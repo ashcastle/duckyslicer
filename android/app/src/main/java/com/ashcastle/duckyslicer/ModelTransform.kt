@@ -199,6 +199,51 @@ internal fun ModelTransform.transformLocal(point: FloatArray): FloatArray = rota
     ),
 )
 
+internal data class ProjectObjectGeometry(
+    val minX: Float,
+    val minY: Float,
+    val minZ: Float,
+    val maxX: Float,
+    val maxY: Float,
+    val maxZ: Float,
+) {
+    val center: FloatArray
+        get() = floatArrayOf(
+            (minX + maxX) / 2f,
+            (minY + maxY) / 2f,
+            (minZ + maxZ) / 2f,
+        )
+}
+
+internal fun ProjectObject.geometry(): ProjectObjectGeometry = ProjectObjectGeometry(
+    minX = volumes.minOf { it.model.minMm[0] }.toFloat(),
+    minY = volumes.minOf { it.model.minMm[1] }.toFloat(),
+    minZ = volumes.minOf { it.model.minMm[2] }.toFloat(),
+    maxX = volumes.maxOf { it.model.maxMm[0] }.toFloat(),
+    maxY = volumes.maxOf { it.model.maxMm[1] }.toFloat(),
+    maxZ = volumes.maxOf { it.model.maxMm[2] }.toFloat(),
+)
+
+internal fun ModelTransform.minimumRotatedZ(projectObject: ProjectObject): Float {
+    val center = projectObject.geometry().center
+    var minimum = Float.POSITIVE_INFINITY
+    projectObject.volumes.forEach { volume ->
+        var index = 0
+        while (index + 2 < volume.model.previewTriangles.size) {
+            val rotated = transformLocal(
+                floatArrayOf(
+                    volume.model.previewTriangles[index] - center[0],
+                    volume.model.previewTriangles[index + 1] - center[1],
+                    volume.model.previewTriangles[index + 2] - center[2],
+                ),
+            )
+            minimum = minOf(minimum, rotated[2])
+            index += 3
+        }
+    }
+    return minimum.takeIf { it.isFinite() } ?: 0f
+}
+
 internal fun ModelTransform.minimumRotatedZ(model: ModelInfo): Float {
     val center = FloatArray(3) { axis ->
         ((model.minMm[axis] + model.maxMm[axis]) / 2.0).toFloat()
@@ -217,6 +262,30 @@ internal fun ModelTransform.minimumRotatedZ(model: ModelInfo): Float {
         index += 3
     }
     return minimum.takeIf { it.isFinite() } ?: 0f
+}
+
+internal fun ModelTransform.placeVertex(
+    x: Float,
+    y: Float,
+    z: Float,
+    geometry: ProjectObjectGeometry,
+    bedSizeX: Float,
+    bedSizeY: Float,
+    minimumRotatedZ: Float,
+): FloatArray {
+    val center = geometry.center
+    val rotated = transformLocal(
+        floatArrayOf(
+            x - center[0],
+            y - center[1],
+            z - center[2],
+        ),
+    )
+    return floatArrayOf(
+        rotated[0] + bedSizeX / 2f + offsetXmm,
+        rotated[1] + bedSizeY / 2f + offsetYmm,
+        rotated[2] - minimumRotatedZ + offsetZmm,
+    )
 }
 
 internal fun ModelTransform.placeVertex(

@@ -740,7 +740,7 @@ internal class ProjectStore(
         const val MAX_PROJECT_BYTES = 1_048_576L
         const val MAX_PROJECT_OBJECTS = 256
         const val MAX_PROJECT_VOLUMES = 256
-        const val SUPPORTED_PROJECT_VOLUMES_PER_OBJECT = 1
+        const val SUPPORTED_PROJECT_VOLUMES_PER_OBJECT = MAX_PROJECT_VOLUMES_PER_OBJECT
         const val MAX_ID_LENGTH = 128
         const val MAX_FILE_NAME_LENGTH = 240
         const val MAX_DISPLAY_NAME_LENGTH = 200

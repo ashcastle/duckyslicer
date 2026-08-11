@@ -1073,13 +1073,15 @@ private fun DuckySlicerScreen(
         onCancelProjectEdit = projectTransferModel::cancelActiveEdit,
         onCancelProjectImport = projectTransferModel::cancelProjectImport,
         onCancelProjectExport = projectTransferModel::cancelProjectExport,
-        onSupportPaintPreview = { objectId, facetIndex, state ->
+        onSupportPaintPreview = { objectId, volumeId, facetIndex, state ->
             val current = projectTransferModel.state.value.history
             val projectObject = current.current.objects.firstOrNull { it.id == objectId }
-            if (projectObject != null && facetIndex in 0 until projectObject.model.triangles) {
-                val nextPaint = projectObject.supportPaint.paint(facetIndex, state)
+            val volume = projectObject?.volumes?.firstOrNull { it.id == volumeId }
+            if (volume != null && facetIndex in 0 until volume.model.triangles) {
+                val nextPaint = volume.supportPaint.paint(facetIndex, state)
                 val nextHistory = current.updateSupportPaint(
                     objectId,
+                    volumeId,
                     nextPaint,
                     recordHistory = false,
                 )
@@ -1092,20 +1094,22 @@ private fun DuckySlicerScreen(
                 }
             }
         },
-        onSupportPaintCommitted = { objectId, previous ->
+        onSupportPaintCommitted = { objectId, volumeId, previous ->
             val current = projectTransferModel.state.value.history
             projectTransferModel.updateHistory(
                 current,
-                current.commitSupportPaint(objectId, previous),
+                current.commitSupportPaint(objectId, volumeId, previous),
             )
         },
-        onSeamPaintPreview = { objectId, facetIndex, state ->
+        onSeamPaintPreview = { objectId, volumeId, facetIndex, state ->
             val current = projectTransferModel.state.value.history
             val projectObject = current.current.objects.firstOrNull { it.id == objectId }
-            if (projectObject != null && facetIndex in 0 until projectObject.model.triangles) {
-                val nextPaint = projectObject.seamPaint.paint(facetIndex, state)
+            val volume = projectObject?.volumes?.firstOrNull { it.id == volumeId }
+            if (volume != null && facetIndex in 0 until volume.model.triangles) {
+                val nextPaint = volume.seamPaint.paint(facetIndex, state)
                 val nextHistory = current.updateSeamPaint(
                     objectId,
+                    volumeId,
                     nextPaint,
                     recordHistory = false,
                 )
@@ -1118,26 +1122,28 @@ private fun DuckySlicerScreen(
                 }
             }
         },
-        onSeamPaintCommitted = { objectId, previous ->
+        onSeamPaintCommitted = { objectId, volumeId, previous ->
             val current = projectTransferModel.state.value.history
             projectTransferModel.updateHistory(
                 current,
-                current.commitSeamPaint(objectId, previous),
+                current.commitSeamPaint(objectId, volumeId, previous),
             )
         },
-        onMultiColorPaintPreview = { objectId, facetIndex, slot ->
+        onMultiColorPaintPreview = { objectId, volumeId, facetIndex, slot ->
             val session = projectTransferModel.state.value
             val current = session.history
             val projectObject = current.current.objects.firstOrNull { it.id == objectId }
+            val volume = projectObject?.volumes?.firstOrNull { it.id == volumeId }
             val availableSlots = session.sliceOptions.resolvedFilamentSlots().indices
             if (
-                projectObject != null &&
-                facetIndex in 0 until projectObject.model.triangles &&
+                volume != null &&
+                facetIndex in 0 until volume.model.triangles &&
                 (slot == null || slot in availableSlots)
             ) {
-                val nextPaint = projectObject.multiColorPaint.paint(facetIndex, slot)
+                val nextPaint = volume.multiColorPaint.paint(facetIndex, slot)
                 val nextHistory = current.updateMultiColorPaint(
                     objectId,
+                    volumeId,
                     nextPaint,
                     recordHistory = false,
                 )
@@ -1150,11 +1156,11 @@ private fun DuckySlicerScreen(
                 }
             }
         },
-        onMultiColorPaintCommitted = { objectId, previous ->
+        onMultiColorPaintCommitted = { objectId, volumeId, previous ->
             val current = projectTransferModel.state.value.history
             projectTransferModel.updateHistory(
                 current,
-                current.commitMultiColorPaint(objectId, previous),
+                current.commitMultiColorPaint(objectId, volumeId, previous),
             )
         },
         onVariableLayerHeightsChanged = { variableLayerHeights ->

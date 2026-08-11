@@ -352,11 +352,12 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     @Synchronized
     fun autoLaySelectedModel(): Boolean {
         val target = mutableState.value.history.current.selectedObject ?: return false
+        val targetVolume = target.singleVolumeOrNull ?: return false
         val baseline = startEditLocked(ProjectEditKind.AUTO_LAY) ?: return false
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val orientation = SlicerProcessClient.autoOrient(
-                    File(target.model.localPath),
+                    File(targetVolume.model.localPath),
                     baseline.operation.requestId,
                 )
                 val nextHistory = baseline.history.updateTransform(
@@ -377,7 +378,8 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
 
     @Synchronized
     fun arrangeProjectObjects(): Boolean {
-        if (mutableState.value.history.current.objects.size < 2) return false
+        val currentObjects = mutableState.value.history.current.objects
+        if (currentObjects.size < 2 || currentObjects.any { it.singleVolumeOrNull == null }) return false
         val baseline = startEditLocked(ProjectEditKind.ARRANGE) ?: return false
         val targets = baseline.history.current.objects
         viewModelScope.launch(Dispatchers.IO) {
@@ -408,6 +410,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     fun splitSelectedModel(): Boolean {
         val current = mutableState.value
         val target = current.history.current.selectedObject ?: return false
+        if (target.singleVolumeOrNull == null) return false
         val maximumObjects = ProjectStore.MAX_PROJECT_OBJECTS - current.history.current.objects.size + 1
         if (maximumObjects < 2) return false
         val baseline = startEditLocked(ProjectEditKind.SPLIT) ?: return false
@@ -450,6 +453,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     fun cutSelectedModel(heightRatio: Float, placeOnCut: Boolean): Boolean {
         val current = mutableState.value
         val target = current.history.current.selectedObject ?: return false
+        if (target.singleVolumeOrNull == null) return false
         val maximumObjects = ProjectStore.MAX_PROJECT_OBJECTS - current.history.current.objects.size + 1
         if (maximumObjects < 2 || !heightRatio.isFinite() || heightRatio !in 0.02f..0.98f) {
             return false
@@ -495,8 +499,9 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     @Synchronized
     fun simplifySelectedModel(keepPercent: Int): Boolean {
         val target = mutableState.value.history.current.selectedObject ?: return false
+        val targetVolume = target.singleVolumeOrNull ?: return false
         if (
-            target.model.triangles < MINIMUM_SIMPLIFIABLE_TRIANGLES ||
+            targetVolume.model.triangles < MINIMUM_SIMPLIFIABLE_TRIANGLES ||
             keepPercent !in MINIMUM_SIMPLIFY_KEEP_PERCENT..MAXIMUM_SIMPLIFY_KEEP_PERCENT
         ) {
             return false

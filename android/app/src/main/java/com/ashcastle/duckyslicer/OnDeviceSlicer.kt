@@ -5,6 +5,7 @@ import java.io.File
 import java.io.Serializable
 import java.util.UUID
 import kotlin.math.abs
+import org.json.JSONArray
 import org.json.JSONObject
 
 data class SliceOutcome(
@@ -1194,6 +1195,11 @@ data class FilamentSlotAssignment(
 
 internal const val MAX_FILAMENT_SLOTS = 16
 
+internal data class TransformedProjectModels(
+    val files: List<File>,
+    val objectVolumeCounts: IntArray,
+)
+
 object OnDeviceSlicer {
     fun slice(
         model: File,
@@ -1220,20 +1226,28 @@ object OnDeviceSlicer {
         onProgress: (Int) -> Unit = {},
     ): SliceOutcome {
         val filamentSlots = options.resolvedFilamentSlots()
-        require(objects.all { it.filamentSlot in filamentSlots.indices }) {
-            "Object filament assignment is unavailable"
+        require(objects.all { projectObject ->
+            projectObject.volumes.all { it.filamentSlot in filamentSlots.indices }
+        }) {
+            "Volume filament assignment is unavailable"
         }
         require(objects.all { projectObject ->
-            projectObject.supportPaint.facets.keys.all { it in 0 until projectObject.model.triangles }
+            projectObject.volumes.all { volume ->
+                volume.supportPaint.facets.keys.all { it in 0 until volume.model.triangles }
+            }
         }) { "Support paint references an unavailable facet" }
         require(objects.all { projectObject ->
-            projectObject.seamPaint.facets.keys.all { it in 0 until projectObject.model.triangles }
+            projectObject.volumes.all { volume ->
+                volume.seamPaint.facets.keys.all { it in 0 until volume.model.triangles }
+            }
         }) { "Seam paint references an unavailable facet" }
         val availableFilamentSlots = options.resolvedFilamentSlots().indices
         require(objects.all { projectObject ->
-            projectObject.multiColorPaint.facets.keys.all {
-                it in 0 until projectObject.model.triangles
-            } && projectObject.multiColorPaint.facets.values.all { it in availableFilamentSlots }
+            projectObject.volumes.all { volume ->
+                volume.multiColorPaint.facets.keys.all {
+                    it in 0 until volume.model.triangles
+                } && volume.multiColorPaint.facets.values.all { it in availableFilamentSlots }
+            }
         }) { "Multi-color paint references unavailable geometry or filament" }
         val maximumLayerHeight = options.nozzleDiameter * 0.7f
         require(objects.all { projectObject ->
@@ -1252,25 +1266,26 @@ object OnDeviceSlicer {
             options,
             cancellationRequested = cancellationRequested,
         ) { transformedModels ->
-            val supportPaintFiles = objects.mapIndexed { index, projectObject ->
-                projectObject.supportPaint
+            val volumes = objects.flatMap(ProjectObject::volumes)
+            val supportPaintFiles = volumes.mapIndexed { index, volume ->
+                volume.supportPaint
                     .takeIf { it.facets.isNotEmpty() }
                     ?.let {
                         File.createTempFile(
                             "slice-support-$index-",
                             ".bin",
-                            File(projectObject.model.localPath).parentFile,
+                            File(volume.model.localPath).parentFile,
                         ).also(it::writeSidecar)
                     }
             }
-            val seamPaintFiles = objects.mapIndexed { index, projectObject ->
-                projectObject.seamPaint
+            val seamPaintFiles = volumes.mapIndexed { index, volume ->
+                volume.seamPaint
                     .takeIf { it.facets.isNotEmpty() }
                     ?.let {
                         File.createTempFile(
                             "slice-seam-$index-",
                             ".bin",
-                            File(projectObject.model.localPath).parentFile,
+                            File(volume.model.localPath).parentFile,
                         ).also(it::writeSidecar)
                     }
             }
@@ -1281,18 +1296,18 @@ object OnDeviceSlicer {
                         File.createTempFile(
                             "slice-layers-$index-",
                             ".bin",
-                            File(projectObject.model.localPath).parentFile,
+                            File(projectObject.volumes.first().model.localPath).parentFile,
                         ).also(it::writeSidecar)
                     }
             }
-            val multiColorPaintFiles = objects.mapIndexed { index, projectObject ->
-                projectObject.multiColorPaint
+            val multiColorPaintFiles = volumes.mapIndexed { index, volume ->
+                volume.multiColorPaint
                     .takeIf { it.facets.isNotEmpty() }
                     ?.let {
                         File.createTempFile(
                             "slice-colors-$index-",
                             ".bin",
-                            File(projectObject.model.localPath).parentFile,
+                            File(volume.model.localPath).parentFile,
                         ).also(it::writeSidecar)
                     }
             }
@@ -1303,20 +1318,21 @@ object OnDeviceSlicer {
                         File.createTempFile(
                             "slice-process-$index-",
                             ".bin",
-                            File(projectObject.model.localPath).parentFile,
+                            File(projectObject.volumes.first().model.localPath).parentFile,
                         ).also(it::writeSidecar)
                     }
             }
             try {
                 SlicerProcessClient.slice(
-                    transformedModels,
+                    transformedModels.files,
                     supportPaintFiles,
                     seamPaintFiles,
                     multiColorPaintFiles,
                     variableLayerHeightFiles,
                     processOverrideFiles,
                     options,
-                    filamentSlots = objects.map(ProjectObject::filamentSlot).toIntArray(),
+                    objectVolumeCounts = transformedModels.objectVolumeCounts,
+                    filamentSlots = volumes.map(ProjectVolume::filamentSlot).toIntArray(),
                     foregroundSession = foregroundSession,
                     cancellationRequested = cancellationRequested,
                     onProgress = onProgress,
@@ -1346,8 +1362,11 @@ object OnDeviceSlicer {
                 SlicerProcessClient.projectRequestCancellationRequested(requestId)
             },
         ) { transformedModels ->
+            require(transformedModels.objectVolumeCounts.all { it == 1 }) {
+                "Multi-volume arrangement is not available yet"
+            }
             SlicerProcessClient.autoArrange(
-                transformedModels,
+                transformedModels.files,
                 options.bedSizeX,
                 options.bedSizeY,
                 options.bedOriginX,
@@ -1364,18 +1383,25 @@ object OnDeviceSlicer {
         options: SliceOptions,
         includePlacement: Boolean = true,
         cancellationRequested: () -> Boolean = { false },
-        block: (List<File>) -> Result,
+        block: (TransformedProjectModels) -> Result,
     ): Result {
         require(objects.isNotEmpty()) { "Project has no objects" }
-        require(objects.all { File(it.model.localPath).isFile }) { "Model file is unavailable" }
-        val transformedModels = ArrayList<File>(objects.size)
+        require(objects.all { projectObject ->
+            projectObject.volumes.all { File(it.model.localPath).isFile }
+        }) { "Model file is unavailable" }
+        val transformedModels = ArrayList<File>(objects.sumOf { it.volumes.size })
         return try {
             if (cancellationRequested()) throw SlicingCancelledException()
             objects.forEachIndexed { index, projectObject ->
                 if (cancellationRequested()) throw SlicingCancelledException()
-                val modelRoot = File(projectObject.model.localPath).parentFile
-                val transformedModel = File.createTempFile("slicer-input-$index-", ".stl", modelRoot)
-                transformedModels += transformedModel
+                val objectOutputs = projectObject.volumes.mapIndexed { volumeIndex, volume ->
+                    val modelRoot = File(volume.model.localPath).parentFile
+                    File.createTempFile(
+                        "slicer-input-$index-$volumeIndex-",
+                        ".stl",
+                        modelRoot,
+                    ).also(transformedModels::add)
+                }
                 val transform = if (includePlacement) {
                     projectObject.transform.toJson(
                         options.bedSizeX,
@@ -1388,18 +1414,41 @@ object OnDeviceSlicer {
                         .copy(offsetXmm = 0f, offsetYmm = 0f, offsetZmm = 0f)
                         .toJson(0f, 0f)
                 }
-                val transformed = JSONObject(
-                    NativeEngine.transformStl(
-                        projectObject.model.localPath,
-                        transformedModel.absolutePath,
-                        transform,
-                    ),
-                )
+                val transformed = if (projectObject.volumes.size == 1) {
+                    JSONObject(
+                        NativeEngine.transformStl(
+                            projectObject.singleVolume.model.localPath,
+                            objectOutputs.single().absolutePath,
+                            transform,
+                        ),
+                    )
+                } else {
+                    JSONObject(
+                        NativeEngine.transformStlGroup(
+                            JSONObject()
+                                .put(
+                                    "inputPaths",
+                                    JSONArray(projectObject.volumes.map { it.model.localPath }),
+                                )
+                                .put(
+                                    "outputPaths",
+                                    JSONArray(objectOutputs.map(File::getAbsolutePath)),
+                                )
+                                .put("transform", JSONObject(transform))
+                                .toString(),
+                        ),
+                    )
+                }
                 check(transformed.optBoolean("ok")) { "Model transform failed" }
                 if (cancellationRequested()) throw SlicingCancelledException()
             }
             if (cancellationRequested()) throw SlicingCancelledException()
-            block(transformedModels)
+            block(
+                TransformedProjectModels(
+                    files = transformedModels,
+                    objectVolumeCounts = objects.map { it.volumes.size }.toIntArray(),
+                ),
+            )
         } finally {
             transformedModels.forEach(File::delete)
         }

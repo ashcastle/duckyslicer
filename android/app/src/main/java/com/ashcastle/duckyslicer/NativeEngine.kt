@@ -13,6 +13,8 @@ internal object NativeEngine {
 
     external fun transformStl(inputPath: String, outputPath: String, transformJson: String): String
 
+    external fun transformStlGroup(requestJson: String): String
+
     external fun layOnFace(requestJson: String): String
 
     external fun previewGcodeRange(path: String, startLayer: Int, endLayer: Int): FloatArray?

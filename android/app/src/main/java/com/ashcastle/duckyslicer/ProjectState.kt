@@ -240,12 +240,14 @@ data class ProjectHistoryState(
     fun updateSelectedFilamentSlot(slot: Int): ProjectHistoryState {
         require(slot in 0 until MAX_FILAMENT_SLOTS) { "Filament slot is invalid" }
         val selected = current.selectedObject ?: return this
-        if (selected.filamentSlot == slot) return this
+        if (selected.volumes.all { it.filamentSlot == slot }) return this
         return record(
             current.copy(
                 objects = current.objects.map { projectObject ->
                     if (projectObject.id == selected.id) {
-                        projectObject.updateSingleVolume { it.copy(filamentSlot = slot) }
+                        projectObject.copy(
+                            volumes = projectObject.volumes.map { it.copy(filamentSlot = slot) },
+                        )
                     } else {
                         projectObject
                     }
@@ -275,14 +277,29 @@ data class ProjectHistoryState(
         recordHistory: Boolean = true,
     ): ProjectHistoryState {
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
-        if (target.supportPaint == supportPaint) return this
-        require(supportPaint.facets.keys.all { it in 0 until target.model.triangles }) {
+        return updateSupportPaint(objectId, target.singleVolume.id, supportPaint, recordHistory)
+    }
+
+    fun updateSupportPaint(
+        objectId: String,
+        volumeId: String,
+        supportPaint: SupportPaint,
+        recordHistory: Boolean = true,
+    ): ProjectHistoryState {
+        val target = current.objects.firstOrNull { it.id == objectId } ?: return this
+        val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
+        if (targetVolume.supportPaint == supportPaint) return this
+        require(supportPaint.facets.keys.all { it in 0 until targetVolume.model.triangles }) {
             "Support paint references an unavailable facet"
         }
         val next = current.copy(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
-                    projectObject.updateSingleVolume { it.copy(supportPaint = supportPaint) }
+                    projectObject.copy(
+                        volumes = projectObject.volumes.map { volume ->
+                            if (volume.id == volumeId) volume.copy(supportPaint = supportPaint) else volume
+                        },
+                    )
                 } else {
                     projectObject
                 }
@@ -293,11 +310,25 @@ data class ProjectHistoryState(
 
     fun commitSupportPaint(objectId: String, previous: SupportPaint): ProjectHistoryState {
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
-        if (target.supportPaint == previous) return this
+        return commitSupportPaint(objectId, target.singleVolume.id, previous)
+    }
+
+    fun commitSupportPaint(
+        objectId: String,
+        volumeId: String,
+        previous: SupportPaint,
+    ): ProjectHistoryState {
+        val target = current.objects.firstOrNull { it.id == objectId } ?: return this
+        val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
+        if (targetVolume.supportPaint == previous) return this
         val previousSnapshot = current.copy(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
-                    projectObject.updateSingleVolume { it.copy(supportPaint = previous) }
+                    projectObject.copy(
+                        volumes = projectObject.volumes.map { volume ->
+                            if (volume.id == volumeId) volume.copy(supportPaint = previous) else volume
+                        },
+                    )
                 } else {
                     projectObject
                 }
@@ -315,14 +346,29 @@ data class ProjectHistoryState(
         recordHistory: Boolean = true,
     ): ProjectHistoryState {
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
-        if (target.seamPaint == seamPaint) return this
-        require(seamPaint.facets.keys.all { it in 0 until target.model.triangles }) {
+        return updateSeamPaint(objectId, target.singleVolume.id, seamPaint, recordHistory)
+    }
+
+    fun updateSeamPaint(
+        objectId: String,
+        volumeId: String,
+        seamPaint: SeamPaint,
+        recordHistory: Boolean = true,
+    ): ProjectHistoryState {
+        val target = current.objects.firstOrNull { it.id == objectId } ?: return this
+        val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
+        if (targetVolume.seamPaint == seamPaint) return this
+        require(seamPaint.facets.keys.all { it in 0 until targetVolume.model.triangles }) {
             "Seam paint references an unavailable facet"
         }
         val next = current.copy(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
-                    projectObject.updateSingleVolume { it.copy(seamPaint = seamPaint) }
+                    projectObject.copy(
+                        volumes = projectObject.volumes.map { volume ->
+                            if (volume.id == volumeId) volume.copy(seamPaint = seamPaint) else volume
+                        },
+                    )
                 } else {
                     projectObject
                 }
@@ -333,11 +379,25 @@ data class ProjectHistoryState(
 
     fun commitSeamPaint(objectId: String, previous: SeamPaint): ProjectHistoryState {
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
-        if (target.seamPaint == previous) return this
+        return commitSeamPaint(objectId, target.singleVolume.id, previous)
+    }
+
+    fun commitSeamPaint(
+        objectId: String,
+        volumeId: String,
+        previous: SeamPaint,
+    ): ProjectHistoryState {
+        val target = current.objects.firstOrNull { it.id == objectId } ?: return this
+        val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
+        if (targetVolume.seamPaint == previous) return this
         val previousSnapshot = current.copy(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
-                    projectObject.updateSingleVolume { it.copy(seamPaint = previous) }
+                    projectObject.copy(
+                        volumes = projectObject.volumes.map { volume ->
+                            if (volume.id == volumeId) volume.copy(seamPaint = previous) else volume
+                        },
+                    )
                 } else {
                     projectObject
                 }
@@ -355,14 +415,29 @@ data class ProjectHistoryState(
         recordHistory: Boolean = true,
     ): ProjectHistoryState {
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
-        if (target.multiColorPaint == multiColorPaint) return this
-        require(multiColorPaint.facets.keys.all { it in 0 until target.model.triangles }) {
+        return updateMultiColorPaint(objectId, target.singleVolume.id, multiColorPaint, recordHistory)
+    }
+
+    fun updateMultiColorPaint(
+        objectId: String,
+        volumeId: String,
+        multiColorPaint: MultiColorPaint,
+        recordHistory: Boolean = true,
+    ): ProjectHistoryState {
+        val target = current.objects.firstOrNull { it.id == objectId } ?: return this
+        val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
+        if (targetVolume.multiColorPaint == multiColorPaint) return this
+        require(multiColorPaint.facets.keys.all { it in 0 until targetVolume.model.triangles }) {
             "Multi-color paint references an unavailable facet"
         }
         val next = current.copy(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
-                    projectObject.updateSingleVolume { it.copy(multiColorPaint = multiColorPaint) }
+                    projectObject.copy(
+                        volumes = projectObject.volumes.map { volume ->
+                            if (volume.id == volumeId) volume.copy(multiColorPaint = multiColorPaint) else volume
+                        },
+                    )
                 } else {
                     projectObject
                 }
@@ -376,11 +451,25 @@ data class ProjectHistoryState(
         previous: MultiColorPaint,
     ): ProjectHistoryState {
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
-        if (target.multiColorPaint == previous) return this
+        return commitMultiColorPaint(objectId, target.singleVolume.id, previous)
+    }
+
+    fun commitMultiColorPaint(
+        objectId: String,
+        volumeId: String,
+        previous: MultiColorPaint,
+    ): ProjectHistoryState {
+        val target = current.objects.firstOrNull { it.id == objectId } ?: return this
+        val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
+        if (targetVolume.multiColorPaint == previous) return this
         val previousSnapshot = current.copy(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
-                    projectObject.updateSingleVolume { it.copy(multiColorPaint = previous) }
+                    projectObject.copy(
+                        volumes = projectObject.volumes.map { volume ->
+                            if (volume.id == volumeId) volume.copy(multiColorPaint = previous) else volume
+                        },
+                    )
                 } else {
                     projectObject
                 }

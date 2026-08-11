@@ -196,6 +196,32 @@ class ProjectStateTest {
     }
 
     @Test
+    fun surfacePaintingTargetsOneVolumeWithoutMutatingItsSiblings() {
+        val base = projectObject("assembly")
+        val left = base.singleVolume.copy(id = "left")
+        val right = base.singleVolume.copy(id = "right")
+        var state = ProjectHistoryState().add(
+            base.copy(volumes = listOf(left, right)),
+        )
+
+        state = state.updateSupportPaint(
+            "assembly",
+            "right",
+            SupportPaint().paint(0, SupportPaintState.ENFORCE),
+            recordHistory = false,
+        )
+        state = state.commitSupportPaint("assembly", "right", SupportPaint())
+
+        assertTrue(state.current.selectedObject!!.volumes[0].supportPaint.facets.isEmpty())
+        assertEquals(
+            SupportPaintState.ENFORCE,
+            state.current.selectedObject!!.volumes[1].supportPaint.facets[0],
+        )
+        state = state.undo()
+        assertTrue(state.current.selectedObject!!.volumes.all { it.supportPaint.facets.isEmpty() })
+    }
+
+    @Test
     fun variableLayerHeightsAreObjectScopedAndUndoable() {
         var state = ProjectHistoryState().add(projectObject("part"))
         val variableLayers = VariableLayerHeights(
@@ -234,20 +260,28 @@ class ProjectStateTest {
     }
 
     @Test
-    fun filamentAssignmentIsObjectScopedUndoableAndConstrainedWhenSlotsShrink() {
+    fun filamentAssignmentUpdatesEverySelectedObjectVolumeAndRemainsUndoable() {
+        val second = projectObject("second")
         var state = ProjectHistoryState()
             .add(projectObject("first"))
-            .add(projectObject("second"))
+            .add(
+                second.copy(
+                    volumes = listOf(
+                        second.singleVolume.copy(id = "second-left"),
+                        second.singleVolume.copy(id = "second-right"),
+                    ),
+                ),
+            )
 
         state = state.updateSelectedFilamentSlot(1)
         assertEquals(0, state.current.objects.first().filamentSlot)
-        assertEquals(1, state.current.selectedObject!!.filamentSlot)
+        assertTrue(state.current.selectedObject!!.volumes.all { it.filamentSlot == 1 })
 
         state = state.undo()
-        assertEquals(0, state.current.selectedObject!!.filamentSlot)
+        assertTrue(state.current.selectedObject!!.volumes.all { it.filamentSlot == 0 })
         state = state.redo().constrainFilamentSlots(1)
-        assertEquals(0, state.current.selectedObject!!.filamentSlot)
+        assertTrue(state.current.selectedObject!!.volumes.all { it.filamentSlot == 0 })
         state = state.undo()
-        assertEquals(1, state.current.selectedObject!!.filamentSlot)
+        assertTrue(state.current.selectedObject!!.volumes.all { it.filamentSlot == 1 })
     }
 }

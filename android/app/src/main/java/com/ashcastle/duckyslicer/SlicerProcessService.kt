@@ -52,6 +52,7 @@ internal object SlicerProcessClient {
     fun slice(
         transformedModels: List<File>,
         options: SliceOptions,
+        objectVolumeCounts: IntArray = IntArray(transformedModels.size) { 1 },
         filamentSlots: IntArray = IntArray(transformedModels.size),
         foregroundSession: ForegroundSliceSession? = null,
         cancellationRequested: () -> Boolean = { false },
@@ -61,9 +62,10 @@ internal object SlicerProcessClient {
         List(transformedModels.size) { null },
         List(transformedModels.size) { null },
         List(transformedModels.size) { null },
-        List(transformedModels.size) { null },
-        List(transformedModels.size) { null },
+        List(objectVolumeCounts.size) { null },
+        List(objectVolumeCounts.size) { null },
         options,
+        objectVolumeCounts,
         filamentSlots,
         foregroundSession,
         cancellationRequested,
@@ -79,6 +81,7 @@ internal object SlicerProcessClient {
         variableLayerHeightFiles: List<File?>,
         processOverrideFiles: List<File?>,
         options: SliceOptions,
+        objectVolumeCounts: IntArray = IntArray(transformedModels.size) { 1 },
         filamentSlots: IntArray = IntArray(transformedModels.size),
         foregroundSession: ForegroundSliceSession? = null,
         cancellationRequested: () -> Boolean = { false },
@@ -91,6 +94,7 @@ internal object SlicerProcessClient {
         variableLayerHeightFiles,
         processOverrideFiles,
         options,
+        objectVolumeCounts,
         filamentSlots,
         foregroundSession,
         cancellationRequested,
@@ -116,6 +120,7 @@ internal object SlicerProcessClient {
             List(transformedModels.size) { null },
             List(transformedModels.size) { null },
             options,
+            IntArray(transformedModels.size) { 1 },
             IntArray(transformedModels.size),
             null,
             { false },
@@ -424,6 +429,7 @@ internal object SlicerProcessClient {
         variableLayerHeightFiles: List<File?>,
         processOverrideFiles: List<File?>,
         options: SliceOptions,
+        objectVolumeCounts: IntArray,
         filamentSlots: IntArray,
         foregroundSession: ForegroundSliceSession?,
         cancellationRequested: () -> Boolean,
@@ -441,11 +447,16 @@ internal object SlicerProcessClient {
         require(multiColorPaintFiles.size == transformedModels.size) {
             "Multi-color paint count does not match models"
         }
-        require(variableLayerHeightFiles.size == transformedModels.size) {
-            "Variable layer height count does not match models"
+        require(
+            objectVolumeCounts.isNotEmpty() &&
+                objectVolumeCounts.all { it in 1..MAX_PROJECT_VOLUMES_PER_OBJECT } &&
+                objectVolumeCounts.sum() == transformedModels.size,
+        ) { "Object volume counts do not match models" }
+        require(variableLayerHeightFiles.size == objectVolumeCounts.size) {
+            "Variable layer height count does not match objects"
         }
-        require(processOverrideFiles.size == transformedModels.size) {
-            "Object settings count does not match models"
+        require(processOverrideFiles.size == objectVolumeCounts.size) {
+            "Object settings count does not match objects"
         }
         require(filamentSlots.size == transformedModels.size) { "Filament slot count does not match models" }
         val supportPaintPaths = supportPaintFiles.map { it?.absolutePath.orEmpty() }
@@ -491,6 +502,7 @@ internal object SlicerProcessClient {
                 ArrayList(processOverridePaths),
             )
             putString(SlicerProcessContract.KEY_OPTIONS, optionsText)
+            putIntArray(SlicerProcessContract.KEY_OBJECT_VOLUME_COUNTS, objectVolumeCounts)
             putIntArray(SlicerProcessContract.KEY_FILAMENT_SLOTS, filamentSlots)
             maximumGcodeBytesForTest?.let {
                 putInt(SlicerProcessContract.KEY_MAXIMUM_GCODE_BYTES_FOR_TEST, it)
@@ -1660,6 +1672,14 @@ class SlicerProcessService : Service() {
         }
         require(paths.size in 1..MAX_OBJECTS) { "Invalid model count" }
         val models = paths.map(::validateModel)
+        val objectVolumeCounts = requireNotNull(
+            extras.getIntArray(SlicerProcessContract.KEY_OBJECT_VOLUME_COUNTS),
+        ) { "Object volume counts are unavailable" }
+        require(
+            objectVolumeCounts.size in 1..MAX_OBJECTS &&
+                objectVolumeCounts.all { it in 1..MAX_PROJECT_VOLUMES_PER_OBJECT } &&
+                objectVolumeCounts.sum() == models.size,
+        ) { "Object volume counts do not match models" }
         val supportPaintPaths = requireNotNull(
             extras.getStringArrayList(SlicerProcessContract.KEY_SUPPORT_PAINT_PATHS),
         ) { "Support paint paths are unavailable" }
@@ -1686,8 +1706,8 @@ class SlicerProcessService : Service() {
         val variableLayerHeightPaths = requireNotNull(
             extras.getStringArrayList(SlicerProcessContract.KEY_VARIABLE_LAYER_HEIGHT_PATHS),
         ) { "Variable layer height paths are unavailable" }
-        require(variableLayerHeightPaths.size == models.size) {
-            "Variable layer height count does not match models"
+        require(variableLayerHeightPaths.size == objectVolumeCounts.size) {
+            "Variable layer height count does not match objects"
         }
         val variableLayerHeightFiles = variableLayerHeightPaths.map { path ->
             path.takeIf(String::isNotEmpty)?.let(::validateVariableLayerHeights)
@@ -1695,8 +1715,8 @@ class SlicerProcessService : Service() {
         val processOverridePaths = requireNotNull(
             extras.getStringArrayList(SlicerProcessContract.KEY_PROCESS_OVERRIDE_PATHS),
         ) { "Object setting paths are unavailable" }
-        require(processOverridePaths.size == models.size) {
-            "Object settings count does not match models"
+        require(processOverridePaths.size == objectVolumeCounts.size) {
+            "Object settings count does not match objects"
         }
         val processOverrideFiles = processOverridePaths.map { path ->
             path.takeIf(String::isNotEmpty)?.let(::validateObjectProcessOverrides)
@@ -1751,6 +1771,7 @@ class SlicerProcessService : Service() {
                 multiColorPaintFiles,
                 variableLayerHeightFiles,
                 processOverrideFiles,
+                objectVolumeCounts,
                 filamentSlots,
                 options,
                 maximumGcodeBytes,
@@ -2074,6 +2095,7 @@ class SlicerProcessService : Service() {
         multiColorPaintFiles: List<ValidatedMultiColorPaint?>,
         variableLayerHeightFiles: List<ValidatedVariableLayerHeights?>,
         processOverrideFiles: List<ValidatedObjectProcessOverrides?>,
+        objectVolumeCounts: IntArray,
         filamentSlots: IntArray,
         options: SliceOptions,
         maximumGcodeBytes: Int,
@@ -2082,37 +2104,79 @@ class SlicerProcessService : Service() {
         artifactStore.prepareForSlice()
         val runtime = createNativeRuntime(onProgress)
         return try {
-            check(runtime.loadModel(models.first().absolutePath)) { "Model could not be prepared" }
-            models.drop(1).forEach { model ->
-                check(runtime.addModel(model.absolutePath)) { "Additional model could not be prepared" }
-            }
-            check(runtime.getObjectBoundingBoxes().size == models.size * 3) {
-                "Native model count does not match the request"
-            }
-            filamentSlots.forEachIndexed { objectIndex, slot ->
-                check(runtime.nativeSetVolumeExtruder(objectIndex, 0, slot + 1)) {
-                    "Object filament could not be applied"
+            val volumeObjectIndices = IntArray(models.size)
+            val nativeVolumeIndices = IntArray(models.size)
+            var flatVolumeIndex = 0
+            objectVolumeCounts.forEachIndexed { objectIndex, volumeCount ->
+                val firstVolume = models[flatVolumeIndex]
+                val loaded = if (objectIndex == 0) {
+                    runtime.loadModel(firstVolume.absolutePath)
+                } else {
+                    runtime.addModel(firstVolume.absolutePath)
+                }
+                check(loaded) { "Model object could not be prepared" }
+                volumeObjectIndices[flatVolumeIndex] = objectIndex
+                nativeVolumeIndices[flatVolumeIndex] = 0
+                flatVolumeIndex += 1
+                repeat(volumeCount - 1) { volumeOffset ->
+                    volumeObjectIndices[flatVolumeIndex] = objectIndex
+                    val nativeVolumeIndex = runtime.nativeAddModelPartVolume(
+                        objectIndex,
+                        models[flatVolumeIndex].absolutePath,
+                        "Part ${volumeOffset + 2}",
+                    )
+                    check(nativeVolumeIndex >= 0) { "Model volume could not be prepared" }
+                    nativeVolumeIndices[flatVolumeIndex] = nativeVolumeIndex
+                    flatVolumeIndex += 1
                 }
             }
-            supportPaintFiles.forEachIndexed { objectIndex, supportPaint ->
+            check(flatVolumeIndex == models.size) { "Native volume count does not match the request" }
+            check(runtime.getObjectBoundingBoxes().size == objectVolumeCounts.size * 3) {
+                "Native model count does not match the request"
+            }
+            filamentSlots.forEachIndexed { volumeIndex, slot ->
+                check(
+                    runtime.nativeSetVolumeExtruder(
+                        volumeObjectIndices[volumeIndex],
+                        nativeVolumeIndices[volumeIndex],
+                        slot + 1,
+                    ),
+                ) {
+                    "Volume filament could not be applied"
+                }
+            }
+            supportPaintFiles.forEachIndexed { volumeIndex, supportPaint ->
                 if (supportPaint != null) {
-                    check(runtime.applySupportPaint(objectIndex, supportPaint.file.absolutePath)) {
+                    check(
+                        runtime.applySupportPaint(
+                            volumeObjectIndices[volumeIndex],
+                            nativeVolumeIndices[volumeIndex],
+                            supportPaint.file.absolutePath,
+                        ),
+                    ) {
                         "Support paint could not be applied"
                     }
                 }
             }
-            seamPaintFiles.forEachIndexed { objectIndex, seamPaint ->
+            seamPaintFiles.forEachIndexed { volumeIndex, seamPaint ->
                 if (seamPaint != null) {
-                    check(runtime.applySeamPaint(objectIndex, seamPaint.file.absolutePath)) {
+                    check(
+                        runtime.applySeamPaint(
+                            volumeObjectIndices[volumeIndex],
+                            nativeVolumeIndices[volumeIndex],
+                            seamPaint.file.absolutePath,
+                        ),
+                    ) {
                         "Seam paint could not be applied"
                     }
                 }
             }
-            multiColorPaintFiles.forEachIndexed { objectIndex, multiColorPaint ->
+            multiColorPaintFiles.forEachIndexed { volumeIndex, multiColorPaint ->
                 if (multiColorPaint != null) {
                     check(
                         runtime.applyMultiColorPaint(
-                            objectIndex,
+                            volumeObjectIndices[volumeIndex],
+                            nativeVolumeIndices[volumeIndex],
                             multiColorPaint.file.absolutePath,
                         ),
                     ) { "Multi-color paint could not be applied" }
@@ -2527,6 +2591,7 @@ private object SlicerProcessContract {
     const val KEY_MODEL_PATHS = "modelPaths"
     const val KEY_MODEL_OUTPUT_DIRECTORY = "modelOutputDirectory"
     const val KEY_NORMALIZED_MODELS = "normalizedModels"
+    const val KEY_OBJECT_VOLUME_COUNTS = "objectVolumeCounts"
     const val KEY_FILAMENT_SLOTS = "filamentSlots"
     const val KEY_MODEL_NOT_SPLITTABLE = "modelNotSplittable"
     const val KEY_MODEL_NOT_CUTTABLE = "modelNotCuttable"
