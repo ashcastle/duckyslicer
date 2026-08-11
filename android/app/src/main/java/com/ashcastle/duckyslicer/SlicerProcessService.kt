@@ -30,6 +30,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Files
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -42,6 +43,7 @@ internal object SlicerProcessClient {
 
     private val activeRequestId = AtomicReference<String?>(null)
     private val cancelledRequestId = AtomicReference<String?>(null)
+    private val cancelledProjectRequestIds = ConcurrentHashMap.newKeySet<String>()
 
     private val replyThread by lazy {
         HandlerThread("DuckySlicer replies").apply { start() }
@@ -123,15 +125,20 @@ internal object SlicerProcessClient {
     }
 
     /** Uses OrcaSlicer's inherited orientation::orient implementation in the isolated worker. */
-    fun autoOrient(model: File): OrcaOrientation {
+    fun autoOrient(
+        model: File,
+        requestId: String = UUID.randomUUID().toString(),
+    ): OrcaOrientation {
         check(Looper.myLooper() != Looper.getMainLooper()) {
             "Automatic orientation must run outside the application main thread"
         }
-        val requestId = UUID.randomUUID().toString()
+        requireValidRequestId(requestId)
+        throwIfProjectRequestCanceled(requestId)
         check(activeRequestId.compareAndSet(null, requestId)) {
             "Another slicer operation is already running"
         }
         return try {
+            throwIfProjectRequestCanceled(requestId)
             val response = withWorker(DuckySlicerApplication.context()) { worker ->
                 worker.request(
                     what = SlicerProcessContract.MESSAGE_AUTO_ORIENT,
@@ -142,6 +149,7 @@ internal object SlicerProcessClient {
                     timeoutSeconds = ORIENTATION_TIMEOUT_SECONDS,
                 )
             }
+            throwIfProjectRequestCanceled(requestId)
             check(response.getBoolean(SlicerProcessContract.KEY_OK)) {
                 response.getString(SlicerProcessContract.KEY_ERROR)
                     ?: "OrcaSlicer could not orient the model"
@@ -152,6 +160,11 @@ internal object SlicerProcessClient {
                     "OrcaSlicer returned no orientation"
                 },
             )
+        } catch (failure: Exception) {
+            if (projectRequestCancellationRequested(requestId)) {
+                throw ProjectEditCancelledException()
+            }
+            throw failure
         } finally {
             activeRequestId.compareAndSet(requestId, null)
             cancelledRequestId.compareAndSet(requestId, null)
@@ -159,21 +172,31 @@ internal object SlicerProcessClient {
     }
 
     /** Loads STL, 3MF, or OBJ through Orca and exports bounded project-owned STL objects. */
-    fun normalizeModel(model: File, stagingDirectory: File): List<OrcaImportedObject> =
+    fun normalizeModel(
+        model: File,
+        stagingDirectory: File,
+        requestId: String = UUID.randomUUID().toString(),
+    ): List<OrcaImportedObject> =
         runModelOperation(
             message = SlicerProcessContract.MESSAGE_NORMALIZE_MODEL,
             model = model,
             stagingDirectory = stagingDirectory,
             fallbackError = "OrcaSlicer could not import the model",
+            requestId = requestId,
         )
 
     /** Uses Orca's inherited ModelObject::split and exports each resulting object. */
-    fun splitModel(model: File, stagingDirectory: File): List<OrcaImportedObject> =
+    fun splitModel(
+        model: File,
+        stagingDirectory: File,
+        requestId: String = UUID.randomUUID().toString(),
+    ): List<OrcaImportedObject> =
         runModelOperation(
             message = SlicerProcessContract.MESSAGE_SPLIT_MODEL,
             model = model,
             stagingDirectory = stagingDirectory,
             fallbackError = "OrcaSlicer could not split the model",
+            requestId = requestId,
         )
 
     /** Uses Orca's inherited planar Cut and exports the two resulting solids. */
@@ -182,11 +205,13 @@ internal object SlicerProcessClient {
         stagingDirectory: File,
         heightRatio: Float,
         placeOnCut: Boolean,
+        requestId: String = UUID.randomUUID().toString(),
     ): List<OrcaImportedObject> = runModelOperation(
         message = SlicerProcessContract.MESSAGE_CUT_MODEL,
         model = model,
         stagingDirectory = stagingDirectory,
         fallbackError = "OrcaSlicer could not cut the model",
+        requestId = requestId,
     ) {
         putFloat(SlicerProcessContract.KEY_CUT_HEIGHT_RATIO, heightRatio)
         putBoolean(SlicerProcessContract.KEY_PLACE_ON_CUT, placeOnCut)
@@ -197,6 +222,7 @@ internal object SlicerProcessClient {
         primitive: OrcaPrimitive,
         sizeMm: Float,
         stagingDirectory: File,
+        requestId: String = UUID.randomUUID().toString(),
     ): OrcaImportedObject {
         require(sizeMm.isFinite() && sizeMm in MIN_PRIMITIVE_SIZE_MM..MAX_PRIMITIVE_SIZE_MM) {
             "Shape size is invalid"
@@ -206,6 +232,7 @@ internal object SlicerProcessClient {
             model = null,
             stagingDirectory = stagingDirectory,
             fallbackError = "OrcaSlicer could not create the shape",
+            requestId = requestId,
         ) {
             putInt(SlicerProcessContract.KEY_PRIMITIVE_TYPE, primitive.nativeId)
             putFloat(SlicerProcessContract.KEY_PRIMITIVE_SIZE_MM, sizeMm)
@@ -217,16 +244,19 @@ internal object SlicerProcessClient {
         model: File?,
         stagingDirectory: File,
         fallbackError: String,
+        requestId: String,
         configureRequest: Bundle.() -> Unit = {},
     ): List<OrcaImportedObject> {
         check(Looper.myLooper() != Looper.getMainLooper()) {
             "Model operations must run outside the application main thread"
         }
-        val requestId = UUID.randomUUID().toString()
+        requireValidRequestId(requestId)
+        throwIfProjectRequestCanceled(requestId)
         check(activeRequestId.compareAndSet(null, requestId)) {
             "Another slicer operation is already running"
         }
         return try {
+            throwIfProjectRequestCanceled(requestId)
             val response = withWorker(DuckySlicerApplication.context()) { worker ->
                 worker.request(
                     what = message,
@@ -244,6 +274,7 @@ internal object SlicerProcessClient {
                     timeoutSeconds = MODEL_NORMALIZATION_TIMEOUT_SECONDS,
                 )
             }
+            throwIfProjectRequestCanceled(requestId)
             if (response.getBoolean(SlicerProcessContract.KEY_MODEL_NOT_SPLITTABLE)) {
                 throw ModelNotSplittableException()
             }
@@ -283,6 +314,11 @@ internal object SlicerProcessClient {
                     "OrcaSlicer returned an invalid model count"
                 }
             }
+        } catch (failure: Exception) {
+            if (projectRequestCancellationRequested(requestId)) {
+                throw ProjectEditCancelledException()
+            }
+            throw failure
         } finally {
             activeRequestId.compareAndSet(requestId, null)
             cancelledRequestId.compareAndSet(requestId, null)
@@ -298,12 +334,14 @@ internal object SlicerProcessClient {
         bedOriginY: Float,
         bedPolygon: List<Float>,
         minimumGap: Float = 6f,
+        requestId: String = UUID.randomUUID().toString(),
     ): OrcaArrangement {
         check(Looper.myLooper() != Looper.getMainLooper()) {
             "Automatic arrangement must run outside the application main thread"
         }
         require(transformedModels.size >= 2) { "At least two models are required" }
-        val requestId = UUID.randomUUID().toString()
+        requireValidRequestId(requestId)
+        throwIfProjectRequestCanceled(requestId)
         val modelPaths = transformedModels.map(File::getAbsolutePath)
         require(encodedRequestBytes(modelPaths, "") <= SlicerProcessContract.MAX_REQUEST_BYTES) {
             "Arrange request is too large"
@@ -312,6 +350,7 @@ internal object SlicerProcessClient {
             "Another slicer operation is already running"
         }
         return try {
+            throwIfProjectRequestCanceled(requestId)
             val response = withWorker(DuckySlicerApplication.context()) { worker ->
                 worker.request(
                     what = SlicerProcessContract.MESSAGE_AUTO_ARRANGE,
@@ -328,6 +367,7 @@ internal object SlicerProcessClient {
                     timeoutSeconds = ARRANGEMENT_TIMEOUT_SECONDS,
                 )
             }
+            throwIfProjectRequestCanceled(requestId)
             check(response.getBoolean(SlicerProcessContract.KEY_OK)) {
                 response.getString(SlicerProcessContract.KEY_ERROR)
                     ?: "The objects could not be arranged"
@@ -344,6 +384,11 @@ internal object SlicerProcessClient {
                     response.getFloatArray(SlicerProcessContract.KEY_OBJECT_CENTERS),
                 ) { "OrcaSlicer returned no object centers" },
             )
+        } catch (failure: Exception) {
+            if (projectRequestCancellationRequested(requestId)) {
+                throw ProjectEditCancelledException()
+            }
+            throw failure
         } finally {
             activeRequestId.compareAndSet(requestId, null)
             cancelledRequestId.compareAndSet(requestId, null)
@@ -567,6 +612,69 @@ internal object SlicerProcessClient {
         }
     }
 
+    /** Marks and cancels only the project-edit request with this exact identifier. */
+    fun cancelProjectRequestAsync(requestId: String): Boolean {
+        if (!isValidRequestId(requestId)) return false
+        cancelledProjectRequestIds.add(requestId)
+        if (activeRequestId.get() != requestId) return true
+        Thread(
+            { cancelProjectRequest(requestId) },
+            "DuckySlicer project cancellation",
+        ).apply {
+            isDaemon = true
+            start()
+        }
+        return true
+    }
+
+    internal fun projectRequestCancellationRequested(requestId: String): Boolean =
+        requestId in cancelledProjectRequestIds
+
+    internal fun releaseProjectRequest(requestId: String) {
+        cancelledProjectRequestIds.remove(requestId)
+        if (activeRequestId.get() != requestId) {
+            cancelledRequestId.compareAndSet(requestId, null)
+        }
+    }
+
+    private fun cancelProjectRequest(requestId: String): Boolean {
+        if (activeRequestId.get() != requestId) return false
+        cancelledRequestId.set(requestId)
+        return runCatching {
+            withWorker(DuckySlicerApplication.context()) { worker ->
+                repeat(PROJECT_CANCEL_BIND_RETRIES) {
+                    if (activeRequestId.get() != requestId) return@withWorker true
+                    val response = worker.request(
+                        what = SlicerProcessContract.MESSAGE_CANCEL,
+                        data = Bundle().apply {
+                            putString(SlicerProcessContract.KEY_REQUEST_ID, requestId)
+                        },
+                        timeoutSeconds = CONNECTION_TIMEOUT_SECONDS,
+                    )
+                    if (response.getBoolean(SlicerProcessContract.KEY_OK)) {
+                        return@withWorker true
+                    }
+                    Thread.sleep(PROJECT_CANCEL_RETRY_MILLIS)
+                }
+                activeRequestId.get() != requestId
+            }
+        }.getOrDefault(activeRequestId.get() != requestId)
+    }
+
+    private fun throwIfProjectRequestCanceled(requestId: String) {
+        if (projectRequestCancellationRequested(requestId)) {
+            throw ProjectEditCancelledException()
+        }
+    }
+
+    private fun requireValidRequestId(requestId: String) {
+        require(isValidRequestId(requestId)) { "Slicer request id is invalid" }
+    }
+
+    private fun isValidRequestId(requestId: String): Boolean =
+        requestId.length in 1..SlicerProcessService.MAX_REQUEST_ID_LENGTH &&
+            requestId.none(Char::isISOControl)
+
     /** Cancels only the currently active request by terminating its isolated worker. */
     fun cancelActiveSlice(): Boolean {
         val requestId = activeRequestId.get() ?: return false
@@ -629,13 +737,18 @@ internal object SlicerProcessClient {
         }
     }
 
-    internal fun cancellationProbeForTest(onStarted: () -> Unit) {
+    internal fun cancellationProbeForTest(
+        onStarted: () -> Unit,
+        requestId: String = UUID.randomUUID().toString(),
+    ) {
         check(BuildConfig.DEBUG) { "Cancellation probe is available only in debug builds" }
-        val requestId = UUID.randomUUID().toString()
+        requireValidRequestId(requestId)
+        throwIfProjectRequestCanceled(requestId)
         check(activeRequestId.compareAndSet(null, requestId)) {
             "Another slice is already running"
         }
         try {
+            throwIfProjectRequestCanceled(requestId)
             withWorker(DuckySlicerApplication.context()) { worker ->
                 worker.request(
                     what = SlicerProcessContract.MESSAGE_BLOCK_FOR_TEST,
@@ -648,6 +761,9 @@ internal object SlicerProcessClient {
             }
             error("Cancellation probe completed unexpectedly")
         } catch (failure: Exception) {
+            if (projectRequestCancellationRequested(requestId)) {
+                throw ProjectEditCancelledException()
+            }
             if (cancelledRequestId.get() == requestId) throw SlicingCancelledException()
             throw failure
         } finally {
@@ -812,6 +928,7 @@ internal object SlicerProcessClient {
                 what == SlicerProcessContract.MESSAGE_AUTO_ARRANGE ||
                 what == SlicerProcessContract.MESSAGE_NORMALIZE_MODEL ||
                 what == SlicerProcessContract.MESSAGE_SPLIT_MODEL ||
+                what == SlicerProcessContract.MESSAGE_CUT_MODEL ||
                 what == SlicerProcessContract.MESSAGE_CREATE_PRIMITIVE ||
                 what == SlicerProcessContract.MESSAGE_BLOCK_FOR_TEST
             if (!cancellable) return
@@ -842,6 +959,8 @@ internal object SlicerProcessClient {
     }
 
     private const val CONNECTION_TIMEOUT_SECONDS = 10L
+    private const val PROJECT_CANCEL_BIND_RETRIES = 100
+    private const val PROJECT_CANCEL_RETRY_MILLIS = 10L
     private const val ARRANGEMENT_TIMEOUT_SECONDS = 5L * 60L
     private const val MODEL_NORMALIZATION_TIMEOUT_SECONDS = 5L * 60L
     private const val ORIENTATION_TIMEOUT_SECONDS = 5L * 60L
@@ -906,6 +1025,7 @@ internal class ForegroundSliceSession internal constructor(
 }
 
 internal class SlicingCancelledException : Exception("Slicing was cancelled")
+internal class ProjectEditCancelledException : Exception("Project edit was cancelled")
 
 internal class ModelNotSplittableException : Exception("model_not_splittable")
 internal class ModelNotCuttableException : Exception("model_not_cuttable")

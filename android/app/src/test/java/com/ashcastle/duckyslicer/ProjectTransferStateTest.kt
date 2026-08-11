@@ -139,6 +139,46 @@ class ProjectTransferStateTest {
         assertNull(started.editCompletion)
     }
 
+    @Test
+    fun requestedCancellationRejectsALateNativeSuccessAndKeepsTheProject() {
+        val history = history()
+        val options = SliceOptions()
+        val operation = ActiveProjectEdit(
+            id = 73,
+            kind = ProjectEditKind.ARRANGE,
+            requestId = "request-73",
+        )
+        val started = requireNotNull(
+            ProjectTransferState(
+                history = history,
+                sliceOptions = options,
+                restored = true,
+                sessionRevision = 12,
+            ).withStartedEdit(operation),
+        )
+        val canceling = requireNotNull(started.withEditCancellationRequested(operation.id))
+        val lateHistory = history.updateSelectedTransform(ModelTransform(offsetXmm = 48f))
+
+        assertTrue(requireNotNull(canceling.activeEdit).cancellationRequested)
+        assertNull(canceling.withEditCancellationRequested(operation.id))
+        val completed = requireNotNull(
+            canceling.withCompletedEdit(
+                operation,
+                history,
+                options,
+                lateHistory,
+                ProjectEditCompletion(operation.id, operation.kind),
+            ),
+        )
+
+        assertFalse(completed.busy)
+        assertNull(completed.activeEdit)
+        assertEquals(ProjectEditFailure.CANCELED, completed.editCompletion?.failure)
+        assertFalse(requireNotNull(completed.editCompletion).sessionChanged)
+        assertEquals(history, completed.history)
+        assertEquals(12L, completed.sessionRevision)
+    }
+
     private fun history(): ProjectHistoryState {
         val model = ModelInfo(
             fileName = "retained.stl",

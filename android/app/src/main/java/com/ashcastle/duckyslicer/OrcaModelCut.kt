@@ -22,6 +22,7 @@ internal suspend fun cutProjectObject(
     heightRatio: Float,
     placeOnCut: Boolean,
     maximumObjects: Int = ProjectStore.MAX_PROJECT_OBJECTS,
+    requestId: String = UUID.randomUUID().toString(),
 ): CutProjectResult = withContext(Dispatchers.IO) {
     require(heightRatio.isFinite() && heightRatio in 0.02f..0.98f) {
         "Cut height is invalid"
@@ -30,6 +31,9 @@ internal suspend fun cutProjectObject(
     val staging = projectStore.createModelImportStaging()
     val installed = ArrayList<File>()
     try {
+        if (SlicerProcessClient.projectRequestCancellationRequested(requestId)) {
+            throw ProjectEditCancelledException()
+        }
         val transformed = File(staging, "cut-source.stl")
         val transformResult = JSONObject(
             NativeEngine.transformStl(
@@ -44,6 +48,9 @@ internal suspend fun cutProjectObject(
             ),
         )
         check(transformResult.optBoolean("ok")) { "Model transform failed" }
+        if (SlicerProcessClient.projectRequestCancellationRequested(requestId)) {
+            throw ProjectEditCancelledException()
+        }
         val transformedModel = ModelInfo.fromJson(
             NativeEngine.inspectStl(transformed.absolutePath),
             transformed.absolutePath,
@@ -64,6 +71,7 @@ internal suspend fun cutProjectObject(
             staging,
             heightRatio,
             placeOnCut,
+            requestId,
         )
         require(exported.size == 2) { "Invalid cut object count" }
         val sourceBase = projectObject.model.fileName
@@ -74,6 +82,9 @@ internal suspend fun cutProjectObject(
         val bedCenterX = options.bedOriginX + options.bedSizeX / 2f
         val bedCenterY = options.bedOriginY + options.bedSizeY / 2f
         val objects = exported.mapIndexed { index, cut ->
+            if (SlicerProcessClient.projectRequestCancellationRequested(requestId)) {
+                throw ProjectEditCancelledException()
+            }
             val displayName = "$sourceBase ${if (index == 0) "A" else "B"}.stl"
             val model = projectStore.installImportedModel(cut.file, displayName)
             installed += File(model.localPath)

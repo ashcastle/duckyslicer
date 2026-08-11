@@ -41,4 +41,21 @@ class ModelImportTest {
             copyModelWithLimit(ByteArrayInputStream(byteArrayOf(1)), ByteArrayOutputStream(), 0)
         }
     }
+
+    @Test
+    fun cooperativeCancellationStopsBeforeAnotherImportChunkIsWritten() {
+        val source = ByteArray(20_000) { 4 }
+        val output = ByteArrayOutputStream()
+        var checks = 0
+
+        assertThrows(ProjectEditCancelledException::class.java) {
+            copyModelWithLimit(
+                ByteArrayInputStream(source),
+                output,
+                cancellationRequested = { ++checks >= 3 },
+            )
+        }
+
+        assertEquals(DEFAULT_BUFFER_SIZE, output.size())
+    }
 }

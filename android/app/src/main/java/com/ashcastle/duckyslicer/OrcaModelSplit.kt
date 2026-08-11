@@ -20,6 +20,7 @@ internal suspend fun splitProjectObject(
     projectStore: ProjectStore,
     options: SliceOptions,
     maximumObjects: Int = ProjectStore.MAX_PROJECT_OBJECTS,
+    requestId: String = UUID.randomUUID().toString(),
 ): SplitProjectResult = withContext(Dispatchers.IO) {
     require(maximumObjects in 2..ProjectStore.MAX_PROJECT_OBJECTS) {
         "Project has no room for split objects"
@@ -27,6 +28,9 @@ internal suspend fun splitProjectObject(
     val staging = projectStore.createModelImportStaging()
     val installed = ArrayList<File>()
     try {
+        if (SlicerProcessClient.projectRequestCancellationRequested(requestId)) {
+            throw ProjectEditCancelledException()
+        }
         val transformed = File(staging, "split-source.stl")
         val transformResult = JSONObject(
             NativeEngine.transformStl(
@@ -41,8 +45,11 @@ internal suspend fun splitProjectObject(
             ),
         )
         check(transformResult.optBoolean("ok")) { "Model transform failed" }
+        if (SlicerProcessClient.projectRequestCancellationRequested(requestId)) {
+            throw ProjectEditCancelledException()
+        }
 
-        val exported = SlicerProcessClient.splitModel(transformed, staging)
+        val exported = SlicerProcessClient.splitModel(transformed, staging, requestId)
         require(exported.size in 2..maximumObjects) {
             "Invalid split object count"
         }
@@ -54,6 +61,9 @@ internal suspend fun splitProjectObject(
         val bedCenterX = options.bedOriginX + options.bedSizeX / 2f
         val bedCenterY = options.bedOriginY + options.bedSizeY / 2f
         val objects = exported.mapIndexed { index, split ->
+            if (SlicerProcessClient.projectRequestCancellationRequested(requestId)) {
+                throw ProjectEditCancelledException()
+            }
             val displayName = "$sourceBase ${index + 1}.stl"
             val model = projectStore.installImportedModel(split.file, displayName)
             installed += File(model.localPath)

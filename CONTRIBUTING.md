@@ -45,7 +45,10 @@ avoid introducing an account or cloud requirement.
   through that retained project owner. Bind each result to its starting history and
   options, reject duplicate work after rotation, and delete every unaccepted model file.
 - UI disposal must not issue a process-wide slicer cancellation. Only the retained
-  owner of an active operation may cancel it.
+  owner of an active operation may cancel it. Long-running project edits must expose
+  request-scoped cancellation, preserve the starting project on cancellation, and
+  remove every generated model that was not accepted. Final retained-owner clearance
+  must cancel that exact request; ordinary Activity recreation must not.
 - User-selected G-code export must run through its retained owner, hold a reader lease,
   reject duplicate copies, and clean up a newly created document after failure.
 - Every `CreateDocument` writer must accept only its returned `content://` URI, truncate

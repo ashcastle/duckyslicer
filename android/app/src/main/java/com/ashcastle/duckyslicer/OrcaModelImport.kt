@@ -22,7 +22,11 @@ internal suspend fun importOrcaModels(
     uri: Uri,
     projectStore: ProjectStore,
     options: SliceOptions,
+    requestId: String = UUID.randomUUID().toString(),
 ): List<ProjectObject> = withContext(Dispatchers.IO) {
+    fun cancellationRequested(): Boolean =
+        SlicerProcessClient.projectRequestCancellationRequested(requestId)
+    if (cancellationRequested()) throw ProjectEditCancelledException()
     val metadata = queryModelMetadata(context, uri)
     val format = modelFormat(metadata.displayName, metadata.mimeType)
         ?: throw UnsupportedModelFormatException()
@@ -35,14 +39,18 @@ internal suspend fun importOrcaModels(
         val source = File(staging, "source.${format.extension}")
         context.contentResolver.openInputStream(uri).use { input ->
             requireNotNull(input) { "model_unreadable" }
-            source.outputStream().use { output -> copyModelWithLimit(input, output) }
+            source.outputStream().use { output ->
+                copyModelWithLimit(input, output, cancellationRequested = ::cancellationRequested)
+            }
         }
+        if (cancellationRequested()) throw ProjectEditCancelledException()
         val exported = if (format == OrcaModelFormat.STL) {
             listOf(OrcaImportedObject(source, metadata.displayName, 0f, 0f))
         } else {
-            SlicerProcessClient.normalizeModel(source, staging)
+            SlicerProcessClient.normalizeModel(source, staging, requestId)
         }
         val imported = exported.mapIndexed { index, normalized ->
+            if (cancellationRequested()) throw ProjectEditCancelledException()
             val displayName = importedObjectName(
                 sourceName = metadata.displayName,
                 objectName = normalized.displayName,
@@ -53,6 +61,7 @@ internal suspend fun importOrcaModels(
             installed += File(model.localPath)
             ImportedGeometry(model, normalized.centerXmm, normalized.centerYmm)
         }
+        if (cancellationRequested()) throw ProjectEditCancelledException()
         val transforms = importedTransforms(imported, format, options)
         imported.mapIndexed { index, geometry ->
             ProjectObject(

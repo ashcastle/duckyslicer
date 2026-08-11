@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.UUID
 
 internal enum class ProjectTransferDirection {
     IMPORT,
@@ -38,9 +39,12 @@ internal enum class ProjectEditKind {
 internal data class ActiveProjectEdit(
     val id: Long,
     val kind: ProjectEditKind,
+    val requestId: String = "project-$id",
+    val cancellationRequested: Boolean = false,
 )
 
 internal enum class ProjectEditFailure {
+    CANCELED,
     GENERIC,
     MODEL_TOO_LARGE,
     NOT_SPLITTABLE,
@@ -124,6 +128,14 @@ internal fun ProjectTransferState.withStartedEdit(
     return copy(busy = true, activeEdit = operation)
 }
 
+internal fun ProjectTransferState.withEditCancellationRequested(
+    operationId: Long,
+): ProjectTransferState? {
+    val operation = activeEdit ?: return null
+    if (!busy || operation.id != operationId || operation.cancellationRequested) return null
+    return copy(activeEdit = operation.copy(cancellationRequested = true))
+}
+
 internal fun ProjectTransferState.withCompletedEdit(
     operation: ActiveProjectEdit,
     expectedHistory: ProjectHistoryState,
@@ -137,18 +149,23 @@ internal fun ProjectTransferState.withCompletedEdit(
     require((completion.failure == null) == (nextHistory != null)) {
         "Successful project edits require a resulting history"
     }
+    val running = activeEdit
     if (
-        !busy || activeEdit != operation || history != expectedHistory ||
+        !busy || running == null || !running.matches(operation) || history != expectedHistory ||
         sliceOptions != expectedOptions
     ) {
         return null
     }
-    val appliedHistory = nextHistory ?: history
+    val canceled = running.cancellationRequested || completion.failure == ProjectEditFailure.CANCELED
+    val appliedHistory = if (canceled) history else nextHistory ?: history
     val changed = appliedHistory != history
     return copy(
         busy = false,
         activeEdit = null,
-        editCompletion = completion.copy(sessionChanged = changed),
+        editCompletion = completion.copy(
+            failure = ProjectEditFailure.CANCELED.takeIf { canceled } ?: completion.failure,
+            sessionChanged = changed,
+        ),
         history = appliedHistory,
         persistenceMessage = ProjectPersistenceMessage.STORAGE_UNAVAILABLE.takeIf {
             changed && persistenceBlocked
@@ -156,6 +173,9 @@ internal fun ProjectTransferState.withCompletedEdit(
         sessionRevision = sessionRevision + if (changed) 1 else 0,
     )
 }
+
+private fun ActiveProjectEdit.matches(other: ActiveProjectEdit): Boolean =
+    id == other.id && kind == other.kind && requestId == other.requestId
 
 private data class ProjectEditBaseline(
     val operation: ActiveProjectEdit,
@@ -235,7 +255,10 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         val baseline = startEditLocked(ProjectEditKind.AUTO_LAY) ?: return false
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val orientation = SlicerProcessClient.autoOrient(File(target.model.localPath))
+                val orientation = SlicerProcessClient.autoOrient(
+                    File(target.model.localPath),
+                    baseline.operation.requestId,
+                )
                 val nextHistory = baseline.history.updateTransform(
                     target.id,
                     target.transform.withOrcaOrientation(orientation),
@@ -245,6 +268,8 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 throw failure
             } catch (failure: Exception) {
                 completeEditFailure(baseline, failure)
+            } finally {
+                SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId)
             }
         }
         return true
@@ -257,7 +282,11 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         val targets = baseline.history.current.objects
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val arrangement = OnDeviceSlicer.arrange(targets, baseline.options)
+                val arrangement = OnDeviceSlicer.arrange(
+                    targets,
+                    baseline.options,
+                    requestId = baseline.operation.requestId,
+                )
                 val nextHistory = baseline.history.applyOrcaArrangement(
                     arrangement,
                     baseline.options.bedSizeX,
@@ -268,6 +297,8 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 throw failure
             } catch (failure: Exception) {
                 completeEditFailure(baseline, failure)
+            } finally {
+                SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId)
             }
         }
         return true
@@ -288,6 +319,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                     projectStore,
                     baseline.options,
                     maximumObjects,
+                    baseline.operation.requestId,
                 )
                 installed = result.objects
                 val nextHistory = baseline.history.replaceSelected(result.objects)
@@ -307,6 +339,8 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             } catch (failure: Exception) {
                 installed.deleteInstalledModels()
                 completeEditFailure(baseline, failure)
+            } finally {
+                SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId)
             }
         }
         return true
@@ -331,6 +365,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                     heightRatio,
                     placeOnCut,
                     maximumObjects,
+                    baseline.operation.requestId,
                 )
                 installed = result.objects
                 val nextHistory = baseline.history.replaceSelected(result.objects)
@@ -350,6 +385,8 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             } catch (failure: Exception) {
                 installed.deleteInstalledModels()
                 completeEditFailure(baseline, failure)
+            } finally {
+                SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId)
             }
         }
         return true
@@ -372,7 +409,13 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         viewModelScope.launch(Dispatchers.IO) {
             var installed = emptyList<ProjectObject>()
             try {
-                val created = createOrcaPrimitive(primitive, sizeMm, displayName, projectStore)
+                val created = createOrcaPrimitive(
+                    primitive,
+                    sizeMm,
+                    displayName,
+                    projectStore,
+                    baseline.operation.requestId,
+                )
                 installed = listOf(created)
                 val distance = ((objectCount + 1) / 2) * 24f
                 val offset = when {
@@ -399,6 +442,8 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             } catch (failure: Exception) {
                 installed.deleteInstalledModels()
                 completeEditFailure(baseline, failure)
+            } finally {
+                SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId)
             }
         }
         return true
@@ -417,6 +462,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                     uri,
                     projectStore,
                     baseline.options,
+                    baseline.operation.requestId,
                 )
                 installed = imported
                 require(objectCount + imported.size <= ProjectStore.MAX_PROJECT_OBJECTS) {
@@ -451,6 +497,8 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             } catch (failure: Exception) {
                 installed.deleteInstalledModels()
                 completeEditFailure(baseline, failure)
+            } finally {
+                SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId)
             }
         }
         return true
@@ -581,9 +629,46 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         mutableState.value = current.copy(editCompletion = null)
     }
 
+    @Synchronized
+    fun cancelActiveEdit(): Boolean {
+        val operation = mutableState.value.activeEdit ?: return false
+        val updated = mutableState.value.withEditCancellationRequested(operation.id) ?: return false
+        mutableState.value = updated
+        return SlicerProcessClient.cancelProjectRequestAsync(operation.requestId)
+    }
+
+    @Synchronized
+    internal fun startCancellationProbeForTest(onWorkerStarted: () -> Unit): Boolean {
+        check(BuildConfig.DEBUG) { "Project cancellation probe is available only in debug builds" }
+        val baseline = startEditLocked(ProjectEditKind.AUTO_LAY) ?: return false
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                SlicerProcessClient.cancellationProbeForTest(
+                    onStarted = onWorkerStarted,
+                    requestId = baseline.operation.requestId,
+                )
+                completeEditFailure(
+                    baseline,
+                    IllegalStateException("Cancellation probe completed unexpectedly"),
+                )
+            } catch (failure: CancellationException) {
+                throw failure
+            } catch (failure: Exception) {
+                completeEditFailure(baseline, failure)
+            } finally {
+                SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId)
+            }
+        }
+        return true
+    }
+
     private fun startEditLocked(kind: ProjectEditKind): ProjectEditBaseline? {
         val current = mutableState.value
-        val operation = ActiveProjectEdit(++nextOperationId, kind)
+        val operation = ActiveProjectEdit(
+            id = ++nextOperationId,
+            kind = kind,
+            requestId = UUID.randomUUID().toString(),
+        )
         val started = current.withStartedEdit(operation) ?: return null
         mutableState.value = started
         return ProjectEditBaseline(operation, current.history, current.sliceOptions)
@@ -612,7 +697,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         ) ?: return@synchronized false
         mutableState.value = updated
         schedulePersistenceLocked(allowPendingCompletion = true)
-        true
+        updated.editCompletion?.failure != ProjectEditFailure.CANCELED
     }
 
     private fun completeEditFailure(
@@ -620,6 +705,8 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         failure: Exception,
     ) {
         val reason = when (failure) {
+            is ProjectEditCancelledException, is SlicingCancelledException ->
+                ProjectEditFailure.CANCELED
             is ModelTooLargeException -> ProjectEditFailure.MODEL_TOO_LARGE
             is ModelNotSplittableException -> ProjectEditFailure.NOT_SPLITTABLE
             is ModelNotCuttableException -> ProjectEditFailure.NOT_CUTTABLE
@@ -630,24 +717,24 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             kind = baseline.operation.kind,
             failure = reason,
         )
-        val accepted = synchronized(this) {
+        val completedReason = synchronized(this) {
             val updated = mutableState.value.withCompletedEdit(
                 operation = baseline.operation,
                 expectedHistory = baseline.history,
                 expectedOptions = baseline.options,
                 nextHistory = null,
                 completion = completion,
-            ) ?: return@synchronized false
+            ) ?: return@synchronized null
             mutableState.value = updated
             schedulePersistenceLocked(allowPendingCompletion = true)
-            true
+            updated.editCompletion?.failure
         }
-        if (!accepted) return
+        if (completedReason == null || completedReason == ProjectEditFailure.CANCELED) return
         when (baseline.operation.kind) {
             ProjectEditKind.AUTO_LAY -> supportEvents.record(SupportEvent.AUTO_LAY_FAILED)
             ProjectEditKind.ARRANGE -> supportEvents.record(SupportEvent.ARRANGE_FAILED)
             ProjectEditKind.MODEL_IMPORT -> supportEvents.record(
-                if (reason == ProjectEditFailure.MODEL_TOO_LARGE) {
+                if (completedReason == ProjectEditFailure.MODEL_TOO_LARGE) {
                     SupportEvent.MODEL_TOO_LARGE
                 } else {
                     SupportEvent.MODEL_IMPORT_FAILED
@@ -738,8 +825,11 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         val pending = synchronized(this) {
             persistenceJob?.cancel()
             persistenceJob = null
-            mutableState.value.takeIf { current ->
-                current.hasPersistableChanges(allowActiveTransfer = false)
+            val current = mutableState.value
+            val activeRequestId = current.activeEdit?.requestId
+            activeRequestId?.let(SlicerProcessClient::cancelProjectRequestAsync)
+            current.takeIf { state ->
+                state.hasPersistableChanges(allowActiveTransfer = false)
             }
         }
         try {

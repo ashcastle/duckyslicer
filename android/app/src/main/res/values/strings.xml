@@ -30,6 +30,10 @@
     <string name="slicing_progress">Slicing… %1$d%%</string>
     <string name="canceling_slice">Canceling…</string>
     <string name="slice_canceled">Slice canceled.</string>
+    <string name="editing_model">Updating model…</string>
+    <string name="cancel_model_edit">Cancel model change</string>
+    <string name="canceling_model_edit">Canceling model change…</string>
+    <string name="model_edit_canceled">Model change canceled.</string>
     <string name="gcode_ready">G-code ready</string>
     <string name="layers">Layers</string>
     <string name="slice_model">Slice</string>

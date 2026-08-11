@@ -30,6 +30,10 @@
     <string name="slicing_progress">슬라이스 중… %1$d%%</string>
     <string name="canceling_slice">취소 중…</string>
     <string name="slice_canceled">슬라이스를 취소했습니다.</string>
+    <string name="editing_model">모델 변경 중…</string>
+    <string name="cancel_model_edit">모델 변경 취소</string>
+    <string name="canceling_model_edit">모델 변경 취소 중…</string>
+    <string name="model_edit_canceled">모델 변경을 취소했습니다.</string>
     <string name="gcode_ready">G-code 준비 완료</string>
     <string name="layers">레이어</string>
     <string name="slice_model">슬라이스</string>

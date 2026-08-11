@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentCut
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.ExpandLess
@@ -367,6 +368,8 @@ internal fun WorkspaceScreen(
     arranging: Boolean,
     splitting: Boolean,
     cutting: Boolean,
+    projectEditActive: Boolean,
+    projectEditCancellationRequested: Boolean,
     slicing: Boolean,
     sliceCancellationRequested: Boolean,
     sliceProgress: Int,
@@ -394,6 +397,7 @@ internal fun WorkspaceScreen(
     onLayOnFace: (String, FloatArray) -> Unit,
     onSplit: () -> Unit,
     onCut: (Float, Boolean) -> Unit,
+    onCancelProjectEdit: () -> Unit,
     onSupportPaintPreview: (String, Int, SupportPaintState?) -> Unit,
     onSupportPaintCommitted: (String, SupportPaint) -> Unit,
     onSeamPaintPreview: (String, Int, SeamPaintState?) -> Unit,
@@ -534,6 +538,8 @@ internal fun WorkspaceScreen(
             WorkspaceMenu(
                 importing = importing,
                 editingBusy = editingBusy,
+                projectEditActive = projectEditActive,
+                cancellationRequested = projectEditCancellationRequested,
                 slicing = slicing,
                 previewLoading = previewLoading,
                 canExport = sliceOutcome != null && !exportingGcode,
@@ -542,6 +548,7 @@ internal fun WorkspaceScreen(
                 onExport = onSave,
                 canArrange = projectObjects.size > 1,
                 onArrange = onArrange,
+                onCancelProjectEdit = onCancelProjectEdit,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(16.dp),
@@ -690,6 +697,8 @@ internal fun WorkspaceScreen(
                     recents = profileRecents,
                     profileBusy = profileBusy,
                     importing = importing || editingBusy,
+                    projectEditActive = projectEditActive,
+                    projectEditCancellationRequested = projectEditCancellationRequested,
                     previewLoading = previewLoading,
                     slicing = slicing,
                     cancellationRequested = sliceCancellationRequested,
@@ -698,6 +707,7 @@ internal fun WorkspaceScreen(
                     notice = notice,
                     onSlice = onSlice,
                     onCancelSlice = onCancelSlice,
+                    onCancelProjectEdit = onCancelProjectEdit,
                     onOptionsChanged = onSliceOptionsChanged,
                     onSavePrinter = onSavePrinterProfile,
                     onSaveFilament = onSaveFilamentProfile,
@@ -1843,6 +1853,8 @@ private fun TransformSlider(
 private fun WorkspaceMenu(
     importing: Boolean,
     editingBusy: Boolean,
+    projectEditActive: Boolean,
+    cancellationRequested: Boolean,
     slicing: Boolean,
     previewLoading: Boolean,
     canExport: Boolean,
@@ -1851,6 +1863,7 @@ private fun WorkspaceMenu(
     onAddShape: () -> Unit,
     onExport: () -> Unit,
     onArrange: () -> Unit,
+    onCancelProjectEdit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -1870,6 +1883,27 @@ private fun WorkspaceMenu(
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (projectEditActive) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            stringResource(
+                                if (cancellationRequested) {
+                                    R.string.canceling_model_edit
+                                } else {
+                                    R.string.cancel_model_edit
+                                },
+                            ),
+                        )
+                    },
+                    leadingIcon = { Icon(Icons.Default.Close, null) },
+                    enabled = !cancellationRequested,
+                    onClick = {
+                        expanded = false
+                        onCancelProjectEdit()
+                    },
+                )
+            }
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.import_model)) },
                 leadingIcon = { Icon(Icons.Default.FileOpen, null) },
@@ -3289,6 +3323,8 @@ private fun SliceSheet(
     recents: ProfileRecents,
     profileBusy: Boolean,
     importing: Boolean,
+    projectEditActive: Boolean,
+    projectEditCancellationRequested: Boolean,
     previewLoading: Boolean,
     slicing: Boolean,
     cancellationRequested: Boolean,
@@ -3297,6 +3333,7 @@ private fun SliceSheet(
     notice: String?,
     onSlice: () -> Unit,
     onCancelSlice: () -> Unit,
+    onCancelProjectEdit: () -> Unit,
     onOptionsChanged: (SliceOptions) -> Unit,
     onSavePrinter: (String, SliceOptions) -> Unit,
     onSaveFilament: (String, SliceOptions, Int) -> Unit,
@@ -3325,6 +3362,28 @@ private fun SliceSheet(
         }
         if (error != null) Text(error, color = Color(0xFFFF8A80))
         if (notice != null) Text(notice, color = WorkspaceYellow)
+        if (projectEditActive) {
+            Text(stringResource(R.string.editing_model), fontWeight = FontWeight.SemiBold)
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth(),
+                color = WorkspaceYellow,
+            )
+            TextButton(
+                onClick = onCancelProjectEdit,
+                enabled = !projectEditCancellationRequested,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    stringResource(
+                        if (projectEditCancellationRequested) {
+                            R.string.canceling_model_edit
+                        } else {
+                            R.string.cancel_model_edit
+                        },
+                    ),
+                )
+            }
+        }
         if (slicing) {
             Text(stringResource(R.string.slicing_progress, progress), fontWeight = FontWeight.SemiBold)
             LinearProgressIndicator(

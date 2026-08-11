@@ -19,6 +19,8 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "DurableJsonFile.kt",
         "ProjectStore.kt",
         "ProjectTransfer.kt",
+        "ModelImport.kt",
+        "SlicerProcessService.kt",
         "ProfileStore.kt",
         "ProfileLibraryViewModel.kt",
         "AppSettings.kt",
@@ -26,9 +28,11 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "RemoteDevice.kt",
         "RemoteOperationViewModel.kt",
         "MainActivity.kt",
+        "WorkspaceScreen.kt",
         "DeviceSheet.kt",
         "DurableJsonFileTest.kt",
         "ProjectStoreTest.kt",
+        "ModelImportTest.kt",
         "ProfileStoreMigrationTest.kt",
         "ProfileLibraryViewModelTest.kt",
         "AppSettingsViewModelTest.kt",
@@ -39,6 +43,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "ProfileLibraryInstrumentedTest.kt",
         "AppSettingsLifecycleInstrumentedTest.kt",
         "ProjectArchiveIntentInstrumentedTest.kt",
+        "ProjectEditCancellationInstrumentedTest.kt",
         "CONTRIBUTING.md",
         "SECURITY.md",
         "strings.xml",
@@ -94,6 +99,13 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "startEditLocked",
         "withCompletedEdit",
         "deleteInstalledModels",
+        "val requestId: String",
+        "val cancellationRequested: Boolean",
+        "ProjectEditFailure.CANCELED",
+        "fun cancelActiveEdit()",
+        "SlicerProcessClient.cancelProjectRequestAsync(operation.requestId)",
+        "SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId)",
+        "activeRequestId?.let(SlicerProcessClient::cancelProjectRequestAsync)",
     ):
         if marker not in project_session:
             raise VerificationError(f"project autosave corruption guard is missing: {marker}")
@@ -115,9 +127,42 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "projectTransferModel.cutSelectedModel(heightRatio, placeOnCut)",
         "projectTransferModel.createPrimitive(primitive, sizeMm, displayName)",
         "projectTransferModel.importModels(uri)",
+        "projectTransferModel::cancelActiveEdit",
     ):
         if marker not in main:
             raise VerificationError(f"retained project edit dispatch is missing: {marker}")
+
+    model_import = sources["ModelImport.kt"]
+    for marker in (
+        "cancellationRequested: () -> Boolean",
+        "if (cancellationRequested()) throw ProjectEditCancelledException()",
+    ):
+        if marker not in model_import:
+            raise VerificationError(f"model import cancellation contract is missing: {marker}")
+
+    slicer_process = sources["SlicerProcessService.kt"]
+    for marker in (
+        "cancelledProjectRequestIds",
+        "fun cancelProjectRequestAsync(requestId: String)",
+        "activeRequestId.get() != requestId",
+        "projectRequestCancellationRequested(requestId)",
+        "fun releaseProjectRequest(requestId: String)",
+        "throw ProjectEditCancelledException()",
+        "what == SlicerProcessContract.MESSAGE_CUT_MODEL",
+    ):
+        if marker not in slicer_process:
+            raise VerificationError(f"request-scoped project cancellation is missing: {marker}")
+
+    workspace = sources["WorkspaceScreen.kt"]
+    for marker in (
+        "projectEditActive: Boolean",
+        "projectEditCancellationRequested: Boolean",
+        "onCancelProjectEdit: () -> Unit",
+        "R.string.cancel_model_edit",
+        "R.string.canceling_model_edit",
+    ):
+        if marker not in workspace:
+            raise VerificationError(f"project cancellation UI is missing: {marker}")
     for forbidden in (
         "SlicerProcessClient.autoOrient(",
         "OnDeviceSlicer.arrange(",
@@ -369,6 +414,16 @@ def verify_resilience(sources: dict[str, str]) -> None:
             "ProjectEditKind.AUTO_LAY",
             "waitForPersistedTransform",
         ),
+        "ModelImportTest.kt": (
+            "cooperativeCancellationStopsBeforeAnotherImportChunkIsWritten",
+        ),
+        "ProjectEditCancellationInstrumentedTest.kt": (
+            "retainedOwnerCancelsOnlyItsNativeEditAndKeepsTheProjectUnchanged",
+            "Canceling the exact edit request must restart the isolated worker",
+            "Pre-bind cancellation must be accepted",
+            "Clearing the final owner did not stop its exact native edit",
+            "assertEquals(baseline.history, completed.history)",
+        ),
     }
     for source_name, markers in test_markers.items():
         for marker in markers:
@@ -378,7 +433,12 @@ def verify_resilience(sources: dict[str, str]) -> None:
     for strings in ("strings.xml", "strings-ko.xml"):
         if not all(
             marker in sources[strings]
-            for marker in ("saved_data_unavailable", "settings_save_error")
+            for marker in (
+                "saved_data_unavailable",
+                "settings_save_error",
+                "cancel_model_edit",
+                "model_edit_canceled",
+            )
         ):
             raise VerificationError(f"saved-data recovery copy is missing from {strings}")
 
@@ -449,6 +509,17 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "CONTRIBUTING.md"
     ]:
         raise VerificationError("contributor guidance allows UI disposal to cancel retained work")
+    for marker in (
+        "request-scoped cancellation",
+        "preserve the starting project on cancellation",
+        "remove every generated model that was not accepted",
+        "Final retained-owner clearance",
+        "ordinary Activity recreation must not",
+    ):
+        if marker not in sources["CONTRIBUTING.md"]:
+            raise VerificationError(
+                f"contributor guidance does not preserve project cancellation: {marker}"
+            )
     security = sources["SECURITY.md"]
     for marker in (
         "every current DNS answer",
@@ -471,6 +542,10 @@ def read_sources() -> dict[str, str]:
         "DurableJsonFile.kt": (main / "DurableJsonFile.kt").read_text(encoding="utf-8"),
         "ProjectStore.kt": (main / "ProjectStore.kt").read_text(encoding="utf-8"),
         "ProjectTransfer.kt": (main / "ProjectTransfer.kt").read_text(encoding="utf-8"),
+        "ModelImport.kt": (main / "ModelImport.kt").read_text(encoding="utf-8"),
+        "SlicerProcessService.kt": (main / "SlicerProcessService.kt").read_text(
+            encoding="utf-8"
+        ),
         "ProfileStore.kt": (main / "ProfileStore.kt").read_text(encoding="utf-8"),
         "ProfileLibraryViewModel.kt": (main / "ProfileLibraryViewModel.kt").read_text(
             encoding="utf-8"
@@ -484,9 +559,11 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "MainActivity.kt": (main / "MainActivity.kt").read_text(encoding="utf-8"),
+        "WorkspaceScreen.kt": (main / "WorkspaceScreen.kt").read_text(encoding="utf-8"),
         "DeviceSheet.kt": (main / "DeviceSheet.kt").read_text(encoding="utf-8"),
         "DurableJsonFileTest.kt": (tests / "DurableJsonFileTest.kt").read_text(encoding="utf-8"),
         "ProjectStoreTest.kt": (tests / "ProjectStoreTest.kt").read_text(encoding="utf-8"),
+        "ModelImportTest.kt": (tests / "ModelImportTest.kt").read_text(encoding="utf-8"),
         "ProfileStoreMigrationTest.kt": (tests / "ProfileStoreMigrationTest.kt").read_text(
             encoding="utf-8"
         ),
@@ -516,6 +593,9 @@ def read_sources() -> dict[str, str]:
         ).read_text(encoding="utf-8"),
         "ProjectArchiveIntentInstrumentedTest.kt": (
             device_tests / "ProjectArchiveIntentInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "ProjectEditCancellationInstrumentedTest.kt": (
+            device_tests / "ProjectEditCancellationInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),
         "SECURITY.md": (ROOT / "SECURITY.md").read_text(encoding="utf-8"),

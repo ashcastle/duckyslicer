@@ -179,6 +179,7 @@ private fun DuckySlicerScreen(
     val cutError = stringResource(R.string.cut_error)
     val sliceError = stringResource(R.string.slice_error)
     val sliceCanceledNotice = stringResource(R.string.slice_canceled)
+    val modelEditCanceledNotice = stringResource(R.string.model_edit_canceled)
     val saveError = stringResource(R.string.save_error)
     val savedNotice = stringResource(R.string.gcode_saved)
     val profileSavedNotice = stringResource(R.string.profile_saved)
@@ -218,6 +219,9 @@ private fun DuckySlicerScreen(
     val projectTransferState by projectTransferModel.state.collectAsStateWithLifecycle()
     val projectTransferBusy = projectTransferState.busy ||
         projectTransferState.completion != null || projectTransferState.editCompletion != null
+    val projectEditActive = projectTransferState.activeEdit != null
+    val projectEditCancellationRequested =
+        projectTransferState.activeEdit?.cancellationRequested == true
     val visibleEdit = projectTransferState.activeEdit?.kind
         ?: projectTransferState.editCompletion?.kind
     val importing = visibleEdit == ProjectEditKind.MODEL_IMPORT ||
@@ -348,6 +352,7 @@ private fun DuckySlicerScreen(
         } else {
             notice = null
             error = when (completion.failure) {
+                ProjectEditFailure.CANCELED -> null
                 ProjectEditFailure.MODEL_TOO_LARGE -> modelTooLargeError
                 ProjectEditFailure.NOT_SPLITTABLE -> splitNotPossible
                 ProjectEditFailure.NOT_CUTTABLE -> cutNotPossible
@@ -359,6 +364,9 @@ private fun DuckySlicerScreen(
                     ProjectEditKind.SPLIT -> splitError
                     ProjectEditKind.CUT -> cutError
                 }
+            }
+            if (completion.failure == ProjectEditFailure.CANCELED) {
+                notice = modelEditCanceledNotice
             }
         }
         projectTransferModel.consumeEditCompletion(completion.id)
@@ -768,6 +776,8 @@ private fun DuckySlicerScreen(
         arranging = arranging,
         splitting = splitting,
         cutting = cutting,
+        projectEditActive = projectEditActive,
+        projectEditCancellationRequested = projectEditCancellationRequested,
         slicing = slicing,
         sliceCancellationRequested = sliceCancellationRequested,
         sliceProgress = sliceProgress,
@@ -861,6 +871,7 @@ private fun DuckySlicerScreen(
         onLayOnFace = ::laySelectedFaceOnBed,
         onSplit = ::splitSelectedModel,
         onCut = ::cutSelectedModel,
+        onCancelProjectEdit = projectTransferModel::cancelActiveEdit,
         onSupportPaintPreview = { objectId, facetIndex, state ->
             val current = projectTransferModel.state.value.history
             val projectObject = current.current.objects.firstOrNull { it.id == objectId }

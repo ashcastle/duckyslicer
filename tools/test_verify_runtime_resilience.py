@@ -25,7 +25,21 @@ def valid_sources() -> dict[str, str]:
             "fun splitSelectedModel() "
             "fun cutSelectedModel(heightRatio: Float, placeOnCut: Boolean) "
             "fun createPrimitive( fun importModels(uri: Uri) startEditLocked "
-            "withCompletedEdit deleteInstalledModels"
+            "withCompletedEdit deleteInstalledModels val requestId: String "
+            "val cancellationRequested: Boolean ProjectEditFailure.CANCELED "
+            "fun cancelActiveEdit() SlicerProcessClient.cancelProjectRequestAsync(operation.requestId) "
+            "SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId) "
+            "activeRequestId?.let(SlicerProcessClient::cancelProjectRequestAsync)"
+        ),
+        "ModelImport.kt": (
+            "cancellationRequested: () -> Boolean "
+            "if (cancellationRequested()) throw ProjectEditCancelledException()"
+        ),
+        "SlicerProcessService.kt": (
+            "cancelledProjectRequestIds fun cancelProjectRequestAsync(requestId: String) "
+            "activeRequestId.get() != requestId projectRequestCancellationRequested(requestId) "
+            "fun releaseProjectRequest(requestId: String) throw ProjectEditCancelledException() "
+            "what == SlicerProcessContract.MESSAGE_CUT_MODEL"
         ),
         "ProfileStore.kt": "DurableJsonFile(",
         "ProfileLibraryViewModel.kt": (
@@ -92,7 +106,12 @@ def valid_sources() -> dict[str, str]:
             "projectTransferModel.splitSelectedModel() "
             "projectTransferModel.cutSelectedModel(heightRatio, placeOnCut) "
             "projectTransferModel.createPrimitive(primitive, sizeMm, displayName) "
-            "projectTransferModel.importModels(uri)"
+            "projectTransferModel.importModels(uri) projectTransferModel::cancelActiveEdit"
+        ),
+        "WorkspaceScreen.kt": (
+            "projectEditActive: Boolean projectEditCancellationRequested: Boolean "
+            "onCancelProjectEdit: () -> Unit R.string.cancel_model_edit "
+            "R.string.canceling_model_edit"
         ),
         "DeviceSheet.kt": ".selectable( selected = true enabled = !busy ),",
         "DurableJsonFileTest.kt": (
@@ -100,6 +119,7 @@ def valid_sources() -> dict[str, str]:
             "unreadableGenerationsAreNeverOverwritten"
         ),
         "ProjectStoreTest.kt": "unreadablePrimaryAndBackupBlockAutosave",
+        "ModelImportTest.kt": "cooperativeCancellationStopsBeforeAnotherImportChunkIsWritten",
         "ProfileStoreMigrationTest.kt": "unreadableOrFutureProfilesAreNotOverwritten",
         "ProfileLibraryViewModelTest.kt": (
             "savedProfileAppliesOnlyToTheSessionRevisionThatStartedTheSave "
@@ -155,6 +175,13 @@ def valid_sources() -> dict[str, str]:
             "clearingRetainedOwnerFlushesProjectBeforeDebounce "
             "assertSame( ProjectEditKind.AUTO_LAY waitForPersistedTransform"
         ),
+        "ProjectEditCancellationInstrumentedTest.kt": (
+            "retainedOwnerCancelsOnlyItsNativeEditAndKeepsTheProjectUnchanged "
+            "Canceling the exact edit request must restart the isolated worker "
+            "Pre-bind cancellation must be accepted "
+            "Clearing the final owner did not stop its exact native edit "
+            "assertEquals(baseline.history, completed.history)"
+        ),
         "CONTRIBUTING.md": (
             "pin the connection target and bypass system proxies "
             "bind a replacement printer credential generation "
@@ -172,7 +199,10 @@ def valid_sources() -> dict[str, str]:
             "Flush the latest dirty revision app enters the background owner is finally cleared "
             "archive import commits cancel and join any older metadata write "
             "Model import, primitive creation, automatic lay, arrangement, split, and cut must run "
-            "UI disposal must not issue a process-wide slicer cancellation"
+            "UI disposal must not issue a process-wide slicer cancellation "
+            "request-scoped cancellation preserve the starting project on cancellation "
+            "remove every generated model that was not accepted Final retained-owner clearance "
+            "ordinary Activity recreation must not"
         ),
         "SECURITY.md": (
             "every current DNS answer DNS rebinding bypass system proxies "
@@ -180,8 +210,12 @@ def valid_sources() -> dict[str, str]:
             "Credential updates are staged under a new generation "
             "never carried to a changed connection type or address"
         ),
-        "strings.xml": "saved_data_unavailable settings_save_error",
-        "strings-ko.xml": "saved_data_unavailable settings_save_error",
+        "strings.xml": (
+            "saved_data_unavailable settings_save_error cancel_model_edit model_edit_canceled"
+        ),
+        "strings-ko.xml": (
+            "saved_data_unavailable settings_save_error cancel_model_edit model_edit_canceled"
+        ),
     }
 
 
@@ -257,6 +291,39 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
         sources = valid_sources()
         sources["MainActivity.kt"] += " SlicerProcessClient.autoOrient(File(path))"
         with self.assertRaisesRegex(VerificationError, "Activity composition"):
+            verify_resilience(sources)
+
+    def test_rejects_project_edit_without_retained_cancellation(self) -> None:
+        sources = valid_sources()
+        sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
+            "fun cancelActiveEdit()", "leave project edit running"
+        )
+        with self.assertRaisesRegex(VerificationError, "autosave corruption guard"):
+            verify_resilience(sources)
+
+    def test_rejects_final_project_owner_leaving_native_edit_running(self) -> None:
+        sources = valid_sources()
+        sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
+            "activeRequestId?.let(SlicerProcessClient::cancelProjectRequestAsync)",
+            "leave final native edit running",
+        )
+        with self.assertRaisesRegex(VerificationError, "autosave corruption guard"):
+            verify_resilience(sources)
+
+    def test_rejects_project_cancellation_without_request_identity(self) -> None:
+        sources = valid_sources()
+        sources["SlicerProcessService.kt"] = sources["SlicerProcessService.kt"].replace(
+            "activeRequestId.get() != requestId", "activeRequestId.get() == null"
+        )
+        with self.assertRaisesRegex(VerificationError, "request-scoped"):
+            verify_resilience(sources)
+
+    def test_rejects_project_cancellation_without_reachable_ui(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            "onCancelProjectEdit: () -> Unit", "hide project cancellation"
+        )
+        with self.assertRaisesRegex(VerificationError, "cancellation UI"):
             verify_resilience(sources)
 
     def test_rejects_recent_profiles_without_final_owner_flush(self) -> None:

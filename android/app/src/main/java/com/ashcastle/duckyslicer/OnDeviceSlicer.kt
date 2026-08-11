@@ -3,6 +3,7 @@ package com.ashcastle.duckyslicer
 import com.u1.slicer.data.SliceConfig
 import java.io.File
 import java.io.Serializable
+import java.util.UUID
 import kotlin.math.abs
 import org.json.JSONObject
 
@@ -1334,9 +1335,17 @@ object OnDeviceSlicer {
         objects: List<ProjectObject>,
         options: SliceOptions = SliceOptions(),
         minimumGap: Float = 6f,
+        requestId: String = UUID.randomUUID().toString(),
     ): OrcaArrangement {
         require(objects.size >= 2) { "At least two objects are required" }
-        return withTransformedModels(objects, options, includePlacement = false) { transformedModels ->
+        return withTransformedModels(
+            objects,
+            options,
+            includePlacement = false,
+            cancellationRequested = {
+                SlicerProcessClient.projectRequestCancellationRequested(requestId)
+            },
+        ) { transformedModels ->
             SlicerProcessClient.autoArrange(
                 transformedModels,
                 options.bedSizeX,
@@ -1345,6 +1354,7 @@ object OnDeviceSlicer {
                 options.bedOriginY,
                 options.bedPolygon,
                 minimumGap,
+                requestId,
             )
         }
     }

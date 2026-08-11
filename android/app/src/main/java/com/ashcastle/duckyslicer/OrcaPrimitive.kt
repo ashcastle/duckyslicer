@@ -23,6 +23,7 @@ internal suspend fun createOrcaPrimitive(
     sizeMm: Float,
     displayName: String,
     projectStore: ProjectStore,
+    requestId: String = UUID.randomUUID().toString(),
 ): ProjectObject = withContext(Dispatchers.IO) {
     require(sizeMm.isFinite() && sizeMm in MIN_PRIMITIVE_SIZE_MM..MAX_PRIMITIVE_SIZE_MM) {
         "Shape size is invalid"
@@ -30,7 +31,13 @@ internal suspend fun createOrcaPrimitive(
     val staging = projectStore.createModelImportStaging()
     var installed: File? = null
     try {
-        val generated = SlicerProcessClient.createPrimitive(primitive, sizeMm, staging)
+        if (SlicerProcessClient.projectRequestCancellationRequested(requestId)) {
+            throw ProjectEditCancelledException()
+        }
+        val generated = SlicerProcessClient.createPrimitive(primitive, sizeMm, staging, requestId)
+        if (SlicerProcessClient.projectRequestCancellationRequested(requestId)) {
+            throw ProjectEditCancelledException()
+        }
         val fileName = "${displayName.substringBeforeLast('.').take(180).ifBlank { "shape" }}.stl"
         val model = projectStore.installImportedModel(generated.file, fileName)
         installed = File(model.localPath)
