@@ -588,6 +588,43 @@ class AccessibilityInstrumentedTest {
         }
     }
 
+    @Test
+    fun manualBrimEditorExposesTouchAndNonTouchEditingActions() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val title = context.getString(R.string.manual_brim_ears)
+        val hint = context.getString(R.string.brim_point_hint)
+        val addAtFootprint = context.getString(R.string.brim_add_automatic)
+        val radius = context.getString(R.string.brim_radius)
+        val moveLeft = context.getString(R.string.brim_move_left)
+        val remove = context.getString(R.string.brim_remove_point)
+        val apply = context.getString(R.string.apply_changes)
+
+        launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use {
+            val brimTool = waitForNodes(setOf(title)).firstOrNull {
+                it.isClickable && it.effectiveLabel() == title
+            }
+            tapCenter(checkNotNull(brimTool))
+
+            val editor = waitForNodes(setOf(title, hint, addAtFootprint, apply))
+            assertTrue(editor.any { it.isHeading && it.effectiveLabel() == title })
+            assertTrue(editor.any { it.effectiveLabel().contains(hint) })
+            val automaticAdd = editor.first { it.isClickable && it.effectiveLabel() == addAtFootprint }
+            tapCenter(automaticAdd)
+
+            val edited = waitForNodes(setOf(radius, moveLeft, remove, apply))
+            assertTrue(
+                "Brim size must be adjustable without a touch gesture",
+                edited.any {
+                    it.className?.toString() == SEEK_BAR_CLASS &&
+                        it.effectiveLabel().contains(radius)
+                },
+            )
+            assertTrue(edited.any { it.isClickable && it.effectiveLabel() == moveLeft })
+            assertTrue(edited.any { it.isClickable && it.effectiveLabel() == remove })
+            assertTrue(edited.any { it.isClickable && it.effectiveLabel() == apply })
+        }
+    }
+
     private fun launchHarness(screen: String): ActivityScenario<AccessibilityHarnessActivity> {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         return ActivityScenario.launch(

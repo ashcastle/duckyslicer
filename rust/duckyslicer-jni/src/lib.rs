@@ -232,9 +232,18 @@ impl StlTransform {
     }
 }
 
+#[derive(Clone, Copy)]
+struct StlTransformFrame {
+    source_center_mm: [f32; 3],
+    transformed_min_z: f32,
+}
+
 #[derive(Serialize)]
-struct SuccessResponse {
+#[serde(rename_all = "camelCase")]
+struct StlTransformResponse {
     ok: bool,
+    source_center_mm: [f32; 3],
+    transformed_min_z: f32,
 }
 
 #[derive(Deserialize)]
@@ -1186,7 +1195,7 @@ fn transform_stl(
     input_path: &str,
     output_path: &str,
     transform: &StlTransform,
-) -> Result<(), EngineError> {
+) -> Result<StlTransformFrame, EngineError> {
     let input = Path::new(input_path);
     let output = Path::new(output_path);
     if input == output
@@ -1317,14 +1326,17 @@ fn transform_stl(
     drop(writer);
     std::fs::rename(&temporary.path, output)?;
     temporary.committed = true;
-    Ok(())
+    Ok(StlTransformFrame {
+        source_center_mm: source_center,
+        transformed_min_z,
+    })
 }
 
 fn transform_stl_group(
     input_paths: &[String],
     output_paths: &[String],
     transform: &StlTransform,
-) -> Result<(), EngineError> {
+) -> Result<StlTransformFrame, EngineError> {
     const MAX_GROUP_VOLUMES: usize = 64;
     if input_paths.is_empty()
         || input_paths.len() > MAX_GROUP_VOLUMES
@@ -1484,7 +1496,10 @@ fn transform_stl_group(
         std::fs::rename(&temporary.path, output)?;
         temporary.committed = true;
     }
-    Ok(())
+    Ok(StlTransformFrame {
+        source_center_mm: source_center,
+        transformed_min_z,
+    })
 }
 
 fn parse_axis(line: &str, axis: char) -> Option<f32> {
@@ -1903,8 +1918,12 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_transformStl(
         let transform_json = read_string(&mut env, &transform_json)?;
         let transform: StlTransform = serde_json::from_str(&transform_json)
             .map_err(|error| EngineError::Parse(error.to_string()))?;
-        transform_stl(&input_path, &output_path, &transform)?;
-        Ok(SuccessResponse { ok: true })
+        let frame = transform_stl(&input_path, &output_path, &transform)?;
+        Ok(StlTransformResponse {
+            ok: true,
+            source_center_mm: frame.source_center_mm,
+            transformed_min_z: frame.transformed_min_z,
+        })
     });
     make_java_string(&env, &response)
 }
@@ -1922,12 +1941,16 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_transformStlG
             .map_err(|error| EngineError::Parse(error.to_string()))?;
         let request: StlGroupTransformRequest = serde_json::from_str(&request_json)
             .map_err(|error| EngineError::Parse(error.to_string()))?;
-        transform_stl_group(
+        let frame = transform_stl_group(
             &request.input_paths,
             &request.output_paths,
             &request.transform,
         )?;
-        Ok(SuccessResponse { ok: true })
+        Ok(StlTransformResponse {
+            ok: true,
+            source_center_mm: frame.source_center_mm,
+            transformed_min_z: frame.transformed_min_z,
+        })
     });
     make_java_string(&env, &response)
 }
@@ -1988,6 +2011,11 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeR
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[derive(Serialize)]
+    struct SuccessResponse {
+        ok: bool,
+    }
 
     #[test]
     fn host_vulkan_probe_never_enables_android_acceleration() {

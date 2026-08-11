@@ -90,7 +90,8 @@ internal suspend fun splitProjectObject(
             clearedObjectSettings = projectObject.supportPaint.facets.isNotEmpty() ||
                 projectObject.seamPaint.facets.isNotEmpty() ||
                 projectObject.multiColorPaint.facets.isNotEmpty() ||
-                projectObject.variableLayerHeights.ranges.isNotEmpty(),
+                projectObject.variableLayerHeights.ranges.isNotEmpty() ||
+                projectObject.brimPoints.points.isNotEmpty(),
         )
     } catch (failure: Throwable) {
         installed.forEach(File::delete)

@@ -34,6 +34,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AddBox
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoFixHigh
@@ -49,6 +51,8 @@ import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.SaveAlt
@@ -422,6 +426,7 @@ internal fun WorkspaceScreen(
     onSupportPaintCommitted: (String, String, SupportPaint) -> Unit,
     onSeamPaintPreview: (String, String, Int, SeamPaintState?) -> Unit,
     onSeamPaintCommitted: (String, String, SeamPaint) -> Unit,
+    onBrimPointsChanged: (String, BrimPoints) -> Unit,
     onMultiColorPaintPreview: (String, String, Int, Int?) -> Unit,
     onMultiColorPaintCommitted: (String, String, MultiColorPaint) -> Unit,
     onVariableLayerHeightsChanged: (VariableLayerHeights) -> Unit,
@@ -451,6 +456,7 @@ internal fun WorkspaceScreen(
     onRemoteCancel: () -> Unit,
 ) = BoxWithConstraints {
     val selectedObject = projectObjects.firstOrNull { it.id == selectedObjectId }
+    val stringResourceBrimPlacementHint = stringResource(R.string.brim_point_invalid)
     val selectedSingleVolume = selectedObject?.singleVolumeOrNull
     val availableFilaments = sliceOptions.resolvedFilamentSlots()
     val modelDimensions = (selectedObject ?: projectObjects.firstOrNull())?.geometry()?.let {
@@ -478,8 +484,29 @@ internal fun WorkspaceScreen(
     var seamPaintTool by remember { mutableStateOf(SeamPaintTool.ENFORCE) }
     var multiColorPainting by remember { mutableStateOf(false) }
     var multiColorPaintSlot by remember { mutableStateOf<Int?>(1) }
+    var brimEditing by remember { mutableStateOf(false) }
+    var brimDraft by remember { mutableStateOf(BrimPoints()) }
+    var selectedBrimPointIndex by remember { mutableStateOf<Int?>(null) }
+    var brimAddMode by remember { mutableStateOf(true) }
+    var brimEditMessage by remember { mutableStateOf<String?>(null) }
     var visibleToolpathRoles by remember { mutableStateOf(ToolpathStyles.indices.toSet()) }
     var previewControlsExpanded by rememberSaveable { mutableStateOf(false) }
+
+    fun beginBrimEditing(projectObject: ProjectObject) {
+        showModelTools = false
+        layingOnFace = false
+        measuring = false
+        measurementPoints = emptyList()
+        supportPainting = false
+        seamPainting = false
+        multiColorPainting = false
+        brimDraft = projectObject.brimPoints
+        selectedBrimPointIndex = projectObject.brimPoints.points.lastIndex.takeIf { it >= 0 }
+        brimAddMode = projectObject.brimPoints.points.isEmpty()
+        brimEditMessage = null
+        brimEditing = true
+    }
+
     LaunchedEffect(selectedObjectId, selectedTab) {
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) layingOnFace = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) {
@@ -489,6 +516,7 @@ internal fun WorkspaceScreen(
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) supportPainting = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) seamPainting = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) multiColorPainting = false
+        if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) brimEditing = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showFilamentPicker = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showCutTool = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showSimplifyTool = false
@@ -537,7 +565,7 @@ internal fun WorkspaceScreen(
                     previewRenderingMode = appSettings.previewRenderingMode,
                     objectManipulationEnabled = selectedTab == WorkspaceTab.SLICE &&
                         !importing && !editingBusy && !slicing && !previewLoading &&
-                        !layingOnFace && !measuring,
+                        !layingOnFace && !measuring && !brimEditing,
                     layOnFaceObjectId = selectedObjectId.takeIf { layingOnFace },
                     measureObjectId = selectedObjectId.takeIf { measuring },
                     measurementPoints = measurementPoints,
@@ -547,6 +575,10 @@ internal fun WorkspaceScreen(
                     seamPaintState = seamPaintTool.state,
                     multiColorPaintObjectId = selectedObjectId.takeIf { multiColorPainting },
                     multiColorPaintSlot = multiColorPaintSlot,
+                    brimEditObjectId = selectedObjectId.takeIf { brimEditing },
+                    brimPoints = brimDraft,
+                    selectedBrimPointIndex = selectedBrimPointIndex,
+                    brimAddMode = brimAddMode,
                     onObjectSelected = onObjectSelected,
                     onModelTransformPreview = onModelTransformPreview,
                     onModelTransformCommitted = onModelTransformCommitted,
@@ -561,6 +593,26 @@ internal fun WorkspaceScreen(
                     onSupportPaintCommitted = onSupportPaintCommitted,
                     onSeamPaintPreview = onSeamPaintPreview,
                     onSeamPaintCommitted = onSeamPaintCommitted,
+                    onBrimPointSelected = { selectedBrimPointIndex = it },
+                    onBrimPointAdded = { point ->
+                        if (brimDraft.points.size < BrimPoints.MAX_POINTS) {
+                            brimDraft = BrimPoints(brimDraft.points + point)
+                            selectedBrimPointIndex = brimDraft.points.lastIndex
+                            brimAddMode = false
+                            brimEditMessage = null
+                        }
+                    },
+                    onBrimPointMoved = { index, point ->
+                        if (index in brimDraft.points.indices) {
+                            brimDraft = BrimPoints(
+                                brimDraft.points.toMutableList().apply { this[index] = point },
+                            )
+                            brimEditMessage = null
+                        }
+                    },
+                    onBrimPointInvalid = {
+                        brimEditMessage = stringResourceBrimPlacementHint
+                    },
                     onMultiColorPaintPreview = onMultiColorPaintPreview,
                     onMultiColorPaintCommitted = onMultiColorPaintCommitted,
                     modifier = Modifier.fillMaxSize(),
@@ -603,7 +655,7 @@ internal fun WorkspaceScreen(
             if (
                 selectedObject != null && selectedTab == WorkspaceTab.SLICE &&
                 !layingOnFace && !measuring && !supportPainting && !seamPainting &&
-                !multiColorPainting
+                !multiColorPainting && !brimEditing
             ) {
                 ObjectToolRail(
                     canUndo = canUndo,
@@ -619,6 +671,7 @@ internal fun WorkspaceScreen(
                         supportPainting = false
                         seamPainting = false
                         multiColorPainting = false
+                        brimEditing = false
                         layingOnFace = true
                     },
                     onMeasure = {
@@ -626,9 +679,11 @@ internal fun WorkspaceScreen(
                         supportPainting = false
                         seamPainting = false
                         multiColorPainting = false
+                        brimEditing = false
                         measurementPoints = emptyList()
                         measuring = true
                     },
+                    onBrimEars = { beginBrimEditing(selectedObject) },
                     autoLaying = autoLaying,
                     editingBusy = editingBusy,
                     canPaintColor = availableFilaments.size > 1,
@@ -639,10 +694,12 @@ internal fun WorkspaceScreen(
                             ?.takeIf { it in availableFilaments.indices }
                             ?: availableFilaments.indices.last()
                         multiColorPainting = true
+                        brimEditing = false
                     },
                     onSupportPaint = {
                         seamPainting = false
                         multiColorPainting = false
+                        brimEditing = false
                         supportPainting = true
                     },
                     onMore = { showModelTools = true },
@@ -696,6 +753,40 @@ internal fun WorkspaceScreen(
                     selectedSlot = multiColorPaintSlot,
                     onSlotSelected = { multiColorPaintSlot = it },
                     onDone = { multiColorPainting = false },
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
+                )
+            }
+
+            if (selectedObject != null && selectedTab == WorkspaceTab.SLICE && brimEditing) {
+                BrimEarPalette(
+                    projectObject = selectedObject,
+                    points = brimDraft,
+                    selectedIndex = selectedBrimPointIndex,
+                    addMode = brimAddMode,
+                    message = brimEditMessage,
+                    bedSizeX = sliceOptions.bedSizeX,
+                    bedSizeY = sliceOptions.bedSizeY,
+                    bedPolygon = sliceOptions.bedPolygon,
+                    onAddModeChanged = {
+                        brimAddMode = it
+                        brimEditMessage = null
+                    },
+                    onPointSelected = { selectedBrimPointIndex = it },
+                    onPointsChanged = { points, selected ->
+                        brimDraft = points
+                        selectedBrimPointIndex = selected
+                        brimEditMessage = null
+                    },
+                    onInvalid = { brimEditMessage = stringResourceBrimPlacementHint },
+                    onCancel = {
+                        brimEditing = false
+                        brimEditMessage = null
+                    },
+                    onApply = {
+                        onBrimPointsChanged(selectedObject.id, brimDraft)
+                        brimEditing = false
+                        brimEditMessage = null
+                    },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
                 )
             }
@@ -907,6 +998,9 @@ internal fun WorkspaceScreen(
                 supportPainting = false
                 multiColorPainting = false
                 seamPainting = true
+            },
+            onBrimEars = {
+                beginBrimEditing(selectedObject)
             },
             onVariableLayerHeight = {
                 showModelTools = false
@@ -1352,6 +1446,7 @@ private fun ModelTransformSheet(
     onCut: () -> Unit,
     onSimplify: () -> Unit,
     onSeamPaint: () -> Unit,
+    onBrimEars: () -> Unit,
     onVariableLayerHeight: () -> Unit,
     onObjectSettings: () -> Unit,
     onChooseFilament: () -> Unit,
@@ -1654,6 +1749,19 @@ private fun ModelTransformSheet(
                 Icon(Icons.Default.Straighten, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.measure_model))
+            }
+            Button(
+                onClick = onBrimEars,
+                enabled = !modelEditBusy,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF3A3B37),
+                    contentColor = Color(0xFFF4F4EE),
+                ),
+            ) {
+                Icon(Icons.Default.AddBox, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.manual_brim_ears))
             }
             Button(
                 onClick = onSimplify,
@@ -2597,6 +2705,10 @@ private fun BedScene(
     seamPaintState: SeamPaintState?,
     multiColorPaintObjectId: String?,
     multiColorPaintSlot: Int?,
+    brimEditObjectId: String?,
+    brimPoints: BrimPoints,
+    selectedBrimPointIndex: Int?,
+    brimAddMode: Boolean,
     onObjectSelected: (String?) -> Unit,
     onModelTransformPreview: (ModelTransform) -> Unit,
     onModelTransformCommitted: (ModelTransform) -> Unit,
@@ -2606,6 +2718,10 @@ private fun BedScene(
     onSupportPaintCommitted: (String, String, SupportPaint) -> Unit,
     onSeamPaintPreview: (String, String, Int, SeamPaintState?) -> Unit,
     onSeamPaintCommitted: (String, String, SeamPaint) -> Unit,
+    onBrimPointSelected: (Int?) -> Unit,
+    onBrimPointAdded: (BrimPoint) -> Unit,
+    onBrimPointMoved: (Int, BrimPoint) -> Unit,
+    onBrimPointInvalid: () -> Unit,
     onMultiColorPaintPreview: (String, String, Int, Int?) -> Unit,
     onMultiColorPaintCommitted: (String, String, MultiColorPaint) -> Unit,
     modifier: Modifier = Modifier,
@@ -2660,6 +2776,9 @@ private fun BedScene(
     var modelScreenTriangles by remember(objectIds) {
         mutableStateOf<Map<String, List<ModelScreenTriangle>>>(emptyMap())
     }
+    var brimPointScreenPositions by remember(brimEditObjectId) {
+        mutableStateOf<Map<Int, Offset>>(emptyMap())
+    }
     val currentObjects by rememberUpdatedState(projectObjects)
     val currentSelectionCallback by rememberUpdatedState(onObjectSelected)
     val currentTransformCallback by rememberUpdatedState(onModelTransformPreview)
@@ -2670,11 +2789,26 @@ private fun BedScene(
     val currentSupportPaintCommitCallback by rememberUpdatedState(onSupportPaintCommitted)
     val currentSeamPaintPreviewCallback by rememberUpdatedState(onSeamPaintPreview)
     val currentSeamPaintCommitCallback by rememberUpdatedState(onSeamPaintCommitted)
+    val currentBrimPoints by rememberUpdatedState(brimPoints)
+    val currentBrimPointSelectionCallback by rememberUpdatedState(onBrimPointSelected)
+    val currentBrimPointAddedCallback by rememberUpdatedState(onBrimPointAdded)
+    val currentBrimPointMovedCallback by rememberUpdatedState(onBrimPointMoved)
+    val currentBrimPointInvalidCallback by rememberUpdatedState(onBrimPointInvalid)
     val currentMultiColorPaintPreviewCallback by rememberUpdatedState(onMultiColorPaintPreview)
     val currentMultiColorPaintCommitCallback by rememberUpdatedState(onMultiColorPaintCommitted)
     val effectiveBedPolygon = remember(bedPolygon, bedSizeX, bedSizeY) {
         bedPolygon.takeIf { bedPolygonIsValid(it, bedSizeX, bedSizeY) }
             ?: rectangularBedPolygon(bedSizeX, bedSizeY)
+    }
+    val brimEditFootprint = remember(
+        brimEditObjectId,
+        modelTopology,
+        projectObjects.firstOrNull { it.id == brimEditObjectId }?.transform,
+        bedSizeX,
+        bedSizeY,
+    ) {
+        projectObjects.firstOrNull { it.id == brimEditObjectId }
+            ?.placedModelFootprint(bedSizeX, bedSizeY)
     }
     val previewPaths = remember(preview) {
         Array(PreviewDepthBands) { Array(ToolpathStyles.size) { Path() } }
@@ -2714,9 +2848,14 @@ private fun BedScene(
             seamPaintState,
             multiColorPaintObjectId,
             multiColorPaintSlot,
+            brimEditObjectId,
+            brimAddMode,
         ) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
+                val brimEditingObject = brimEditObjectId?.let { objectId ->
+                    currentObjects.firstOrNull { it.id == objectId }
+                }
                 val layOnFaceObject = layOnFaceObjectId?.let { objectId ->
                     currentObjects.firstOrNull { it.id == objectId }
                 }
@@ -2734,6 +2873,102 @@ private fun BedScene(
                 }
                 val paintingObject = supportPaintingObject ?: seamPaintingObject ?:
                     multiColorPaintingObject
+                if (brimEditingObject != null) {
+                    val markerTouchRadius = 24.dp.toPx()
+                    val touchedIndex = brimPointScreenPositions
+                        .mapValues { (_, position) -> (position - down.position).getDistance() }
+                        .filterValues { it <= markerTouchRadius }
+                        .minByOrNull { it.value }
+                        ?.key
+                    if (touchedIndex != null) currentBrimPointSelectionCallback(touchedIndex)
+                    val draggedRadius = touchedIndex
+                        ?.let { currentBrimPoints.points.getOrNull(it)?.radiusMm }
+
+                    fun pointAtScreen(position: Offset, radiusMm: Float): BrimPoint? {
+                        val currentSceneScale = min(
+                            size.width * 0.64f,
+                            size.height * 0.72f,
+                        ) / max(bedSizeX, bedSizeY) * zoom
+                        if (!currentSceneScale.isFinite() || currentSceneScale <= 0.0001f) return null
+                        val currentSceneCenter = Offset(
+                            size.width / 2f + pan.x,
+                            size.height * 0.48f + pan.y,
+                        )
+                        val pitchRadians = pitch / 180f * PI.toFloat()
+                        val yawRadians = yaw / 180f * PI.toFloat()
+                        val sinPitch = sin(pitchRadians)
+                        if (abs(sinPitch) <= 0.0001f) return null
+                        val rotatedX = (position.x - currentSceneCenter.x) / currentSceneScale
+                        val rotatedY = (position.y - currentSceneCenter.y) /
+                            (currentSceneScale * sinPitch)
+                        val worldX = bedSizeX / 2f +
+                            rotatedX * cos(yawRadians) + rotatedY * sin(yawRadians)
+                        val worldY = bedSizeY / 2f -
+                            rotatedX * sin(yawRadians) + rotatedY * cos(yawRadians)
+                        if (!pointInsideBedPolygon(worldX, worldY, effectiveBedPolygon)) return null
+                        return brimEditingObject.transform.manualBrimPointAtBed(
+                            brimEditingObject,
+                            worldX,
+                            worldY,
+                            bedSizeX,
+                            bedSizeY,
+                            radiusMm,
+                            brimEditFootprint ?: return null,
+                        )
+                    }
+
+                    var movement = 0f
+                    var usedMultiplePointers = false
+                    interactionActive = true
+                    try {
+                        var event: PointerEvent
+                        do {
+                            event = awaitPointerEvent()
+                            val pressed = event.changes.filter { it.pressed }
+                            if (pressed.size == 1) {
+                                val change = pressed.first()
+                                val delta = change.position - change.previousPosition
+                                movement += abs(delta.x) + abs(delta.y)
+                                if (touchedIndex != null && draggedRadius != null) {
+                                    val candidate = pointAtScreen(change.position, draggedRadius)
+                                    if (candidate != null) {
+                                        currentBrimPointMovedCallback(touchedIndex, candidate)
+                                    } else {
+                                        currentBrimPointInvalidCallback()
+                                    }
+                                } else {
+                                    yaw += delta.x * 0.32f
+                                    pitch = (pitch - delta.y * 0.26f).coerceIn(22f, 88f)
+                                }
+                            } else if (pressed.size >= 2) {
+                                usedMultiplePointers = true
+                                pan += event.calculatePan()
+                                zoom = (zoom * event.calculateZoom()).coerceIn(0.45f, 4.5f)
+                            }
+                            event.changes.forEach { change ->
+                                if (change.positionChanged()) change.consume()
+                            }
+                        } while (event.changes.any { it.pressed })
+                    } finally {
+                        interactionActive = false
+                    }
+                    if (movement < 12f && !usedMultiplePointers && touchedIndex == null) {
+                        if (brimAddMode) {
+                            val candidate = pointAtScreen(
+                                down.position,
+                                BrimPoint.DEFAULT_RADIUS_MM,
+                            )
+                            if (candidate != null) {
+                                currentBrimPointAddedCallback(candidate)
+                            } else {
+                                currentBrimPointInvalidCallback()
+                            }
+                        } else {
+                            currentBrimPointSelectionCallback(null)
+                        }
+                    }
+                    return@awaitEachGesture
+                }
                 if (layOnFaceObject != null || measuringObject != null) {
                     var movement = 0f
                     var usedMultiplePointers = false
@@ -3103,6 +3338,7 @@ private fun BedScene(
         } else if (projectObjects.isNotEmpty()) {
             val nextBounds = mutableMapOf<String, Rect>()
             val nextScreenTriangles = mutableMapOf<String, List<ModelScreenTriangle>>()
+            val nextBrimPositions = mutableMapOf<Int, Offset>()
             projectObjects.forEach { projectObject ->
                 val modelTransform = projectObject.transform
                 val objectSelected = projectObject.id == selectedObjectId
@@ -3281,6 +3517,37 @@ private fun BedScene(
                     Color(0xFF563217),
                     style = Stroke(1.2.dp.toPx()),
                 )
+                if (projectObject.id == brimEditObjectId) {
+                    brimPoints.points.forEachIndexed { index, brimPoint ->
+                        val world = modelTransform.placeBrimPoint(
+                            brimPoint,
+                            projectObject,
+                            bedSizeX,
+                            bedSizeY,
+                        )
+                        val center = project(world[0], world[1], world[2])
+                        nextBrimPositions[index] = center
+                        val selected = index == selectedBrimPointIndex
+                        val radius = max(7.dp.toPx(), brimPoint.radiusMm * sceneScale)
+                        drawCircle(
+                            color = WorkspaceYellow.copy(alpha = if (selected) 0.28f else 0.16f),
+                            radius = radius,
+                            center = center,
+                        )
+                        drawCircle(
+                            color = if (selected) WorkspaceYellow else Color(0xFFF4F4EE),
+                            radius = radius,
+                            center = center,
+                            style = Stroke(if (selected) 2.dp.toPx() else 1.dp.toPx()),
+                        )
+                        drawCircle(Color.Black.copy(alpha = 0.9f), 6.dp.toPx(), center)
+                        drawCircle(
+                            if (world[2] <= 0.05f) WorkspaceYellow else Color(0xFFFF6B6B),
+                            3.5.dp.toPx(),
+                            center,
+                        )
+                    }
+                }
             }
             if (measureObjectId != null && measurementPoints.isNotEmpty()) {
                 val projectedPoints = measurementPoints.take(2).map { point ->
@@ -3311,6 +3578,9 @@ private fun BedScene(
             }
             if (modelScreenBounds != nextBounds) modelScreenBounds = nextBounds
             if (modelScreenTriangles != nextScreenTriangles) modelScreenTriangles = nextScreenTriangles
+            if (brimPointScreenPositions != nextBrimPositions) {
+                brimPointScreenPositions = nextBrimPositions
+            }
         }
     }
 }
@@ -3494,6 +3764,273 @@ internal fun nextMeasurementPoints(
 ): List<ModelPoint3> {
     if (!point.x.isFinite() || !point.y.isFinite() || !point.z.isFinite()) return current.take(2)
     return if (current.size >= 2) listOf(point) else (current + point).take(2)
+}
+
+@Composable
+private fun BrimEarPalette(
+    projectObject: ProjectObject,
+    points: BrimPoints,
+    selectedIndex: Int?,
+    addMode: Boolean,
+    message: String?,
+    bedSizeX: Float,
+    bedSizeY: Float,
+    bedPolygon: List<Float>,
+    onAddModeChanged: (Boolean) -> Unit,
+    onPointSelected: (Int?) -> Unit,
+    onPointsChanged: (BrimPoints, Int?) -> Unit,
+    onInvalid: () -> Unit,
+    onCancel: () -> Unit,
+    onApply: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val effectiveBedPolygon = remember(bedPolygon, bedSizeX, bedSizeY) {
+        bedPolygon.takeIf { bedPolygonIsValid(it, bedSizeX, bedSizeY) }
+            ?: rectangularBedPolygon(bedSizeX, bedSizeY)
+    }
+    val footprint = remember(projectObject, bedSizeX, bedSizeY) {
+        projectObject.placedModelFootprint(bedSizeX, bedSizeY)
+    }
+    val selectedPoint = selectedIndex?.let(points.points::getOrNull)
+    val stringResourceBrimRadius = stringResource(R.string.brim_radius)
+    val stringResourceBrimRadiusValue = stringResource(
+        R.string.millimeters_value_precise,
+        selectedPoint?.radiusMm ?: BrimPoint.DEFAULT_RADIUS_MM,
+    )
+    val stringResourceAddModeState = stringResource(
+        if (addMode) R.string.object_setting_on else R.string.object_setting_off,
+    )
+
+    fun addDefaultPoint() {
+        if (points.points.size >= BrimPoints.MAX_POINTS) {
+            onInvalid()
+            return
+        }
+        val candidate = projectObject.defaultManualBrimPoint(bedSizeX, bedSizeY)
+        if (candidate == null) {
+            onInvalid()
+            return
+        }
+        val placed = projectObject.transform.placeBrimPoint(
+            candidate,
+            projectObject,
+            bedSizeX,
+            bedSizeY,
+        )
+        if (!pointInsideBedPolygon(placed[0], placed[1], effectiveBedPolygon)) {
+            onInvalid()
+            return
+        }
+        val existing = points.points.indexOfFirst { point ->
+            abs(point.xMm - candidate.xMm) < 0.01f &&
+                abs(point.yMm - candidate.yMm) < 0.01f &&
+                abs(point.zMm - candidate.zMm) < 0.01f
+        }
+        if (existing >= 0) {
+            onPointSelected(existing)
+        } else {
+            val next = BrimPoints(points.points + candidate)
+            onPointsChanged(next, next.points.lastIndex)
+        }
+        onAddModeChanged(false)
+    }
+
+    fun moveSelected(worldDeltaX: Float, worldDeltaY: Float) {
+        val index = selectedIndex ?: return
+        val current = points.points.getOrNull(index) ?: return
+        val placed = projectObject.transform.placeBrimPoint(
+            current,
+            projectObject,
+            bedSizeX,
+            bedSizeY,
+        )
+        val targetX = placed[0] + worldDeltaX
+        val targetY = placed[1] + worldDeltaY
+        if (!pointInsideBedPolygon(targetX, targetY, effectiveBedPolygon)) {
+            onInvalid()
+            return
+        }
+        val candidate = projectObject.transform.manualBrimPointAtBed(
+            projectObject,
+            targetX,
+            targetY,
+            bedSizeX,
+            bedSizeY,
+            current.radiusMm,
+            footprint,
+        )
+        if (candidate == null) {
+            onInvalid()
+            return
+        }
+        onPointsChanged(
+            BrimPoints(points.points.toMutableList().apply { this[index] = candidate }),
+            index,
+        )
+    }
+
+    Surface(
+        modifier = modifier.fillMaxWidth(0.96f).widthIn(max = 560.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = Color.Black.copy(alpha = 0.92f),
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.manual_brim_ears),
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    stringResource(R.string.brim_point_count, points.points.size),
+                    color = Color(0xFFC8C9C2),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Text(
+                message ?: stringResource(R.string.brim_point_hint),
+                color = if (message == null) Color(0xFFC8C9C2) else Color(0xFFFFC66D),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Button(
+                    onClick = { onAddModeChanged(!addMode) },
+                    enabled = points.points.size < BrimPoints.MAX_POINTS,
+                    modifier = Modifier.semantics {
+                        selected = addMode
+                        stateDescription = stringResourceAddModeState
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (addMode) WorkspaceYellow else Color(0xFF3A3B37),
+                        contentColor = if (addMode) WorkspaceBlack else Color(0xFFF4F4EE),
+                    ),
+                ) {
+                    Icon(Icons.Default.AddBox, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.brim_add_mode))
+                }
+                TextButton(
+                    onClick = ::addDefaultPoint,
+                    enabled = points.points.size < BrimPoints.MAX_POINTS,
+                ) {
+                    Text(stringResource(R.string.brim_add_automatic))
+                }
+                IconButton(
+                    onClick = {
+                        if (points.points.isNotEmpty()) {
+                            onPointSelected(
+                                ((selectedIndex ?: 0) - 1 + points.points.size) % points.points.size,
+                            )
+                        }
+                    },
+                    enabled = points.points.isNotEmpty(),
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, stringResource(R.string.brim_previous_point))
+                }
+                IconButton(
+                    onClick = {
+                        if (points.points.isNotEmpty()) {
+                            onPointSelected(((selectedIndex ?: -1) + 1) % points.points.size)
+                        }
+                    },
+                    enabled = points.points.isNotEmpty(),
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, stringResource(R.string.brim_next_point))
+                }
+                IconButton(
+                    onClick = {
+                        val index = selectedIndex ?: return@IconButton
+                        val next = points.points.toMutableList().apply { removeAt(index) }
+                        onPointsChanged(
+                            BrimPoints(next),
+                            next.indices.lastOrNull()?.coerceAtMost(index),
+                        )
+                    },
+                    enabled = selectedPoint != null,
+                ) {
+                    Icon(
+                        Icons.Default.DeleteOutline,
+                        stringResource(R.string.brim_remove_point),
+                        tint = Color(0xFFFF8A80),
+                    )
+                }
+            }
+            if (selectedPoint != null) {
+                Slider(
+                    value = selectedPoint.radiusMm,
+                    onValueChange = { value ->
+                        val index = requireNotNull(selectedIndex)
+                        val radius = (value * 2f).roundToInt() / 2f
+                        onPointsChanged(
+                            BrimPoints(
+                                points.points.toMutableList().apply {
+                                    this[index] = selectedPoint.copy(radiusMm = radius)
+                                },
+                            ),
+                            index,
+                        )
+                    },
+                    valueRange = BrimPoint.MIN_RADIUS_MM..BrimPoint.MAX_RADIUS_MM,
+                    steps = 14,
+                    modifier = Modifier.semantics {
+                        contentDescription = stringResourceBrimRadius
+                        stateDescription = stringResourceBrimRadiusValue
+                    },
+                    colors = SliderDefaults.colors(
+                        thumbColor = WorkspaceYellow,
+                        activeTrackColor = WorkspaceYellow,
+                    ),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = { moveSelected(-0.5f, 0f) }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, stringResource(R.string.brim_move_left))
+                    }
+                    IconButton(onClick = { moveSelected(0f, 0.5f) }) {
+                        Icon(Icons.Default.KeyboardArrowUp, stringResource(R.string.brim_move_up))
+                    }
+                    IconButton(onClick = { moveSelected(0f, -0.5f) }) {
+                        Icon(Icons.Default.KeyboardArrowDown, stringResource(R.string.brim_move_down))
+                    }
+                    IconButton(onClick = { moveSelected(0.5f, 0f) }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, stringResource(R.string.brim_move_right))
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextButton(
+                    onClick = onCancel,
+                    modifier = Modifier.weight(0.3f).heightIn(min = 52.dp),
+                ) {
+                    Text(stringResource(R.string.cancel))
+                }
+                Button(
+                    onClick = onApply,
+                    modifier = Modifier.weight(0.7f).heightIn(min = 52.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = WorkspaceYellow,
+                        contentColor = WorkspaceBlack,
+                    ),
+                ) {
+                    Text(stringResource(R.string.apply_changes))
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -3794,6 +4331,7 @@ private fun ObjectToolRail(
     canAutoLay: Boolean,
     onLayOnFace: () -> Unit,
     onMeasure: () -> Unit,
+    onBrimEars: () -> Unit,
     autoLaying: Boolean,
     editingBusy: Boolean,
     canPaintColor: Boolean,
@@ -3836,6 +4374,9 @@ private fun ObjectToolRail(
             }
             IconButton(onClick = onMeasure, enabled = !editingBusy) {
                 Icon(Icons.Default.Straighten, stringResource(R.string.measure_model))
+            }
+            IconButton(onClick = onBrimEars, enabled = !editingBusy) {
+                Icon(Icons.Default.AddBox, stringResource(R.string.manual_brim_ears))
             }
             IconButton(onClick = onMore, enabled = !editingBusy) {
                 Icon(Icons.Default.Tune, stringResource(R.string.more_settings))

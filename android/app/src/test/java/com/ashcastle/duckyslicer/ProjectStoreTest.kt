@@ -58,6 +58,9 @@ class ProjectStoreTest {
                         sparseInfillSpeedMmS = 75f,
                         supportEnabled = false,
                     ),
+                    brimPoints = BrimPoints(
+                        listOf(BrimPoint(2f, 3f, -0.0001f, 4f)),
+                    ),
                 ),
             ),
             selectedObjectId = "duck",
@@ -78,6 +81,7 @@ class ProjectStoreTest {
             restored.selectedObject!!.variableLayerHeights,
         )
         assertEquals(snapshot.selectedObject!!.processOverrides, restored.selectedObject!!.processOverrides)
+        assertEquals(snapshot.selectedObject!!.brimPoints, restored.selectedObject!!.brimPoints)
         assertTrue(modelFile.isFile)
         assertFalse(orphan.exists())
         assertTrue(outside.isFile)
@@ -105,7 +109,7 @@ class ProjectStoreTest {
     }
 
     @Test
-    fun schemaNinePersistsStableVolumeAndSchemaOneMigratesDeterministically() = withStore { root, store ->
+    fun schemaTenPersistsStableVolumeAndSchemaOneMigratesDeterministically() = withStore { root, store ->
         val modelFile = store.createModelDestination("settings.stl").apply { writeText("solid part") }
         val options = multiFilamentSettingsFixture()
         val snapshot = ProjectSnapshot(
@@ -117,10 +121,13 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(9, persisted.getInt("schemaVersion"))
+        assertEquals(10, persisted.getInt("schemaVersion"))
         val persistedObject = persisted.getJSONArray("objects").getJSONObject(0)
         assertEquals(
-            setOf("id", "transform", "variableLayerHeights", "processOverrides", "volumes"),
+            setOf(
+                "id", "transform", "variableLayerHeights", "processOverrides",
+                "brimPoints", "volumes",
+            ),
             persistedObject.keys().asSequence().toSet(),
         )
         val persistedVolume = persistedObject.getJSONArray("volumes").getJSONObject(0)
@@ -175,6 +182,7 @@ class ProjectStoreTest {
         assertTrue(migrated.snapshot.selectedObject!!.multiColorPaint.facets.isEmpty())
         assertTrue(migrated.snapshot.selectedObject!!.variableLayerHeights.ranges.isEmpty())
         assertTrue(migrated.snapshot.selectedObject!!.processOverrides.isEmpty)
+        assertTrue(migrated.snapshot.selectedObject!!.brimPoints.points.isEmpty())
         assertTrue(migrated.snapshot.selectedObject!!.transform.hasUniformScale())
     }
 

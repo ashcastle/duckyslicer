@@ -262,6 +262,34 @@ class ProjectStateTest {
     }
 
     @Test
+    fun brimPointsAreObjectScopedUndoableAndRetainedByDuplication() {
+        val points = BrimPoints(
+            listOf(
+                BrimPoint(0f, 0f, 0f, 4f),
+                BrimPoint(1f, 1f, 0f, 5f),
+            ),
+        )
+        var state = ProjectHistoryState()
+            .add(projectObject("first"))
+            .add(projectObject("second"))
+
+        state = state.updateSelectedBrimPoints(points)
+        assertTrue(state.current.objects.first().brimPoints.points.isEmpty())
+        assertEquals(points, state.current.selectedObject!!.brimPoints)
+
+        state = state.undo()
+        assertTrue(state.current.selectedObject!!.brimPoints.points.isEmpty())
+        state = state.redo()
+        assertEquals(points, state.current.selectedObject!!.brimPoints)
+
+        state = state.duplicateSelected("second-copy")
+        assertEquals(points, state.current.selectedObject!!.brimPoints)
+        state = state.undo()
+        assertEquals("second", state.current.selectedObjectId)
+        assertEquals(points, state.current.selectedObject!!.brimPoints)
+    }
+
+    @Test
     fun processOverridesAreObjectScopedAndUndoable() {
         var state = ProjectHistoryState()
             .add(projectObject("first"))

@@ -44,6 +44,7 @@ data class ProjectObject(
     val transform: ModelTransform = ModelTransform(),
     val variableLayerHeights: VariableLayerHeights = VariableLayerHeights(),
     val processOverrides: ObjectProcessOverrides = ObjectProcessOverrides(),
+    val brimPoints: BrimPoints = BrimPoints(),
 ) {
     init {
         require(volumes.size in 1..MAX_PROJECT_VOLUMES_PER_OBJECT) {
@@ -63,6 +64,7 @@ data class ProjectObject(
         multiColorPaint: MultiColorPaint = MultiColorPaint(),
         variableLayerHeights: VariableLayerHeights = VariableLayerHeights(),
         processOverrides: ObjectProcessOverrides = ObjectProcessOverrides(),
+        brimPoints: BrimPoints = BrimPoints(),
         filamentSlot: Int = 0,
     ) : this(
         id = id,
@@ -79,6 +81,7 @@ data class ProjectObject(
         transform = transform,
         variableLayerHeights = variableLayerHeights,
         processOverrides = processOverrides,
+        brimPoints = brimPoints,
     )
 
     val singleVolumeOrNull: ProjectVolume?
@@ -260,6 +263,27 @@ data class ProjectHistoryState(
                         projectObject.copy(
                             volumes = projectObject.volumes.map { it.copy(filamentSlot = slot) },
                         )
+                    } else {
+                        projectObject
+                    }
+                },
+            ),
+        )
+    }
+
+    fun updateSelectedBrimPoints(brimPoints: BrimPoints): ProjectHistoryState {
+        val selected = current.selectedObject ?: return this
+        return updateBrimPoints(selected.id, brimPoints)
+    }
+
+    fun updateBrimPoints(objectId: String, brimPoints: BrimPoints): ProjectHistoryState {
+        val target = current.objects.firstOrNull { it.id == objectId } ?: return this
+        if (target.brimPoints == brimPoints) return this
+        return record(
+            current.copy(
+                objects = current.objects.map { projectObject ->
+                    if (projectObject.id == objectId) {
+                        projectObject.copy(brimPoints = brimPoints)
                     } else {
                         projectObject
                     }

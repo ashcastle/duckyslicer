@@ -153,6 +153,7 @@ internal class ProjectStore(
                         transform = archived.transform,
                         variableLayerHeights = archived.variableLayerHeights,
                         processOverrides = archived.processOverrides,
+                        brimPoints = archived.brimPoints,
                     )
                 },
                 selectedObjectId = decoded.selectedObjectId,
@@ -326,6 +327,11 @@ internal class ProjectStore(
         val processOverrides = value.optJSONObject("processOverrides")
             ?.toObjectProcessOverrides()
             ?: ObjectProcessOverrides()
+        val brimPoints = if (schemaVersion >= 10) {
+            value.getJSONArray("brimPoints").toBrimPoints()
+        } else {
+            BrimPoints()
+        }
         val volumes = if (schemaVersion >= 9) {
             val values = value.getJSONArray("volumes")
             require(values.length() in 1..SUPPORTED_PROJECT_VOLUMES_PER_OBJECT) {
@@ -341,6 +347,7 @@ internal class ProjectStore(
             transform = transform,
             variableLayerHeights = variableLayerHeights,
             processOverrides = processOverrides,
+            brimPoints = brimPoints,
         )
     }
 
@@ -442,6 +449,9 @@ internal class ProjectStore(
             } else {
                 validateLegacyStoredVolume(value, schemaVersion)
             }
+            if (schemaVersion >= 10) {
+                require(value.optJSONArray("brimPoints")?.isValidBrimPointsArray() == true)
+            }
         }
         val selected = root.takeUnless { it.isNull("selectedObjectId") }
             ?.optString("selectedObjectId")?.takeIf(String::isNotBlank)
@@ -492,6 +502,7 @@ internal class ProjectStore(
             .put("transform", transform.toStoredJson())
             .put("variableLayerHeights", variableLayerHeights.toStoredJson())
             .put("processOverrides", processOverrides.toProjectJson())
+            .put("brimPoints", brimPoints.toStoredJson())
             .put("volumes", JSONArray().also { values ->
                 volumes.forEach { volume -> values.put(volume.toStoredJson()) }
             })
@@ -673,6 +684,43 @@ internal class ProjectStore(
         }
     }
 
+    private fun BrimPoints.toStoredJson() = JSONArray().also { values ->
+        points.forEach { point ->
+            values.put(point.xMm.toDouble())
+            values.put(point.yMm.toDouble())
+            values.put(point.zMm.toDouble())
+            values.put(point.radiusMm.toDouble())
+        }
+    }
+
+    private fun JSONArray.toBrimPoints(): BrimPoints {
+        require(isValidBrimPointsArray()) { "Invalid Brim points" }
+        return BrimPoints(
+            List(length() / 4) { index ->
+                val offset = index * 4
+                BrimPoint(
+                    xMm = getDouble(offset).toFloat(),
+                    yMm = getDouble(offset + 1).toFloat(),
+                    zMm = getDouble(offset + 2).toFloat(),
+                    radiusMm = getDouble(offset + 3).toFloat(),
+                )
+            },
+        )
+    }
+
+    private fun JSONArray.isValidBrimPointsArray(): Boolean = runCatching {
+        require(length() % 4 == 0 && length() / 4 <= BrimPoints.MAX_POINTS)
+        repeat(length() / 4) { index ->
+            val offset = index * 4
+            BrimPoint(
+                xMm = getDouble(offset).toFloat(),
+                yMm = getDouble(offset + 1).toFloat(),
+                zMm = getDouble(offset + 2).toFloat(),
+                radiusMm = getDouble(offset + 3).toFloat(),
+            )
+        }
+    }.isSuccess
+
     private fun JSONArray.toVariableLayerHeights(): VariableLayerHeights {
         require(length() % 3 == 0 && length() / 3 <= VariableLayerHeights.MAX_RANGES) {
             "Invalid variable layer heights"
@@ -731,7 +779,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 9
+        const val SCHEMA_VERSION = 10
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"

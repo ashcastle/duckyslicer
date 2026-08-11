@@ -32,6 +32,7 @@ internal data class ArchivedProjectObject(
     val transform: ModelTransform,
     val variableLayerHeights: VariableLayerHeights,
     val processOverrides: ObjectProcessOverrides,
+    val brimPoints: BrimPoints,
 )
 
 internal data class StagedArchiveModel(
@@ -101,6 +102,7 @@ internal object ProjectArchiveCodec {
                                     projectObject.variableLayerHeights.toArchiveJson(),
                                 )
                                 .put("processOverrides", projectObject.processOverrides.toProjectJson())
+                                .put("brimPoints", projectObject.brimPoints.toArchiveJson())
                                 .put(
                                     "volumes",
                                     JSONArray().also { volumes ->
@@ -304,6 +306,11 @@ internal object ProjectArchiveCodec {
                 } else {
                     ObjectProcessOverrides()
                 },
+                brimPoints = if (schemaVersion >= 8) {
+                    value.getJSONArray("brimPoints").toArchiveBrimPoints()
+                } else {
+                    BrimPoints()
+                },
             )
         }
         val selected = root.takeUnless { it.isNull("selectedObjectId") }
@@ -494,6 +501,30 @@ private fun VariableLayerHeights.toArchiveJson() = JSONArray().also { values ->
     }
 }
 
+private fun BrimPoints.toArchiveJson() = JSONArray().also { values ->
+    points.forEach { point ->
+        values.put(point.xMm.toDouble())
+        values.put(point.yMm.toDouble())
+        values.put(point.zMm.toDouble())
+        values.put(point.radiusMm.toDouble())
+    }
+}
+
+private fun JSONArray.toArchiveBrimPoints(): BrimPoints {
+    require(length() % 4 == 0 && length() / 4 <= BrimPoints.MAX_POINTS)
+    return BrimPoints(
+        List(length() / 4) { index ->
+            val offset = index * 4
+            BrimPoint(
+                xMm = getDouble(offset).toFloat(),
+                yMm = getDouble(offset + 1).toFloat(),
+                zMm = getDouble(offset + 2).toFloat(),
+                radiusMm = getDouble(offset + 3).toFloat(),
+            )
+        },
+    )
+}
+
 private fun JSONArray.toArchiveVariableLayerHeights(): VariableLayerHeights {
     require(length() % 3 == 0 && length() / 3 <= VariableLayerHeights.MAX_RANGES)
     return VariableLayerHeights(
@@ -621,6 +652,6 @@ private const val MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES
 private const val MAX_PROJECT_ARCHIVE_ENTRY_NAME = 128
 private const val PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"
 private const val MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1
-private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 7
+private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 8
 private const val PROJECT_ARCHIVE_MANIFEST = "manifest.json"
 private val PROJECT_ARCHIVE_MODEL_ENTRY = Regex("models/[0-9]{3}\\.stl")

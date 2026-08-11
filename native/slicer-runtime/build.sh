@@ -127,6 +127,8 @@ prepare_runtime_source() {
         "$SOURCE_ROOT/app/src/main/cpp/src/sapil_model_simplify.cpp"
     copy_if_changed "$SCRIPT_DIR/overlay/sapil_model_volume.cpp" \
         "$SOURCE_ROOT/app/src/main/cpp/src/sapil_model_volume.cpp"
+    copy_if_changed "$SCRIPT_DIR/overlay/sapil_brim_points.cpp" \
+        "$SOURCE_ROOT/app/src/main/cpp/src/sapil_brim_points.cpp"
 }
 
 prepare_dependency_sources() {

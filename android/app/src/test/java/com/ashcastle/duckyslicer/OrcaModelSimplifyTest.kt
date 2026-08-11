@@ -35,6 +35,7 @@ class OrcaModelSimplifyTest {
             listOf(VariableLayerRange(0.2f, 0.5f, 0.12f)),
         )
         val overrides = ObjectProcessOverrides(wallLoops = 4, supportEnabled = true)
+        val brimPoints = BrimPoints(listOf(BrimPoint(0f, 0f, 0f, 4f)))
         val original = ProjectObject(
             id = "selected",
             model = modelInfo("original.stl", 1_000),
@@ -44,6 +45,7 @@ class OrcaModelSimplifyTest {
             multiColorPaint = MultiColorPaint(mapOf(4 to 1)),
             variableLayerHeights = variableLayers,
             processOverrides = overrides,
+            brimPoints = brimPoints,
             filamentSlot = 2,
         )
 
@@ -55,6 +57,7 @@ class OrcaModelSimplifyTest {
         assertEquals(transform, simplified.transform)
         assertEquals(variableLayers, simplified.variableLayerHeights)
         assertEquals(overrides, simplified.processOverrides)
+        assertEquals(brimPoints, simplified.brimPoints)
         assertEquals(2, simplified.filamentSlot)
         assertTrue(simplified.supportPaint.facets.isEmpty())
         assertTrue(simplified.seamPaint.facets.isEmpty())

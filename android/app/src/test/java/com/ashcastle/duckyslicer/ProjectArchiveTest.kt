@@ -75,6 +75,12 @@ class ProjectArchiveTest {
                     outerWallSpeedMmS = 42f,
                     supportEnabled = true,
                 ),
+                brimPoints = BrimPoints(
+                    listOf(
+                        BrimPoint(1f, 2f, -0.0001f, 4f),
+                        BrimPoint(8f, 9f, -0.0001f, 5f),
+                    ),
+                ),
             )
             val second = first.copy(
                 id = "duck-b",
@@ -112,10 +118,11 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedObjectId", "sliceOptions", "objects"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(7, manifest.getInt("schemaVersion"))
+            assertEquals(8, manifest.getInt("schemaVersion"))
             assertEquals(
                 setOf(
-                    "id", "transform", "variableLayerHeights", "processOverrides", "volumes",
+                    "id", "transform", "variableLayerHeights", "processOverrides",
+                    "brimPoints", "volumes",
                 ),
                 manifest.getJSONArray("objects").getJSONObject(0).keys().asSequence().toSet(),
             )
@@ -166,6 +173,8 @@ class ProjectArchiveTest {
             )
             assertEquals(first.processOverrides, imported.snapshot.objects[0].processOverrides)
             assertEquals(second.processOverrides, imported.snapshot.objects[1].processOverrides)
+            assertEquals(first.brimPoints, imported.snapshot.objects[0].brimPoints)
+            assertEquals(second.brimPoints, imported.snapshot.objects[1].brimPoints)
             assertEquals(0, imported.snapshot.objects[0].filamentSlot)
             assertEquals(1, imported.snapshot.objects[1].filamentSlot)
             assertEquals(
@@ -217,6 +226,7 @@ class ProjectArchiveTest {
             assertTrue(legacy.snapshot.objects.all { it.multiColorPaint.facets.isEmpty() })
             assertTrue(legacy.snapshot.objects.all { it.variableLayerHeights.ranges.isEmpty() })
             assertTrue(legacy.snapshot.objects.all { it.processOverrides.isEmpty })
+            assertTrue(legacy.snapshot.objects.all { it.brimPoints.points.isEmpty() })
             assertEquals(
                 legacyProjectVolumeId("duck-a"),
                 legacy.snapshot.objects.first().singleVolume.id,

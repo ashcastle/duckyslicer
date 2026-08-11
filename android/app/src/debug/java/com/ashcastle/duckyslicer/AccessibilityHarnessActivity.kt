@@ -320,6 +320,7 @@ private fun WorkspaceAccessibilityHarness(
         onSupportPaintCommitted = { _, _, _ -> },
         onSeamPaintPreview = { _, _, _, _ -> },
         onSeamPaintCommitted = { _, _, _ -> },
+        onBrimPointsChanged = { _, _ -> },
         onMultiColorPaintPreview = { _, _, _, _ -> },
         onMultiColorPaintCommitted = { _, _, _ -> },
         onVariableLayerHeightsChanged = {},

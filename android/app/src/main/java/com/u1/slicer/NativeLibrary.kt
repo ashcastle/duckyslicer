@@ -39,6 +39,7 @@ class NativeLibrary(
     external fun applyMultiColorPaint(objectIndex: Int, volumeIndex: Int, sidecarPath: String): Boolean
     external fun applyVariableLayerHeights(objectIndex: Int, sidecarPath: String): Boolean
     external fun applyObjectProcessOverrides(objectIndex: Int, sidecarPath: String): Boolean
+    external fun applyBrimPoints(objectIndex: Int, sidecarPath: String): Boolean
     external fun getObjectBoundingBoxes(): FloatArray
     external fun nativeGetObjectWorldAABBMins(): FloatArray
     external fun nativeExportLoadedObjects(outputDirectory: String): Array<String>?

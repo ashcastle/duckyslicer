@@ -64,6 +64,7 @@ internal object SlicerProcessClient {
         List(transformedModels.size) { null },
         List(objectVolumeCounts.size) { null },
         List(objectVolumeCounts.size) { null },
+        List(objectVolumeCounts.size) { null },
         options,
         objectVolumeCounts,
         filamentSlots,
@@ -80,6 +81,7 @@ internal object SlicerProcessClient {
         multiColorPaintFiles: List<File?>,
         variableLayerHeightFiles: List<File?>,
         processOverrideFiles: List<File?>,
+        brimPointFiles: List<File?>,
         options: SliceOptions,
         objectVolumeCounts: IntArray = IntArray(transformedModels.size) { 1 },
         filamentSlots: IntArray = IntArray(transformedModels.size),
@@ -93,6 +95,7 @@ internal object SlicerProcessClient {
         multiColorPaintFiles,
         variableLayerHeightFiles,
         processOverrideFiles,
+        brimPointFiles,
         options,
         objectVolumeCounts,
         filamentSlots,
@@ -114,6 +117,7 @@ internal object SlicerProcessClient {
         }
         return sliceInternal(
             transformedModels,
+            List(transformedModels.size) { null },
             List(transformedModels.size) { null },
             List(transformedModels.size) { null },
             List(transformedModels.size) { null },
@@ -468,6 +472,7 @@ internal object SlicerProcessClient {
         multiColorPaintFiles: List<File?>,
         variableLayerHeightFiles: List<File?>,
         processOverrideFiles: List<File?>,
+        brimPointFiles: List<File?>,
         options: SliceOptions,
         objectVolumeCounts: IntArray,
         filamentSlots: IntArray,
@@ -498,17 +503,21 @@ internal object SlicerProcessClient {
         require(processOverrideFiles.size == objectVolumeCounts.size) {
             "Object settings count does not match objects"
         }
+        require(brimPointFiles.size == objectVolumeCounts.size) {
+            "Brim point count does not match objects"
+        }
         require(filamentSlots.size == transformedModels.size) { "Filament slot count does not match models" }
         val supportPaintPaths = supportPaintFiles.map { it?.absolutePath.orEmpty() }
         val seamPaintPaths = seamPaintFiles.map { it?.absolutePath.orEmpty() }
         val multiColorPaintPaths = multiColorPaintFiles.map { it?.absolutePath.orEmpty() }
         val variableLayerHeightPaths = variableLayerHeightFiles.map { it?.absolutePath.orEmpty() }
         val processOverridePaths = processOverrideFiles.map { it?.absolutePath.orEmpty() }
+        val brimPointPaths = brimPointFiles.map { it?.absolutePath.orEmpty() }
         val optionsText = options.toProjectJson().toString()
         require(
             encodedRequestBytes(
                 modelPaths + supportPaintPaths + seamPaintPaths + multiColorPaintPaths +
-                    variableLayerHeightPaths + processOverridePaths,
+                    variableLayerHeightPaths + processOverridePaths + brimPointPaths,
                 optionsText,
             ) <=
                 SlicerProcessContract.MAX_REQUEST_BYTES,
@@ -540,6 +549,10 @@ internal object SlicerProcessClient {
             putStringArrayList(
                 SlicerProcessContract.KEY_PROCESS_OVERRIDE_PATHS,
                 ArrayList(processOverridePaths),
+            )
+            putStringArrayList(
+                SlicerProcessContract.KEY_BRIM_POINT_PATHS,
+                ArrayList(brimPointPaths),
             )
             putString(SlicerProcessContract.KEY_OPTIONS, optionsText)
             putIntArray(SlicerProcessContract.KEY_OBJECT_VOLUME_COUNTS, objectVolumeCounts)
@@ -1765,6 +1778,15 @@ class SlicerProcessService : Service() {
         val processOverrideFiles = processOverridePaths.map { path ->
             path.takeIf(String::isNotEmpty)?.let(::validateObjectProcessOverrides)
         }
+        val brimPointPaths = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_BRIM_POINT_PATHS),
+        ) { "Brim point paths are unavailable" }
+        require(brimPointPaths.size == objectVolumeCounts.size) {
+            "Brim point count does not match objects"
+        }
+        val brimPointFiles = brimPointPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let(::validateBrimPoints)
+        }
         val optionsText = requireNotNull(extras.getString(SlicerProcessContract.KEY_OPTIONS)) {
             "Slice settings are unavailable"
         }
@@ -1774,7 +1796,7 @@ class SlicerProcessService : Service() {
         require(
             encodedRequestBytes(
                 paths + supportPaintPaths + seamPaintPaths + multiColorPaintPaths +
-                    variableLayerHeightPaths + processOverridePaths,
+                    variableLayerHeightPaths + processOverridePaths + brimPointPaths,
                 optionsText,
             ) <=
                 SlicerProcessContract.MAX_REQUEST_BYTES,
@@ -1815,6 +1837,7 @@ class SlicerProcessService : Service() {
                 multiColorPaintFiles,
                 variableLayerHeightFiles,
                 processOverrideFiles,
+                brimPointFiles,
                 objectVolumeCounts,
                 filamentSlots,
                 options,
@@ -2208,6 +2231,7 @@ class SlicerProcessService : Service() {
         multiColorPaintFiles: List<ValidatedMultiColorPaint?>,
         variableLayerHeightFiles: List<ValidatedVariableLayerHeights?>,
         processOverrideFiles: List<ValidatedObjectProcessOverrides?>,
+        brimPointFiles: List<ValidatedBrimPoints?>,
         objectVolumeCounts: IntArray,
         filamentSlots: IntArray,
         options: SliceOptions,
@@ -2286,6 +2310,13 @@ class SlicerProcessService : Service() {
                             overrides.file.absolutePath,
                         ),
                     ) { "Object settings could not be applied" }
+                }
+            }
+            brimPointFiles.forEachIndexed { objectIndex, brimPoints ->
+                if (brimPoints != null) {
+                    check(
+                        runtime.applyBrimPoints(objectIndex, brimPoints.file.absolutePath),
+                    ) { "Brim points could not be applied" }
                 }
             }
             val nativeConfig = options.toNativeConfig().apply {
@@ -2494,6 +2525,39 @@ class SlicerProcessService : Service() {
         return ValidatedVariableLayerHeights(sidecar)
     }
 
+    private fun validateBrimPoints(path: String): ValidatedBrimPoints {
+        require(path.length in 1..MAX_PATH_LENGTH) { "Invalid Brim point path" }
+        val sidecar = File(path).canonicalFile
+        val allowedRoots = listOf(filesDir.canonicalFile, cacheDir.canonicalFile)
+        require(allowedRoots.any(sidecar::isInside)) {
+            "Brim points are outside private storage"
+        }
+        require(
+            sidecar.isFile && sidecar.length() in BrimPoints.HEADER_BYTES..BrimPoints.MAX_SIDECAR_BYTES,
+        ) { "Brim points are unavailable" }
+        DataInputStream(sidecar.inputStream().buffered()).use { reader ->
+            val magic = ByteArray(BrimPoints.MAGIC.size)
+            reader.readFully(magic)
+            require(magic.contentEquals(BrimPoints.MAGIC)) { "Brim point format is invalid" }
+            val count = reader.readInt()
+            require(count in 1..BrimPoints.MAX_POINTS) { "Brim point count is invalid" }
+            require(sidecar.length() == BrimPoints.HEADER_BYTES + count.toLong() * BrimPoints.ENTRY_BYTES) {
+                "Brim point size is invalid"
+            }
+            BrimPoints(
+                List(count) {
+                    BrimPoint(
+                        xMm = reader.readFloat(),
+                        yMm = reader.readFloat(),
+                        zMm = reader.readFloat(),
+                        radiusMm = reader.readFloat(),
+                    )
+                },
+            )
+        }
+        return ValidatedBrimPoints(sidecar)
+    }
+
     private fun validateMultiColorPaint(path: String): ValidatedMultiColorPaint {
         require(path.length in 1..MAX_PATH_LENGTH) { "Invalid multi-color paint path" }
         val sidecar = File(path).canonicalFile
@@ -2697,6 +2761,8 @@ class SlicerProcessService : Service() {
 
     private data class ValidatedVariableLayerHeights(val file: File)
 
+    private data class ValidatedBrimPoints(val file: File)
+
     private data class ValidatedObjectProcessOverrides(val file: File)
 
     private data class NativeVolumeMapping(
@@ -2742,6 +2808,7 @@ private object SlicerProcessContract {
     const val KEY_MULTI_COLOR_PAINT_PATHS = "multiColorPaintPaths"
     const val KEY_VARIABLE_LAYER_HEIGHT_PATHS = "variableLayerHeightPaths"
     const val KEY_PROCESS_OVERRIDE_PATHS = "processOverridePaths"
+    const val KEY_BRIM_POINT_PATHS = "brimPointPaths"
     const val KEY_OPTIONS = "options"
     const val KEY_MAXIMUM_GCODE_BYTES_FOR_TEST = "maximumGcodeBytesForTest"
     const val KEY_OK = "ok"

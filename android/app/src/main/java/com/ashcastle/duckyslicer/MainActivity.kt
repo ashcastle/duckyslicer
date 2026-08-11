@@ -1163,6 +1163,15 @@ private fun DuckySlicerScreen(
                 current.commitSeamPaint(objectId, volumeId, previous),
             )
         },
+        onBrimPointsChanged = { objectId, brimPoints ->
+            val current = projectTransferModel.state.value.history
+            val nextHistory = current.updateBrimPoints(objectId, brimPoints)
+            if (projectTransferModel.updateHistory(current, nextHistory)) {
+                clearCompletedSlice()
+                notice = null
+                error = null
+            }
+        },
         onMultiColorPaintPreview = { objectId, volumeId, facetIndex, slot ->
             val session = projectTransferModel.state.value
             val current = session.history

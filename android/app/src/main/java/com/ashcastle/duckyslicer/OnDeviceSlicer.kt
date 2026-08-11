@@ -1198,6 +1198,7 @@ internal const val MAX_FILAMENT_SLOTS = 16
 internal data class TransformedProjectModels(
     val files: List<File>,
     val objectVolumeCounts: IntArray,
+    val brimPoints: List<BrimPoints>,
 )
 
 object OnDeviceSlicer {
@@ -1322,6 +1323,15 @@ object OnDeviceSlicer {
                         ).also(it::writeSidecar)
                     }
             }
+            val brimPointFiles = transformedModels.brimPoints.mapIndexed { index, points ->
+                points.takeIf { it.points.isNotEmpty() }?.let {
+                    File.createTempFile(
+                        "slice-brim-$index-",
+                        ".bin",
+                        File(objects[index].volumes.first().model.localPath).parentFile,
+                    ).also(it::writeSidecar)
+                }
+            }
             try {
                 SlicerProcessClient.slice(
                     transformedModels.files,
@@ -1330,6 +1340,7 @@ object OnDeviceSlicer {
                     multiColorPaintFiles,
                     variableLayerHeightFiles,
                     processOverrideFiles,
+                    brimPointFiles,
                     options,
                     objectVolumeCounts = transformedModels.objectVolumeCounts,
                     filamentSlots = volumes.map(ProjectVolume::filamentSlot).toIntArray(),
@@ -1343,6 +1354,7 @@ object OnDeviceSlicer {
                 multiColorPaintFiles.filterNotNull().forEach(File::delete)
                 variableLayerHeightFiles.filterNotNull().forEach(File::delete)
                 processOverrideFiles.filterNotNull().forEach(File::delete)
+                brimPointFiles.filterNotNull().forEach(File::delete)
             }
         }
     }
@@ -1388,6 +1400,7 @@ object OnDeviceSlicer {
             projectObject.volumes.all { File(it.model.localPath).isFile }
         }) { "Model file is unavailable" }
         val transformedModels = ArrayList<File>(objects.sumOf { it.volumes.size })
+        val transformedBrimPoints = ArrayList<BrimPoints>(objects.size)
         return try {
             if (cancellationRequested()) throw SlicingCancelledException()
             objects.forEachIndexed { index, projectObject ->
@@ -1438,6 +1451,26 @@ object OnDeviceSlicer {
                     )
                 }
                 check(transformed.optBoolean("ok")) { "Model transform failed" }
+                val sourceCenter = transformed.getJSONArray("sourceCenterMm")
+                val sourceCenterMm = FloatArray(3) { axis ->
+                    sourceCenter.getDouble(axis).toFloat()
+                }
+                val transformedMinZ = transformed.getDouble("transformedMinZ").toFloat()
+                transformedBrimPoints += projectObject.transform.transformBrimPointsForSlicing(
+                    brimPoints = projectObject.brimPoints,
+                    sourceCenterMm = sourceCenterMm,
+                    transformedMinZ = transformedMinZ,
+                    bedCenterXmm = if (includePlacement) {
+                        options.bedOriginX + options.bedSizeX / 2f
+                    } else {
+                        0f
+                    },
+                    bedCenterYmm = if (includePlacement) {
+                        options.bedOriginY + options.bedSizeY / 2f
+                    } else {
+                        0f
+                    },
+                )
                 if (cancellationRequested()) throw SlicingCancelledException()
             }
             if (cancellationRequested()) throw SlicingCancelledException()
@@ -1445,6 +1478,7 @@ object OnDeviceSlicer {
                 TransformedProjectModels(
                     files = transformedModels,
                     objectVolumeCounts = objects.map { it.volumes.size }.toIntArray(),
+                    brimPoints = transformedBrimPoints,
                 ),
             )
         } finally {

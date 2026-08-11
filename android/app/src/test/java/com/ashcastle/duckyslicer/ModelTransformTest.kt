@@ -87,6 +87,74 @@ class ModelTransformTest {
     }
 
     @Test
+    fun brimPointsUseTheExactSliceTransformFrame() {
+        val transformed = ModelTransform(
+            offsetXmm = 3f,
+            offsetYmm = -4f,
+            offsetZmm = 2f,
+            rotationZdeg = 90f,
+            scale = 2f,
+            scaleY = 3f,
+        ).transformBrimPointsForSlicing(
+            brimPoints = BrimPoints(listOf(BrimPoint(12f, 11f, 5f, 4f))),
+            sourceCenterMm = floatArrayOf(10f, 10f, 5f),
+            transformedMinZ = -7f,
+            bedCenterXmm = 50f,
+            bedCenterYmm = 60f,
+        ).points.single()
+
+        assertEquals(50f, transformed.xMm, 0.0001f)
+        assertEquals(60f, transformed.yMm, 0.0001f)
+        assertEquals(9f, transformed.zMm, 0.0001f)
+        assertEquals(4f, transformed.radiusMm, 0.0001f)
+    }
+
+    @Test
+    fun manualBrimPointRoundTripsThroughThePlacedBedFootprint() {
+        val model = ModelInfo(
+            fileName = "footprint.stl",
+            triangles = 2,
+            dimensions = listOf(20.0, 20.0, 20.0),
+            localPath = "/tmp/footprint.stl",
+            minMm = listOf(0.0, 0.0, 0.0),
+            maxMm = listOf(20.0, 20.0, 20.0),
+            previewTriangles = floatArrayOf(
+                0f, 0f, 0f, 20f, 0f, 0f, 20f, 20f, 0f,
+                0f, 0f, 0f, 20f, 20f, 0f, 0f, 20f, 0f,
+            ),
+        )
+        val transform = ModelTransform(
+            offsetXmm = 8f,
+            offsetYmm = -6f,
+            rotationZdeg = 90f,
+            scale = 1.25f,
+        )
+        val projectObject = ProjectObject("footprint", model, transform = transform)
+
+        val point = requireNotNull(
+            transform.manualBrimPointAtBed(projectObject, 58f, 44f, 100f, 100f),
+        )
+        val placed = transform.placeBrimPoint(point, projectObject, 100f, 100f)
+
+        assertEquals(10f, point.xMm, 0.0001f)
+        assertEquals(10f, point.yMm, 0.0001f)
+        assertEquals(0f, point.zMm, 0.0001f)
+        assertEquals(58f, placed[0], 0.0001f)
+        assertEquals(44f, placed[1], 0.0001f)
+        assertEquals(0f, placed[2], 0.0001f)
+        assertTrue(transform.manualBrimPointAtBed(projectObject, 90f, 90f, 100f, 100f) == null)
+        assertTrue(
+            transform.copy(offsetZmm = 1f).manualBrimPointAtBed(
+                projectObject.copy(transform = transform.copy(offsetZmm = 1f)),
+                58f,
+                44f,
+                100f,
+                100f,
+            ) == null,
+        )
+    }
+
+    @Test
     fun axisScaleCanPreserveOrReleaseCurrentProportions() {
         val current = ModelTransform(scale = 1f, scaleY = 2f, scaleZ = 4f)
         val locked = current.withAxisScale(ModelScaleAxis.Y, 3f, true, 0.05f..10f)

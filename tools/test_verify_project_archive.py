@@ -22,7 +22,7 @@ def valid_sources() -> dict[str, str]:
                 "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
                 'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
                 "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-                "PROJECT_ARCHIVE_SCHEMA_VERSION = 7",
+                "PROJECT_ARCHIVE_SCHEMA_VERSION = 8",
                 "ArchivedProjectVolume",
                 'getJSONArray("volumes") legacyProjectVolumeId',
                 'Regex("models/[0-9]{3}\\\\.stl")',
@@ -38,6 +38,7 @@ def valid_sources() -> dict[str, str]:
                 "multiColorPaint.facets.keys.all",
                 'getJSONArray("multiColorPaint").toArchiveMultiColorPaint()',
                 'getJSONArray("variableLayerHeights").toArchiveVariableLayerHeights()',
+                'getJSONArray("brimPoints").toArchiveBrimPoints()',
                 'getJSONObject("processOverrides").toObjectProcessOverrides()',
                 "checkCancellation: () -> Unit = {}",
                 "copyArchiveBytes(input, archive, model.length(), checkCancellation)",
@@ -248,17 +249,17 @@ def valid_sources() -> dict[str, str]:
         ),
         "PRIVACY.md": (
             "Exported DuckySlicer project files contain the model geometry\n"
-            "support, seam, and multi-color painting, variable layer-height ranges, and active printer, filament,\n"
+            "support, seam, and multi-color painting, manual Brim-ear points, variable layer-height ranges,\n"
             "They do not contain G-code, saved printer addresses, or printer\n"
-            "형상, 오브젝트 배치, 서포트·심·다중 색상 채색, 가변 레이어 높이 구간\n"
+            "형상, 오브젝트 배치, 서포트·심·다중 색상 채색, 수동 Brim 이어 점, 가변 레이어\n"
             "프린터 접속 키는 포함되지"
         ),
         "SUPPORT.md": "`.duckyproject` model geometry include saved printer addresses, access keys, or G-code",
         "PROJECT_FORMAT.md": (
-            "manifest.json models/000.stl schema version `7` "
-            "Schema 1 through 6 projects remain readable stable, bounded `volumes` list "
-            "one volume per object independent X, Y, and Z scale "
-            "multi-color painting variable layer-height ranges "
+            "manifest.json models/000.stl schema version `8` "
+            "Schema 1 through 7 projects remain readable stable, bounded `volumes` list "
+            "up to 64 volumes per object independent X, Y, and Z scale "
+            "multi-color painting manual Brim-ear points variable layer-height ranges "
             "rejects duplicate, directory, traversal, and unknown entries "
             "A failed import leaves the current project unchanged and removes staged data "
             "it in Files. External opening accepts only a granted `content://` URI "
