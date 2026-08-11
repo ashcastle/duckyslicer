@@ -16,7 +16,12 @@ def valid_sources() -> dict[str, str]:
         "ProjectTransfer.kt": (
             "val persistenceBlocked: Boolean restored.storageUnavailable "
             "!current.persistenceBlocked "
-            "projectStore.save(document.history.current, document.sliceOptions)"
+            "projectStore.save(document.history.current, document.sliceOptions) "
+            "fun autoLaySelectedModel() fun arrangeProjectObjects() "
+            "fun splitSelectedModel() "
+            "fun cutSelectedModel(heightRatio: Float, placeOnCut: Boolean) "
+            "fun createPrimitive( fun importModels(uri: Uri) startEditLocked "
+            "withCompletedEdit deleteInstalledModels"
         ),
         "ProfileStore.kt": "DurableJsonFile(",
         "ProfileLibraryViewModel.kt": (
@@ -72,7 +77,13 @@ def valid_sources() -> dict[str, str]:
             "profileLibraryModel.recordSelection(options) "
             "ViewModelProvider(this)[AppSettingsViewModel::class.java] "
             "appSettingsModel.state.collectAsStateWithLifecycle() "
-            "appSettingsModel.updateSettings(next)"
+            "appSettingsModel.updateSettings(next) "
+            "projectTransferModel.autoLaySelectedModel() "
+            "projectTransferModel.arrangeProjectObjects() "
+            "projectTransferModel.splitSelectedModel() "
+            "projectTransferModel.cutSelectedModel(heightRatio, placeOnCut) "
+            "projectTransferModel.createPrimitive(primitive, sizeMm, displayName) "
+            "projectTransferModel.importModels(uri)"
         ),
         "DeviceSheet.kt": ".selectable( selected = true enabled = !busy ),",
         "DurableJsonFileTest.kt": (
@@ -127,6 +138,10 @@ def valid_sources() -> dict[str, str]:
             "latestUnsavedSettingsSurviveImmediateActivityRecreationAndPersist "
             "Recreate before the 350 ms persistence debounce can run"
         ),
+        "ProjectArchiveIntentInstrumentedTest.kt": (
+            "automaticLayKeepsOneRetainedOperationAcrossActivityRecreation "
+            "assertSame( ProjectEditKind.AUTO_LAY waitForPersistedTransform"
+        ),
         "CONTRIBUTING.md": (
             "pin the connection target and bypass system proxies "
             "bind a replacement printer credential generation "
@@ -137,7 +152,9 @@ def valid_sources() -> dict[str, str]:
             "Profile catalog loading, recent selections, and user-profile saves must share one "
             "only in the project session revision that "
             "Live app settings and their debounced persistence must share one "
-            "Fixed support-event writers must serialize through the process-wide journal boundary"
+            "Fixed support-event writers must serialize through the process-wide journal boundary "
+            "Model import, primitive creation, automatic lay, arrangement, split, and cut must run "
+            "UI disposal must not issue a process-wide slicer cancellation"
         ),
         "SECURITY.md": (
             "every current DNS answer DNS rebinding bypass system proxies "
@@ -192,6 +209,18 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
         sources = valid_sources()
         sources["MainActivity.kt"] += " AppSettingsStore(context)"
         with self.assertRaisesRegex(VerificationError, "app-settings persistence"):
+            verify_resilience(sources)
+
+    def test_rejects_activity_owned_project_edit_work(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] += " SlicerProcessClient.autoOrient(File(path))"
+        with self.assertRaisesRegex(VerificationError, "Activity composition"):
+            verify_resilience(sources)
+
+    def test_rejects_ui_disposal_canceling_retained_native_work(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] += " SlicerProcessClient.cancelActiveSliceAsync()"
+        with self.assertRaisesRegex(VerificationError, "Activity composition"):
             verify_resilience(sources)
 
     def test_rejects_async_settings_write_without_commit_result(self) -> None:

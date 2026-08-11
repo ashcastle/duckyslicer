@@ -38,6 +38,11 @@ avoid introducing an account or cloud requirement.
 - Project history, active slicing options, restoration, and debounced persistence must
   share the same Activity-retained owner. Rotation must preserve unsaved edits and undo
   history, while the durable project generation remains the process-death recovery path.
+- Model import, primitive creation, automatic lay, arrangement, split, and cut must run
+  through that retained project owner. Bind each result to its starting history and
+  options, reject duplicate work after rotation, and delete every unaccepted model file.
+- UI disposal must not issue a process-wide slicer cancellation. Only the retained
+  owner of an active operation may cancel it.
 - Profile catalog loading, recent selections, and user-profile saves must share one
   Activity-retained owner. A saved profile may update the catalog after rotation, but
   its late completion may select that profile only in the project session revision that

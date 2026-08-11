@@ -53,6 +53,16 @@ class ModelTransformTest {
     }
 
     @Test
+    fun orcaOrientationCanonicalizesSignedZeroForDurableSessionEquality() {
+        val transformed = ModelTransform().withOrcaOrientation(
+            OrcaOrientation(doubleArrayOf(0.0, -0.0, 0.0)),
+        )
+
+        assertEquals(ModelTransform(), transformed)
+        assertEquals(0f.toBits(), transformed.rotationYdeg.toBits())
+    }
+
+    @Test
     fun orcaOrientationRejectsMalformedNativeData() {
         val malformed = listOf(doubleArrayOf(), doubleArrayOf(0.0, 0.0), doubleArrayOf(0.0, Double.NaN, 0.0))
 

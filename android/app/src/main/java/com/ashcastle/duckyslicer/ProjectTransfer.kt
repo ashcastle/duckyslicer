@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 internal enum class ProjectTransferDirection {
     IMPORT,
@@ -23,6 +24,37 @@ internal enum class ProjectPersistenceMessage {
     STORAGE_UNAVAILABLE,
     SAVE_FAILED,
 }
+
+internal enum class ProjectEditKind {
+    MODEL_IMPORT,
+    PRIMITIVE,
+    AUTO_LAY,
+    ARRANGE,
+    SPLIT,
+    CUT,
+}
+
+internal data class ActiveProjectEdit(
+    val id: Long,
+    val kind: ProjectEditKind,
+)
+
+internal enum class ProjectEditFailure {
+    GENERIC,
+    MODEL_TOO_LARGE,
+    NOT_SPLITTABLE,
+    NOT_CUTTABLE,
+}
+
+internal data class ProjectEditCompletion(
+    val id: Long,
+    val kind: ProjectEditKind,
+    val failure: ProjectEditFailure? = null,
+    val sessionChanged: Boolean = false,
+    val objectCount: Int = 0,
+    val clearedObjectSettings: Boolean = false,
+    val displayName: String? = null,
+)
 
 internal sealed interface ProjectTransferCompletion {
     val id: Long
@@ -49,6 +81,8 @@ internal sealed interface ProjectTransferCompletion {
 internal data class ProjectTransferState(
     val busy: Boolean = false,
     val completion: ProjectTransferCompletion? = null,
+    val activeEdit: ActiveProjectEdit? = null,
+    val editCompletion: ProjectEditCompletion? = null,
     val history: ProjectHistoryState = ProjectHistoryState(),
     val sliceOptions: SliceOptions = SliceOptions(),
     val restored: Boolean = false,
@@ -64,8 +98,8 @@ internal fun ProjectTransferState.withUpdatedSession(
     nextOptions: SliceOptions,
 ): ProjectTransferState? {
     if (
-        !restored || busy || completion != null || history != expectedHistory ||
-        sliceOptions != expectedOptions
+        !restored || busy || completion != null || editCompletion != null ||
+        history != expectedHistory || sliceOptions != expectedOptions
     ) {
         return null
     }
@@ -79,6 +113,52 @@ internal fun ProjectTransferState.withUpdatedSession(
         sessionRevision = sessionRevision + 1,
     )
 }
+
+internal fun ProjectTransferState.withStartedEdit(
+    operation: ActiveProjectEdit,
+): ProjectTransferState? {
+    if (!restored || busy || completion != null || editCompletion != null) return null
+    return copy(busy = true, activeEdit = operation)
+}
+
+internal fun ProjectTransferState.withCompletedEdit(
+    operation: ActiveProjectEdit,
+    expectedHistory: ProjectHistoryState,
+    expectedOptions: SliceOptions,
+    nextHistory: ProjectHistoryState?,
+    completion: ProjectEditCompletion,
+): ProjectTransferState? {
+    require(completion.id == operation.id && completion.kind == operation.kind) {
+        "Project edit completion does not match its operation"
+    }
+    require((completion.failure == null) == (nextHistory != null)) {
+        "Successful project edits require a resulting history"
+    }
+    if (
+        !busy || activeEdit != operation || history != expectedHistory ||
+        sliceOptions != expectedOptions
+    ) {
+        return null
+    }
+    val appliedHistory = nextHistory ?: history
+    val changed = appliedHistory != history
+    return copy(
+        busy = false,
+        activeEdit = null,
+        editCompletion = completion.copy(sessionChanged = changed),
+        history = appliedHistory,
+        persistenceMessage = ProjectPersistenceMessage.STORAGE_UNAVAILABLE.takeIf {
+            changed && persistenceBlocked
+        } ?: persistenceMessage,
+        sessionRevision = sessionRevision + if (changed) 1 else 0,
+    )
+}
+
+private data class ProjectEditBaseline(
+    val operation: ActiveProjectEdit,
+    val history: ProjectHistoryState,
+    val options: SliceOptions,
+)
 
 internal class ProjectTransferViewModel(application: Application) : AndroidViewModel(application) {
     private val projectStore = ProjectStore(application)
@@ -147,8 +227,238 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     )
 
     @Synchronized
+    fun autoLaySelectedModel(): Boolean {
+        val target = mutableState.value.history.current.selectedObject ?: return false
+        val baseline = startEditLocked(ProjectEditKind.AUTO_LAY) ?: return false
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val orientation = SlicerProcessClient.autoOrient(File(target.model.localPath))
+                val nextHistory = baseline.history.updateTransform(
+                    target.id,
+                    target.transform.withOrcaOrientation(orientation),
+                )
+                completeEditSuccess(baseline, nextHistory)
+            } catch (failure: CancellationException) {
+                throw failure
+            } catch (failure: Exception) {
+                completeEditFailure(baseline, failure)
+            }
+        }
+        return true
+    }
+
+    @Synchronized
+    fun arrangeProjectObjects(): Boolean {
+        if (mutableState.value.history.current.objects.size < 2) return false
+        val baseline = startEditLocked(ProjectEditKind.ARRANGE) ?: return false
+        val targets = baseline.history.current.objects
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val arrangement = OnDeviceSlicer.arrange(targets, baseline.options)
+                val nextHistory = baseline.history.applyOrcaArrangement(
+                    arrangement,
+                    baseline.options.bedSizeX,
+                    baseline.options.bedSizeY,
+                )
+                completeEditSuccess(baseline, nextHistory)
+            } catch (failure: CancellationException) {
+                throw failure
+            } catch (failure: Exception) {
+                completeEditFailure(baseline, failure)
+            }
+        }
+        return true
+    }
+
+    @Synchronized
+    fun splitSelectedModel(): Boolean {
+        val current = mutableState.value
+        val target = current.history.current.selectedObject ?: return false
+        val maximumObjects = ProjectStore.MAX_PROJECT_OBJECTS - current.history.current.objects.size + 1
+        if (maximumObjects < 2) return false
+        val baseline = startEditLocked(ProjectEditKind.SPLIT) ?: return false
+        viewModelScope.launch(Dispatchers.IO) {
+            var installed = emptyList<ProjectObject>()
+            try {
+                val result = splitProjectObject(
+                    target,
+                    projectStore,
+                    baseline.options,
+                    maximumObjects,
+                )
+                installed = result.objects
+                val nextHistory = baseline.history.replaceSelected(result.objects)
+                if (
+                    !completeEditSuccess(
+                        baseline,
+                        nextHistory,
+                        objectCount = result.objects.size,
+                        clearedObjectSettings = result.clearedObjectSettings,
+                    )
+                ) {
+                    result.objects.deleteInstalledModels()
+                }
+            } catch (failure: CancellationException) {
+                installed.deleteInstalledModels()
+                throw failure
+            } catch (failure: Exception) {
+                installed.deleteInstalledModels()
+                completeEditFailure(baseline, failure)
+            }
+        }
+        return true
+    }
+
+    @Synchronized
+    fun cutSelectedModel(heightRatio: Float, placeOnCut: Boolean): Boolean {
+        val current = mutableState.value
+        val target = current.history.current.selectedObject ?: return false
+        val maximumObjects = ProjectStore.MAX_PROJECT_OBJECTS - current.history.current.objects.size + 1
+        if (maximumObjects < 2 || !heightRatio.isFinite() || heightRatio !in 0.02f..0.98f) {
+            return false
+        }
+        val baseline = startEditLocked(ProjectEditKind.CUT) ?: return false
+        viewModelScope.launch(Dispatchers.IO) {
+            var installed = emptyList<ProjectObject>()
+            try {
+                val result = cutProjectObject(
+                    target,
+                    projectStore,
+                    baseline.options,
+                    heightRatio,
+                    placeOnCut,
+                    maximumObjects,
+                )
+                installed = result.objects
+                val nextHistory = baseline.history.replaceSelected(result.objects)
+                if (
+                    !completeEditSuccess(
+                        baseline,
+                        nextHistory,
+                        objectCount = result.objects.size,
+                        clearedObjectSettings = result.clearedObjectSettings,
+                    )
+                ) {
+                    result.objects.deleteInstalledModels()
+                }
+            } catch (failure: CancellationException) {
+                installed.deleteInstalledModels()
+                throw failure
+            } catch (failure: Exception) {
+                installed.deleteInstalledModels()
+                completeEditFailure(baseline, failure)
+            }
+        }
+        return true
+    }
+
+    @Synchronized
+    fun createPrimitive(
+        primitive: OrcaPrimitive,
+        sizeMm: Float,
+        displayName: String,
+    ): Boolean {
+        val objectCount = mutableState.value.history.current.objects.size
+        if (
+            objectCount >= ProjectStore.MAX_PROJECT_OBJECTS || !sizeMm.isFinite() ||
+            sizeMm !in MIN_PRIMITIVE_SIZE_MM..MAX_PRIMITIVE_SIZE_MM
+        ) {
+            return false
+        }
+        val baseline = startEditLocked(ProjectEditKind.PRIMITIVE) ?: return false
+        viewModelScope.launch(Dispatchers.IO) {
+            var installed = emptyList<ProjectObject>()
+            try {
+                val created = createOrcaPrimitive(primitive, sizeMm, displayName, projectStore)
+                installed = listOf(created)
+                val distance = ((objectCount + 1) / 2) * 24f
+                val offset = when {
+                    objectCount == 0 -> 0f
+                    objectCount % 2 == 1 -> distance
+                    else -> -distance
+                }
+                val placed = created.copy(
+                    transform = created.transform.copy(offsetXmm = offset),
+                )
+                val nextHistory = baseline.history.addAll(listOf(placed))
+                if (
+                    !completeEditSuccess(
+                        baseline,
+                        nextHistory,
+                        displayName = displayName,
+                    )
+                ) {
+                    listOf(created).deleteInstalledModels()
+                }
+            } catch (failure: CancellationException) {
+                installed.deleteInstalledModels()
+                throw failure
+            } catch (failure: Exception) {
+                installed.deleteInstalledModels()
+                completeEditFailure(baseline, failure)
+            }
+        }
+        return true
+    }
+
+    @Synchronized
+    fun importModels(uri: Uri): Boolean {
+        val objectCount = mutableState.value.history.current.objects.size
+        if (objectCount >= ProjectStore.MAX_PROJECT_OBJECTS) return false
+        val baseline = startEditLocked(ProjectEditKind.MODEL_IMPORT) ?: return false
+        viewModelScope.launch(Dispatchers.IO) {
+            var installed = emptyList<ProjectObject>()
+            try {
+                val imported = importOrcaModels(
+                    getApplication<Application>(),
+                    uri,
+                    projectStore,
+                    baseline.options,
+                )
+                installed = imported
+                require(objectCount + imported.size <= ProjectStore.MAX_PROJECT_OBJECTS) {
+                    "Project has too many imported objects"
+                }
+                val distance = ((objectCount + 1) / 2) * 24f
+                val offset = when {
+                    objectCount == 0 -> 0f
+                    objectCount % 2 == 1 -> distance
+                    else -> -distance
+                }
+                val placed = imported.map { projectObject ->
+                    projectObject.copy(
+                        transform = projectObject.transform.copy(
+                            offsetXmm = projectObject.transform.offsetXmm + offset,
+                        ),
+                    )
+                }
+                val nextHistory = baseline.history.addAll(placed)
+                if (
+                    !completeEditSuccess(
+                        baseline,
+                        nextHistory,
+                        objectCount = placed.size,
+                    )
+                ) {
+                    imported.deleteInstalledModels()
+                }
+            } catch (failure: CancellationException) {
+                installed.deleteInstalledModels()
+                throw failure
+            } catch (failure: Exception) {
+                installed.deleteInstalledModels()
+                completeEditFailure(baseline, failure)
+            }
+        }
+        return true
+    }
+
+    @Synchronized
     fun importProject(uri: Uri): Boolean {
-        if (mutableState.value.busy || mutableState.value.completion != null) return false
+        if (
+            mutableState.value.busy || mutableState.value.completion != null ||
+            mutableState.value.editCompletion != null
+        ) return false
         persistenceJob?.cancel()
         val operationId = ++nextOperationId
         mutableState.value = mutableState.value.copy(busy = true, persistenceMessage = null)
@@ -196,7 +506,10 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         snapshot: ProjectSnapshot,
         sliceOptions: SliceOptions,
     ): Boolean {
-        if (mutableState.value.busy || mutableState.value.completion != null) return false
+        if (
+            mutableState.value.busy || mutableState.value.completion != null ||
+            mutableState.value.editCompletion != null
+        ) return false
         val operationId = ++nextOperationId
         mutableState.value = mutableState.value.copy(busy = true)
         viewModelScope.launch(Dispatchers.IO) {
@@ -236,6 +549,90 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         mutableState.value = current.copy(completion = null)
     }
 
+    @Synchronized
+    fun consumeEditCompletion(operationId: Long) {
+        val current = mutableState.value
+        if (current.editCompletion?.id != operationId) return
+        mutableState.value = current.copy(editCompletion = null)
+    }
+
+    private fun startEditLocked(kind: ProjectEditKind): ProjectEditBaseline? {
+        val current = mutableState.value
+        val operation = ActiveProjectEdit(++nextOperationId, kind)
+        val started = current.withStartedEdit(operation) ?: return null
+        persistenceJob?.cancel()
+        mutableState.value = started
+        return ProjectEditBaseline(operation, current.history, current.sliceOptions)
+    }
+
+    private fun completeEditSuccess(
+        baseline: ProjectEditBaseline,
+        nextHistory: ProjectHistoryState,
+        objectCount: Int = 0,
+        clearedObjectSettings: Boolean = false,
+        displayName: String? = null,
+    ): Boolean = synchronized(this) {
+        val completion = ProjectEditCompletion(
+            id = baseline.operation.id,
+            kind = baseline.operation.kind,
+            objectCount = objectCount,
+            clearedObjectSettings = clearedObjectSettings,
+            displayName = displayName,
+        )
+        val updated = mutableState.value.withCompletedEdit(
+            operation = baseline.operation,
+            expectedHistory = baseline.history,
+            expectedOptions = baseline.options,
+            nextHistory = nextHistory,
+            completion = completion,
+        ) ?: return@synchronized false
+        mutableState.value = updated
+        schedulePersistenceLocked(allowPendingCompletion = true)
+        true
+    }
+
+    private fun completeEditFailure(
+        baseline: ProjectEditBaseline,
+        failure: Exception,
+    ) {
+        val reason = when (failure) {
+            is ModelTooLargeException -> ProjectEditFailure.MODEL_TOO_LARGE
+            is ModelNotSplittableException -> ProjectEditFailure.NOT_SPLITTABLE
+            is ModelNotCuttableException -> ProjectEditFailure.NOT_CUTTABLE
+            else -> ProjectEditFailure.GENERIC
+        }
+        val completion = ProjectEditCompletion(
+            id = baseline.operation.id,
+            kind = baseline.operation.kind,
+            failure = reason,
+        )
+        val accepted = synchronized(this) {
+            val updated = mutableState.value.withCompletedEdit(
+                operation = baseline.operation,
+                expectedHistory = baseline.history,
+                expectedOptions = baseline.options,
+                nextHistory = null,
+                completion = completion,
+            ) ?: return@synchronized false
+            mutableState.value = updated
+            schedulePersistenceLocked(allowPendingCompletion = true)
+            true
+        }
+        if (!accepted) return
+        when (baseline.operation.kind) {
+            ProjectEditKind.AUTO_LAY -> supportEvents.record(SupportEvent.AUTO_LAY_FAILED)
+            ProjectEditKind.ARRANGE -> supportEvents.record(SupportEvent.ARRANGE_FAILED)
+            ProjectEditKind.MODEL_IMPORT -> supportEvents.record(
+                if (reason == ProjectEditFailure.MODEL_TOO_LARGE) {
+                    SupportEvent.MODEL_TOO_LARGE
+                } else {
+                    SupportEvent.MODEL_IMPORT_FAILED
+                },
+            )
+            else -> Unit
+        }
+    }
+
     private fun updateSessionLocked(
         current: ProjectTransferState,
         expectedHistory: ProjectHistoryState,
@@ -262,7 +659,10 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             val document = synchronized(this@ProjectTransferViewModel) {
                 mutableState.value.takeIf { current ->
                     current.restored && !current.busy &&
-                        (allowPendingCompletion || current.completion == null) &&
+                        (
+                            allowPendingCompletion ||
+                                (current.completion == null && current.editCompletion == null)
+                            ) &&
                         !current.persistenceBlocked && current.sessionRevision == expectedRevision
                 }
             } ?: return@launch
@@ -296,4 +696,8 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     private companion object {
         const val PROJECT_SAVE_DEBOUNCE_MILLIS = 400L
     }
+}
+
+private fun List<ProjectObject>.deleteInstalledModels() {
+    forEach { projectObject -> File(projectObject.model.localPath).delete() }
 }

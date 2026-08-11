@@ -130,15 +130,10 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
             raise VerificationError(f"retained slice lifecycle is missing: {marker}")
     if "ViewModelProvider(this)[SliceOperationViewModel::class.java]" not in main:
         raise VerificationError("the Activity must retain active slicing across configuration changes")
-    for marker in (
-        "DisposableEffect(sliceOperationModel)",
-        "if (!sliceOperationModel.state.value.busy)",
-        "SlicerProcessClient.cancelActiveSliceAsync()",
-    ):
-        if marker not in main:
-            raise VerificationError(f"non-slice disposal containment is missing: {marker}")
-    if "DisposableEffect(Unit)" in main:
-        raise VerificationError("configuration disposal must not cancel active slicing")
+    if "SlicerProcessClient.cancelActiveSliceAsync()" in main:
+        raise VerificationError(
+            "the Activity must not cancel retained native work during UI disposal"
+        )
     if "onCancelSlice" not in workspace or "canceling_slice" not in workspace:
         raise VerificationError("the Slice workspace must expose cancellation progress")
     for marker in (

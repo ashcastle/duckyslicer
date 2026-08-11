@@ -20,6 +20,59 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ProjectArchiveIntentInstrumentedTest {
     @Test
+    fun automaticLayKeepsOneRetainedOperationAcrossActivityRecreation() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        projectRoot.deleteRecursively()
+        try {
+            seedCurrentProject("retained-auto-lay", "retained-auto-lay.stl")
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                lateinit var retainedModel: ProjectTransferViewModel
+                scenario.onActivity { activity ->
+                    retainedModel = ViewModelProvider(activity)[ProjectTransferViewModel::class.java]
+                }
+                waitForSession(retainedModel, "retained-auto-lay")
+                val ready = retainedModel.state.value
+                val tilted = ModelTransform(
+                    rotationXdeg = 31f,
+                    rotationYdeg = 17f,
+                    rotationZdeg = 9f,
+                )
+                assertTrue(
+                    retainedModel.updateHistory(
+                        ready.history,
+                        ready.history.updateSelectedTransform(tilted),
+                    ),
+                )
+                val startingRevision = retainedModel.state.value.sessionRevision
+                scenario.onActivity {
+                    assertTrue(retainedModel.autoLaySelectedModel())
+                    assertTrue(retainedModel.state.value.busy)
+                    assertEquals(
+                        ProjectEditKind.AUTO_LAY,
+                        retainedModel.state.value.activeEdit?.kind,
+                    )
+                }
+
+                scenario.recreate()
+                scenario.onActivity { recreated ->
+                    assertSame(
+                        retainedModel,
+                        ViewModelProvider(recreated)[ProjectTransferViewModel::class.java],
+                    )
+                }
+                val completed = waitForEditCompletion(retainedModel, startingRevision + 1)
+                val applied = requireNotNull(completed.history.current.selectedObject).transform
+                assertTrue("Automatic lay must replace the staged tilt", applied != tilted)
+                assertEquals(startingRevision + 1, completed.sessionRevision)
+                waitForPersistedTransform("retained-auto-lay", applied)
+            }
+        } finally {
+            projectRoot.deleteRecursively()
+        }
+    }
+
+    @Test
     fun unsavedProjectEditAndUndoSurviveImmediateActivityRecreation() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
@@ -293,6 +346,49 @@ class ProjectArchiveIntentInstrumentedTest {
             SystemClock.sleep(WAIT_POLL_MILLIS)
         }
         throw AssertionError("Timed out waiting for retained project persistence")
+    }
+
+    private fun waitForEditCompletion(
+        model: ProjectTransferViewModel,
+        expectedRevision: Long,
+    ): ProjectTransferState {
+        val deadline = SystemClock.elapsedRealtime() + WAIT_TIMEOUT_MILLIS
+        var latest = model.state.value
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val state = model.state.value
+            latest = state
+            if (!state.busy && state.activeEdit == null && state.sessionRevision == expectedRevision) {
+                return state
+            }
+            SystemClock.sleep(WAIT_POLL_MILLIS)
+        }
+        throw AssertionError(
+            "Timed out waiting for retained project edit completion: " +
+                "expectedRevision=$expectedRevision actualRevision=${latest.sessionRevision} " +
+                "active=${latest.activeEdit} completion=${latest.editCompletion}",
+        )
+    }
+
+    private fun waitForPersistedTransform(objectId: String, transform: ModelTransform) {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val deadline = SystemClock.elapsedRealtime() + WAIT_TIMEOUT_MILLIS
+        var latest = StoredProjectDocument()
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val stored = ProjectStore(context).loadProject()
+            latest = stored
+            if (
+                stored.snapshot.selectedObjectId == objectId &&
+                stored.snapshot.selectedObject?.transform == transform
+            ) {
+                return
+            }
+            SystemClock.sleep(WAIT_POLL_MILLIS)
+        }
+        throw AssertionError(
+            "Timed out waiting for retained project edit persistence: " +
+                "expected=$transform actual=${latest.snapshot.selectedObject?.transform} " +
+                "storageUnavailable=${latest.storageUnavailable}",
+        )
     }
 
     private fun waitForNode(

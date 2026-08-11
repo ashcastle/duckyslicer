@@ -37,7 +37,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.File
 import java.util.UUID
 
 private val DuckyColors = darkColorScheme(
@@ -196,12 +195,7 @@ private fun DuckySlicerScreen(
 
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
-    var importing by remember { mutableStateOf(false) }
     var externalProjectConfirmation by remember { mutableStateOf<ExternalProjectRequest?>(null) }
-    var autoLaying by remember { mutableStateOf(false) }
-    var arranging by remember { mutableStateOf(false) }
-    var splitting by remember { mutableStateOf(false) }
-    var cutting by remember { mutableStateOf(false) }
     var sliceOutcome by rememberSaveable { mutableStateOf<SliceOutcome?>(null) }
     var selectedTab by rememberSaveable { mutableStateOf(WorkspaceTab.SLICE) }
     var layerPreview by remember { mutableStateOf<GcodeLayerPreview?>(null) }
@@ -211,7 +205,18 @@ private fun DuckySlicerScreen(
     val sliceProgress = sliceOperationState.progress
     val previewLoading = sliceOperationState.previewLoading
     val projectTransferState by projectTransferModel.state.collectAsStateWithLifecycle()
-    val projectTransferBusy = projectTransferState.busy
+    val projectTransferBusy = projectTransferState.busy ||
+        projectTransferState.completion != null || projectTransferState.editCompletion != null
+    val visibleEdit = projectTransferState.activeEdit?.kind
+        ?: projectTransferState.editCompletion?.kind
+    val importing = visibleEdit == ProjectEditKind.MODEL_IMPORT ||
+        visibleEdit == ProjectEditKind.PRIMITIVE
+    val autoLaying = visibleEdit == ProjectEditKind.AUTO_LAY
+    val arranging = visibleEdit == ProjectEditKind.ARRANGE
+    val splitting = visibleEdit == ProjectEditKind.SPLIT
+    val cutting = visibleEdit == ProjectEditKind.CUT
+    val projectFileBusy = !projectTransferState.restored ||
+        (projectTransferBusy && visibleEdit == null)
     val projectHistory = projectTransferState.history
     val projectRestored = projectTransferState.restored
     val remoteOperationState by remoteOperationModel.state.collectAsStateWithLifecycle()
@@ -222,7 +227,6 @@ private fun DuckySlicerScreen(
     val selectedProjectObject = projectHistory.current.selectedObject
     val model = selectedProjectObject?.model ?: projectObjects.firstOrNull()?.model
     val modelTransform = selectedProjectObject?.transform ?: ModelTransform()
-    val projectStore = remember(context.applicationContext) { ProjectStore(context.applicationContext) }
     val profileCatalog = profileLibraryState.catalog
     val profileRecents = profileLibraryState.recents
     val profileRecentsLoaded = profileLibraryState.recentsLoaded
@@ -297,6 +301,55 @@ private fun DuckySlicerScreen(
         projectTransferModel.consumeCompletion(completion.id)
     }
 
+    LaunchedEffect(projectTransferState.editCompletion?.id) {
+        val completion = projectTransferState.editCompletion ?: return@LaunchedEffect
+        if (completion.failure == null) {
+            if (completion.sessionChanged) clearCompletedSlice()
+            error = null
+            notice = when (completion.kind) {
+                ProjectEditKind.MODEL_IMPORT -> null
+                ProjectEditKind.PRIMITIVE -> resources.getString(
+                    R.string.shape_added,
+                    completion.displayName.orEmpty(),
+                )
+                ProjectEditKind.AUTO_LAY -> autoLayDone
+                ProjectEditKind.ARRANGE -> arrangeDone
+                ProjectEditKind.SPLIT -> resources.getString(
+                    if (completion.clearedObjectSettings) {
+                        R.string.split_done_painting_cleared
+                    } else {
+                        R.string.split_done
+                    },
+                    completion.objectCount,
+                )
+                ProjectEditKind.CUT -> resources.getString(
+                    if (completion.clearedObjectSettings) {
+                        R.string.cut_done_painting_cleared
+                    } else {
+                        R.string.cut_done
+                    },
+                )
+            }
+            selectedTab = WorkspaceTab.SLICE
+        } else {
+            notice = null
+            error = when (completion.failure) {
+                ProjectEditFailure.MODEL_TOO_LARGE -> modelTooLargeError
+                ProjectEditFailure.NOT_SPLITTABLE -> splitNotPossible
+                ProjectEditFailure.NOT_CUTTABLE -> cutNotPossible
+                ProjectEditFailure.GENERIC -> when (completion.kind) {
+                    ProjectEditKind.MODEL_IMPORT -> modelReadError
+                    ProjectEditKind.PRIMITIVE -> shapeError
+                    ProjectEditKind.AUTO_LAY -> autoLayError
+                    ProjectEditKind.ARRANGE -> arrangeError
+                    ProjectEditKind.SPLIT -> splitError
+                    ProjectEditKind.CUT -> cutError
+                }
+            }
+        }
+        projectTransferModel.consumeEditCompletion(completion.id)
+    }
+
     LaunchedEffect(sliceOutcome?.output?.absolutePath) {
         val restored = sliceOutcome ?: return@LaunchedEffect
         if (!restored.isRestorableFrom(context.filesDir)) {
@@ -365,14 +418,6 @@ private fun DuckySlicerScreen(
         if (keepScreenAwake) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
-    DisposableEffect(sliceOperationModel) {
-        onDispose {
-            if (!sliceOperationModel.state.value.busy) {
-                SlicerProcessClient.cancelActiveSliceAsync()
-            }
-        }
-    }
-
     fun applyOptions(options: SliceOptions) {
         val session = projectTransferModel.state.value
         val previous = session.sliceOptions
@@ -414,45 +459,18 @@ private fun DuckySlicerScreen(
     }
 
     fun autoLaySelectedModel() {
-        val target = projectHistory.current.selectedObject ?: return
-        if (autoLaying || arranging || splitting || cutting || importing || slicing || previewLoading) return
-        autoLaying = true
-        error = null
-        notice = null
-        scope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    SlicerProcessClient.autoOrient(File(target.model.localPath))
-                }
-            }.onSuccess { orientation ->
-                val current = projectTransferModel.state.value.history
-                val currentTarget = current.current.objects.firstOrNull { it.id == target.id }
-                if (currentTarget != null) {
-                    val nextHistory = current.updateTransform(
-                        target.id,
-                        currentTarget.transform.withOrcaOrientation(orientation),
-                    )
-                    if (
-                        nextHistory != current &&
-                        projectTransferModel.updateHistory(current, nextHistory)
-                    ) {
-                        clearCompletedSlice()
-                    }
-                    notice = autoLayDone
-                    error = null
-                }
-            }.onFailure { failure ->
-                if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Automatic lay failed", failure)
-                supportEvents.record(SupportEvent.AUTO_LAY_FAILED)
-                error = autoLayError
-                notice = null
-            }
-            autoLaying = false
+        if (
+            projectTransferBusy || importing || slicing || previewLoading ||
+            projectHistory.current.selectedObject == null
+        ) return
+        if (projectTransferModel.autoLaySelectedModel()) {
+            error = null
+            notice = null
         }
     }
 
     fun laySelectedFaceOnBed(objectId: String, triangle: FloatArray) {
-        if (autoLaying || arranging || splitting || cutting || importing || slicing || previewLoading) return
+        if (projectTransferBusy || importing || slicing || previewLoading) return
         val target = projectHistory.current.objects.firstOrNull { it.id == objectId } ?: return
         runCatching { target.transform.withFaceOnBed(triangle) }
             .onSuccess { transform ->
@@ -476,255 +494,76 @@ private fun DuckySlicerScreen(
     }
 
     fun arrangeProjectObjects() {
-        val targets = projectHistory.current.objects
-        if (targets.size < 2 || arranging || autoLaying || splitting || cutting || importing || slicing || previewLoading) return
-        arranging = true
-        error = null
-        notice = null
-        clearCompletedSlice()
-        val targetOptions = sliceOptions
-        scope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) { OnDeviceSlicer.arrange(targets, targetOptions) }
-            }.onSuccess { arrangement ->
-                val current = projectTransferModel.state.value.history
-                val currentObjects = current.current.objects
-                if (currentObjects.map(ProjectObject::id) == targets.map(ProjectObject::id) &&
-                    currentObjects.map(ProjectObject::transform) == targets.map(ProjectObject::transform)
-                ) {
-                    val nextHistory = current.applyOrcaArrangement(
-                        arrangement,
-                        targetOptions.bedSizeX,
-                        targetOptions.bedSizeY,
-                    )
-                    if (projectTransferModel.updateHistory(current, nextHistory)) {
-                        notice = arrangeDone
-                        error = null
-                    }
-                }
-            }.onFailure { failure ->
-                if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Automatic arrangement failed", failure)
-                supportEvents.record(SupportEvent.ARRANGE_FAILED)
-                error = arrangeError
-                notice = null
-            }
-            arranging = false
+        if (
+            projectHistory.current.objects.size < 2 || projectTransferBusy || importing ||
+            slicing || previewLoading
+        ) return
+        if (projectTransferModel.arrangeProjectObjects()) {
+            clearCompletedSlice()
+            error = null
+            notice = null
         }
     }
 
     fun splitSelectedModel() {
-        val target = projectHistory.current.selectedObject ?: return
-        if (splitting || cutting || arranging || autoLaying || importing || slicing || previewLoading) return
+        if (
+            projectHistory.current.selectedObject == null || projectTransferBusy || importing ||
+            slicing || previewLoading
+        ) return
         val maximumObjects = ProjectStore.MAX_PROJECT_OBJECTS - projectObjects.size + 1
         if (maximumObjects < 2) {
             error = splitError
             notice = null
             return
         }
-        splitting = true
-        error = null
-        notice = null
-        clearCompletedSlice()
-        val targetOptions = sliceOptions
-        scope.launch {
-            runCatching {
-                splitProjectObject(target, projectStore, targetOptions, maximumObjects)
-            }.onSuccess { result ->
-                val current = projectTransferModel.state.value.history
-                val currentTarget = current.current.selectedObject
-                if (
-                    currentTarget?.id == target.id &&
-                    currentTarget.model.localPath == target.model.localPath &&
-                    currentTarget.transform == target.transform &&
-                    currentTarget.supportPaint == target.supportPaint &&
-                    currentTarget.seamPaint == target.seamPaint &&
-                    currentTarget.multiColorPaint == target.multiColorPaint &&
-                    currentTarget.variableLayerHeights == target.variableLayerHeights &&
-                    currentTarget.processOverrides == target.processOverrides &&
-                    currentTarget.filamentSlot == target.filamentSlot
-                ) {
-                    val nextHistory = current.replaceSelected(result.objects)
-                    if (projectTransferModel.updateHistory(current, nextHistory)) {
-                        notice = resources.getString(
-                            if (result.clearedObjectSettings) {
-                                R.string.split_done_painting_cleared
-                            } else {
-                                R.string.split_done
-                            },
-                            result.objects.size,
-                        )
-                        error = null
-                        selectedTab = WorkspaceTab.SLICE
-                    } else {
-                        result.objects.forEach { File(it.model.localPath).delete() }
-                    }
-                } else {
-                    result.objects.forEach { File(it.model.localPath).delete() }
-                }
-            }.onFailure { failure ->
-                if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Model split failed", failure)
-                error = if (failure is ModelNotSplittableException) splitNotPossible else splitError
-                notice = null
-            }
-            splitting = false
+        if (projectTransferModel.splitSelectedModel()) {
+            clearCompletedSlice()
+            error = null
+            notice = null
         }
     }
 
     fun cutSelectedModel(heightRatio: Float, placeOnCut: Boolean) {
-        val target = projectHistory.current.selectedObject ?: return
-        if (cutting || splitting || arranging || autoLaying || importing || slicing || previewLoading) return
+        if (
+            projectHistory.current.selectedObject == null || projectTransferBusy || importing ||
+            slicing || previewLoading
+        ) return
         val maximumObjects = ProjectStore.MAX_PROJECT_OBJECTS - projectObjects.size + 1
         if (maximumObjects < 2) {
             error = cutError
             notice = null
             return
         }
-        cutting = true
-        error = null
-        notice = null
-        clearCompletedSlice()
-        val targetOptions = sliceOptions
-        scope.launch {
-            runCatching {
-                cutProjectObject(
-                    target,
-                    projectStore,
-                    targetOptions,
-                    heightRatio,
-                    placeOnCut,
-                    maximumObjects,
-                )
-            }.onSuccess { result ->
-                val current = projectTransferModel.state.value.history
-                val currentTarget = current.current.selectedObject
-                if (
-                    currentTarget?.id == target.id &&
-                    currentTarget.model.localPath == target.model.localPath &&
-                    currentTarget.transform == target.transform &&
-                    currentTarget.supportPaint == target.supportPaint &&
-                    currentTarget.seamPaint == target.seamPaint &&
-                    currentTarget.multiColorPaint == target.multiColorPaint &&
-                    currentTarget.variableLayerHeights == target.variableLayerHeights &&
-                    currentTarget.processOverrides == target.processOverrides &&
-                    currentTarget.filamentSlot == target.filamentSlot
-                ) {
-                    val nextHistory = current.replaceSelected(result.objects)
-                    if (projectTransferModel.updateHistory(current, nextHistory)) {
-                        notice = resources.getString(
-                            if (result.clearedObjectSettings) {
-                                R.string.cut_done_painting_cleared
-                            } else {
-                                R.string.cut_done
-                            },
-                        )
-                        error = null
-                        selectedTab = WorkspaceTab.SLICE
-                    } else {
-                        result.objects.forEach { File(it.model.localPath).delete() }
-                    }
-                } else {
-                    result.objects.forEach { File(it.model.localPath).delete() }
-                }
-            }.onFailure { failure ->
-                if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Model cut failed", failure)
-                error = if (failure is ModelNotCuttableException) cutNotPossible else cutError
-                notice = null
-            }
-            cutting = false
+        if (projectTransferModel.cutSelectedModel(heightRatio, placeOnCut)) {
+            clearCompletedSlice()
+            error = null
+            notice = null
         }
     }
 
     fun addPrimitive(primitive: OrcaPrimitive, sizeMm: Float) {
         if (
-            importing || projectTransferBusy || !projectRestored || autoLaying || arranging ||
-            splitting || cutting || slicing || previewLoading
+            projectTransferBusy || !projectRestored || slicing || previewLoading
         ) return
         if (projectObjects.size >= ProjectStore.MAX_PROJECT_OBJECTS) {
             error = shapeError
             notice = null
             return
         }
-        importing = true
-        error = null
-        notice = null
         val displayName = resources.getString(primitive.label)
-        val objectIndex = projectObjects.size
-        scope.launch {
-            runCatching {
-                createOrcaPrimitive(primitive, sizeMm, displayName, projectStore)
-            }.onSuccess { created ->
-                val distance = ((objectIndex + 1) / 2) * 24f
-                val offset = when {
-                    objectIndex == 0 -> 0f
-                    objectIndex % 2 == 1 -> distance
-                    else -> -distance
-                }
-                val current = projectTransferModel.state.value.history
-                val nextHistory = current.addAll(
-                    listOf(
-                        created.copy(
-                            transform = created.transform.copy(offsetXmm = offset),
-                        ),
-                    ),
-                )
-                if (projectTransferModel.updateHistory(current, nextHistory)) {
-                    clearCompletedSlice()
-                    selectedTab = WorkspaceTab.SLICE
-                    notice = resources.getString(R.string.shape_added, displayName)
-                } else {
-                    File(created.model.localPath).delete()
-                }
-            }.onFailure { failure ->
-                if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Shape creation failed", failure)
-                error = shapeError
-                notice = null
-            }
-            importing = false
+        if (projectTransferModel.createPrimitive(primitive, sizeMm, displayName)) {
+            error = null
+            notice = null
         }
     }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null && projectRestored && !autoLaying && !arranging && !splitting && !cutting && !slicing && !previewLoading) {
-            importing = true
+        if (
+            uri != null && projectRestored && !projectTransferBusy && !slicing &&
+            !previewLoading && projectTransferModel.importModels(uri)
+        ) {
             error = null
             notice = null
-            scope.launch {
-                runCatching { importOrcaModels(context, uri, projectStore, sliceOptions) }
-                    .onSuccess { importedObjects ->
-                        val current = projectTransferModel.state.value.history
-                        val objectIndex = current.current.objects.size
-                        val distance = ((objectIndex + 1) / 2) * 24f
-                        val offset = when {
-                            objectIndex == 0 -> 0f
-                            objectIndex % 2 == 1 -> distance
-                            else -> -distance
-                        }
-                        val placedObjects = importedObjects.map { imported ->
-                            imported.copy(
-                                transform = imported.transform.copy(
-                                    offsetXmm = imported.transform.offsetXmm + offset,
-                                ),
-                            )
-                        }
-                        val nextHistory = current.addAll(placedObjects)
-                        if (projectTransferModel.updateHistory(current, nextHistory)) {
-                            clearCompletedSlice()
-                            selectedTab = WorkspaceTab.SLICE
-                        } else {
-                            importedObjects.forEach { File(it.model.localPath).delete() }
-                        }
-                    }
-                    .onFailure { failure ->
-                        if (failure is ModelTooLargeException) {
-                            supportEvents.record(SupportEvent.MODEL_TOO_LARGE)
-                            error = modelTooLargeError
-                        } else {
-                            supportEvents.record(SupportEvent.MODEL_IMPORT_FAILED)
-                            error = modelReadError
-                        }
-                    }
-                importing = false
-            }
         }
     }
 
@@ -914,7 +753,7 @@ private fun DuckySlicerScreen(
         appSettingsSaveFailed = appSettingsState.message == AppSettingsMessage.SAVE_FAILED,
         sliceOutcome = sliceOutcome,
         layerPreview = layerPreview,
-        importing = importing || projectTransferBusy || !projectRestored,
+        importing = importing || projectFileBusy,
         autoLaying = autoLaying,
         arranging = arranging,
         splitting = splitting,

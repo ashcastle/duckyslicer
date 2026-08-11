@@ -61,6 +61,82 @@ class ProjectTransferStateTest {
         assertNull(ready.withUpdatedSession(history, history, options, options))
     }
 
+    @Test
+    fun retainedEditAppliesOneMatchingBaselineAndAdvancesTheSessionOnce() {
+        val history = history()
+        val options = SliceOptions()
+        val operation = ActiveProjectEdit(41, ProjectEditKind.AUTO_LAY)
+        val ready = ProjectTransferState(
+            history = history,
+            sliceOptions = options,
+            restored = true,
+            sessionRevision = 8,
+        )
+        val started = requireNotNull(ready.withStartedEdit(operation))
+        val nextHistory = history.updateSelectedTransform(
+            ModelTransform(rotationXdeg = 90f),
+        )
+        val completion = ProjectEditCompletion(
+            id = operation.id,
+            kind = operation.kind,
+        )
+
+        assertTrue(started.busy)
+        assertEquals(operation, started.activeEdit)
+        val completed = requireNotNull(
+            started.withCompletedEdit(
+                operation,
+                history,
+                options,
+                nextHistory,
+                completion,
+            ),
+        )
+        assertFalse(completed.busy)
+        assertNull(completed.activeEdit)
+        assertTrue(requireNotNull(completed.editCompletion).sessionChanged)
+        assertEquals(90f, completed.history.current.selectedObject?.transform?.rotationXdeg)
+        assertEquals(9L, completed.sessionRevision)
+
+        assertNull(
+            completed.withCompletedEdit(
+                operation,
+                history,
+                options,
+                nextHistory,
+                completion,
+            ),
+        )
+    }
+
+    @Test
+    fun retainedEditRejectsAStaleBaselineAndKeepsTheOperationPending() {
+        val history = history()
+        val options = SliceOptions()
+        val operation = ActiveProjectEdit(7, ProjectEditKind.ARRANGE)
+        val started = requireNotNull(
+            ProjectTransferState(
+                history = history,
+                sliceOptions = options,
+                restored = true,
+            ).withStartedEdit(operation),
+        )
+        val staleHistory = history.updateSelectedTransform(ModelTransform(offsetXmm = 3f))
+
+        assertNull(
+            started.withCompletedEdit(
+                operation,
+                staleHistory,
+                options,
+                history,
+                ProjectEditCompletion(operation.id, operation.kind),
+            ),
+        )
+        assertTrue(started.busy)
+        assertEquals(operation, started.activeEdit)
+        assertNull(started.editCompletion)
+    }
+
     private fun history(): ProjectHistoryState {
         val model = ModelInfo(
             fileName = "retained.stl",

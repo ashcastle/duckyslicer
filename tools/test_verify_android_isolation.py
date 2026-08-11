@@ -114,10 +114,7 @@ def valid_sources() -> dict[str, str]:
             "if (cancellationRequested()) throw SlicingCancelledException()"
         ),
         "com/ashcastle/duckyslicer/MainActivity.kt": (
-            "ViewModelProvider(this)[SliceOperationViewModel::class.java] "
-            "DisposableEffect(sliceOperationModel) "
-            "if (!sliceOperationModel.state.value.busy) "
-            "SlicerProcessClient.cancelActiveSliceAsync()"
+            "ViewModelProvider(this)[SliceOperationViewModel::class.java]"
         ),
         "com/ashcastle/duckyslicer/SliceOperationViewModel.kt": (
             "class SliceOperationViewModel : ViewModel() viewModelScope.launch "
@@ -262,10 +259,9 @@ class VerifyAndroidIsolationTest(unittest.TestCase):
             with self.assertRaisesRegex(VerificationError, marker):
                 verify_debug_recovery_harness(source, manifest)
 
-    def test_requires_retained_ui_and_final_disposal_cancellation_paths(self) -> None:
+    def test_requires_retained_ui_and_owner_cancellation_paths(self) -> None:
         for source_path, marker in (
             ("com/ashcastle/duckyslicer/MainActivity.kt", "ViewModelProvider(this)"),
-            ("com/ashcastle/duckyslicer/MainActivity.kt", "if (!sliceOperationModel.state.value.busy)"),
             ("com/ashcastle/duckyslicer/SliceOperationViewModel.kt", "viewModelScope.launch"),
             ("com/ashcastle/duckyslicer/SliceOperationViewModel.kt", "override fun onCleared()"),
             ("com/ashcastle/duckyslicer/WorkspaceScreen.kt", "onCancelSlice"),
@@ -275,13 +271,13 @@ class VerifyAndroidIsolationTest(unittest.TestCase):
             with self.assertRaises(VerificationError):
                 verify_sources(sources, VALID_DEVICE_TEST)
 
-    def test_rejects_configuration_disposal_cancellation(self) -> None:
+    def test_rejects_activity_disposal_cancellation(self) -> None:
         sources = valid_sources()
         sources["com/ashcastle/duckyslicer/MainActivity.kt"] += (
-            " DisposableEffect(Unit) { onDispose { "
+            " DisposableEffect(sliceOperationModel) { onDispose { "
             "SlicerProcessClient.cancelActiveSliceAsync() } }"
         )
-        with self.assertRaisesRegex(VerificationError, "configuration disposal"):
+        with self.assertRaisesRegex(VerificationError, "Activity must not cancel"):
             verify_sources(sources, VALID_DEVICE_TEST)
 
     def test_requires_cancellation_before_the_worker_is_bound(self) -> None:

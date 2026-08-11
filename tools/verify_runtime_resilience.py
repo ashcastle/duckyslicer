@@ -38,6 +38,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "RemoteDeviceInstrumentedTest.kt",
         "ProfileLibraryInstrumentedTest.kt",
         "AppSettingsLifecycleInstrumentedTest.kt",
+        "ProjectArchiveIntentInstrumentedTest.kt",
         "CONTRIBUTING.md",
         "SECURITY.md",
         "strings.xml",
@@ -78,12 +79,44 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "restored.storageUnavailable",
         "!current.persistenceBlocked",
         "projectStore.save(document.history.current, document.sliceOptions)",
+        "fun autoLaySelectedModel()",
+        "fun arrangeProjectObjects()",
+        "fun splitSelectedModel()",
+        "fun cutSelectedModel(heightRatio: Float, placeOnCut: Boolean)",
+        "fun createPrimitive(",
+        "fun importModels(uri: Uri)",
+        "startEditLocked",
+        "withCompletedEdit",
+        "deleteInstalledModels",
     ):
         if marker not in project_session:
             raise VerificationError(f"project autosave corruption guard is missing: {marker}")
     main = sources["MainActivity.kt"]
     if "saved_data_unavailable" not in main:
         raise VerificationError("project autosave corruption warning is missing")
+    for marker in (
+        "projectTransferModel.autoLaySelectedModel()",
+        "projectTransferModel.arrangeProjectObjects()",
+        "projectTransferModel.splitSelectedModel()",
+        "projectTransferModel.cutSelectedModel(heightRatio, placeOnCut)",
+        "projectTransferModel.createPrimitive(primitive, sizeMm, displayName)",
+        "projectTransferModel.importModels(uri)",
+    ):
+        if marker not in main:
+            raise VerificationError(f"retained project edit dispatch is missing: {marker}")
+    for forbidden in (
+        "SlicerProcessClient.autoOrient(",
+        "OnDeviceSlicer.arrange(",
+        "splitProjectObject(",
+        "cutProjectObject(",
+        "createOrcaPrimitive(",
+        "importOrcaModels(",
+        "ProjectStore(",
+        "var autoLaying by remember",
+        "SlicerProcessClient.cancelActiveSliceAsync()",
+    ):
+        if forbidden in main:
+            raise VerificationError("project edit work is still owned by the Activity composition")
 
     remote = sources["RemoteDevice.kt"]
     for marker in (
@@ -304,6 +337,12 @@ def verify_resilience(sources: dict[str, str]) -> None:
             "latestUnsavedSettingsSurviveImmediateActivityRecreationAndPersist",
             "Recreate before the 350 ms persistence debounce can run",
         ),
+        "ProjectArchiveIntentInstrumentedTest.kt": (
+            "automaticLayKeepsOneRetainedOperationAcrossActivityRecreation",
+            "assertSame(",
+            "ProjectEditKind.AUTO_LAY",
+            "waitForPersistedTransform",
+        ),
     }
     for source_name, markers in test_markers.items():
         for marker in markers:
@@ -345,6 +384,14 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "CONTRIBUTING.md"
     ]:
         raise VerificationError("contributor guidance does not serialize support diagnostics")
+    if "Model import, primitive creation, automatic lay, arrangement, split, and cut must run" not in sources[
+        "CONTRIBUTING.md"
+    ]:
+        raise VerificationError("contributor guidance does not retain project edit operations")
+    if "UI disposal must not issue a process-wide slicer cancellation" not in sources[
+        "CONTRIBUTING.md"
+    ]:
+        raise VerificationError("contributor guidance allows UI disposal to cancel retained work")
     security = sources["SECURITY.md"]
     for marker in (
         "every current DNS answer",
@@ -409,6 +456,9 @@ def read_sources() -> dict[str, str]:
         ).read_text(encoding="utf-8"),
         "AppSettingsLifecycleInstrumentedTest.kt": (
             device_tests / "AppSettingsLifecycleInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "ProjectArchiveIntentInstrumentedTest.kt": (
+            device_tests / "ProjectArchiveIntentInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),
         "SECURITY.md": (ROOT / "SECURITY.md").read_text(encoding="utf-8"),

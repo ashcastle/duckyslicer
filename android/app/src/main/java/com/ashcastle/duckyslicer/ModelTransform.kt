@@ -39,11 +39,14 @@ data class ModelTransform(
         .toString()
 
     internal fun withOrcaOrientation(orientation: OrcaOrientation): ModelTransform = copy(
-        rotationXdeg = Math.toDegrees(orientation.rotationRadians[0]).toFloat(),
-        rotationYdeg = Math.toDegrees(orientation.rotationRadians[1]).toFloat(),
-        rotationZdeg = Math.toDegrees(orientation.rotationRadians[2]).toFloat(),
+        rotationXdeg = orientation.rotationRadians[0].toCanonicalDegreeFloat(),
+        rotationYdeg = orientation.rotationRadians[1].toCanonicalDegreeFloat(),
+        rotationZdeg = orientation.rotationRadians[2].toCanonicalDegreeFloat(),
     )
 }
+
+private fun Double.toCanonicalDegreeFloat(): Float =
+    Math.toDegrees(this).toFloat().let { degrees -> if (degrees == 0f) 0f else degrees }
 
 internal enum class ModelScaleAxis { X, Y, Z }
 
