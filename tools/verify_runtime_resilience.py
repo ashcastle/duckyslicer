@@ -233,6 +233,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "withUpdatedSettings",
         "SETTINGS_SAVE_DEBOUNCE_MILLIS",
         "current.revision != revision",
+        "fun flushPersistence()",
         "override fun onCleared()",
         "SupportEvent.APP_SETTINGS_SAVE_FAILED",
     ):
@@ -250,6 +251,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "ViewModelProvider(this)[AppSettingsViewModel::class.java]",
         "appSettingsModel.state.collectAsStateWithLifecycle()",
         "appSettingsModel.updateSettings(next)",
+        "appSettingsModel.flushPersistence()",
     ):
         if marker not in main:
             raise VerificationError(f"app-settings Activity-recreation contract is missing: {marker}")
@@ -356,7 +358,9 @@ def verify_resilience(sources: dict[str, str]) -> None:
         ),
         "AppSettingsLifecycleInstrumentedTest.kt": (
             "latestUnsavedSettingsSurviveImmediateActivityRecreationAndPersist",
+            "backgroundingFlushesLatestSettingsBeforeDebounce",
             "Recreate before the 350 ms persistence debounce can run",
+            "onStop must replace the pending 350 ms write with an immediate one",
         ),
         "ProjectArchiveIntentInstrumentedTest.kt": (
             "automaticLayKeepsOneRetainedOperationAcrossActivityRecreation",
@@ -412,6 +416,15 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "CONTRIBUTING.md"
     ]:
         raise VerificationError("contributor guidance does not retain live app settings")
+    for marker in (
+        "Flush the latest dirty settings",
+        "app enters the background",
+        "owner is finally cleared",
+    ):
+        if marker not in sources["CONTRIBUTING.md"]:
+            raise VerificationError(
+                f"contributor guidance does not preserve app-settings durability: {marker}"
+            )
     if "Fixed support-event writers must serialize through the process-wide journal boundary" not in sources[
         "CONTRIBUTING.md"
     ]:

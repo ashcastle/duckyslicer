@@ -59,6 +59,8 @@ avoid introducing an account or cloud requirement.
 - Live app settings and their debounced persistence must share one Activity-retained
   owner. Rotation must preserve the latest slider and toggle values before disk commit,
   and only the newest revision may report a persistence result.
+  Flush the latest dirty settings when the app enters the background or that owner is
+  finally cleared.
 - Fixed support-event writers must serialize through the process-wide journal boundary;
   adding another retained owner must not turn diagnostics into competing read-modify-write
   snapshots or expose free-form failure details.

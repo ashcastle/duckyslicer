@@ -15,6 +15,47 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class AppSettingsLifecycleInstrumentedTest {
     @Test
+    fun backgroundingFlushesLatestSettingsBeforeDebounce() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+        assertTrue(preferences.edit().clear().commit())
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                lateinit var retained: AppSettingsViewModel
+                scenario.onActivity { activity ->
+                    retained = ViewModelProvider(activity)[AppSettingsViewModel::class.java]
+                }
+                assertTrue(
+                    retained.updateSettings(
+                        retained.state.value.settings.copy(
+                            previewDetail = PreviewDetail.DETAIL,
+                            toolpathDepthContrast = 0.41f,
+                            confirmBeforeRemotePrint = false,
+                        ),
+                    ),
+                )
+                val expectedRevision = retained.state.value.revision
+
+                // onStop must replace the pending 350 ms write with an immediate one.
+                scenario.onActivity { activity ->
+                    assertTrue(activity.moveTaskToBack(true))
+                }
+
+                waitUntil("background settings flush did not become durable") {
+                    retained.state.value.persistedRevision == expectedRevision &&
+                        AppSettingsStore(context).load().let { stored ->
+                            stored.previewDetail == PreviewDetail.DETAIL &&
+                                stored.toolpathDepthContrast == 0.41f &&
+                                !stored.confirmBeforeRemotePrint
+                        }
+                }
+            }
+        } finally {
+            preferences.edit().clear().commit()
+        }
+    }
+
+    @Test
     fun latestUnsavedSettingsSurviveImmediateActivityRecreationAndPersist() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val preferences = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)

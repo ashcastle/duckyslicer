@@ -51,10 +51,26 @@ internal class AppSettingsViewModel(application: Application) : AndroidViewModel
         return true
     }
 
-    private fun schedulePersistenceLocked(revision: Long, settings: AppSettings) {
+    @Synchronized
+    fun flushPersistence(): Boolean {
+        val current = mutableState.value
+        if (current.revision == current.persistedRevision) return false
+        schedulePersistenceLocked(
+            revision = current.revision,
+            settings = current.settings,
+            delayMillis = 0L,
+        )
+        return true
+    }
+
+    private fun schedulePersistenceLocked(
+        revision: Long,
+        settings: AppSettings,
+        delayMillis: Long = SETTINGS_SAVE_DEBOUNCE_MILLIS,
+    ) {
         persistenceJob?.cancel()
         persistenceJob = viewModelScope.launch {
-            delay(SETTINGS_SAVE_DEBOUNCE_MILLIS)
+            if (delayMillis > 0L) delay(delayMillis)
             val saved = try {
                 withContext(Dispatchers.IO) { store.save(settings) }
             } catch (cancellation: CancellationException) {
@@ -62,13 +78,13 @@ internal class AppSettingsViewModel(application: Application) : AndroidViewModel
             } catch (_: Exception) {
                 false
             }
+            if (!saved) supportEvents.record(SupportEvent.APP_SETTINGS_SAVE_FAILED)
             synchronized(this@AppSettingsViewModel) {
                 val current = mutableState.value
                 if (current.revision != revision) return@synchronized
                 mutableState.value = if (saved) {
                     current.copy(persistedRevision = revision, message = null)
                 } else {
-                    supportEvents.record(SupportEvent.APP_SETTINGS_SAVE_FAILED)
                     current.copy(message = AppSettingsMessage.SAVE_FAILED)
                 }
             }
@@ -78,13 +94,16 @@ internal class AppSettingsViewModel(application: Application) : AndroidViewModel
     override fun onCleared() {
         val pending = synchronized(this) {
             persistenceJob?.cancel()
+            persistenceJob = null
             mutableState.value.takeIf { it.revision != it.persistedRevision }
         }
-        val saved = pending == null || runCatching { store.save(pending.settings) }.getOrDefault(false)
-        if (!saved) {
-            supportEvents.record(SupportEvent.APP_SETTINGS_SAVE_FAILED)
+        try {
+            val saved = pending == null ||
+                runCatching { store.save(pending.settings) }.getOrDefault(false)
+            if (!saved) supportEvents.record(SupportEvent.APP_SETTINGS_SAVE_FAILED)
+        } finally {
+            super.onCleared()
         }
-        super.onCleared()
     }
 
     private companion object {

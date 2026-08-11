@@ -43,7 +43,7 @@ def valid_sources() -> dict[str, str]:
         "AppSettingsViewModel.kt": (
             "class AppSettingsViewModel(application: Application) : AndroidViewModel(application) "
             "viewModelScope.launch withUpdatedSettings SETTINGS_SAVE_DEBOUNCE_MILLIS "
-            "current.revision != revision override fun onCleared() "
+            "current.revision != revision fun flushPersistence() override fun onCleared() "
             "SupportEvent.APP_SETTINGS_SAVE_FAILED"
         ),
         "RemoteDevice.kt": (
@@ -85,6 +85,7 @@ def valid_sources() -> dict[str, str]:
             "ViewModelProvider(this)[AppSettingsViewModel::class.java] "
             "appSettingsModel.state.collectAsStateWithLifecycle() "
             "appSettingsModel.updateSettings(next) "
+            "appSettingsModel.flushPersistence() "
             "override fun onStop() projectTransferModel.flushPersistence() "
             "projectTransferModel.autoLaySelectedModel() "
             "projectTransferModel.arrangeProjectObjects() "
@@ -145,7 +146,9 @@ def valid_sources() -> dict[str, str]:
         ),
         "AppSettingsLifecycleInstrumentedTest.kt": (
             "latestUnsavedSettingsSurviveImmediateActivityRecreationAndPersist "
-            "Recreate before the 350 ms persistence debounce can run"
+            "backgroundingFlushesLatestSettingsBeforeDebounce "
+            "Recreate before the 350 ms persistence debounce can run "
+            "onStop must replace the pending 350 ms write with an immediate one"
         ),
         "ProjectArchiveIntentInstrumentedTest.kt": (
             "automaticLayKeepsOneRetainedOperationAcrossActivityRecreation "
@@ -164,6 +167,7 @@ def valid_sources() -> dict[str, str]:
             "Track recent-selection persistence revisions dirty `Recent` list "
             "app enters the background owner is finally cleared "
             "Live app settings and their debounced persistence must share one "
+            "Flush the latest dirty settings "
             "Fixed support-event writers must serialize through the process-wide journal boundary "
             "Flush the latest dirty revision app enters the background owner is finally cleared "
             "archive import commits cancel and join any older metadata write "
@@ -239,6 +243,14 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
         sources = valid_sources()
         sources["MainActivity.kt"] += " AppSettingsStore(context)"
         with self.assertRaisesRegex(VerificationError, "app-settings persistence"):
+            verify_resilience(sources)
+
+    def test_rejects_background_transition_without_app_settings_flush(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+            "appSettingsModel.flushPersistence()", "leave settings save pending"
+        )
+        with self.assertRaisesRegex(VerificationError, "app-settings Activity-recreation"):
             verify_resilience(sources)
 
     def test_rejects_activity_owned_project_edit_work(self) -> None:
