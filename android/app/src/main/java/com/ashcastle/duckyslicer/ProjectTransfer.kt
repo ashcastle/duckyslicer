@@ -22,6 +22,11 @@ internal enum class ProjectTransferDirection {
     EXPORT,
 }
 
+internal data class ActiveProjectTransfer(
+    val id: Long,
+    val direction: ProjectTransferDirection,
+)
+
 internal enum class ProjectPersistenceMessage {
     STORAGE_UNAVAILABLE,
     SAVE_FAILED,
@@ -76,6 +81,12 @@ internal sealed interface ProjectTransferCompletion {
         override val uri: Uri,
     ) : ProjectTransferCompletion
 
+    data class Canceled(
+        override val id: Long,
+        override val uri: Uri,
+        val direction: ProjectTransferDirection,
+    ) : ProjectTransferCompletion
+
     data class Failed(
         override val id: Long,
         override val uri: Uri,
@@ -85,7 +96,9 @@ internal sealed interface ProjectTransferCompletion {
 
 internal data class ProjectTransferState(
     val busy: Boolean = false,
+    val activeTransferId: Long? = null,
     val activeTransferDirection: ProjectTransferDirection? = null,
+    val transferCancellationRequested: Boolean = false,
     val completion: ProjectTransferCompletion? = null,
     val activeEdit: ActiveProjectEdit? = null,
     val editCompletion: ProjectEditCompletion? = null,
@@ -97,6 +110,73 @@ internal data class ProjectTransferState(
     val sessionRevision: Long = 0,
     val persistedRevision: Long = 0,
 )
+
+internal fun ProjectTransferState.withStartedTransfer(
+    operation: ActiveProjectTransfer,
+): ProjectTransferState? {
+    if (!restored || busy || completion != null || editCompletion != null) return null
+    return copy(
+        busy = true,
+        activeTransferId = operation.id,
+        activeTransferDirection = operation.direction,
+        transferCancellationRequested = false,
+        persistenceMessage = persistenceMessage.takeUnless {
+            operation.direction == ProjectTransferDirection.IMPORT
+        },
+    )
+}
+
+internal fun ProjectTransferState.withTransferCancellationRequested(
+    operationId: Long,
+): ProjectTransferState? {
+    if (
+        !busy || activeTransferId != operationId ||
+        activeTransferDirection != ProjectTransferDirection.EXPORT ||
+        transferCancellationRequested || completion != null
+    ) {
+        return null
+    }
+    return copy(transferCancellationRequested = true)
+}
+
+internal fun ProjectTransferState.withCompletedTransfer(
+    operation: ActiveProjectTransfer,
+    requestedCompletion: ProjectTransferCompletion,
+): ProjectTransferState? {
+    if (
+        !busy || activeTransferId != operation.id ||
+        activeTransferDirection != operation.direction ||
+        requestedCompletion.id != operation.id || completion != null
+    ) {
+        return null
+    }
+    val completionDirection = when (requestedCompletion) {
+        is ProjectTransferCompletion.Imported -> ProjectTransferDirection.IMPORT
+        is ProjectTransferCompletion.Exported -> ProjectTransferDirection.EXPORT
+        is ProjectTransferCompletion.Canceled -> requestedCompletion.direction
+        is ProjectTransferCompletion.Failed -> requestedCompletion.direction
+    }
+    if (completionDirection != operation.direction) return null
+    val completion = if (
+        transferCancellationRequested &&
+        requestedCompletion is ProjectTransferCompletion.Exported
+    ) {
+        ProjectTransferCompletion.Canceled(
+            operation.id,
+            requestedCompletion.uri,
+            operation.direction,
+        )
+    } else {
+        requestedCompletion
+    }
+    return copy(
+        busy = false,
+        activeTransferId = null,
+        activeTransferDirection = null,
+        transferCancellationRequested = false,
+        completion = completion,
+    )
+}
 
 internal fun ProjectTransferState.withUpdatedSession(
     expectedHistory: ProjectHistoryState,
@@ -183,6 +263,11 @@ private data class ProjectEditBaseline(
     val options: SliceOptions,
 )
 
+private data class ActiveProjectExport(
+    val operation: ActiveProjectTransfer,
+    val cancellation: CreatedDocumentWriteCancellation,
+)
+
 internal class ProjectTransferViewModel(application: Application) : AndroidViewModel(application) {
     private val projectStore = ProjectStore(application)
     private val supportEvents = SupportEventJournal(application)
@@ -190,6 +275,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     val state: StateFlow<ProjectTransferState> = mutableState.asStateFlow()
     private var nextOperationId = 0L
     private var persistenceJob: Job? = null
+    private var activeProjectExport: ActiveProjectExport? = null
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -506,42 +592,37 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
 
     @Synchronized
     fun importProject(uri: Uri): Boolean {
-        if (
-            mutableState.value.busy || mutableState.value.completion != null ||
-            mutableState.value.editCompletion != null
-        ) return false
+        val operation = ActiveProjectTransfer(
+            id = ++nextOperationId,
+            direction = ProjectTransferDirection.IMPORT,
+        )
+        val started = mutableState.value.withStartedTransfer(operation) ?: return false
         val pendingPersistence = persistenceJob
         pendingPersistence?.cancel()
         persistenceJob = null
-        val operationId = ++nextOperationId
-        mutableState.value = mutableState.value.copy(
-            busy = true,
-            activeTransferDirection = ProjectTransferDirection.IMPORT,
-            persistenceMessage = null,
-        )
+        mutableState.value = started
         viewModelScope.launch(Dispatchers.IO) {
             pendingPersistence?.join()
             val completion = try {
                 val document = getApplication<Application>().contentResolver.openInputStream(uri).use { input ->
                     projectStore.importArchive(requireNotNull(input) { "input_unavailable" })
                 }
-                ProjectTransferCompletion.Imported(operationId, uri, document)
+                ProjectTransferCompletion.Imported(operation.id, uri, document)
             } catch (failure: CancellationException) {
                 throw failure
             } catch (_: Exception) {
                 ProjectTransferCompletion.Failed(
-                    operationId,
+                    operation.id,
                     uri,
                     ProjectTransferDirection.IMPORT,
                 )
             }
             synchronized(this@ProjectTransferViewModel) {
                 val current = mutableState.value
+                val settled = current.withCompletedTransfer(operation, completion)
+                    ?: return@synchronized
                 mutableState.value = when (completion) {
-                    is ProjectTransferCompletion.Imported -> current.copy(
-                        busy = false,
-                        activeTransferDirection = null,
-                        completion = completion,
+                    is ProjectTransferCompletion.Imported -> settled.copy(
                         history = ProjectHistoryState(current = completion.document.snapshot),
                         sliceOptions = completion.document.sliceOptions ?: current.sliceOptions,
                         restored = true,
@@ -550,11 +631,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                         sessionRevision = current.sessionRevision + 1,
                         persistedRevision = current.sessionRevision + 1,
                     )
-                    else -> current.copy(
-                        busy = false,
-                        activeTransferDirection = null,
-                        completion = completion,
-                    )
+                    else -> settled
                 }
                 if (completion !is ProjectTransferCompletion.Imported) {
                     schedulePersistenceLocked(allowPendingCompletion = true)
@@ -571,46 +648,82 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         sliceOptions: SliceOptions,
     ): Boolean {
         if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
-        if (
-            mutableState.value.busy || mutableState.value.completion != null ||
-            mutableState.value.editCompletion != null
-        ) return false
-        val operationId = ++nextOperationId
-        mutableState.value = mutableState.value.copy(
-            busy = true,
-            activeTransferDirection = ProjectTransferDirection.EXPORT,
+        val operation = ActiveProjectTransfer(
+            id = ++nextOperationId,
+            direction = ProjectTransferDirection.EXPORT,
         )
+        val started = mutableState.value.withStartedTransfer(operation) ?: return false
+        val cancellation = CreatedDocumentWriteCancellation()
+        activeProjectExport = ActiveProjectExport(operation, cancellation)
+        mutableState.value = started
         viewModelScope.launch(Dispatchers.IO) {
             val application = getApplication<Application>()
             val completion = try {
-                application.contentResolver.openOutputStream(uri, "wt").use { output ->
-                    projectStore.exportArchive(
-                        snapshot,
-                        sliceOptions,
-                        requireNotNull(output) { "output_unavailable" },
+                val descriptor = requireNotNull(
+                    application.contentResolver.openAssetFileDescriptor(
+                        uri,
+                        "wt",
+                        cancellation.providerSignal,
+                    ),
+                ) { "output_unavailable" }
+                descriptor.use {
+                    descriptor.createOutputStream().use { output ->
+                        cancellation.attachOutput(output)
+                        try {
+                            projectStore.exportArchive(
+                                snapshot,
+                                sliceOptions,
+                                output,
+                                cancellation::throwIfRequested,
+                            )
+                            output.flush()
+                            cancellation.complete()
+                        } finally {
+                            cancellation.detachOutput(output)
+                        }
+                    }
+                }
+                ProjectTransferCompletion.Exported(operation.id, uri)
+            } catch (_: CancellationException) {
+                cancellation.cancel()
+                deleteFailedCreatedDocument(application, uri)
+                ProjectTransferCompletion.Canceled(operation.id, uri, operation.direction)
+            } catch (failure: Exception) {
+                if (
+                    cancellation.wasRequested() ||
+                    failure is CreatedDocumentWriteCancelledException
+                ) {
+                    deleteFailedCreatedDocument(application, uri)
+                    ProjectTransferCompletion.Canceled(operation.id, uri, operation.direction)
+                } else {
+                    deleteFailedCreatedDocument(application, uri)
+                    supportEvents.record(SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED)
+                    ProjectTransferCompletion.Failed(
+                        operation.id,
+                        uri,
+                        operation.direction,
                     )
                 }
-                ProjectTransferCompletion.Exported(operationId, uri)
-            } catch (failure: CancellationException) {
-                deleteFailedCreatedDocument(application, uri)
-                throw failure
-            } catch (_: Exception) {
-                deleteFailedCreatedDocument(application, uri)
-                supportEvents.record(SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED)
-                ProjectTransferCompletion.Failed(
-                    operationId,
-                    uri,
-                    ProjectTransferDirection.EXPORT,
-                )
+            } finally {
+                cancellation.close()
             }
             synchronized(this@ProjectTransferViewModel) {
-                mutableState.value = mutableState.value.copy(
-                    busy = false,
-                    activeTransferDirection = null,
-                    completion = completion,
-                )
+                if (activeProjectExport?.operation == operation) activeProjectExport = null
+                val settled = mutableState.value.withCompletedTransfer(operation, completion)
+                    ?: return@synchronized
+                mutableState.value = settled
                 schedulePersistenceLocked(allowPendingCompletion = true)
             }
+        }
+        return true
+    }
+
+    fun cancelProjectExport(): Boolean {
+        val active = synchronized(this) { activeProjectExport } ?: return false
+        if (!active.cancellation.cancel()) return false
+        synchronized(this) {
+            mutableState.value.withTransferCancellationRequested(active.operation.id)
+                ?.let { canceling -> mutableState.value = canceling }
         }
         return true
     }
@@ -765,7 +878,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     @Synchronized
     fun flushPersistence(): Boolean {
         val current = mutableState.value
-        if (!current.hasPersistableChanges(allowActiveTransfer = false)) return false
+        if (!current.hasPersistableChanges(allowActiveTransfer = true)) return false
         schedulePersistenceLocked(
             allowPendingCompletion = true,
             delayMillis = 0L,
@@ -822,16 +935,19 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     }
 
     override fun onCleared() {
-        val pending = synchronized(this) {
+        val cleanup = synchronized(this) {
             persistenceJob?.cancel()
             persistenceJob = null
             val current = mutableState.value
             val activeRequestId = current.activeEdit?.requestId
             activeRequestId?.let(SlicerProcessClient::cancelProjectRequestAsync)
-            current.takeIf { state ->
-                state.hasPersistableChanges(allowActiveTransfer = false)
+            val pending = current.takeIf { state ->
+                state.hasPersistableChanges(allowActiveTransfer = true)
             }
+            activeProjectExport?.cancellation to pending
         }
+        cleanup.first?.cancel()
+        val pending = cleanup.second
         try {
             if (pending != null) {
                 try {

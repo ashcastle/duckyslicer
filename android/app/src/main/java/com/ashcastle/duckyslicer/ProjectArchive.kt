@@ -46,7 +46,9 @@ internal object ProjectArchiveCodec {
         snapshot: ProjectSnapshot,
         sliceOptions: SliceOptions,
         output: OutputStream,
+        checkCancellation: () -> Unit = {},
     ) = archiveBoundary {
+        checkCancellation()
         require(snapshot.objects.size <= ProjectStore.MAX_PROJECT_OBJECTS)
         require(snapshot.objects.map(ProjectObject::id).toSet().size == snapshot.objects.size)
         require(
@@ -60,6 +62,7 @@ internal object ProjectArchiveCodec {
         })
         val modelEntries = LinkedHashMap<File, String>()
         snapshot.objects.forEach { projectObject ->
+            checkCancellation()
             val model = File(projectObject.model.localPath).canonicalFile
             require(model.isFile && model.length() in 1..MAX_MODEL_IMPORT_BYTES)
             modelEntries.getOrPut(model) { archiveModelEntry(modelEntries.size) }
@@ -104,18 +107,22 @@ internal object ProjectArchiveCodec {
 
         val zip = ZipOutputStream(BufferedOutputStream(NonClosingOutputStream(output)))
         zip.use { archive ->
+            checkCancellation()
             archive.putNextEntry(projectArchiveEntry(PROJECT_ARCHIVE_MANIFEST))
             archive.write(manifestBytes)
             archive.closeEntry()
             modelEntries.forEach { (model, entryName) ->
+                checkCancellation()
                 archive.putNextEntry(projectArchiveEntry(entryName))
                 model.inputStream().use { input ->
-                    copyArchiveBytes(input, archive, model.length())
+                    copyArchiveBytes(input, archive, model.length(), checkCancellation)
                 }
                 archive.closeEntry()
             }
+            checkCancellation()
             archive.finish()
         }
+        checkCancellation()
         output.flush()
     }
 
@@ -437,15 +444,22 @@ private fun checkedArchiveTotal(current: Long, additional: Long): Long {
     return total
 }
 
-private fun copyArchiveBytes(input: InputStream, output: OutputStream, maximumBytes: Long): Long {
+private fun copyArchiveBytes(
+    input: InputStream,
+    output: OutputStream,
+    maximumBytes: Long,
+    checkCancellation: () -> Unit = {},
+): Long {
     require(maximumBytes >= 0L)
     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
     var total = 0L
     while (true) {
+        checkCancellation()
         val count = input.read(buffer)
         if (count < 0) break
         if (count == 0) continue
         if (count.toLong() > maximumBytes - total) throw ProjectArchiveException()
+        checkCancellation()
         output.write(buffer, 0, count)
         total += count
     }
@@ -460,6 +474,8 @@ private fun readArchiveBytes(input: InputStream, maximumBytes: Int): ByteArray {
 
 private inline fun <T> archiveBoundary(block: () -> T): T = try {
     block()
+} catch (failure: CreatedDocumentWriteCancelledException) {
+    throw failure
 } catch (failure: ProjectArchiveException) {
     throw failure
 } catch (failure: Exception) {

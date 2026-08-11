@@ -57,6 +57,9 @@ avoid introducing an account or cloud requirement.
   reject duplicate copies, and expose request-scoped cancellation that interrupts the
   exact provider open and copy streams. Rotation must retain that operation; final owner
   clearance must stop it. Cancellation or failure must delete the partial document.
+- Project archive export must follow the same retained-owner lifecycle. Cancellation
+  must interrupt the exact provider open and ZIP write, including each copied model,
+  survive rotation, stop on final owner clearance, and delete the partial document.
 - Every `CreateDocument` writer must accept only its returned `content://` URI, truncate
   the new target, and delete it after cancellation or failure so partial exports never
   look like valid G-code, project archives, or support details.

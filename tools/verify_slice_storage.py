@@ -107,6 +107,12 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "ContentResolver.SCHEME_CONTENT",
         "DocumentsContract.deleteDocument",
         "resolver.delete(uri, null, null)",
+        "class CreatedDocumentWriteCancelledException",
+        "class CreatedDocumentWriteCancellation",
+        "CancellationSignal()",
+        "providerSignal.cancel()",
+        "resources.first.closeQuietly()",
+        "resources.second.closeQuietly()",
     ):
         if marker not in created_document:
             raise VerificationError(f"failed created-document cleanup is missing: {marker}")
@@ -114,11 +120,8 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "class GcodeExportViewModel(application: Application) : AndroidViewModel(application)",
         "viewModelScope.launch(Dispatchers.IO)",
         "SliceArtifactLease.acquire(source)",
-        "class GcodeExportCancellation",
-        "CancellationSignal()",
-        "providerSignal.cancel()",
-        "resources.first.closeQuietly()",
-        "resources.second.closeQuietly()",
+        "CreatedDocumentWriteCancellation()",
+        "CreatedDocumentWriteCancelledException",
         "openAssetFileDescriptor(",
         '"wt",',
         "copyCancellable(",

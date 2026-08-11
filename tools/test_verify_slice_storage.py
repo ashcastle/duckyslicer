@@ -40,13 +40,16 @@ def valid_sources() -> dict[str, str]:
         "CreatedDocument.kt": (
             "fun deleteFailedCreatedDocument(context: Context, uri: Uri) "
             "ContentResolver.SCHEME_CONTENT DocumentsContract.deleteDocument "
-            "resolver.delete(uri, null, null)"
+            "resolver.delete(uri, null, null) "
+            "class CreatedDocumentWriteCancelledException "
+            "class CreatedDocumentWriteCancellation CancellationSignal() "
+            "providerSignal.cancel() resources.first.closeQuietly() "
+            "resources.second.closeQuietly()"
         ),
         "GcodeExportViewModel.kt": (
             "class GcodeExportViewModel(application: Application) : AndroidViewModel(application) "
             "viewModelScope.launch(Dispatchers.IO) SliceArtifactLease.acquire(source) "
-            "class GcodeExportCancellation CancellationSignal() providerSignal.cancel() "
-            "resources.first.closeQuietly() resources.second.closeQuietly() "
+            "CreatedDocumentWriteCancellation() CreatedDocumentWriteCancelledException "
             "openAssetFileDescriptor( \"wt\", "
             "copyCancellable( fun cancelActiveExport(): Boolean override fun onCleared() "
             "if (activeExport?.id == operationId) activeExport = null "
@@ -128,7 +131,7 @@ class VerifySliceStorageTest(unittest.TestCase):
     def test_rejects_non_interruptible_gcode_export(self) -> None:
         sources = valid_sources()
         sources["GcodeExportViewModel.kt"] = sources["GcodeExportViewModel.kt"].replace(
-            "class GcodeExportCancellation", "blocking copy without request cancellation"
+            "CreatedDocumentWriteCancellation()", "blocking copy without request cancellation"
         )
         with self.assertRaisesRegex(VerificationError, "retained G-code export"):
             verify_slice_storage(sources)

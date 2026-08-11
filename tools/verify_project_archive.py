@@ -15,6 +15,8 @@ COMPATIBLE_MIME_TYPES = {
     "application/octet-stream",
 }
 REQUIRED_STRINGS = {
+    "cancel_project_export",
+    "canceling_project_export",
     "open_project",
     "save_project",
     "replace_project_title",
@@ -23,6 +25,7 @@ REQUIRED_STRINGS = {
     "project_saved",
     "project_open_error",
     "project_export_error",
+    "project_export_canceled",
 }
 
 
@@ -62,6 +65,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "ProjectTransferStateTest.kt",
         "ProjectArchiveIntentInstrumentedTest.kt",
         "CreatedDocumentLifecycleInstrumentedTest.kt",
+        "BlockingExportProvider.java",
+        "AccessibilityInstrumentedTest.kt",
         "NativeEngineInstrumentedTest.kt",
         "strings.xml",
         "strings-ko.xml",
@@ -106,6 +111,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             'getJSONArray("multiColorPaint").toArchiveMultiColorPaint()',
             'getJSONArray("variableLayerHeights").toArchiveVariableLayerHeights()',
             'getJSONObject("processOverrides").toObjectProcessOverrides()',
+            "checkCancellation: () -> Unit = {}",
+            "copyArchiveBytes(input, archive, model.length(), checkCancellation)",
+            "catch (failure: CreatedDocumentWriteCancelledException)",
         ),
     )
 
@@ -129,6 +137,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "removePrefix(prefix)",
             "UUID.fromString(identifier)",
             "!Files.isSymbolicLink(candidate.toPath())",
+            "checkCancellation: () -> Unit = {}",
+            "ProjectArchiveCodec.write(snapshot, sliceOptions, output, checkCancellation)",
         ),
     )
     if store.index("save(snapshot, decoded.sliceOptions)") > store.index(
@@ -167,7 +177,12 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "val restored: Boolean",
             "val sessionRevision: Long",
             "val persistedRevision: Long",
+            "val activeTransferId: Long?",
             "val activeTransferDirection: ProjectTransferDirection?",
+            "val transferCancellationRequested: Boolean",
+            "fun ProjectTransferState.withStartedTransfer(",
+            "fun ProjectTransferState.withTransferCancellationRequested(",
+            "fun ProjectTransferState.withCompletedTransfer(",
             "fun updateHistory(",
             "fun updateSession(",
             "projectStore.loadProject()",
@@ -177,12 +192,22 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "fun flushPersistence()",
             "override fun onCleared()",
             "hasPersistableChanges",
-            "mutableState.value.completion != null",
+            "completion != null",
             "openInputStream(uri)",
             "projectStore.importArchive",
             "uri.scheme != ContentResolver.SCHEME_CONTENT",
-            'openOutputStream(uri, "wt")',
+            "CreatedDocumentWriteCancellation()",
+            "openAssetFileDescriptor(",
+            '"wt",',
+            "cancellation.providerSignal",
             "projectStore.exportArchive",
+            "cancellation::throwIfRequested",
+            "CreatedDocumentWriteCancelledException",
+            "ProjectTransferCompletion.Canceled",
+            "fun cancelProjectExport(): Boolean",
+            "activeProjectExport?.operation == operation",
+            "activeProjectExport?.cancellation",
+            "hasPersistableChanges(allowActiveTransfer = true)",
             "deleteFailedCreatedDocument(application, uri)",
             "SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED",
             "catch (failure: CancellationException)",
@@ -200,6 +225,10 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "ContentResolver.SCHEME_CONTENT",
             "DocumentsContract.deleteDocument",
             "resolver.delete(uri, null, null)",
+            "class CreatedDocumentWriteCancelledException",
+            "class CreatedDocumentWriteCancellation",
+            "CancellationSignal()",
+            "providerSignal.cancel()",
         ),
     )
 
@@ -300,6 +329,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "sliceOptions = projectTransferState.sliceOptions",
             "projectRestored = projectTransferState.restored",
             "projectTransferModel.updateHistory(",
+            "projectTransferModel::cancelProjectExport",
+            "ProjectTransferCompletion.Canceled",
             "ProjectReplacementDialog(",
         ),
     )
@@ -326,6 +357,11 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "confirmReplacement",
             "R.string.replace_project_title",
             "R.string.replace_project_body",
+            "projectExportCancellationRequested: Boolean",
+            "onCancelProjectExport: () -> Unit",
+            "R.string.cancel_project_export",
+            "R.string.canceling_project_export",
+            "if (exporting) onCancelProjectExport() else onSaveProject()",
         ),
     )
 
@@ -393,6 +429,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "retainedSessionMutationKeepsHistoryAndOptionsTogether",
             "staleOrBusySessionMutationIsRejected",
             "withUpdatedSession",
+            "projectExportCancellationIsBoundToTheExactActiveTransfer",
         ),
     )
     _require_markers(
@@ -418,7 +455,30 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "BlockingExportProvider.METHOD_PREPARE_FAILURE",
             "model.exportProject(",
             "BlockingExportProvider.KEY_DELETED",
+            "projectExportCancellationSurvivesRecreationAndDeletesThePartialDocument",
+            "projectExportCancellationInterruptsProviderOpen",
+            "finalProjectOwnerClearStopsItsExportAndDeletesThePartialDocument",
+            "BlockingExportProvider.METHOD_PREPARE",
+            "BlockingExportProvider.METHOD_PREPARE_OPEN_BLOCK",
+            "scenario.recreate()",
+            "retained.cancelProjectExport()",
+            "store.clear()",
         ),
+    )
+    _require_markers(
+        "BlockingExportProvider.java",
+        sources["BlockingExportProvider.java"],
+        (
+            "openAssetFile(",
+            "CancellationSignal signal",
+            "signal.setOnCancelListener(target.release::countDown)",
+            "signal.throwIfCanceled()",
+        ),
+    )
+    _require_markers(
+        "AccessibilityInstrumentedTest.kt",
+        sources["AccessibilityInstrumentedTest.kt"],
+        ("cancelProjectExportActionIsReachable",),
     )
     _require_markers(
         "CONTRIBUTING.md",
@@ -429,6 +489,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "process-death recovery",
             "Every `CreateDocument` writer",
             "delete it after cancellation or failure",
+            "Project archive export",
+            "exact provider open and ZIP write",
         ),
     )
     _require_markers(
@@ -467,6 +529,12 @@ def read_sources() -> dict[str, str]:
         "CreatedDocumentLifecycleInstrumentedTest.kt": (
             tests
             / "androidTest/java/com/ashcastle/duckyslicer/CreatedDocumentLifecycleInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "BlockingExportProvider.java": (
+            tests / "androidTest/java/com/ashcastle/duckyslicer/BlockingExportProvider.java"
+        ).read_text(encoding="utf-8"),
+        "AccessibilityInstrumentedTest.kt": (
+            tests / "androidTest/java/com/ashcastle/duckyslicer/AccessibilityInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "NativeEngineInstrumentedTest.kt": (
             tests / "androidTest/java/com/ashcastle/duckyslicer/NativeEngineInstrumentedTest.kt"

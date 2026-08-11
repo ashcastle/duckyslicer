@@ -191,6 +191,7 @@ private fun DuckySlicerScreen(
     val projectSavedNotice = stringResource(R.string.project_saved)
     val projectOpenError = stringResource(R.string.project_open_error)
     val projectExportError = stringResource(R.string.project_export_error)
+    val projectExportCanceledNotice = stringResource(R.string.project_export_canceled)
     val savedDataUnavailable = stringResource(R.string.saved_data_unavailable)
     val previewError = stringResource(R.string.preview_error)
     val remoteSavedNotice = stringResource(R.string.device_saved)
@@ -224,6 +225,10 @@ private fun DuckySlicerScreen(
     val projectEditActive = projectTransferState.activeEdit != null
     val projectEditCancellationRequested =
         projectTransferState.activeEdit?.cancellationRequested == true
+    val projectExporting =
+        projectTransferState.activeTransferDirection == ProjectTransferDirection.EXPORT
+    val projectExportCancellationRequested =
+        projectTransferState.transferCancellationRequested
     val visibleEdit = projectTransferState.activeEdit?.kind
         ?: projectTransferState.editCompletion?.kind
     val importing = visibleEdit == ProjectEditKind.MODEL_IMPORT ||
@@ -307,6 +312,10 @@ private fun DuckySlicerScreen(
             }
             is ProjectTransferCompletion.Exported -> {
                 notice = projectSavedNotice
+                error = null
+            }
+            is ProjectTransferCompletion.Canceled -> {
+                notice = projectExportCanceledNotice
                 error = null
             }
             is ProjectTransferCompletion.Failed -> {
@@ -794,6 +803,8 @@ private fun DuckySlicerScreen(
         cutting = cutting,
         projectEditActive = projectEditActive,
         projectEditCancellationRequested = projectEditCancellationRequested,
+        projectExporting = projectExporting,
+        projectExportCancellationRequested = projectExportCancellationRequested,
         slicing = slicing,
         sliceCancellationRequested = sliceCancellationRequested,
         sliceProgress = sliceProgress,
@@ -889,6 +900,7 @@ private fun DuckySlicerScreen(
         onSplit = ::splitSelectedModel,
         onCut = ::cutSelectedModel,
         onCancelProjectEdit = projectTransferModel::cancelActiveEdit,
+        onCancelProjectExport = projectTransferModel::cancelProjectExport,
         onSupportPaintPreview = { objectId, facetIndex, state ->
             val current = projectTransferModel.state.value.history
             val projectObject = current.current.objects.firstOrNull { it.id == objectId }

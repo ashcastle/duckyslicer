@@ -8,6 +8,9 @@ import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
+import java.util.UUID
+import kotlin.random.Random
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -109,6 +112,188 @@ class CreatedDocumentLifecycleInstrumentedTest {
         }
     }
 
+    @Test
+    fun projectExportCancellationSurvivesRecreationAndDeletesThePartialDocument() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        resolver.call(
+            BlockingExportProvider.URI,
+            BlockingExportProvider.METHOD_PREPARE,
+            null,
+            null,
+        )
+        var modelFile: File? = null
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                lateinit var retained: ProjectTransferViewModel
+                scenario.onActivity { activity ->
+                    retained = ViewModelProvider(activity)[ProjectTransferViewModel::class.java]
+                }
+                waitUntil("project session did not restore") {
+                    retained.state.value.restored && !retained.state.value.busy
+                }
+                val fixture = largeProjectSnapshot()
+                val snapshot = fixture.first
+                modelFile = fixture.second
+                scenario.onActivity {
+                    assertTrue(
+                        retained.exportProject(
+                            BlockingExportProvider.URI,
+                            snapshot,
+                            retained.state.value.sliceOptions,
+                        ),
+                    )
+                }
+                waitForProvider { it.getBoolean(BlockingExportProvider.KEY_STARTED) }
+
+                scenario.recreate()
+                scenario.onActivity { recreated ->
+                    assertSame(
+                        retained,
+                        ViewModelProvider(recreated)[ProjectTransferViewModel::class.java],
+                    )
+                    assertTrue(retained.cancelProjectExport())
+                    assertFalse(retained.cancelProjectExport())
+                }
+                waitUntil("project export cancellation did not settle") {
+                    !retained.state.value.busy
+                }
+                val status = waitForProvider {
+                    it.getBoolean(BlockingExportProvider.KEY_DELETED) &&
+                        it.getBoolean(BlockingExportProvider.KEY_COMPLETED)
+                }
+                assertTrue(status.getInt(BlockingExportProvider.KEY_BYTES) < fixture.second.length())
+                assertTrue(fixture.second.isFile)
+            }
+        } finally {
+            modelFile?.delete()
+            releaseProvider()
+        }
+    }
+
+    @Test
+    fun projectExportCancellationInterruptsProviderOpen() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        context.contentResolver.call(
+            BlockingExportProvider.URI,
+            BlockingExportProvider.METHOD_PREPARE_OPEN_BLOCK,
+            null,
+            null,
+        )
+        var modelFile: File? = null
+        val store = ViewModelStore()
+        try {
+            val application = context.applicationContext as Application
+            val model = ViewModelProvider(
+                store,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[ProjectTransferViewModel::class.java]
+            waitUntil("project session did not restore") {
+                model.state.value.restored && !model.state.value.busy
+            }
+            val fixture = largeProjectSnapshot()
+            modelFile = fixture.second
+            assertTrue(
+                model.exportProject(
+                    BlockingExportProvider.URI,
+                    fixture.first,
+                    model.state.value.sliceOptions,
+                ),
+            )
+            waitForProvider { it.getBoolean(BlockingExportProvider.KEY_STARTED) }
+
+            assertTrue(model.cancelProjectExport())
+            assertFalse(model.cancelProjectExport())
+            waitUntil("provider-open cancellation did not settle") {
+                !model.state.value.busy
+            }
+            val status = waitForProvider {
+                it.getBoolean(BlockingExportProvider.KEY_DELETED) &&
+                    it.getBoolean(BlockingExportProvider.KEY_COMPLETED)
+            }
+            assertEquals(0, status.getInt(BlockingExportProvider.KEY_BYTES))
+            assertEquals(
+                "OperationCanceledException",
+                status.getString(BlockingExportProvider.KEY_ERROR),
+            )
+            assertTrue(fixture.second.isFile)
+        } finally {
+            store.clear()
+            modelFile?.delete()
+            releaseProvider()
+        }
+    }
+
+    @Test
+    fun finalProjectOwnerClearStopsItsExportAndDeletesThePartialDocument() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        resolver.call(
+            BlockingExportProvider.URI,
+            BlockingExportProvider.METHOD_PREPARE,
+            null,
+            null,
+        )
+        var modelFile: File? = null
+        val store = ViewModelStore()
+        try {
+            val application = context.applicationContext as Application
+            val model = ViewModelProvider(
+                store,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[ProjectTransferViewModel::class.java]
+            waitUntil("project session did not restore") {
+                model.state.value.restored && !model.state.value.busy
+            }
+            val fixture = largeProjectSnapshot()
+            val snapshot = fixture.first
+            modelFile = fixture.second
+            assertTrue(
+                model.exportProject(
+                    BlockingExportProvider.URI,
+                    snapshot,
+                    model.state.value.sliceOptions,
+                ),
+            )
+            waitForProvider { it.getBoolean(BlockingExportProvider.KEY_STARTED) }
+
+            store.clear()
+
+            val status = waitForProvider {
+                it.getBoolean(BlockingExportProvider.KEY_DELETED) &&
+                    it.getBoolean(BlockingExportProvider.KEY_COMPLETED)
+            }
+            assertTrue(status.getInt(BlockingExportProvider.KEY_BYTES) < fixture.second.length())
+            assertTrue(fixture.second.isFile)
+        } finally {
+            store.clear()
+            modelFile?.delete()
+            releaseProvider()
+        }
+    }
+
+    private fun largeProjectSnapshot(): Pair<ProjectSnapshot, File> {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val modelRoot = ProjectStore.modelStorageRoot(context.filesDir).apply { mkdirs() }
+        val modelFile = modelRoot.resolve("archive-export-${UUID.randomUUID()}.stl")
+        val payload = ByteArray(LARGE_MODEL_BYTES)
+        Random(73).nextBytes(payload)
+        modelFile.writeBytes(payload)
+        val model = ModelInfo(
+            fileName = "large-export.stl",
+            triangles = 1,
+            dimensions = listOf(1.0, 1.0, 1.0),
+            localPath = modelFile.canonicalPath,
+            minMm = listOf(0.0, 0.0, 0.0),
+            maxMm = listOf(1.0, 1.0, 1.0),
+            previewTriangles = FloatArray(9),
+        )
+        return ProjectSnapshot(
+            objects = listOf(ProjectObject("archive-export", model)),
+            selectedObjectId = "archive-export",
+        ) to modelFile
+    }
+
     private fun releaseProvider() {
         InstrumentationRegistry.getInstrumentation().targetContext.contentResolver.call(
             BlockingExportProvider.URI,
@@ -147,5 +332,6 @@ class CreatedDocumentLifecycleInstrumentedTest {
     private companion object {
         const val WAIT_TIMEOUT_MILLIS = 15_000L
         const val WAIT_POLL_MILLIS = 25L
+        const val LARGE_MODEL_BYTES = 2 * 1_024 * 1_024
     }
 }

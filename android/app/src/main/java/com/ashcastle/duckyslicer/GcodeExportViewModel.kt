@@ -3,11 +3,9 @@ package com.ashcastle.duckyslicer
 import android.app.Application
 import android.content.ContentResolver
 import android.net.Uri
-import android.os.CancellationSignal
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import java.io.Closeable
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -60,99 +58,9 @@ internal fun GcodeExportState.withCompletedExport(
     )
 }
 
-private class GcodeExportCancelledException : Exception("gcode_export_canceled")
-
-/** Interrupts only the streams and provider open belonging to one G-code export. */
-internal class GcodeExportCancellation {
-    private val lock = Any()
-    val providerSignal = CancellationSignal()
-
-    @Volatile
-    private var cancellationRequested = false
-    private var input: InputStream? = null
-    private var output: OutputStream? = null
-    private var completed = false
-
-    fun cancel(): Boolean {
-        val resources = synchronized(lock) {
-            if (completed || cancellationRequested) return false
-            cancellationRequested = true
-            output to input
-        }
-        runCatching { providerSignal.cancel() }
-        resources.first.closeQuietly()
-        resources.second.closeQuietly()
-        return true
-    }
-
-    fun throwIfRequested() {
-        if (cancellationRequested) throw GcodeExportCancelledException()
-    }
-
-    fun attachInput(value: InputStream) = attach(value, outputStream = false)
-
-    fun attachOutput(value: OutputStream) = attach(value, outputStream = true)
-
-    fun detachInput(value: InputStream) = detach(value, outputStream = false)
-
-    fun detachOutput(value: OutputStream) = detach(value, outputStream = true)
-
-    fun complete() {
-        synchronized(lock) {
-            if (cancellationRequested) throw GcodeExportCancelledException()
-            check(!completed) { "gcode_export_lifecycle_invalid" }
-            completed = true
-            input = null
-            output = null
-        }
-    }
-
-    fun close() {
-        synchronized(lock) {
-            completed = true
-            input = null
-            output = null
-        }
-    }
-
-    fun wasRequested(): Boolean = cancellationRequested
-
-    private fun attach(value: Closeable, outputStream: Boolean) {
-        val rejected = synchronized(lock) {
-            if (cancellationRequested || completed) {
-                true
-            } else {
-                if (outputStream) {
-                    check(output == null) { "gcode_export_lifecycle_invalid" }
-                    output = value as OutputStream
-                } else {
-                    check(input == null) { "gcode_export_lifecycle_invalid" }
-                    input = value as InputStream
-                }
-                false
-            }
-        }
-        if (rejected) {
-            value.closeQuietly()
-            throw GcodeExportCancelledException()
-        }
-    }
-
-    private fun detach(value: Closeable, outputStream: Boolean) {
-        synchronized(lock) {
-            if (outputStream && output === value) output = null
-            if (!outputStream && input === value) input = null
-        }
-    }
-
-    private fun Closeable?.closeQuietly() {
-        if (this != null) runCatching { close() }
-    }
-}
-
 private data class ActiveGcodeExport(
     val id: Long,
-    val cancellation: GcodeExportCancellation,
+    val cancellation: CreatedDocumentWriteCancellation,
 )
 
 /** Owns one user-selected G-code copy independently of Activity configuration changes. */
@@ -174,7 +82,7 @@ internal class GcodeExportViewModel(application: Application) : AndroidViewModel
         }
         val operationId = ++nextOperationId
         val started = mutableState.value.withStartedExport(operationId) ?: return false
-        val cancellation = GcodeExportCancellation()
+        val cancellation = CreatedDocumentWriteCancellation()
         activeExport = ActiveGcodeExport(operationId, cancellation)
         mutableState.value = started
         viewModelScope.launch(Dispatchers.IO) {
@@ -187,7 +95,10 @@ internal class GcodeExportViewModel(application: Application) : AndroidViewModel
                 deleteFailedCreatedDocument(application, uri)
                 GcodeExportResult.CANCELED
             } catch (failure: Exception) {
-                if (cancellation.wasRequested() || failure is GcodeExportCancelledException) {
+                if (
+                    cancellation.wasRequested() ||
+                    failure is CreatedDocumentWriteCancelledException
+                ) {
                     deleteFailedCreatedDocument(application, uri)
                     GcodeExportResult.CANCELED
                 } else {
@@ -237,7 +148,7 @@ internal class GcodeExportViewModel(application: Application) : AndroidViewModel
         contentResolver: ContentResolver,
         uri: Uri,
         source: File,
-        cancellation: GcodeExportCancellation,
+        cancellation: CreatedDocumentWriteCancellation,
     ) {
         try {
             cancellation.throwIfRequested()
@@ -270,7 +181,7 @@ internal class GcodeExportViewModel(application: Application) : AndroidViewModel
                 }
             }
         } catch (failure: Exception) {
-            if (cancellation.wasRequested()) throw GcodeExportCancelledException()
+            if (cancellation.wasRequested()) throw CreatedDocumentWriteCancelledException()
             throw failure
         }
     }
@@ -278,7 +189,7 @@ internal class GcodeExportViewModel(application: Application) : AndroidViewModel
     private fun copyCancellable(
         input: InputStream,
         output: OutputStream,
-        cancellation: GcodeExportCancellation,
+        cancellation: CreatedDocumentWriteCancellation,
     ) {
         val buffer = ByteArray(COPY_BUFFER_BYTES)
         while (true) {

@@ -2,9 +2,12 @@ package com.ashcastle.duckyslicer;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
+import android.content.res.AssetFileDescriptor;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.CancellationSignal;
+import android.os.OperationCanceledException;
 import android.os.ParcelFileDescriptor;
 
 import java.io.ByteArrayOutputStream;
@@ -103,8 +106,29 @@ public final class BlockingExportProvider extends ContentProvider {
 
     @Override
     public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
+        return openFileInternal(uri, mode, null);
+    }
+
+    @Override
+    public AssetFileDescriptor openAssetFile(
+            Uri uri,
+            String mode,
+            CancellationSignal signal
+    ) throws FileNotFoundException {
+        ParcelFileDescriptor descriptor = openFileInternal(uri, mode, signal);
+        return new AssetFileDescriptor(descriptor, 0, AssetFileDescriptor.UNKNOWN_LENGTH);
+    }
+
+    private static ParcelFileDescriptor openFileInternal(
+            Uri uri,
+            String mode,
+            CancellationSignal signal
+    ) throws FileNotFoundException {
         if (!mode.contains("w")) {
             throw new IllegalArgumentException("Blocking export provider is write-only");
+        }
+        if (signal != null) {
+            signal.throwIfCanceled();
         }
         Session target = current;
         if (target.mode == MODE_FAIL_OPEN) {
@@ -115,17 +139,31 @@ public final class BlockingExportProvider extends ContentProvider {
         }
         if (target.mode == MODE_OPEN_BLOCK) {
             target.started = true;
+            if (signal != null) {
+                signal.setOnCancelListener(target.release::countDown);
+            }
             try {
                 if (!target.release.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                     target.error = "OpenTimeout";
                     target.completed = true;
                     throw new FileNotFoundException("Blocking export was not released");
                 }
+                if (signal != null) {
+                    signal.throwIfCanceled();
+                }
+            } catch (OperationCanceledException error) {
+                target.error = "OperationCanceledException";
+                target.completed = true;
+                throw error;
             } catch (InterruptedException error) {
                 Thread.currentThread().interrupt();
                 target.error = "InterruptedException";
                 target.completed = true;
                 throw new FileNotFoundException("Blocking export was interrupted");
+            } finally {
+                if (signal != null) {
+                    signal.setOnCancelListener(null);
+                }
             }
         }
         try {

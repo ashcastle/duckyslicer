@@ -79,15 +79,18 @@ internal class ProjectStore(
         snapshot: ProjectSnapshot,
         sliceOptions: SliceOptions,
         output: OutputStream,
+        checkCancellation: () -> Unit = {},
     ) {
+        checkCancellation()
         val modelRoot = modelsDirectory.canonicalFile
         snapshot.objects.forEach { projectObject ->
+            checkCancellation()
             val modelFile = File(projectObject.model.localPath).canonicalFile
             require(modelFile.parentFile == modelRoot && modelFile.isFile) {
                 "Project model is outside private storage"
             }
         }
-        ProjectArchiveCodec.write(snapshot, sliceOptions, output)
+        ProjectArchiveCodec.write(snapshot, sliceOptions, output, checkCancellation)
     }
 
     @Synchronized

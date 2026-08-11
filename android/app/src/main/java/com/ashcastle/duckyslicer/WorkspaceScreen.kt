@@ -372,6 +372,8 @@ internal fun WorkspaceScreen(
     cutting: Boolean,
     projectEditActive: Boolean,
     projectEditCancellationRequested: Boolean,
+    projectExporting: Boolean,
+    projectExportCancellationRequested: Boolean,
     slicing: Boolean,
     sliceCancellationRequested: Boolean,
     sliceProgress: Int,
@@ -401,6 +403,7 @@ internal fun WorkspaceScreen(
     onSplit: () -> Unit,
     onCut: (Float, Boolean) -> Unit,
     onCancelProjectEdit: () -> Unit,
+    onCancelProjectExport: () -> Unit,
     onSupportPaintPreview: (String, Int, SupportPaintState?) -> Unit,
     onSupportPaintCommitted: (String, SupportPaint) -> Unit,
     onSeamPaintPreview: (String, Int, SeamPaintState?) -> Unit,
@@ -545,6 +548,8 @@ internal fun WorkspaceScreen(
                 editingBusy = editingBusy,
                 projectEditActive = projectEditActive,
                 cancellationRequested = projectEditCancellationRequested,
+                projectExporting = projectExporting,
+                projectExportCancellationRequested = projectExportCancellationRequested,
                 slicing = slicing,
                 previewLoading = previewLoading,
                 canExport = sliceOutcome != null && !exportingGcode,
@@ -557,6 +562,7 @@ internal fun WorkspaceScreen(
                 canArrange = projectObjects.size > 1,
                 onArrange = onArrange,
                 onCancelProjectEdit = onCancelProjectEdit,
+                onCancelProjectExport = onCancelProjectExport,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(16.dp),
@@ -784,9 +790,12 @@ internal fun WorkspaceScreen(
                     selectedObjectId = selectedObjectId,
                     outcome = sliceOutcome,
                     busy = importing || editingBusy,
+                    exporting = projectExporting,
+                    cancellationRequested = projectExportCancellationRequested,
                     onObjectSelected = onObjectSelected,
                     onOpenProject = onOpenProject,
                     onSaveProject = onSaveProject,
+                    onCancelProjectExport = onCancelProjectExport,
                     modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
                 )
 
@@ -1868,6 +1877,8 @@ private fun WorkspaceMenu(
     editingBusy: Boolean,
     projectEditActive: Boolean,
     cancellationRequested: Boolean,
+    projectExporting: Boolean,
+    projectExportCancellationRequested: Boolean,
     slicing: Boolean,
     previewLoading: Boolean,
     canExport: Boolean,
@@ -1880,6 +1891,7 @@ private fun WorkspaceMenu(
     onCancelGcodeExport: () -> Unit,
     onArrange: () -> Unit,
     onCancelProjectEdit: () -> Unit,
+    onCancelProjectExport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -1917,6 +1929,27 @@ private fun WorkspaceMenu(
                     onClick = {
                         expanded = false
                         onCancelProjectEdit()
+                    },
+                )
+            }
+            if (projectExporting) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            stringResource(
+                                if (projectExportCancellationRequested) {
+                                    R.string.canceling_project_export
+                                } else {
+                                    R.string.cancel_project_export
+                                },
+                            ),
+                        )
+                    },
+                    leadingIcon = { Icon(Icons.Default.Close, null) },
+                    enabled = !projectExportCancellationRequested,
+                    onClick = {
+                        expanded = false
+                        onCancelProjectExport()
                     },
                 )
             }
@@ -3862,9 +3895,12 @@ private fun ProjectSheet(
     selectedObjectId: String?,
     outcome: SliceOutcome?,
     busy: Boolean,
+    exporting: Boolean,
+    cancellationRequested: Boolean,
     onObjectSelected: (String) -> Unit,
     onOpenProject: () -> Unit,
     onSaveProject: () -> Unit,
+    onCancelProjectExport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var confirmReplacement by remember { mutableStateOf(false) }
@@ -3908,7 +3944,7 @@ private fun ProjectSheet(
                 onClick = {
                     if (objects.isEmpty()) onOpenProject() else confirmReplacement = true
                 },
-                enabled = !busy,
+                enabled = !busy && !exporting,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF454640),
                     contentColor = Color(0xFFF4F4EE),
@@ -3920,14 +3956,32 @@ private fun ProjectSheet(
                 Text(stringResource(R.string.open_project))
             }
             Button(
-                onClick = onSaveProject,
-                enabled = !busy,
+                onClick = {
+                    if (exporting) onCancelProjectExport() else onSaveProject()
+                },
+                enabled = if (exporting) !cancellationRequested else !busy,
                 colors = primaryButtonColors(),
                 modifier = Modifier.weight(1f),
             ) {
-                Icon(Icons.Default.SaveAlt, contentDescription = null)
+                if (exporting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = WorkspaceBlack,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(Icons.Default.SaveAlt, contentDescription = null)
+                }
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.save_project))
+                Text(
+                    stringResource(
+                        when {
+                            cancellationRequested -> R.string.canceling_project_export
+                            exporting -> R.string.cancel_project_export
+                            else -> R.string.save_project
+                        },
+                    ),
+                )
             }
         }
     }

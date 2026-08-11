@@ -9,6 +9,24 @@ import org.junit.Test
 
 class ProjectTransferStateTest {
     @Test
+    fun projectExportCancellationIsBoundToTheExactActiveTransfer() {
+        val operation = ActiveProjectTransfer(91, ProjectTransferDirection.EXPORT)
+        val started = requireNotNull(
+            ProjectTransferState(restored = true).withStartedTransfer(operation),
+        )
+
+        assertTrue(started.busy)
+        assertEquals(operation.id, started.activeTransferId)
+        assertNull(started.withTransferCancellationRequested(operation.id - 1))
+        val canceling = requireNotNull(
+            started.withTransferCancellationRequested(operation.id),
+        )
+        assertTrue(canceling.transferCancellationRequested)
+        assertNull(canceling.withTransferCancellationRequested(operation.id))
+        assertEquals(ProjectTransferDirection.EXPORT, canceling.activeTransferDirection)
+    }
+
+    @Test
     fun retainedSessionMutationKeepsHistoryAndOptionsTogether() {
         val history = history()
         val nextHistory = history.updateSelectedTransform(ModelTransform(offsetXmm = 18f))
