@@ -25,6 +25,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "SlicerProcessService.kt",
         "ProfileStore.kt",
         "ProfileBundle.kt",
+        "ProfileOpenRequest.kt",
         "ProfileLibraryViewModel.kt",
         "AppSettings.kt",
         "AppSettingsViewModel.kt",
@@ -48,12 +49,14 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "AccessibilityHarnessActivity.kt",
         "ProfileLibraryInstrumentedTest.kt",
         "ProfileBundleLifecycleInstrumentedTest.kt",
+        "ProfileBundleIntentInstrumentedTest.kt",
         "AppSettingsLifecycleInstrumentedTest.kt",
         "ProjectArchiveIntentInstrumentedTest.kt",
         "ProjectEditCancellationInstrumentedTest.kt",
         "BlockingImportProvider.java",
         "BlockingExportProvider.java",
         "CONTRIBUTING.md",
+        "PROFILE_BUNDLE_FORMAT.md",
         "SECURITY.md",
         "strings.xml",
         "strings-ko.xml",
@@ -420,6 +423,79 @@ def verify_resilience(sources: dict[str, str]) -> None:
         if marker not in workspace:
             raise VerificationError(f"profile transfer UI is missing: {marker}")
 
+    profile_open = sources["ProfileOpenRequest.kt"]
+    for marker in (
+        "intent.action != Intent.ACTION_VIEW",
+        "ContentResolver.SCHEME_CONTENT",
+        "PROFILE_BUNDLE_MIME_TYPE",
+        "PROFILE_BUNDLE_FILE_EXTENSION",
+        "PROFILE_BUNDLE_COMPATIBLE_MIME_TYPES",
+        "application/json",
+        "application/octet-stream",
+        "class ExternalProfileRequestViewModel(",
+        "SavedStateHandle",
+        "startedOperationId: Long? = null",
+        "fun markStarted(requestId: Long, operationId: Long)",
+        "current.startedOperationId != null",
+        "fun consume(requestId: Long, operationId: Long)",
+        "current.startedOperationId != operationId",
+    ):
+        if marker not in profile_open:
+            raise VerificationError(f"external profile-document boundary is missing: {marker}")
+    for forbidden in (
+        "ContentResolver.SCHEME_FILE",
+        "http://",
+        "https://",
+        '"text/plain"',
+    ):
+        if forbidden in profile_open:
+            raise VerificationError(
+                f"external profile-document boundary accepts an unsafe surface: {forbidden}"
+            )
+    for marker in (
+        "ViewModelProvider(this)[ExternalProfileRequestViewModel::class.java]",
+        "externalProfileModel.enqueue(intent)",
+        "externalProfileModel.request.collectAsStateWithLifecycle()",
+        "request.startedOperationId == completion.id",
+        "onExternalProfileRequestConsumed(request.id, completion.id)",
+        "if (request.startedOperationId != null) return@LaunchedEffect",
+        "profileLibraryModel.state.value.activeOperationId",
+        "onExternalProfileRequestStarted(request.id, operationId)",
+    ):
+        if marker not in main:
+            raise VerificationError(f"external profile Activity contract is missing: {marker}")
+
+    profile_intent_test = sources["ProfileBundleIntentInstrumentedTest.kt"]
+    for marker in (
+        "externalProfileRequestBindsOneOperationAndRestoresAsRetryableAfterProcessLoss",
+        "profileViewIntentRejectsNetworkFileAndUnrelatedDocuments",
+        "customProfileIntentSurvivesRecreationAndImportsExactlyOnce",
+        "BlockingImportProvider.PROFILE_URI",
+        "assertSame(",
+        "scenario.recreate()",
+        "retainedRequest.request.value == null",
+    ):
+        if marker not in profile_intent_test:
+            raise VerificationError(f"external profile regression is missing: {marker}")
+
+    profile_format = sources["PROFILE_BUNDLE_FORMAT.md"]
+    for marker in (
+        "`.duckyprofiles`",
+        "application/vnd.duckyslicer.profiles+json",
+        '"bundleVersion": 1',
+        '"profileSchemaVersion": 16',
+        "exact profile duplicates are skipped",
+        "additive and atomic",
+        "24 MiB",
+        "4,096",
+        "does not contain projects",
+        "remote printer addresses",
+        "`content://`",
+        "Web, `file://`, unrelated JSON, and unrelated binary",
+    ):
+        if marker not in profile_format:
+            raise VerificationError(f"public profile-bundle contract is missing: {marker}")
+
     app_settings = sources["AppSettingsViewModel.kt"]
     for marker in (
         "class AppSettingsViewModel(application: Application) : AndroidViewModel(application)",
@@ -688,6 +764,17 @@ def verify_resilience(sources: dict[str, str]) -> None:
     if "only in the project session revision that" not in sources["CONTRIBUTING.md"]:
         raise VerificationError("contributor guidance does not bind late profile-save completion")
     for marker in (
+        "Profile bundle import and export must use that same retained owner",
+        "External profile documents must remain `content://`-only",
+        "bind one pending request to one import operation",
+        "consume the request only after that",
+        "`docs/PROFILE_BUNDLE_FORMAT.md`",
+    ):
+        if marker not in sources["CONTRIBUTING.md"]:
+            raise VerificationError(
+                f"contributor guidance does not preserve portable profiles: {marker}"
+            )
+    for marker in (
         "Track recent-selection persistence revisions",
         "dirty `Recent` list",
         "app enters the background",
@@ -793,6 +880,7 @@ def read_sources() -> dict[str, str]:
         ),
         "ProfileStore.kt": (main / "ProfileStore.kt").read_text(encoding="utf-8"),
         "ProfileBundle.kt": (main / "ProfileBundle.kt").read_text(encoding="utf-8"),
+        "ProfileOpenRequest.kt": (main / "ProfileOpenRequest.kt").read_text(encoding="utf-8"),
         "ProfileLibraryViewModel.kt": (main / "ProfileLibraryViewModel.kt").read_text(
             encoding="utf-8"
         ),
@@ -844,6 +932,9 @@ def read_sources() -> dict[str, str]:
         "ProfileBundleLifecycleInstrumentedTest.kt": (
             device_tests / "ProfileBundleLifecycleInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
+        "ProfileBundleIntentInstrumentedTest.kt": (
+            device_tests / "ProfileBundleIntentInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
         "AppSettingsLifecycleInstrumentedTest.kt": (
             device_tests / "AppSettingsLifecycleInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
@@ -860,6 +951,9 @@ def read_sources() -> dict[str, str]:
             device_tests / "BlockingExportProvider.java"
         ).read_text(encoding="utf-8"),
         "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),
+        "PROFILE_BUNDLE_FORMAT.md": (ROOT / "docs/PROFILE_BUNDLE_FORMAT.md").read_text(
+            encoding="utf-8"
+        ),
         "SECURITY.md": (ROOT / "SECURITY.md").read_text(encoding="utf-8"),
         "strings.xml": (ROOT / "android/app/src/main/res/values/strings.xml").read_text(
             encoding="utf-8"

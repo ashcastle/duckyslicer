@@ -78,6 +78,11 @@ avoid introducing an account or cloud requirement.
   its late completion may select that profile only in the project session revision that
   started the save. Track recent-selection persistence revisions and flush the newest
   dirty `Recent` list when the app enters the background or that owner is finally cleared.
+- Profile bundle import and export must use that same retained owner and exact provider
+  cancellation boundary. External profile documents must remain `content://`-only and
+  bind one pending request to one import operation; consume the request only after that
+  operation is terminal. Keep the additive, atomic, credential-free contract and
+  `docs/PROFILE_BUNDLE_FORMAT.md` synchronized with every format change.
 - Live app settings and their debounced persistence must share one Activity-retained
   owner. Rotation must preserve the latest slider and toggle values before disk commit,
   and only the newest revision may report a persistence result.

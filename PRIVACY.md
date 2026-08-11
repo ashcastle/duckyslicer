@@ -1,6 +1,6 @@
 # DuckySlicer Privacy Policy
 
-Effective date: August 10, 2026
+Effective date: August 11, 2026
 
 DuckySlicer (`com.ashcastle.duckyslicer`) is an offline-first, open-source Android
 slicer maintained through the
@@ -45,6 +45,11 @@ DuckySlicer sends data only when you choose an action that requires it:
   access keys. Project files and exported G-code are written only to the location you
   select. A storage provider you select may process that file under its own privacy
   terms.
+- Exported profile bundles contain only user-created printer, filament, and slicing
+  settings. They do not contain projects, models, G-code, recent choices, app settings,
+  support details, saved printer addresses, or access keys. Profile bundles are written
+  only to the location you select; opening one from Android Files adds its validated
+  profiles to local app-private storage.
 - Optional OctoPrint and Klipper connections send status requests, the access key
   required by your server, and G-code uploads directly to the printer address you
   configured. This traffic does not pass through a DuckySlicer-operated service.
@@ -88,7 +93,7 @@ they are included in an official release.
 
 # DuckySlicer 개인정보처리방침
 
-시행일: 2026년 8월 10일
+시행일: 2026년 8월 11일
 
 DuckySlicer(`com.ashcastle.duckyslicer`)는
 [DuckySlicer 프로젝트](https://github.com/ashcastle/duckyslicer)가 관리하는
@@ -131,6 +136,11 @@ DuckySlicer는 사용자가 다음 동작을 선택한 경우에만 필요한 �
   프린터 접속 키는 포함되지 않습니다. 프로젝트 파일과 내보낸 G-code는
   사용자가 선택한 위치에만 저장됩니다. 선택한 저장 공간 제공자는 자체
   개인정보처리방침에 따라 파일을 처리할 수 있습니다.
+- 내보낸 프로필 묶음에는 사용자가 만든 프린터·필라멘트·슬라이싱 설정만
+  포함됩니다. 프로젝트, 모델, G-code, 최근 선택, 앱 설정, 지원 정보, 저장된
+  프린터 주소 또는 접속 키는 포함되지 않습니다. 프로필 묶음은 사용자가 선택한
+  위치에만 저장되며 Android 파일 앱에서 열면 검증된 프로필만 앱 전용 저장
+  공간에 추가됩니다.
 - 선택 기능인 OctoPrint 및 Klipper 연결은 상태 요청, 서버에 필요한 접속 키와
   G-code를 사용자가 설정한 프린터 주소로 직접 보냅니다. 이 트래픽은
   DuckySlicer가 운영하는 서비스를 거치지 않습니다. HTTPS 연결에는 Android의

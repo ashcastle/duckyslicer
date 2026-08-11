@@ -185,6 +185,29 @@ def _expected_main_filters() -> set[
                 )
             ),
         ),
+        (
+            ("android.intent.action.VIEW",),
+            ("android.intent.category.DEFAULT",),
+            (
+                (("mimeType", "application/vnd.duckyslicer.profiles+json"),),
+                (("scheme", "content"),),
+            ),
+        ),
+        (
+            ("android.intent.action.VIEW",),
+            ("android.intent.category.DEFAULT",),
+            tuple(
+                sorted(
+                    (
+                        (("host", "*"),),
+                        (("mimeType", "application/json"),),
+                        (("mimeType", "application/octet-stream"),),
+                        (("pathPattern", ".*.duckyprofiles"),),
+                        (("scheme", "content"),),
+                    )
+                )
+            ),
+        ),
     }
 
 

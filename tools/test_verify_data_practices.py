@@ -88,6 +88,15 @@ class VerifyDataPracticesTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "privacy policy"):
             verify_data_practices(sources)
 
+    def test_rejects_missing_profile_bundle_disclosure(self) -> None:
+        sources = valid_sources()
+        sources["PRIVACY.md"] = sources["PRIVACY.md"].replace(
+            "They do not contain projects, models, G-code, recent choices, app settings",
+            "Profile bundles may contain any app data",
+        )
+        with self.assertRaisesRegex(VerificationError, "privacy policy"):
+            verify_data_practices(sources)
+
     def test_rejects_missing_offline_privacy_policy_access(self) -> None:
         sources = valid_sources()
         sources["AppSettingsSheet.kt"] = sources["AppSettingsSheet.kt"].replace(

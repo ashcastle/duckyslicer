@@ -14,6 +14,10 @@ COMPATIBLE_MIME_TYPES = {
     "application/x-zip-compressed",
     "application/octet-stream",
 }
+PROFILE_COMPATIBLE_MIME_TYPES = {
+    "application/json",
+    "application/octet-stream",
+}
 REQUIRED_STRINGS = {
     "cancel_project_import",
     "canceling_project_import",
@@ -321,13 +325,29 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         {"*"},
         {r".*\.duckyproject"},
     )
+    profile_custom_filter = (
+        expected_category,
+        {"content"},
+        {"application/vnd.duckyslicer.profiles+json"},
+        set(),
+        set(),
+    )
+    profile_compatible_filter = (
+        expected_category,
+        {"content"},
+        PROFILE_COMPATIBLE_MIME_TYPES,
+        {"*"},
+        {r".*\.duckyprofiles"},
+    )
     if (
-        len(view_filters) != 2
+        len(view_filters) != 4
         or custom_filter not in view_filters
         or compatible_filter not in view_filters
+        or profile_custom_filter not in view_filters
+        or profile_compatible_filter not in view_filters
     ):
         raise VerificationError(
-            "AndroidManifest.xml must expose only content project MIME/extension VIEW filters"
+            "AndroidManifest.xml must expose only content project/profile MIME and extension VIEW filters"
         )
 
     main = sources["MainActivity.kt"]

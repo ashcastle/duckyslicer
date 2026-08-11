@@ -38,15 +38,20 @@ DATA_STRING_NAMES = {
 }
 PRIVACY_POLICY_MARKERS = {
     "DuckySlicer Privacy Policy",
-    "Effective date: August 10, 2026",
+    "Effective date: August 11, 2026",
     "does not collect, sell, or share",
     "Data stored on your device",
     "Actions that send data elsewhere",
     "Retention and deletion",
     "Privacy questions and changes",
+    "Exported profile bundles contain only user-created printer, filament, and slicing",
+    "They do not contain projects, models, G-code, recent choices, app settings",
     "https://github.com/ashcastle/duckyslicer/issues/new",
     "DuckySlicer 개인정보처리방침",
+    "시행일: 2026년 8월 11일",
     "수집·판매·공유하지 않습니다",
+    "내보낸 프로필 묶음에는 사용자가 만든 프린터·필라멘트·슬라이싱 설정만",
+    "프린터 주소 또는 접속 키는 포함되지 않습니다",
     "보관 및 삭제",
 }
 TRACKING_MARKERS = {

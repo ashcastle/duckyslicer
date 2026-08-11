@@ -15,10 +15,13 @@ For a reproducible app problem:
    records on Android 11 and later. They contain no models, G-code, file names,
    printer addresses, access keys, raw process names, system exit descriptions,
    memory samples, free-form error text, or stack traces.
-4. Attach a model, G-code, or `.duckyproject` file only when it is the smallest safe
-   reproduction and you have permission to publish it. A project file includes its
-   model geometry and active printer, filament, and slicing settings; it does not
-   include saved printer addresses, access keys, or G-code.
+4. Attach a model, G-code, `.duckyproject`, or `.duckyprofiles` file only when it is
+   the smallest safe reproduction and you have permission to publish it. A project
+   file includes its model geometry and active printer, filament, and slicing settings;
+   it does not include saved printer addresses, access keys, or G-code. A profile
+   bundle includes user printer, filament, and slicing settings but excludes remote
+   printer addresses, access keys, projects, models, G-code, app settings, and recent
+   history.
 
 Do not post vulnerabilities, credentials, personal data, private models, or sensitive
 G-code in a public issue. Follow [SECURITY.md](SECURITY.md) for private security

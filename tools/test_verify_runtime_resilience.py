@@ -71,6 +71,17 @@ def valid_sources() -> dict[str, str]:
             "ProfileValidation.filament(parsed) ProfileValidation.slicing(parsed) "
             "cancellation.throwIfRequested() copy(builtIn = false)"
         ),
+        "ProfileOpenRequest.kt": (
+            "intent.action != Intent.ACTION_VIEW ContentResolver.SCHEME_CONTENT "
+            "PROFILE_BUNDLE_MIME_TYPE PROFILE_BUNDLE_FILE_EXTENSION "
+            "PROFILE_BUNDLE_COMPATIBLE_MIME_TYPES application/json application/octet-stream "
+            "class ExternalProfileRequestViewModel( SavedStateHandle "
+            "startedOperationId: Long? = null "
+            "fun markStarted(requestId: Long, operationId: Long) "
+            "current.startedOperationId != null "
+            "fun consume(requestId: Long, operationId: Long) "
+            "current.startedOperationId != operationId"
+        ),
         "ProfileLibraryViewModel.kt": (
             "class ProfileLibraryViewModel(application: Application) : AndroidViewModel(application) "
             "viewModelScope.launch private val profileStore = ProfileStore(application) "
@@ -145,6 +156,14 @@ def valid_sources() -> dict[str, str]:
             "profileLibraryModel.flushRecentPersistence() "
             "profileImportPicker profileExportPicker profileLibraryModel.importBundle(uri) "
             "profileLibraryModel.exportBundle(uri) profileLibraryModel::cancelTransfer "
+            "ViewModelProvider(this)[ExternalProfileRequestViewModel::class.java] "
+            "externalProfileModel.enqueue(intent) "
+            "externalProfileModel.request.collectAsStateWithLifecycle() "
+            "request.startedOperationId == completion.id "
+            "onExternalProfileRequestConsumed(request.id, completion.id) "
+            "if (request.startedOperationId != null) return@LaunchedEffect "
+            "profileLibraryModel.state.value.activeOperationId "
+            "onExternalProfileRequestStarted(request.id, operationId) "
             "ViewModelProvider(this)[AppSettingsViewModel::class.java] "
             "appSettingsModel.state.collectAsStateWithLifecycle() "
             "appSettingsModel.updateSettings(next) "
@@ -251,6 +270,13 @@ def valid_sources() -> dict[str, str]:
             "profileImportCancellationSurvivesRecreationAndPreservesSavedProfiles "
             "providerBackedProfileImportPublishesTheMergedCatalogOnlyAfterCommit"
         ),
+        "ProfileBundleIntentInstrumentedTest.kt": (
+            "externalProfileRequestBindsOneOperationAndRestoresAsRetryableAfterProcessLoss "
+            "profileViewIntentRejectsNetworkFileAndUnrelatedDocuments "
+            "customProfileIntentSurvivesRecreationAndImportsExactlyOnce "
+            "BlockingImportProvider.PROFILE_URI assertSame( scenario.recreate() "
+            "retainedRequest.request.value == null"
+        ),
         "AppSettingsLifecycleInstrumentedTest.kt": (
             "latestUnsavedSettingsSurviveImmediateActivityRecreationAndPersist "
             "backgroundingFlushesLatestSettingsBeforeDebounce "
@@ -287,6 +313,10 @@ def valid_sources() -> dict[str, str]:
             "must share that same retained "
             "Profile catalog loading, recent selections, and user-profile saves must share one "
             "only in the project session revision that "
+            "Profile bundle import and export must use that same retained owner "
+            "External profile documents must remain `content://`-only "
+            "bind one pending request to one import operation "
+            "consume the request only after that `docs/PROFILE_BUNDLE_FORMAT.md` "
             "Track recent-selection persistence revisions dirty `Recent` list "
             "app enters the background owner is finally cleared "
             "Live app settings and their debounced persistence must share one "
@@ -312,6 +342,13 @@ def valid_sources() -> dict[str, str]:
             "platform certificate verifier remains authoritative "
             "Credential updates are staged under a new generation "
             "never carried to a changed connection type or address"
+        ),
+        "PROFILE_BUNDLE_FORMAT.md": (
+            "`.duckyprofiles` application/vnd.duckyslicer.profiles+json "
+            '"bundleVersion": 1 "profileSchemaVersion": 16 '
+            "exact profile duplicates are skipped additive and atomic 24 MiB 4,096 "
+            "does not contain projects remote printer addresses `content://` "
+            "Web, `file://`, unrelated JSON, and unrelated binary"
         ),
         "strings.xml": (
             "saved_data_unavailable settings_save_error cancel_model_edit model_edit_canceled "
@@ -525,6 +562,30 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
             "uncancelable provider",
         )
         with self.assertRaisesRegex(VerificationError, "profile transfer lifecycle"):
+            verify_resilience(sources)
+
+    def test_rejects_external_profile_documents_over_network(self) -> None:
+        sources = valid_sources()
+        sources["ProfileOpenRequest.kt"] += " https://example.invalid/profiles.duckyprofiles"
+        with self.assertRaisesRegex(VerificationError, "unsafe surface"):
+            verify_resilience(sources)
+
+    def test_rejects_external_profile_request_consumed_without_operation_identity(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+            "request.startedOperationId == completion.id",
+            "request.uri != null",
+        )
+        with self.assertRaisesRegex(VerificationError, "external profile Activity contract"):
+            verify_resilience(sources)
+
+    def test_rejects_profile_format_without_private_data_boundary(self) -> None:
+        sources = valid_sources()
+        sources["PROFILE_BUNDLE_FORMAT.md"] = sources["PROFILE_BUNDLE_FORMAT.md"].replace(
+            "does not contain projects",
+            "may contain projects",
+        )
+        with self.assertRaisesRegex(VerificationError, "public profile-bundle contract"):
             verify_resilience(sources)
 
     def test_rejects_background_transition_without_recent_profile_flush(self) -> None:

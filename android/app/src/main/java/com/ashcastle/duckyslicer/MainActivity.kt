@@ -98,6 +98,7 @@ data class ModelInfo(
 
 class MainActivity : ComponentActivity() {
     private lateinit var appSettingsModel: AppSettingsViewModel
+    private lateinit var externalProfileModel: ExternalProfileRequestViewModel
     private lateinit var externalProjectModel: ExternalProjectRequestViewModel
     private lateinit var profileLibraryModel: ProfileLibraryViewModel
     private lateinit var projectTransferModel: ProjectTransferViewModel
@@ -111,9 +112,13 @@ class MainActivity : ComponentActivity() {
         val gcodeExportModel = ViewModelProvider(this)[GcodeExportViewModel::class.java]
         val supportReportExportModel =
             ViewModelProvider(this)[SupportReportExportViewModel::class.java]
+        externalProfileModel = ViewModelProvider(this)[ExternalProfileRequestViewModel::class.java]
         externalProjectModel = ViewModelProvider(this)[ExternalProjectRequestViewModel::class.java]
         projectTransferModel = ViewModelProvider(this)[ProjectTransferViewModel::class.java]
-        if (savedInstanceState == null) externalProjectModel.enqueue(intent)
+        if (savedInstanceState == null) {
+            externalProfileModel.enqueue(intent)
+            externalProjectModel.enqueue(intent)
+        }
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
@@ -122,6 +127,8 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = DuckyColors) {
                 val externalProjectRequest by
                     externalProjectModel.request.collectAsStateWithLifecycle()
+                val externalProfileRequest by
+                    externalProfileModel.request.collectAsStateWithLifecycle()
                 DuckySlicerScreen(
                     sliceOperationModel = sliceOperationModel,
                     remoteOperationModel = remoteOperationModel,
@@ -130,6 +137,9 @@ class MainActivity : ComponentActivity() {
                     gcodeExportModel = gcodeExportModel,
                     supportReportExportModel = supportReportExportModel,
                     projectTransferModel = projectTransferModel,
+                    externalProfileRequest = externalProfileRequest,
+                    onExternalProfileRequestStarted = externalProfileModel::markStarted,
+                    onExternalProfileRequestConsumed = externalProfileModel::consume,
                     externalProjectRequest = externalProjectRequest,
                     onExternalProjectRequestConsumed = externalProjectModel::consume,
                 )
@@ -140,6 +150,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        externalProfileModel.enqueue(intent)
         externalProjectModel.enqueue(intent)
     }
 
@@ -160,6 +171,9 @@ private fun DuckySlicerScreen(
     gcodeExportModel: GcodeExportViewModel,
     supportReportExportModel: SupportReportExportViewModel,
     projectTransferModel: ProjectTransferViewModel,
+    externalProfileRequest: ExternalProfileRequest?,
+    onExternalProfileRequestStarted: (Long, Long) -> Boolean,
+    onExternalProfileRequestConsumed: (Long, Long) -> Boolean,
     externalProjectRequest: ExternalProjectRequest?,
     onExternalProjectRequestConsumed: (Long) -> Unit,
 ) {
@@ -564,6 +578,11 @@ private fun DuckySlicerScreen(
                 }
             }
         }
+        externalProfileRequest
+            ?.takeIf { request -> request.startedOperationId == completion.id }
+            ?.let { request ->
+                onExternalProfileRequestConsumed(request.id, completion.id)
+            }
         profileLibraryModel.consumeTransferCompletion(completion.id)
     }
 
@@ -756,16 +775,44 @@ private fun DuckySlicerScreen(
         }
     }
 
-    val profileImportPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri ->
+    fun importProfiles(uri: Uri): Boolean {
         if (
-            uri != null && !profileBusy && projectRestored && !projectTransferBusy &&
+            !profileBusy && projectRestored && !projectTransferBusy &&
             !importing && !autoLaying && !arranging && !splitting && !cutting &&
             !slicing && !previewLoading && profileLibraryModel.importBundle(uri)
         ) {
             error = null
             notice = null
+            return true
+        }
+        return false
+    }
+
+    val profileImportPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        uri?.let(::importProfiles)
+    }
+
+    LaunchedEffect(
+        externalProfileRequest?.id,
+        externalProfileRequest?.startedOperationId,
+        profileBusy,
+        projectRestored,
+        projectTransferBusy,
+        importing,
+        autoLaying,
+        arranging,
+        splitting,
+        cutting,
+        slicing,
+        previewLoading,
+    ) {
+        val request = externalProfileRequest ?: return@LaunchedEffect
+        if (request.startedOperationId != null) return@LaunchedEffect
+        if (importProfiles(request.uri)) {
+            val operationId = profileLibraryModel.state.value.activeOperationId
+            onExternalProfileRequestStarted(request.id, operationId)
         }
     }
 

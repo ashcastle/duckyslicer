@@ -100,6 +100,30 @@ def valid_manifest(*, debug: bool = False) -> str:
             A: android:pathPattern(0x0101002c)=".*.duckyproject" (Raw: ".*.duckyproject")
           E: data (line=65)
             A: android:scheme(0x01010027)="content" (Raw: "content")
+        E: intent-filter (line=66)
+          E: action (line=67)
+            A: android:name(0x01010003)="android.intent.action.VIEW" (Raw: "android.intent.action.VIEW")
+          E: category (line=68)
+            A: android:name(0x01010003)="android.intent.category.DEFAULT" (Raw: "android.intent.category.DEFAULT")
+          E: data (line=69)
+            A: android:mimeType(0x01010026)="application/vnd.duckyslicer.profiles+json" (Raw: "application/vnd.duckyslicer.profiles+json")
+          E: data (line=70)
+            A: android:scheme(0x01010027)="content" (Raw: "content")
+        E: intent-filter (line=71)
+          E: action (line=72)
+            A: android:name(0x01010003)="android.intent.action.VIEW" (Raw: "android.intent.action.VIEW")
+          E: category (line=73)
+            A: android:name(0x01010003)="android.intent.category.DEFAULT" (Raw: "android.intent.category.DEFAULT")
+          E: data (line=74)
+            A: android:mimeType(0x01010026)="application/json" (Raw: "application/json")
+          E: data (line=75)
+            A: android:mimeType(0x01010026)="application/octet-stream" (Raw: "application/octet-stream")
+          E: data (line=76)
+            A: android:host(0x01010028)="*" (Raw: "*")
+          E: data (line=77)
+            A: android:pathPattern(0x0101002c)=".*.duckyprofiles" (Raw: ".*.duckyprofiles")
+          E: data (line=78)
+            A: android:scheme(0x01010027)="content" (Raw: "content")
       E: provider (line=70)
         A: android:name(0x01010003)="androidx.startup.InitializationProvider" (Raw: "androidx.startup.InitializationProvider")
         A: android:exported(0x01010010)=(type 0x12)0x0
@@ -173,6 +197,16 @@ class VerifyArtifactManifestTest(unittest.TestCase):
             'android:scheme(0x01010027)="content" (Raw: "content")',
             'android:scheme(0x01010027)="file" (Raw: "file")',
             1,
+        )
+        with self.assertRaisesRegex(VerificationError, "external intent"):
+            verify_aapt_output(source, "release")
+
+    def test_rejects_broad_profile_json_import(self) -> None:
+        source = valid_manifest().replace(
+            '          E: data (line=77)\n'
+            '            A: android:pathPattern(0x0101002c)=".*.duckyprofiles" '
+            '(Raw: ".*.duckyprofiles")\n',
+            "",
         )
         with self.assertRaisesRegex(VerificationError, "external intent"):
             verify_aapt_output(source, "release")

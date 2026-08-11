@@ -21,6 +21,9 @@ import java.util.concurrent.TimeUnit;
 public final class BlockingImportProvider extends ContentProvider {
     public static final String AUTHORITY = "com.ashcastle.duckyslicer.test.blocking-import";
     public static final Uri URI = Uri.parse("content://" + AUTHORITY + "/project.duckyproject");
+    public static final Uri PROFILE_URI = Uri.parse(
+            "content://" + AUTHORITY + "/profiles.duckyprofiles"
+    );
     public static final Uri MODEL_URI = Uri.parse("content://" + AUTHORITY + "/blocked-model.stl");
     public static final String METHOD_PREPARE = "prepare";
     public static final String METHOD_PREPARE_OPEN_BLOCK = "prepare_open_block";
@@ -43,9 +46,13 @@ public final class BlockingImportProvider extends ContentProvider {
 
     @Override
     public String getType(Uri uri) {
-        return MODEL_URI.equals(uri)
-                ? "model/stl"
-                : "application/vnd.duckyslicer.project+zip";
+        if (MODEL_URI.equals(uri)) {
+            return "model/stl";
+        }
+        if (PROFILE_URI.equals(uri)) {
+            return "application/vnd.duckyslicer.profiles+json";
+        }
+        return "application/vnd.duckyslicer.project+zip";
     }
 
     @Override
@@ -63,7 +70,13 @@ public final class BlockingImportProvider extends ContentProvider {
         MatrixCursor.RowBuilder row = cursor.newRow();
         for (String column : columns) {
             if (OpenableColumns.DISPLAY_NAME.equals(column)) {
-                row.add(MODEL_URI.equals(uri) ? "blocked-model.stl" : "project.duckyproject");
+                if (MODEL_URI.equals(uri)) {
+                    row.add("blocked-model.stl");
+                } else if (PROFILE_URI.equals(uri)) {
+                    row.add("profiles.duckyprofiles");
+                } else {
+                    row.add("project.duckyproject");
+                }
             } else if (OpenableColumns.SIZE.equals(column)) {
                 row.add(current.source == null ? null : current.source.getStatSize());
             } else {
