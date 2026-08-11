@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "engine": {
+    "name": "OrcaSlicer",
+    "revision": "2c8a5385bc53cbc16211b4dd36ef9963ee185f4a",
+    "sourcePath": "third_party/android-slicer-runtime/app/src/main/cpp/orcaslicer"
+  },
+  "effectiveProfile": {
+    "printerId": "snapmaker-u1-04",
+    "processId": "snapmaker-u1-04-020",
+    "filamentId": "generic-pla",
+    "nozzleDiameterMm": 0.4,
+    "layerHeightMm": 0.2,
+    "firstLayerHeightMm": 0.25,
+    "perimeters": 2,
+    "fillDensity": 0.15,
+    "fillPattern": "gyroid",
+    "topSolidLayers": 5,
+    "bottomSolidLayers": 4,
+    "nozzleTemperatureC": 220,
+    "bedTemperatureC": 60,
+    "flowRatio": 0.98,
+    "maxVolumetricSpeed": 12.0,
+    "wallGenerator": "arachne",
+    "brimType": "no_brim",
+    "brimWidthMm": 0.0,
+    "skirtLoops": 0
+  },
+  "profileFingerprintKeys": [
+    "nozzle_diameter",
+    "layer_height",
+    "first_layer_height",
+    "wall_loops",
+    "sparse_infill_density",
+    "sparse_infill_pattern",
+    "top_shell_layers",
+    "bottom_shell_layers",
+    "filament_type",
+    "filament_flow_ratio",
+    "filament_max_volumetric_speed",
+    "wall_generator",
+    "brim_type",
+    "brim_width",
+    "skirt_loops"
+  ],
+  "models": [
+    {"path": "models/simple-cube.stl", "sha256": "efc831705a7fe00f6e6b815d03c13797aef13d7fca060b838e0e5241ad2655eb", "triangles": 12},
+    {"path": "models/hollow-open-box.stl", "sha256": "1f35a138eed9fcb0f4d620edaeb03d7dd955d3d5d3a80a48cf6ff4940e47eee7", "triangles": 28},
+    {"path": "models/bridge.stl", "sha256": "b7e2605d91bc04d0c5d91b4096cf9c6ef18512a32126afbf425017ae70a10b13", "triangles": 36},
+    {"path": "models/support-overhang.stl", "sha256": "e21551de9cc1e8f03d8a1ba835faa3e1347ae55683b6cf824fabc2d6bcb9776c", "triangles": 24},
+    {"path": "models/dense-cylinder.stl", "sha256": "ba16521b8156deec99f83e1f71be3fc37da8370a296258bf1116e95524ed5985", "triangles": 512}
+  ],
+  "cases": [
+    {
+      "id": "simple-part",
+      "models": ["models/simple-cube.stl"],
+      "expected": {
+        "minLayers": 95,
+        "maxLayers": 105,
+        "minGcodeBytes": 300000,
+        "minExtrusionMotions": 10000,
+        "minPreviewSegments": 10000,
+        "minPreviewLayerCoverage": 0.9,
+        "minExtrusionXSpanMm": 18.0,
+        "requiredRoles": ["outerWall", "innerWall", "sparseInfill", "topSurface", "internalSolid", "bottomSurface"]
+      }
+    },
+    {
+      "id": "hollow-topology",
+      "models": ["models/hollow-open-box.stl"],
+      "expected": {
+        "minLayers": 145,
+        "maxLayers": 155,
+        "minGcodeBytes": 1000000,
+        "minExtrusionMotions": 30000,
+        "minPreviewSegments": 30000,
+        "minPreviewLayerCoverage": 0.9,
+        "minExtrusionXSpanMm": 28.0,
+        "requiredRoles": ["outerWall", "innerWall", "topSurface", "internalSolid", "bottomSurface"]
+      }
+    },
+    {
+      "id": "bridge-overhang",
+      "models": ["models/bridge.stl"],
+      "expected": {
+        "minLayers": 115,
+        "maxLayers": 125,
+        "minGcodeBytes": 350000,
+        "minExtrusionMotions": 10000,
+        "minPreviewSegments": 10000,
+        "minPreviewLayerCoverage": 0.9,
+        "minExtrusionXSpanMm": 48.0,
+        "requiredRoles": ["outerWall", "innerWall", "bridge"]
+      }
+    },
+    {
+      "id": "automatic-supports",
+      "models": ["models/support-overhang.stl"],
+      "supportEnabled": true,
+      "expected": {
+        "minLayers": 195,
+        "maxLayers": 210,
+        "minGcodeBytes": 350000,
+        "minExtrusionMotions": 10000,
+        "minPreviewSegments": 10000,
+        "minPreviewLayerCoverage": 0.9,
+        "minExtrusionXSpanMm": 42.0,
+        "requiredRoles": ["outerWall", "innerWall", "support"]
+      }
+    },
+    {
+      "id": "multi-object",
+      "models": ["models/simple-cube.stl", "models/simple-cube.stl"],
+      "offsetsXmm": [-18.0, 18.0],
+      "expected": {
+        "minLayers": 95,
+        "maxLayers": 105,
+        "minGcodeBytes": 600000,
+        "minExtrusionMotions": 20000,
+        "minPreviewSegments": 20000,
+        "minPreviewLayerCoverage": 0.9,
+        "minExtrusionXSpanMm": 54.0,
+        "requiredRoles": ["outerWall", "innerWall", "sparseInfill", "topSurface"]
+      }
+    },
+    {
+      "id": "dense-preview",
+      "models": ["models/dense-cylinder.stl"],
+      "expected": {
+        "minLayers": 495,
+        "maxLayers": 505,
+        "minGcodeBytes": 10000000,
+        "minExtrusionMotions": 300000,
+        "minPreviewSegments": 100000,
+        "minPreviewLayerCoverage": 0.9,
+        "minExtrusionXSpanMm": 48.0,
+        "requiredRoles": ["outerWall", "innerWall", "sparseInfill", "topSurface", "internalSolid", "bottomSurface"]
+      }
+    }
+  ]
+}

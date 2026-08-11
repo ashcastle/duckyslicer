@@ -1,0 +1,170 @@
+solid support_overhang
+  facet normal 0 0 0
+    outer loop
+      vertex -4 -4 0
+      vertex -4 4 0
+      vertex 4 4 0
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex -4 -4 0
+      vertex 4 4 0
+      vertex 4 -4 0
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex -4 -4 22
+      vertex 4 -4 22
+      vertex 4 4 22
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex -4 -4 22
+      vertex 4 4 22
+      vertex -4 4 22
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex -4 -4 0
+      vertex 4 -4 0
+      vertex 4 -4 22
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex -4 -4 0
+      vertex 4 -4 22
+      vertex -4 -4 22
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex 4 -4 0
+      vertex 4 4 0
+      vertex 4 4 22
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex 4 -4 0
+      vertex 4 4 22
+      vertex 4 -4 22
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex 4 4 0
+      vertex -4 4 0
+      vertex -4 4 22
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex 4 4 0
+      vertex -4 4 22
+      vertex 4 4 22
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex -4 4 0
+      vertex -4 -4 0
+      vertex -4 -4 22
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex -4 4 0
+      vertex -4 -4 22
+      vertex -4 4 22
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex -22 -22 22
+      vertex -22 22 22
+      vertex 22 22 22
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex -22 -22 22
+      vertex 22 22 22
+      vertex 22 -22 22
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex -22 -22 26
+      vertex 22 -22 26
+      vertex 22 22 26
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex -22 -22 26
+      vertex 22 22 26
+      vertex -22 22 26
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex -22 -22 22
+      vertex 22 -22 22
+      vertex 22 -22 26
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex -22 -22 22
+      vertex 22 -22 26
+      vertex -22 -22 26
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex 22 -22 22
+      vertex 22 22 22
+      vertex 22 22 26
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex 22 -22 22
+      vertex 22 22 26
+      vertex 22 -22 26
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex 22 22 22
+      vertex -22 22 22
+      vertex -22 22 26
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex 22 22 22
+      vertex -22 22 26
+      vertex 22 22 26
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex -22 22 22
+      vertex -22 -22 22
+      vertex -22 -22 26
+    endloop
+  endfacet
+  facet normal 0 0 0
+    outer loop
+      vertex -22 22 22
+      vertex -22 -22 26
+      vertex -22 22 26
+    endloop
+  endfacet
+endsolid support_overhang

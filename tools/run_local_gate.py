@@ -212,6 +212,11 @@ def host_steps(python: str = sys.executable, windows: bool = os.name == "nt") ->
             (python, "-m", "unittest", "discover", "-s", "tools", "-p", "test_*.py"),
             ROOT,
         ),
+        GateStep(
+            "Qualification corpus reproducibility",
+            (python, str(ROOT / "tools/qualification_corpus.py"), "--check"),
+            ROOT,
+        ),
     ]
     steps.extend(
         GateStep(

@@ -26,6 +26,13 @@ val profileCatalogGenerator = repositoryRoot.resolve("tools/generate_profile_cat
 val offlineLicenseGenerator = repositoryRoot.resolve("tools/generate_offline_licenses.py")
 val androidTranslationGenerator = repositoryRoot.resolve("tools/generate_android_translations.py")
 val nativeLicensePolicy = repositoryRoot.resolve("tools/native_license_policy.py")
+val slicerVersionsFile = repositoryRoot.resolve("native/slicer-runtime/versions.env")
+val lockedSlicerVersions = slicerVersionsFile.readLines()
+    .filter { line -> '=' in line && !line.trimStart().startsWith('#') }
+    .associate { line -> line.substringBefore('=') to line.substringAfter('=') }
+val orcaEngineRevision = checkNotNull(lockedSlicerVersions["SLICER_ENGINE_COMMIT"]) {
+    "SLICER_ENGINE_COMMIT is missing from ${slicerVersionsFile.absolutePath}"
+}
 val defaultAndroidStrings = projectDir.resolve("src/main/res/values/strings.xml")
 val orcaTranslationRoot = repositoryRoot.resolve("localization/i18n")
 val generatedProfileCatalog = generatedProfileAssets.map { it.file("profile_catalog_v15.bin") }
@@ -84,12 +91,12 @@ val generateOrcaProfileCatalog = tasks.register<Exec>("generateOrcaProfileCatalo
         profileCatalogGenerator.absolutePath,
         orcaProfileRoot.absolutePath,
         generatedProfileCatalog.get().asFile.absolutePath,
-        "2c8a5385bc53cbc16211b4dd36ef9963ee185f4a",
+        orcaEngineRevision,
     )
     inputs.file(profileCatalogGenerator)
     inputs.dir(orcaProfileRoot)
     inputs.property("profileSchemaVersion", 14)
-    inputs.property("orcaRevision", "2c8a5385bc53cbc16211b4dd36ef9963ee185f4a")
+    inputs.property("orcaRevision", orcaEngineRevision)
     outputs.file(generatedProfileCatalog)
     outputs.upToDateWhen {
         val expected = generatedProfileCatalog.get().asFile
@@ -254,6 +261,11 @@ android {
         versionCode = providers.gradleProperty("duckyslicer.versionCode").orNull?.toInt() ?: 1
         versionName = providers.gradleProperty("duckyslicer.versionName").orNull ?: "0.1.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField(
+            "String",
+            "ORCA_ENGINE_REVISION",
+            "\"$orcaEngineRevision\"",
+        )
         ndk {
             abiFilters += setOf("arm64-v8a")
         }
@@ -343,6 +355,9 @@ android {
     )
     sourceSets.getByName("androidTest").assets.directories.add(
         repositoryRoot.resolve("tests/data/test_stl/ASCII").absolutePath,
+    )
+    sourceSets.getByName("androidTest").assets.directories.add(
+        repositoryRoot.resolve("qualification/corpus").absolutePath,
     )
 
     packaging {

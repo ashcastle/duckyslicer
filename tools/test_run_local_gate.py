@@ -141,6 +141,14 @@ physical unauthorized transport_id:3
                 for command in commands
             )
         )
+        self.assertIn(
+            (
+                "python-for-test",
+                str(ROOT / "tools/qualification_corpus.py"),
+                "--check",
+            ),
+            commands,
+        )
         self.assertTrue(
             any(
                 len(command) > 1 and "verify_no_embedded_credentials.py" in command[1]
