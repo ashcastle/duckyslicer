@@ -33,6 +33,7 @@ internal enum class SupportEvent {
     REMOTE_STORAGE_UNAVAILABLE,
     SLICE_FAILED,
     SLICING_PROFILE_SAVE_FAILED,
+    SUPPORT_REPORT_EXPORT_FAILED,
 }
 
 internal data class SupportEventRecord(

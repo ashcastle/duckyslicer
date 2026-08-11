@@ -54,12 +54,14 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "ProjectStore.kt",
         "ProjectOpenRequest.kt",
         "ProjectTransfer.kt",
+        "CreatedDocument.kt",
         "MainActivity.kt",
         "WorkspaceScreen.kt",
         "AndroidManifest.xml",
         "ProjectArchiveTest.kt",
         "ProjectTransferStateTest.kt",
         "ProjectArchiveIntentInstrumentedTest.kt",
+        "CreatedDocumentLifecycleInstrumentedTest.kt",
         "NativeEngineInstrumentedTest.kt",
         "strings.xml",
         "strings-ko.xml",
@@ -172,14 +174,28 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "mutableState.value.completion != null",
             "openInputStream(uri)",
             "projectStore.importArchive",
-            "openOutputStream(uri)",
+            "uri.scheme != ContentResolver.SCHEME_CONTENT",
+            'openOutputStream(uri, "wt")',
             "projectStore.exportArchive",
+            "deleteFailedCreatedDocument(application, uri)",
+            "SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED",
             "catch (failure: CancellationException)",
             "consumeCompletion",
         ),
     )
     if "catch (_: Throwable)" in transfer or "catch (failure: Throwable)" in transfer:
         raise VerificationError("ProjectTransfer.kt must not swallow process-level failures")
+
+    _require_markers(
+        "CreatedDocument.kt",
+        sources["CreatedDocument.kt"],
+        (
+            "fun deleteFailedCreatedDocument(context: Context, uri: Uri)",
+            "ContentResolver.SCHEME_CONTENT",
+            "DocumentsContract.deleteDocument",
+            "resolver.delete(uri, null, null)",
+        ),
+    )
 
     try:
         manifest = ElementTree.fromstring(sources["AndroidManifest.xml"])
@@ -268,7 +284,6 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "projectSavePicker = rememberLauncherForActivityResult",
             "ActivityResultContracts.CreateDocument(PROJECT_ARCHIVE_MIME_TYPE)",
             "SupportEvent.PROJECT_ARCHIVE_IMPORT_FAILED",
-            "SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED",
             "override fun onNewIntent(intent: Intent)",
             "externalProjectModel.enqueue(intent)",
             "ProjectTransferViewModel",
@@ -387,12 +402,24 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         ),
     )
     _require_markers(
+        "CreatedDocumentLifecycleInstrumentedTest.kt",
+        sources["CreatedDocumentLifecycleInstrumentedTest.kt"],
+        (
+            "failedProjectArchiveExportDeletesTheNewDocument",
+            "BlockingExportProvider.METHOD_PREPARE_FAILURE",
+            "model.exportProject(",
+            "BlockingExportProvider.KEY_DELETED",
+        ),
+    )
+    _require_markers(
         "CONTRIBUTING.md",
         sources["CONTRIBUTING.md"],
         (
             "Project history, active slicing options, restoration, and debounced persistence",
             "same Activity-retained owner",
             "process-death recovery",
+            "Every `CreateDocument` writer",
+            "delete it after cancellation or failure",
         ),
     )
     _require_markers(
@@ -414,6 +441,7 @@ def read_sources() -> dict[str, str]:
         "ProjectStore.kt": (package / "ProjectStore.kt").read_text(encoding="utf-8"),
         "ProjectOpenRequest.kt": (package / "ProjectOpenRequest.kt").read_text(encoding="utf-8"),
         "ProjectTransfer.kt": (package / "ProjectTransfer.kt").read_text(encoding="utf-8"),
+        "CreatedDocument.kt": (package / "CreatedDocument.kt").read_text(encoding="utf-8"),
         "MainActivity.kt": (package / "MainActivity.kt").read_text(encoding="utf-8"),
         "WorkspaceScreen.kt": (package / "WorkspaceScreen.kt").read_text(encoding="utf-8"),
         "AndroidManifest.xml": (tests / "main/AndroidManifest.xml").read_text(encoding="utf-8"),
@@ -426,6 +454,10 @@ def read_sources() -> dict[str, str]:
         "ProjectArchiveIntentInstrumentedTest.kt": (
             tests
             / "androidTest/java/com/ashcastle/duckyslicer/ProjectArchiveIntentInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "CreatedDocumentLifecycleInstrumentedTest.kt": (
+            tests
+            / "androidTest/java/com/ashcastle/duckyslicer/CreatedDocumentLifecycleInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "NativeEngineInstrumentedTest.kt": (
             tests / "androidTest/java/com/ashcastle/duckyslicer/NativeEngineInstrumentedTest.kt"

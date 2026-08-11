@@ -3,7 +3,6 @@ package com.ashcastle.duckyslicer
 import android.app.Application
 import android.content.ContentResolver
 import android.net.Uri
-import android.provider.DocumentsContract
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -68,11 +67,11 @@ internal class GcodeExportViewModel(application: Application) : AndroidViewModel
                 copyArtifact(application.contentResolver, uri, outcome.output)
                 true
             } catch (cancellation: CancellationException) {
-                cleanupFailedDocument(application.contentResolver, uri)
+                deleteFailedCreatedDocument(application, uri)
                 throw cancellation
             } catch (failure: Exception) {
                 if (BuildConfig.DEBUG) Log.e(LOG_TAG, "G-code export failed", failure)
-                cleanupFailedDocument(application.contentResolver, uri)
+                deleteFailedCreatedDocument(application, uri)
                 supportEvents.record(SupportEvent.GCODE_EXPORT_FAILED)
                 false
             }
@@ -98,16 +97,6 @@ internal class GcodeExportViewModel(application: Application) : AndroidViewModel
                 requireNotNull(output) { "G-code output is unavailable" }
                 source.inputStream().use { input -> input.copyTo(output) }
                 output.flush()
-            }
-        }
-    }
-
-    private fun cleanupFailedDocument(contentResolver: ContentResolver, uri: Uri) {
-        runCatching {
-            if (DocumentsContract.isDocumentUri(getApplication<Application>(), uri)) {
-                DocumentsContract.deleteDocument(contentResolver, uri)
-            } else {
-                contentResolver.delete(uri, null, null)
             }
         }
     }

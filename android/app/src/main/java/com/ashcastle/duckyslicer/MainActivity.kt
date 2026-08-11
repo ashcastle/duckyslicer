@@ -106,6 +106,8 @@ class MainActivity : ComponentActivity() {
         val profileLibraryModel = ViewModelProvider(this)[ProfileLibraryViewModel::class.java]
         val appSettingsModel = ViewModelProvider(this)[AppSettingsViewModel::class.java]
         val gcodeExportModel = ViewModelProvider(this)[GcodeExportViewModel::class.java]
+        val supportReportExportModel =
+            ViewModelProvider(this)[SupportReportExportViewModel::class.java]
         externalProjectModel = ViewModelProvider(this)[ExternalProjectRequestViewModel::class.java]
         projectTransferModel = ViewModelProvider(this)[ProjectTransferViewModel::class.java]
         if (savedInstanceState == null) externalProjectModel.enqueue(intent)
@@ -123,6 +125,7 @@ class MainActivity : ComponentActivity() {
                     profileLibraryModel = profileLibraryModel,
                     appSettingsModel = appSettingsModel,
                     gcodeExportModel = gcodeExportModel,
+                    supportReportExportModel = supportReportExportModel,
                     projectTransferModel = projectTransferModel,
                     externalProjectRequest = externalProjectRequest,
                     onExternalProjectRequestConsumed = externalProjectModel::consume,
@@ -145,6 +148,7 @@ private fun DuckySlicerScreen(
     profileLibraryModel: ProfileLibraryViewModel,
     appSettingsModel: AppSettingsViewModel,
     gcodeExportModel: GcodeExportViewModel,
+    supportReportExportModel: SupportReportExportViewModel,
     projectTransferModel: ProjectTransferViewModel,
     externalProjectRequest: ExternalProjectRequest?,
     onExternalProjectRequestConsumed: (Long) -> Unit,
@@ -221,6 +225,8 @@ private fun DuckySlicerScreen(
     val profileLibraryState by profileLibraryModel.state.collectAsStateWithLifecycle()
     val appSettingsState by appSettingsModel.state.collectAsStateWithLifecycle()
     val gcodeExportState by gcodeExportModel.state.collectAsStateWithLifecycle()
+    val supportReportExportState by
+        supportReportExportModel.state.collectAsStateWithLifecycle()
     val exportingGcode = gcodeExportState.busy
     val sliceOptions = projectTransferState.sliceOptions
     val projectObjects = projectHistory.current.objects
@@ -291,7 +297,6 @@ private fun DuckySlicerScreen(
                         onExternalProjectRequestConsumed(externalProjectRequest.id)
                     }
                 } else {
-                    supportEvents.record(SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED)
                     error = projectExportError
                 }
                 externalProjectConfirmation = null
@@ -746,6 +751,7 @@ private fun DuckySlicerScreen(
         remoteMessageIsError = remoteMessageIsError,
         profileBusy = profileBusy,
         appSettingsSaveFailed = appSettingsState.message == AppSettingsMessage.SAVE_FAILED,
+        supportReportExportState = supportReportExportState,
         sliceOutcome = sliceOutcome,
         layerPreview = layerPreview,
         importing = importing || projectFileBusy,
@@ -1014,6 +1020,9 @@ private fun DuckySlicerScreen(
         onLayerRangeSelected = loadPreviewRange,
         onAppSettingsChanged = { next ->
             appSettingsModel.updateSettings(next)
+        },
+        onSupportReportExport = { uri ->
+            supportReportExportModel.export(uri, appSettings)
         },
         onRemoteDeviceSelected = { id ->
             remoteOperationModel.selectionChanged(id)

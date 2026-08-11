@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -30,6 +31,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
@@ -42,7 +44,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,9 +60,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 @Composable
@@ -69,12 +67,13 @@ import kotlin.math.roundToInt
 internal fun AppSettingsSheet(
     settings: AppSettings,
     saveFailed: Boolean,
+    supportReportExportState: SupportReportExportState,
     onSettingsChanged: (AppSettings) -> Unit,
+    onSupportReportExport: (Uri) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val scope = rememberCoroutineScope()
     val toolpathVisibilityLabel = stringResource(R.string.toolpath_visibility_control)
     val toolpathVisibilityState = stringResource(
         R.string.percent_value,
@@ -92,7 +91,6 @@ internal fun AppSettingsSheet(
     )
     var legalDocument by remember { mutableStateOf<LegalDocument?>(null) }
     var showDataPractices by remember { mutableStateOf(false) }
-    var supportSaveResult by remember { mutableStateOf<Boolean?>(null) }
     var notificationsEnabled by remember(context) {
         mutableStateOf(sliceNotificationsEnabled(context))
     }
@@ -108,19 +106,7 @@ internal fun AppSettingsSheet(
     val supportReportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/plain"),
     ) { uri ->
-        if (uri != null) {
-            scope.launch {
-                supportSaveResult = runCatching {
-                    withContext(Dispatchers.IO) {
-                        val report = createSupportReport(context.applicationContext, settings)
-                        context.contentResolver.openOutputStream(uri).use { output ->
-                            requireNotNull(output) { "output_unavailable" }
-                            writeSupportReport(output, report)
-                        }
-                    }
-                }.isSuccess
-            }
-        }
+        uri?.let(onSupportReportExport)
     }
 
     Card(
@@ -314,14 +300,18 @@ internal fun AppSettingsSheet(
                 style = MaterialTheme.typography.bodySmall,
             )
             TextButton(
-                onClick = {
-                    supportSaveResult = null
-                    supportReportLauncher.launch(SUPPORT_REPORT_FILE_NAME)
-                },
+                enabled = !supportReportExportState.busy,
+                onClick = { supportReportLauncher.launch(SUPPORT_REPORT_FILE_NAME) },
             ) {
+                if (supportReportExportState.busy) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.padding(end = 8.dp).size(18.dp),
+                        strokeWidth = 2.dp,
+                    )
+                }
                 Text(stringResource(R.string.save_support_details))
             }
-            supportSaveResult?.let { saved ->
+            supportReportExportState.completion?.succeeded?.let { saved ->
                 Text(
                     stringResource(
                         if (saved) {

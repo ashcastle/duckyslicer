@@ -45,6 +45,9 @@ avoid introducing an account or cloud requirement.
   owner of an active operation may cancel it.
 - User-selected G-code export must run through its retained owner, hold a reader lease,
   reject duplicate copies, and clean up a newly created document after failure.
+- Every `CreateDocument` writer must accept only its returned `content://` URI, truncate
+  the new target, and delete it after cancellation or failure so partial exports never
+  look like valid G-code, project archives, or support details.
 - Profile catalog loading, recent selections, and user-profile saves must share one
   Activity-retained owner. A saved profile may update the catalog after rotation, but
   its late completion may select that profile only in the project session revision that

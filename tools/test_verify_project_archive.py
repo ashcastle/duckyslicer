@@ -78,9 +78,17 @@ def valid_sources() -> dict[str, str]:
                 "PROJECT_SAVE_DEBOUNCE_MILLIS = 400L",
                 "mutableState.value.completion != null",
                 "openInputStream(uri) projectStore.importArchive",
-                "openOutputStream(uri) projectStore.exportArchive",
+                "uri.scheme != ContentResolver.SCHEME_CONTENT "
+                'openOutputStream(uri, "wt") projectStore.exportArchive '
+                "deleteFailedCreatedDocument(application, uri) "
+                "SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED",
                 "catch (failure: CancellationException) consumeCompletion",
             )
+        ),
+        "CreatedDocument.kt": (
+            "fun deleteFailedCreatedDocument(context: Context, uri: Uri) "
+            "ContentResolver.SCHEME_CONTENT DocumentsContract.deleteDocument "
+            "resolver.delete(uri, null, null)"
         ),
         "MainActivity.kt": " ".join(
             (
@@ -89,7 +97,6 @@ def valid_sources() -> dict[str, str]:
                 "projectSavePicker = rememberLauncherForActivityResult",
                 "ActivityResultContracts.CreateDocument(PROJECT_ARCHIVE_MIME_TYPE)",
                 "SupportEvent.PROJECT_ARCHIVE_IMPORT_FAILED",
-                "SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED",
                 "override fun onNewIntent(intent: Intent)",
                 "externalProjectModel.enqueue(intent)",
                 "ProjectTransferViewModel projectTransferState.completion ProjectReplacementDialog(",
@@ -120,6 +127,11 @@ def valid_sources() -> dict[str, str]:
             "projectViewIntentRejectsNetworkAndUnrelatedBinaryUris "
             "Intent.ACTION_VIEW Intent.FLAG_GRANT_READ_URI_PERMISSION "
             "scenario.recreate() OnDeviceSlicer.slice("
+        ),
+        "CreatedDocumentLifecycleInstrumentedTest.kt": (
+            "failedProjectArchiveExportDeletesTheNewDocument "
+            "BlockingExportProvider.METHOD_PREPARE_FAILURE model.exportProject( "
+            "BlockingExportProvider.KEY_DELETED"
         ),
         "NativeEngineInstrumentedTest.kt": (
             "projectArchiveRoundTripReinspectsAndSlicesOnArm64 "
@@ -167,7 +179,8 @@ def valid_sources() -> dict[str, str]:
         ),
         "CONTRIBUTING.md": (
             "Project history, active slicing options, restoration, and debounced persistence "
-            "same Activity-retained owner process-death recovery"
+            "same Activity-retained owner process-death recovery "
+            "Every `CreateDocument` writer delete it after cancellation or failure"
         ),
     }
 
@@ -260,6 +273,14 @@ class VerifyProjectArchiveTest(unittest.TestCase):
         sources = valid_sources()
         sources["MainActivity.kt"] += " mutableStateOf(ProjectHistoryState())"
         with self.assertRaisesRegex(VerificationError, "session persistence"):
+            verify_project_archive(sources)
+
+    def test_rejects_partial_project_export_cleanup(self) -> None:
+        sources = valid_sources()
+        sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
+            "deleteFailedCreatedDocument(application, uri)", "leave partial archive"
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
             verify_project_archive(sources)
 
 

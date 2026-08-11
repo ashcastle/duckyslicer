@@ -1,6 +1,7 @@
 package com.ashcastle.duckyslicer
 
 import android.app.Application
+import android.content.ContentResolver
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -506,6 +507,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         snapshot: ProjectSnapshot,
         sliceOptions: SliceOptions,
     ): Boolean {
+        if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
         if (
             mutableState.value.busy || mutableState.value.completion != null ||
             mutableState.value.editCompletion != null
@@ -513,8 +515,9 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         val operationId = ++nextOperationId
         mutableState.value = mutableState.value.copy(busy = true)
         viewModelScope.launch(Dispatchers.IO) {
+            val application = getApplication<Application>()
             val completion = try {
-                getApplication<Application>().contentResolver.openOutputStream(uri).use { output ->
+                application.contentResolver.openOutputStream(uri, "wt").use { output ->
                     projectStore.exportArchive(
                         snapshot,
                         sliceOptions,
@@ -523,8 +526,11 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 }
                 ProjectTransferCompletion.Exported(operationId, uri)
             } catch (failure: CancellationException) {
+                deleteFailedCreatedDocument(application, uri)
                 throw failure
             } catch (_: Exception) {
+                deleteFailedCreatedDocument(application, uri)
+                supportEvents.record(SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED)
                 ProjectTransferCompletion.Failed(
                     operationId,
                     uri,

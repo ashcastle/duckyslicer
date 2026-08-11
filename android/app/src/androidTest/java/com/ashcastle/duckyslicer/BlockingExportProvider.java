@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 
 import java.io.ByteArrayOutputStream;
+import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.util.concurrent.CountDownLatch;
@@ -17,6 +18,8 @@ public final class BlockingExportProvider extends ContentProvider {
     public static final String AUTHORITY = "com.ashcastle.duckyslicer.test.blocking-export";
     public static final Uri URI = Uri.parse("content://" + AUTHORITY + "/export.gcode");
     public static final String METHOD_PREPARE = "prepare";
+    public static final String METHOD_PREPARE_OPEN_BLOCK = "prepare_open_block";
+    public static final String METHOD_PREPARE_FAILURE = "prepare_failure";
     public static final String METHOD_RELEASE = "release";
     public static final String METHOD_STATUS = "status";
     public static final String KEY_STARTED = "started";
@@ -26,7 +29,10 @@ public final class BlockingExportProvider extends ContentProvider {
     public static final String KEY_SHA256 = "sha256";
     public static final String KEY_ERROR = "error";
     private static final long TIMEOUT_SECONDS = 20L;
-    private static volatile Session current = new Session();
+    private static final int MODE_STREAM_BLOCK = 0;
+    private static final int MODE_OPEN_BLOCK = 1;
+    private static final int MODE_FAIL_OPEN = 2;
+    private static volatile Session current = new Session(MODE_STREAM_BLOCK);
 
     @Override
     public boolean onCreate() {
@@ -74,8 +80,15 @@ public final class BlockingExportProvider extends ContentProvider {
     @Override
     public synchronized Bundle call(String method, String arg, Bundle extras) {
         if (METHOD_PREPARE.equals(method)) {
-            current.release.countDown();
-            current = new Session();
+            reset(MODE_STREAM_BLOCK);
+            return Bundle.EMPTY;
+        }
+        if (METHOD_PREPARE_OPEN_BLOCK.equals(method)) {
+            reset(MODE_OPEN_BLOCK);
+            return Bundle.EMPTY;
+        }
+        if (METHOD_PREPARE_FAILURE.equals(method)) {
+            reset(MODE_FAIL_OPEN);
             return Bundle.EMPTY;
         }
         if (METHOD_RELEASE.equals(method)) {
@@ -89,13 +102,34 @@ public final class BlockingExportProvider extends ContentProvider {
     }
 
     @Override
-    public ParcelFileDescriptor openFile(Uri uri, String mode) {
+    public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
         if (!mode.contains("w")) {
             throw new IllegalArgumentException("Blocking export provider is write-only");
         }
+        Session target = current;
+        if (target.mode == MODE_FAIL_OPEN) {
+            target.started = true;
+            target.completed = true;
+            target.error = "FileNotFoundException";
+            throw new FileNotFoundException("Intentional export failure");
+        }
+        if (target.mode == MODE_OPEN_BLOCK) {
+            target.started = true;
+            try {
+                if (!target.release.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                    target.error = "OpenTimeout";
+                    target.completed = true;
+                    throw new FileNotFoundException("Blocking export was not released");
+                }
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                target.error = "InterruptedException";
+                target.completed = true;
+                throw new FileNotFoundException("Blocking export was interrupted");
+            }
+        }
         try {
             ParcelFileDescriptor[] pipe = ParcelFileDescriptor.createPipe();
-            Session target = current;
             new Thread(
                     () -> readExport(pipe[0], target),
                     "Ducky blocking export provider"
@@ -104,6 +138,11 @@ public final class BlockingExportProvider extends ContentProvider {
         } catch (Exception error) {
             throw new IllegalStateException("Could not create blocking export pipe", error);
         }
+    }
+
+    private static void reset(int mode) {
+        current.release.countDown();
+        current = new Session(mode);
     }
 
     private static void readExport(ParcelFileDescriptor readSide, Session target) {
@@ -141,6 +180,7 @@ public final class BlockingExportProvider extends ContentProvider {
     }
 
     private static final class Session {
+        final int mode;
         final CountDownLatch release = new CountDownLatch(1);
         volatile boolean started;
         volatile boolean completed;
@@ -148,6 +188,10 @@ public final class BlockingExportProvider extends ContentProvider {
         volatile int bytes;
         volatile String sha256 = "";
         volatile String error = "";
+
+        Session(int mode) {
+            this.mode = mode;
+        }
 
         Bundle toBundle() {
             Bundle value = new Bundle();

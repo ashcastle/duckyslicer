@@ -39,6 +39,7 @@ EXPECTED_EVENTS = {
     "REMOTE_STORAGE_UNAVAILABLE",
     "SLICE_FAILED",
     "SLICING_PROFILE_SAVE_FAILED",
+    "SUPPORT_REPORT_EXPORT_FAILED",
 }
 EXPECTED_EXIT_REASONS = {
     "UNKNOWN": 0,
@@ -149,9 +150,12 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
         "ProfileLibraryViewModel.kt",
         "AppSettingsViewModel.kt",
         "GcodeExportViewModel.kt",
+        "SupportReportExportViewModel.kt",
+        "CreatedDocument.kt",
         "AppSettingsSheet.kt",
         "SupportDiagnosticsTest.kt",
         "SupportDiagnosticsInstrumentedTest.kt",
+        "CreatedDocumentLifecycleInstrumentedTest.kt",
         "AccessibilityInstrumentedTest.kt",
         "strings.xml",
         "strings-ko.xml",
@@ -251,7 +255,8 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
         sources["RemoteOperationViewModel.kt"] +
         sources["ProfileLibraryViewModel.kt"] +
         sources["AppSettingsViewModel.kt"] +
-        sources["GcodeExportViewModel.kt"]
+        sources["GcodeExportViewModel.kt"] +
+        sources["SupportReportExportViewModel.kt"]
     )
     unrecorded = sorted(
         event for event in events if f"SupportEvent.{event}" not in event_recorders
@@ -264,15 +269,50 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
                 "retained project diagnostics are missing: " + retained_event
             )
 
+    exporter = sources["SupportReportExportViewModel.kt"]
+    for marker in (
+        "class SupportReportExportViewModel(application: Application) : AndroidViewModel(application)",
+        "viewModelScope.launch(Dispatchers.IO)",
+        "uri.scheme != ContentResolver.SCHEME_CONTENT",
+        'openOutputStream(uri, "wt")',
+        "createSupportReport(application, snapshot)",
+        "writeSupportReport(",
+        "deleteFailedCreatedDocument(application, uri)",
+        "SupportEvent.SUPPORT_REPORT_EXPORT_FAILED",
+    ):
+        if marker not in exporter:
+            raise VerificationError(f"retained support export is missing: {marker}")
+    created_document = sources["CreatedDocument.kt"]
+    for marker in (
+        "fun deleteFailedCreatedDocument(context: Context, uri: Uri)",
+        "DocumentsContract.deleteDocument",
+        "resolver.delete(uri, null, null)",
+    ):
+        if marker not in created_document:
+            raise VerificationError(f"support export rollback is missing: {marker}")
     settings = sources["AppSettingsSheet.kt"]
     for marker in (
         'ActivityResultContracts.CreateDocument("text/plain")',
-        "createSupportReport(context.applicationContext, settings)",
-        "writeSupportReport(output, report)",
+        "supportReportExportState",
+        "onSupportReportExport",
         'SUPPORT_REPORT_FILE_NAME = "DuckySlicer-support.txt"',
     ):
         if marker not in settings:
             raise VerificationError(f"user-chosen support export is missing: {marker}")
+    for forbidden in (
+        "rememberCoroutineScope",
+        "openOutputStream(uri)",
+        "createSupportReport(context.applicationContext, settings)",
+    ):
+        if forbidden in settings:
+            raise VerificationError("support export is still owned by the Settings composition")
+    main_activity = sources["MainActivity.kt"]
+    for marker in (
+        "ViewModelProvider(this)[SupportReportExportViewModel::class.java]",
+        "supportReportExportModel.export(uri, appSettings)",
+    ):
+        if marker not in main_activity:
+            raise VerificationError(f"retained support export dispatch is missing: {marker}")
     for resource in REQUIRED_STRINGS:
         if f"R.string.{resource}" not in settings:
             raise VerificationError(f"support UI does not use localized copy: {resource}")
@@ -333,6 +373,15 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
             raise VerificationError(f"support ARM64 regression is missing: {marker}")
     if "appSettingsExposeAVisibleSupportDetailsAction" not in accessibility_test:
         raise VerificationError("support accessibility regression is missing")
+    lifecycle_test = sources["CreatedDocumentLifecycleInstrumentedTest.kt"]
+    for marker in (
+        "supportReportExportSurvivesActivityRecreationAndRejectsDuplicateWork",
+        "assertSame(",
+        "assertFalse(retained.export(",
+        "MAX_SUPPORT_REPORT_BYTES",
+    ):
+        if marker not in lifecycle_test:
+            raise VerificationError(f"retained support export regression is missing: {marker}")
 
 
 def read_sources() -> dict[str, str]:
@@ -358,6 +407,10 @@ def read_sources() -> dict[str, str]:
         "GcodeExportViewModel.kt": (package / "GcodeExportViewModel.kt").read_text(
             encoding="utf-8"
         ),
+        "SupportReportExportViewModel.kt": (
+            package / "SupportReportExportViewModel.kt"
+        ).read_text(encoding="utf-8"),
+        "CreatedDocument.kt": (package / "CreatedDocument.kt").read_text(encoding="utf-8"),
         "AppSettingsSheet.kt": (package / "AppSettingsSheet.kt").read_text(encoding="utf-8"),
         "SupportDiagnosticsTest.kt": (
             ROOT
@@ -366,6 +419,10 @@ def read_sources() -> dict[str, str]:
         "SupportDiagnosticsInstrumentedTest.kt": (
             ROOT
             / "android/app/src/androidTest/java/com/ashcastle/duckyslicer/SupportDiagnosticsInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "CreatedDocumentLifecycleInstrumentedTest.kt": (
+            ROOT
+            / "android/app/src/androidTest/java/com/ashcastle/duckyslicer/CreatedDocumentLifecycleInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "AccessibilityInstrumentedTest.kt": (
             ROOT

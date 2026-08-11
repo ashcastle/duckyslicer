@@ -1,5 +1,6 @@
 package com.ashcastle.duckyslicer
 
+import android.net.Uri
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -358,6 +359,7 @@ internal fun WorkspaceScreen(
     remoteMessageIsError: Boolean,
     profileBusy: Boolean,
     appSettingsSaveFailed: Boolean,
+    supportReportExportState: SupportReportExportState,
     sliceOutcome: SliceOutcome?,
     layerPreview: GcodeLayerPreview?,
     importing: Boolean,
@@ -410,6 +412,7 @@ internal fun WorkspaceScreen(
     onSaveSlicingProfile: (String, SliceOptions) -> Unit,
     onLayerRangeSelected: (Int, Int) -> Unit,
     onAppSettingsChanged: (AppSettings) -> Unit,
+    onSupportReportExport: (Uri) -> Unit,
     onRemoteDeviceSelected: (String) -> Unit,
     onRemoteDeviceSaved: (RemoteDeviceDraft) -> Unit,
     onRemoteDeviceDeleted: (String) -> Unit,
@@ -767,7 +770,9 @@ internal fun WorkspaceScreen(
                 WorkspaceTab.SETTINGS -> AppSettingsSheet(
                     settings = appSettings,
                     saveFailed = appSettingsSaveFailed,
+                    supportReportExportState = supportReportExportState,
                     onSettingsChanged = onAppSettingsChanged,
+                    onSupportReportExport = onSupportReportExport,
                     modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
                 )
             }

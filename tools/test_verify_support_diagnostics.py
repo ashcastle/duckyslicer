@@ -21,7 +21,11 @@ def string_resources() -> str:
 def valid_sources() -> dict[str, str]:
     event_enum = "\n".join(f"    {event}," for event in sorted(EXPECTED_EVENTS))
     remote_events = {event for event in EXPECTED_EVENTS if event.startswith("REMOTE_")}
-    project_events = {"PROJECT_SAVE_FAILED", "PROJECT_STORAGE_UNAVAILABLE"}
+    project_events = {
+        "PROJECT_ARCHIVE_EXPORT_FAILED",
+        "PROJECT_SAVE_FAILED",
+        "PROJECT_STORAGE_UNAVAILABLE",
+    }
     profile_events = {
         "FILAMENT_PROFILE_SAVE_FAILED",
         "PRINTER_PROFILE_SAVE_FAILED",
@@ -30,6 +34,7 @@ def valid_sources() -> dict[str, str]:
     }
     settings_events = {"APP_SETTINGS_SAVE_FAILED"}
     gcode_events = {"GCODE_EXPORT_FAILED"}
+    support_export_events = {"SUPPORT_REPORT_EXPORT_FAILED"}
     event_calls = " ".join(
         f"SupportEvent.{event}"
         for event in EXPECTED_EVENTS
@@ -38,12 +43,16 @@ def valid_sources() -> dict[str, str]:
         - profile_events
         - settings_events
         - gcode_events
+        - support_export_events
     )
     project_event_calls = " ".join(f"SupportEvent.{event}" for event in project_events)
     remote_event_calls = " ".join(f"SupportEvent.{event}" for event in remote_events)
     profile_event_calls = " ".join(f"SupportEvent.{event}" for event in profile_events)
     settings_event_calls = " ".join(f"SupportEvent.{event}" for event in settings_events)
     gcode_event_calls = " ".join(f"SupportEvent.{event}" for event in gcode_events)
+    support_export_event_calls = " ".join(
+        f"SupportEvent.{event}" for event in support_export_events
+    )
     string_calls = " ".join(f"R.string.{name}" for name in REQUIRED_STRINGS)
     exit_reasons = "\n".join(
         f"    {name}({code})," for name, code in EXPECTED_EXIT_REASONS.items()
@@ -100,16 +109,31 @@ def valid_sources() -> dict[str, str]:
             "supportProcessKind(context.packageName, info.processName) "
             "SupportExitReason.fromPlatformCode(info.reason)"
         ),
-        "MainActivity.kt": event_calls,
+        "MainActivity.kt": (
+            event_calls +
+            " ViewModelProvider(this)[SupportReportExportViewModel::class.java] "
+            "supportReportExportModel.export(uri, appSettings)"
+        ),
         "ProjectTransfer.kt": project_event_calls,
         "RemoteOperationViewModel.kt": remote_event_calls,
         "ProfileLibraryViewModel.kt": profile_event_calls,
         "AppSettingsViewModel.kt": settings_event_calls,
         "GcodeExportViewModel.kt": gcode_event_calls,
+        "SupportReportExportViewModel.kt": (
+            "class SupportReportExportViewModel(application: Application) : "
+            "AndroidViewModel(application) viewModelScope.launch(Dispatchers.IO) "
+            "uri.scheme != ContentResolver.SCHEME_CONTENT "
+            "openOutputStream(uri, \"wt\") createSupportReport(application, snapshot) "
+            "writeSupportReport( deleteFailedCreatedDocument(application, uri) "
+            f"{support_export_event_calls}"
+        ),
+        "CreatedDocument.kt": (
+            "fun deleteFailedCreatedDocument(context: Context, uri: Uri) "
+            "DocumentsContract.deleteDocument resolver.delete(uri, null, null)"
+        ),
         "AppSettingsSheet.kt": (
             'ActivityResultContracts.CreateDocument("text/plain") '
-            "createSupportReport(context.applicationContext, settings) "
-            "writeSupportReport(output, report) "
+            "supportReportExportState onSupportReportExport "
             'SUPPORT_REPORT_FILE_NAME = "DuckySlicer-support.txt" '
             f"{string_calls}"
         ),
@@ -128,6 +152,10 @@ def valid_sources() -> dict[str, str]:
             "Os.sysconf(OsConstants._SC_PAGESIZE) "
             "pageSizeBytes == 4_096L || pageSizeBytes == 16_384L "
             "page_size_bytes=$pageSizeBytes"
+        ),
+        "CreatedDocumentLifecycleInstrumentedTest.kt": (
+            "supportReportExportSurvivesActivityRecreationAndRejectsDuplicateWork "
+            "assertSame( assertFalse(retained.export( MAX_SUPPORT_REPORT_BYTES"
         ),
         "AccessibilityInstrumentedTest.kt": "appSettingsExposeAVisibleSupportDetailsAction",
         "strings.xml": string_resources(),
@@ -195,6 +223,20 @@ class VerifySupportDiagnosticsTest(unittest.TestCase):
             "automaticUpload()",
         )
         with self.assertRaisesRegex(VerificationError, "user-chosen"):
+            verify_support_diagnostics(sources)
+
+    def test_rejects_composition_owned_support_export(self) -> None:
+        sources = valid_sources()
+        sources["AppSettingsSheet.kt"] += " rememberCoroutineScope openOutputStream(uri)"
+        with self.assertRaisesRegex(VerificationError, "Settings composition"):
+            verify_support_diagnostics(sources)
+
+    def test_rejects_missing_support_export_rollback(self) -> None:
+        sources = valid_sources()
+        sources["SupportReportExportViewModel.kt"] = sources[
+            "SupportReportExportViewModel.kt"
+        ].replace("deleteFailedCreatedDocument(application, uri)", "leave partial report")
+        with self.assertRaisesRegex(VerificationError, "retained support export"):
             verify_support_diagnostics(sources)
 
     def test_rejects_fixed_page_size_device_regression(self) -> None:

@@ -32,10 +32,15 @@ def valid_sources() -> dict[str, str]:
             "gcodeExportModel.export(uri, completed)"
         ),
         "SliceOperationViewModel.kt": "SliceArtifactLease.acquire(outcome.output)",
+        "CreatedDocument.kt": (
+            "fun deleteFailedCreatedDocument(context: Context, uri: Uri) "
+            "ContentResolver.SCHEME_CONTENT DocumentsContract.deleteDocument "
+            "resolver.delete(uri, null, null)"
+        ),
         "GcodeExportViewModel.kt": (
             "class GcodeExportViewModel(application: Application) : AndroidViewModel(application) "
             "viewModelScope.launch(Dispatchers.IO) SliceArtifactLease.acquire(source) "
-            "openOutputStream(uri, \"wt\") cleanupFailedDocument "
+            "openOutputStream(uri, \"wt\") deleteFailedCreatedDocument(application, uri) "
             "SupportEvent.GCODE_EXPORT_FAILED"
         ),
         "RemoteDevice.kt": "SliceArtifactLease.acquire(gcode)",
@@ -96,6 +101,14 @@ class VerifySliceStorageTest(unittest.TestCase):
         sources = valid_sources()
         sources["MainActivity.kt"] += " rememberCoroutineScope() openOutputStream(uri)"
         with self.assertRaisesRegex(VerificationError, "Activity composition"):
+            verify_slice_storage(sources)
+
+    def test_rejects_missing_failed_document_cleanup(self) -> None:
+        sources = valid_sources()
+        sources["GcodeExportViewModel.kt"] = sources["GcodeExportViewModel.kt"].replace(
+            "deleteFailedCreatedDocument(application, uri)", "leave partial output"
+        )
+        with self.assertRaisesRegex(VerificationError, "retained G-code export"):
             verify_slice_storage(sources)
 
     def test_rejects_text_plain_gcode_export(self) -> None:

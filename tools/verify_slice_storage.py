@@ -22,6 +22,7 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "runtime.patch",
         "MainActivity.kt",
         "SliceOperationViewModel.kt",
+        "CreatedDocument.kt",
         "GcodeExportViewModel.kt",
         "RemoteDevice.kt",
         "SliceArtifactStoreTest.kt",
@@ -97,12 +98,21 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
 
     main_activity = sources["MainActivity.kt"]
     exporter = sources["GcodeExportViewModel.kt"]
+    created_document = sources["CreatedDocument.kt"]
+    for marker in (
+        "fun deleteFailedCreatedDocument(context: Context, uri: Uri)",
+        "ContentResolver.SCHEME_CONTENT",
+        "DocumentsContract.deleteDocument",
+        "resolver.delete(uri, null, null)",
+    ):
+        if marker not in created_document:
+            raise VerificationError(f"failed created-document cleanup is missing: {marker}")
     for marker in (
         "class GcodeExportViewModel(application: Application) : AndroidViewModel(application)",
         "viewModelScope.launch(Dispatchers.IO)",
         "SliceArtifactLease.acquire(source)",
         'openOutputStream(uri, "wt")',
-        "cleanupFailedDocument",
+        "deleteFailedCreatedDocument(application, uri)",
         "SupportEvent.GCODE_EXPORT_FAILED",
     ):
         if marker not in exporter:
@@ -186,6 +196,7 @@ def read_sources() -> dict[str, str]:
         "SliceOperationViewModel.kt": (main / "SliceOperationViewModel.kt").read_text(
             encoding="utf-8"
         ),
+        "CreatedDocument.kt": (main / "CreatedDocument.kt").read_text(encoding="utf-8"),
         "GcodeExportViewModel.kt": (main / "GcodeExportViewModel.kt").read_text(
             encoding="utf-8"
         ),

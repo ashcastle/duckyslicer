@@ -171,7 +171,9 @@ private fun SettingsAccessibilityHarness() {
     AppSettingsSheet(
         settings = settings,
         saveFailed = false,
+        supportReportExportState = SupportReportExportState(),
         onSettingsChanged = { settings = it },
+        onSupportReportExport = {},
     )
 }
 
@@ -198,6 +200,7 @@ private fun WorkspaceAccessibilityHarness(
         remoteMessageIsError = false,
         profileBusy = false,
         appSettingsSaveFailed = false,
+        supportReportExportState = SupportReportExportState(),
         sliceOutcome = null,
         layerPreview = null,
         importing = false,
@@ -250,6 +253,7 @@ private fun WorkspaceAccessibilityHarness(
         onSaveSlicingProfile = { _, _ -> },
         onLayerRangeSelected = { _, _ -> },
         onAppSettingsChanged = {},
+        onSupportReportExport = {},
         onRemoteDeviceSelected = {},
         onRemoteDeviceSaved = {},
         onRemoteDeviceDeleted = {},
