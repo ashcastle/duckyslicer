@@ -152,6 +152,24 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun activeRemoteRequestExposesOneNamedStopAction() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val stopLabel = context.getString(R.string.stop_remote_request)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_REMOTE_REQUEST).use {
+            val nodes = waitForNodes(setOf(stopLabel))
+            val actions = nodes.filter {
+                it.isVisibleToUser && it.isFocusable && it.isClickable &&
+                    it.effectiveLabel() == stopLabel
+            }
+            assertEquals(
+                "An active remote request must expose one visible, focusable stop action",
+                1,
+                actions.size,
+            )
+        }
+    }
+
+    @Test
     fun appSettingsExposeNamedSlidersWholeRowSwitchesAndHeadings() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val sliderLabels = setOf(

@@ -85,9 +85,11 @@ def valid_sources() -> dict[str, str]:
             "addresses.all(::isPrivateOrLocalAddress) val url = endpoint.uri.toURL() "
             "url.openConnection(Proxy.NO_PROXY) "
             "endpoint.hostHeader?.let isUniqueLocalIpv6 safeRemotePath connection.disconnect() "
-            "class RemoteUploadCancellation connection?.disconnect() "
-            "cancellation.attach(connection) cancellation.throwIfRequested() "
-            "cancellation.complete() RemoteUploadCancelledException "
+            "class RemoteRequestCancellation connection?.disconnect() "
+            "cancellation.attach(connection) cancellation.attach(connection) "
+            "cancellation.throwIfRequested() cancellation.complete() "
+            "RemoteRequestCancelledException internal fun status( internal fun upload( "
+            "internal fun start( internal fun pause( internal fun resume( internal fun cancel( "
             "fun save(draft: RemoteDeviceDraft) endpointChanged stagedCredential "
             "credentialKey = credentialKey stagedCredential?.let write(profiles.sortedBy "
             "secrets.remove(stagedCredentialKey) return load().first "
@@ -102,8 +104,9 @@ def valid_sources() -> dict[str, str]:
             "activeArtifactRevision invalidateRemoteUpload withRemoteUploadProgress "
             "RemoteStatusSnapshot SupportEvent.REMOTE_COMMAND_FAILED "
             "fun saveProfile( fun deleteProfile( profilesLoaded selectedProfileId "
-            "ActiveRemoteUpload activeRemoteUpload fun cancelUpload() "
-            "withRemoteUploadCancellationRequested RemoteOperationOutcome.UploadCanceled "
+            "RemoteNetworkOperationKind activeNetworkOperation "
+            "ActiveRemoteRequest activeRemoteRequest fun cancelActiveRequest() "
+            "withRemoteRequestCancellationRequested RemoteOperationOutcome.RequestCanceled "
             "finishOperation( override fun onCleared() "
             "remoteDeviceStore.load() remoteDeviceStore.save(draft) "
             "remoteDeviceStore.delete(profileId) "
@@ -115,7 +118,7 @@ def valid_sources() -> dict[str, str]:
             "remoteOperationModel.state.collectAsStateWithLifecycle() "
             "selectedRemoteDeviceId = remoteOperationState.selectedProfileId "
             "remoteOperationModel.invalidateUpload() "
-            "remoteOperationModel.cancelUpload() "
+            "remoteOperationModel.cancelActiveRequest() "
             "ViewModelProvider(this)[ProfileLibraryViewModel::class.java] "
             "profileLibraryModel.state.collectAsStateWithLifecycle() "
             "completion.optionsForSession(session.sessionRevision) "
@@ -140,8 +143,9 @@ def valid_sources() -> dict[str, str]:
         ),
         "DeviceSheet.kt": (
             ".selectable( selected = true enabled = !busy ), "
-            "uploadActive: Boolean uploadCancellationRequested: Boolean "
-            "onCancelUpload: () -> Unit R.string.cancel_upload R.string.canceling_upload"
+            "requestActive: Boolean uploadActive: Boolean requestCancellationRequested: Boolean "
+            "onCancelRequest: () -> Unit R.string.cancel_upload R.string.canceling_upload "
+            "R.string.stop_remote_request R.string.stopping_remote_request"
         ),
         "DurableJsonFileTest.kt": (
             "validPrimaryCreatesBackupAndCorruptionRecoversIt "
@@ -171,6 +175,8 @@ def valid_sources() -> dict[str, str]:
             "invalidatedUploadCannotBecomePrintable "
             "explicitUploadCancellationStopsProgressAndReportsOneTerminalNotice "
             "invalidatingAnActiveUploadKeepsItsCancellationSilent "
+            "refreshCancellationRejectsDuplicatesAndLateSuccess "
+            "commandCancellationCannotApplyALateStateChange "
             "commandCompletionRetainsFileAndUpdatesState "
             "profileSaveSelectsTheDurableResultAndClearsOldPrinterState "
             "deletingTheSelectedProfileChoosesTheFirstRemainingProfile"
@@ -186,9 +192,17 @@ def valid_sources() -> dict[str, str]:
         "RemoteDeviceInstrumentedTest.kt": (
             "retainedUploadCancellationStopsItsConnectionAcrossActivityRecreation "
             "remoteRefreshSurvivesActivityRecreationAndRejectsDuplicateWork "
+            "retainedRefreshCancellationDisconnectsExactRequestAndAllowsFollowUp "
+            "finalRemoteOwnerDisconnectsBlockedCommand "
             "remoteProfileSaveAndSelectionSurviveActivityRecreation "
             "remoteDeviceMetadataRecoversFromLastKnownGoodBackup "
             "cleartextHostnameRequestUsesOneValidatedPinnedAddress"
+        ),
+        "AccessibilityInstrumentedTest.kt": (
+            "activeRemoteRequestExposesOneNamedStopAction SCREEN_REMOTE_REQUEST"
+        ),
+        "AccessibilityHarnessActivity.kt": (
+            "SCREEN_REMOTE_REQUEST DeviceAccessibilityHarness(requestActive = true)"
         ),
         "ProfileLibraryInstrumentedTest.kt": (
             "profileSaveAndRecentSelectionSurviveImmediateActivityRecreation "
@@ -226,7 +240,7 @@ def valid_sources() -> dict[str, str]:
             "pin the connection target and bypass system proxies "
             "bind a replacement printer credential generation "
             "Bind every remote status, upload-progress, and command result "
-            "Remote operations and their busy state must "
+            "exact request-scoped cancellation must survive Activity recreation "
             "must never become eligible for Start Print "
             "must share that same retained "
             "Profile catalog loading, recent selections, and user-profile saves must share one "
@@ -248,7 +262,8 @@ def valid_sources() -> dict[str, str]:
             "Ordinary STL, 3MF, and OBJ import cancellation must interrupt the exact provider open "
             "matching isolated-worker request without deleting the user-selected source document"
             " disconnecting only its request-bound connection"
-            " stale cancellation must never stop a later upload or printer command"
+            " Final retained-owner clearance must stop that exact active connection"
+            " Stale cancellation must never stop a later refresh, upload, or printer command"
         ),
         "SECURITY.md": (
             "every current DNS answer DNS rebinding bypass system proxies "
@@ -258,11 +273,13 @@ def valid_sources() -> dict[str, str]:
         ),
         "strings.xml": (
             "saved_data_unavailable settings_save_error cancel_model_edit model_edit_canceled "
-            "cancel_upload canceling_upload upload_canceled"
+            "cancel_upload canceling_upload upload_canceled stop_remote_request "
+            "stopping_remote_request remote_request_canceled"
         ),
         "strings-ko.xml": (
             "saved_data_unavailable settings_save_error cancel_model_edit model_edit_canceled "
-            "cancel_upload canceling_upload upload_canceled"
+            "cancel_upload canceling_upload upload_canceled stop_remote_request "
+            "stopping_remote_request remote_request_canceled"
         ),
     }
 
@@ -469,7 +486,7 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "lifecycle contract"):
             verify_resilience(sources)
 
-    def test_rejects_remote_upload_without_request_scoped_socket_cancellation(self) -> None:
+    def test_rejects_remote_work_without_request_scoped_socket_cancellation(self) -> None:
         sources = valid_sources()
         sources["RemoteDevice.kt"] = sources["RemoteDevice.kt"].replace(
             "connection?.disconnect()", "leave stale upload connected"
@@ -477,12 +494,23 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "remote input containment"):
             verify_resilience(sources)
 
-    def test_rejects_remote_upload_cancellation_without_reachable_ui(self) -> None:
+    def test_rejects_remote_request_cancellation_without_reachable_ui(self) -> None:
         sources = valid_sources()
         sources["DeviceSheet.kt"] = sources["DeviceSheet.kt"].replace(
-            "onCancelUpload: () -> Unit", "hide upload cancellation"
+            "onCancelRequest: () -> Unit", "hide remote cancellation"
         )
         with self.assertRaisesRegex(VerificationError, "cancellation UI"):
+            verify_resilience(sources)
+
+    def test_rejects_missing_final_owner_remote_disconnect_regression(self) -> None:
+        sources = valid_sources()
+        sources["RemoteDeviceInstrumentedTest.kt"] = sources[
+            "RemoteDeviceInstrumentedTest.kt"
+        ].replace(
+            "finalRemoteOwnerDisconnectsBlockedCommand",
+            "leave blocked command alive",
+        )
+        with self.assertRaisesRegex(VerificationError, "resilience regression"):
             verify_resilience(sources)
 
     def test_rejects_printer_selection_during_remote_operation(self) -> None:

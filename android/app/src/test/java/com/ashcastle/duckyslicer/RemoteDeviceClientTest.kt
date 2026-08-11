@@ -266,7 +266,7 @@ class RemoteDeviceClientTest {
                 }
             }.onFailure(serverFailure::set)
         }.apply { start() }
-        val cancellation = RemoteUploadCancellation()
+        val cancellation = RemoteRequestCancellation()
         val uploadFailure = AtomicReference<Throwable?>(null)
         val profile = RemoteDeviceProfile(
             "cancel-upload",
@@ -304,7 +304,7 @@ class RemoteDeviceClientTest {
         }
 
         assertTrue("Disconnecting the exact upload socket must stop it promptly", stoppedPromptly)
-        assertTrue(uploadFailure.get() is RemoteUploadCancelledException)
+        assertTrue(uploadFailure.get() is RemoteRequestCancelledException)
         serverFailure.get()?.let { throw AssertionError("Blocked printer server failed", it) }
         assertFalse("Blocked printer server did not stop", serverWorker.isAlive)
 
@@ -319,7 +319,7 @@ class RemoteDeviceClientTest {
                     "",
                     followUp,
                     {},
-                    RemoteUploadCancellation(),
+                    RemoteRequestCancellation(),
                 )
                 assertEquals("follow-up.gcode", uploaded.remotePath)
             }

@@ -85,9 +85,9 @@ data class RemoteUpload(
     val displayName: String,
 )
 
-internal class RemoteUploadCancelledException : Exception("remote_upload_canceled")
+internal class RemoteRequestCancelledException : Exception("remote_request_canceled")
 
-internal class RemoteUploadCancellation {
+internal class RemoteRequestCancellation {
     private val lock = Any()
 
     @Volatile
@@ -106,16 +106,16 @@ internal class RemoteUploadCancellation {
     }
 
     fun throwIfRequested() {
-        if (cancellationRequested) throw RemoteUploadCancelledException()
+        if (cancellationRequested) throw RemoteRequestCancelledException()
     }
 
     fun attach(connection: HttpURLConnection) {
         synchronized(lock) {
             if (cancellationRequested) {
                 connection.disconnect()
-                throw RemoteUploadCancelledException()
+                throw RemoteRequestCancelledException()
             }
-            check(!completed && activeConnection == null) { "remote_upload_lifecycle_invalid" }
+            check(!completed && activeConnection == null) { "remote_request_lifecycle_invalid" }
             activeConnection = connection
         }
     }
@@ -128,8 +128,8 @@ internal class RemoteUploadCancellation {
 
     fun complete() {
         synchronized(lock) {
-            if (cancellationRequested) throw RemoteUploadCancelledException()
-            check(!completed) { "remote_upload_lifecycle_invalid" }
+            if (cancellationRequested) throw RemoteRequestCancelledException()
+            check(!completed) { "remote_request_lifecycle_invalid" }
             completed = true
             activeConnection = null
         }
@@ -497,12 +497,25 @@ class RemoteDeviceClient(
     private val timeoutMillis: Int,
     private val addressResolver: (String) -> List<InetAddress> = ::resolveRemoteAddresses,
 ) {
-    fun status(profile: RemoteDeviceProfile, credential: String): RemoteDeviceStatus {
+    fun status(profile: RemoteDeviceProfile, credential: String): RemoteDeviceStatus = status(
+        profile,
+        credential,
+        RemoteRequestCancellation(),
+    )
+
+    internal fun status(
+        profile: RemoteDeviceProfile,
+        credential: String,
+        cancellation: RemoteRequestCancellation,
+    ): RemoteDeviceStatus {
+        cancellation.throwIfRequested()
         profile.validate()?.let { throw IllegalArgumentException(it) }
-        return when (profile.kind) {
-            RemoteDeviceKind.OCTOPRINT -> octoPrintStatus(profile, credential)
-            RemoteDeviceKind.KLIPPER -> moonrakerStatus(profile, credential)
+        val status = when (profile.kind) {
+            RemoteDeviceKind.OCTOPRINT -> octoPrintStatus(profile, credential, cancellation)
+            RemoteDeviceKind.KLIPPER -> moonrakerStatus(profile, credential, cancellation)
         }
+        cancellation.complete()
+        return status
     }
 
     fun upload(
@@ -515,7 +528,7 @@ class RemoteDeviceClient(
         credential,
         gcode,
         onProgress,
-        RemoteUploadCancellation(),
+        RemoteRequestCancellation(),
     )
 
     internal fun upload(
@@ -523,7 +536,7 @@ class RemoteDeviceClient(
         credential: String,
         gcode: File,
         onProgress: (Int) -> Unit,
-        cancellation: RemoteUploadCancellation,
+        cancellation: RemoteRequestCancellation,
     ): RemoteUpload {
         cancellation.throwIfRequested()
         require(gcode.isFile) { "gcode_missing" }
@@ -550,7 +563,20 @@ class RemoteDeviceClient(
         return RemoteUpload(profile.id, remotePath, gcode.name)
     }
 
-    fun start(profile: RemoteDeviceProfile, credential: String, upload: RemoteUpload) {
+    fun start(profile: RemoteDeviceProfile, credential: String, upload: RemoteUpload) = start(
+        profile,
+        credential,
+        upload,
+        RemoteRequestCancellation(),
+    )
+
+    internal fun start(
+        profile: RemoteDeviceProfile,
+        credential: String,
+        upload: RemoteUpload,
+        cancellation: RemoteRequestCancellation,
+    ) {
+        cancellation.throwIfRequested()
         require(upload.profileId == profile.id) { "upload_device_mismatch" }
         val remotePath = safeRemotePath(upload.remotePath)
         when (profile.kind) {
@@ -560,21 +586,62 @@ class RemoteDeviceClient(
                 "POST",
                 "/api/files/local/${encodePath(remotePath)}",
                 "{\"command\":\"select\",\"print\":true}",
+                cancellation,
             )
             RemoteDeviceKind.KLIPPER -> request(
                 profile,
                 credential,
                 "POST",
                 "/printer/print/start?filename=${encodeQuery(remotePath)}",
+                cancellation = cancellation,
             )
         }
+        cancellation.complete()
     }
 
-    fun pause(profile: RemoteDeviceProfile, credential: String) = command(profile, credential, "pause")
-    fun resume(profile: RemoteDeviceProfile, credential: String) = command(profile, credential, "resume")
-    fun cancel(profile: RemoteDeviceProfile, credential: String) = command(profile, credential, "cancel")
+    fun pause(profile: RemoteDeviceProfile, credential: String) = pause(
+        profile,
+        credential,
+        RemoteRequestCancellation(),
+    )
 
-    private fun command(profile: RemoteDeviceProfile, credential: String, command: String) {
+    internal fun pause(
+        profile: RemoteDeviceProfile,
+        credential: String,
+        cancellation: RemoteRequestCancellation,
+    ) = command(profile, credential, "pause", cancellation)
+
+    fun resume(profile: RemoteDeviceProfile, credential: String) = resume(
+        profile,
+        credential,
+        RemoteRequestCancellation(),
+    )
+
+    internal fun resume(
+        profile: RemoteDeviceProfile,
+        credential: String,
+        cancellation: RemoteRequestCancellation,
+    ) = command(profile, credential, "resume", cancellation)
+
+    fun cancel(profile: RemoteDeviceProfile, credential: String) = cancel(
+        profile,
+        credential,
+        RemoteRequestCancellation(),
+    )
+
+    internal fun cancel(
+        profile: RemoteDeviceProfile,
+        credential: String,
+        cancellation: RemoteRequestCancellation,
+    ) = command(profile, credential, "cancel", cancellation)
+
+    private fun command(
+        profile: RemoteDeviceProfile,
+        credential: String,
+        command: String,
+        cancellation: RemoteRequestCancellation,
+    ) {
+        cancellation.throwIfRequested()
         when (profile.kind) {
             RemoteDeviceKind.OCTOPRINT -> {
                 val octoCommand = if (command == "cancel") {
@@ -582,19 +649,31 @@ class RemoteDeviceClient(
                 } else {
                     "{\"command\":\"pause\",\"action\":\"$command\"}"
                 }
-                request(profile, credential, "POST", "/api/job", octoCommand)
+                request(profile, credential, "POST", "/api/job", octoCommand, cancellation)
             }
             RemoteDeviceKind.KLIPPER -> request(
                 profile,
                 credential,
                 "POST",
                 "/printer/print/$command",
+                cancellation = cancellation,
             )
         }
+        cancellation.complete()
     }
 
-    private fun octoPrintStatus(profile: RemoteDeviceProfile, credential: String): RemoteDeviceStatus {
-        val response = request(profile, credential, "GET", "/api/job")
+    private fun octoPrintStatus(
+        profile: RemoteDeviceProfile,
+        credential: String,
+        cancellation: RemoteRequestCancellation,
+    ): RemoteDeviceStatus {
+        val response = request(
+            profile,
+            credential,
+            "GET",
+            "/api/job",
+            cancellation = cancellation,
+        )
         return RemoteDeviceStatus(
             state = response.optString("state", "Unknown").take(200),
             fileName = response.optJSONObject("job")?.optJSONObject("file")?.optString("name")
@@ -604,12 +683,17 @@ class RemoteDeviceClient(
         )
     }
 
-    private fun moonrakerStatus(profile: RemoteDeviceProfile, credential: String): RemoteDeviceStatus {
+    private fun moonrakerStatus(
+        profile: RemoteDeviceProfile,
+        credential: String,
+        cancellation: RemoteRequestCancellation,
+    ): RemoteDeviceStatus {
         val response = request(
             profile,
             credential,
             "GET",
             "/printer/objects/query?print_stats&virtual_sdcard",
+            cancellation = cancellation,
         )
         val status = response.optJSONObject("result")?.optJSONObject("status")
         val printStats = status?.optJSONObject("print_stats")
@@ -629,19 +713,30 @@ class RemoteDeviceClient(
         method: String,
         path: String,
         body: String? = null,
+        cancellation: RemoteRequestCancellation,
     ): JSONObject {
+        cancellation.throwIfRequested()
         val connection = open(profile, credential, path)
         return try {
+            cancellation.attach(connection)
+            cancellation.throwIfRequested()
             connection.requestMethod = method
             if (body != null) {
+                cancellation.throwIfRequested()
                 connection.doOutput = true
                 connection.setRequestProperty("Content-Type", "application/json")
                 connection.outputStream.bufferedWriter().use { it.write(body) }
             }
-            connection.readJsonResponse()
-        } catch (failure: Throwable) {
-            connection.disconnect()
+            cancellation.throwIfRequested()
+            connection.readJsonResponse().also { cancellation.throwIfRequested() }
+        } catch (failure: Exception) {
+            if (cancellation.wasRequested() && failure !is RemoteRequestCancelledException) {
+                throw RemoteRequestCancelledException()
+            }
             throw failure
+        } finally {
+            cancellation.detach(connection)
+            connection.disconnect()
         }
     }
 
@@ -652,7 +747,7 @@ class RemoteDeviceClient(
         fields: Map<String, String>,
         file: File,
         onProgress: (Int) -> Unit,
-        cancellation: RemoteUploadCancellation,
+        cancellation: RemoteRequestCancellation,
     ): JSONObject {
         val boundary = "DuckySlicer-${UUID.randomUUID()}"
         val preamble = buildString {
@@ -706,8 +801,8 @@ class RemoteDeviceClient(
             cancellation.throwIfRequested()
             connection.readJsonResponse()
         } catch (failure: Exception) {
-            if (cancellation.wasRequested() && failure !is RemoteUploadCancelledException) {
-                throw RemoteUploadCancelledException()
+            if (cancellation.wasRequested() && failure !is RemoteRequestCancelledException) {
+                throw RemoteRequestCancelledException()
             }
             throw failure
         } finally {

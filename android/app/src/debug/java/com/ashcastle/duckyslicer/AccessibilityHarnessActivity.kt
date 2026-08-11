@@ -31,6 +31,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                     when (intent.getStringExtra(EXTRA_SCREEN)) {
                         SCREEN_PROFILE -> ProfileAccessibilityHarness()
                         SCREEN_DEVICE -> DeviceAccessibilityHarness()
+                        SCREEN_REMOTE_REQUEST -> DeviceAccessibilityHarness(requestActive = true)
                         SCREEN_SETTINGS -> SettingsAccessibilityHarness()
                         SCREEN_SUPPORT_EXPORT -> SettingsAccessibilityHarness(supportExporting = true)
                         SCREEN_PROJECT -> WorkspaceAccessibilityHarness(
@@ -86,6 +87,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_PREVIEW = "preview"
         const val SCREEN_PROFILE = "profile"
         const val SCREEN_DEVICE = "device"
+        const val SCREEN_REMOTE_REQUEST = "remote-request"
         const val SCREEN_SETTINGS = "settings"
         const val SCREEN_SUPPORT_EXPORT = "support-export"
         const val SCREEN_PROJECT = "project"
@@ -159,7 +161,7 @@ private fun ProfileAccessibilityHarness() {
 }
 
 @Composable
-private fun DeviceAccessibilityHarness() {
+private fun DeviceAccessibilityHarness(requestActive: Boolean = false) {
     DeviceSheet(
         profiles = listOf(
             RemoteDeviceProfile(
@@ -169,14 +171,15 @@ private fun DeviceAccessibilityHarness() {
                 baseUrl = "http://127.0.0.1",
             ),
         ),
-        selectedProfileId = null,
+        selectedProfileId = "accessibility-device".takeIf { requestActive },
         status = null,
         upload = null,
         gcodeAvailable = false,
-        busy = false,
+        busy = requestActive,
         uploadProgress = null,
+        requestActive = requestActive,
         uploadActive = false,
-        uploadCancellationRequested = false,
+        requestCancellationRequested = false,
         message = null,
         isError = false,
         confirmBeforePrint = true,
@@ -185,7 +188,7 @@ private fun DeviceAccessibilityHarness() {
         onDelete = {},
         onRefresh = {},
         onUpload = {},
-        onCancelUpload = {},
+        onCancelRequest = {},
         onStart = {},
         onPause = {},
         onResume = {},
@@ -231,8 +234,9 @@ private fun WorkspaceAccessibilityHarness(
         remoteUpload = null,
         remoteBusy = false,
         remoteUploadProgress = null,
+        remoteRequestActive = false,
         remoteUploadActive = false,
-        remoteUploadCancellationRequested = false,
+        remoteRequestCancellationRequested = false,
         remoteMessage = null,
         remoteMessageIsError = false,
         profileBusy = false,
@@ -307,7 +311,7 @@ private fun WorkspaceAccessibilityHarness(
         onRemoteDeviceDeleted = {},
         onRemoteRefresh = {},
         onRemoteUpload = {},
-        onRemoteCancelUpload = {},
+        onRemoteCancelRequest = {},
         onRemoteStart = {},
         onRemotePause = {},
         onRemoteResume = {},

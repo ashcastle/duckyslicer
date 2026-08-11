@@ -47,7 +47,7 @@ class RemoteOperationViewModelTest {
     @Test
     fun invalidatedUploadCannotBecomePrintable() {
         val active = RemoteOperationState()
-            .beginRemoteOperation(3, "printer-a", uploadOperation = true)
+            .beginRemoteOperation(3, "printer-a", RemoteNetworkOperationKind.UPLOAD)
             .withRemoteUploadProgress(3, "printer-a", 42)
         val invalidated = active.invalidateRemoteUpload()
         val afterLateProgress = invalidated.withRemoteUploadProgress(3, "printer-a", 80)
@@ -70,15 +70,15 @@ class RemoteOperationViewModelTest {
     @Test
     fun explicitUploadCancellationStopsProgressAndReportsOneTerminalNotice() {
         val active = RemoteOperationState()
-            .beginRemoteOperation(7, "printer-a", uploadOperation = true)
+            .beginRemoteOperation(7, "printer-a", RemoteNetworkOperationKind.UPLOAD)
             .withRemoteUploadProgress(7, "printer-a", 35)
-        val canceling = active.withRemoteUploadCancellationRequested(7, "printer-a")
-        val duplicate = canceling.withRemoteUploadCancellationRequested(7, "printer-a")
+        val canceling = active.withRemoteRequestCancellationRequested(7, "printer-a")
+        val duplicate = canceling.withRemoteRequestCancellationRequested(7, "printer-a")
         val afterLateProgress = duplicate.withRemoteUploadProgress(7, "printer-a", 90)
         val completed = afterLateProgress.finishRemoteOperation(
             7,
             "printer-a",
-            RemoteOperationOutcome.UploadCanceled,
+            RemoteOperationOutcome.RequestCanceled(RemoteNetworkOperationKind.UPLOAD),
         )
 
         assertTrue(canceling.cancellationRequested)
@@ -97,18 +97,57 @@ class RemoteOperationViewModelTest {
     @Test
     fun invalidatingAnActiveUploadKeepsItsCancellationSilent() {
         val invalidated = RemoteOperationState()
-            .beginRemoteOperation(8, "printer-a", uploadOperation = true)
+            .beginRemoteOperation(8, "printer-a", RemoteNetworkOperationKind.UPLOAD)
             .invalidateRemoteUpload()
         val completed = invalidated.finishRemoteOperation(
             8,
             "printer-a",
-            RemoteOperationOutcome.UploadCanceled,
+            RemoteOperationOutcome.RequestCanceled(RemoteNetworkOperationKind.UPLOAD),
         )
 
         assertTrue(invalidated.cancellationRequested)
         assertFalse(completed.busy)
         assertNull(completed.uploadFor("printer-a"))
         assertNull(completed.messageFor("printer-a"))
+    }
+
+    @Test
+    fun refreshCancellationRejectsDuplicatesAndLateSuccess() {
+        val previousStatus = RemoteStatusSnapshot("printer-a", RemoteDeviceStatus("idle"))
+        val active = RemoteOperationState(status = previousStatus)
+            .beginRemoteOperation(9, "printer-a", RemoteNetworkOperationKind.REFRESH)
+        val canceling = active.withRemoteRequestCancellationRequested(9, "printer-a")
+        val duplicate = canceling.withRemoteRequestCancellationRequested(9, "printer-a")
+        val staleOperation = canceling.withRemoteRequestCancellationRequested(8, "printer-a")
+        val completed = canceling.finishRemoteOperation(
+            9,
+            "printer-a",
+            RemoteOperationOutcome.Refreshed(RemoteDeviceStatus("printing")),
+        )
+
+        assertTrue(canceling.requestCancellationRequestedFor("printer-a"))
+        assertEquals(canceling, duplicate)
+        assertEquals(canceling, staleOperation)
+        assertFalse(completed.busy)
+        assertEquals("idle", completed.statusFor("printer-a")?.state)
+        assertEquals(RemoteOperationMessage.REQUEST_CANCELED, completed.messageFor("printer-a"))
+    }
+
+    @Test
+    fun commandCancellationCannotApplyALateStateChange() {
+        val active = RemoteOperationState(
+            status = RemoteStatusSnapshot("printer-a", RemoteDeviceStatus("printing")),
+        ).beginRemoteOperation(10, "printer-a", RemoteNetworkOperationKind.COMMAND)
+        val completed = active
+            .withRemoteRequestCancellationRequested(10, "printer-a")
+            .finishRemoteOperation(
+                10,
+                "printer-a",
+                RemoteOperationOutcome.Commanded("paused", RemoteOperationMessage.PAUSED),
+            )
+
+        assertEquals("printing", completed.statusFor("printer-a")?.state)
+        assertEquals(RemoteOperationMessage.REQUEST_CANCELED, completed.messageFor("printer-a"))
     }
 
     @Test

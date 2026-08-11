@@ -42,6 +42,8 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "RemoteOperationViewModelTest.kt",
         "RemoteDeviceStoreTest.kt",
         "RemoteDeviceInstrumentedTest.kt",
+        "AccessibilityInstrumentedTest.kt",
+        "AccessibilityHarnessActivity.kt",
         "ProfileLibraryInstrumentedTest.kt",
         "AppSettingsLifecycleInstrumentedTest.kt",
         "ProjectArchiveIntentInstrumentedTest.kt",
@@ -228,17 +230,29 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "isUniqueLocalIpv6",
         "safeRemotePath",
         "connection.disconnect()",
-        "class RemoteUploadCancellation",
+        "class RemoteRequestCancellation",
         "connection?.disconnect()",
         "cancellation.attach(connection)",
         "cancellation.throwIfRequested()",
         "cancellation.complete()",
-        "RemoteUploadCancelledException",
+        "RemoteRequestCancelledException",
     ):
         if marker not in remote:
             raise VerificationError(f"remote input containment is missing: {marker}")
     if "bufferedReader()?.use { it.readText() }" in remote:
         raise VerificationError("remote response uses an unbounded text read")
+    if remote.count("cancellation.attach(connection)") < 2:
+        raise VerificationError("every remote request type must bind its exact connection")
+    for marker in (
+        "internal fun status(",
+        "internal fun upload(",
+        "internal fun start(",
+        "internal fun pause(",
+        "internal fun resume(",
+        "internal fun cancel(",
+    ):
+        if marker not in remote:
+            raise VerificationError(f"remote request cancellation overload is missing: {marker}")
     if "remoteResultBelongsToSelection" not in remote:
         raise VerificationError("remote operation results are not bound to their printer profile")
 
@@ -256,11 +270,13 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "fun deleteProfile(",
         "profilesLoaded",
         "selectedProfileId",
-        "ActiveRemoteUpload",
-        "activeRemoteUpload",
-        "fun cancelUpload()",
-        "withRemoteUploadCancellationRequested",
-        "RemoteOperationOutcome.UploadCanceled",
+        "RemoteNetworkOperationKind",
+        "activeNetworkOperation",
+        "ActiveRemoteRequest",
+        "activeRemoteRequest",
+        "fun cancelActiveRequest()",
+        "withRemoteRequestCancellationRequested",
+        "RemoteOperationOutcome.RequestCanceled",
         "finishOperation(",
         "override fun onCleared()",
         "remoteDeviceStore.load()",
@@ -278,7 +294,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "remoteOperationModel.state.collectAsStateWithLifecycle()",
         "selectedRemoteDeviceId = remoteOperationState.selectedProfileId",
         "remoteOperationModel.invalidateUpload()",
-        "remoteOperationModel.cancelUpload()",
+        "remoteOperationModel.cancelActiveRequest()",
     ):
         if marker not in main:
             raise VerificationError(f"remote operation Activity-recreation contract is missing: {marker}")
@@ -354,11 +370,14 @@ def verify_resilience(sources: dict[str, str]) -> None:
 
     device_sheet = sources["DeviceSheet.kt"]
     for marker in (
+        "requestActive: Boolean",
         "uploadActive: Boolean",
-        "uploadCancellationRequested: Boolean",
-        "onCancelUpload: () -> Unit",
+        "requestCancellationRequested: Boolean",
+        "onCancelRequest: () -> Unit",
         "R.string.cancel_upload",
         "R.string.canceling_upload",
+        "R.string.stop_remote_request",
+        "R.string.stopping_remote_request",
     ):
         if marker not in device_sheet:
             raise VerificationError(f"remote upload cancellation UI is missing: {marker}")
@@ -429,6 +448,8 @@ def verify_resilience(sources: dict[str, str]) -> None:
             "invalidatedUploadCannotBecomePrintable",
             "explicitUploadCancellationStopsProgressAndReportsOneTerminalNotice",
             "invalidatingAnActiveUploadKeepsItsCancellationSilent",
+            "refreshCancellationRejectsDuplicatesAndLateSuccess",
+            "commandCancellationCannotApplyALateStateChange",
             "commandCompletionRetainsFileAndUpdatesState",
             "profileSaveSelectsTheDurableResultAndClearsOldPrinterState",
             "deletingTheSelectedProfileChoosesTheFirstRemainingProfile",
@@ -444,9 +465,19 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "RemoteDeviceInstrumentedTest.kt": (
             "retainedUploadCancellationStopsItsConnectionAcrossActivityRecreation",
             "remoteRefreshSurvivesActivityRecreationAndRejectsDuplicateWork",
+            "retainedRefreshCancellationDisconnectsExactRequestAndAllowsFollowUp",
+            "finalRemoteOwnerDisconnectsBlockedCommand",
             "remoteProfileSaveAndSelectionSurviveActivityRecreation",
             "remoteDeviceMetadataRecoversFromLastKnownGoodBackup",
             "cleartextHostnameRequestUsesOneValidatedPinnedAddress",
+        ),
+        "AccessibilityInstrumentedTest.kt": (
+            "activeRemoteRequestExposesOneNamedStopAction",
+            "SCREEN_REMOTE_REQUEST",
+        ),
+        "AccessibilityHarnessActivity.kt": (
+            "SCREEN_REMOTE_REQUEST",
+            "DeviceAccessibilityHarness(requestActive = true)",
         ),
         "ProfileLibraryViewModelTest.kt": (
             "savedProfileAppliesOnlyToTheSessionRevisionThatStartedTheSave",
@@ -512,6 +543,9 @@ def verify_resilience(sources: dict[str, str]) -> None:
                 "cancel_upload",
                 "canceling_upload",
                 "upload_canceled",
+                "stop_remote_request",
+                "stopping_remote_request",
+                "remote_request_canceled",
             )
         ):
             raise VerificationError(f"saved-data recovery copy is missing from {strings}")
@@ -524,19 +558,23 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "CONTRIBUTING.md"
     ]:
         raise VerificationError("contributor guidance does not preserve printer result binding")
-    if "Remote operations and their busy state must" not in sources["CONTRIBUTING.md"]:
+    if "exact request-scoped cancellation must survive Activity recreation" not in sources[
+        "CONTRIBUTING.md"
+    ]:
         raise VerificationError("contributor guidance does not preserve remote operation lifetime")
     if "must never become eligible for Start Print" not in sources["CONTRIBUTING.md"]:
         raise VerificationError("contributor guidance does not reject stale uploaded G-code")
     if "must share that same retained" not in sources["CONTRIBUTING.md"]:
         raise VerificationError("contributor guidance does not retain device-profile persistence")
     for marker in (
+        "exact request-scoped cancellation must survive Activity recreation",
         "disconnecting only its request-bound connection",
-        "stale cancellation must never stop a later upload or printer command",
+        "Final retained-owner clearance must stop that exact active connection",
+        "Stale cancellation must never stop a later refresh, upload, or printer command",
     ):
         if marker not in sources["CONTRIBUTING.md"]:
             raise VerificationError(
-                f"contributor guidance does not scope remote upload cancellation: {marker}"
+                f"contributor guidance does not scope remote request cancellation: {marker}"
             )
     if "Profile catalog loading, recent selections, and user-profile saves must share one" not in sources[
         "CONTRIBUTING.md"
@@ -636,6 +674,7 @@ def read_sources() -> dict[str, str]:
     main = ROOT / "android/app/src/main/java/com/ashcastle/duckyslicer"
     tests = ROOT / "android/app/src/test/java/com/ashcastle/duckyslicer"
     device_tests = ROOT / "android/app/src/androidTest/java/com/ashcastle/duckyslicer"
+    debug = ROOT / "android/app/src/debug/java/com/ashcastle/duckyslicer"
     return {
         "BoundedJson.kt": (main / "BoundedJson.kt").read_text(encoding="utf-8"),
         "DurableJsonFile.kt": (main / "DurableJsonFile.kt").read_text(encoding="utf-8"),
@@ -685,6 +724,12 @@ def read_sources() -> dict[str, str]:
         ),
         "RemoteDeviceInstrumentedTest.kt": (
             device_tests / "RemoteDeviceInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "AccessibilityInstrumentedTest.kt": (
+            device_tests / "AccessibilityInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "AccessibilityHarnessActivity.kt": (
+            debug / "AccessibilityHarnessActivity.kt"
         ).read_text(encoding="utf-8"),
         "ProfileLibraryInstrumentedTest.kt": (
             device_tests / "ProfileLibraryInstrumentedTest.kt"

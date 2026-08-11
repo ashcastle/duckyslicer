@@ -428,6 +428,8 @@
     <string name="slice_before_sending">보내기 전에 모델을 슬라이스하세요</string>
     <string name="cancel_upload">업로드 취소</string>
     <string name="canceling_upload">업로드 중지 중…</string>
+    <string name="stop_remote_request">중지</string>
+    <string name="stopping_remote_request">중지 중…</string>
     <string name="sent_file">프린터에 준비됨 · %1$s</string>
     <string name="start_print">출력 시작</string>
     <string name="confirm_start_print">베드가 비어 있고 프린터가 준비되었는지 확인하세요.</string>
@@ -439,6 +441,7 @@
     <string name="device_connected">프린터에 연결했습니다.</string>
     <string name="gcode_sent">G-code를 보냈습니다.</string>
     <string name="upload_canceled">업로드를 중지했습니다.</string>
+    <string name="remote_request_canceled">작업을 중지했습니다.</string>
     <string name="print_started">출력을 시작했습니다.</string>
     <string name="print_paused">출력을 일시 정지했습니다.</string>
     <string name="print_resumed">출력을 계속합니다.</string>

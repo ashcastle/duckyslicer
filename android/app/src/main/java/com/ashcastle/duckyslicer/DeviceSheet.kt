@@ -59,8 +59,9 @@ internal fun DeviceSheet(
     gcodeAvailable: Boolean,
     busy: Boolean,
     uploadProgress: Int?,
+    requestActive: Boolean,
     uploadActive: Boolean,
-    uploadCancellationRequested: Boolean,
+    requestCancellationRequested: Boolean,
     message: String?,
     isError: Boolean,
     confirmBeforePrint: Boolean,
@@ -69,7 +70,7 @@ internal fun DeviceSheet(
     onDelete: (String) -> Unit,
     onRefresh: () -> Unit,
     onUpload: () -> Unit,
-    onCancelUpload: () -> Unit,
+    onCancelRequest: () -> Unit,
     onStart: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
@@ -218,21 +219,25 @@ internal fun DeviceSheet(
                             color = Color(0xFFF6C945),
                         )
                     }
-                    if (uploadActive) {
+                    if (requestActive) {
                         TextButton(
-                            onClick = onCancelUpload,
-                            enabled = !uploadCancellationRequested,
+                            onClick = onCancelRequest,
+                            enabled = !requestCancellationRequested,
                             modifier = Modifier.align(Alignment.End),
                         ) {
                             Text(
                                 stringResource(
-                                    if (uploadCancellationRequested) {
+                                    if (uploadActive && requestCancellationRequested) {
                                         R.string.canceling_upload
-                                    } else {
+                                    } else if (uploadActive) {
                                         R.string.cancel_upload
+                                    } else if (requestCancellationRequested) {
+                                        R.string.stopping_remote_request
+                                    } else {
+                                        R.string.stop_remote_request
                                     },
                                 ),
-                                color = if (uploadCancellationRequested) {
+                                color = if (requestCancellationRequested) {
                                     Color(0xFFC8C9C2)
                                 } else {
                                     Color(0xFFFF8A80)

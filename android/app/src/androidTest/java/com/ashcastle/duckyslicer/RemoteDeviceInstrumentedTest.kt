@@ -1,7 +1,9 @@
 package com.ashcastle.duckyslicer
 
 import android.os.SystemClock
+import android.app.Application
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -17,6 +19,7 @@ import java.io.File
 import java.io.RandomAccessFile
 import java.net.InetAddress
 import java.net.ServerSocket
+import java.net.SocketException
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.UUID
@@ -80,8 +83,11 @@ class RemoteDeviceInstrumentedTest {
                         ViewModelProvider(recreated)[RemoteOperationViewModel::class.java]
                     assertSame(model, recreatedModel)
                     assertTrue(recreatedModel.state.value.uploadActiveFor(profile.id))
-                    assertTrue(recreatedModel.cancelUpload())
-                    assertFalse("Duplicate upload cancellation was accepted", recreatedModel.cancelUpload())
+                    assertTrue(recreatedModel.cancelActiveRequest())
+                    assertFalse(
+                        "Duplicate upload cancellation was accepted",
+                        recreatedModel.cancelActiveRequest(),
+                    )
                 }
 
                 waitForRemoteState(model, "Canceled upload did not release its connection") {
@@ -135,7 +141,7 @@ class RemoteDeviceInstrumentedTest {
                 assertFalse("Invalidated printer server did not stop", staleWorker.isAlive)
             }
         } finally {
-            retainedModel.get()?.cancelUpload()
+            retainedModel.get()?.cancelActiveRequest()
             releaseServer.countDown()
             worker.join(5_000)
             server.close()
@@ -218,6 +224,172 @@ class RemoteDeviceInstrumentedTest {
         }
         serverFailure.get()?.let { throw AssertionError("Local printer server failed", it) }
         assertFalse("Local printer server did not stop", worker.isAlive)
+    }
+
+    @Test
+    fun retainedRefreshCancellationDisconnectsExactRequestAndAllowsFollowUp() {
+        val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        val requestAccepted = CountDownLatch(1)
+        val connectionClosed = CountDownLatch(1)
+        val serverFailure = AtomicReference<Throwable?>(null)
+        val worker = Thread {
+            runCatching {
+                server.accept().use { socket ->
+                    socket.soTimeout = 5_000
+                    val input = BufferedInputStream(socket.getInputStream())
+                    val received = StringBuilder()
+                    var current: Int
+                    while (input.read().also { current = it } >= 0) {
+                        received.append(current.toChar())
+                        if (received.endsWith("\r\n\r\n")) break
+                    }
+                    requestAccepted.countDown()
+                    try {
+                        while (input.read() >= 0) {
+                            // A GET request has no body; wait for the exact client connection to close.
+                        }
+                    } catch (_: SocketException) {
+                        // HttpURLConnection.disconnect() may surface as EOF or a reset.
+                    }
+                    connectionClosed.countDown()
+                }
+            }.onFailure(serverFailure::set)
+        }.apply { start() }
+        val profile = RemoteDeviceProfile(
+            id = "retained-refresh-cancel",
+            name = "Cancelable refresh",
+            kind = RemoteDeviceKind.OCTOPRINT,
+            baseUrl = "http://127.0.0.1:${server.localPort}",
+        )
+        val retainedModel = AtomicReference<RemoteOperationViewModel>()
+
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    retainedModel.set(
+                        ViewModelProvider(activity)[RemoteOperationViewModel::class.java],
+                    )
+                }
+                val model = retainedModel.get()
+                waitForRemoteState(model, "Remote profiles did not finish loading") {
+                    it.profilesLoaded && !it.busy
+                }
+                scenario.onActivity {
+                    assertTrue(model.refresh(profile, timeoutSeconds = 30))
+                }
+                assertTrue(
+                    "Refresh did not reach its printer socket",
+                    requestAccepted.await(3, TimeUnit.SECONDS),
+                )
+
+                scenario.recreate()
+                scenario.onActivity { recreated ->
+                    val recreatedModel =
+                        ViewModelProvider(recreated)[RemoteOperationViewModel::class.java]
+                    assertSame(model, recreatedModel)
+                    assertTrue(recreatedModel.state.value.networkRequestActiveFor(profile.id))
+                    assertTrue(recreatedModel.cancelActiveRequest())
+                    assertFalse(
+                        "Duplicate refresh cancellation was accepted",
+                        recreatedModel.cancelActiveRequest(),
+                    )
+                }
+
+                assertTrue(
+                    "Canceled refresh did not close its exact socket",
+                    connectionClosed.await(3, TimeUnit.SECONDS),
+                )
+                waitForRemoteState(model, "Canceled refresh did not settle") { !it.busy }
+                assertNull(model.state.value.statusFor(profile.id))
+                assertEquals(
+                    RemoteOperationMessage.REQUEST_CANCELED,
+                    model.state.value.messageFor(profile.id),
+                )
+                assertFalse("Settled cancellation was accepted again", model.cancelActiveRequest())
+
+                withServer("""{"state":"Operational"}""") { baseUrl, _ ->
+                    val followUp = profile.copy(id = "refresh-follow-up", baseUrl = baseUrl)
+                    assertTrue(model.refresh(followUp, timeoutSeconds = 5))
+                    waitForRemoteState(model, "Follow-up refresh did not finish") { !it.busy }
+                    assertEquals("Operational", model.state.value.statusFor(followUp.id)?.state)
+                }
+            }
+        } finally {
+            retainedModel.get()?.cancelActiveRequest()
+            worker.join(5_000)
+            server.close()
+        }
+        serverFailure.get()?.let { throw AssertionError("Cancelable printer server failed", it) }
+        assertFalse("Cancelable printer server did not stop", worker.isAlive)
+    }
+
+    @Test
+    fun finalRemoteOwnerDisconnectsBlockedCommand() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val server = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        val requestAccepted = CountDownLatch(1)
+        val connectionClosed = CountDownLatch(1)
+        val serverFailure = AtomicReference<Throwable?>(null)
+        val worker = Thread {
+            runCatching {
+                server.accept().use { socket ->
+                    socket.soTimeout = 5_000
+                    val input = BufferedInputStream(socket.getInputStream())
+                    val received = StringBuilder()
+                    var current: Int
+                    while (input.read().also { current = it } >= 0) {
+                        received.append(current.toChar())
+                        if (received.endsWith("\r\n\r\n")) break
+                    }
+                    requestAccepted.countDown()
+                    try {
+                        while (input.read() >= 0) {
+                            // Consume the short command body, then wait for owner-driven disconnect.
+                        }
+                    } catch (_: SocketException) {
+                        // A reset is equivalent to EOF for this lifecycle contract.
+                    }
+                    connectionClosed.countDown()
+                }
+            }.onFailure(serverFailure::set)
+        }.apply { start() }
+        val profile = RemoteDeviceProfile(
+            id = "final-owner-command",
+            name = "Final owner command",
+            kind = RemoteDeviceKind.OCTOPRINT,
+            baseUrl = "http://127.0.0.1:${server.localPort}",
+        )
+        val store = ViewModelStore()
+        var storeCleared = false
+        try {
+            val application = context.applicationContext as Application
+            val model = ViewModelProvider(
+                store,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[RemoteOperationViewModel::class.java]
+            waitForRemoteState(model, "Remote profiles did not finish loading") {
+                it.profilesLoaded && !it.busy
+            }
+            assertTrue(model.pause(profile, timeoutSeconds = 30))
+            assertTrue(
+                "Command did not reach its printer socket",
+                requestAccepted.await(3, TimeUnit.SECONDS),
+            )
+
+            store.clear()
+            storeCleared = true
+
+            assertTrue(
+                "Final remote owner did not close the blocked command socket",
+                connectionClosed.await(3, TimeUnit.SECONDS),
+            )
+        } finally {
+            if (!storeCleared) store.clear()
+            worker.join(5_000)
+            server.close()
+        }
+        serverFailure.get()?.let { throw AssertionError("Blocked command server failed", it) }
+        assertFalse("Blocked command server did not stop", worker.isAlive)
     }
 
     private fun waitForRemoteState(

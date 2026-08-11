@@ -22,6 +22,7 @@ internal enum class RemoteOperationMessage(val isError: Boolean = false) {
     RESUMED,
     CANCELED,
     UPLOAD_CANCELED,
+    REQUEST_CANCELED,
     PROFILE_SAVED,
     PROFILE_DELETED,
     ACCESS_DENIED(isError = true),
@@ -29,6 +30,12 @@ internal enum class RemoteOperationMessage(val isError: Boolean = false) {
     COMMAND_FAILED(isError = true),
     PROFILE_SAVE_FAILED(isError = true),
     STORAGE_UNAVAILABLE(isError = true),
+}
+
+internal enum class RemoteNetworkOperationKind {
+    REFRESH,
+    UPLOAD,
+    COMMAND,
 }
 
 internal data class RemoteStatusSnapshot(
@@ -40,6 +47,7 @@ internal data class RemoteOperationState(
     val operationId: Long = 0,
     val busy: Boolean = false,
     val activeProfileId: String? = null,
+    val activeNetworkOperation: RemoteNetworkOperationKind? = null,
     val artifactRevision: Long = 0,
     val activeArtifactRevision: Long? = null,
     val cancellationRequested: Boolean = false,
@@ -61,15 +69,20 @@ internal data class RemoteOperationState(
         ?.takeIf { remoteResultBelongsToSelection(it.profileId, profileId) }
 
     fun progressFor(profileId: String?): Int? = uploadProgress.takeIf {
-        busy && remoteResultBelongsToSelection(activeProfileId.orEmpty(), profileId)
+        uploadActiveFor(profileId)
     }
 
-    fun uploadActiveFor(profileId: String?): Boolean =
-        busy && activeArtifactRevision != null &&
+    fun networkRequestActiveFor(profileId: String?): Boolean =
+        busy && activeNetworkOperation != null &&
             remoteResultBelongsToSelection(activeProfileId.orEmpty(), profileId)
 
-    fun uploadCancellationRequestedFor(profileId: String?): Boolean =
-        cancellationRequested && uploadActiveFor(profileId)
+    fun uploadActiveFor(profileId: String?): Boolean =
+        networkRequestActiveFor(profileId) &&
+            activeNetworkOperation == RemoteNetworkOperationKind.UPLOAD &&
+            activeArtifactRevision != null
+
+    fun requestCancellationRequestedFor(profileId: String?): Boolean =
+        cancellationRequested && networkRequestActiveFor(profileId)
 
     fun messageFor(profileId: String?): RemoteOperationMessage? = message.takeIf {
         messageProfileId == null ||
@@ -84,7 +97,7 @@ internal data class RemoteOperationState(
 internal sealed interface RemoteOperationOutcome {
     data class Refreshed(val status: RemoteDeviceStatus) : RemoteOperationOutcome
     data class Uploaded(val upload: RemoteUpload) : RemoteOperationOutcome
-    data object UploadCanceled : RemoteOperationOutcome
+    data class RequestCanceled(val kind: RemoteNetworkOperationKind) : RemoteOperationOutcome
     data class Commanded(
         val state: String,
         val message: RemoteOperationMessage,
@@ -109,16 +122,19 @@ internal sealed interface RemoteOperationOutcome {
 internal fun RemoteOperationState.beginRemoteOperation(
     nextOperationId: Long,
     profileId: String,
-    uploadOperation: Boolean = false,
+    networkOperation: RemoteNetworkOperationKind? = null,
 ): RemoteOperationState {
     require(!busy) { "remote_operation_busy" }
     return copy(
         operationId = nextOperationId,
         busy = true,
         activeProfileId = profileId,
-        activeArtifactRevision = artifactRevision.takeIf { uploadOperation },
+        activeNetworkOperation = networkOperation,
+        activeArtifactRevision = artifactRevision.takeIf {
+            networkOperation == RemoteNetworkOperationKind.UPLOAD
+        },
         cancellationRequested = false,
-        uploadProgress = 0.takeIf { uploadOperation },
+        uploadProgress = 0.takeIf { networkOperation == RemoteNetworkOperationKind.UPLOAD },
         messageProfileId = null,
         message = null,
     )
@@ -139,14 +155,13 @@ internal fun RemoteOperationState.withRemoteUploadProgress(
     return copy(uploadProgress = maxOf(uploadProgress ?: 0, progress.coerceIn(0, 100)))
 }
 
-internal fun RemoteOperationState.withRemoteUploadCancellationRequested(
+internal fun RemoteOperationState.withRemoteRequestCancellationRequested(
     expectedOperationId: Long,
     profileId: String,
 ): RemoteOperationState {
     if (
         !busy || operationId != expectedOperationId || activeProfileId != profileId ||
-        activeArtifactRevision == null || activeArtifactRevision != artifactRevision ||
-        cancellationRequested
+        activeNetworkOperation == null || cancellationRequested
     ) {
         return this
     }
@@ -159,35 +174,50 @@ internal fun RemoteOperationState.finishRemoteOperation(
     outcome: RemoteOperationOutcome,
 ): RemoteOperationState {
     if (!busy || operationId != expectedOperationId || activeProfileId != profileId) return this
-    val uploadBecameStale = activeArtifactRevision != null &&
+    val operationKind = activeNetworkOperation
+    val uploadBecameStale = operationKind == RemoteNetworkOperationKind.UPLOAD &&
+        activeArtifactRevision != null &&
         activeArtifactRevision != artifactRevision
-    val explicitUploadCancellation = outcome is RemoteOperationOutcome.UploadCanceled &&
-        cancellationRequested && !uploadBecameStale
+    val effectiveOutcome = if (
+        cancellationRequested && operationKind != null &&
+        outcome !is RemoteOperationOutcome.RequestCanceled
+    ) {
+        RemoteOperationOutcome.RequestCanceled(operationKind)
+    } else {
+        outcome
+    }
+    val explicitCancellation = effectiveOutcome is RemoteOperationOutcome.RequestCanceled &&
+        effectiveOutcome.kind == operationKind && cancellationRequested && !uploadBecameStale
     val settled = copy(
         busy = false,
         activeProfileId = null,
+        activeNetworkOperation = null,
         activeArtifactRevision = null,
         cancellationRequested = false,
         uploadProgress = null,
         messageProfileId = profileId.takeUnless {
-            uploadBecameStale || outcome is RemoteOperationOutcome.UploadCanceled &&
-                !explicitUploadCancellation
+            uploadBecameStale || effectiveOutcome is RemoteOperationOutcome.RequestCanceled &&
+                !explicitCancellation
         },
         message = null,
     )
     if (uploadBecameStale) return settled
-    return when (outcome) {
+    return when (effectiveOutcome) {
         is RemoteOperationOutcome.Refreshed -> settled.copy(
-            status = RemoteStatusSnapshot(profileId, outcome.status),
+            status = RemoteStatusSnapshot(profileId, effectiveOutcome.status),
             message = RemoteOperationMessage.CONNECTED,
         )
         is RemoteOperationOutcome.Uploaded -> settled.copy(
-            upload = outcome.upload,
+            upload = effectiveOutcome.upload,
             message = RemoteOperationMessage.UPLOADED,
         )
-        RemoteOperationOutcome.UploadCanceled -> settled.copy(
-            message = RemoteOperationMessage.UPLOAD_CANCELED.takeIf {
-                explicitUploadCancellation
+        is RemoteOperationOutcome.RequestCanceled -> settled.copy(
+            message = if (!explicitCancellation) {
+                null
+            } else if (effectiveOutcome.kind == RemoteNetworkOperationKind.UPLOAD) {
+                RemoteOperationMessage.UPLOAD_CANCELED
+            } else {
+                RemoteOperationMessage.REQUEST_CANCELED
             },
         )
         is RemoteOperationOutcome.Commanded -> {
@@ -195,19 +225,19 @@ internal fun RemoteOperationState.finishRemoteOperation(
             settled.copy(
                 status = RemoteStatusSnapshot(
                     profileId,
-                    (previous ?: RemoteDeviceStatus(outcome.state)).copy(
-                        state = outcome.state,
+                    (previous ?: RemoteDeviceStatus(effectiveOutcome.state)).copy(
+                        state = effectiveOutcome.state,
                         fileName = previous?.fileName ?: upload?.displayName,
                     ),
                 ),
-                message = outcome.message,
+                message = effectiveOutcome.message,
             )
         }
         is RemoteOperationOutcome.ProfileSaved -> settled.copy(
-            profiles = outcome.profiles,
+            profiles = effectiveOutcome.profiles,
             profilesLoaded = true,
             storageUnavailable = false,
-            selectedProfileId = outcome.saved.id,
+            selectedProfileId = effectiveOutcome.saved.id,
             status = null,
             upload = null,
             messageProfileId = null,
@@ -215,23 +245,29 @@ internal fun RemoteOperationState.finishRemoteOperation(
         )
         is RemoteOperationOutcome.ProfileDeleted -> {
             val nextSelected = selectedProfileId
-                ?.takeUnless { it == outcome.deletedProfileId }
-                ?.takeIf { selected -> outcome.profiles.any { it.id == selected } }
-                ?: outcome.profiles.firstOrNull()?.id
+                ?.takeUnless { it == effectiveOutcome.deletedProfileId }
+                ?.takeIf { selected -> effectiveOutcome.profiles.any { it.id == selected } }
+                ?: effectiveOutcome.profiles.firstOrNull()?.id
             settled.copy(
-                profiles = outcome.profiles,
+                profiles = effectiveOutcome.profiles,
                 profilesLoaded = true,
                 storageUnavailable = false,
                 selectedProfileId = nextSelected,
-                status = status?.takeUnless { it.profileId == outcome.deletedProfileId },
-                upload = upload?.takeUnless { it.profileId == outcome.deletedProfileId },
+                status = status?.takeUnless {
+                    it.profileId == effectiveOutcome.deletedProfileId
+                },
+                upload = upload?.takeUnless {
+                    it.profileId == effectiveOutcome.deletedProfileId
+                },
                 messageProfileId = null,
                 message = RemoteOperationMessage.PROFILE_DELETED,
             )
         }
         is RemoteOperationOutcome.Failed -> settled.copy(
-            status = status?.takeUnless { outcome.clearStatus && it.profileId == profileId },
-            message = outcome.message,
+            status = status?.takeUnless {
+                effectiveOutcome.clearStatus && it.profileId == profileId
+            },
+            message = effectiveOutcome.message,
         )
     }
 }
@@ -241,7 +277,8 @@ internal fun RemoteOperationState.invalidateRemoteUpload(): RemoteOperationState
         message == RemoteOperationMessage.UPLOAD_CANCELED
     return copy(
         artifactRevision = artifactRevision + 1,
-        cancellationRequested = cancellationRequested || (busy && activeArtifactRevision != null),
+        cancellationRequested = cancellationRequested ||
+            (busy && activeNetworkOperation == RemoteNetworkOperationKind.UPLOAD),
         upload = null,
         uploadProgress = null,
         messageProfileId = messageProfileId.takeUnless { uploadMessage },
@@ -249,9 +286,10 @@ internal fun RemoteOperationState.invalidateRemoteUpload(): RemoteOperationState
     )
 }
 
-private data class ActiveRemoteUpload(
+private data class ActiveRemoteRequest(
     val operationId: Long,
-    val cancellation: RemoteUploadCancellation,
+    val kind: RemoteNetworkOperationKind,
+    val cancellation: RemoteRequestCancellation,
 )
 
 internal fun RemoteOperationState.changeRemoteSelection(profileId: String): RemoteOperationState {
@@ -277,7 +315,7 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
     )
     val state: StateFlow<RemoteOperationState> = mutableState.asStateFlow()
     private var nextOperationId = 1L
-    private val activeRemoteUpload = AtomicReference<ActiveRemoteUpload?>(null)
+    private val activeRemoteRequest = AtomicReference<ActiveRemoteRequest?>(null)
 
     init {
         loadProfiles(operationId = 1L)
@@ -298,9 +336,10 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
     fun refresh(profile: RemoteDeviceProfile, timeoutSeconds: Int): Boolean = launchOperation(
         profile = profile,
         timeoutSeconds = timeoutSeconds,
+        kind = RemoteNetworkOperationKind.REFRESH,
         clearStatusOnFailure = true,
-    ) { client, credential, _, _ ->
-        RemoteOperationOutcome.Refreshed(client.status(profile, credential))
+    ) { client, credential, _, cancellation ->
+        RemoteOperationOutcome.Refreshed(client.status(profile, credential, cancellation))
     }
 
     fun upload(
@@ -310,7 +349,7 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
     ): Boolean = launchOperation(
         profile = profile,
         timeoutSeconds = timeoutSeconds,
-        uploadOperation = true,
+        kind = RemoteNetworkOperationKind.UPLOAD,
     ) { client, credential, onProgress, cancellation ->
         RemoteOperationOutcome.Uploaded(
             client.upload(
@@ -318,7 +357,7 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
                 credential,
                 output,
                 onProgress,
-                requireNotNull(cancellation),
+                cancellation,
             ),
         )
     }
@@ -334,7 +373,9 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
             timeoutSeconds,
             resultingState = "printing",
             message = RemoteOperationMessage.STARTED,
-        ) { client, credential -> client.start(profile, credential, upload) }
+        ) { client, credential, cancellation ->
+            client.start(profile, credential, upload, cancellation)
+        }
     }
 
     fun pause(profile: RemoteDeviceProfile, timeoutSeconds: Int): Boolean = command(
@@ -342,34 +383,35 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
         timeoutSeconds,
         resultingState = "paused",
         message = RemoteOperationMessage.PAUSED,
-    ) { client, credential -> client.pause(profile, credential) }
+    ) { client, credential, cancellation -> client.pause(profile, credential, cancellation) }
 
     fun resume(profile: RemoteDeviceProfile, timeoutSeconds: Int): Boolean = command(
         profile,
         timeoutSeconds,
         resultingState = "printing",
         message = RemoteOperationMessage.RESUMED,
-    ) { client, credential -> client.resume(profile, credential) }
+    ) { client, credential, cancellation -> client.resume(profile, credential, cancellation) }
 
     fun cancel(profile: RemoteDeviceProfile, timeoutSeconds: Int): Boolean = command(
         profile,
         timeoutSeconds,
         resultingState = "canceled",
         message = RemoteOperationMessage.CANCELED,
-    ) { client, credential -> client.cancel(profile, credential) }
+    ) { client, credential, cancellation -> client.cancel(profile, credential, cancellation) }
 
     @Synchronized
-    fun cancelUpload(): Boolean {
+    fun cancelActiveRequest(): Boolean {
         val current = mutableState.value
-        val active = activeRemoteUpload.get()
+        val active = activeRemoteRequest.get()
         if (
-            !current.busy || current.activeArtifactRevision == null ||
+            !current.busy || current.activeNetworkOperation == null ||
             current.cancellationRequested || active?.operationId != current.operationId ||
+            active.kind != current.activeNetworkOperation ||
             !active.cancellation.cancel()
         ) {
             return false
         }
-        mutableState.value = current.withRemoteUploadCancellationRequested(
+        mutableState.value = current.withRemoteRequestCancellationRequested(
             current.operationId,
             current.activeProfileId.orEmpty(),
         )
@@ -380,8 +422,11 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
     fun invalidateUpload() {
         val current = mutableState.value
         mutableState.value = current.invalidateRemoteUpload()
-        activeRemoteUpload.get()
-            ?.takeIf { it.operationId == current.operationId }
+        activeRemoteRequest.get()
+            ?.takeIf {
+                it.operationId == current.operationId &&
+                    it.kind == RemoteNetworkOperationKind.UPLOAD
+            }
             ?.cancellation
             ?.cancel()
     }
@@ -395,13 +440,13 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
         timeoutSeconds: Int,
         resultingState: String,
         message: RemoteOperationMessage,
-        operation: (RemoteDeviceClient, String) -> Unit,
+        operation: (RemoteDeviceClient, String, RemoteRequestCancellation) -> Unit,
     ): Boolean = launchOperation(
         profile = profile,
         timeoutSeconds = timeoutSeconds,
-        commandOperation = true,
-    ) { client, credential, _, _ ->
-        operation(client, credential)
+        kind = RemoteNetworkOperationKind.COMMAND,
+    ) { client, credential, _, cancellation ->
+        operation(client, credential, cancellation)
         RemoteOperationOutcome.Commanded(resultingState, message)
     }
 
@@ -480,31 +525,30 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
     private fun launchOperation(
         profile: RemoteDeviceProfile,
         timeoutSeconds: Int,
-        uploadOperation: Boolean = false,
-        commandOperation: Boolean = false,
+        kind: RemoteNetworkOperationKind,
         clearStatusOnFailure: Boolean = false,
         operation: (
             RemoteDeviceClient,
             String,
             (Int) -> Unit,
-            RemoteUploadCancellation?,
+            RemoteRequestCancellation,
         ) -> RemoteOperationOutcome,
     ): Boolean {
         if (mutableState.value.busy) return false
         val operationId = ++nextOperationId
-        val activeUpload = if (uploadOperation) {
-            ActiveRemoteUpload(operationId, RemoteUploadCancellation()).also {
-                check(activeRemoteUpload.compareAndSet(null, it)) {
-                    "remote_upload_lifecycle_invalid"
-                }
+        val activeRequest = ActiveRemoteRequest(
+            operationId,
+            kind,
+            RemoteRequestCancellation(),
+        ).also {
+            check(activeRemoteRequest.compareAndSet(null, it)) {
+                "remote_request_lifecycle_invalid"
             }
-        } else {
-            null
         }
         mutableState.value = mutableState.value.beginRemoteOperation(
             operationId,
             profile.id,
-            uploadOperation,
+            kind,
         )
         viewModelScope.launch {
             val outcome = try {
@@ -516,13 +560,13 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
                             mutableState.update {
                                 it.withRemoteUploadProgress(operationId, profile.id, progress)
                             }
-                        }, activeUpload?.cancellation)
+                        }, activeRequest.cancellation)
                     } finally {
-                        activeUpload?.cancellation?.close()
+                        activeRequest.cancellation.close()
                     }
                 }
-            } catch (cancellation: RemoteUploadCancelledException) {
-                RemoteOperationOutcome.UploadCanceled
+            } catch (cancellation: RemoteRequestCancelledException) {
+                RemoteOperationOutcome.RequestCanceled(kind)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (failure: Exception) {
@@ -531,14 +575,17 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
                 supportEvents.record(
                     when {
                         unauthorized -> SupportEvent.REMOTE_AUTH_FAILED
-                        commandOperation -> SupportEvent.REMOTE_COMMAND_FAILED
+                        kind == RemoteNetworkOperationKind.COMMAND -> {
+                            SupportEvent.REMOTE_COMMAND_FAILED
+                        }
                         else -> SupportEvent.REMOTE_CONNECTION_FAILED
                     },
                 )
                 RemoteOperationOutcome.Failed(
                     message = when {
                         unauthorized -> RemoteOperationMessage.ACCESS_DENIED
-                        commandOperation && failure is RemoteDeviceException -> {
+                        kind == RemoteNetworkOperationKind.COMMAND &&
+                            failure is RemoteDeviceException -> {
                             RemoteOperationMessage.COMMAND_FAILED
                         }
                         else -> RemoteOperationMessage.CONNECTION_FAILED
@@ -546,7 +593,7 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
                     clearStatus = clearStatusOnFailure,
                 )
             }
-            finishOperation(operationId, profile.id, outcome, activeUpload)
+            finishOperation(operationId, profile.id, outcome, activeRequest)
         }
         return true
     }
@@ -556,9 +603,9 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
         operationId: Long,
         profileId: String,
         outcome: RemoteOperationOutcome,
-        activeUpload: ActiveRemoteUpload?,
+        activeRequest: ActiveRemoteRequest,
     ) {
-        if (activeUpload != null) activeRemoteUpload.compareAndSet(activeUpload, null)
+        activeRemoteRequest.compareAndSet(activeRequest, null)
         mutableState.value = mutableState.value.finishRemoteOperation(
             operationId,
             profileId,
@@ -567,7 +614,7 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
     }
 
     override fun onCleared() {
-        activeRemoteUpload.getAndSet(null)?.cancellation?.cancel()
+        activeRemoteRequest.getAndSet(null)?.cancellation?.cancel()
         super.onCleared()
     }
 

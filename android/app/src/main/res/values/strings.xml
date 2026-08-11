@@ -428,6 +428,8 @@
     <string name="slice_before_sending">Slice a model before sending</string>
     <string name="cancel_upload">Cancel upload</string>
     <string name="canceling_upload">Stopping upload…</string>
+    <string name="stop_remote_request">Stop current action</string>
+    <string name="stopping_remote_request">Stopping current action…</string>
     <string name="sent_file">Ready on printer · %1$s</string>
     <string name="start_print">Start print</string>
     <string name="confirm_start_print">Make sure the bed is clear and the printer is ready.</string>
@@ -439,6 +441,7 @@
     <string name="device_connected">Printer is reachable.</string>
     <string name="gcode_sent">G-code sent.</string>
     <string name="upload_canceled">Upload stopped.</string>
+    <string name="remote_request_canceled">Current action stopped.</string>
     <string name="print_started">Print started.</string>
     <string name="print_paused">Print paused.</string>
     <string name="print_resumed">Print resumed.</string>
