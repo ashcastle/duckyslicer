@@ -640,9 +640,13 @@ internal object SlicerProcessClient {
     private fun cancelProjectRequest(requestId: String): Boolean {
         if (activeRequestId.get() != requestId) return false
         cancelledRequestId.set(requestId)
+        return cancelMatchingRequest(requestId)
+    }
+
+    private fun cancelMatchingRequest(requestId: String): Boolean {
         return runCatching {
             withWorker(DuckySlicerApplication.context()) { worker ->
-                repeat(PROJECT_CANCEL_BIND_RETRIES) {
+                repeat(REQUEST_CANCEL_BIND_RETRIES) {
                     if (activeRequestId.get() != requestId) return@withWorker true
                     val response = worker.request(
                         what = SlicerProcessContract.MESSAGE_CANCEL,
@@ -654,7 +658,7 @@ internal object SlicerProcessClient {
                     if (response.getBoolean(SlicerProcessContract.KEY_OK)) {
                         return@withWorker true
                     }
-                    Thread.sleep(PROJECT_CANCEL_RETRY_MILLIS)
+                    Thread.sleep(REQUEST_CANCEL_RETRY_MILLIS)
                 }
                 activeRequestId.get() != requestId
             }
@@ -675,30 +679,24 @@ internal object SlicerProcessClient {
         requestId.length in 1..SlicerProcessService.MAX_REQUEST_ID_LENGTH &&
             requestId.none(Char::isISOControl)
 
-    /** Cancels only the currently active request by terminating its isolated worker. */
-    fun cancelActiveSlice(): Boolean {
-        val requestId = activeRequestId.get() ?: return false
+    /** Cancels only the retained foreground slice represented by this exact session. */
+    fun cancelUserSliceAsync(session: ForegroundSliceSession): Boolean {
+        val requestId = session.requestId
+        val active = activeRequestId.get() == requestId
+        val checkpointed = runCatching(session::requestCancellation).getOrDefault(false)
+        if (!active && !checkpointed) return false
+        runCatching {
+            session.context.startService(
+                SlicerProcessService.cancelSliceIntent(session.context, requestId),
+            )
+        }
+        if (activeRequestId.get() != requestId) return true
         cancelledRequestId.set(requestId)
-        return runCatching {
-            val response = withWorker(DuckySlicerApplication.context()) { worker ->
-                worker.request(
-                    what = SlicerProcessContract.MESSAGE_CANCEL,
-                    data = Bundle().apply {
-                        putString(SlicerProcessContract.KEY_REQUEST_ID, requestId)
-                    },
-                    timeoutSeconds = CONNECTION_TIMEOUT_SECONDS,
-                )
-            }
-            response.getBoolean(SlicerProcessContract.KEY_OK)
-        }.getOrDefault(activeRequestId.get() != requestId)
-    }
-
-    fun cancelActiveSliceAsync() {
-        if (activeRequestId.get() == null) return
-        Thread({ cancelActiveSlice() }, "DuckySlicer cancellation").apply {
+        Thread({ cancelMatchingRequest(requestId) }, "DuckySlicer cancellation").apply {
             isDaemon = true
             start()
         }
+        return true
     }
 
     internal fun lastWorkerPid(): Int = latestWorkerPid
@@ -712,11 +710,19 @@ internal object SlicerProcessClient {
         }
     }
 
-    internal fun cancelFromNotificationForTest(): Boolean {
+    internal fun cancelFromNotificationForTest(session: ForegroundSliceSession): Boolean {
         check(BuildConfig.DEBUG) { "Notification cancellation is available only in debug builds" }
-        val requestId = activeRequestId.get() ?: return false
-        val context = DuckySlicerApplication.context()
-        return context.startService(SlicerProcessService.cancelSliceIntent(context, requestId)) != null
+        if (!session.isCurrent()) return false
+        return session.context.startService(
+            SlicerProcessService.cancelSliceIntent(session.context, session.requestId),
+        ) != null
+    }
+
+    internal fun cancelRequestForTest(requestId: String): Boolean {
+        check(BuildConfig.DEBUG) { "Exact request cancellation is available only in debug builds" }
+        if (!isValidRequestId(requestId) || activeRequestId.get() != requestId) return false
+        cancelledRequestId.set(requestId)
+        return cancelMatchingRequest(requestId)
     }
 
     internal fun terminateWorkerForTest(context: Context): Int {
@@ -959,8 +965,8 @@ internal object SlicerProcessClient {
     }
 
     private const val CONNECTION_TIMEOUT_SECONDS = 10L
-    private const val PROJECT_CANCEL_BIND_RETRIES = 100
-    private const val PROJECT_CANCEL_RETRY_MILLIS = 10L
+    private const val REQUEST_CANCEL_BIND_RETRIES = 100
+    private const val REQUEST_CANCEL_RETRY_MILLIS = 10L
     private const val ARRANGEMENT_TIMEOUT_SECONDS = 5L * 60L
     private const val MODEL_NORMALIZATION_TIMEOUT_SECONDS = 5L * 60L
     private const val ORIENTATION_TIMEOUT_SECONDS = 5L * 60L
@@ -977,6 +983,11 @@ internal class ForegroundSliceSession internal constructor(
     private val cancellationFile = File(context.filesDir, CANCELLATION_FILE)
 
     internal fun cancellationRequested(): Boolean = wasCanceled(context, requestId)
+
+    internal fun isCurrent(): Boolean =
+        ForegroundSliceStore.load(context)?.requestId == requestId
+
+    internal fun requestCancellation(): Boolean = markCanceled(context, requestId)
 
     override fun close() {
         SlicerProcessClient.finishUserSlice(this)
@@ -1006,20 +1017,26 @@ internal class ForegroundSliceSession internal constructor(
                 ForegroundSliceSession(context, record.requestId)
             }
 
-        fun markCanceled(context: Context, requestId: String) {
+        fun markCanceled(context: Context, requestId: String): Boolean {
+            if (ForegroundSliceStore.load(context)?.requestId != requestId) return false
             FileOutputStream(File(context.filesDir, CANCELLATION_FILE)).use { output ->
                 output.write(requestId.toByteArray(Charsets.UTF_8))
                 output.flush()
                 output.fd.sync()
             }
             ForegroundSliceStore.mark(context, requestId, ForegroundSlicePhase.CANCELED)
+            return true
         }
 
         fun wasCanceled(context: Context, requestId: String): Boolean = runCatching {
             val cancellationFile = File(context.filesDir, CANCELLATION_FILE)
-            cancellationFile.isFile &&
+            val fileCanceled = cancellationFile.isFile &&
                 cancellationFile.length() in 1..MAX_CANCELLATION_BYTES &&
                 cancellationFile.readText(Charsets.UTF_8).trim() == requestId
+            val checkpointCanceled = ForegroundSliceStore.load(context)?.let { record ->
+                record.requestId == requestId && record.phase == ForegroundSlicePhase.CANCELED
+            } == true
+            fileCanceled || checkpointCanceled
         }.getOrDefault(false)
     }
 }

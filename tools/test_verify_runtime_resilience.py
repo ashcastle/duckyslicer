@@ -200,6 +200,8 @@ def valid_sources() -> dict[str, str]:
             "archive import commits cancel and join any older metadata write "
             "Model import, primitive creation, automatic lay, arrangement, split, and cut must run "
             "UI disposal must not issue a process-wide slicer cancellation "
+            "Foreground-slice cancellation must carry its "
+            "idle or stale slice owner must never cancel a later "
             "request-scoped cancellation preserve the starting project on cancellation "
             "remove every generated model that was not accepted Final retained-owner clearance "
             "ordinary Activity recreation must not"
@@ -346,6 +348,15 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
         sources = valid_sources()
         sources["MainActivity.kt"] += " SlicerProcessClient.cancelActiveSliceAsync()"
         with self.assertRaisesRegex(VerificationError, "Activity composition"):
+            verify_resilience(sources)
+
+    def test_rejects_contributor_guidance_allowing_stale_slice_cancellation(self) -> None:
+        sources = valid_sources()
+        sources["CONTRIBUTING.md"] = sources["CONTRIBUTING.md"].replace(
+            "idle or stale slice owner must never cancel a later",
+            "stale owners may cancel later work",
+        )
+        with self.assertRaisesRegex(VerificationError, "foreground cancellation"):
             verify_resilience(sources)
 
     def test_rejects_async_settings_write_without_commit_result(self) -> None:

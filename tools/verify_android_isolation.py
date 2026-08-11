@@ -123,17 +123,22 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         "foregroundSession.close()",
         "operationCancellation.get()",
         "operationCancellation.set(true)",
+        "private val operationSession = AtomicReference<ForegroundSliceSession?>(null)",
+        "SlicerProcessClient.cancelUserSliceAsync(session)",
         "override fun onCleared()",
-        "SlicerProcessClient.cancelActiveSliceAsync()",
+        "operationSession.get()?.let(SlicerProcessClient::cancelUserSliceAsync)",
     ):
         if marker not in lifecycle:
             raise VerificationError(f"retained slice lifecycle is missing: {marker}")
     if "ViewModelProvider(this)[SliceOperationViewModel::class.java]" not in main:
         raise VerificationError("the Activity must retain active slicing across configuration changes")
-    if "SlicerProcessClient.cancelActiveSliceAsync()" in main:
+    if "SlicerProcessClient.cancelUserSliceAsync(" in main:
         raise VerificationError(
             "the Activity must not cancel retained native work during UI disposal"
         )
+    for forbidden in ("fun cancelActiveSlice(", "fun cancelActiveSliceAsync("):
+        if forbidden in service or forbidden in lifecycle:
+            raise VerificationError("slice cancellation must not target a global active request")
     if "onCancelSlice" not in workspace or "canceling_slice" not in workspace:
         raise VerificationError("the Slice workspace must expose cancellation progress")
     for marker in (
@@ -150,6 +155,10 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         "debug worker termination": "MESSAGE_TERMINATE_FOR_TEST",
         "dedicated Orca thread": "HandlerThread(\"DuckySlicer Orca work\")",
         "request-scoped cancellation": "MESSAGE_CANCEL",
+        "retained-session cancellation":
+            "fun cancelUserSliceAsync(session: ForegroundSliceSession)",
+        "exact foreground request identity": "val active = activeRequestId.get() == requestId",
+        "durable retained-session cancellation": "session::requestCancellation",
         "pre-bind cancellation race containment": "if (cancellationRequested())",
         "cancellation process containment": "Process.killProcess(Process.myPid())",
         "abandoned-client containment": "override fun onUnbind",
@@ -206,6 +215,18 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         raise VerificationError("ARM64 imperfect-mesh recovery corpus is missing")
     if "activeSliceCancellationKeepsServiceResponsiveAndRestartsCleanly" not in device_test:
         raise VerificationError("ARM64 active-slice cancellation regression is missing")
+    if (
+        "clearingIdleSliceOwnerAndStaleSessionCannotCancelLaterNativeRequest" not in device_test
+        or "A stale foreground session must not cancel another request" not in device_test
+        or "Clearing an idle slice owner canceled later native work" not in device_test
+    ):
+        raise VerificationError("ARM64 stale-slice-owner cancellation regression is missing")
+    if (
+        "clearingFinalActiveSliceOwnerCancelsItsExactSessionAndRecovers" not in device_test
+        or "Final owner cancellation left a recoverable foreground session" not in device_test
+        or "A clean slice must succeed after final-owner cancellation" not in device_test
+    ):
+        raise VerificationError("ARM64 final-slice-owner cancellation regression is missing")
     if (
         "activeSliceSurvivesActivityRecreationAndCompletes" not in device_test
         or "Stopping the Activity must not cancel the slice" not in device_test

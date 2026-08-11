@@ -510,6 +510,14 @@ def verify_resilience(sources: dict[str, str]) -> None:
     ]:
         raise VerificationError("contributor guidance allows UI disposal to cancel retained work")
     for marker in (
+        "Foreground-slice cancellation must carry its",
+        "idle or stale slice owner must never cancel a later",
+    ):
+        if marker not in sources["CONTRIBUTING.md"]:
+            raise VerificationError(
+                f"contributor guidance does not scope foreground cancellation: {marker}"
+            )
+    for marker in (
         "request-scoped cancellation",
         "preserve the starting project on cancellation",
         "remove every generated model that was not accepted",

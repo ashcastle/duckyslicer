@@ -5,10 +5,15 @@ import android.os.SystemClock
 import android.provider.Settings
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -43,6 +48,61 @@ class SliceLifecycleInstrumentedTest {
         assertEquals("request-one", first.data?.lastPathSegment)
         assertEquals("request-two", second.data?.lastPathSegment)
         assertFalse("Each slice must receive a distinct cancel token", first.filterEquals(second))
+    }
+
+    @Test
+    fun clearingFinalActiveSliceOwnerCancelsItsExactSessionAndRecovers() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val storedModel = File(context.cacheDir, "final-owner-slice.stl")
+        instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
+            storedModel.outputStream().use(input::copyTo)
+        }
+        val model = ModelInfo.fromJson(
+            NativeEngine.inspectStl(storedModel.absolutePath),
+            storedModel.absolutePath,
+        )
+        val projectObject = ProjectObject(
+            id = "final-owner-slice",
+            model = model,
+        )
+        try {
+            val launchIntent = Intent(Intent.ACTION_MAIN)
+                .setClass(context, MainActivity::class.java)
+                .addCategory(Intent.CATEGORY_LAUNCHER)
+            ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+                scenario.onActivity { activity ->
+                    val owner = ViewModelProvider(activity)[SliceOperationViewModel::class.java]
+                    assertTrue(owner.start(listOf(projectObject), SliceOptions()))
+                    assertTrue(owner.state.value.slicing)
+                }
+            }
+
+            val deadline = SystemClock.elapsedRealtime() + FINAL_OWNER_TIMEOUT_MILLIS
+            while (
+                (
+                    ForegroundSliceStore.load(context) != null ||
+                        SlicerProcessClient.workerIsForegroundForTest(context)
+                    ) && SystemClock.elapsedRealtime() < deadline
+            ) {
+                SystemClock.sleep(20)
+            }
+            assertNull(
+                "Final owner cancellation left a recoverable foreground session",
+                ForegroundSliceStore.load(context),
+            )
+            assertFalse(
+                "Final owner cancellation left the slicer service in foreground",
+                SlicerProcessClient.workerIsForegroundForTest(context),
+            )
+            val recovery = OnDeviceSlicer.slice(
+                storedModel,
+                SliceOptions().selectQuality(QualityProfile.DRAFT),
+            )
+            assertTrue("A clean slice must succeed after final-owner cancellation", recovery.output.isFile)
+        } finally {
+            storedModel.delete()
+        }
     }
 
     @Test
@@ -210,7 +270,7 @@ class SliceLifecycleInstrumentedTest {
                     "Notification cancellation requires an active foreground slice",
                     SlicerProcessClient.workerIsForegroundForTest(context),
                 )
-                assertTrue(SlicerProcessClient.cancelFromNotificationForTest())
+                assertTrue(retained.cancelFromNotificationForTest())
                 val notificationCancelDeadline =
                     SystemClock.elapsedRealtime() + COMPLETION_TIMEOUT_MILLIS
                 while (
@@ -229,8 +289,64 @@ class SliceLifecycleInstrumentedTest {
         }
     }
 
+    @Test
+    fun clearingIdleSliceOwnerAndStaleSessionCannotCancelLaterNativeRequest() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        ForegroundSliceStore.load(context)?.let { record ->
+            ForegroundSliceStore.remove(context, record.requestId)
+        }
+        val ownerStore = ViewModelStore()
+        ViewModelProvider(
+            ownerStore,
+            ViewModelProvider.NewInstanceFactory(),
+        )[SliceOperationViewModel::class.java]
+        var ownerCleared = false
+        val started = CountDownLatch(1)
+        val failure = AtomicReference<Throwable?>(null)
+        val requestId = UUID.randomUUID().toString()
+        val probe = Thread {
+            runCatching {
+                SlicerProcessClient.cancellationProbeForTest(started::countDown, requestId)
+            }.onFailure(failure::set)
+        }.apply { start() }
+        try {
+            assertTrue("The later native request did not start", started.await(10, TimeUnit.SECONDS))
+            val workerPid = SlicerProcessClient.workerHealthForTest(context)
+            val staleSession = ForegroundSliceSession(context, UUID.randomUUID().toString())
+
+            assertFalse(
+                "A stale foreground session must not cancel another request",
+                SlicerProcessClient.cancelUserSliceAsync(staleSession),
+            )
+            ownerStore.clear()
+            ownerCleared = true
+            SystemClock.sleep(300)
+
+            assertTrue("Clearing an idle slice owner canceled later native work", probe.isAlive)
+            assertEquals(
+                "An idle slice owner must leave the exact worker untouched",
+                workerPid,
+                SlicerProcessClient.workerHealthForTest(context),
+            )
+            assertTrue(
+                "The exact test request must remain cancelable",
+                SlicerProcessClient.cancelRequestForTest(requestId),
+            )
+            probe.join(10_000)
+            assertFalse("Exact cancellation did not release the request", probe.isAlive)
+            assertTrue(failure.get() is SlicingCancelledException)
+        } finally {
+            if (!ownerCleared) ownerStore.clear()
+            if (probe.isAlive) {
+                SlicerProcessClient.cancelRequestForTest(requestId)
+                probe.join(10_000)
+            }
+        }
+    }
+
     private companion object {
         const val COMPLETION_TIMEOUT_MILLIS = 90_000L
+        const val FINAL_OWNER_TIMEOUT_MILLIS = 15_000L
         const val SERVICE_STATE_TIMEOUT_MILLIS = 10_000L
     }
 }

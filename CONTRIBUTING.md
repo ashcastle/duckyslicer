@@ -34,7 +34,9 @@ avoid introducing an account or cloud requirement.
   owner so a recreated Activity cannot race or replace a newer durable profile list.
 - Keep Orca work off every Android main thread. New long-running operations must
   retain request-scoped cancellation, terminate only the isolated worker, and prove
-  a clean follow-up operation on ARM64.
+  a clean follow-up operation on ARM64. Foreground-slice cancellation must carry its
+  retained session request ID; an idle or stale slice owner must never cancel a later
+  native operation.
 - Project history, active slicing options, restoration, and debounced persistence must
   share the same Activity-retained owner. Rotation must preserve unsaved edits and undo
   history, while the durable project generation remains the process-death recovery path.

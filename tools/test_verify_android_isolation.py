@@ -33,6 +33,11 @@ class SlicerProcessService {
   val terminate = MESSAGE_TERMINATE_FOR_TEST
   val worker = HandlerThread("DuckySlicer Orca work")
   val cancel = MESSAGE_CANCEL
+  fun cancelUserSliceAsync(session: ForegroundSliceSession) {
+    val requestId = session.requestId
+    val active = activeRequestId.get() == requestId
+    runCatching(session::requestCancellation)
+  }
   val attach = MESSAGE_ATTACH
   val completed = completedForegroundResult
   fun containPreBindCancellation() { if (cancellationRequested()) return }
@@ -70,6 +75,12 @@ VALID_DEVICE_TEST = """
 nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly
 imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp
 activeSliceCancellationKeepsServiceResponsiveAndRestartsCleanly
+clearingIdleSliceOwnerAndStaleSessionCannotCancelLaterNativeRequest
+A stale foreground session must not cancel another request
+Clearing an idle slice owner canceled later native work
+clearingFinalActiveSliceOwnerCancelsItsExactSessionAndRecovers
+Final owner cancellation left a recoverable foreground session
+A clean slice must succeed after final-owner cancellation
 activeSliceSurvivesActivityRecreationAndCompletes
 Stopping the Activity must not cancel the slice
 The slicer service must be foreground while a stopped Activity is slicing
@@ -125,7 +136,10 @@ def valid_sources() -> dict[str, str]:
             "foregroundSession.close() "
             "operationCancellation.get() "
             "operationCancellation.set(true) "
-            "override fun onCleared() SlicerProcessClient.cancelActiveSliceAsync()"
+            "private val operationSession = AtomicReference<ForegroundSliceSession?>(null) "
+            "SlicerProcessClient.cancelUserSliceAsync(session) "
+            "override fun onCleared() "
+            "operationSession.get()?.let(SlicerProcessClient::cancelUserSliceAsync)"
         ),
         "com/ashcastle/duckyslicer/ForegroundSliceStore.kt": VALID_FOREGROUND_STORE,
         "com/ashcastle/duckyslicer/WorkspaceScreen.kt": "onCancelSlice canceling_slice",
@@ -178,6 +192,30 @@ class VerifyAndroidIsolationTest(unittest.TestCase):
             ("imperfectMeshCorpusIsRepairableOrFailsWithoutKillingTheApp", "imperfect-mesh"),
             ("nativeSlicerWorkerCrashLeavesAppAliveAndRestartsCleanly", "crash recovery"),
             ("activeSliceCancellationKeepsServiceResponsiveAndRestartsCleanly", "active-slice"),
+            (
+                "clearingIdleSliceOwnerAndStaleSessionCannotCancelLaterNativeRequest",
+                "stale-slice-owner",
+            ),
+            (
+                "A stale foreground session must not cancel another request",
+                "stale-slice-owner",
+            ),
+            (
+                "Clearing an idle slice owner canceled later native work",
+                "stale-slice-owner",
+            ),
+            (
+                "clearingFinalActiveSliceOwnerCancelsItsExactSessionAndRecovers",
+                "final-slice-owner",
+            ),
+            (
+                "Final owner cancellation left a recoverable foreground session",
+                "final-slice-owner",
+            ),
+            (
+                "A clean slice must succeed after final-owner cancellation",
+                "final-slice-owner",
+            ),
             ("activeSliceSurvivesActivityRecreationAndCompletes", "configuration/background"),
             ("Stopping the Activity must not cancel the slice", "configuration/background"),
             (
@@ -275,10 +313,39 @@ class VerifyAndroidIsolationTest(unittest.TestCase):
         sources = valid_sources()
         sources["com/ashcastle/duckyslicer/MainActivity.kt"] += (
             " DisposableEffect(sliceOperationModel) { onDispose { "
-            "SlicerProcessClient.cancelActiveSliceAsync() } }"
+            "SlicerProcessClient.cancelUserSliceAsync(session) } }"
         )
         with self.assertRaisesRegex(VerificationError, "Activity must not cancel"):
             verify_sources(sources, VALID_DEVICE_TEST)
+
+    def test_rejects_global_or_unscoped_slice_cancellation(self) -> None:
+        service_path = "com/ashcastle/duckyslicer/SlicerProcessService.kt"
+        lifecycle_path = "com/ashcastle/duckyslicer/SliceOperationViewModel.kt"
+        mutations = (
+            lambda sources: sources.__setitem__(
+                service_path,
+                sources[service_path] + " fun cancelActiveSlice() = Unit",
+            ),
+            lambda sources: sources.__setitem__(
+                lifecycle_path,
+                sources[lifecycle_path].replace(
+                    "operationSession.get()?.let(SlicerProcessClient::cancelUserSliceAsync)",
+                    "SlicerProcessClient.cancelActiveSliceAsync()",
+                ),
+            ),
+            lambda sources: sources.__setitem__(
+                service_path,
+                sources[service_path].replace(
+                    "val active = activeRequestId.get() == requestId",
+                    "val active = activeRequestId.get() != null",
+                ),
+            ),
+        )
+        for mutate in mutations:
+            sources = valid_sources()
+            mutate(sources)
+            with self.assertRaises(VerificationError):
+                verify_sources(sources, VALID_DEVICE_TEST)
 
     def test_requires_cancellation_before_the_worker_is_bound(self) -> None:
         for source_path, marker in (

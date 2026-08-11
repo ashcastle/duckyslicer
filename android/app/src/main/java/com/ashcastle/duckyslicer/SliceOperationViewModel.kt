@@ -41,6 +41,7 @@ internal class SliceOperationViewModel : ViewModel() {
     val state: StateFlow<SliceOperationState> = mutableState.asStateFlow()
 
     private val operationJob = AtomicReference<Job?>(null)
+    private val operationSession = AtomicReference<ForegroundSliceSession?>(null)
     private val operationCancellation = AtomicBoolean(false)
 
     init {
@@ -65,9 +66,7 @@ internal class SliceOperationViewModel : ViewModel() {
                 objects,
                 options,
                 foregroundSession = foregroundSession,
-                cancellationRequested = {
-                    operationCancellation.get() || foregroundSession.cancellationRequested()
-                },
+                cancellationRequested = { cancellationRequested(foregroundSession) },
                 onProgress = onProgress,
             )
         }
@@ -95,6 +94,9 @@ internal class SliceOperationViewModel : ViewModel() {
         recovering: Boolean,
         slice: ((Int) -> Unit) -> SliceOutcome,
     ) {
+        check(operationSession.compareAndSet(null, foregroundSession)) {
+            "Another foreground slice session is already owned"
+        }
         mutableState.value = SliceOperationState(slicing = true)
         operationCancellation.set(false)
         val job = viewModelScope.launch {
@@ -116,11 +118,11 @@ internal class SliceOperationViewModel : ViewModel() {
                     previewLoading = true,
                 )
                 try {
-                    if (foregroundSession.cancellationRequested()) {
+                    if (cancellationRequested(foregroundSession)) {
                         throw SlicingCancelledException()
                     }
                     val preview = withContext(Dispatchers.IO) { buildPreview(outcome, 0, Int.MAX_VALUE) }
-                    if (foregroundSession.cancellationRequested()) {
+                    if (cancellationRequested(foregroundSession)) {
                         throw SlicingCancelledException()
                     }
                     mutableState.value = SliceOperationState(
@@ -160,6 +162,7 @@ internal class SliceOperationViewModel : ViewModel() {
                         terminalStatus = SliceTerminalStatus.CANCELED,
                     )
                 }
+                operationSession.compareAndSet(foregroundSession, null)
                 foregroundSession.close()
                 operationCancellation.set(false)
                 operationJob.set(null)
@@ -214,9 +217,16 @@ internal class SliceOperationViewModel : ViewModel() {
     fun cancel() {
         val current = mutableState.value
         if (!current.slicing || current.cancellationRequested) return
+        val session = operationSession.get() ?: return
+        if (!SlicerProcessClient.cancelUserSliceAsync(session)) return
         mutableState.value = current.copy(cancellationRequested = true)
         operationCancellation.set(true)
-        SlicerProcessClient.cancelActiveSliceAsync()
+    }
+
+    internal fun cancelFromNotificationForTest(): Boolean {
+        check(BuildConfig.DEBUG) { "Notification cancellation is available only in debug builds" }
+        val session = operationSession.get() ?: return false
+        return SlicerProcessClient.cancelFromNotificationForTest(session)
     }
 
     fun clearCompleted() {
@@ -237,9 +247,14 @@ internal class SliceOperationViewModel : ViewModel() {
         },
     )
 
+    private fun cancellationRequested(session: ForegroundSliceSession): Boolean =
+        operationCancellation.get() || session.cancellationRequested()
+
     override fun onCleared() {
         operationCancellation.set(true)
-        SlicerProcessClient.cancelActiveSliceAsync()
+        if (mutableState.value.slicing) {
+            operationSession.get()?.let(SlicerProcessClient::cancelUserSliceAsync)
+        }
         super.onCleared()
     }
 

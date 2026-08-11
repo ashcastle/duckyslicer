@@ -18,6 +18,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
+import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -1551,9 +1552,10 @@ class NativeEngineInstrumentedTest {
         val appPid = android.os.Process.myPid()
         val started = CountDownLatch(1)
         val failure = AtomicReference<Throwable?>(null)
+        val requestId = UUID.randomUUID().toString()
         val probe = Thread {
             runCatching {
-                SlicerProcessClient.cancellationProbeForTest(started::countDown)
+                SlicerProcessClient.cancellationProbeForTest(started::countDown, requestId)
             }.onFailure(failure::set)
         }.apply { start() }
 
@@ -1561,7 +1563,10 @@ class NativeEngineInstrumentedTest {
         val busyWorkerPid = SlicerProcessClient.workerHealthForTest(context)
         assertNotEquals("Orca work must not block the service main thread", appPid, busyWorkerPid)
 
-        assertTrue("The active slice must accept cancellation", SlicerProcessClient.cancelActiveSlice())
+        assertTrue(
+            "The exact active request must accept cancellation",
+            SlicerProcessClient.cancelRequestForTest(requestId),
+        )
         probe.join(10_000)
 
         assertTrue("Cancellation must promptly release the waiting client", !probe.isAlive)
