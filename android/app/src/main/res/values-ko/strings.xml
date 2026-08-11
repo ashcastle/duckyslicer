@@ -57,6 +57,11 @@
     <string name="offline_app_summary">안드로이드용 오프라인 슬라이서</string>
     <string name="menu">메뉴</string>
     <string name="import_model">모델 임포트</string>
+    <string name="import_profiles">프로필 가져오기</string>
+    <string name="export_profiles">프로필 내보내기</string>
+    <string name="cancel_profile_import">프로필 가져오기 중지</string>
+    <string name="cancel_profile_export">프로필 내보내기 중지</string>
+    <string name="canceling_profile_transfer">프로필 전송 중지 중…</string>
     <string name="export_gcode">G-code 내보내기</string>
     <string name="export_options">내보내기 옵션</string>
     <string name="import_from_menu">위 메뉴에서 모델을 임포트하세요.</string>
@@ -389,6 +394,13 @@
     <string name="revert_changes">되돌리기</string>
     <string name="apply_changes">적용</string>
     <string name="profile_saved">프로필을 저장했습니다.</string>
+    <string name="profiles_imported">프로필 %1$d개를 가져왔습니다.</string>
+    <string name="profiles_unchanged">프로필이 이미 최신 상태입니다.</string>
+    <string name="profiles_exported">프로필을 내보냈습니다.</string>
+    <string name="profile_import_canceled">프로필 가져오기를 중지했습니다.</string>
+    <string name="profile_export_canceled">프로필 내보내기를 중지했습니다.</string>
+    <string name="profile_import_error">프로필을 가져오지 못했습니다. 저장된 프로필은 변경하지 않았습니다.</string>
+    <string name="profile_export_error">프로필을 내보내지 못했습니다.</string>
     <string name="profile_save_error">이 프로필을 저장하지 못했습니다.</string>
     <string name="project_save_error">이 프로젝트를 저장하지 못했습니다.</string>
     <string name="open_project">프로젝트 열기</string>

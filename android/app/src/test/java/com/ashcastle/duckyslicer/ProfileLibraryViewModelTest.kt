@@ -1,7 +1,10 @@
 package com.ashcastle.duckyslicer
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProfileLibraryViewModelTest {
@@ -47,5 +50,50 @@ class ProfileLibraryViewModelTest {
 
         assertEquals(printer, printerOptions.printerProfile)
         assertEquals(filament, filamentOptions.filamentProfile)
+    }
+
+    @Test
+    fun profileTransferStateRejectsStaleTransitionsAndSettlesCancellation() {
+        val idle = ProfileLibraryState(busy = false, catalogLoaded = true)
+        val started = requireNotNull(
+            idle.withStartedProfileTransfer(7, ProfileTransferDirection.IMPORT),
+        )
+        assertTrue(started.busy)
+        assertEquals(ProfileTransferDirection.IMPORT, started.activeTransferDirection)
+        assertNull(started.withStartedProfileTransfer(8, ProfileTransferDirection.EXPORT))
+        assertNull(
+            started.withProfileTransferCancellationRequested(
+                8,
+                ProfileTransferDirection.IMPORT,
+            ),
+        )
+
+        val canceling = requireNotNull(
+            started.withProfileTransferCancellationRequested(
+                7,
+                ProfileTransferDirection.IMPORT,
+            ),
+        )
+        assertTrue(canceling.transferCancellationRequested)
+        assertNull(
+            canceling.withProfileTransferCancellationRequested(
+                7,
+                ProfileTransferDirection.IMPORT,
+            ),
+        )
+        val settled = requireNotNull(
+            canceling.withCompletedProfileTransfer(
+                operationId = 7,
+                direction = ProfileTransferDirection.IMPORT,
+                requestedOutcome = ProfileTransferOutcome.SUCCEEDED,
+                importResult = ProfileBundleImportResult(1, 0, 0, 0),
+                refreshedCatalog = ProfileCatalog(),
+                profileStorageUnavailable = false,
+            ),
+        )
+        assertFalse(settled.busy)
+        assertEquals(ProfileTransferOutcome.CANCELED, settled.transferCompletion?.outcome)
+        assertNull(settled.transferCompletion?.importResult)
+        assertNotNull(settled.catalog)
     }
 }

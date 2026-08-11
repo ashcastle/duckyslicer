@@ -59,7 +59,18 @@ def valid_sources() -> dict[str, str]:
             "fun releaseProjectRequest(requestId: String) throw ProjectEditCancelledException() "
             "what == SlicerProcessContract.MESSAGE_CUT_MODEL"
         ),
-        "ProfileStore.kt": "DurableJsonFile(",
+        "ProfileStore.kt": (
+            "DurableJsonFile( internal fun importBundle( mergeProfileBundle( "
+            "beforeCommit() writeRoot(merged.root) private fun append("
+        ),
+        "ProfileBundle.kt": (
+            "MAX_PROFILE_BUNDLE_BYTES PROFILE_BUNDLE_KEYS PROFILE_ARRAY_KEYS "
+            "parseBoundedJsonObject(bytes, MAX_PROFILE_BUNDLE_BYTES) portableProfile "
+            "importedPrinterIds remapPrinterIds "
+            "importedId MAX_USER_PROFILES ProfileValidation.printer(parsed) "
+            "ProfileValidation.filament(parsed) ProfileValidation.slicing(parsed) "
+            "cancellation.throwIfRequested() copy(builtIn = false)"
+        ),
         "ProfileLibraryViewModel.kt": (
             "class ProfileLibraryViewModel(application: Application) : AndroidViewModel(application) "
             "viewModelScope.launch private val profileStore = ProfileStore(application) "
@@ -67,7 +78,15 @@ def valid_sources() -> dict[str, str]:
             "fun saveFilament( fun saveSlicing( fun recordSelection( activeOperationId "
             "optionsForSession val recentsRevision: Long "
             "val persistedRecentsRevision: Long fun flushRecentPersistence() "
-            "override fun onCleared() hasDirtyRecents RECENT_PROFILE_SAVE_DEBOUNCE_MILLIS"
+            "override fun onCleared() hasDirtyRecents RECENT_PROFILE_SAVE_DEBOUNCE_MILLIS "
+            "fun importBundle(uri: Uri) fun exportBundle(uri: Uri) "
+            "DocumentTransferCancellation() cancellation.providerSignal "
+            "application.contentResolver.acquireContentProviderClient(uri) "
+            'provider.openAssetFile(uri, "r", cancellation.providerSignal) '
+            "cancellation.attachInput(input) cancellation.attachOutput(output) "
+            "profileStore.importBundle(bytes, cancellation::complete) "
+            "deleteFailedCreatedDocument(application, uri) fun cancelTransfer() "
+            "activeTransfer?.cancellation?.cancel()"
         ),
         "AppSettings.kt": (
             "fun AppSettings.normalized() fun save(settings: AppSettings): Boolean .commit()"
@@ -124,6 +143,8 @@ def valid_sources() -> dict[str, str]:
             "completion.optionsForSession(session.sessionRevision) "
             "profileLibraryModel.recordSelection(options) "
             "profileLibraryModel.flushRecentPersistence() "
+            "profileImportPicker profileExportPicker profileLibraryModel.importBundle(uri) "
+            "profileLibraryModel.exportBundle(uri) profileLibraryModel::cancelTransfer "
             "ViewModelProvider(this)[AppSettingsViewModel::class.java] "
             "appSettingsModel.state.collectAsStateWithLifecycle() "
             "appSettingsModel.updateSettings(next) "
@@ -139,7 +160,12 @@ def valid_sources() -> dict[str, str]:
         "WorkspaceScreen.kt": (
             "projectEditActive: Boolean projectEditCancellationRequested: Boolean "
             "onCancelProjectEdit: () -> Unit R.string.cancel_model_edit "
-            "R.string.canceling_model_edit"
+            "R.string.canceling_model_edit "
+            "profileTransferDirection: ProfileTransferDirection? "
+            "profileTransferCancellationRequested: Boolean "
+            "onImportProfiles: () -> Unit onExportProfiles: () -> Unit "
+            "onCancelProfileTransfer: () -> Unit R.string.cancel_profile_import "
+            "R.string.cancel_profile_export"
         ),
         "DeviceSheet.kt": (
             ".selectable( selected = true enabled = !busy ), "
@@ -154,6 +180,14 @@ def valid_sources() -> dict[str, str]:
         "ProjectStoreTest.kt": "unreadablePrimaryAndBackupBlockAutosave",
         "ModelImportTest.kt": "cooperativeCancellationStopsBeforeAnotherImportChunkIsWritten",
         "ProfileStoreMigrationTest.kt": "unreadableOrFutureProfilesAreNotOverwritten",
+        "ProfileBundleTest.kt": (
+            "bundleRoundTripCarriesOnlyUserProfilesAndRepeatImportIsStable "
+            "changedProfileWithCollidingIdentityReceivesANewUserIdentity "
+            "malformedOrFutureBundleNeverChangesSavedProfiles "
+            "unknownPerProfileFieldsAreDiscardedBeforeTheAtomicWrite "
+            "providerInputIsBoundedAndHonorsCancellation "
+            "unreadableSavedProfilesCannotBeMisrepresentedAsAnEmptyExport"
+        ),
         "ProfileLibraryViewModelTest.kt": (
             "savedProfileAppliesOnlyToTheSessionRevisionThatStartedTheSave "
             "eachSavedProfileKindBuildsItsExpectedSelection"
@@ -211,6 +245,12 @@ def valid_sources() -> dict[str, str]:
             "The profile save must be active before recreation "
             "The profile save must be active before the newer edit"
         ),
+        "ProfileBundleLifecycleInstrumentedTest.kt": (
+            "profileExportSurvivesRecreationAndWritesTheExactBoundedBundle "
+            "profileExportCancellationSurvivesRecreationAndDeletesThePartialDocument "
+            "profileImportCancellationSurvivesRecreationAndPreservesSavedProfiles "
+            "providerBackedProfileImportPublishesTheMergedCatalogOnlyAfterCommit"
+        ),
         "AppSettingsLifecycleInstrumentedTest.kt": (
             "latestUnsavedSettingsSurviveImmediateActivityRecreationAndPersist "
             "backgroundingFlushesLatestSettingsBeforeDebounce "
@@ -237,6 +277,7 @@ def valid_sources() -> dict[str, str]:
             "MODEL_URI signal.setOnCancelListener(target.release::countDown) "
             'target.error = "OperationCanceledException"'
         ),
+        "BlockingExportProvider.java": "blocking export provider",
         "CONTRIBUTING.md": (
             "pin the connection target and bypass system proxies "
             "bind a replacement printer credential generation "
@@ -276,11 +317,15 @@ def valid_sources() -> dict[str, str]:
             "saved_data_unavailable settings_save_error cancel_model_edit model_edit_canceled "
             "cancel_upload canceling_upload upload_canceled stop_remote_request "
             "stopping_remote_request remote_request_canceled"
+            " import_profiles export_profiles cancel_profile_import cancel_profile_export"
+            " profile_import_error profile_export_error"
         ),
         "strings-ko.xml": (
             "saved_data_unavailable settings_save_error cancel_model_edit model_edit_canceled "
             "cancel_upload canceling_upload upload_canceled stop_remote_request "
             "stopping_remote_request remote_request_canceled"
+            " import_profiles export_profiles cancel_profile_import cancel_profile_export"
+            " profile_import_error profile_export_error"
         ),
     }
 
@@ -456,6 +501,30 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
             "override fun onCleared()", "drop pending recents on clear"
         )
         with self.assertRaisesRegex(VerificationError, "profile library lifecycle"):
+            verify_resilience(sources)
+
+    def test_rejects_profile_import_committing_before_completion_claim(self) -> None:
+        sources = valid_sources()
+        sources["ProfileStore.kt"] = sources["ProfileStore.kt"].replace(
+            "beforeCommit() writeRoot(merged.root)",
+            "writeRoot(merged.root) beforeCommit()",
+        )
+        with self.assertRaisesRegex(VerificationError, "validated before its atomic commit"):
+            verify_resilience(sources)
+
+    def test_rejects_profile_bundle_that_can_include_remote_credentials(self) -> None:
+        sources = valid_sources()
+        sources["ProfileBundle.kt"] += " credentialCiphertext"
+        with self.assertRaisesRegex(VerificationError, "out-of-scope data"):
+            verify_resilience(sources)
+
+    def test_rejects_profile_transfer_without_provider_cancellation(self) -> None:
+        sources = valid_sources()
+        sources["ProfileLibraryViewModel.kt"] = sources["ProfileLibraryViewModel.kt"].replace(
+            "cancellation.providerSignal",
+            "uncancelable provider",
+        )
+        with self.assertRaisesRegex(VerificationError, "profile transfer lifecycle"):
             verify_resilience(sources)
 
     def test_rejects_background_transition_without_recent_profile_flush(self) -> None:

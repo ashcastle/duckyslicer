@@ -57,6 +57,11 @@
     <string name="offline_app_summary">Your offline slicer for Android</string>
     <string name="menu">Menu</string>
     <string name="import_model">Import model</string>
+    <string name="import_profiles">Import profiles</string>
+    <string name="export_profiles">Export profiles</string>
+    <string name="cancel_profile_import">Stop importing profiles</string>
+    <string name="cancel_profile_export">Stop exporting profiles</string>
+    <string name="canceling_profile_transfer">Stopping profile transfer…</string>
     <string name="export_gcode">Export G-code</string>
     <string name="export_options">Export options</string>
     <string name="import_from_menu">Import a model from the menu above.</string>
@@ -389,6 +394,13 @@
     <string name="revert_changes">Revert</string>
     <string name="apply_changes">Apply</string>
     <string name="profile_saved">Profile saved.</string>
+    <string name="profiles_imported">%1$d profiles imported.</string>
+    <string name="profiles_unchanged">Profiles are already up to date.</string>
+    <string name="profiles_exported">Profiles exported.</string>
+    <string name="profile_import_canceled">Profile import stopped.</string>
+    <string name="profile_export_canceled">Profile export stopped.</string>
+    <string name="profile_import_error">Couldn’t import profiles. Your saved profiles were left unchanged.</string>
+    <string name="profile_export_error">Couldn’t export profiles.</string>
     <string name="profile_save_error">Couldn’t save this profile.</string>
     <string name="project_save_error">Couldn’t save this project.</string>
     <string name="open_project">Open project</string>

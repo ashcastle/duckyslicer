@@ -67,6 +67,12 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                             selectedTab = WorkspaceTab.PROJECT,
                             projectImporting = true,
                         )
+                        SCREEN_PROFILE_IMPORT -> WorkspaceAccessibilityHarness(
+                            profileTransferDirection = ProfileTransferDirection.IMPORT,
+                        )
+                        SCREEN_PROFILE_EXPORT -> WorkspaceAccessibilityHarness(
+                            profileTransferDirection = ProfileTransferDirection.EXPORT,
+                        )
                         SCREEN_WORKSPACE -> {
                             val density = LocalDensity.current
                             CompositionLocalProvider(
@@ -98,6 +104,8 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_GCODE_EXPORT = "gcode-export"
         const val SCREEN_PROJECT_EXPORT = "project-export"
         const val SCREEN_PROJECT_IMPORT = "project-import"
+        const val SCREEN_PROFILE_IMPORT = "profile-import"
+        const val SCREEN_PROFILE_EXPORT = "profile-export"
     }
 }
 
@@ -219,6 +227,8 @@ private fun WorkspaceAccessibilityHarness(
     exportingGcode: Boolean = false,
     projectImporting: Boolean = false,
     projectExporting: Boolean = false,
+    profileTransferDirection: ProfileTransferDirection? = null,
+    profileTransferCancellationRequested: Boolean = false,
 ) {
     WorkspaceScreen(
         selectedTab = selectedTab,
@@ -239,7 +249,9 @@ private fun WorkspaceAccessibilityHarness(
         remoteRequestCancellationRequested = false,
         remoteMessage = null,
         remoteMessageIsError = false,
-        profileBusy = false,
+        profileBusy = profileTransferDirection != null,
+        profileTransferDirection = profileTransferDirection,
+        profileTransferCancellationRequested = profileTransferCancellationRequested,
         appSettingsSaveFailed = false,
         supportReportExportState = SupportReportExportState(),
         sliceOutcome = sliceOutcome,
@@ -266,6 +278,9 @@ private fun WorkspaceAccessibilityHarness(
         canRedo = false,
         onTabSelected = {},
         onChoose = {},
+        onImportProfiles = {},
+        onExportProfiles = {},
+        onCancelProfileTransfer = {},
         onCreatePrimitive = { _, _ -> },
         onOpenProject = {},
         onSaveProject = {},

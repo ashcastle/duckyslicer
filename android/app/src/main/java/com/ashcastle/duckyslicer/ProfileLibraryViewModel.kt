@@ -1,6 +1,9 @@
 package com.ashcastle.duckyslicer
 
 import android.app.Application
+import android.content.ContentResolver
+import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
@@ -17,6 +20,24 @@ internal enum class ProfileLibraryMessage {
     STORAGE_UNAVAILABLE,
     SAVE_FAILED,
 }
+
+internal enum class ProfileTransferDirection {
+    IMPORT,
+    EXPORT,
+}
+
+internal enum class ProfileTransferOutcome {
+    SUCCEEDED,
+    CANCELED,
+    FAILED,
+}
+
+internal data class ProfileTransferCompletion(
+    val id: Long,
+    val direction: ProfileTransferDirection,
+    val outcome: ProfileTransferOutcome,
+    val importResult: ProfileBundleImportResult? = null,
+)
 
 internal sealed interface ProfileSaveCompletion {
     val id: Long
@@ -67,6 +88,74 @@ internal data class ProfileLibraryState(
     val completion: ProfileSaveCompletion? = null,
     val message: ProfileLibraryMessage? = null,
     val activeOperationId: Long = 0,
+    val activeTransferDirection: ProfileTransferDirection? = null,
+    val transferCancellationRequested: Boolean = false,
+    val transferCompletion: ProfileTransferCompletion? = null,
+)
+
+internal fun ProfileLibraryState.withStartedProfileTransfer(
+    operationId: Long,
+    direction: ProfileTransferDirection,
+): ProfileLibraryState? {
+    if (busy || !catalogLoaded || completion != null || transferCompletion != null) return null
+    return copy(
+        busy = true,
+        message = null,
+        activeOperationId = operationId,
+        activeTransferDirection = direction,
+        transferCancellationRequested = false,
+    )
+}
+
+internal fun ProfileLibraryState.withProfileTransferCancellationRequested(
+    operationId: Long,
+    direction: ProfileTransferDirection,
+): ProfileLibraryState? {
+    if (
+        !busy || activeOperationId != operationId || activeTransferDirection != direction ||
+        transferCancellationRequested
+    ) {
+        return null
+    }
+    return copy(transferCancellationRequested = true)
+}
+
+internal fun ProfileLibraryState.withCompletedProfileTransfer(
+    operationId: Long,
+    direction: ProfileTransferDirection,
+    requestedOutcome: ProfileTransferOutcome,
+    importResult: ProfileBundleImportResult?,
+    refreshedCatalog: ProfileCatalog?,
+    profileStorageUnavailable: Boolean,
+): ProfileLibraryState? {
+    if (!busy || activeOperationId != operationId || activeTransferDirection != direction) return null
+    val outcome = if (
+        transferCancellationRequested && requestedOutcome == ProfileTransferOutcome.SUCCEEDED
+    ) {
+        ProfileTransferOutcome.CANCELED
+    } else {
+        requestedOutcome
+    }
+    return copy(
+        busy = false,
+        catalog = refreshedCatalog ?: catalog,
+        catalogLoaded = catalogLoaded || refreshedCatalog != null,
+        storageUnavailable = storageUnavailable || profileStorageUnavailable,
+        activeTransferDirection = null,
+        transferCancellationRequested = false,
+        transferCompletion = ProfileTransferCompletion(
+            operationId,
+            direction,
+            outcome,
+            importResult.takeIf { outcome == ProfileTransferOutcome.SUCCEEDED },
+        ),
+    )
+}
+
+private data class ActiveProfileTransfer(
+    val id: Long,
+    val direction: ProfileTransferDirection,
+    val cancellation: DocumentTransferCancellation,
 )
 
 /** Owns profile persistence for the whole Activity lifetime, including recreation. */
@@ -78,6 +167,7 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
     val state: StateFlow<ProfileLibraryState> = mutableState.asStateFlow()
     private var nextOperationId = 0L
     private var recentPersistenceJob: Job? = null
+    private var activeTransfer: ActiveProfileTransfer? = null
 
     init {
         loadLibrary()
@@ -131,6 +221,21 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
             )
         }
 
+    fun importBundle(uri: Uri): Boolean = launchTransfer(uri, ProfileTransferDirection.IMPORT)
+
+    fun exportBundle(uri: Uri): Boolean = launchTransfer(uri, ProfileTransferDirection.EXPORT)
+
+    fun cancelTransfer(): Boolean {
+        val active = synchronized(this) { activeTransfer } ?: return false
+        if (!active.cancellation.cancel()) return false
+        synchronized(this) {
+            val current = mutableState.value
+            current.withProfileTransferCancellationRequested(active.id, active.direction)
+                ?.let { canceling -> mutableState.value = canceling }
+        }
+        return true
+    }
+
     @Synchronized
     fun recordSelection(options: SliceOptions): Boolean {
         val current = mutableState.value
@@ -158,6 +263,13 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
         val current = mutableState.value
         if (current.message != message) return
         mutableState.value = current.copy(message = null)
+    }
+
+    @Synchronized
+    fun consumeTransferCompletion(operationId: Long) {
+        val current = mutableState.value
+        if (current.transferCompletion?.id != operationId) return
+        mutableState.value = current.copy(transferCompletion = null)
     }
 
     private fun loadLibrary() {
@@ -195,6 +307,123 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
                 )
             }
         }
+    }
+
+    @Synchronized
+    private fun launchTransfer(uri: Uri, direction: ProfileTransferDirection): Boolean {
+        if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
+        val current = mutableState.value
+        val operationId = ++nextOperationId
+        val started = current.withStartedProfileTransfer(operationId, direction) ?: return false
+        val cancellation = DocumentTransferCancellation()
+        val transfer = ActiveProfileTransfer(operationId, direction, cancellation)
+        activeTransfer = transfer
+        mutableState.value = started
+        viewModelScope.launch(Dispatchers.IO) {
+            val application = getApplication<Application>()
+            var imported: ProfileBundleImportResult? = null
+            val outcome = try {
+                when (direction) {
+                    ProfileTransferDirection.IMPORT -> {
+                        val provider = requireNotNull(
+                            application.contentResolver.acquireContentProviderClient(uri),
+                        ) { "profile_bundle_provider_unavailable" }
+                        val descriptor = requireNotNull(
+                            provider.use {
+                                provider.openAssetFile(uri, "r", cancellation.providerSignal)
+                            },
+                        ) { "profile_bundle_input_unavailable" }
+                        if (descriptor.length >= 0L) {
+                            require(descriptor.length <= MAX_PROFILE_BUNDLE_BYTES) {
+                                "profile_bundle_too_large"
+                            }
+                        }
+                        val bytes = descriptor.use {
+                            descriptor.createInputStream().use { input ->
+                                cancellation.attachInput(input)
+                                try {
+                                    readProfileBundleBytes(input, cancellation)
+                                } finally {
+                                    cancellation.detachInput(input)
+                                }
+                            }
+                        }
+                        imported = profileStore.importBundle(bytes, cancellation::complete)
+                    }
+                    ProfileTransferDirection.EXPORT -> {
+                        val bytes = profileStore.exportBundle()
+                        cancellation.throwIfRequested()
+                        val descriptor = requireNotNull(
+                            application.contentResolver.openAssetFileDescriptor(
+                                uri,
+                                "wt",
+                                cancellation.providerSignal,
+                            ),
+                        ) { "profile_bundle_output_unavailable" }
+                        descriptor.use {
+                            descriptor.createOutputStream().use { output ->
+                                cancellation.attachOutput(output)
+                                try {
+                                    writeProfileBundleBytes(output, bytes, cancellation)
+                                    output.flush()
+                                    cancellation.complete()
+                                } finally {
+                                    cancellation.detachOutput(output)
+                                }
+                            }
+                        }
+                    }
+                }
+                ProfileTransferOutcome.SUCCEEDED
+            } catch (scopeCancellation: CancellationException) {
+                cancellation.cancel()
+                if (direction == ProfileTransferDirection.EXPORT) {
+                    deleteFailedCreatedDocument(application, uri)
+                }
+                throw scopeCancellation
+            } catch (failure: Exception) {
+                val canceled = cancellation.wasRequested() ||
+                    failure is DocumentTransferCancelledException
+                if (direction == ProfileTransferDirection.EXPORT) {
+                    deleteFailedCreatedDocument(application, uri)
+                }
+                if (canceled) {
+                    ProfileTransferOutcome.CANCELED
+                } else {
+                    if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Profile bundle transfer failed", failure)
+                    supportEvents.record(
+                        if (direction == ProfileTransferDirection.IMPORT) {
+                            SupportEvent.PROFILE_BUNDLE_IMPORT_FAILED
+                        } else {
+                            SupportEvent.PROFILE_BUNDLE_EXPORT_FAILED
+                        },
+                    )
+                    ProfileTransferOutcome.FAILED
+                }
+            } finally {
+                cancellation.close()
+            }
+            val refreshedCatalog = if (
+                direction == ProfileTransferDirection.IMPORT &&
+                outcome == ProfileTransferOutcome.SUCCEEDED
+            ) {
+                runCatching { profileStore.load() }.getOrNull()
+            } else {
+                null
+            }
+            synchronized(this@ProfileLibraryViewModel) {
+                if (activeTransfer?.id == operationId) activeTransfer = null
+                mutableState.value.withCompletedProfileTransfer(
+                    operationId = operationId,
+                    direction = direction,
+                    requestedOutcome = outcome,
+                    importResult = imported,
+                    refreshedCatalog = refreshedCatalog,
+                    profileStorageUnavailable = profileStore.storageUnavailable,
+                )?.let { completed -> mutableState.value = completed }
+            }
+        }
+        return true
     }
 
     @Synchronized
@@ -306,6 +535,8 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
 
     override fun onCleared() {
         val pending = synchronized(this) {
+            activeTransfer?.cancellation?.cancel()
+            activeTransfer = null
             recentPersistenceJob?.cancel()
             recentPersistenceJob = null
             mutableState.value.takeIf { current ->
@@ -338,6 +569,7 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
 
     private companion object {
         const val RECENT_PROFILE_SAVE_DEBOUNCE_MILLIS = 350L
+        const val LOG_TAG = "DuckyProfileTransfer"
     }
 }
 

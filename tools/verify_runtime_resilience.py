@@ -24,6 +24,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "OrcaModelImport.kt",
         "SlicerProcessService.kt",
         "ProfileStore.kt",
+        "ProfileBundle.kt",
         "ProfileLibraryViewModel.kt",
         "AppSettings.kt",
         "AppSettingsViewModel.kt",
@@ -36,6 +37,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "ProjectStoreTest.kt",
         "ModelImportTest.kt",
         "ProfileStoreMigrationTest.kt",
+        "ProfileBundleTest.kt",
         "ProfileLibraryViewModelTest.kt",
         "AppSettingsViewModelTest.kt",
         "RemoteDeviceClientTest.kt",
@@ -45,10 +47,12 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "AccessibilityInstrumentedTest.kt",
         "AccessibilityHarnessActivity.kt",
         "ProfileLibraryInstrumentedTest.kt",
+        "ProfileBundleLifecycleInstrumentedTest.kt",
         "AppSettingsLifecycleInstrumentedTest.kt",
         "ProjectArchiveIntentInstrumentedTest.kt",
         "ProjectEditCancellationInstrumentedTest.kt",
         "BlockingImportProvider.java",
+        "BlockingExportProvider.java",
         "CONTRIBUTING.md",
         "SECURITY.md",
         "strings.xml",
@@ -336,6 +340,86 @@ def verify_resilience(sources: dict[str, str]) -> None:
     if "ProfileStore(" in main or "ProfileRecentStore(" in main:
         raise VerificationError("profile library persistence is still owned by the Activity composition")
 
+    profile_bundle = sources["ProfileBundle.kt"]
+    for marker in (
+        "MAX_PROFILE_BUNDLE_BYTES",
+        "PROFILE_BUNDLE_KEYS",
+        "PROFILE_ARRAY_KEYS",
+        "parseBoundedJsonObject(bytes, MAX_PROFILE_BUNDLE_BYTES)",
+        "portableProfile",
+        "importedPrinterIds",
+        "remapPrinterIds",
+        "importedId",
+        "MAX_USER_PROFILES",
+        "ProfileValidation.printer(parsed)",
+        "ProfileValidation.filament(parsed)",
+        "ProfileValidation.slicing(parsed)",
+        "cancellation.throwIfRequested()",
+        "copy(builtIn = false)",
+    ):
+        if marker not in profile_bundle:
+            raise VerificationError(f"profile portability boundary is missing: {marker}")
+    for forbidden in (
+        "RemoteDeviceProfile",
+        "credentialCiphertext",
+        '"baseUrl"',
+        "ProjectSnapshot",
+        "AppSettings",
+    ):
+        if forbidden in profile_bundle:
+            raise VerificationError(f"profile bundle includes out-of-scope data: {forbidden}")
+
+    profile_store = sources["ProfileStore.kt"]
+    import_start = profile_store.find("internal fun importBundle(")
+    import_end = profile_store.find("private fun append(", import_start)
+    profile_import = profile_store[import_start:import_end]
+    import_order = (
+        profile_import.find("mergeProfileBundle("),
+        profile_import.find("beforeCommit()"),
+        profile_import.find("writeRoot(merged.root)"),
+    )
+    if any(position < 0 for position in import_order) or not (
+        import_order[0] < import_order[1] < import_order[2]
+    ):
+        raise VerificationError("profile import is not validated before its atomic commit")
+
+    for marker in (
+        "fun importBundle(uri: Uri)",
+        "fun exportBundle(uri: Uri)",
+        "DocumentTransferCancellation()",
+        "application.contentResolver.acquireContentProviderClient(uri)",
+        'provider.openAssetFile(uri, "r", cancellation.providerSignal)',
+        "cancellation.providerSignal",
+        "cancellation.attachInput(input)",
+        "cancellation.attachOutput(output)",
+        "profileStore.importBundle(bytes, cancellation::complete)",
+        "deleteFailedCreatedDocument(application, uri)",
+        "fun cancelTransfer()",
+        "activeTransfer?.cancellation?.cancel()",
+    ):
+        if marker not in profile_library:
+            raise VerificationError(f"profile transfer lifecycle contract is missing: {marker}")
+    for marker in (
+        "profileImportPicker",
+        "profileExportPicker",
+        "profileLibraryModel.importBundle(uri)",
+        "profileLibraryModel.exportBundle(uri)",
+        "profileLibraryModel::cancelTransfer",
+    ):
+        if marker not in main:
+            raise VerificationError(f"profile transfer Activity contract is missing: {marker}")
+    for marker in (
+        "profileTransferDirection: ProfileTransferDirection?",
+        "profileTransferCancellationRequested: Boolean",
+        "onImportProfiles: () -> Unit",
+        "onExportProfiles: () -> Unit",
+        "onCancelProfileTransfer: () -> Unit",
+        "R.string.cancel_profile_import",
+        "R.string.cancel_profile_export",
+    ):
+        if marker not in workspace:
+            raise VerificationError(f"profile transfer UI is missing: {marker}")
+
     app_settings = sources["AppSettingsViewModel.kt"]
     for marker in (
         "class AppSettingsViewModel(application: Application) : AndroidViewModel(application)",
@@ -434,6 +518,14 @@ def verify_resilience(sources: dict[str, str]) -> None:
         ),
         "ProjectStoreTest.kt": ("unreadablePrimaryAndBackupBlockAutosave",),
         "ProfileStoreMigrationTest.kt": ("unreadableOrFutureProfilesAreNotOverwritten",),
+        "ProfileBundleTest.kt": (
+            "bundleRoundTripCarriesOnlyUserProfilesAndRepeatImportIsStable",
+            "changedProfileWithCollidingIdentityReceivesANewUserIdentity",
+            "malformedOrFutureBundleNeverChangesSavedProfiles",
+            "unknownPerProfileFieldsAreDiscardedBeforeTheAtomicWrite",
+            "providerInputIsBoundedAndHonorsCancellation",
+            "unreadableSavedProfilesCannotBeMisrepresentedAsAnEmptyExport",
+        ),
         "RemoteDeviceClientTest.kt": (
             "remoteResultsOnlyBelongToTheirOriginatingSelection",
             "redirectsOversizedResponsesAndDeepJsonFailClosed",
@@ -489,6 +581,12 @@ def verify_resilience(sources: dict[str, str]) -> None:
             "lateProfileSaveCannotReplaceNewerProjectSettings",
             "The profile save must be active before recreation",
             "The profile save must be active before the newer edit",
+        ),
+        "ProfileBundleLifecycleInstrumentedTest.kt": (
+            "profileExportSurvivesRecreationAndWritesTheExactBoundedBundle",
+            "profileExportCancellationSurvivesRecreationAndDeletesThePartialDocument",
+            "profileImportCancellationSurvivesRecreationAndPreservesSavedProfiles",
+            "providerBackedProfileImportPublishesTheMergedCatalogOnlyAfterCommit",
         ),
         "AppSettingsViewModelTest.kt": (
             "settingsUpdatesNormalizeValuesAdvanceRevisionAndClearFailure",
@@ -547,6 +645,12 @@ def verify_resilience(sources: dict[str, str]) -> None:
                 "stop_remote_request",
                 "stopping_remote_request",
                 "remote_request_canceled",
+                "import_profiles",
+                "export_profiles",
+                "cancel_profile_import",
+                "cancel_profile_export",
+                "profile_import_error",
+                "profile_export_error",
             )
         ):
             raise VerificationError(f"saved-data recovery copy is missing from {strings}")
@@ -688,6 +792,7 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "ProfileStore.kt": (main / "ProfileStore.kt").read_text(encoding="utf-8"),
+        "ProfileBundle.kt": (main / "ProfileBundle.kt").read_text(encoding="utf-8"),
         "ProfileLibraryViewModel.kt": (main / "ProfileLibraryViewModel.kt").read_text(
             encoding="utf-8"
         ),
@@ -708,6 +813,7 @@ def read_sources() -> dict[str, str]:
         "ProfileStoreMigrationTest.kt": (tests / "ProfileStoreMigrationTest.kt").read_text(
             encoding="utf-8"
         ),
+        "ProfileBundleTest.kt": (tests / "ProfileBundleTest.kt").read_text(encoding="utf-8"),
         "ProfileLibraryViewModelTest.kt": (
             tests / "ProfileLibraryViewModelTest.kt"
         ).read_text(encoding="utf-8"),
@@ -735,6 +841,9 @@ def read_sources() -> dict[str, str]:
         "ProfileLibraryInstrumentedTest.kt": (
             device_tests / "ProfileLibraryInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
+        "ProfileBundleLifecycleInstrumentedTest.kt": (
+            device_tests / "ProfileBundleLifecycleInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
         "AppSettingsLifecycleInstrumentedTest.kt": (
             device_tests / "AppSettingsLifecycleInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
@@ -746,6 +855,9 @@ def read_sources() -> dict[str, str]:
         ).read_text(encoding="utf-8"),
         "BlockingImportProvider.java": (
             device_tests / "BlockingImportProvider.java"
+        ).read_text(encoding="utf-8"),
+        "BlockingExportProvider.java": (
+            device_tests / "BlockingExportProvider.java"
         ).read_text(encoding="utf-8"),
         "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),
         "SECURITY.md": (ROOT / "SECURITY.md").read_text(encoding="utf-8"),

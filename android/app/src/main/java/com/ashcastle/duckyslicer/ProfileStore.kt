@@ -6,6 +6,9 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
+internal const val USER_PROFILE_SCHEMA_VERSION = 16
+internal const val MAX_USER_PROFILES = 4_096
+
 /** Stores schema-versioned user profiles in app-private storage. */
 class ProfileStore private constructor(
     private val file: File,
@@ -307,6 +310,27 @@ class ProfileStore private constructor(
         return profile
     }
 
+    @Synchronized
+    internal fun exportBundle(): ByteArray {
+        val stored = durableProfiles.read(::validateRoot, ::isCompatibleRoot)
+        storageUnavailable = !stored.status.mutationSafe
+        check(stored.value != null || stored.status == DurableJsonStatus.MISSING) {
+            "saved_data_unreadable"
+        }
+        return encodeProfileBundle(stored.value ?: JSONObject())
+    }
+
+    @Synchronized
+    internal fun importBundle(
+        bytes: ByteArray,
+        beforeCommit: () -> Unit = {},
+    ): ProfileBundleImportResult {
+        val merged = mergeProfileBundle(readRoot(forMutation = true), bytes, ::userId)
+        beforeCommit()
+        if (merged.result.importedTotal > 0) writeRoot(merged.root)
+        return merged.result
+    }
+
     private fun append(key: String, value: JSONObject) {
         val root = readRoot(forMutation = true)
         root.put("schemaVersion", USER_PROFILE_SCHEMA_VERSION)
@@ -354,9 +378,7 @@ class ProfileStore private constructor(
         ?: throw IllegalArgumentException("Profile name is required")
 
     private companion object {
-        const val USER_PROFILE_SCHEMA_VERSION = 16
         const val MAX_USER_PROFILE_BYTES = 16 * 1_024 * 1_024
-        const val MAX_USER_PROFILES = 4_096
         val PROFILE_ARRAY_PARSERS: Map<String, (JSONObject) -> String?> = mapOf(
             "printers" to { value ->
                 value.toPrinterProfileOrNull()?.takeIf(ProfileValidation::printer)?.id

@@ -29,6 +29,8 @@ def valid_sources() -> dict[str, str]:
     profile_events = {
         "FILAMENT_PROFILE_SAVE_FAILED",
         "PRINTER_PROFILE_SAVE_FAILED",
+        "PROFILE_BUNDLE_EXPORT_FAILED",
+        "PROFILE_BUNDLE_IMPORT_FAILED",
         "PROFILE_STORAGE_UNAVAILABLE",
         "SLICING_PROFILE_SAVE_FAILED",
     }

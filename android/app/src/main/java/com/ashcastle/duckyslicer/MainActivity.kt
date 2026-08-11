@@ -49,6 +49,7 @@ internal const val GCODE_DOCUMENT_MIME_TYPE = "application/octet-stream"
 private const val SLICE_NOTIFICATION_PREFERENCES = "slice_notifications"
 private const val SLICE_NOTIFICATION_PERMISSION_ASKED = "permission_asked"
 private const val DEFAULT_PROJECT_ARCHIVE_NAME = "DuckySlicer-project$PROJECT_ARCHIVE_FILE_EXTENSION"
+private const val DEFAULT_PROFILE_BUNDLE_NAME = "DuckySlicer-profiles$PROFILE_BUNDLE_FILE_EXTENSION"
 
 data class ModelInfo(
     val fileName: String,
@@ -185,6 +186,12 @@ private fun DuckySlicerScreen(
     val gcodeExportCanceledNotice = stringResource(R.string.gcode_export_canceled)
     val profileSavedNotice = stringResource(R.string.profile_saved)
     val profileSaveError = stringResource(R.string.profile_save_error)
+    val profilesUnchangedNotice = stringResource(R.string.profiles_unchanged)
+    val profilesExportedNotice = stringResource(R.string.profiles_exported)
+    val profileImportCanceledNotice = stringResource(R.string.profile_import_canceled)
+    val profileExportCanceledNotice = stringResource(R.string.profile_export_canceled)
+    val profileImportError = stringResource(R.string.profile_import_error)
+    val profileExportError = stringResource(R.string.profile_export_error)
     val filamentSlotUnavailable = stringResource(R.string.filament_slot_unavailable)
     val projectSaveError = stringResource(R.string.project_save_error)
     val projectOpenedNotice = stringResource(R.string.project_opened)
@@ -261,7 +268,11 @@ private fun DuckySlicerScreen(
     val profileCatalog = profileLibraryState.catalog
     val profileRecents = profileLibraryState.recents
     val profileRecentsLoaded = profileLibraryState.recentsLoaded
-    val profileBusy = profileLibraryState.busy || profileLibraryState.completion != null
+    val profileBusy = profileLibraryState.busy || profileLibraryState.completion != null ||
+        profileLibraryState.transferCompletion != null
+    val profileTransferDirection = profileLibraryState.activeTransferDirection
+    val profileTransferCancellationRequested =
+        profileLibraryState.transferCancellationRequested
     val supportEvents = remember(context.applicationContext) {
         SupportEventJournal(context.applicationContext)
     }
@@ -520,6 +531,42 @@ private fun DuckySlicerScreen(
         profileLibraryModel.consumeCompletion(completion.id)
     }
 
+    LaunchedEffect(profileLibraryState.transferCompletion?.id) {
+        val completion = profileLibraryState.transferCompletion ?: return@LaunchedEffect
+        when (completion.outcome) {
+            ProfileTransferOutcome.SUCCEEDED -> {
+                error = null
+                notice = if (completion.direction == ProfileTransferDirection.IMPORT) {
+                    val imported = completion.importResult?.importedTotal ?: 0
+                    if (imported == 0) {
+                        profilesUnchangedNotice
+                    } else {
+                        resources.getString(R.string.profiles_imported, imported)
+                    }
+                } else {
+                    profilesExportedNotice
+                }
+            }
+            ProfileTransferOutcome.CANCELED -> {
+                error = null
+                notice = if (completion.direction == ProfileTransferDirection.IMPORT) {
+                    profileImportCanceledNotice
+                } else {
+                    profileExportCanceledNotice
+                }
+            }
+            ProfileTransferOutcome.FAILED -> {
+                notice = null
+                error = if (completion.direction == ProfileTransferDirection.IMPORT) {
+                    profileImportError
+                } else {
+                    profileExportError
+                }
+            }
+        }
+        profileLibraryModel.consumeTransferCompletion(completion.id)
+    }
+
     fun applyModelTransform(transform: ModelTransform, recordHistory: Boolean = true) {
         val current = projectTransferModel.state.value.history
         val nextHistory = current.updateSelectedTransform(transform, recordHistory)
@@ -709,6 +756,32 @@ private fun DuckySlicerScreen(
         }
     }
 
+    val profileImportPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (
+            uri != null && !profileBusy && projectRestored && !projectTransferBusy &&
+            !importing && !autoLaying && !arranging && !splitting && !cutting &&
+            !slicing && !previewLoading && profileLibraryModel.importBundle(uri)
+        ) {
+            error = null
+            notice = null
+        }
+    }
+
+    val profileExportPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(PROFILE_BUNDLE_MIME_TYPE),
+    ) { uri ->
+        if (
+            uri != null && !profileBusy && projectRestored && !projectTransferBusy &&
+            !importing && !autoLaying && !arranging && !splitting && !cutting &&
+            !slicing && !previewLoading && profileLibraryModel.exportBundle(uri)
+        ) {
+            error = null
+            notice = null
+        }
+    }
+
     val loadPreviewRange: (Int, Int) -> Unit = { startLayer, endLayer ->
         val completed = sliceOutcome
         if (completed != null && !slicing && !autoLaying && !arranging && !splitting && !cutting) {
@@ -807,6 +880,8 @@ private fun DuckySlicerScreen(
         remoteMessage = remoteMessage,
         remoteMessageIsError = remoteMessageIsError,
         profileBusy = profileBusy,
+        profileTransferDirection = profileTransferDirection,
+        profileTransferCancellationRequested = profileTransferCancellationRequested,
         appSettingsSaveFailed = appSettingsState.message == AppSettingsMessage.SAVE_FAILED,
         supportReportExportState = supportReportExportState,
         sliceOutcome = sliceOutcome,
@@ -848,6 +923,13 @@ private fun DuckySlicerScreen(
                 ),
             )
         },
+        onImportProfiles = {
+            profileImportPicker.launch(
+                arrayOf(PROFILE_BUNDLE_MIME_TYPE, "application/json", "*/*"),
+            )
+        },
+        onExportProfiles = { profileExportPicker.launch(DEFAULT_PROFILE_BUNDLE_NAME) },
+        onCancelProfileTransfer = profileLibraryModel::cancelTransfer,
         onCreatePrimitive = ::addPrimitive,
         onOpenProject = {
             projectOpenPicker.launch(

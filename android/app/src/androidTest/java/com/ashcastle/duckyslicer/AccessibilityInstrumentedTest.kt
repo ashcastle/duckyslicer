@@ -83,6 +83,33 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun activeProfileTransfersExposeOneNamedStopAction() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val menu = context.getString(R.string.menu)
+        val cases = listOf(
+            AccessibilityHarnessActivity.SCREEN_PROFILE_IMPORT to
+                context.getString(R.string.cancel_profile_import),
+            AccessibilityHarnessActivity.SCREEN_PROFILE_EXPORT to
+                context.getString(R.string.cancel_profile_export),
+        )
+        cases.forEach { (screen, cancelLabel) ->
+            launchHarness(screen).use {
+                val menuButton = waitForNode(menu) { it.isClickable }
+                assertTrue(menuButton.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                val nodes = waitForNodes(setOf(cancelLabel))
+                assertEquals(
+                    "An active profile transfer must expose one named stop action",
+                    1,
+                    nodes.count {
+                        it.isClickable && it.isFocusable &&
+                            it.effectiveLabel().contains(cancelLabel)
+                    },
+                )
+            }
+        }
+    }
+
+    @Test
     fun previewRangeAndDisplaySlidersExposeDistinctNames() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val previewLabels = setOf(

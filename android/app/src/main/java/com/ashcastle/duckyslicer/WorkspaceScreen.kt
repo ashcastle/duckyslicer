@@ -362,6 +362,8 @@ internal fun WorkspaceScreen(
     remoteMessage: String?,
     remoteMessageIsError: Boolean,
     profileBusy: Boolean,
+    profileTransferDirection: ProfileTransferDirection?,
+    profileTransferCancellationRequested: Boolean,
     appSettingsSaveFailed: Boolean,
     supportReportExportState: SupportReportExportState,
     sliceOutcome: SliceOutcome?,
@@ -388,6 +390,9 @@ internal fun WorkspaceScreen(
     canRedo: Boolean,
     onTabSelected: (WorkspaceTab) -> Unit,
     onChoose: () -> Unit,
+    onImportProfiles: () -> Unit,
+    onExportProfiles: () -> Unit,
+    onCancelProfileTransfer: () -> Unit,
     onCreatePrimitive: (OrcaPrimitive, Float) -> Unit,
     onOpenProject: () -> Unit,
     onSaveProject: () -> Unit,
@@ -550,6 +555,9 @@ internal fun WorkspaceScreen(
             WorkspaceMenu(
                 importing = importing,
                 editingBusy = editingBusy,
+                profileBusy = profileBusy,
+                profileTransferDirection = profileTransferDirection,
+                profileTransferCancellationRequested = profileTransferCancellationRequested,
                 projectEditActive = projectEditActive,
                 cancellationRequested = projectEditCancellationRequested,
                 projectImporting = projectImporting,
@@ -561,6 +569,9 @@ internal fun WorkspaceScreen(
                 exportingGcode = exportingGcode,
                 gcodeExportCancellationRequested = gcodeExportCancellationRequested,
                 onImport = onChoose,
+                onImportProfiles = onImportProfiles,
+                onExportProfiles = onExportProfiles,
+                onCancelProfileTransfer = onCancelProfileTransfer,
                 onAddShape = { showPrimitivePicker = true },
                 onExport = onSave,
                 onCancelGcodeExport = onCancelGcodeExport,
@@ -1885,6 +1896,9 @@ private fun TransformSlider(
 private fun WorkspaceMenu(
     importing: Boolean,
     editingBusy: Boolean,
+    profileBusy: Boolean,
+    profileTransferDirection: ProfileTransferDirection?,
+    profileTransferCancellationRequested: Boolean,
     projectEditActive: Boolean,
     cancellationRequested: Boolean,
     projectImporting: Boolean,
@@ -1897,6 +1911,9 @@ private fun WorkspaceMenu(
     gcodeExportCancellationRequested: Boolean,
     canArrange: Boolean,
     onImport: () -> Unit,
+    onImportProfiles: () -> Unit,
+    onExportProfiles: () -> Unit,
+    onCancelProfileTransfer: () -> Unit,
     onAddShape: () -> Unit,
     onExport: () -> Unit,
     onCancelGcodeExport: () -> Unit,
@@ -1907,6 +1924,7 @@ private fun WorkspaceMenu(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val menuDescription = stringResource(R.string.menu)
     Box(modifier) {
         Surface(
             color = Color.Black.copy(alpha = 0.68f),
@@ -1914,11 +1932,14 @@ private fun WorkspaceMenu(
             shape = RoundedCornerShape(50),
             modifier = Modifier.size(50.dp),
         ) {
-            IconButton(onClick = { expanded = true }) {
-                if (importing || editingBusy) {
+            IconButton(
+                onClick = { expanded = true },
+                modifier = Modifier.semantics { contentDescription = menuDescription },
+            ) {
+                if (importing || editingBusy || profileTransferDirection != null) {
                     CircularProgressIndicator(Modifier.size(22.dp), color = WorkspaceYellow, strokeWidth = 2.dp)
                 } else {
-                    Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.menu))
+                    Icon(Icons.Default.Menu, contentDescription = null)
                 }
             }
         }
@@ -1968,6 +1989,29 @@ private fun WorkspaceMenu(
                     },
                 )
             }
+            if (profileTransferDirection != null) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            stringResource(
+                                when {
+                                    profileTransferCancellationRequested ->
+                                        R.string.canceling_profile_transfer
+                                    profileTransferDirection == ProfileTransferDirection.IMPORT ->
+                                        R.string.cancel_profile_import
+                                    else -> R.string.cancel_profile_export
+                                },
+                            ),
+                        )
+                    },
+                    leadingIcon = { Icon(Icons.Default.Close, null) },
+                    enabled = !profileTransferCancellationRequested,
+                    onClick = {
+                        expanded = false
+                        onCancelProfileTransfer()
+                    },
+                )
+            }
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.import_model)) },
                 leadingIcon = { Icon(Icons.Default.FileOpen, null) },
@@ -1984,6 +2028,24 @@ private fun WorkspaceMenu(
                 onClick = {
                     expanded = false
                     onAddShape()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.import_profiles)) },
+                leadingIcon = { Icon(Icons.Default.FileOpen, null) },
+                enabled = !profileBusy && !importing && !editingBusy && !slicing && !previewLoading,
+                onClick = {
+                    expanded = false
+                    onImportProfiles()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.export_profiles)) },
+                leadingIcon = { Icon(Icons.Default.SaveAlt, null) },
+                enabled = !profileBusy && !importing && !editingBusy && !slicing && !previewLoading,
+                onClick = {
+                    expanded = false
+                    onExportProfiles()
                 },
             )
             DropdownMenuItem(
