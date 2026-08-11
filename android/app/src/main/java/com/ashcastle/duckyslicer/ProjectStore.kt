@@ -80,10 +80,23 @@ internal class ProjectStore(
         sliceOptions: SliceOptions,
         output: OutputStream,
         checkCancellation: () -> Unit = {},
+    ) = exportArchive(
+        snapshot,
+        snapshot.plates.associate { plate -> plate.id to sliceOptions },
+        output,
+        checkCancellation,
+    )
+
+    @Synchronized
+    fun exportArchive(
+        snapshot: ProjectSnapshot,
+        plateOptions: Map<String, SliceOptions>,
+        output: OutputStream,
+        checkCancellation: () -> Unit = {},
     ) {
         checkCancellation()
         val modelRoot = modelsDirectory.canonicalFile
-        snapshot.objects.forEach { projectObject ->
+        snapshot.allObjects.forEach { projectObject ->
             require(projectObject.volumes.size <= SUPPORTED_PROJECT_VOLUMES_PER_OBJECT) {
                 "Multi-volume project export is not enabled yet"
             }
@@ -95,7 +108,7 @@ internal class ProjectStore(
                 }
             }
         }
-        ProjectArchiveCodec.write(snapshot, sliceOptions, output, checkCancellation)
+        ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)
     }
 
     @Synchronized
@@ -132,39 +145,50 @@ internal class ProjectStore(
             }
             checkCancellation()
             val snapshot = ProjectSnapshot(
-                objects = decoded.objects.map { archived ->
-                    checkCancellation()
-                    ProjectObject(
-                        id = archived.id,
-                        volumes = archived.volumes.map { volume ->
-                            val (file, info) = requireNotNull(installedModels[volume.modelEntry])
-                            ProjectVolume(
-                                id = volume.id,
-                                model = info.copy(
-                                    fileName = volume.displayName,
-                                    localPath = file.canonicalPath,
-                                ),
-                                supportPaint = volume.supportPaint,
-                                seamPaint = volume.seamPaint,
-                                multiColorPaint = volume.multiColorPaint,
-                                filamentSlot = volume.filamentSlot,
+                selectedPlateId = decoded.selectedPlateId,
+                plates = decoded.plates.map { archivedPlate ->
+                    ProjectPlate(
+                        id = archivedPlate.id,
+                        objects = archivedPlate.objects.map { archived ->
+                            checkCancellation()
+                            ProjectObject(
+                                id = archived.id,
+                                volumes = archived.volumes.map { volume ->
+                                    val (file, info) = requireNotNull(installedModels[volume.modelEntry])
+                                    ProjectVolume(
+                                        id = volume.id,
+                                        model = info.copy(
+                                            fileName = volume.displayName,
+                                            localPath = file.canonicalPath,
+                                        ),
+                                        supportPaint = volume.supportPaint,
+                                        seamPaint = volume.seamPaint,
+                                        multiColorPaint = volume.multiColorPaint,
+                                        filamentSlot = volume.filamentSlot,
+                                    )
+                                },
+                                transform = archived.transform,
+                                variableLayerHeights = archived.variableLayerHeights,
+                                processOverrides = archived.processOverrides,
+                                brimPoints = archived.brimPoints,
                             )
                         },
-                        transform = archived.transform,
-                        variableLayerHeights = archived.variableLayerHeights,
-                        processOverrides = archived.processOverrides,
-                        brimPoints = archived.brimPoints,
+                        selectedObjectId = archivedPlate.selectedObjectId,
                     )
                 },
-                selectedObjectId = decoded.selectedObjectId,
             )
+            val plateOptions = decoded.plates.associate { it.id to it.sliceOptions }
             checkCancellation()
             beginCommit()
-            save(snapshot, decoded.sliceOptions)
+            save(snapshot, plateOptions)
             // The imported generation is already durable. Cleanup is best-effort so a
             // filesystem cleanup hiccup cannot turn a committed project into a false failure.
             runCatching { pruneUnreferencedModels(snapshot) }
-            return StoredProjectDocument(snapshot = snapshot, sliceOptions = decoded.sliceOptions)
+            return StoredProjectDocument(
+                snapshot = snapshot,
+                sliceOptions = decoded.sliceOptions,
+                plateOptions = plateOptions,
+            )
         } catch (failure: Throwable) {
             installed.forEach(File::delete)
             throw failure
@@ -196,16 +220,14 @@ internal class ProjectStore(
         if (validateProjectRoot(root) == null) return null
         val schemaVersion = root.optInt("schemaVersion", 0)
         if (schemaVersion !in MIN_SUPPORTED_SCHEMA_VERSION..SCHEMA_VERSION) return null
-        val values = root.optJSONArray("objects") ?: JSONArray()
-        if (values.length() > MAX_PROJECT_OBJECTS) return null
-        val objects = ArrayList<ProjectObject>(values.length())
         val objectIds = HashSet<String>()
         val declaredModels = HashSet<File>()
-        for (index in 0 until values.length()) {
-            val value = values.getJSONObject(index)
-            if (schemaVersion >= 9) {
-                val volumeValues = value.optJSONArray("volumes")
-                if (volumeValues != null) {
+        fun restoreObjects(values: JSONArray): List<ProjectObject> {
+            require(values.length() <= MAX_PROJECT_OBJECTS)
+            return List(values.length()) { index ->
+                val value = values.getJSONObject(index)
+                if (schemaVersion >= 9) {
+                    val volumeValues = value.optJSONArray("volumes") ?: JSONArray()
                     repeat(volumeValues.length()) { volumeIndex ->
                         volumeValues.optJSONObject(volumeIndex)
                             ?.optString("modelFile")
@@ -213,80 +235,141 @@ internal class ProjectStore(
                             ?.let(::resolveStoredModel)
                             ?.let(declaredModels::add)
                     }
+                } else {
+                    value.optString("modelFile")
+                        .takeIf(String::isNotBlank)
+                        ?.let(::resolveStoredModel)
+                        ?.let(declaredModels::add)
                 }
-            } else {
-                value.optString("modelFile")
-                    .takeIf(String::isNotBlank)
-                    ?.let(::resolveStoredModel)
-                    ?.let(declaredModels::add)
+                restoreObject(value, schemaVersion).also { restored ->
+                    require(objectIds.add(restored.id))
+                }
             }
-            val restored = restoreObject(value, schemaVersion)
-            if (!objectIds.add(restored.id)) return null
-            objects += restored
         }
-        val requestedSelection = root.takeUnless { it.isNull("selectedObjectId") }
-            ?.optString("selectedObjectId")?.takeIf(String::isNotBlank)
-        val restoredOptions = if (schemaVersion >= 2) {
-            root.optJSONObject("sliceOptions")?.toProjectSliceOptionsOrNull()
+
+        val snapshot: ProjectSnapshot
+        val plateOptions: Map<String, SliceOptions>
+        if (schemaVersion >= 11) {
+            val plateValues = root.getJSONArray("plates")
+            require(plateValues.length() in 1..MAX_PROJECT_PLATES)
+            val plateIds = HashSet<String>()
+            val options = LinkedHashMap<String, SliceOptions>()
+            val plates = List(plateValues.length()) { plateIndex ->
+                val value = plateValues.getJSONObject(plateIndex)
+                val plateId = value.getString("id").takeIf {
+                    it.length in 1..MAX_ID_LENGTH && plateIds.add(it)
+                } ?: error("Invalid project plate id")
+                val objects = restoreObjects(value.getJSONArray("objects"))
+                val requestedSelection = value.takeUnless { it.isNull("selectedObjectId") }
+                    ?.optString("selectedObjectId")?.takeIf(String::isNotBlank)
+                options[plateId] = value.getJSONObject("sliceOptions")
+                    .toProjectSliceOptionsOrNull() ?: error("Invalid plate settings")
+                ProjectPlate(
+                    id = plateId,
+                    objects = objects,
+                    selectedObjectId = requestedSelection,
+                )
+            }
+            val selectedPlateId = root.getString("selectedPlateId")
+            snapshot = ProjectSnapshot(selectedPlateId = selectedPlateId, plates = plates)
+            plateOptions = options
         } else {
-            null
+            val objects = restoreObjects(root.optJSONArray("objects") ?: JSONArray())
+            val requestedSelection = root.takeUnless { it.isNull("selectedObjectId") }
+                ?.optString("selectedObjectId")?.takeIf(String::isNotBlank)
+            val restoredOptions = if (schemaVersion >= 2) {
+                root.optJSONObject("sliceOptions")?.toProjectSliceOptionsOrNull()
+            } else {
+                null
+            } ?: SliceOptions()
+            snapshot = ProjectSnapshot(
+                objects = objects,
+                selectedObjectId = requestedSelection?.takeIf(objectIds::contains)
+                    ?: objects.lastOrNull()?.id,
+            )
+            plateOptions = mapOf(snapshot.selectedPlateId to restoredOptions)
         }
-        val availableSlots = restoredOptions?.resolvedFilamentSlots()?.indices ?: 0..0
-        if (objects.any { projectObject ->
+        require(snapshot.allObjects.size <= MAX_PROJECT_OBJECTS)
+        snapshot.plates.forEach { plate ->
+            val availableSlots = requireNotNull(plateOptions[plate.id])
+                .resolvedFilamentSlots().indices
+            require(plate.objects.none { projectObject ->
                 projectObject.volumes.any { volume ->
                     volume.filamentSlot !in availableSlots ||
                         volume.multiColorPaint.facets.values.any { it !in availableSlots }
                 }
-            }
-        ) {
-            return null
+            })
         }
         return StoredProject(
             document = StoredProjectDocument(
-                snapshot = ProjectSnapshot(
-                    objects = objects,
-                    selectedObjectId = requestedSelection?.takeIf(objectIds::contains)
-                        ?: objects.lastOrNull()?.id,
-                ),
-                sliceOptions = restoredOptions,
+                snapshot = snapshot,
+                sliceOptions = plateOptions[snapshot.selectedPlateId],
+                plateOptions = plateOptions,
             ),
             declaredModels = declaredModels,
         )
     }
 
     @Synchronized
-    fun save(snapshot: ProjectSnapshot, sliceOptions: SliceOptions? = null) {
-        require(snapshot.objects.size <= MAX_PROJECT_OBJECTS) { "Project has too many objects" }
-        require(snapshot.objects.map(ProjectObject::id).toSet().size == snapshot.objects.size) {
+    fun save(snapshot: ProjectSnapshot, sliceOptions: SliceOptions? = null) = save(
+        snapshot,
+        snapshot.plates.associate { plate -> plate.id to (sliceOptions ?: SliceOptions()) },
+    )
+
+    @Synchronized
+    fun save(snapshot: ProjectSnapshot, plateOptions: Map<String, SliceOptions>) {
+        require(snapshot.allObjects.size <= MAX_PROJECT_OBJECTS) { "Project has too many objects" }
+        require(snapshot.allObjects.map(ProjectObject::id).toSet().size == snapshot.allObjects.size) {
             "Project contains duplicate object ids"
         }
-        require(snapshot.objects.sumOf { it.volumes.size } <= MAX_PROJECT_VOLUMES) {
+        require(snapshot.allObjects.sumOf { it.volumes.size } <= MAX_PROJECT_VOLUMES) {
             "Project has too many volumes"
         }
-        require(snapshot.objects.all { it.volumes.size <= SUPPORTED_PROJECT_VOLUMES_PER_OBJECT }) {
+        require(snapshot.allObjects.all { it.volumes.size <= SUPPORTED_PROJECT_VOLUMES_PER_OBJECT }) {
             "Multi-volume project persistence is not enabled yet"
         }
-        require(snapshot.selectedObjectId == null || snapshot.objects.any { it.id == snapshot.selectedObjectId }) {
-            "Project selection is invalid"
+        require(plateOptions.keys.containsAll(snapshot.plates.map(ProjectPlate::id))) {
+            "Project plate settings are unavailable"
         }
-        require(snapshot.objects.all { projectObject ->
-            val availableSlots = sliceOptions?.resolvedFilamentSlots()?.indices ?: 0..0
-            projectObject.volumes.all { volume ->
-                volume.filamentSlot in availableSlots &&
-                    volume.multiColorPaint.facets.values.all { it in availableSlots }
-            }
-        }) { "Project filament assignment is invalid" }
+        snapshot.plates.forEach { plate ->
+            val availableSlots = requireNotNull(plateOptions[plate.id])
+                .resolvedFilamentSlots().indices
+            require(plate.objects.all { projectObject ->
+                projectObject.volumes.all { volume ->
+                    volume.filamentSlot in availableSlots &&
+                        volume.multiColorPaint.facets.values.all { it in availableSlots }
+                }
+            }) { "Project filament assignment is invalid" }
+        }
         check(projectRoot.isDirectory || projectRoot.mkdirs()) { "Project storage is unavailable" }
         check(modelsDirectory.isDirectory || modelsDirectory.mkdirs()) {
             "Project model storage is unavailable"
         }
-        val objects = JSONArray()
-        snapshot.objects.forEach { projectObject -> objects.put(projectObject.toStoredJson()) }
         val root = JSONObject()
             .put("schemaVersion", SCHEMA_VERSION)
-            .put("selectedObjectId", snapshot.selectedObjectId ?: JSONObject.NULL)
-            .put("objects", objects)
-        if (sliceOptions != null) root.put("sliceOptions", sliceOptions.toProjectJson())
+            .put("selectedPlateId", snapshot.selectedPlateId)
+            .put(
+                "plates",
+                JSONArray().also { values ->
+                    snapshot.plates.forEach { plate ->
+                        values.put(
+                            JSONObject()
+                                .put("id", plate.id)
+                                .put(
+                                    "selectedObjectId",
+                                    plate.selectedObjectId ?: JSONObject.NULL,
+                                )
+                                .put("sliceOptions", requireNotNull(plateOptions[plate.id]).toProjectJson())
+                                .put(
+                                    "objects",
+                                    JSONArray().also { objects ->
+                                        plate.objects.forEach { objects.put(it.toStoredJson()) }
+                                    },
+                                ),
+                        )
+                    }
+                },
+            )
         val bytes = root.toString().toByteArray(Charsets.UTF_8)
         require(bytes.size <= MAX_PROJECT_BYTES) { "Project metadata is too large" }
 
@@ -296,7 +379,7 @@ internal class ProjectStore(
     @Synchronized
     fun pruneUnreferencedModels(snapshot: ProjectSnapshot) {
         val modelRoot = modelsDirectory.canonicalFile
-        val referenced = snapshot.objects
+        val referenced = snapshot.allObjects
             .asSequence()
             .flatMap { it.volumes.asSequence() }
             .mapNotNullTo(HashSet()) { volume ->
@@ -415,13 +498,60 @@ internal class ProjectStore(
     private fun validateProjectRoot(root: JSONObject): JSONObject? = runCatching {
         val schemaVersion = root.optInt("schemaVersion", 0)
         require(schemaVersion in MIN_SUPPORTED_SCHEMA_VERSION..SCHEMA_VERSION)
-        val values = root.optJSONArray("objects") ?: error("Project objects are missing")
+        val objectIds = HashSet<String>()
+        if (schemaVersion >= 11) {
+            val values = root.getJSONArray("plates")
+            require(values.length() in 1..MAX_PROJECT_PLATES)
+            val plateIds = HashSet<String>()
+            var objectCount = 0
+            repeat(values.length()) { index ->
+                val value = values.getJSONObject(index)
+                val plateId = value.getString("id")
+                require(plateId.length in 1..MAX_ID_LENGTH && plateIds.add(plateId))
+                val localIds = validateStoredObjects(
+                    value.getJSONArray("objects"),
+                    schemaVersion,
+                    objectIds,
+                )
+                objectCount += localIds.size
+                require(objectCount <= MAX_PROJECT_OBJECTS)
+                val selected = value.takeUnless { it.isNull("selectedObjectId") }
+                    ?.optString("selectedObjectId")?.takeIf(String::isNotBlank)
+                require(selected == null || selected in localIds)
+                require(value.getJSONObject("sliceOptions").toProjectSliceOptionsOrNull() != null)
+            }
+            val selectedPlateId = root.getString("selectedPlateId")
+            require(selectedPlateId in plateIds)
+        } else {
+            val ids = validateStoredObjects(
+                root.optJSONArray("objects") ?: error("Project objects are missing"),
+                schemaVersion,
+                objectIds,
+            )
+            val selected = root.takeUnless { it.isNull("selectedObjectId") }
+                ?.optString("selectedObjectId")?.takeIf(String::isNotBlank)
+            require(selected == null || selected in ids)
+            if (schemaVersion >= 2 && root.has("sliceOptions")) {
+                require(root.optJSONObject("sliceOptions")?.toProjectSliceOptionsOrNull() != null)
+            }
+        }
+        root
+    }.getOrNull()
+
+    private fun validateStoredObjects(
+        values: JSONArray,
+        schemaVersion: Int,
+        globalIds: MutableSet<String>,
+    ): Set<String> {
         require(values.length() <= MAX_PROJECT_OBJECTS)
-        val ids = HashSet<String>()
+        val localIds = HashSet<String>()
         for (index in 0 until values.length()) {
             val value = values.getJSONObject(index)
             val id = value.getString("id")
-            require(id.length in 1..MAX_ID_LENGTH && ids.add(id))
+            require(
+                id.length in 1..MAX_ID_LENGTH &&
+                    localIds.add(id) && globalIds.add(id),
+            )
             value.getJSONObject("transform").toModelTransform()
             if (schemaVersion >= 5) {
                 require(
@@ -453,14 +583,8 @@ internal class ProjectStore(
                 require(value.optJSONArray("brimPoints")?.isValidBrimPointsArray() == true)
             }
         }
-        val selected = root.takeUnless { it.isNull("selectedObjectId") }
-            ?.optString("selectedObjectId")?.takeIf(String::isNotBlank)
-        require(selected == null || selected in ids)
-        if (schemaVersion >= 2 && root.has("sliceOptions")) {
-            require(root.optJSONObject("sliceOptions")?.toProjectSliceOptionsOrNull() != null)
-        }
-        root
-    }.getOrNull()
+        return localIds
+    }
 
     private fun isCompatibleProjectRoot(root: JSONObject): Boolean =
         root.optInt("schemaVersion", 0) <= SCHEMA_VERSION
@@ -779,7 +903,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 10
+        const val SCHEMA_VERSION = 11
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"
@@ -807,5 +931,11 @@ internal class ProjectStore(
 internal data class StoredProjectDocument(
     val snapshot: ProjectSnapshot = ProjectSnapshot(),
     val sliceOptions: SliceOptions? = null,
+    val plateOptions: Map<String, SliceOptions> = snapshot.plates.associate { plate ->
+        plate.id to (sliceOptions ?: SliceOptions())
+    },
     val storageUnavailable: Boolean = false,
-)
+) {
+    val activeSliceOptions: SliceOptions
+        get() = plateOptions[snapshot.selectedPlateId] ?: sliceOptions ?: SliceOptions()
+}

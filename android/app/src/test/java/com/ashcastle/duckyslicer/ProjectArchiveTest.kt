@@ -115,18 +115,24 @@ class ProjectArchiveTest {
             assertArrayEquals(model.readBytes(), archiveEntries["models/000.stl"])
             val manifest = JSONObject(requireNotNull(archiveEntries["manifest.json"]).toString(Charsets.UTF_8))
             assertEquals(
-                setOf("format", "schemaVersion", "selectedObjectId", "sliceOptions", "objects"),
+                setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(8, manifest.getInt("schemaVersion"))
+            assertEquals(9, manifest.getInt("schemaVersion"))
+            assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
+            val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
+            assertEquals(
+                setOf("id", "selectedObjectId", "sliceOptions", "objects"),
+                manifestPlate.keys().asSequence().toSet(),
+            )
             assertEquals(
                 setOf(
                     "id", "transform", "variableLayerHeights", "processOverrides",
                     "brimPoints", "volumes",
                 ),
-                manifest.getJSONArray("objects").getJSONObject(0).keys().asSequence().toSet(),
+                manifestPlate.getJSONArray("objects").getJSONObject(0).keys().asSequence().toSet(),
             )
-            val manifestVolume = manifest.getJSONArray("objects").getJSONObject(0)
+            val manifestVolume = manifestPlate.getJSONArray("objects").getJSONObject(0)
                 .getJSONArray("volumes").getJSONObject(0)
             assertEquals(
                 setOf(
@@ -142,7 +148,7 @@ class ProjectArchiveTest {
                     "rotationZdeg", "scale", "scaleY", "scaleZ", "mirrorX", "mirrorY",
                     "mirrorZ",
                 ),
-                manifest.getJSONArray("objects").getJSONObject(0)
+                manifestPlate.getJSONArray("objects").getJSONObject(0)
                     .getJSONObject("transform").keys().asSequence().toSet(),
             )
 
@@ -190,12 +196,12 @@ class ProjectArchiveTest {
             val legacyManifest = JSONObject()
                 .put("format", manifest.getString("format"))
                 .put("schemaVersion", 1)
-                .put("selectedObjectId", manifest.getString("selectedObjectId"))
-                .put("sliceOptions", manifest.getJSONObject("sliceOptions"))
+                .put("selectedObjectId", manifestPlate.getString("selectedObjectId"))
+                .put("sliceOptions", manifestPlate.getJSONObject("sliceOptions"))
                 .put(
                     "objects",
                     JSONArray().also { legacyObjects ->
-                        val objects = manifest.getJSONArray("objects")
+                        val objects = manifestPlate.getJSONArray("objects")
                         repeat(objects.length()) { index ->
                             val objectValue = objects.getJSONObject(index)
                             val volumeValue = objectValue.getJSONArray("volumes").getJSONObject(0)
@@ -234,6 +240,76 @@ class ProjectArchiveTest {
             assertEquals(
                 1,
                 File(destinationRoot, ProjectStore.MODELS_DIRECTORY).listFiles().orEmpty().size,
+            )
+        } finally {
+            sourceRoot.deleteRecursively()
+            destinationRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun multiplePlatesAndTheirSettingsRoundTripThroughThePortableArchive() {
+        val sourceRoot = Files.createTempDirectory("ducky-project-multiplate-source-").toFile()
+        val destinationRoot = Files.createTempDirectory("ducky-project-multiplate-destination-").toFile()
+        try {
+            val source = ProjectStore(sourceRoot, ::inspectedModel)
+            val firstModel = source.createModelDestination("first-plate.stl").apply {
+                writeText("solid first plate")
+            }
+            val secondModel = source.createModelDestination("second-plate.stl").apply {
+                writeText("solid second plate")
+            }
+            val firstOptions = restoredSettingsFixture().copy(fillDensity = 0.13f)
+            val secondOptions = restoredSettingsFixture().copy(fillDensity = 0.47f)
+            val snapshot = ProjectSnapshot(
+                selectedPlateId = "plate-two",
+                plates = listOf(
+                    ProjectPlate(
+                        id = "plate-one",
+                        objects = listOf(ProjectObject("first-object", inspectedModel(firstModel))),
+                        selectedObjectId = "first-object",
+                    ),
+                    ProjectPlate(
+                        id = "plate-two",
+                        objects = listOf(ProjectObject("second-object", inspectedModel(secondModel))),
+                        selectedObjectId = "second-object",
+                    ),
+                ),
+            )
+            val plateOptions = mapOf(
+                "plate-one" to firstOptions,
+                "plate-two" to secondOptions,
+            )
+
+            val archive = ByteArrayOutputStream().also { output ->
+                source.exportArchive(snapshot, plateOptions, output)
+            }.toByteArray()
+            val manifest = JSONObject(
+                requireNotNull(archiveEntries(archive)["manifest.json"]).toString(Charsets.UTF_8),
+            )
+            assertEquals("plate-two", manifest.getString("selectedPlateId"))
+            assertEquals(2, manifest.getJSONArray("plates").length())
+
+            val imported = ProjectStore(destinationRoot, ::inspectedModel)
+                .importArchive(ByteArrayInputStream(archive))
+
+            assertEquals("plate-two", imported.snapshot.selectedPlateId)
+            assertEquals(listOf("plate-one", "plate-two"), imported.snapshot.plates.map(ProjectPlate::id))
+            assertEquals(
+                listOf("first-object", "second-object"),
+                imported.snapshot.allObjects.map(ProjectObject::id),
+            )
+            assertEquals(
+                firstOptions.toProjectJson().toString(),
+                imported.plateOptions.getValue("plate-one").toProjectJson().toString(),
+            )
+            assertEquals(
+                secondOptions.toProjectJson().toString(),
+                imported.plateOptions.getValue("plate-two").toProjectJson().toString(),
+            )
+            assertEquals(
+                listOf("solid first plate", "solid second plate"),
+                imported.snapshot.allObjects.map { File(it.model.localPath).readText() },
             )
         } finally {
             sourceRoot.deleteRecursively()

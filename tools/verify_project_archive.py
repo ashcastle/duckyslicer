@@ -33,6 +33,11 @@ REQUIRED_STRINGS = {
     "project_import_canceled",
     "project_export_error",
     "project_export_canceled",
+    "plate_number",
+    "add_plate",
+    "remove_plate",
+    "remove_plate_title",
+    "remove_plate_message",
 }
 
 
@@ -102,8 +107,12 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
             'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
             "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-            "PROJECT_ARCHIVE_SCHEMA_VERSION = 8",
+            "PROJECT_ARCHIVE_SCHEMA_VERSION = 9",
+            "ArchivedProjectPlate",
             "ArchivedProjectVolume",
+            'getJSONArray("plates")',
+            "selectedPlateId",
+            "plateOptions: Map<String, SliceOptions>",
             'getJSONArray("volumes")',
             "legacyProjectVolumeId",
             'Regex("models/[0-9]{3}\\\\.stl")',
@@ -141,7 +150,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             'File(projectRoot, ".archive-${UUID.randomUUID()}")',
             "ProjectArchiveCodec.read(",
             "moveArchiveModel(stagedModel.file, destination)",
-            "save(snapshot, decoded.sliceOptions)",
+            "val plateOptions = decoded.plates.associate",
+            "save(snapshot, plateOptions)",
             "pruneUnreferencedModels(snapshot)",
             "installed.forEach(File::delete)",
             "staging.deleteRecursively()",
@@ -154,12 +164,12 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "UUID.fromString(identifier)",
             "!Files.isSymbolicLink(candidate.toPath())",
             "checkCancellation: () -> Unit = {}",
-            "ProjectArchiveCodec.write(snapshot, sliceOptions, output, checkCancellation)",
+            "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
             "beginCommit: () -> Unit = {}",
             "beginCommit()",
         ),
     )
-    if store.index("save(snapshot, decoded.sliceOptions)") > store.index(
+    if store.index("save(snapshot, plateOptions)") > store.index(
         "pruneUnreferencedModels(snapshot)"
     ):
         raise VerificationError("ProjectStore.kt must commit imported metadata before pruning")
@@ -192,6 +202,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "ProjectTransferState(busy = true)",
             "val history: ProjectHistoryState",
             "val sliceOptions: SliceOptions",
+            "val plateOptions: Map<String, SliceOptions>",
             "val restored: Boolean",
             "val sessionRevision: Long",
             "val persistedRevision: Long",
@@ -204,7 +215,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "fun updateHistory(",
             "fun updateSession(",
             "projectStore.loadProject()",
-            "projectStore.save(document.history.current, document.sliceOptions)",
+            "projectStore.save(document.history.current, document.plateOptions)",
             "PROJECT_SAVE_DEBOUNCE_MILLIS = 400L",
             "pendingPersistence?.join()",
             "fun flushPersistence()",
@@ -372,6 +383,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "projectTransferState.completion",
             "projectHistory = projectTransferState.history",
             "sliceOptions = projectTransferState.sliceOptions",
+            "projectPlates = projectHistory.current.plates",
+            "selectedPlateId = projectHistory.current.selectedPlateId",
             "projectRestored = projectTransferState.restored",
             "projectTransferModel.updateHistory(",
             "projectTransferModel::cancelProjectImport",
@@ -400,6 +413,10 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "ProjectSheet(",
             "onOpenProject",
             "onSaveProject",
+            "onPlateSelected",
+            "onAddPlate",
+            "onRemovePlate",
+            "PlateSwitcher(",
             "confirmReplacement",
             "R.string.replace_project_title",
             "R.string.replace_project_body",
@@ -428,7 +445,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "PRIVACY.md",
         sources["PRIVACY.md"],
         (
-            "Exported DuckySlicer project files contain the model geometry",
+            "Exported DuckySlicer project files contain plate organization, model geometry",
             "support, seam, and multi-color painting, manual Brim-ear points, variable layer-height ranges,",
             "They do not contain G-code, saved printer addresses, or printer",
             "형상, 오브젝트 배치, 서포트·심·다중 색상 채색, 수동 Brim 이어 점, 가변 레이어",
@@ -446,8 +463,10 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         (
             "manifest.json",
             "models/000.stl",
-            "schema version `8`",
-            "Schema 1 through 7 projects remain readable",
+            "schema version `9`",
+            "Schema 1 through 8 projects remain readable",
+            "up to 16 plates",
+            "plate-local objects and settings",
             "stable, bounded `volumes` list",
             "up to 64 volumes per object",
             "independent X, Y, and Z scale",
@@ -470,6 +489,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         sources["ProjectArchiveTest.kt"],
         (
             "projectArchiveRoundTripsModelsTransformsPaintAndResolvedProfilesDeterministically",
+            "multiplePlatesAndTheirSettingsRoundTripThroughThePortableArchive",
             "invalidArchiveCannotEscapeStagingOrReplaceTheCurrentProject",
             "oversizedManifestIsRejectedBeforeProjectStateChanges",
             "startupRecoveryRemovesOnlyExactAbandonedArchiveDirectories",
@@ -486,6 +506,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "withUpdatedSession",
             "projectExportCancellationIsBoundToTheExactActiveTransfer",
             "projectImportCancellationIsBoundToTheExactActiveTransfer",
+            "switchingPlatesRestoresEachPlatesIndependentSliceOptions",
         ),
     )
     _require_markers(
@@ -567,6 +588,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         (
             "cancelProjectImportActionIsReachable",
             "cancelProjectExportActionIsReachable",
+            "plateSwitcherExposesSelectionAddAndConfirmedRemovalActions",
         ),
     )
     _require_markers(

@@ -32,8 +32,8 @@ class WorkspaceLayoutPolicyTest {
 
     @Test
     fun workspacePanelAlwaysLeavesTheTopOverlayReachable() {
-        assertEquals(201f, workspacePanelMaxHeightDp(283f), 0.001f)
-        assertEquals(704f, workspacePanelMaxHeightDp(786f), 0.001f)
+        assertEquals(141f, workspacePanelMaxHeightDp(283f), 0.001f)
+        assertEquals(644f, workspacePanelMaxHeightDp(786f), 0.001f)
         assertEquals(1f, workspacePanelMaxHeightDp(60f), 0.001f)
     }
 

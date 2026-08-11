@@ -336,4 +336,36 @@ class ProjectStateTest {
         state = state.undo()
         assertTrue(state.current.selectedObject!!.volumes.all { it.filamentSlot == 1 })
     }
+
+    @Test
+    fun platesKeepObjectsAndSelectionIsolatedAcrossRemovalUndoAndRedo() {
+        var state = ProjectHistoryState()
+            .add(projectObject("first-plate-object"))
+        val firstPlateId = state.current.selectedPlateId
+
+        state = state.addPlate("second-plate").add(projectObject("second-plate-object"))
+        assertEquals("second-plate", state.current.selectedPlateId)
+        assertEquals(listOf("second-plate-object"), state.current.objects.map(ProjectObject::id))
+        assertEquals(
+            listOf("first-plate-object", "second-plate-object"),
+            state.current.allObjects.map(ProjectObject::id),
+        )
+
+        state = state.selectPlate(firstPlateId)
+        assertEquals(listOf("first-plate-object"), state.current.objects.map(ProjectObject::id))
+        assertEquals("first-plate-object", state.current.selectedObjectId)
+
+        state = state.selectPlate("second-plate").removeSelectedPlate()
+        assertEquals(listOf(firstPlateId), state.current.plates.map(ProjectPlate::id))
+        assertEquals("first-plate-object", state.current.selectedObjectId)
+
+        state = state.undo()
+        assertEquals(listOf(firstPlateId, "second-plate"), state.current.plates.map(ProjectPlate::id))
+        assertEquals("second-plate", state.current.selectedPlateId)
+        assertEquals("second-plate-object", state.current.selectedObjectId)
+
+        state = state.redo()
+        assertEquals(listOf(firstPlateId), state.current.plates.map(ProjectPlate::id))
+        assertEquals(state, state.removeSelectedPlate())
+    }
 }

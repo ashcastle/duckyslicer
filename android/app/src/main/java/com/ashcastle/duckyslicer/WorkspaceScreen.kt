@@ -154,7 +154,7 @@ private val FilamentSlotColors = listOf(
 private const val PreviewDepthBands = 12
 private const val TabletShortestSideDp = 600f
 private const val CompactNavigationLabelFontScale = 1.5f
-private const val WorkspaceTopOverlayClearanceDp = 82f
+private const val WorkspaceTopOverlayClearanceDp = 142f
 // Keep broad curves smooth in the mobile preview while retaining structural creases.
 private const val ModelSharpEdgeCosine = 0.422618f
 
@@ -351,6 +351,8 @@ enum class WorkspaceTab {
 @Composable
 internal fun WorkspaceScreen(
     selectedTab: WorkspaceTab,
+    projectPlates: List<ProjectPlate>,
+    selectedPlateId: String,
     projectObjects: List<ProjectObject>,
     selectedObjectId: String?,
     sliceOptions: SliceOptions,
@@ -404,6 +406,9 @@ internal fun WorkspaceScreen(
     onCreatePrimitive: (OrcaPrimitive, Float) -> Unit,
     onOpenProject: () -> Unit,
     onSaveProject: () -> Unit,
+    onPlateSelected: (String) -> Unit,
+    onAddPlate: () -> Unit,
+    onRemovePlate: () -> Unit,
     onObjectSelected: (String?) -> Unit,
     onModelTransformChanged: (ModelTransform) -> Unit,
     onModelTransformPreview: (ModelTransform) -> Unit,
@@ -491,6 +496,9 @@ internal fun WorkspaceScreen(
     var brimEditMessage by remember { mutableStateOf<String?>(null) }
     var visibleToolpathRoles by remember { mutableStateOf(ToolpathStyles.indices.toSet()) }
     var previewControlsExpanded by rememberSaveable { mutableStateOf(false) }
+    var plateRemovalRequested by remember { mutableStateOf(false) }
+    val plateActionsEnabled = !importing && !editingBusy && !projectImporting &&
+        !projectExporting && !slicing && !previewLoading && !exportingGcode && !remoteBusy
 
     fun beginBrimEditing(projectObject: ProjectObject) {
         showModelTools = false
@@ -507,7 +515,8 @@ internal fun WorkspaceScreen(
         brimEditing = true
     }
 
-    LaunchedEffect(selectedObjectId, selectedTab) {
+    LaunchedEffect(selectedPlateId, selectedObjectId, selectedTab) {
+        plateRemovalRequested = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) layingOnFace = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) {
             measuring = false
@@ -653,6 +662,21 @@ internal fun WorkspaceScreen(
             )
 
             if (
+                selectedTab == WorkspaceTab.SLICE || selectedTab == WorkspaceTab.PREVIEW ||
+                selectedTab == WorkspaceTab.PROJECT
+            ) {
+                PlateSwitcher(
+                    plates = projectPlates,
+                    selectedPlateId = selectedPlateId,
+                    enabled = plateActionsEnabled,
+                    onSelected = onPlateSelected,
+                    onAdd = onAddPlate,
+                    onRemove = { plateRemovalRequested = true },
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
+                )
+            }
+
+            if (
                 selectedObject != null && selectedTab == WorkspaceTab.SLICE &&
                 !layingOnFace && !measuring && !supportPainting && !seamPainting &&
                 !multiColorPainting && !brimEditing
@@ -706,14 +730,14 @@ internal fun WorkspaceScreen(
                     onRemove = {
                         onRemoveModel()
                     },
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 132.dp),
                 )
             }
 
             if (selectedObject != null && selectedTab == WorkspaceTab.SLICE && layingOnFace) {
                 LayOnFacePalette(
                     onDone = { layingOnFace = false },
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 132.dp),
                 )
             }
 
@@ -725,7 +749,7 @@ internal fun WorkspaceScreen(
                         measuring = false
                         measurementPoints = emptyList()
                     },
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 132.dp),
                 )
             }
 
@@ -734,7 +758,7 @@ internal fun WorkspaceScreen(
                     selectedTool = supportPaintTool,
                     onToolSelected = { supportPaintTool = it },
                     onDone = { supportPainting = false },
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 132.dp),
                 )
             }
 
@@ -743,7 +767,7 @@ internal fun WorkspaceScreen(
                     selectedTool = seamPaintTool,
                     onToolSelected = { seamPaintTool = it },
                     onDone = { seamPainting = false },
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 132.dp),
                 )
             }
 
@@ -753,7 +777,7 @@ internal fun WorkspaceScreen(
                     selectedSlot = multiColorPaintSlot,
                     onSlotSelected = { multiColorPaintSlot = it },
                     onDone = { multiColorPainting = false },
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 132.dp),
                 )
             }
 
@@ -787,7 +811,7 @@ internal fun WorkspaceScreen(
                         brimEditing = false
                         brimEditMessage = null
                     },
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 72.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 132.dp),
                 )
             }
 
@@ -937,6 +961,32 @@ internal fun WorkspaceScreen(
                 )
             }
         }
+    }
+    if (plateRemovalRequested) {
+        AlertDialog(
+            onDismissRequest = { plateRemovalRequested = false },
+            title = { Text(stringResource(R.string.remove_plate_title)) },
+            text = { Text(stringResource(R.string.remove_plate_message)) },
+            dismissButton = {
+                TextButton(onClick = { plateRemovalRequested = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        plateRemovalRequested = false
+                        onRemovePlate()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFD9534F),
+                        contentColor = Color.White,
+                    ),
+                ) {
+                    Text(stringResource(R.string.remove_plate))
+                }
+            },
+        )
     }
     }
     if (showModelTools && selectedObject != null) {
@@ -2300,6 +2350,76 @@ private fun TransformSlider(
         steps = steps,
         colors = duckySliderColors(),
     )
+}
+
+@Composable
+private fun PlateSwitcher(
+    plates: List<ProjectPlate>,
+    selectedPlateId: String,
+    enabled: Boolean,
+    onSelected: (String) -> Unit,
+    onAdd: () -> Unit,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(0.92f).widthIn(max = 620.dp),
+        color = Color.Black.copy(alpha = 0.76f),
+        contentColor = Color(0xFFF4F4EE),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            plates.forEachIndexed { index, plate ->
+                val selected = plate.id == selectedPlateId
+                TextButton(
+                    onClick = { onSelected(plate.id) },
+                    enabled = enabled,
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .semantics {
+                            this.selected = selected
+                            stateDescription = if (selected) {
+                                "${index + 1}/${plates.size}"
+                            } else {
+                                "${index + 1}"
+                            }
+                        },
+                    colors = ButtonDefaults.textButtonColors(
+                        containerColor = if (selected) WorkspaceYellow else Color.Transparent,
+                        contentColor = if (selected) WorkspaceBlack else Color(0xFFF4F4EE),
+                    ),
+                ) {
+                    Text(
+                        stringResource(R.string.plate_number, index + 1),
+                        maxLines = 1,
+                    )
+                }
+            }
+            IconButton(
+                onClick = onAdd,
+                enabled = enabled && plates.size < MAX_PROJECT_PLATES,
+            ) {
+                Icon(Icons.Default.AddBox, stringResource(R.string.add_plate))
+            }
+            IconButton(
+                onClick = onRemove,
+                enabled = enabled && plates.size > 1,
+            ) {
+                Icon(
+                    Icons.Default.DeleteOutline,
+                    stringResource(R.string.remove_plate),
+                    tint = if (enabled && plates.size > 1) Color(0xFFFF8A80) else Color.Unspecified,
+                )
+            }
+        }
+    }
 }
 
 @Composable

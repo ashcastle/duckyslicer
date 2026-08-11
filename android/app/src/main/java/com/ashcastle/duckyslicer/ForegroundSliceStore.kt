@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Process
 import java.io.File
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -21,23 +22,34 @@ internal data class ForegroundSliceRecord(
     val requestId: String,
     val phase: ForegroundSlicePhase,
     val outcome: SliceOutcome? = null,
+    val plateId: String? = null,
 )
 
 /** Cross-process checkpoint for the single user-visible foreground slice. */
 internal object ForegroundSliceStore {
-    fun begin(context: Context, requestId: String) {
+    private val localLock = Any()
+
+    fun begin(context: Context, requestId: String, plateId: String) {
         requireRequestId(requestId)
-        check(load(context) == null) { "A foreground slice is already recoverable" }
-        write(
-            context,
-            ForegroundSliceRecord(
-                requestId = requestId,
-                phase = ForegroundSlicePhase.ACTIVE,
-            ),
-        )
+        requirePlateId(plateId)
+        withStoreLock(context) {
+            check(loadUnlocked(context) == null) { "A foreground slice is already recoverable" }
+            writeUnlocked(
+                context,
+                ForegroundSliceRecord(
+                    requestId = requestId,
+                    phase = ForegroundSlicePhase.ACTIVE,
+                    plateId = plateId,
+                ),
+            )
+        }
     }
 
-    fun load(context: Context): ForegroundSliceRecord? {
+    fun load(context: Context): ForegroundSliceRecord? = withStoreLock(context) {
+        loadUnlocked(context)
+    }
+
+    private fun loadUnlocked(context: Context): ForegroundSliceRecord? {
         val sessionFile = sessionFile(context)
         if (!sessionFile.isFile) return null
         val record = runCatching {
@@ -71,21 +83,25 @@ internal object ForegroundSliceStore {
     }
 
     fun remove(context: Context, requestId: String) {
-        val current = load(context)
-        if (current?.requestId == requestId) sessionFile(context).delete()
-        cleanupTemporaryFiles(context)
+        withStoreLock(context) {
+            val current = loadUnlocked(context)
+            if (current?.requestId == requestId) sessionFile(context).delete()
+            cleanupTemporaryFiles(context)
+        }
     }
 
     internal fun fileForTest(context: Context): File = sessionFile(context)
 
     private fun update(context: Context, requestId: String, replacement: ForegroundSliceRecord) {
         requireRequestId(requestId)
-        val current = load(context) ?: return
-        if (current.requestId != requestId) return
-        write(context, replacement)
+        withStoreLock(context) {
+            val current = loadUnlocked(context) ?: return@withStoreLock
+            if (current.requestId != requestId) return@withStoreLock
+            writeUnlocked(context, replacement.copy(plateId = current.plateId))
+        }
     }
 
-    private fun write(context: Context, record: ForegroundSliceRecord) {
+    private fun writeUnlocked(context: Context, record: ForegroundSliceRecord) {
         val destination = sessionFile(context)
         val temporary = File(
             destination.parentFile,
@@ -118,10 +134,25 @@ internal object ForegroundSliceStore {
         }
     }
 
+    private inline fun <T> withStoreLock(context: Context, action: () -> T): T =
+        synchronized(localLock) {
+            RandomAccessFile(File(context.filesDir, LOCK_FILE_NAME), "rw").use { lockFile ->
+                lockFile.channel.use { channel ->
+                    val fileLock = channel.lock()
+                    try {
+                        action()
+                    } finally {
+                        fileLock.release()
+                    }
+                }
+            }
+        }
+
     private fun encode(record: ForegroundSliceRecord): String = JSONObject().apply {
         put("version", RECORD_VERSION)
         put("requestId", record.requestId)
         put("phase", record.phase.name)
+        record.plateId?.let { put("plateId", it) }
         record.outcome?.let { outcome ->
             put("outputPath", outcome.output.canonicalPath)
             put("layers", outcome.layers)
@@ -133,11 +164,17 @@ internal object ForegroundSliceStore {
 
     private fun decode(context: Context, text: String): ForegroundSliceRecord {
         val value = JSONObject(text)
-        require(value.getInt("version") == RECORD_VERSION) {
+        val version = value.getInt("version")
+        require(version in MIN_RECORD_VERSION..RECORD_VERSION) {
             "Unsupported foreground slice checkpoint"
         }
         val requestId = value.getString("requestId")
         requireRequestId(requestId)
+        val plateId = if (version >= 2) {
+            value.getString("plateId").also(::requirePlateId)
+        } else {
+            null
+        }
         val phase = ForegroundSlicePhase.valueOf(value.getString("phase"))
         val outcome = if (phase == ForegroundSlicePhase.COMPLETED) {
             SliceOutcome(
@@ -154,7 +191,7 @@ internal object ForegroundSliceStore {
         } else {
             null
         }
-        return ForegroundSliceRecord(requestId, phase, outcome)
+        return ForegroundSliceRecord(requestId, phase, outcome, plateId)
     }
 
     private fun cleanupTemporaryFiles(context: Context) {
@@ -170,10 +207,16 @@ internal object ForegroundSliceStore {
         require(UUID.fromString(requestId).toString() == requestId)
     }
 
+    private fun requirePlateId(plateId: String) {
+        require(plateId.length in 1..ProjectStore.MAX_ID_LENGTH)
+    }
+
     private fun sessionFile(context: Context) = File(context.filesDir, SESSION_FILE_NAME)
 
-    private const val RECORD_VERSION = 1
+    private const val MIN_RECORD_VERSION = 1
+    private const val RECORD_VERSION = 2
     private const val SESSION_FILE_NAME = "foreground-slice.session"
+    private const val LOCK_FILE_NAME = "foreground-slice.lock"
     private const val MAX_RECORD_BYTES = 4 * 1_024
     private const val MAX_REQUEST_ID_LENGTH = 128
 }

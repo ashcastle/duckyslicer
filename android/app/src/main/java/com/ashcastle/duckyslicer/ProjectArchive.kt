@@ -35,17 +35,35 @@ internal data class ArchivedProjectObject(
     val brimPoints: BrimPoints,
 )
 
+internal data class ArchivedProjectPlate(
+    val id: String,
+    val objects: List<ArchivedProjectObject>,
+    val selectedObjectId: String?,
+    val sliceOptions: SliceOptions,
+)
+
 internal data class StagedArchiveModel(
     val file: File,
     val info: ModelInfo,
 )
 
 internal data class DecodedProjectArchive(
-    val objects: List<ArchivedProjectObject>,
-    val selectedObjectId: String?,
-    val sliceOptions: SliceOptions,
+    val plates: List<ArchivedProjectPlate>,
+    val selectedPlateId: String,
     val models: Map<String, StagedArchiveModel>,
-)
+) {
+    val activePlate: ArchivedProjectPlate
+        get() = plates.first { it.id == selectedPlateId }
+
+    val objects: List<ArchivedProjectObject>
+        get() = plates.flatMap(ArchivedProjectPlate::objects)
+
+    val selectedObjectId: String?
+        get() = activePlate.selectedObjectId
+
+    val sliceOptions: SliceOptions
+        get() = activePlate.sliceOptions
+}
 
 internal object ProjectArchiveCodec {
     fun write(
@@ -53,24 +71,37 @@ internal object ProjectArchiveCodec {
         sliceOptions: SliceOptions,
         output: OutputStream,
         checkCancellation: () -> Unit = {},
+    ) = write(
+        snapshot,
+        snapshot.plates.associate { plate -> plate.id to sliceOptions },
+        output,
+        checkCancellation,
+    )
+
+    fun write(
+        snapshot: ProjectSnapshot,
+        plateOptions: Map<String, SliceOptions>,
+        output: OutputStream,
+        checkCancellation: () -> Unit = {},
     ) = archiveBoundary {
         checkCancellation()
-        require(snapshot.objects.size <= ProjectStore.MAX_PROJECT_OBJECTS)
-        require(snapshot.objects.map(ProjectObject::id).toSet().size == snapshot.objects.size)
-        require(
-            snapshot.selectedObjectId == null ||
-                snapshot.objects.any { it.id == snapshot.selectedObjectId },
-        )
-        val availableSlots = sliceOptions.resolvedFilamentSlots().indices
-        require(snapshot.objects.all { projectObject ->
-            projectObject.volumes.size <= ProjectStore.SUPPORTED_PROJECT_VOLUMES_PER_OBJECT &&
-                projectObject.volumes.all { volume ->
-                    volume.filamentSlot in availableSlots &&
-                        volume.multiColorPaint.facets.values.all { it in availableSlots }
-                }
-        })
+        require(snapshot.plates.size in 1..MAX_PROJECT_PLATES)
+        require(snapshot.allObjects.size <= ProjectStore.MAX_PROJECT_OBJECTS)
+        require(snapshot.allObjects.map(ProjectObject::id).toSet().size == snapshot.allObjects.size)
+        require(plateOptions.keys.containsAll(snapshot.plates.map(ProjectPlate::id)))
+        snapshot.plates.forEach { plate ->
+            val availableSlots = requireNotNull(plateOptions[plate.id])
+                .resolvedFilamentSlots().indices
+            require(plate.objects.all { projectObject ->
+                projectObject.volumes.size <= ProjectStore.SUPPORTED_PROJECT_VOLUMES_PER_OBJECT &&
+                    projectObject.volumes.all { volume ->
+                        volume.filamentSlot in availableSlots &&
+                            volume.multiColorPaint.facets.values.all { it in availableSlots }
+                    }
+            })
+        }
         val modelEntries = LinkedHashMap<File, String>()
-        snapshot.objects.forEach { projectObject ->
+        snapshot.allObjects.forEach { projectObject ->
             projectObject.volumes.forEach { volume ->
                 checkCancellation()
                 val model = File(volume.model.localPath).canonicalFile
@@ -87,52 +118,27 @@ internal object ProjectArchiveCodec {
         val manifest = JSONObject()
             .put("format", PROJECT_ARCHIVE_FORMAT)
             .put("schemaVersion", PROJECT_ARCHIVE_SCHEMA_VERSION)
-            .put("selectedObjectId", snapshot.selectedObjectId ?: JSONObject.NULL)
-            .put("sliceOptions", sliceOptions.toProjectJson())
+            .put("selectedPlateId", snapshot.selectedPlateId)
             .put(
-                "objects",
-                JSONArray().also { objects ->
-                    snapshot.objects.forEach { projectObject ->
-                        objects.put(
+                "plates",
+                JSONArray().also { plates ->
+                    snapshot.plates.forEach { plate ->
+                        plates.put(
                             JSONObject()
-                                .put("id", checkedArchiveId(projectObject.id))
-                                .put("transform", projectObject.transform.toArchiveJson())
+                                .put("id", checkedArchiveId(plate.id))
                                 .put(
-                                    "variableLayerHeights",
-                                    projectObject.variableLayerHeights.toArchiveJson(),
+                                    "selectedObjectId",
+                                    plate.selectedObjectId ?: JSONObject.NULL,
                                 )
-                                .put("processOverrides", projectObject.processOverrides.toProjectJson())
-                                .put("brimPoints", projectObject.brimPoints.toArchiveJson())
                                 .put(
-                                    "volumes",
-                                    JSONArray().also { volumes ->
-                                        projectObject.volumes.forEach { volume ->
-                                            val model = File(volume.model.localPath).canonicalFile
-                                            volumes.put(
-                                                JSONObject()
-                                                    .put("id", checkedArchiveId(volume.id))
-                                                    .put(
-                                                        "displayName",
-                                                        checkedArchiveDisplayName(volume.model.fileName),
-                                                    )
-                                                    .put(
-                                                        "modelEntry",
-                                                        requireNotNull(modelEntries[model]),
-                                                    )
-                                                    .put(
-                                                        "supportPaint",
-                                                        volume.supportPaint.toArchiveJson(),
-                                                    )
-                                                    .put(
-                                                        "seamPaint",
-                                                        volume.seamPaint.toArchiveJson(),
-                                                    )
-                                                    .put(
-                                                        "multiColorPaint",
-                                                        volume.multiColorPaint.toArchiveJson(),
-                                                    )
-                                                    .put("filamentSlot", volume.filamentSlot),
-                                            )
+                                    "sliceOptions",
+                                    requireNotNull(plateOptions[plate.id]).toProjectJson(),
+                                )
+                                .put(
+                                    "objects",
+                                    JSONArray().also { objects ->
+                                        plate.objects.forEach { projectObject ->
+                                            objects.put(projectObject.toArchiveJson(modelEntries))
                                         }
                                     },
                                 ),
@@ -246,36 +252,80 @@ internal object ProjectArchiveCodec {
             require(info.triangles > 0)
             StagedArchiveModel(file, info)
         }
-        val validatedObjects = metadata.objects.map { archived ->
-            checkCancellation()
-            archived.volumes.forEach { volume ->
-                val triangleCount = requireNotNull(inspected[volume.modelEntry]).info.triangles
-                require(volume.supportPaint.facets.keys.all { it in 0 until triangleCount })
-                require(volume.seamPaint.facets.keys.all { it in 0 until triangleCount })
-                require(volume.multiColorPaint.facets.keys.all { it in 0 until triangleCount })
-            }
-            archived
+        val validatedPlates = metadata.plates.map { plate ->
+            plate.copy(
+                objects = plate.objects.map { archived ->
+                    checkCancellation()
+                    archived.volumes.forEach { volume ->
+                        val triangleCount = requireNotNull(inspected[volume.modelEntry]).info.triangles
+                        require(volume.supportPaint.facets.keys.all { it in 0 until triangleCount })
+                        require(volume.seamPaint.facets.keys.all { it in 0 until triangleCount })
+                        require(volume.multiColorPaint.facets.keys.all { it in 0 until triangleCount })
+                    }
+                    archived
+                },
+            )
         }
         checkCancellation()
-        DecodedProjectArchive(
-            objects = validatedObjects,
-            selectedObjectId = metadata.selectedObjectId,
-            sliceOptions = metadata.sliceOptions,
-            models = inspected,
-        )
+        metadata.copy(plates = validatedPlates, models = inspected)
     }
 
     private fun parseManifest(root: JSONObject): DecodedProjectArchive {
         require(root.optString("format") == PROJECT_ARCHIVE_FORMAT)
         val schemaVersion = root.optInt("schemaVersion", 0)
         require(schemaVersion in MIN_PROJECT_ARCHIVE_SCHEMA_VERSION..PROJECT_ARCHIVE_SCHEMA_VERSION)
-        val values = root.getJSONArray("objects")
+        val objectIds = HashSet<String>()
+        val plates = if (schemaVersion >= 9) {
+            val values = root.getJSONArray("plates")
+            require(values.length() in 1..MAX_PROJECT_PLATES)
+            val plateIds = HashSet<String>()
+            List(values.length()) { index ->
+                val value = values.getJSONObject(index)
+                val id = checkedArchiveId(value.getString("id"))
+                require(plateIds.add(id))
+                val objects = parseArchivedObjects(
+                    value.getJSONArray("objects"),
+                    schemaVersion,
+                    objectIds,
+                )
+                val selected = value.takeUnless { it.isNull("selectedObjectId") }
+                    ?.getString("selectedObjectId")
+                require(selected == null || objects.any { it.id == selected })
+                val options = value.getJSONObject("sliceOptions").toProjectSliceOptionsOrNull()
+                    ?: throw ProjectArchiveException()
+                validatePlateFilaments(objects, options)
+                ArchivedProjectPlate(id, objects, selected, options)
+            }
+        } else {
+            val objects = parseArchivedObjects(root.getJSONArray("objects"), schemaVersion, objectIds)
+            val selected = root.takeUnless { it.isNull("selectedObjectId") }
+                ?.getString("selectedObjectId")
+            require(selected == null || objects.any { it.id == selected })
+            val options = root.getJSONObject("sliceOptions").toProjectSliceOptionsOrNull()
+                ?: throw ProjectArchiveException()
+            validatePlateFilaments(objects, options)
+            listOf(ArchivedProjectPlate(legacyProjectPlateId(), objects, selected, options))
+        }
+        require(plates.sumOf { it.objects.size } <= ProjectStore.MAX_PROJECT_OBJECTS)
+        val selectedPlateId = if (schemaVersion >= 9) {
+            checkedArchiveId(root.getString("selectedPlateId"))
+        } else {
+            legacyProjectPlateId()
+        }
+        require(plates.any { it.id == selectedPlateId })
+        return DecodedProjectArchive(plates, selectedPlateId, emptyMap())
+    }
+
+    private fun parseArchivedObjects(
+        values: JSONArray,
+        schemaVersion: Int,
+        objectIds: MutableSet<String>,
+    ): List<ArchivedProjectObject> {
         require(values.length() <= ProjectStore.MAX_PROJECT_OBJECTS)
-        val ids = HashSet<String>()
-        val objects = List(values.length()) { index ->
+        return List(values.length()) { index ->
             val value = values.getJSONObject(index)
             val id = checkedArchiveId(value.getString("id"))
-            require(ids.add(id))
+            require(objectIds.add(id))
             ArchivedProjectObject(
                 id = id,
                 volumes = if (schemaVersion >= 7) {
@@ -313,11 +363,12 @@ internal object ProjectArchiveCodec {
                 },
             )
         }
-        val selected = root.takeUnless { it.isNull("selectedObjectId") }
-            ?.getString("selectedObjectId")
-        require(selected == null || selected in ids)
-        val options = root.getJSONObject("sliceOptions").toProjectSliceOptionsOrNull()
-            ?: throw ProjectArchiveException()
+    }
+
+    private fun validatePlateFilaments(
+        objects: List<ArchivedProjectObject>,
+        options: SliceOptions,
+    ) {
         val availableSlots = options.resolvedFilamentSlots().indices
         require(objects.all { archived ->
             archived.volumes.all { volume ->
@@ -325,7 +376,6 @@ internal object ProjectArchiveCodec {
                     volume.multiColorPaint.facets.values.all { it in availableSlots }
             }
         })
-        return DecodedProjectArchive(objects, selected, options, emptyMap())
     }
 
     private fun parseLegacyVolume(
@@ -366,6 +416,32 @@ internal object ProjectArchiveCodec {
     private fun checkedArchiveFilamentSlot(value: Int): Int =
         value.takeIf { it in 0 until MAX_FILAMENT_SLOTS } ?: throw ProjectArchiveException()
 }
+
+private fun ProjectObject.toArchiveJson(modelEntries: Map<File, String>): JSONObject =
+    JSONObject()
+        .put("id", checkedArchiveId(id))
+        .put("transform", transform.toArchiveJson())
+        .put("variableLayerHeights", variableLayerHeights.toArchiveJson())
+        .put("processOverrides", processOverrides.toProjectJson())
+        .put("brimPoints", brimPoints.toArchiveJson())
+        .put(
+            "volumes",
+            JSONArray().also { values ->
+                volumes.forEach { volume ->
+                    val model = File(volume.model.localPath).canonicalFile
+                    values.put(
+                        JSONObject()
+                            .put("id", checkedArchiveId(volume.id))
+                            .put("displayName", checkedArchiveDisplayName(volume.model.fileName))
+                            .put("modelEntry", requireNotNull(modelEntries[model]))
+                            .put("supportPaint", volume.supportPaint.toArchiveJson())
+                            .put("seamPaint", volume.seamPaint.toArchiveJson())
+                            .put("multiColorPaint", volume.multiColorPaint.toArchiveJson())
+                            .put("filamentSlot", volume.filamentSlot),
+                    )
+                }
+            },
+        )
 
 private fun ModelTransform.toArchiveJson() = JSONObject()
     .put("offsetXmm", offsetXmm.checkedArchiveTransform(-ProjectStore.MAX_OFFSET_MM, ProjectStore.MAX_OFFSET_MM))
@@ -652,6 +728,6 @@ private const val MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES
 private const val MAX_PROJECT_ARCHIVE_ENTRY_NAME = 128
 private const val PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"
 private const val MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1
-private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 8
+private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 9
 private const val PROJECT_ARCHIVE_MANIFEST = "manifest.json"
 private val PROJECT_ARCHIVE_MODEL_ENTRY = Regex("models/[0-9]{3}\\.stl")

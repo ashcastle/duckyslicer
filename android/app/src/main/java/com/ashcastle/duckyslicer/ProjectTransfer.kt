@@ -107,6 +107,7 @@ internal data class ProjectTransferState(
     val editCompletion: ProjectEditCompletion? = null,
     val history: ProjectHistoryState = ProjectHistoryState(),
     val sliceOptions: SliceOptions = SliceOptions(),
+    val plateOptions: Map<String, SliceOptions> = mapOf(legacyProjectPlateId() to sliceOptions),
     val restored: Boolean = false,
     val persistenceBlocked: Boolean = false,
     val persistenceMessage: ProjectPersistenceMessage? = null,
@@ -197,6 +198,7 @@ internal fun ProjectTransferState.withUpdatedSession(
     return copy(
         history = nextHistory,
         sliceOptions = nextOptions,
+        plateOptions = plateOptions + (nextHistory.current.selectedPlateId to nextOptions),
         persistenceMessage = ProjectPersistenceMessage.STORAGE_UNAVAILABLE.takeIf {
             persistenceBlocked
         },
@@ -311,7 +313,8 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             }
             mutableState.value = ProjectTransferState(
                 history = ProjectHistoryState(current = restored.snapshot),
-                sliceOptions = restored.sliceOptions ?: SliceOptions(),
+                sliceOptions = restored.activeSliceOptions,
+                plateOptions = restored.plateOptions,
                 restored = true,
                 persistenceBlocked = restored.storageUnavailable,
                 persistenceMessage = ProjectPersistenceMessage.STORAGE_UNAVAILABLE.takeIf {
@@ -332,7 +335,8 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             expectedHistory = expected,
             nextHistory = next,
             expectedOptions = current.sliceOptions,
-            nextOptions = current.sliceOptions,
+            nextOptions = current.plateOptions[next.current.selectedPlateId]
+                ?: current.sliceOptions,
         )
     }
 
@@ -415,7 +419,8 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         val current = mutableState.value
         val target = current.history.current.selectedObject ?: return false
         if (target.singleVolumeOrNull == null) return false
-        val maximumObjects = ProjectStore.MAX_PROJECT_OBJECTS - current.history.current.objects.size + 1
+        val maximumObjects =
+            ProjectStore.MAX_PROJECT_OBJECTS - current.history.current.allObjects.size + 1
         if (maximumObjects < 2) return false
         val baseline = startEditLocked(ProjectEditKind.SPLIT) ?: return false
         viewModelScope.launch(Dispatchers.IO) {
@@ -458,7 +463,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         val current = mutableState.value
         val target = current.history.current.selectedObject ?: return false
         if (target.volumes.none { it.id == sourceVolumeId }) return false
-        val otherVolumeCount = current.history.current.objects.sumOf { it.volumes.size } -
+        val otherVolumeCount = current.history.current.allObjects.sumOf { it.volumes.size } -
             target.volumes.size
         val maximumResultingVolumes = minOf(
             MAX_PROJECT_VOLUMES_PER_OBJECT,
@@ -506,7 +511,8 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         val current = mutableState.value
         val target = current.history.current.selectedObject ?: return false
         if (target.singleVolumeOrNull == null) return false
-        val maximumObjects = ProjectStore.MAX_PROJECT_OBJECTS - current.history.current.objects.size + 1
+        val maximumObjects =
+            ProjectStore.MAX_PROJECT_OBJECTS - current.history.current.allObjects.size + 1
         if (maximumObjects < 2 || !heightRatio.isFinite() || heightRatio !in 0.02f..0.98f) {
             return false
         }
@@ -599,9 +605,10 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         sizeMm: Float,
         displayName: String,
     ): Boolean {
-        val objectCount = mutableState.value.history.current.objects.size
+        val snapshot = mutableState.value.history.current
+        val objectCount = snapshot.objects.size
         if (
-            objectCount >= ProjectStore.MAX_PROJECT_OBJECTS || !sizeMm.isFinite() ||
+            snapshot.allObjects.size >= ProjectStore.MAX_PROJECT_OBJECTS || !sizeMm.isFinite() ||
             sizeMm !in MIN_PRIMITIVE_SIZE_MM..MAX_PRIMITIVE_SIZE_MM
         ) {
             return false
@@ -653,8 +660,10 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     @Synchronized
     fun importModels(uri: Uri): Boolean {
         if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
-        val objectCount = mutableState.value.history.current.objects.size
-        if (objectCount >= ProjectStore.MAX_PROJECT_OBJECTS) return false
+        val snapshot = mutableState.value.history.current
+        val objectCount = snapshot.objects.size
+        val totalObjectCount = snapshot.allObjects.size
+        if (totalObjectCount >= ProjectStore.MAX_PROJECT_OBJECTS) return false
         val baseline = startEditLocked(ProjectEditKind.MODEL_IMPORT) ?: return false
         val cancellation = DocumentTransferCancellation()
         activeModelImportTransfer = ActiveModelImportTransfer(baseline.operation, cancellation)
@@ -670,7 +679,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                     cancellation,
                 )
                 installed = imported
-                require(objectCount + imported.size <= ProjectStore.MAX_PROJECT_OBJECTS) {
+                require(totalObjectCount + imported.size <= ProjectStore.MAX_PROJECT_OBJECTS) {
                     "Project has too many imported objects"
                 }
                 val distance = ((objectCount + 1) / 2) * 24f
@@ -800,7 +809,8 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 mutableState.value = when (completion) {
                     is ProjectTransferCompletion.Imported -> settled.copy(
                         history = ProjectHistoryState(current = completion.document.snapshot),
-                        sliceOptions = completion.document.sliceOptions ?: current.sliceOptions,
+                        sliceOptions = completion.document.activeSliceOptions,
+                        plateOptions = completion.document.plateOptions,
                         restored = true,
                         persistenceBlocked = false,
                         persistenceMessage = null,
@@ -821,7 +831,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     fun exportProject(
         uri: Uri,
         snapshot: ProjectSnapshot,
-        sliceOptions: SliceOptions,
+        plateOptions: Map<String, SliceOptions>,
     ): Boolean {
         if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
         val operation = ActiveProjectTransfer(
@@ -848,7 +858,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                         try {
                             projectStore.exportArchive(
                                 snapshot,
-                                sliceOptions,
+                                plateOptions,
                                 output,
                                 cancellation::throwIfRequested,
                             )
@@ -1102,7 +1112,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             } ?: return@launch
             val failure = try {
                 withContext(Dispatchers.IO) {
-                    projectStore.save(document.history.current, document.sliceOptions)
+                    projectStore.save(document.history.current, document.plateOptions)
                 }
                 null
             } catch (cancellation: CancellationException) {
@@ -1165,7 +1175,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         try {
             if (pending != null) {
                 try {
-                    projectStore.save(pending.history.current, pending.sliceOptions)
+                    projectStore.save(pending.history.current, pending.plateOptions)
                 } catch (_: Exception) {
                     supportEvents.record(SupportEvent.PROJECT_SAVE_FAILED)
                 }

@@ -109,7 +109,7 @@ class ProjectStoreTest {
     }
 
     @Test
-    fun schemaTenPersistsStableVolumeAndSchemaOneMigratesDeterministically() = withStore { root, store ->
+    fun schemaElevenPersistsStableVolumeAndSchemaOneMigratesDeterministically() = withStore { root, store ->
         val modelFile = store.createModelDestination("settings.stl").apply { writeText("solid part") }
         val options = multiFilamentSettingsFixture()
         val snapshot = ProjectSnapshot(
@@ -121,8 +121,18 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(10, persisted.getInt("schemaVersion"))
-        val persistedObject = persisted.getJSONArray("objects").getJSONObject(0)
+        assertEquals(11, persisted.getInt("schemaVersion"))
+        assertEquals(
+            setOf("schemaVersion", "selectedPlateId", "plates"),
+            persisted.keys().asSequence().toSet(),
+        )
+        val persistedPlate = persisted.getJSONArray("plates").getJSONObject(0)
+        assertEquals(
+            setOf("id", "selectedObjectId", "sliceOptions", "objects"),
+            persistedPlate.keys().asSequence().toSet(),
+        )
+        assertEquals(legacyProjectPlateId(), persistedPlate.getString("id"))
+        val persistedObject = persistedPlate.getJSONArray("objects").getJSONObject(0)
         assertEquals(
             setOf(
                 "id", "transform", "variableLayerHeights", "processOverrides",
@@ -173,7 +183,11 @@ class ProjectStoreTest {
         File(root, "current_project.json").writeText(legacy.toString())
         val migrated = ProjectStore(root, ::inspectedModel).loadProject()
         assertEquals("settings", migrated.snapshot.selectedObjectId)
-        assertEquals(null, migrated.sliceOptions)
+        assertEquals(legacyProjectPlateId(), migrated.snapshot.selectedPlateId)
+        assertEquals(
+            SliceOptions().toProjectJson().toString(),
+            migrated.activeSliceOptions.toProjectJson().toString(),
+        )
         assertEquals(
             legacyProjectVolumeId("settings"),
             migrated.snapshot.selectedObject!!.singleVolume.id,
@@ -184,6 +198,57 @@ class ProjectStoreTest {
         assertTrue(migrated.snapshot.selectedObject!!.processOverrides.isEmpty)
         assertTrue(migrated.snapshot.selectedObject!!.brimPoints.points.isEmpty())
         assertTrue(migrated.snapshot.selectedObject!!.transform.hasUniformScale())
+    }
+
+    @Test
+    fun multiplePlatesAndTheirSettingsRoundTripWithoutSharingObjects() = withStore { root, store ->
+        val firstModel = store.createModelDestination("plate-a.stl").apply {
+            writeText("solid plate-a")
+        }
+        val secondModel = store.createModelDestination("plate-b.stl").apply {
+            writeText("solid plate-b")
+        }
+        val orphan = store.createModelDestination("orphan.stl").apply { writeText("orphan") }
+        val firstOptions = restoredSettingsFixture().copy(fillDensity = 0.11f)
+        val secondOptions = restoredSettingsFixture().copy(fillDensity = 0.42f)
+        val snapshot = ProjectSnapshot(
+            selectedPlateId = "plate-b",
+            plates = listOf(
+                ProjectPlate(
+                    id = "plate-a",
+                    objects = listOf(ProjectObject("object-a", inspectedModel(firstModel))),
+                    selectedObjectId = "object-a",
+                ),
+                ProjectPlate(
+                    id = "plate-b",
+                    objects = listOf(ProjectObject("object-b", inspectedModel(secondModel))),
+                    selectedObjectId = "object-b",
+                ),
+            ),
+        )
+
+        store.save(snapshot, mapOf("plate-a" to firstOptions, "plate-b" to secondOptions))
+        val restored = ProjectStore(root, ::inspectedModel).loadProject()
+
+        assertEquals("plate-b", restored.snapshot.selectedPlateId)
+        assertEquals(listOf("plate-a", "plate-b"), restored.snapshot.plates.map(ProjectPlate::id))
+        assertEquals(listOf("object-a"), restored.snapshot.plates[0].objects.map(ProjectObject::id))
+        assertEquals(listOf("object-b"), restored.snapshot.plates[1].objects.map(ProjectObject::id))
+        assertEquals(
+            firstOptions.toProjectJson().toString(),
+            restored.plateOptions.getValue("plate-a").toProjectJson().toString(),
+        )
+        assertEquals(
+            secondOptions.toProjectJson().toString(),
+            restored.plateOptions.getValue("plate-b").toProjectJson().toString(),
+        )
+        assertEquals(
+            secondOptions.toProjectJson().toString(),
+            restored.activeSliceOptions.toProjectJson().toString(),
+        )
+        assertTrue(firstModel.isFile)
+        assertTrue(secondModel.isFile)
+        assertFalse(orphan.exists())
     }
 
     @Test

@@ -4,7 +4,7 @@ DuckySlicer saves portable projects with the `.duckyproject` extension and the M
 type `application/vnd.duckyslicer.project+zip`. The format is a versioned ZIP archive
 so a project can be inspected and recovered with standard tools.
 
-## Schema 8
+## Schema 9
 
 An archive contains exactly:
 
@@ -16,7 +16,8 @@ models/001.stl
 ```
 
 `manifest.json` identifies the format as `com.ashcastle.duckyslicer.project`, declares
-schema version `8`, and stores the selected object, resolved printer, filament, and
+schema version `9`, and stores the selected plate plus a bounded `plates` list. Each plate
+owns its stable identity, selected object, objects, and resolved printer, filament, and
 slicing settings. Each object owns a stable, bounded `volumes` list. The object owns its
 transform (including independent X, Y, and Z scale), variable layer-height ranges, and
 object-specific process overrides. It also owns up to 256 validated manual Brim-ear points
@@ -24,11 +25,12 @@ in Orca-compatible local coordinates and radius units. Each volume owns its stab
 display name, model-entry reference, filament assignment, support and seam painting, and
 multi-color painting. Objects or volumes that share one source model also share one model entry.
 
-Schema 1 through 7 projects remain readable. Their single object-level model, filament,
-and paint fields migrate deterministically to one stable volume; older uniform-scale
-transforms, missing object-specific settings, and missing Brim points receive safe defaults.
-Current projects may contain up to 64 volumes per object and retain those volumes through
-Prepare, slicing, autosave, and portable project round trips.
+Schema 1 through 8 projects remain readable and migrate deterministically to one plate.
+Their single object-level model, filament, and paint fields migrate deterministically to
+one stable volume; older uniform-scale transforms, missing object-specific settings, and
+missing Brim points receive safe defaults. Current projects may contain up to 16 plates and
+up to 64 volumes per object, and retain plate-local objects and settings through Prepare, slicing,
+autosave, and portable project round trips.
 
 The archive intentionally does not contain G-code, remote-printer profiles, printer
 addresses, access keys, support reports, or other app state. A project therefore
@@ -55,7 +57,8 @@ removes only abandoned private staging directories with the exact generated UUID
 
 The current bounds are:
 
-- 256 objects, volumes, and unique models
+- 16 plates
+- 256 objects, volumes, and unique models across the project
 - 1 MiB manifest
 - 512 MiB per model
 - 1 GiB total uncompressed content

@@ -23,6 +23,7 @@ internal enum class SliceTerminalStatus {
 }
 
 internal data class SliceOperationState(
+    val plateId: String? = null,
     val slicing: Boolean = false,
     val cancellationRequested: Boolean = false,
     val progress: Int = 0,
@@ -48,15 +49,16 @@ internal class SliceOperationViewModel : ViewModel() {
         recoverForegroundSlice()
     }
 
-    fun start(objects: List<ProjectObject>, options: SliceOptions): Boolean {
+    fun start(plateId: String, objects: List<ProjectObject>, options: SliceOptions): Boolean {
         if (objects.isEmpty() || mutableState.value.busy || operationJob.get()?.isActive == true) {
             return false
         }
         val foregroundSession = try {
-            SlicerProcessClient.beginUserSlice()
+            SlicerProcessClient.beginUserSlice(plateId)
         } catch (failure: Exception) {
             if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Foreground slice could not start", failure)
             mutableState.value = SliceOperationState(
+                plateId = plateId,
                 terminalStatus = SliceTerminalStatus.SLICE_FAILED,
             )
             return false
@@ -97,7 +99,10 @@ internal class SliceOperationViewModel : ViewModel() {
         check(operationSession.compareAndSet(null, foregroundSession)) {
             "Another foreground slice session is already owned"
         }
-        mutableState.value = SliceOperationState(slicing = true)
+        mutableState.value = SliceOperationState(
+            plateId = foregroundSession.plateId,
+            slicing = true,
+        )
         operationCancellation.set(false)
         val job = viewModelScope.launch {
             var completedState: SliceOperationState? = null
@@ -114,6 +119,7 @@ internal class SliceOperationViewModel : ViewModel() {
                     }
                 }
                 mutableState.value = SliceOperationState(
+                    plateId = foregroundSession.plateId,
                     progress = 100,
                     outcome = outcome,
                     previewLoading = true,
@@ -127,6 +133,7 @@ internal class SliceOperationViewModel : ViewModel() {
                         throw SlicingCancelledException()
                     }
                     completedState = SliceOperationState(
+                        plateId = foregroundSession.plateId,
                         progress = 100,
                         outcome = outcome.copy(layers = preview.layerCount),
                         preview = preview,
@@ -141,6 +148,7 @@ internal class SliceOperationViewModel : ViewModel() {
                 } catch (failure: Exception) {
                     if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Initial Preview failed", failure)
                     completedState = SliceOperationState(
+                        plateId = foregroundSession.plateId,
                         progress = 100,
                         outcome = outcome,
                         terminalStatus = SliceTerminalStatus.PREVIEW_FAILED,
@@ -150,16 +158,19 @@ internal class SliceOperationViewModel : ViewModel() {
                 throw cancellation
             } catch (_: SlicingCancelledException) {
                 completedState = SliceOperationState(
+                    plateId = foregroundSession.plateId,
                     terminalStatus = SliceTerminalStatus.CANCELED,
                 )
             } catch (failure: Exception) {
                 if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Retained slice failed", failure)
                 completedState = SliceOperationState(
+                    plateId = foregroundSession.plateId,
                     terminalStatus = SliceTerminalStatus.SLICE_FAILED,
                 )
             } finally {
                 if (foregroundSession.cancellationRequested()) {
                     completedState = SliceOperationState(
+                        plateId = foregroundSession.plateId,
                         terminalStatus = SliceTerminalStatus.CANCELED,
                     )
                 }
@@ -173,7 +184,12 @@ internal class SliceOperationViewModel : ViewModel() {
         operationJob.set(job)
     }
 
-    fun loadPreview(outcome: SliceOutcome, startLayer: Int, endLayer: Int): Boolean {
+    fun loadPreview(
+        plateId: String,
+        outcome: SliceOutcome,
+        startLayer: Int,
+        endLayer: Int,
+    ): Boolean {
         if (
             mutableState.value.busy ||
             operationJob.get()?.isActive == true ||
@@ -183,6 +199,7 @@ internal class SliceOperationViewModel : ViewModel() {
         }
         val previousPreview = mutableState.value.preview
         mutableState.value = SliceOperationState(
+            plateId = plateId,
             progress = 100,
             outcome = outcome,
             preview = previousPreview,
@@ -194,6 +211,7 @@ internal class SliceOperationViewModel : ViewModel() {
                     buildPreview(outcome, startLayer, endLayer)
                 }
                 mutableState.value = SliceOperationState(
+                    plateId = plateId,
                     progress = 100,
                     outcome = outcome,
                     preview = preview,
@@ -203,6 +221,7 @@ internal class SliceOperationViewModel : ViewModel() {
             } catch (failure: Exception) {
                 if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Preview range failed", failure)
                 mutableState.value = SliceOperationState(
+                    plateId = plateId,
                     progress = 100,
                     outcome = outcome,
                     preview = previousPreview,

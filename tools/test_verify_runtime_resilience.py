@@ -18,7 +18,7 @@ def valid_sources() -> dict[str, str]:
             "val activeTransferDirection: ProjectTransferDirection? "
             "restored.storageUnavailable "
             "!current.persistenceBlocked "
-            "projectStore.save(document.history.current, document.sliceOptions) "
+            "projectStore.save(document.history.current, document.plateOptions) "
             "pendingPersistence?.join() fun flushPersistence() "
             "override fun onCleared() hasPersistableChanges "
             "fun autoLaySelectedModel() fun arrangeProjectObjects() "

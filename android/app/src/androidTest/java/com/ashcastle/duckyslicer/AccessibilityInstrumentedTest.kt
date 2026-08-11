@@ -328,6 +328,44 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun plateSwitcherExposesSelectionAddAndConfirmedRemovalActions() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val firstLabel = context.getString(R.string.plate_number, 1)
+        val secondLabel = context.getString(R.string.plate_number, 2)
+        val addLabel = context.getString(R.string.add_plate)
+        val removeLabel = context.getString(R.string.remove_plate)
+        val removeTitle = context.getString(R.string.remove_plate_title)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_PLATES).use {
+            val nodes = waitForNodes(setOf(firstLabel, secondLabel, addLabel, removeLabel))
+            val first = nodes.first { it.isClickable && it.effectiveLabel() == firstLabel }
+            val second = nodes.first { it.isClickable && it.effectiveLabel() == secondLabel }
+            val add = nodes.first { it.isClickable && it.effectiveLabel() == addLabel }
+            val remove = nodes.first { it.isClickable && it.effectiveLabel() == removeLabel }
+            assertEquals("1/2", first.stateDescription?.toString())
+            assertTrue(second.isFocusable)
+            assertTrue(add.isFocusable)
+            assertTrue(remove.isFocusable)
+
+            assertTrue(second.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            waitForNode(secondLabel) {
+                it.isClickable && it.stateDescription?.toString() == "2/2"
+            }
+            val selectedRemove = waitForNode(removeLabel) { it.isClickable }
+            assertTrue(selectedRemove.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            assertTrue(
+                waitForNodes(setOf(removeTitle)).any {
+                    it.effectiveLabel().contains(removeTitle)
+                },
+            )
+            val confirm = waitForNode(removeLabel) { it.isClickable }
+            assertTrue(confirm.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            waitForNode(firstLabel) {
+                it.isClickable && it.stateDescription?.toString() == "1/1"
+            }
+        }
+    }
+
+    @Test
     fun largeTextLandscapeKeepsMenuClearOfScrollableWorkspaceSheet() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val menuLabel = context.getString(R.string.menu)
@@ -606,7 +644,10 @@ class AccessibilityInstrumentedTest {
             tapCenter(checkNotNull(brimTool))
 
             val editor = waitForNodes(setOf(title, hint, addAtFootprint, apply))
-            assertTrue(editor.any { it.isHeading && it.effectiveLabel() == title })
+            assertTrue(
+                "Manual Brim ears must expose its editor title as a navigable heading",
+                editor.any { it.isHeading && it.effectiveLabel().contains(title) },
+            )
             assertTrue(editor.any { it.effectiveLabel().contains(hint) })
             val automaticAdd = editor.first { it.isClickable && it.effectiveLabel() == addAtFootprint }
             tapCenter(automaticAdd)

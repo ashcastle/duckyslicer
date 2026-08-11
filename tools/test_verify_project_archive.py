@@ -22,9 +22,10 @@ def valid_sources() -> dict[str, str]:
                 "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
                 'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
                 "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-                "PROJECT_ARCHIVE_SCHEMA_VERSION = 8",
-                "ArchivedProjectVolume",
-                'getJSONArray("volumes") legacyProjectVolumeId',
+                "PROJECT_ARCHIVE_SCHEMA_VERSION = 9",
+                "ArchivedProjectPlate ArchivedProjectVolume",
+                'getJSONArray("plates") getJSONArray("volumes") legacyProjectVolumeId',
+                "selectedPlateId plateOptions: Map<String, SliceOptions>",
                 'Regex("models/[0-9]{3}\\\\.stl")',
                 "require(!entry.isDirectory require(entries.add(entry.name))",
                 "entry.method == ZipEntry.DEFLATED || entry.method == ZipEntry.STORED",
@@ -52,7 +53,7 @@ def valid_sources() -> dict[str, str]:
                 'File(projectRoot, ".archive-${UUID.randomUUID()}")',
                 "ProjectArchiveCodec.read(",
                 "moveArchiveModel(stagedModel.file, destination)",
-                "save(snapshot, decoded.sliceOptions)",
+                "val plateOptions = decoded.plates.associate save(snapshot, plateOptions)",
                 "pruneUnreferencedModels(snapshot)",
                 "installed.forEach(File::delete) staging.deleteRecursively()",
                 "modelFile.parentFile == modelRoot && modelFile.isFile",
@@ -61,7 +62,7 @@ def valid_sources() -> dict[str, str]:
                 "private fun recoverGeneratedStaging removePrefix(prefix)",
                 "UUID.fromString(identifier) !Files.isSymbolicLink(candidate.toPath())",
                 "checkCancellation: () -> Unit = {}",
-                "ProjectArchiveCodec.write(snapshot, sliceOptions, output, checkCancellation)",
+                "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
                 "beginCommit: () -> Unit = {} beginCommit()",
             )
         ),
@@ -82,6 +83,7 @@ def valid_sources() -> dict[str, str]:
                 "ProjectStore.recoverAbandonedArchiveStaging",
                 "ProjectTransferState(busy = true)",
                 "val history: ProjectHistoryState val sliceOptions: SliceOptions "
+                "val plateOptions: Map<String, SliceOptions> "
                 "val restored: Boolean val sessionRevision: Long "
                 "val persistedRevision: Long "
                 "val activeTransferId: Long? "
@@ -92,7 +94,7 @@ def valid_sources() -> dict[str, str]:
                 "fun ProjectTransferState.withCompletedTransfer(",
                 "fun updateHistory( fun updateSession(",
                 "projectStore.loadProject()",
-                "projectStore.save(document.history.current, document.sliceOptions)",
+                "projectStore.save(document.history.current, document.plateOptions)",
                 "PROJECT_SAVE_DEBOUNCE_MILLIS = 400L",
                 "pendingPersistence?.join() fun flushPersistence() "
                 "override fun onCleared() hasPersistableChanges",
@@ -137,6 +139,8 @@ def valid_sources() -> dict[str, str]:
                 "ProjectTransferViewModel projectTransferState.completion ProjectReplacementDialog(",
                 "projectHistory = projectTransferState.history "
                 "sliceOptions = projectTransferState.sliceOptions "
+                "projectPlates = projectHistory.current.plates "
+                "selectedPlateId = projectHistory.current.selectedPlateId "
                 "projectRestored = projectTransferState.restored "
                 "projectTransferModel.updateHistory( projectTransferModel::cancelProjectImport "
                 "projectTransferModel::cancelProjectExport "
@@ -144,7 +148,8 @@ def valid_sources() -> dict[str, str]:
             )
         ),
         "WorkspaceScreen.kt": (
-            "ProjectSheet( onOpenProject onSaveProject confirmReplacement "
+            "ProjectSheet( onOpenProject onSaveProject onPlateSelected onAddPlate "
+            "onRemovePlate PlateSwitcher( confirmReplacement "
             "R.string.replace_project_title R.string.replace_project_body "
             "projectImporting: Boolean projectTransferCancellationRequested: Boolean "
             "onCancelProjectImport: () -> Unit onCancelProjectExport: () -> Unit "
@@ -154,6 +159,7 @@ def valid_sources() -> dict[str, str]:
         ),
         "ProjectArchiveTest.kt": (
             "projectArchiveRoundTripsModelsTransformsPaintAndResolvedProfilesDeterministically "
+            "multiplePlatesAndTheirSettingsRoundTripThroughThePortableArchive "
             "invalidArchiveCannotEscapeStagingOrReplaceTheCurrentProject "
             "oversizedManifestIsRejectedBeforeProjectStateChanges "
             "startupRecoveryRemovesOnlyExactAbandonedArchiveDirectories "
@@ -165,6 +171,7 @@ def valid_sources() -> dict[str, str]:
             "staleOrBusySessionMutationIsRejected withUpdatedSession "
             "projectExportCancellationIsBoundToTheExactActiveTransfer "
             "projectImportCancellationIsBoundToTheExactActiveTransfer"
+            " switchingPlatesRestoresEachPlatesIndependentSliceOptions"
         ),
         "ProjectArchiveIntentInstrumentedTest.kt": (
             "customProjectIntentSurvivesRecreationRestoresAndSlices "
@@ -205,7 +212,8 @@ def valid_sources() -> dict[str, str]:
             "ParcelFileDescriptor.createPipe() Blocking import provider is read-only"
         ),
         "AccessibilityInstrumentedTest.kt": (
-            "cancelProjectImportActionIsReachable cancelProjectExportActionIsReachable"
+            "cancelProjectImportActionIsReachable cancelProjectExportActionIsReachable "
+            "plateSwitcherExposesSelectionAddAndConfirmedRemovalActions"
         ),
         "NativeEngineInstrumentedTest.kt": (
             "projectArchiveRoundTripReinspectsAndSlicesOnArm64 "
@@ -248,7 +256,7 @@ def valid_sources() -> dict[str, str]:
             'com.ashcastle.duckyslicer.test.blocking-import" /></application></manifest>'
         ),
         "PRIVACY.md": (
-            "Exported DuckySlicer project files contain the model geometry\n"
+            "Exported DuckySlicer project files contain plate organization, model geometry\n"
             "support, seam, and multi-color painting, manual Brim-ear points, variable layer-height ranges,\n"
             "They do not contain G-code, saved printer addresses, or printer\n"
             "형상, 오브젝트 배치, 서포트·심·다중 색상 채색, 수동 Brim 이어 점, 가변 레이어\n"
@@ -256,8 +264,9 @@ def valid_sources() -> dict[str, str]:
         ),
         "SUPPORT.md": "`.duckyproject` model geometry include saved printer addresses, access keys, or G-code",
         "PROJECT_FORMAT.md": (
-            "manifest.json models/000.stl schema version `8` "
-            "Schema 1 through 7 projects remain readable stable, bounded `volumes` list "
+            "manifest.json models/000.stl schema version `9` "
+            "Schema 1 through 8 projects remain readable up to 16 plates "
+            "plate-local objects and settings stable, bounded `volumes` list "
             "up to 64 volumes per object independent X, Y, and Z scale "
             "multi-color painting manual Brim-ear points variable layer-height ranges "
             "rejects duplicate, directory, traversal, and unknown entries "

@@ -97,7 +97,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "val activeTransferDirection: ProjectTransferDirection?",
         "restored.storageUnavailable",
         "!current.persistenceBlocked",
-        "projectStore.save(document.history.current, document.sliceOptions)",
+        "projectStore.save(document.history.current, document.plateOptions)",
         "pendingPersistence?.join()",
         "fun flushPersistence()",
         "override fun onCleared()",

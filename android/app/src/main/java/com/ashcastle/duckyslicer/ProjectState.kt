@@ -3,6 +3,7 @@ package com.ashcastle.duckyslicer
 import java.util.UUID
 
 internal const val MAX_PROJECT_VOLUMES_PER_OBJECT = 64
+internal const val MAX_PROJECT_PLATES = 16
 
 data class ProjectVolume(
     val id: String,
@@ -37,6 +38,10 @@ internal fun splitProjectVolumeId(
             .toByteArray(Charsets.UTF_8),
     ).toString()
 }
+
+internal fun legacyProjectPlateId(): String = UUID.nameUUIDFromBytes(
+    "com.ashcastle.duckyslicer:legacy-plate".toByteArray(Charsets.UTF_8),
+).toString()
 
 data class ProjectObject(
     val id: String,
@@ -108,12 +113,93 @@ data class ProjectObject(
     }
 }
 
-data class ProjectSnapshot(
+data class ProjectPlate(
+    val id: String,
     val objects: List<ProjectObject> = emptyList(),
     val selectedObjectId: String? = null,
 ) {
+    init {
+        require(id.length in 1..ProjectStore.MAX_ID_LENGTH) { "Invalid project plate id" }
+        require(objects.map(ProjectObject::id).toSet().size == objects.size) {
+            "Project plate contains duplicate object ids"
+        }
+        require(selectedObjectId == null || objects.any { it.id == selectedObjectId }) {
+            "Project plate selection is invalid"
+        }
+    }
+
     val selectedObject: ProjectObject?
         get() = objects.firstOrNull { it.id == selectedObjectId }
+}
+
+data class ProjectSnapshot(
+    val selectedPlateId: String,
+    val plates: List<ProjectPlate>,
+) {
+    constructor(
+        objects: List<ProjectObject> = emptyList(),
+        selectedObjectId: String? = null,
+    ) : this(
+        plates = listOf(
+            ProjectPlate(
+                id = legacyProjectPlateId(),
+                objects = objects,
+                selectedObjectId = selectedObjectId,
+            ),
+        ),
+        selectedPlateId = legacyProjectPlateId(),
+    )
+
+    init {
+        require(plates.size in 1..MAX_PROJECT_PLATES) { "Project plate count is invalid" }
+        require(plates.map(ProjectPlate::id).toSet().size == plates.size) {
+            "Project contains duplicate plate ids"
+        }
+        require(plates.any { it.id == selectedPlateId }) { "Selected plate is unavailable" }
+        val objectIds = HashSet<String>()
+        require(plates.flatMap(ProjectPlate::objects).all { objectIds.add(it.id) }) {
+            "Project contains duplicate object ids"
+        }
+    }
+
+    val activePlate: ProjectPlate
+        get() = plates.first { it.id == selectedPlateId }
+
+    val objects: List<ProjectObject>
+        get() = activePlate.objects
+
+    val selectedObjectId: String?
+        get() = activePlate.selectedObjectId
+
+    val selectedObject: ProjectObject?
+        get() = activePlate.selectedObject
+
+    val allObjects: List<ProjectObject>
+        get() = plates.flatMap(ProjectPlate::objects)
+
+    internal fun updateActivePlate(
+        objects: List<ProjectObject> = this.objects,
+        selectedObjectId: String? = this.selectedObjectId,
+    ): ProjectSnapshot = copy(
+        plates = plates.map { plate ->
+            if (plate.id == selectedPlateId) {
+                plate.copy(objects = objects, selectedObjectId = selectedObjectId)
+            } else {
+                plate
+            }
+        },
+    )
+
+    /** Compatibility copy for callers that still address the active plate as one project. */
+    fun copy(
+        objects: List<ProjectObject> = this.objects,
+        selectedObjectId: String? = this.selectedObjectId,
+    ): ProjectSnapshot = updateActivePlate(objects, selectedObjectId)
+
+    internal fun selectPlate(plateId: String): ProjectSnapshot {
+        require(plates.any { it.id == plateId }) { "Selected plate is unavailable" }
+        return if (plateId == selectedPlateId) this else copy(selectedPlateId = plateId)
+    }
 }
 
 data class ProjectHistoryState(
@@ -125,9 +211,12 @@ data class ProjectHistoryState(
     val canRedo: Boolean get() = redoStates.isNotEmpty()
 
     fun add(projectObject: ProjectObject): ProjectHistoryState {
-        require(current.objects.none { it.id == projectObject.id }) { "Duplicate project object id" }
+        require(current.allObjects.none { it.id == projectObject.id }) { "Duplicate project object id" }
+        require(current.allObjects.size < ProjectStore.MAX_PROJECT_OBJECTS) {
+            "Project has too many objects"
+        }
         return record(
-            current.copy(
+            current.updateActivePlate(
                 objects = current.objects + projectObject,
                 selectedObjectId = projectObject.id,
             ),
@@ -136,10 +225,13 @@ data class ProjectHistoryState(
 
     fun addAll(projectObjects: List<ProjectObject>): ProjectHistoryState {
         if (projectObjects.isEmpty()) return this
-        val existingIds = current.objects.mapTo(HashSet(), ProjectObject::id)
+        require(current.allObjects.size + projectObjects.size <= ProjectStore.MAX_PROJECT_OBJECTS) {
+            "Project has too many objects"
+        }
+        val existingIds = current.allObjects.mapTo(HashSet(), ProjectObject::id)
         require(projectObjects.all { existingIds.add(it.id) }) { "Duplicate project object id" }
         return record(
-            current.copy(
+            current.updateActivePlate(
                 objects = current.objects + projectObjects,
                 selectedObjectId = projectObjects.last().id,
             ),
@@ -151,10 +243,10 @@ data class ProjectHistoryState(
         require(replacements.isNotEmpty()) { "Replacement objects are empty" }
         val selectedIndex = current.objects.indexOfFirst { it.id == selectedId }
         if (selectedIndex < 0) return this
-        require(current.objects.size - 1 + replacements.size <= ProjectStore.MAX_PROJECT_OBJECTS) {
+        require(current.allObjects.size - 1 + replacements.size <= ProjectStore.MAX_PROJECT_OBJECTS) {
             "Project has too many objects"
         }
-        val ids = current.objects
+        val ids = current.allObjects
             .asSequence()
             .filterNot { it.id == selectedId }
             .mapTo(HashSet(), ProjectObject::id)
@@ -164,7 +256,7 @@ data class ProjectHistoryState(
             addAll(selectedIndex, replacements)
         }
         return record(
-            current.copy(
+            current.updateActivePlate(
                 objects = nextObjects,
                 selectedObjectId = replacements.first().id,
             ),
@@ -175,18 +267,48 @@ data class ProjectHistoryState(
         val selected = current.selectedObject ?: return this
         val remaining = current.objects.filterNot { it.id == selected.id }
         return record(
-            current.copy(
+            current.updateActivePlate(
                 objects = remaining,
                 selectedObjectId = remaining.lastOrNull()?.id,
             ),
         )
     }
 
-    fun clear(): ProjectHistoryState = if (current.objects.isEmpty()) this else record(ProjectSnapshot())
+    fun clear(): ProjectHistoryState = if (current.objects.isEmpty()) {
+        this
+    } else {
+        record(current.updateActivePlate(objects = emptyList(), selectedObjectId = null))
+    }
+
+    fun addPlate(plateId: String): ProjectHistoryState {
+        require(current.plates.size < MAX_PROJECT_PLATES) { "Project has too many plates" }
+        require(current.plates.none { it.id == plateId }) { "Duplicate project plate id" }
+        return record(
+            current.copy(
+                plates = current.plates + ProjectPlate(plateId),
+                selectedPlateId = plateId,
+            ),
+        )
+    }
+
+    fun removeSelectedPlate(): ProjectHistoryState {
+        if (current.plates.size <= 1) return this
+        val index = current.plates.indexOfFirst { it.id == current.selectedPlateId }
+        if (index < 0) return this
+        val remaining = current.plates.toMutableList().apply { removeAt(index) }
+        val nextSelection = remaining[minOf(index, remaining.lastIndex)].id
+        return record(current.copy(plates = remaining, selectedPlateId = nextSelection))
+    }
+
+    fun selectPlate(plateId: String): ProjectHistoryState =
+        copy(current = current.selectPlate(plateId))
 
     fun duplicateSelected(newId: String): ProjectHistoryState {
         val selected = current.selectedObject ?: return this
-        require(current.objects.none { it.id == newId }) { "Duplicate project object id" }
+        require(current.allObjects.none { it.id == newId }) { "Duplicate project object id" }
+        require(current.allObjects.size < ProjectStore.MAX_PROJECT_OBJECTS) {
+            "Project has too many objects"
+        }
         val duplicate = selected.copy(
             id = newId,
             volumes = selected.rebaseVolumeIds(newId),
@@ -196,7 +318,7 @@ data class ProjectHistoryState(
             ),
         )
         return record(
-            current.copy(
+            current.updateActivePlate(
                 objects = current.objects + duplicate,
                 selectedObjectId = duplicate.id,
             ),
@@ -219,14 +341,18 @@ data class ProjectHistoryState(
                 ),
             )
         }
-        return if (arranged == current.objects) this else record(current.copy(objects = arranged))
+        return if (arranged == current.objects) {
+            this
+        } else {
+            record(current.updateActivePlate(objects = arranged))
+        }
     }
 
     fun select(objectId: String?): ProjectHistoryState {
         require(objectId == null || current.objects.any { it.id == objectId }) {
             "Selected object is not part of the project"
         }
-        return copy(current = current.copy(selectedObjectId = objectId))
+        return copy(current = current.updateActivePlate(selectedObjectId = objectId))
     }
 
     fun updateSelectedTransform(
@@ -244,7 +370,7 @@ data class ProjectHistoryState(
     ): ProjectHistoryState {
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
         if (target.transform == transform) return this
-        val next = current.copy(
+        val next = current.updateActivePlate(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) projectObject.copy(transform = transform) else projectObject
             },
@@ -257,7 +383,7 @@ data class ProjectHistoryState(
         val selected = current.selectedObject ?: return this
         if (selected.volumes.all { it.filamentSlot == slot }) return this
         return record(
-            current.copy(
+            current.updateActivePlate(
                 objects = current.objects.map { projectObject ->
                     if (projectObject.id == selected.id) {
                         projectObject.copy(
@@ -280,7 +406,7 @@ data class ProjectHistoryState(
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
         if (target.brimPoints == brimPoints) return this
         return record(
-            current.copy(
+            current.updateActivePlate(
                 objects = current.objects.map { projectObject ->
                     if (projectObject.id == objectId) {
                         projectObject.copy(brimPoints = brimPoints)
@@ -304,7 +430,11 @@ data class ProjectHistoryState(
                 },
             )
         }
-        return if (updated == current.objects) this else record(current.copy(objects = updated))
+        return if (updated == current.objects) {
+            this
+        } else {
+            record(current.updateActivePlate(objects = updated))
+        }
     }
 
     fun updateSupportPaint(
@@ -328,7 +458,7 @@ data class ProjectHistoryState(
         require(supportPaint.facets.keys.all { it in 0 until targetVolume.model.triangles }) {
             "Support paint references an unavailable facet"
         }
-        val next = current.copy(
+        val next = current.updateActivePlate(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
                     projectObject.copy(
@@ -357,7 +487,7 @@ data class ProjectHistoryState(
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
         val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
         if (targetVolume.supportPaint == previous) return this
-        val previousSnapshot = current.copy(
+        val previousSnapshot = current.updateActivePlate(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
                     projectObject.copy(
@@ -397,7 +527,7 @@ data class ProjectHistoryState(
         require(seamPaint.facets.keys.all { it in 0 until targetVolume.model.triangles }) {
             "Seam paint references an unavailable facet"
         }
-        val next = current.copy(
+        val next = current.updateActivePlate(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
                     projectObject.copy(
@@ -426,7 +556,7 @@ data class ProjectHistoryState(
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
         val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
         if (targetVolume.seamPaint == previous) return this
-        val previousSnapshot = current.copy(
+        val previousSnapshot = current.updateActivePlate(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
                     projectObject.copy(
@@ -466,7 +596,7 @@ data class ProjectHistoryState(
         require(multiColorPaint.facets.keys.all { it in 0 until targetVolume.model.triangles }) {
             "Multi-color paint references an unavailable facet"
         }
-        val next = current.copy(
+        val next = current.updateActivePlate(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
                     projectObject.copy(
@@ -498,7 +628,7 @@ data class ProjectHistoryState(
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
         val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
         if (targetVolume.multiColorPaint == previous) return this
-        val previousSnapshot = current.copy(
+        val previousSnapshot = current.updateActivePlate(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
                     projectObject.copy(
@@ -523,7 +653,7 @@ data class ProjectHistoryState(
         val selected = current.selectedObject ?: return this
         if (selected.variableLayerHeights == variableLayerHeights) return this
         return record(
-            current.copy(
+            current.updateActivePlate(
                 objects = current.objects.map { projectObject ->
                     if (projectObject.id == selected.id) {
                         projectObject.copy(variableLayerHeights = variableLayerHeights)
@@ -541,7 +671,7 @@ data class ProjectHistoryState(
         val selected = current.selectedObject ?: return this
         if (selected.processOverrides == processOverrides) return this
         return record(
-            current.copy(
+            current.updateActivePlate(
                 objects = current.objects.map { projectObject ->
                     if (projectObject.id == selected.id) {
                         projectObject.copy(processOverrides = processOverrides)
@@ -556,7 +686,7 @@ data class ProjectHistoryState(
     fun commitSelectedTransform(previous: ModelTransform): ProjectHistoryState {
         val selected = current.selectedObject ?: return this
         if (selected.transform == previous) return this
-        val previousSnapshot = current.copy(
+        val previousSnapshot = current.updateActivePlate(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == selected.id) projectObject.copy(transform = previous) else projectObject
             },

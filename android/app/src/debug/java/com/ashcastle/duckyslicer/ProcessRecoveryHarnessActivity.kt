@@ -38,6 +38,7 @@ class ProcessRecoveryHarnessActivity : ComponentActivity() {
                 }
                 check(
                     operation.start(
+                        legacyProjectPlateId(),
                         listOf(projectObject),
                         SliceOptions().copy(
                             layerHeight = 0.02f,

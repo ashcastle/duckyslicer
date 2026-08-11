@@ -237,7 +237,8 @@ private fun DuckySlicerScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var externalProjectConfirmation by remember { mutableStateOf<ExternalProjectRequest?>(null) }
-    var sliceOutcome by rememberSaveable { mutableStateOf<SliceOutcome?>(null) }
+    var plateSliceResults by rememberSaveable { mutableStateOf(PlateSliceResults()) }
+    var pendingGcodeExport by rememberSaveable { mutableStateOf<PlateSliceResult?>(null) }
     var selectedTab by rememberSaveable { mutableStateOf(WorkspaceTab.SLICE) }
     var layerPreview by remember { mutableStateOf<GcodeLayerPreview?>(null) }
     val sliceOperationState by sliceOperationModel.state.collectAsStateWithLifecycle()
@@ -280,8 +281,11 @@ private fun DuckySlicerScreen(
     val exportingGcode = gcodeExportState.busy
     val gcodeExportCancellationRequested = gcodeExportState.cancellationRequested
     val sliceOptions = projectTransferState.sliceOptions
+    val projectPlates = projectHistory.current.plates
+    val selectedPlateId = projectHistory.current.selectedPlateId
     val projectObjects = projectHistory.current.objects
     val selectedProjectObject = projectHistory.current.selectedObject
+    val sliceOutcome = plateSliceResults.outcomeFor(selectedPlateId)
     val model = selectedProjectObject?.model ?: projectObjects.firstOrNull()?.model
     val modelTransform = selectedProjectObject?.transform ?: ModelTransform()
     val profileCatalog = profileLibraryState.catalog
@@ -327,9 +331,17 @@ private fun DuckySlicerScreen(
     val remoteMessageIsError = remoteOperationMessage?.isError ?: false
     val remoteBusy = remoteOperationState.busy
 
-    fun clearCompletedSlice() {
+    fun clearCompletedSlice(plateId: String = selectedPlateId) {
         sliceOperationModel.clearCompleted()
-        sliceOutcome = null
+        plateSliceResults = plateSliceResults.clear(plateId)
+        layerPreview = null
+        remoteOperationModel.invalidateUpload()
+    }
+
+    fun clearAllCompletedSlices() {
+        sliceOperationModel.clearCompleted()
+        plateSliceResults = PlateSliceResults()
+        pendingGcodeExport = null
         layerPreview = null
         remoteOperationModel.invalidateUpload()
     }
@@ -338,7 +350,7 @@ private fun DuckySlicerScreen(
         val completion = projectTransferState.completion ?: return@LaunchedEffect
         when (completion) {
             is ProjectTransferCompletion.Imported -> {
-                clearCompletedSlice()
+                clearAllCompletedSlices()
                 externalProjectConfirmation = null
                 notice = projectOpenedNotice
                 error = null
@@ -475,19 +487,33 @@ private fun DuckySlicerScreen(
         gcodeExportModel.consumeCompletion(completion.id)
     }
 
-    LaunchedEffect(sliceOutcome?.output?.absolutePath) {
+    LaunchedEffect(sliceOutcome?.output?.absolutePath, selectedPlateId) {
         val restored = sliceOutcome ?: return@LaunchedEffect
         if (!restored.isRestorableFrom(context.filesDir)) {
             clearCompletedSlice()
             if (selectedTab == WorkspaceTab.PREVIEW) selectedTab = WorkspaceTab.SLICE
         }
     }
-    LaunchedEffect(sliceOperationState.outcome, sliceOperationState.preview) {
+    LaunchedEffect(
+        sliceOperationState.plateId,
+        sliceOperationState.outcome,
+        sliceOperationState.preview,
+    ) {
         val completed = sliceOperationState.outcome ?: return@LaunchedEffect
-        sliceOutcome = completed
-        sliceOperationState.preview?.let { layerPreview = it }
+        val ownerPlateId = sliceOperationState.plateId ?: run {
+            sliceOperationModel.clearCompleted()
+            return@LaunchedEffect
+        }
+        if (projectPlates.none { it.id == ownerPlateId }) {
+            sliceOperationModel.clearCompleted()
+            return@LaunchedEffect
+        }
+        plateSliceResults = plateSliceResults.put(ownerPlateId, completed)
+        if (ownerPlateId == selectedPlateId) {
+            sliceOperationState.preview?.let { layerPreview = it }
+            selectedTab = WorkspaceTab.PREVIEW
+        }
         remoteOperationModel.invalidateUpload()
-        selectedTab = WorkspaceTab.PREVIEW
     }
     LaunchedEffect(sliceOperationState.terminalStatus) {
         when (sliceOperationState.terminalStatus) {
@@ -507,6 +533,9 @@ private fun DuckySlicerScreen(
             }
             SliceTerminalStatus.NONE -> Unit
         }
+    }
+    LaunchedEffect(projectPlates.map(ProjectPlate::id)) {
+        plateSliceResults = plateSliceResults.retain(projectPlates.mapTo(HashSet(), ProjectPlate::id))
     }
     LaunchedEffect(projectTransferState.persistenceMessage) {
         when (projectTransferState.persistenceMessage) {
@@ -676,7 +705,8 @@ private fun DuckySlicerScreen(
             projectHistory.current.selectedObject == null || projectTransferBusy || importing ||
             slicing || previewLoading
         ) return
-        val maximumObjects = ProjectStore.MAX_PROJECT_OBJECTS - projectObjects.size + 1
+        val maximumObjects =
+            ProjectStore.MAX_PROJECT_OBJECTS - projectHistory.current.allObjects.size + 1
         if (maximumObjects < 2) {
             error = splitError
             notice = null
@@ -709,7 +739,8 @@ private fun DuckySlicerScreen(
             projectHistory.current.selectedObject == null || projectTransferBusy || importing ||
             slicing || previewLoading
         ) return
-        val maximumObjects = ProjectStore.MAX_PROJECT_OBJECTS - projectObjects.size + 1
+        val maximumObjects =
+            ProjectStore.MAX_PROJECT_OBJECTS - projectHistory.current.allObjects.size + 1
         if (maximumObjects < 2) {
             error = cutError
             notice = null
@@ -739,7 +770,7 @@ private fun DuckySlicerScreen(
         if (
             projectTransferBusy || !projectRestored || slicing || previewLoading
         ) return
-        if (projectObjects.size >= ProjectStore.MAX_PROJECT_OBJECTS) {
+        if (projectHistory.current.allObjects.size >= ProjectStore.MAX_PROJECT_OBJECTS) {
             error = shapeError
             notice = null
             return
@@ -764,8 +795,9 @@ private fun DuckySlicerScreen(
     val savePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(GCODE_DOCUMENT_MIME_TYPE),
     ) { uri ->
-        val completed = sliceOutcome
-        if (uri != null && completed != null && gcodeExportModel.export(uri, completed)) {
+        val requested = pendingGcodeExport
+        pendingGcodeExport = null
+        if (uri != null && requested != null && gcodeExportModel.export(uri, requested.outcome)) {
             error = null
             notice = null
         }
@@ -795,7 +827,7 @@ private fun DuckySlicerScreen(
     LaunchedEffect(
         externalProjectRequest?.id,
         projectRestored,
-        projectObjects.isNotEmpty(),
+        projectHistory.current.allObjects.isNotEmpty(),
         projectTransferBusy,
         projectTransferState.completion?.id,
         importing,
@@ -811,7 +843,7 @@ private fun DuckySlicerScreen(
             !projectRestored || projectTransferBusy || importing || autoLaying ||
             arranging || splitting || cutting || slicing || previewLoading || projectTransferState.completion != null
         ) return@LaunchedEffect
-        if (projectObjects.isEmpty()) {
+        if (projectHistory.current.allObjects.isEmpty()) {
             importProject(request.uri)
         } else {
             externalProjectConfirmation = request
@@ -825,7 +857,13 @@ private fun DuckySlicerScreen(
             uri != null && projectRestored && !projectTransferBusy && !importing &&
             !autoLaying && !arranging && !splitting && !cutting && !slicing && !previewLoading
         ) {
-            if (projectTransferModel.exportProject(uri, projectHistory.current, sliceOptions)) {
+            if (
+                projectTransferModel.exportProject(
+                    uri,
+                    projectHistory.current,
+                    projectTransferState.plateOptions,
+                )
+            ) {
                 error = null
                 notice = null
             }
@@ -887,9 +925,14 @@ private fun DuckySlicerScreen(
     }
 
     val loadPreviewRange: (Int, Int) -> Unit = { startLayer, endLayer ->
-        val completed = sliceOutcome
-        if (completed != null && !slicing && !autoLaying && !arranging && !splitting && !cutting) {
-            sliceOperationModel.loadPreview(completed, startLayer, endLayer)
+        val requested = plateSliceResults.resultFor(selectedPlateId)
+        if (requested != null && !slicing && !autoLaying && !arranging && !splitting && !cutting) {
+            sliceOperationModel.loadPreview(
+                requested.plateId,
+                requested.outcome,
+                startLayer,
+                endLayer,
+            )
         }
     }
     LaunchedEffect(selectedTab, sliceOutcome?.output?.absolutePath) {
@@ -904,14 +947,14 @@ private fun DuckySlicerScreen(
     }
 
     fun beginSlice() {
-        val objects = projectObjects
+        val session = projectTransferModel.state.value
+        val input = session.history.current.sliceInput(session.plateOptions) ?: return
         if (
-            objects.isNotEmpty() &&
             !slicing && !importing && !projectTransferBusy && !autoLaying && !arranging &&
             !splitting && !cutting && !previewLoading &&
-            sliceOperationModel.start(objects, sliceOptions)
+            sliceOperationModel.start(input.plateId, input.objects, input.options)
         ) {
-            sliceOutcome = null
+            plateSliceResults = plateSliceResults.clear(input.plateId)
             layerPreview = null
             remoteOperationModel.invalidateUpload()
             error = null
@@ -950,14 +993,15 @@ private fun DuckySlicerScreen(
     }
 
     val saveGcode = {
-        val completed = sliceOutcome
+        val requested = plateSliceResults.resultFor(selectedPlateId)
         val selected = selectedProjectObject?.model ?: projectObjects.firstOrNull()?.model
-        if (completed != null && selected != null && !exportingGcode) {
+        if (requested != null && selected != null && !exportingGcode) {
             val baseName = if (projectObjects.size > 1) {
                 "project"
             } else {
                 selected.fileName.substringBeforeLast('.').ifBlank { "model" }
             }
+            pendingGcodeExport = requested
             savePicker.launch("$baseName.gcode")
         }
     }
@@ -966,6 +1010,8 @@ private fun DuckySlicerScreen(
 
     WorkspaceScreen(
         selectedTab = selectedTab,
+        projectPlates = projectPlates,
+        selectedPlateId = selectedPlateId,
         projectObjects = projectObjects,
         selectedObjectId = projectHistory.current.selectedObjectId,
         sliceOptions = sliceOptions,
@@ -1042,6 +1088,58 @@ private fun DuckySlicerScreen(
             )
         },
         onSaveProject = { projectSavePicker.launch(DEFAULT_PROJECT_ARCHIVE_NAME) },
+        onPlateSelected = { plateId ->
+            if (
+                !projectTransferBusy && !slicing && !previewLoading && !exportingGcode &&
+                !remoteBusy && plateId != selectedPlateId
+            ) {
+                val current = projectTransferModel.state.value.history
+                val next = current.selectPlate(plateId)
+                if (projectTransferModel.updateHistory(current, next)) {
+                    sliceOperationModel.clearCompleted()
+                    layerPreview = null
+                    remoteOperationModel.invalidateUpload()
+                    notice = null
+                    error = null
+                }
+            }
+        },
+        onAddPlate = {
+            if (
+                !projectTransferBusy && !slicing && !previewLoading && !exportingGcode &&
+                !remoteBusy && projectPlates.size < MAX_PROJECT_PLATES
+            ) {
+                val current = projectTransferModel.state.value.history
+                val next = current.addPlate(UUID.randomUUID().toString())
+                if (projectTransferModel.updateHistory(current, next)) {
+                    sliceOperationModel.clearCompleted()
+                    layerPreview = null
+                    remoteOperationModel.invalidateUpload()
+                    selectedTab = WorkspaceTab.SLICE
+                    notice = null
+                    error = null
+                }
+            }
+        },
+        onRemovePlate = {
+            if (
+                !projectTransferBusy && !slicing && !previewLoading && !exportingGcode &&
+                !remoteBusy && projectPlates.size > 1
+            ) {
+                val removedPlateId = selectedPlateId
+                val current = projectTransferModel.state.value.history
+                val next = current.removeSelectedPlate()
+                if (projectTransferModel.updateHistory(current, next)) {
+                    plateSliceResults = plateSliceResults.clear(removedPlateId)
+                    sliceOperationModel.clearCompleted()
+                    layerPreview = null
+                    remoteOperationModel.invalidateUpload()
+                    selectedTab = WorkspaceTab.SLICE
+                    notice = null
+                    error = null
+                }
+            }
+        },
         canUndo = projectHistory.canUndo,
         canRedo = projectHistory.canRedo,
         onObjectSelected = { objectId ->
@@ -1077,16 +1175,18 @@ private fun DuckySlicerScreen(
         onUndo = {
             val current = projectTransferModel.state.value.history
             if (current.canUndo) {
-                if (projectTransferModel.updateHistory(current, current.undo())) {
-                    clearCompletedSlice()
+                val next = current.undo()
+                if (projectTransferModel.updateHistory(current, next)) {
+                    clearCompletedSlice(next.current.selectedPlateId)
                 }
             }
         },
         onRedo = {
             val current = projectTransferModel.state.value.history
             if (current.canRedo) {
-                if (projectTransferModel.updateHistory(current, current.redo())) {
-                    clearCompletedSlice()
+                val next = current.redo()
+                if (projectTransferModel.updateHistory(current, next)) {
+                    clearCompletedSlice(next.current.selectedPlateId)
                 }
             }
         },
@@ -1313,7 +1413,7 @@ private fun DuckySlicerScreen(
         },
         onRemoteUpload = {
             val profile = selectedRemoteDevice()
-            val output = sliceOutcome?.output
+            val output = plateSliceResults.resultFor(selectedPlateId)?.outcome?.output
             if (profile != null && output != null && !remoteBusy) {
                 remoteOperationModel.upload(
                     profile,

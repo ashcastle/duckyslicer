@@ -115,7 +115,7 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
     for marker in (
         "class SliceOperationViewModel : ViewModel()",
         "viewModelScope.launch",
-        "SlicerProcessClient.beginUserSlice()",
+        "SlicerProcessClient.beginUserSlice(plateId)",
         "SlicerProcessClient.recoverUserSlice()",
         "SlicerProcessClient.awaitRecoveredSlice(",
         "Recovered foreground slice",
@@ -216,6 +216,11 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         "StandardCopyOption.ATOMIC_MOVE",
         "output.fd.sync()",
         "outcome.isRestorableFrom(context.filesDir)",
+        "plateId",
+        "RECORD_VERSION = 2",
+        "synchronized(localLock)",
+        "channel.lock()",
+        "loadUnlocked(context)",
     ):
         if marker not in foreground_store:
             raise VerificationError(f"foreground slice checkpoint is missing: {marker}")
@@ -249,6 +254,14 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         not in device_test
     ):
         raise VerificationError("ARM64 configuration/background slice regression is missing")
+    if (
+        "projectTransfer.state.value.history.current.selectedPlateId" not in device_test
+        or "assertEquals(selectedPlateId, initial.state.value.plateId)" not in device_test
+        or "assertEquals(selectedPlateId, ForegroundSliceStore.load(context)?.plateId)"
+        not in device_test
+        or "assertEquals(livePlateId, completed.plateId)" not in device_test
+    ):
+        raise VerificationError("ARM64 foreground slice plate ownership regression is missing")
     return len(direct_calls)
 
 

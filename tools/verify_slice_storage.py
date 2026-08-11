@@ -135,7 +135,9 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
             raise VerificationError(f"retained G-code export contract is missing: {marker}")
     for marker in (
         "ViewModelProvider(this)[GcodeExportViewModel::class.java]",
-        "gcodeExportModel.export(uri, completed)",
+        "var pendingGcodeExport by rememberSaveable",
+        "pendingGcodeExport = requested",
+        "gcodeExportModel.export(uri, requested.outcome)",
         "gcodeExportModel::cancelActiveExport",
     ):
         if marker not in main_activity:

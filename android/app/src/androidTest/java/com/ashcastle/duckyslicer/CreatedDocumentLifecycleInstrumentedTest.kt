@@ -179,7 +179,7 @@ class CreatedDocumentLifecycleInstrumentedTest {
                 model.exportProject(
                     BlockingExportProvider.URI,
                     ProjectSnapshot(),
-                    model.state.value.sliceOptions,
+                    model.state.value.plateOptions,
                 ),
             )
             waitUntil("failed project export did not complete") {
@@ -229,7 +229,7 @@ class CreatedDocumentLifecycleInstrumentedTest {
                         retained.exportProject(
                             BlockingExportProvider.URI,
                             snapshot,
-                            retained.state.value.sliceOptions,
+                            retained.state.value.plateOptions,
                         ),
                     )
                 }
@@ -286,7 +286,7 @@ class CreatedDocumentLifecycleInstrumentedTest {
                 model.exportProject(
                     BlockingExportProvider.URI,
                     fixture.first,
-                    model.state.value.sliceOptions,
+                    model.state.value.plateOptions,
                 ),
             )
             waitForProvider { it.getBoolean(BlockingExportProvider.KEY_STARTED) }
@@ -341,7 +341,7 @@ class CreatedDocumentLifecycleInstrumentedTest {
                 model.exportProject(
                     BlockingExportProvider.URI,
                     snapshot,
-                    model.state.value.sliceOptions,
+                    model.state.value.plateOptions,
                 ),
             )
             waitForProvider { it.getBoolean(BlockingExportProvider.KEY_STARTED) }

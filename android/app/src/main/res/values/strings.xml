@@ -449,6 +449,11 @@
     <string name="cancel_project_export">Stop saving project</string>
     <string name="canceling_project_export">Stopping project save…</string>
     <string name="project_export_canceled">Project save stopped.</string>
+    <string name="plate_number">Plate %1$d</string>
+    <string name="add_plate">Add plate</string>
+    <string name="remove_plate">Remove plate</string>
+    <string name="remove_plate_title">Remove this plate?</string>
+    <string name="remove_plate_message">The models and sliced result on this plate will be removed. You can use Undo to restore the plate.</string>
     <string name="saved_data_unavailable">Some saved items couldn’t be opened. They were left unchanged.</string>
     <string name="settings_save_error">Couldn’t save settings.</string>
     <string name="add_device">Add</string>

@@ -449,6 +449,11 @@
     <string name="cancel_project_export">프로젝트 저장 중지</string>
     <string name="canceling_project_export">프로젝트 저장을 중지하는 중…</string>
     <string name="project_export_canceled">프로젝트 저장을 중지했습니다.</string>
+    <string name="plate_number">플레이트 %1$d</string>
+    <string name="add_plate">플레이트 추가</string>
+    <string name="remove_plate">플레이트 제거</string>
+    <string name="remove_plate_title">이 플레이트를 제거할까요?</string>
+    <string name="remove_plate_message">이 플레이트의 모델과 슬라이스 결과가 제거됩니다. 실행 취소로 플레이트를 복원할 수 있습니다.</string>
     <string name="saved_data_unavailable">일부 저장 항목을 열지 못했습니다. 기존 파일은 변경하지 않았습니다.</string>
     <string name="settings_save_error">설정을 저장하지 못했습니다.</string>
     <string name="add_device">추가</string>

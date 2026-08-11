@@ -73,7 +73,9 @@ class SliceLifecycleInstrumentedTest {
             ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
                 scenario.onActivity { activity ->
                     val owner = ViewModelProvider(activity)[SliceOperationViewModel::class.java]
-                    assertTrue(owner.start(listOf(projectObject), SliceOptions()))
+                    assertTrue(
+                        owner.start(legacyProjectPlateId(), listOf(projectObject), SliceOptions()),
+                    )
                     assertTrue(owner.state.value.slicing)
                 }
             }
@@ -131,18 +133,27 @@ class SliceLifecycleInstrumentedTest {
 
         try {
             var retainedModel: SliceOperationViewModel? = null
+            var ownerPlateId: String? = null
             val launchIntent = Intent(Intent.ACTION_MAIN)
                 .setClass(context, MainActivity::class.java)
                 .addCategory(Intent.CATEGORY_LAUNCHER)
             ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
                 scenario.onActivity { activity ->
                     val initial = ViewModelProvider(activity)[SliceOperationViewModel::class.java]
+                    val projectTransfer =
+                        ViewModelProvider(activity)[ProjectTransferViewModel::class.java]
+                    val selectedPlateId =
+                        projectTransfer.state.value.history.current.selectedPlateId
                     retainedModel = initial
-                    assertTrue(initial.start(listOf(projectObject), options))
+                    ownerPlateId = selectedPlateId
+                    assertTrue(initial.start(selectedPlateId, listOf(projectObject), options))
                     assertTrue("The slice must be active before recreation", initial.state.value.slicing)
+                    assertEquals(selectedPlateId, initial.state.value.plateId)
+                    assertEquals(selectedPlateId, ForegroundSliceStore.load(context)?.plateId)
                 }
 
                 val retained = requireNotNull(retainedModel)
+                val livePlateId = requireNotNull(ownerPlateId)
                 val foregroundDeadline = SystemClock.elapsedRealtime() + SERVICE_STATE_TIMEOUT_MILLIS
                 while (
                     !SlicerProcessClient.workerIsForegroundForTest(context) &&
@@ -193,6 +204,7 @@ class SliceLifecycleInstrumentedTest {
                 val completed = retained.state.value
                 assertFalse("The retained slice must finish before timeout", completed.busy)
                 assertEquals(SliceTerminalStatus.NONE, completed.terminalStatus)
+                assertEquals(livePlateId, completed.plateId)
                 val outcome = requireNotNull(completed.outcome) {
                     "The retained slice must produce G-code"
                 }
@@ -212,7 +224,15 @@ class SliceLifecycleInstrumentedTest {
                 scenario.moveToState(Lifecycle.State.RESUMED)
 
                 scenario.onActivity {
-                    assertTrue(retained.loadPreview(outcome, 0, outcome.layers / 2))
+                    assertTrue(
+                        retained.loadPreview(
+                            livePlateId,
+                            outcome,
+                            0,
+                            outcome.layers / 2,
+                        ),
+                    )
+                    assertEquals(livePlateId, retained.state.value.plateId)
                     assertTrue("Preview range loading must be active before recreation", retained.state.value.previewLoading)
                 }
                 scenario.recreate()
@@ -233,7 +253,7 @@ class SliceLifecycleInstrumentedTest {
 
                 scenario.onActivity {
                     retained.clearCompleted()
-                    assertTrue(retained.start(listOf(projectObject), options))
+                    assertTrue(retained.start(livePlateId, listOf(projectObject), options))
                     retained.cancel()
                     assertTrue("Cancellation must remain visible while preprocessing", retained.state.value.cancellationRequested)
                 }
@@ -257,7 +277,7 @@ class SliceLifecycleInstrumentedTest {
                     retained.clearCompleted()
                     assertTrue(
                         "An idle canceled slice must release ownership before allowing restart",
-                        retained.start(listOf(projectObject), options),
+                        retained.start(livePlateId, listOf(projectObject), options),
                     )
                 }
                 val notificationDeadline =

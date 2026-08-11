@@ -29,7 +29,8 @@ def valid_sources() -> dict[str, str]:
             "GCODE_DOCUMENT_MIME_TYPE = \"application/octet-stream\" "
             "CreateDocument(GCODE_DOCUMENT_MIME_TYPE) "
             "ViewModelProvider(this)[GcodeExportViewModel::class.java] "
-            "gcodeExportModel.export(uri, completed) gcodeExportModel::cancelActiveExport"
+            "var pendingGcodeExport by rememberSaveable pendingGcodeExport = requested "
+            "gcodeExportModel.export(uri, requested.outcome) gcodeExportModel::cancelActiveExport"
         ),
         "WorkspaceScreen.kt": (
             "gcodeExportCancellationRequested: Boolean onCancelGcodeExport: () -> Unit "

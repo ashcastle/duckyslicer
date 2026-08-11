@@ -217,7 +217,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "TabletShortestSideDp = 600f",
         "useWorkspaceNavigationRail(maxWidth.value, maxHeight.value)",
         "minOf(widthDp, heightDp) >= TabletShortestSideDp",
-        "WorkspaceTopOverlayClearanceDp = 82f",
+        "WorkspaceTopOverlayClearanceDp = 142f",
         "workspacePanelMaxHeightDp(maxHeight.value).dp",
         "BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxSize())",
         "showWorkspaceNavigationLabels(LocalDensity.current.fontScale)",
@@ -297,11 +297,13 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
 
     main_activity = sources["MainActivity.kt"]
     for marker in (
-        "var sliceOutcome by rememberSaveable",
+        "var plateSliceResults by rememberSaveable",
         "var selectedTab by rememberSaveable",
         "restored.isRestorableFrom(context.filesDir)",
         "completed?.isRestorableFrom(context.filesDir) == true",
-        "sliceOperationModel.loadPreview(completed, startLayer, endLayer)",
+        "val requested = plateSliceResults.resultFor(selectedPlateId)",
+        "requested.plateId",
+        "requested.outcome",
         "loadPreviewRange(0, Int.MAX_VALUE)",
     ):
         if marker not in main_activity:

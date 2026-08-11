@@ -601,17 +601,18 @@ internal object SlicerProcessClient {
         }
     }
 
-    fun beginUserSlice(): ForegroundSliceSession {
+    fun beginUserSlice(plateId: String): ForegroundSliceSession {
         check(Looper.myLooper() == Looper.getMainLooper()) {
             "A foreground slice must begin from visible UI"
         }
+        require(plateId.length in 1..ProjectStore.MAX_ID_LENGTH) { "Invalid slice plate id" }
         val context = DuckySlicerApplication.context()
         val requestId = UUID.randomUUID().toString()
         check(activeRequestId.compareAndSet(null, requestId)) {
             "Another slicer operation is already running"
         }
         val session = try {
-            ForegroundSliceSession.prepare(context, requestId)
+            ForegroundSliceSession.prepare(context, requestId, plateId)
         } catch (failure: Exception) {
             activeRequestId.compareAndSet(requestId, null)
             throw failure
@@ -1069,6 +1070,7 @@ internal object SlicerProcessClient {
 internal class ForegroundSliceSession internal constructor(
     internal val context: Context,
     internal val requestId: String,
+    internal val plateId: String? = null,
 ) : AutoCloseable {
     private val cancellationFile = File(context.filesDir, CANCELLATION_FILE)
 
@@ -1094,17 +1096,21 @@ internal class ForegroundSliceSession internal constructor(
         private const val CANCELLATION_FILE = "foreground-slice.cancel"
         private const val MAX_CANCELLATION_BYTES = 128L
 
-        fun prepare(context: Context, requestId: String): ForegroundSliceSession =
-            ForegroundSliceSession(context, requestId).also { session ->
+        fun prepare(
+            context: Context,
+            requestId: String,
+            plateId: String,
+        ): ForegroundSliceSession =
+            ForegroundSliceSession(context, requestId, plateId).also { session ->
                 check(!session.cancellationFile.exists() || session.cancellationFile.delete()) {
                     "Slice cancellation state is unavailable"
                 }
-                ForegroundSliceStore.begin(context, requestId)
+                ForegroundSliceStore.begin(context, requestId, plateId)
             }
 
         fun recover(context: Context): ForegroundSliceSession? =
             ForegroundSliceStore.load(context)?.let { record ->
-                ForegroundSliceSession(context, record.requestId)
+                ForegroundSliceSession(context, record.requestId, record.plateId)
             }
 
         fun markCanceled(context: Context, requestId: String): Boolean {

@@ -69,6 +69,11 @@ ForegroundSlicePhase.COMPLETED
 StandardCopyOption.ATOMIC_MOVE
 output.fd.sync()
 outcome.isRestorableFrom(context.filesDir)
+plateId
+RECORD_VERSION = 2
+synchronized(localLock)
+channel.lock()
+loadUnlocked(context)
 """
 
 VALID_DEVICE_TEST = """
@@ -82,6 +87,10 @@ clearingFinalActiveSliceOwnerCancelsItsExactSessionAndRecovers
 Final owner cancellation left a recoverable foreground session
 A clean slice must succeed after final-owner cancellation
 activeSliceSurvivesActivityRecreationAndCompletes
+projectTransfer.state.value.history.current.selectedPlateId
+assertEquals(selectedPlateId, initial.state.value.plateId)
+assertEquals(selectedPlateId, ForegroundSliceStore.load(context)?.plateId)
+assertEquals(livePlateId, completed.plateId)
 Stopping the Activity must not cancel the slice
 The slicer service must be foreground while a stopped Activity is slicing
 A slice that finishes during the background transition must retain its result
@@ -130,7 +139,7 @@ def valid_sources() -> dict[str, str]:
         ),
         "com/ashcastle/duckyslicer/SliceOperationViewModel.kt": (
             "class SliceOperationViewModel : ViewModel() viewModelScope.launch "
-            "SlicerProcessClient.beginUserSlice() foregroundSession.cancellationRequested() "
+            "SlicerProcessClient.beginUserSlice(plateId) foregroundSession.cancellationRequested() "
             "SlicerProcessClient.recoverUserSlice() "
             "SlicerProcessClient.awaitRecoveredSlice( "
             "Recovered foreground slice "
@@ -269,6 +278,10 @@ class VerifyAndroidIsolationTest(unittest.TestCase):
             (
                 "com/ashcastle/duckyslicer/ForegroundSliceStore.kt",
                 "StandardCopyOption.ATOMIC_MOVE",
+            ),
+            (
+                "com/ashcastle/duckyslicer/ForegroundSliceStore.kt",
+                "channel.lock()",
             ),
         ):
             sources = valid_sources()

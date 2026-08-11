@@ -216,6 +216,54 @@ class ProjectTransferStateTest {
         assertEquals(12L, completed.sessionRevision)
     }
 
+    @Test
+    fun switchingPlatesRestoresEachPlatesIndependentSliceOptions() {
+        val firstHistory = history()
+        val firstPlateId = firstHistory.current.selectedPlateId
+        val firstOptions = SliceOptions().copy(fillDensity = 0.18f)
+        var state = ProjectTransferState(
+            history = firstHistory,
+            sliceOptions = firstOptions,
+            plateOptions = mapOf(firstPlateId to firstOptions),
+            restored = true,
+        )
+
+        val addedHistory = state.history.addPlate("second-plate")
+        state = requireNotNull(
+            state.withUpdatedSession(
+                state.history,
+                addedHistory,
+                state.sliceOptions,
+                state.sliceOptions,
+            ),
+        )
+        val secondOptions = firstOptions.copy(fillDensity = 0.44f)
+        state = requireNotNull(
+            state.withUpdatedSession(
+                state.history,
+                state.history,
+                state.sliceOptions,
+                secondOptions,
+            ),
+        )
+        assertEquals(secondOptions, state.plateOptions.getValue("second-plate"))
+
+        val firstSelected = state.history.selectPlate(firstPlateId)
+        state = requireNotNull(
+            state.withUpdatedSession(
+                state.history,
+                firstSelected,
+                state.sliceOptions,
+                state.plateOptions.getValue(firstPlateId),
+            ),
+        )
+
+        assertEquals(firstPlateId, state.history.current.selectedPlateId)
+        assertEquals(firstOptions, state.sliceOptions)
+        assertEquals(firstOptions, state.plateOptions.getValue(firstPlateId))
+        assertEquals(secondOptions, state.plateOptions.getValue("second-plate"))
+    }
+
     private fun history(): ProjectHistoryState {
         val model = ModelInfo(
             fileName = "retained.stl",

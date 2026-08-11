@@ -95,7 +95,7 @@ def valid_sources() -> dict[str, str]:
             "@Composable private const val TabletShortestSideDp = 600f "
             "useWorkspaceNavigationRail(maxWidth.value, maxHeight.value) "
             "minOf(widthDp, heightDp) >= TabletShortestSideDp "
-            "WorkspaceTopOverlayClearanceDp = 82f "
+            "WorkspaceTopOverlayClearanceDp = 142f "
             "workspacePanelMaxHeightDp(maxHeight.value).dp "
             "BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxSize()) "
             "private fun WorkspaceCard( .verticalScroll(rememberScrollState()) @Composable"
@@ -105,10 +105,11 @@ def valid_sources() -> dict[str, str]:
             "workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading)"
         ),
         "MainActivity.kt": (
-            "var sliceOutcome by rememberSaveable var selectedTab by rememberSaveable "
+            "var plateSliceResults by rememberSaveable var selectedTab by rememberSaveable "
             "restored.isRestorableFrom(context.filesDir) "
             "completed?.isRestorableFrom(context.filesDir) == true "
-            "sliceOperationModel.loadPreview(completed, startLayer, endLayer) "
+            "val requested = plateSliceResults.resultFor(selectedPlateId) "
+            "requested.plateId requested.outcome "
             "loadPreviewRange(0, Int.MAX_VALUE)"
         ),
         "SliceOperationViewModel.kt": "GcodeLayerPreview.fromNative",
@@ -425,9 +426,9 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
     def test_rejects_configuration_loss_of_completed_slice(self) -> None:
         sources = valid_sources()
         sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
-            "var sliceOutcome by rememberSaveable", "var sliceOutcome by remember"
+            "var plateSliceResults by rememberSaveable", "var plateSliceResults by remember"
         )
-        with self.assertRaisesRegex(VerificationError, "sliceOutcome"):
+        with self.assertRaisesRegex(VerificationError, "plateSliceResults"):
             verify_preview_boundary(sources)
 
     def test_rejects_unvalidated_restored_output_path(self) -> None:

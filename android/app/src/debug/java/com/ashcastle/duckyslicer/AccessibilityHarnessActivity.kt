@@ -38,6 +38,10 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                             selectedTab = WorkspaceTab.PROJECT,
                             projectObjects = listOf(accessibilityProjectObject()),
                         )
+                        SCREEN_PLATES -> WorkspaceAccessibilityHarness(
+                            projectObjects = listOf(accessibilityProjectObject()),
+                            plateCount = 2,
+                        )
                         SCREEN_OBJECT_SETTINGS -> ObjectSettingsAccessibilityHarness()
                         SCREEN_SHAPES -> BasicShapeSheet(
                             bedSizeX = 220f,
@@ -108,6 +112,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_SETTINGS = "settings"
         const val SCREEN_SUPPORT_EXPORT = "support-export"
         const val SCREEN_PROJECT = "project"
+        const val SCREEN_PLATES = "plates"
         const val SCREEN_WORKSPACE = "workspace"
         const val SCREEN_OBJECT_SETTINGS = "object-settings"
         const val SCREEN_SHAPES = "shapes"
@@ -242,11 +247,29 @@ private fun WorkspaceAccessibilityHarness(
     projectExporting: Boolean = false,
     profileTransferDirection: ProfileTransferDirection? = null,
     profileTransferCancellationRequested: Boolean = false,
+    plateCount: Int = 1,
 ) {
+    var projectPlates by remember(plateCount) {
+        mutableStateOf(
+            List(plateCount) { index ->
+                ProjectPlate(
+                    id = "accessibility-plate-$index",
+                    objects = projectObjects.takeIf { index == 0 }.orEmpty(),
+                    selectedObjectId = projectObjects.firstOrNull()?.id.takeIf { index == 0 },
+                )
+            },
+        )
+    }
+    var selectedPlateId by remember(plateCount) {
+        mutableStateOf(projectPlates.first().id)
+    }
+    val activePlate = projectPlates.first { it.id == selectedPlateId }
     WorkspaceScreen(
         selectedTab = selectedTab,
-        projectObjects = projectObjects,
-        selectedObjectId = projectObjects.firstOrNull()?.id,
+        projectPlates = projectPlates,
+        selectedPlateId = selectedPlateId,
+        projectObjects = activePlate.objects,
+        selectedObjectId = activePlate.selectedObjectId,
         sliceOptions = SliceOptions(),
         profileCatalog = ProfileCatalog(),
         profileRecents = ProfileRecents(),
@@ -298,6 +321,21 @@ private fun WorkspaceAccessibilityHarness(
         onCreatePrimitive = { _, _ -> },
         onOpenProject = {},
         onSaveProject = {},
+        onPlateSelected = { selectedPlateId = it },
+        onAddPlate = {
+            if (projectPlates.size < MAX_PROJECT_PLATES) {
+                val added = ProjectPlate("accessibility-plate-${projectPlates.size}")
+                projectPlates = projectPlates + added
+                selectedPlateId = added.id
+            }
+        },
+        onRemovePlate = {
+            if (projectPlates.size > 1) {
+                val selectedIndex = projectPlates.indexOfFirst { it.id == selectedPlateId }
+                projectPlates = projectPlates.filterNot { it.id == selectedPlateId }
+                selectedPlateId = projectPlates[minOf(selectedIndex, projectPlates.lastIndex)].id
+            }
+        },
         onObjectSelected = {},
         onModelTransformChanged = {},
         onModelTransformPreview = {},
