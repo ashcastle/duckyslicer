@@ -24,6 +24,8 @@ REQUIRED_STRINGS = {
     "open_source_summary",
     "open_source_license",
     "third_party_notices",
+    "opening_legal_document",
+    "legal_document_open_error",
     "view_source_code",
     "close",
 }
@@ -68,6 +70,7 @@ def verify_distribution(sources: dict[str, str]) -> None:
         "SECURITY.md",
         "android/app/build.gradle.kts",
         "android/app/src/main/java/com/ashcastle/duckyslicer/AppSettingsSheet.kt",
+        "android/app/src/test/java/com/ashcastle/duckyslicer/LegalTextChunksTest.kt",
         "android/app/src/main/res/values/strings.xml",
         "android/app/src/main/res/values-ko/strings.xml",
     }
@@ -135,6 +138,29 @@ def verify_distribution(sources: dict[str, str]) -> None:
     for marker in (*SETTINGS_LEGAL_ASSETS, SOURCE_URL, "BuildConfig.VERSION_NAME", "open_source_summary"):
         if marker not in settings:
             raise VerificationError(f"Settings legal-notice access is missing: {marker}")
+    for marker in (
+        "produceState<LegalDocumentContent>",
+        "withContext(Dispatchers.IO)",
+        "BoundedLegalInputStream",
+        "MAX_LEGAL_DOCUMENT_BYTES",
+        "cancellationRequested",
+        "LegalDocumentContent.Failed",
+    ):
+        if marker not in settings:
+            raise VerificationError(f"bounded off-main legal loading is missing: {marker}")
+    if "readText()" in settings or "readBytes()" in settings:
+        raise VerificationError("Settings legal documents are read eagerly on the main thread")
+
+    legal_tests = sources[
+        "android/app/src/test/java/com/ashcastle/duckyslicer/LegalTextChunksTest.kt"
+    ]
+    for marker in (
+        "largeLegalDocumentIsLosslesslySplitForLazyRendering",
+        "oversizedLegalDocumentIsRejectedWithoutReadingItIntoOneString",
+        "canceledLegalDocumentReadStopsBetweenBoundedChunks",
+    ):
+        if marker not in legal_tests:
+            raise VerificationError(f"legal document streaming regression is missing: {marker}")
 
     english = parse_strings(sources["android/app/src/main/res/values/strings.xml"], "English")
     korean = parse_strings(sources["android/app/src/main/res/values-ko/strings.xml"], "Korean")
@@ -170,6 +196,7 @@ def read_sources() -> dict[str, str]:
         "SECURITY.md",
         "android/app/build.gradle.kts",
         "android/app/src/main/java/com/ashcastle/duckyslicer/AppSettingsSheet.kt",
+        "android/app/src/test/java/com/ashcastle/duckyslicer/LegalTextChunksTest.kt",
         "android/app/src/main/res/values/strings.xml",
         "android/app/src/main/res/values-ko/strings.xml",
     )

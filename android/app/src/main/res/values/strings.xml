@@ -511,6 +511,8 @@
     <string name="open_source_summary">Free software under the GNU AGPL v3. You may share and modify it. It comes without any warranty. Complete source code and build instructions are available below.</string>
     <string name="open_source_license">Open-source license</string>
     <string name="third_party_notices">Third-party notices</string>
+    <string name="opening_legal_document">Opening this document…</string>
+    <string name="legal_document_open_error">This document couldn’t be opened.</string>
     <string name="view_source_code">View source code</string>
     <string name="close">Close</string>
     <string name="build_height">Build height</string>

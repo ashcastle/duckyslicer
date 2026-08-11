@@ -251,6 +251,24 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun appSettingsStreamTheLargeThirdPartyNoticeOffline() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val noticesLabel = context.getString(R.string.third_party_notices)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_SETTINGS).use {
+            val noticesButton = scrollUntilClickable(noticesLabel, fastScroll = true)
+            assertTrue(
+                "The third-party notice action must open its bundled document",
+                noticesButton.performAction(AccessibilityNodeInfo.ACTION_CLICK),
+            )
+            val nodes = waitForNodes(setOf(THIRD_PARTY_DOCUMENT_HEADING))
+            assertTrue(
+                "The streamed third-party document must expose its heading",
+                nodes.any { it.effectiveLabel().contains(THIRD_PARTY_DOCUMENT_HEADING) },
+            )
+        }
+    }
+
+    @Test
     fun appSettingsExposeAVisibleSupportDetailsAction() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val supportLabel = context.getString(R.string.save_support_details)
@@ -631,6 +649,7 @@ class AccessibilityInstrumentedTest {
     private companion object {
         const val SEEK_BAR_CLASS = "android.widget.SeekBar"
         const val PRIVACY_DOCUMENT_HEADING = "DuckySlicer Privacy Policy"
+        const val THIRD_PARTY_DOCUMENT_HEADING = "DuckySlicer third-party licenses"
         const val MAX_LABEL_DEPTH = 12
         const val NODE_TIMEOUT_MILLIS = 5_000L
         const val NODE_POLL_MILLIS = 50L

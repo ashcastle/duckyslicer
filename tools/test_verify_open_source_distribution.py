@@ -10,6 +10,7 @@ def valid_sources() -> dict[str, str]:
       <string name="about">About</string><string name="app_version">Version</string>
       <string name="open_source_summary">Free software without any warranty</string>
       <string name="open_source_license">License</string><string name="third_party_notices">Notices</string>
+      <string name="opening_legal_document">Opening</string><string name="legal_document_open_error">Error</string>
       <string name="view_source_code">Source</string><string name="close">Close</string>
     </resources>"""
     korean = strings.replace("Free software without any warranty", "보증 없이 제공되는 자유 소프트웨어")
@@ -38,7 +39,15 @@ def valid_sources() -> dict[str, str]:
         ),
         "android/app/src/main/java/com/ashcastle/duckyslicer/AppSettingsSheet.kt": (
             "legal/AGPL-3.0.txt legal/THIRD_PARTY_NOTICES.md legal/THIRD_PARTY_LICENSES.txt "
-            "https://github.com/ashcastle/duckyslicer BuildConfig.VERSION_NAME open_source_summary"
+            "https://github.com/ashcastle/duckyslicer BuildConfig.VERSION_NAME open_source_summary "
+            "produceState<LegalDocumentContent> withContext(Dispatchers.IO) "
+            "BoundedLegalInputStream MAX_LEGAL_DOCUMENT_BYTES cancellationRequested "
+            "LegalDocumentContent.Failed"
+        ),
+        "android/app/src/test/java/com/ashcastle/duckyslicer/LegalTextChunksTest.kt": (
+            "largeLegalDocumentIsLosslesslySplitForLazyRendering "
+            "oversizedLegalDocumentIsRejectedWithoutReadingItIntoOneString "
+            "canceledLegalDocumentReadStopsBetweenBoundedChunks"
         ),
         "android/app/src/main/res/values/strings.xml": strings,
         "android/app/src/main/res/values-ko/strings.xml": korean,
@@ -59,6 +68,24 @@ class VerifyOpenSourceDistributionTest(unittest.TestCase):
         sources = valid_sources()
         sources["android/app/src/main/java/com/ashcastle/duckyslicer/AppSettingsSheet.kt"] = ""
         with self.assertRaisesRegex(VerificationError, "Settings"):
+            verify_distribution(sources)
+
+    def test_rejects_eager_main_thread_legal_document_read(self) -> None:
+        sources = valid_sources()
+        sources[
+            "android/app/src/main/java/com/ashcastle/duckyslicer/AppSettingsSheet.kt"
+        ] += " context.assets.open(path).bufferedReader().use { it.readText() }"
+        with self.assertRaisesRegex(VerificationError, "main thread"):
+            verify_distribution(sources)
+
+    def test_rejects_legal_document_loading_without_size_bound(self) -> None:
+        sources = valid_sources()
+        sources[
+            "android/app/src/main/java/com/ashcastle/duckyslicer/AppSettingsSheet.kt"
+        ] = sources[
+            "android/app/src/main/java/com/ashcastle/duckyslicer/AppSettingsSheet.kt"
+        ].replace("MAX_LEGAL_DOCUMENT_BYTES", "unbounded legal document")
+        with self.assertRaisesRegex(VerificationError, "bounded off-main"):
             verify_distribution(sources)
 
     def test_rejects_stale_third_party_revision(self) -> None:

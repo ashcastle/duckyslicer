@@ -43,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -60,7 +61,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import java.io.FilterInputStream
+import java.io.InputStream
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -382,19 +390,51 @@ internal fun AppSettingsSheet(
     }
 
     legalDocument?.let { document ->
-        val contentChunks = remember(document) {
-            legalTextChunks(
-                context.assets.open(document.assetPath).bufferedReader().use { it.readText() },
-            )
+        val content by produceState<LegalDocumentContent>(
+            initialValue = LegalDocumentContent.Loading,
+            key1 = document,
+            key2 = context.applicationContext,
+        ) {
+            value = try {
+                val chunks = withContext(Dispatchers.IO) {
+                    val loadContext = currentCoroutineContext()
+                    context.assets.open(document.assetPath).use { input ->
+                        legalTextChunks(
+                            input,
+                            cancellationRequested = { !loadContext.isActive },
+                        )
+                    }
+                }
+                LegalDocumentContent.Ready(chunks)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                LegalDocumentContent.Failed
+            }
         }
         AlertDialog(
             onDismissRequest = { legalDocument = null },
             title = { Text(stringResource(document.titleResource)) },
             text = {
-                LazyColumn(Modifier.heightIn(max = 480.dp)) {
-                    itemsIndexed(contentChunks, key = { index, _ -> index }) { _, chunk ->
-                        SelectionContainer {
-                            Text(chunk, style = MaterialTheme.typography.bodySmall)
+                when (val current = content) {
+                    LegalDocumentContent.Loading -> Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        CircularProgressIndicator(Modifier.size(24.dp))
+                        Text(stringResource(R.string.opening_legal_document))
+                    }
+                    LegalDocumentContent.Failed -> Text(
+                        stringResource(R.string.legal_document_open_error),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    is LegalDocumentContent.Ready -> {
+                        LazyColumn(Modifier.heightIn(max = 480.dp)) {
+                            itemsIndexed(current.chunks, key = { index, _ -> index }) { _, chunk ->
+                                SelectionContainer {
+                                    Text(chunk, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
                         }
                     }
                 }
@@ -477,6 +517,12 @@ private enum class LegalDocument(
     THIRD_PARTY("legal/THIRD_PARTY_LICENSES.txt", R.string.third_party_notices),
 }
 
+private sealed interface LegalDocumentContent {
+    data object Loading : LegalDocumentContent
+    data class Ready(val chunks: List<String>) : LegalDocumentContent
+    data object Failed : LegalDocumentContent
+}
+
 private fun openSourceRepository(context: Context) {
     try {
         context.startActivity(
@@ -526,11 +572,63 @@ private fun openSliceNotificationSettings(context: Context) {
 private const val SOURCE_CODE_URL = "https://github.com/ashcastle/duckyslicer"
 private const val SUPPORT_REPORT_FILE_NAME = "DuckySlicer-support.txt"
 
-internal fun legalTextChunks(source: String, maximumCharacters: Int = 12_000): List<String> {
+internal fun legalTextChunks(
+    input: InputStream,
+    maximumCharacters: Int = 12_000,
+    maximumBytes: Int = MAX_LEGAL_DOCUMENT_BYTES,
+    cancellationRequested: () -> Boolean = { false },
+): List<String> {
     require(maximumCharacters > 0)
-    if (source.isEmpty()) return listOf("")
-    return source.chunked(maximumCharacters)
+    require(maximumBytes > 0)
+    val reader = BoundedLegalInputStream(input, maximumBytes).reader(Charsets.UTF_8)
+    val buffer = CharArray(minOf(8 * 1_024, maximumCharacters))
+    val pending = StringBuilder(maximumCharacters)
+    val chunks = ArrayList<String>()
+    while (true) {
+        if (cancellationRequested()) throw CancellationException("legal_document_canceled")
+        val count = reader.read(buffer)
+        if (count < 0) break
+        if (cancellationRequested()) throw CancellationException("legal_document_canceled")
+        var offset = 0
+        while (offset < count) {
+            val copyCount = minOf(maximumCharacters - pending.length, count - offset)
+            pending.append(buffer, offset, copyCount)
+            offset += copyCount
+            if (pending.length == maximumCharacters) {
+                chunks += pending.toString()
+                pending.clear()
+            }
+        }
+    }
+    if (pending.isNotEmpty() || chunks.isEmpty()) chunks += pending.toString()
+    return chunks
 }
+
+private class BoundedLegalInputStream(
+    input: InputStream,
+    private val maximumBytes: Int,
+) : FilterInputStream(input) {
+    private var bytesRead = 0L
+
+    override fun read(): Int = super.read().also { value ->
+        if (value >= 0) recordBytes(1)
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        val bytesBeforeOverflow = maximumBytes.toLong() - bytesRead + 1L
+        val boundedLength = minOf(length.toLong(), bytesBeforeOverflow).toInt()
+        return super.read(buffer, offset, boundedLength).also { count ->
+            if (count > 0) recordBytes(count)
+        }
+    }
+
+    private fun recordBytes(count: Int) {
+        bytesRead += count
+        require(bytesRead <= maximumBytes.toLong()) { "legal_document_too_large" }
+    }
+}
+
+private const val MAX_LEGAL_DOCUMENT_BYTES = 4 * 1_024 * 1_024
 
 @Composable
 private fun SettingsToggle(
