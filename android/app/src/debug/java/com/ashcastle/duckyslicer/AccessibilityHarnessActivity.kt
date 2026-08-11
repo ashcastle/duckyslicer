@@ -209,6 +209,7 @@ private fun WorkspaceAccessibilityHarness(
         sliceCancellationRequested = false,
         sliceProgress = 0,
         previewLoading = false,
+        exportingGcode = false,
         error = null,
         notice = null,
         canUndo = false,

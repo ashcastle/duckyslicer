@@ -148,6 +148,7 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
         "RemoteOperationViewModel.kt",
         "ProfileLibraryViewModel.kt",
         "AppSettingsViewModel.kt",
+        "GcodeExportViewModel.kt",
         "AppSettingsSheet.kt",
         "SupportDiagnosticsTest.kt",
         "SupportDiagnosticsInstrumentedTest.kt",
@@ -249,7 +250,8 @@ def verify_support_diagnostics(sources: dict[str, str]) -> None:
         sources["ProjectTransfer.kt"] +
         sources["RemoteOperationViewModel.kt"] +
         sources["ProfileLibraryViewModel.kt"] +
-        sources["AppSettingsViewModel.kt"]
+        sources["AppSettingsViewModel.kt"] +
+        sources["GcodeExportViewModel.kt"]
     )
     unrecorded = sorted(
         event for event in events if f"SupportEvent.{event}" not in event_recorders
@@ -351,6 +353,9 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "AppSettingsViewModel.kt": (package / "AppSettingsViewModel.kt").read_text(
+            encoding="utf-8"
+        ),
+        "GcodeExportViewModel.kt": (package / "GcodeExportViewModel.kt").read_text(
             encoding="utf-8"
         ),
         "AppSettingsSheet.kt": (package / "AppSettingsSheet.kt").read_text(encoding="utf-8"),

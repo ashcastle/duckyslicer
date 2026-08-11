@@ -22,9 +22,11 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         "runtime.patch",
         "MainActivity.kt",
         "SliceOperationViewModel.kt",
+        "GcodeExportViewModel.kt",
         "RemoteDevice.kt",
         "SliceArtifactStoreTest.kt",
         "NativeEngineInstrumentedTest.kt",
+        "GcodeExportLifecycleInstrumentedTest.kt",
         "SECURITY.md",
         "CONTRIBUTING.md",
     }
@@ -94,8 +96,30 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         raise VerificationError("native compatibility preview reads the complete G-code")
 
     main_activity = sources["MainActivity.kt"]
-    if "SliceArtifactLease.acquire(completed.output)" not in main_activity:
-        raise VerificationError("G-code export does not lease its retained artifact")
+    exporter = sources["GcodeExportViewModel.kt"]
+    for marker in (
+        "class GcodeExportViewModel(application: Application) : AndroidViewModel(application)",
+        "viewModelScope.launch(Dispatchers.IO)",
+        "SliceArtifactLease.acquire(source)",
+        'openOutputStream(uri, "wt")',
+        "cleanupFailedDocument",
+        "SupportEvent.GCODE_EXPORT_FAILED",
+    ):
+        if marker not in exporter:
+            raise VerificationError(f"retained G-code export contract is missing: {marker}")
+    for marker in (
+        "ViewModelProvider(this)[GcodeExportViewModel::class.java]",
+        "gcodeExportModel.export(uri, completed)",
+    ):
+        if marker not in main_activity:
+            raise VerificationError(f"retained G-code export dispatch is missing: {marker}")
+    for forbidden in (
+        "SliceArtifactLease.acquire(completed.output)",
+        "openOutputStream(uri)",
+        "rememberCoroutineScope()",
+    ):
+        if forbidden in main_activity:
+            raise VerificationError("G-code export is still owned by the Activity composition")
     preview_operation = sources["SliceOperationViewModel.kt"]
     if "SliceArtifactLease.acquire(outcome.output)" not in preview_operation:
         raise VerificationError("Preview generation does not lease its retained artifact")
@@ -127,6 +151,15 @@ def verify_slice_storage(sources: dict[str, str]) -> None:
         raise VerificationError("ARM64 native G-code hard-limit recovery regression is missing")
     if "persistentProjectModelSlicesIntoRetainedArtifact" not in device_tests:
         raise VerificationError("ARM64 persistent-project slice regression is missing")
+    export_tests = sources["GcodeExportLifecycleInstrumentedTest.kt"]
+    for marker in (
+        "gcodeExportSurvivesActivityRecreationAndCopiesTheExactArtifactOnce",
+        "assertSame(",
+        "assertFalse(retainedModel.export(",
+        "KEY_SHA256",
+    ):
+        if marker not in export_tests:
+            raise VerificationError(f"retained G-code export regression is missing: {marker}")
 
     for document in ("SECURITY.md", "CONTRIBUTING.md"):
         if "G-code" not in sources[document] or "lease" not in sources[document].lower():
@@ -153,12 +186,18 @@ def read_sources() -> dict[str, str]:
         "SliceOperationViewModel.kt": (main / "SliceOperationViewModel.kt").read_text(
             encoding="utf-8"
         ),
+        "GcodeExportViewModel.kt": (main / "GcodeExportViewModel.kt").read_text(
+            encoding="utf-8"
+        ),
         "RemoteDevice.kt": (main / "RemoteDevice.kt").read_text(encoding="utf-8"),
         "SliceArtifactStoreTest.kt": (tests / "SliceArtifactStoreTest.kt").read_text(
             encoding="utf-8"
         ),
         "NativeEngineInstrumentedTest.kt": (
             device_tests / "NativeEngineInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "GcodeExportLifecycleInstrumentedTest.kt": (
+            device_tests / "GcodeExportLifecycleInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "SECURITY.md": (ROOT / "SECURITY.md").read_text(encoding="utf-8"),
         "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),

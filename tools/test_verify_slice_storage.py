@@ -28,9 +28,16 @@ def valid_sources() -> dict[str, str]:
         "MainActivity.kt": (
             "GCODE_DOCUMENT_MIME_TYPE = \"application/octet-stream\" "
             "CreateDocument(GCODE_DOCUMENT_MIME_TYPE) "
-            "SliceArtifactLease.acquire(completed.output)"
+            "ViewModelProvider(this)[GcodeExportViewModel::class.java] "
+            "gcodeExportModel.export(uri, completed)"
         ),
         "SliceOperationViewModel.kt": "SliceArtifactLease.acquire(outcome.output)",
+        "GcodeExportViewModel.kt": (
+            "class GcodeExportViewModel(application: Application) : AndroidViewModel(application) "
+            "viewModelScope.launch(Dispatchers.IO) SliceArtifactLease.acquire(source) "
+            "openOutputStream(uri, \"wt\") cleanupFailedDocument "
+            "SupportEvent.GCODE_EXPORT_FAILED"
+        ),
         "RemoteDevice.kt": "SliceArtifactLease.acquire(gcode)",
         "SliceArtifactStoreTest.kt": (
             "pruningEnforcesCountAndByteBudgetsOldestFirst "
@@ -45,6 +52,10 @@ def valid_sources() -> dict[str, str]:
             "sliceArtifactLeaseProtectsConcurrentReadersAcrossProcesses "
             "nativeGcodeWriterHardLimitContainsDiskGrowthAndRecovers "
             "persistentProjectModelSlicesIntoRetainedArtifact"
+        ),
+        "GcodeExportLifecycleInstrumentedTest.kt": (
+            "gcodeExportSurvivesActivityRecreationAndCopiesTheExactArtifactOnce "
+            "assertSame( assertFalse(retainedModel.export( KEY_SHA256"
         ),
         "SECURITY.md": "G-code reader lease RLIMIT_FSIZE",
         "CONTRIBUTING.md": "G-code reader lease RLIMIT_FSIZE",
@@ -75,10 +86,16 @@ class VerifySliceStorageTest(unittest.TestCase):
 
     def test_rejects_missing_export_reader_lease(self) -> None:
         sources = valid_sources()
-        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
-            "SliceArtifactLease.acquire(completed.output)", "export without a lease"
+        sources["GcodeExportViewModel.kt"] = sources["GcodeExportViewModel.kt"].replace(
+            "SliceArtifactLease.acquire(source)", "export without a lease"
         )
-        with self.assertRaisesRegex(VerificationError, "G-code export"):
+        with self.assertRaisesRegex(VerificationError, "retained G-code export"):
+            verify_slice_storage(sources)
+
+    def test_rejects_activity_owned_export_coroutine(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] += " rememberCoroutineScope() openOutputStream(uri)"
+        with self.assertRaisesRegex(VerificationError, "Activity composition"):
             verify_slice_storage(sources)
 
     def test_rejects_text_plain_gcode_export(self) -> None:

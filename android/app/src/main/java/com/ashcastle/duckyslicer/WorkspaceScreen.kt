@@ -369,6 +369,7 @@ internal fun WorkspaceScreen(
     sliceCancellationRequested: Boolean,
     sliceProgress: Int,
     previewLoading: Boolean,
+    exportingGcode: Boolean,
     error: String?,
     notice: String?,
     canUndo: Boolean,
@@ -532,7 +533,7 @@ internal fun WorkspaceScreen(
                 editingBusy = editingBusy,
                 slicing = slicing,
                 previewLoading = previewLoading,
-                canExport = sliceOutcome != null,
+                canExport = sliceOutcome != null && !exportingGcode,
                 onImport = onChoose,
                 onAddShape = { showPrimitivePicker = true },
                 onExport = onSave,
@@ -644,7 +645,8 @@ internal fun WorkspaceScreen(
 
             if (selectedTab == WorkspaceTab.PREVIEW) {
                 PreviewExportSplitButton(
-                    canExport = sliceOutcome != null,
+                    canExport = sliceOutcome != null && !exportingGcode,
+                    exporting = exportingGcode,
                     canSend = sliceOutcome != null && selectedRemoteDeviceId != null && !remoteBusy,
                     onExport = onSave,
                     onSend = onRemoteUpload,
@@ -1906,6 +1908,7 @@ private fun WorkspaceMenu(
 @Composable
 private fun PreviewExportSplitButton(
     canExport: Boolean,
+    exporting: Boolean,
     canSend: Boolean,
     onExport: () -> Unit,
     onSend: () -> Unit,
@@ -1949,7 +1952,18 @@ private fun PreviewExportSplitButton(
                 modifier = Modifier.size(50.dp),
             ) {
                 IconButton(enabled = canExport, onClick = onExport) {
-                    Icon(Icons.Default.SaveAlt, contentDescription = stringResource(R.string.export_gcode))
+                    if (exporting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            color = WorkspaceBlack,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.SaveAlt,
+                            contentDescription = stringResource(R.string.export_gcode),
+                        )
+                    }
                 }
             }
         }

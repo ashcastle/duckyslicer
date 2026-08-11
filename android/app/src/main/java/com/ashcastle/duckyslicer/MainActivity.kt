@@ -24,7 +24,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
@@ -33,9 +32,6 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.UUID
 
@@ -109,6 +105,7 @@ class MainActivity : ComponentActivity() {
         val remoteOperationModel = ViewModelProvider(this)[RemoteOperationViewModel::class.java]
         val profileLibraryModel = ViewModelProvider(this)[ProfileLibraryViewModel::class.java]
         val appSettingsModel = ViewModelProvider(this)[AppSettingsViewModel::class.java]
+        val gcodeExportModel = ViewModelProvider(this)[GcodeExportViewModel::class.java]
         externalProjectModel = ViewModelProvider(this)[ExternalProjectRequestViewModel::class.java]
         projectTransferModel = ViewModelProvider(this)[ProjectTransferViewModel::class.java]
         if (savedInstanceState == null) externalProjectModel.enqueue(intent)
@@ -125,6 +122,7 @@ class MainActivity : ComponentActivity() {
                     remoteOperationModel = remoteOperationModel,
                     profileLibraryModel = profileLibraryModel,
                     appSettingsModel = appSettingsModel,
+                    gcodeExportModel = gcodeExportModel,
                     projectTransferModel = projectTransferModel,
                     externalProjectRequest = externalProjectRequest,
                     onExternalProjectRequestConsumed = externalProjectModel::consume,
@@ -146,13 +144,13 @@ private fun DuckySlicerScreen(
     remoteOperationModel: RemoteOperationViewModel,
     profileLibraryModel: ProfileLibraryViewModel,
     appSettingsModel: AppSettingsViewModel,
+    gcodeExportModel: GcodeExportViewModel,
     projectTransferModel: ProjectTransferViewModel,
     externalProjectRequest: ExternalProjectRequest?,
     onExternalProjectRequestConsumed: (Long) -> Unit,
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
-    val scope = rememberCoroutineScope()
     val modelReadError = stringResource(R.string.model_read_error)
     val modelTooLargeError = stringResource(R.string.model_too_large_error)
     val shapeError = stringResource(R.string.shape_error)
@@ -222,6 +220,8 @@ private fun DuckySlicerScreen(
     val remoteOperationState by remoteOperationModel.state.collectAsStateWithLifecycle()
     val profileLibraryState by profileLibraryModel.state.collectAsStateWithLifecycle()
     val appSettingsState by appSettingsModel.state.collectAsStateWithLifecycle()
+    val gcodeExportState by gcodeExportModel.state.collectAsStateWithLifecycle()
+    val exportingGcode = gcodeExportState.busy
     val sliceOptions = projectTransferState.sliceOptions
     val projectObjects = projectHistory.current.objects
     val selectedProjectObject = projectHistory.current.selectedObject
@@ -348,6 +348,18 @@ private fun DuckySlicerScreen(
             }
         }
         projectTransferModel.consumeEditCompletion(completion.id)
+    }
+
+    LaunchedEffect(gcodeExportState.completion?.id) {
+        val completion = gcodeExportState.completion ?: return@LaunchedEffect
+        if (completion.succeeded) {
+            notice = savedNotice
+            error = null
+        } else {
+            notice = null
+            error = saveError
+        }
+        gcodeExportModel.consumeCompletion(completion.id)
     }
 
     LaunchedEffect(sliceOutcome?.output?.absolutePath) {
@@ -571,26 +583,9 @@ private fun DuckySlicerScreen(
         ActivityResultContracts.CreateDocument(GCODE_DOCUMENT_MIME_TYPE),
     ) { uri ->
         val completed = sliceOutcome
-        if (uri != null && completed != null) {
-            scope.launch {
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        context.contentResolver.openOutputStream(uri).use { output ->
-                            requireNotNull(output) { "output_unavailable" }
-                            SliceArtifactLease.acquire(completed.output).use {
-                                completed.output.inputStream().use { input -> input.copyTo(output) }
-                            }
-                        }
-                    }
-                }.onSuccess {
-                    notice = savedNotice
-                    error = null
-                }.onFailure {
-                    supportEvents.record(SupportEvent.GCODE_EXPORT_FAILED)
-                    error = saveError
-                    notice = null
-                }
-            }
+        if (uri != null && completed != null && gcodeExportModel.export(uri, completed)) {
+            error = null
+            notice = null
         }
     }
 
@@ -721,7 +716,7 @@ private fun DuckySlicerScreen(
     val saveGcode = {
         val completed = sliceOutcome
         val selected = selectedProjectObject?.model ?: projectObjects.firstOrNull()?.model
-        if (completed != null && selected != null) {
+        if (completed != null && selected != null && !exportingGcode) {
             val baseName = if (projectObjects.size > 1) {
                 "project"
             } else {
@@ -762,6 +757,7 @@ private fun DuckySlicerScreen(
         sliceCancellationRequested = sliceCancellationRequested,
         sliceProgress = sliceProgress,
         previewLoading = previewLoading,
+        exportingGcode = exportingGcode,
         error = error,
         notice = notice,
         onTabSelected = { tab ->

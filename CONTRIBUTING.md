@@ -43,6 +43,8 @@ avoid introducing an account or cloud requirement.
   options, reject duplicate work after rotation, and delete every unaccepted model file.
 - UI disposal must not issue a process-wide slicer cancellation. Only the retained
   owner of an active operation may cancel it.
+- User-selected G-code export must run through its retained owner, hold a reader lease,
+  reject duplicate copies, and clean up a newly created document after failure.
 - Profile catalog loading, recent selections, and user-profile saves must share one
   Activity-retained owner. A saved profile may update the catalog after rotation, but
   its late completion may select that profile only in the project session revision that
