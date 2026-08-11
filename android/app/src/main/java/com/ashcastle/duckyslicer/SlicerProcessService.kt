@@ -217,6 +217,27 @@ internal object SlicerProcessClient {
         putBoolean(SlicerProcessContract.KEY_PLACE_ON_CUT, placeOnCut)
     }
 
+    /** Uses Orca's inherited quadric edge-collapse simplifier in the isolated worker. */
+    fun simplifyModel(
+        model: File,
+        stagingDirectory: File,
+        targetTriangles: Int,
+        requestId: String = UUID.randomUUID().toString(),
+    ): OrcaImportedObject {
+        require(targetTriangles in MINIMUM_SIMPLIFIED_TRIANGLES..MAXIMUM_SIMPLIFIED_TRIANGLES) {
+            "Simplified model detail is invalid"
+        }
+        return runModelOperation(
+            message = SlicerProcessContract.MESSAGE_SIMPLIFY_MODEL,
+            model = model,
+            stagingDirectory = stagingDirectory,
+            fallbackError = "OrcaSlicer could not simplify the model",
+            requestId = requestId,
+        ) {
+            putInt(SlicerProcessContract.KEY_TARGET_TRIANGLES, targetTriangles)
+        }.single()
+    }
+
     /** Creates a bounded STL with OrcaSlicer's inherited primitive mesh generators. */
     fun createPrimitive(
         primitive: OrcaPrimitive,
@@ -935,6 +956,7 @@ internal object SlicerProcessClient {
                 what == SlicerProcessContract.MESSAGE_NORMALIZE_MODEL ||
                 what == SlicerProcessContract.MESSAGE_SPLIT_MODEL ||
                 what == SlicerProcessContract.MESSAGE_CUT_MODEL ||
+                what == SlicerProcessContract.MESSAGE_SIMPLIFY_MODEL ||
                 what == SlicerProcessContract.MESSAGE_CREATE_PRIMITIVE ||
                 what == SlicerProcessContract.MESSAGE_BLOCK_FOR_TEST
             if (!cancellable) return
@@ -974,6 +996,8 @@ internal object SlicerProcessClient {
     private const val TEST_PROBE_TIMEOUT_SECONDS = 60L
     private const val TEST_MINIMUM_GCODE_BYTES = 16 * 1_024
     private const val PRODUCTION_MAXIMUM_GCODE_BYTES = 1_073_741_824
+    private const val MINIMUM_SIMPLIFIED_TRIANGLES = 4
+    private const val MAXIMUM_SIMPLIFIED_TRIANGLES = 10_000_000
 }
 
 internal class ForegroundSliceSession internal constructor(
@@ -1294,6 +1318,8 @@ class SlicerProcessService : Service() {
                 startWork(message, WorkOperation.SPLIT_MODEL)
             SlicerProcessContract.MESSAGE_CUT_MODEL ->
                 startWork(message, WorkOperation.CUT_MODEL)
+            SlicerProcessContract.MESSAGE_SIMPLIFY_MODEL ->
+                startWork(message, WorkOperation.SIMPLIFY_MODEL)
             SlicerProcessContract.MESSAGE_CREATE_PRIMITIVE ->
                 startWork(message, WorkOperation.CREATE_PRIMITIVE)
             SlicerProcessContract.MESSAGE_ATTACH -> attachToForegroundSlice(message)
@@ -1458,6 +1484,7 @@ class SlicerProcessService : Service() {
                 WorkOperation.NORMALIZE_MODEL -> runNormalizeModel(requestData)
                 WorkOperation.SPLIT_MODEL -> runSplitModel(requestData)
                 WorkOperation.CUT_MODEL -> runCutModel(requestData)
+                WorkOperation.SIMPLIFY_MODEL -> runSimplifyModel(requestData)
                 WorkOperation.CREATE_PRIMITIVE -> runCreatePrimitive(requestData)
                 WorkOperation.SLICE -> runSlice(requestData) { percent ->
                     foregroundProgress = maxOf(foregroundProgress, percent.coerceIn(0, 100))
@@ -1881,6 +1908,46 @@ class SlicerProcessService : Service() {
     } catch (error: Exception) {
         if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Model cut failed", error)
         failure(error.message ?: "OrcaSlicer could not cut the model")
+    }
+
+    private fun runSimplifyModel(extras: Bundle): Bundle = try {
+        val sourcePath = requireNotNull(extras.getString(SlicerProcessContract.KEY_MODEL_PATH)) {
+            "Model path is unavailable"
+        }
+        val outputPath = requireNotNull(
+            extras.getString(SlicerProcessContract.KEY_MODEL_OUTPUT_DIRECTORY),
+        ) { "Model output is unavailable" }
+        val targetTriangles = extras.getInt(SlicerProcessContract.KEY_TARGET_TRIANGLES, -1)
+        require(targetTriangles in MINIMUM_SIMPLIFIED_TRIANGLES..MAXIMUM_SIMPLIFIED_TRIANGLES) {
+            "Simplified model detail is invalid"
+        }
+        val source = validateModel(sourcePath)
+        val outputDirectory = validateModelImportDirectory(outputPath)
+        val runtime = createNativeRuntime()
+        try {
+            check(runtime.loadModel(source.absolutePath)) { "Model could not be prepared" }
+            val actualTriangles = runtime.nativeSimplifyObject(0, targetTriangles)
+            check(actualTriangles in MINIMUM_SIMPLIFIED_TRIANGLES until Int.MAX_VALUE) {
+                "Model could not be simplified"
+            }
+            val records = requireNotNull(
+                runtime.nativeExportLoadedObjects(outputDirectory.absolutePath),
+            ) { "Simplified model could not be exported" }
+            require(records.size == 1) { "Simplified model export count changed" }
+            Bundle().apply {
+                putBoolean(SlicerProcessContract.KEY_OK, true)
+                putInt(SlicerProcessContract.KEY_PID, Process.myPid())
+                putStringArrayList(
+                    SlicerProcessContract.KEY_NORMALIZED_MODELS,
+                    ArrayList(records.toList()),
+                )
+            }
+        } finally {
+            runtime.clearModel()
+        }
+    } catch (error: Exception) {
+        if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Model simplification failed", error)
+        failure(error.message ?: "OrcaSlicer could not simplify the model")
     }
 
     private fun runCreatePrimitive(extras: Bundle): Bundle = try {
@@ -2397,6 +2464,8 @@ class SlicerProcessService : Service() {
         const val ARRANGE_TOLERANCE_MM = 0.05f
         const val MAX_PATH_LENGTH = 1_024
         const val MAX_MODEL_BYTES = 512L * 1_024 * 1_024
+        const val MINIMUM_SIMPLIFIED_TRIANGLES = 4
+        const val MAXIMUM_SIMPLIFIED_TRIANGLES = 10_000_000
         const val MAX_ERROR_LENGTH = 500
         const val MAX_REQUEST_ID_LENGTH = 128
         const val CANCEL_PROCESS_DELAY_MILLIS = 50L
@@ -2415,6 +2484,7 @@ class SlicerProcessService : Service() {
         NORMALIZE_MODEL,
         SPLIT_MODEL,
         CUT_MODEL,
+        SIMPLIFY_MODEL,
         CREATE_PRIMITIVE,
         TEST_PROBE,
     }
@@ -2451,6 +2521,7 @@ private object SlicerProcessContract {
     const val MESSAGE_SPLIT_MODEL = 12
     const val MESSAGE_CUT_MODEL = 13
     const val MESSAGE_CREATE_PRIMITIVE = 14
+    const val MESSAGE_SIMPLIFY_MODEL = 15
     const val KEY_REQUEST_ID = "requestId"
     const val KEY_MODEL_PATH = "modelPath"
     const val KEY_MODEL_PATHS = "modelPaths"
@@ -2461,6 +2532,7 @@ private object SlicerProcessContract {
     const val KEY_MODEL_NOT_CUTTABLE = "modelNotCuttable"
     const val KEY_CUT_HEIGHT_RATIO = "cutHeightRatio"
     const val KEY_PLACE_ON_CUT = "placeOnCut"
+    const val KEY_TARGET_TRIANGLES = "targetTriangles"
     const val KEY_PRIMITIVE_TYPE = "primitiveType"
     const val KEY_PRIMITIVE_SIZE_MM = "primitiveSizeMm"
     const val KEY_SUPPORT_PAINT_PATHS = "supportPaintPaths"

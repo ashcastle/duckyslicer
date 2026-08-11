@@ -56,7 +56,7 @@ index 963808df..e2c066c6 100644
      )
  else()
      target_link_libraries(libslic3r PRIVATE
-@@ -1123,6 +1141,12 @@ add_library(prusaslicer-jni SHARED
+@@ -1123,6 +1141,13 @@ add_library(prusaslicer-jni SHARED
      src/sapil_arrange.cpp
      src/sapil_bambu_snapshot.cpp
      src/sapil_bambu_volumes.cpp
@@ -66,6 +66,7 @@ index 963808df..e2c066c6 100644
 +    src/sapil_object_process_overrides.cpp
 +    src/sapil_primitive.cpp
 +    src/sapil_model_export.cpp
++    src/sapil_model_simplify.cpp
      src/sapil_bambu_project.cpp
      src/sapil_bambu_plate.cpp
      src/sapil_bambu_objects.cpp

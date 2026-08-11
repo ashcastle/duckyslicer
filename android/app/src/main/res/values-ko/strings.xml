@@ -115,6 +115,15 @@
     <string name="cut_done_painting_cleared">오브젝트 2개를 만들었습니다. 오브젝트별 설정은 초기화했습니다.</string>
     <string name="cut_not_possible">이 높이에서는 모델이 나뉘지 않습니다.</string>
     <string name="cut_error">이 모델을 자르지 못했습니다.</string>
+    <string name="simplify_model">모델 단순화</string>
+    <string name="simplify_model_hint">큰 모델을 더 편하게 다룰 수 있도록 디테일을 줄입니다. 작은 형태는 조금 달라질 수 있습니다.</string>
+    <string name="simplify_detail_to_keep">유지할 디테일</string>
+    <string name="simplify_current_faces">현재 · 면 %1$,d개</string>
+    <string name="simplify_expected_faces">변경 후 · 약 %1$,d개</string>
+    <string name="simplify_paint_warning">서포트, 심, 색상 채색 영역은 초기화됩니다.</string>
+    <string name="simplify_done">모델 디테일을 면 %1$,d개로 줄였습니다.</string>
+    <string name="simplify_done_painting_cleared">모델 디테일을 면 %1$,d개로 줄였습니다. 채색 영역은 초기화했습니다.</string>
+    <string name="simplify_error">이 모델을 단순화하지 못했습니다.</string>
     <string name="paint_support">서포트 채색</string>
     <string name="paint_color">색상 채색</string>
     <string name="color_paint_erase">지우기</string>

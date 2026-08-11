@@ -115,6 +115,15 @@
     <string name="cut_done_painting_cleared">2 objects created. Object-specific settings were cleared.</string>
     <string name="cut_not_possible">The cut plane does not divide this model.</string>
     <string name="cut_error">Couldn’t cut this model.</string>
+    <string name="simplify_model">Simplify model</string>
+    <string name="simplify_model_hint">Reduce detail to make a large model easier to work with. Fine shapes may change slightly.</string>
+    <string name="simplify_detail_to_keep">Detail to keep</string>
+    <string name="simplify_current_faces">Current · %1$,d faces</string>
+    <string name="simplify_expected_faces">After · about %1$,d faces</string>
+    <string name="simplify_paint_warning">Painted support, seam, and color areas will be cleared.</string>
+    <string name="simplify_done">Model detail reduced to %1$,d faces.</string>
+    <string name="simplify_done_painting_cleared">Model detail reduced to %1$,d faces. Painted areas were cleared.</string>
+    <string name="simplify_error">Couldn’t simplify this model.</string>
     <string name="paint_support">Paint support</string>
     <string name="paint_color">Paint color</string>
     <string name="color_paint_erase">Erase</string>

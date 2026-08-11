@@ -192,6 +192,7 @@ private fun DuckySlicerScreen(
     val splitError = stringResource(R.string.split_error)
     val cutNotPossible = stringResource(R.string.cut_not_possible)
     val cutError = stringResource(R.string.cut_error)
+    val simplifyError = stringResource(R.string.simplify_error)
     val sliceError = stringResource(R.string.slice_error)
     val sliceCanceledNotice = stringResource(R.string.slice_canceled)
     val modelEditCanceledNotice = stringResource(R.string.model_edit_canceled)
@@ -262,6 +263,7 @@ private fun DuckySlicerScreen(
     val arranging = visibleEdit == ProjectEditKind.ARRANGE
     val splitting = visibleEdit == ProjectEditKind.SPLIT
     val cutting = visibleEdit == ProjectEditKind.CUT
+    val simplifying = visibleEdit == ProjectEditKind.SIMPLIFY
     val projectFileBusy = !projectTransferState.restored ||
         (projectTransferBusy && visibleEdit == null)
     val projectHistory = projectTransferState.history
@@ -402,6 +404,14 @@ private fun DuckySlicerScreen(
                         R.string.cut_done
                     },
                 )
+                ProjectEditKind.SIMPLIFY -> resources.getString(
+                    if (completion.clearedObjectSettings) {
+                        R.string.simplify_done_painting_cleared
+                    } else {
+                        R.string.simplify_done
+                    },
+                    completion.triangleCount,
+                )
             }
             selectedTab = WorkspaceTab.SLICE
         } else {
@@ -418,6 +428,7 @@ private fun DuckySlicerScreen(
                     ProjectEditKind.ARRANGE -> arrangeError
                     ProjectEditKind.SPLIT -> splitError
                     ProjectEditKind.CUT -> cutError
+                    ProjectEditKind.SIMPLIFY -> simplifyError
                 }
             }
             if (completion.failure == ProjectEditFailure.CANCELED) {
@@ -672,6 +683,19 @@ private fun DuckySlicerScreen(
             return
         }
         if (projectTransferModel.cutSelectedModel(heightRatio, placeOnCut)) {
+            clearCompletedSlice()
+            error = null
+            notice = null
+        }
+    }
+
+    fun simplifySelectedModel(keepPercent: Int) {
+        val selected = projectHistory.current.selectedObject
+        if (
+            selected == null || projectTransferBusy || importing || slicing || previewLoading ||
+            selected.model.triangles < MINIMUM_SIMPLIFIABLE_TRIANGLES
+        ) return
+        if (projectTransferModel.simplifySelectedModel(keepPercent)) {
             clearCompletedSlice()
             error = null
             notice = null
@@ -938,6 +962,7 @@ private fun DuckySlicerScreen(
         arranging = arranging,
         splitting = splitting,
         cutting = cutting,
+        simplifying = simplifying,
         projectEditActive = projectEditActive,
         projectEditCancellationRequested = projectEditCancellationRequested,
         projectImporting = projectImporting,
@@ -1044,6 +1069,7 @@ private fun DuckySlicerScreen(
         onLayOnFace = ::laySelectedFaceOnBed,
         onSplit = ::splitSelectedModel,
         onCut = ::cutSelectedModel,
+        onSimplify = ::simplifySelectedModel,
         onCancelProjectEdit = projectTransferModel::cancelActiveEdit,
         onCancelProjectImport = projectTransferModel::cancelProjectImport,
         onCancelProjectExport = projectTransferModel::cancelProjectExport,

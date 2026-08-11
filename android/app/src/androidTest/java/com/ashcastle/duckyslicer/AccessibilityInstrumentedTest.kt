@@ -503,6 +503,33 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun simplifySheetExposesDetailControlCountsWarningAndActions() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val title = context.getString(R.string.simplify_model)
+        val detail = context.getString(R.string.simplify_detail_to_keep)
+        val current = context.getString(R.string.simplify_current_faces, 100_000)
+        val expected = context.getString(R.string.simplify_expected_faces, 50_000)
+        val warning = context.getString(R.string.simplify_paint_warning)
+        val cancel = context.getString(R.string.cancel)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_SIMPLIFY).use {
+            val nodes = waitForNodes(setOf(title, detail, current, expected, warning, cancel))
+            assertTrue(nodes.any { it.isHeading && it.effectiveLabel() == title })
+            assertTrue(
+                "Detail retention must be adjustable and named",
+                nodes.any {
+                    it.className?.toString() == SEEK_BAR_CLASS &&
+                        it.effectiveLabel().contains(detail)
+                },
+            )
+            assertTrue(nodes.any { it.isClickable && it.isFocusable && it.effectiveLabel() == cancel })
+            assertTrue(nodes.any { it.isClickable && it.isFocusable && it.effectiveLabel() == title })
+            assertTrue(nodes.any { it.effectiveLabel().contains(current) })
+            assertTrue(nodes.any { it.effectiveLabel().contains(expected) })
+            assertTrue(nodes.any { it.effectiveLabel().contains(warning) })
+        }
+    }
+
+    @Test
     fun selectedObjectExposesPlaceOnFaceModeAndTouchGuidance() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val placeOnFace = context.getString(R.string.lay_on_face)

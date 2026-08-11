@@ -373,6 +373,7 @@ internal fun WorkspaceScreen(
     arranging: Boolean,
     splitting: Boolean,
     cutting: Boolean,
+    simplifying: Boolean,
     projectEditActive: Boolean,
     projectEditCancellationRequested: Boolean,
     projectImporting: Boolean,
@@ -409,6 +410,7 @@ internal fun WorkspaceScreen(
     onLayOnFace: (String, FloatArray) -> Unit,
     onSplit: () -> Unit,
     onCut: (Float, Boolean) -> Unit,
+    onSimplify: (Int) -> Unit,
     onCancelProjectEdit: () -> Unit,
     onCancelProjectImport: () -> Unit,
     onCancelProjectExport: () -> Unit,
@@ -448,12 +450,14 @@ internal fun WorkspaceScreen(
     val availableFilaments = sliceOptions.resolvedFilamentSlots()
     val model = selectedObject?.model ?: projectObjects.firstOrNull()?.model
     val modelTransform = selectedObject?.transform ?: ModelTransform()
-    val editingBusy = workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading) || splitting || cutting
+    val editingBusy = workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading) ||
+        splitting || cutting || simplifying
     val tabletLayout = useWorkspaceNavigationRail(maxWidth.value, maxHeight.value)
     val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
     var showModelTools by remember { mutableStateOf(false) }
     var showFilamentPicker by remember { mutableStateOf(false) }
     var showCutTool by remember { mutableStateOf(false) }
+    var showSimplifyTool by remember { mutableStateOf(false) }
     var showVariableLayerHeightTool by remember { mutableStateOf(false) }
     var showObjectProcessSettings by remember { mutableStateOf(false) }
     var showPrimitivePicker by remember { mutableStateOf(false) }
@@ -479,6 +483,7 @@ internal fun WorkspaceScreen(
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) multiColorPainting = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showFilamentPicker = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showCutTool = false
+        if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) showSimplifyTool = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) {
             showVariableLayerHeightTool = false
             showObjectProcessSettings = false
@@ -847,6 +852,8 @@ internal fun WorkspaceScreen(
             autoLaying = autoLaying,
             splitting = splitting,
             cutting = cutting,
+            simplifying = simplifying,
+            triangleCount = selectedObject.model.triangles,
             onAutoLay = onAutoLay,
             onLayOnFace = {
                 showModelTools = false
@@ -873,6 +880,10 @@ internal fun WorkspaceScreen(
             onCut = {
                 showModelTools = false
                 showCutTool = true
+            },
+            onSimplify = {
+                showModelTools = false
+                showSimplifyTool = true
             },
             onSeamPaint = {
                 showModelTools = false
@@ -923,6 +934,19 @@ internal fun WorkspaceScreen(
                 onCut(heightRatio, placeOnCut)
             },
             onDismiss = { showCutTool = false },
+        )
+    }
+    if (showSimplifyTool && selectedObject != null) {
+        SimplifyModelSheet(
+            originalTriangleCount = selectedObject.model.triangles,
+            hasSurfacePaint = selectedObject.supportPaint.facets.isNotEmpty() ||
+                selectedObject.seamPaint.facets.isNotEmpty() ||
+                selectedObject.multiColorPaint.facets.isNotEmpty(),
+            onApply = { keepPercent ->
+                showSimplifyTool = false
+                onSimplify(keepPercent)
+            },
+            onDismiss = { showSimplifyTool = false },
         )
     }
     if (showVariableLayerHeightTool && selectedObject != null) {
@@ -1061,6 +1085,112 @@ internal fun BasicShapeSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+internal fun SimplifyModelSheet(
+    originalTriangleCount: Int,
+    hasSurfacePaint: Boolean,
+    onApply: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    require(originalTriangleCount >= MINIMUM_SIMPLIFIABLE_TRIANGLES)
+    var keepPercent by rememberSaveable(originalTriangleCount) {
+        mutableFloatStateOf(DEFAULT_SIMPLIFY_KEEP_PERCENT.toFloat())
+    }
+    val keepPercentInt = keepPercent.roundToInt().coerceIn(
+        MINIMUM_SIMPLIFY_KEEP_PERCENT,
+        MAXIMUM_SIMPLIFY_KEEP_PERCENT,
+    )
+    val targetTriangleCount = simplificationTargetTriangleCount(
+        originalTriangleCount,
+        keepPercentInt,
+    )
+    val detailLabel = stringResource(R.string.simplify_detail_to_keep)
+    val detailValue = stringResource(R.string.percent_value, keepPercentInt)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF282925),
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(
+                stringResource(R.string.simplify_model),
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                stringResource(R.string.simplify_model_hint),
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(detailLabel, fontWeight = FontWeight.SemiBold)
+                Text(detailValue, color = WorkspaceYellow, fontWeight = FontWeight.Bold)
+            }
+            Slider(
+                value = keepPercent,
+                onValueChange = { keepPercent = it.roundToInt().toFloat() },
+                valueRange = MINIMUM_SIMPLIFY_KEEP_PERCENT.toFloat()..
+                    MAXIMUM_SIMPLIFY_KEEP_PERCENT.toFloat(),
+                steps = 79,
+                modifier = Modifier.semantics {
+                    contentDescription = "$detailLabel $detailValue"
+                },
+                colors = duckySliderColors(),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    stringResource(R.string.simplify_current_faces, originalTriangleCount),
+                    color = Color(0xFFC8C9C2),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    stringResource(R.string.simplify_expected_faces, targetTriangleCount),
+                    color = WorkspaceYellow,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            if (hasSurfacePaint) {
+                Text(
+                    stringResource(R.string.simplify_paint_warning),
+                    color = Color(0xFFFFC66D),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(0.3f).heightIn(min = 52.dp),
+                ) {
+                    Text(stringResource(R.string.cancel))
+                }
+                Button(
+                    onClick = { onApply(keepPercentInt) },
+                    modifier = Modifier.weight(0.7f).heightIn(min = 52.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = WorkspaceYellow,
+                        contentColor = WorkspaceBlack,
+                    ),
+                ) {
+                    Text(stringResource(R.string.simplify_model))
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun ModelTransformSheet(
     transform: ModelTransform,
     filamentSlot: Int,
@@ -1072,11 +1202,14 @@ private fun ModelTransformSheet(
     autoLaying: Boolean,
     splitting: Boolean,
     cutting: Boolean,
+    simplifying: Boolean,
+    triangleCount: Int,
     onAutoLay: () -> Unit,
     onLayOnFace: () -> Unit,
     onMeasure: () -> Unit,
     onSplit: () -> Unit,
     onCut: () -> Unit,
+    onSimplify: () -> Unit,
     onSeamPaint: () -> Unit,
     onVariableLayerHeight: () -> Unit,
     onObjectSettings: () -> Unit,
@@ -1087,6 +1220,7 @@ private fun ModelTransformSheet(
     onRemoveModel: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val modelEditBusy = autoLaying || splitting || cutting || simplifying
     val effectiveBedPolygon = bedPolygon.takeIf { bedPolygonIsValid(it, bedSizeX, bedSizeY) }
         ?: rectangularBedPolygon(bedSizeX, bedSizeY)
     val scaleRange = ProjectStore.MIN_SCALE..ProjectStore.MAX_SCALE
@@ -1295,7 +1429,7 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onObjectSettings,
-                enabled = !autoLaying && !splitting && !cutting,
+                enabled = !modelEditBusy,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF3A3B37),
@@ -1308,7 +1442,7 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onChooseFilament,
-                enabled = !autoLaying && !splitting && !cutting,
+                enabled = !modelEditBusy,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF3A3B37),
@@ -1333,7 +1467,7 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onAutoLay,
-                enabled = !autoLaying && !splitting && !cutting,
+                enabled = !modelEditBusy,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = WorkspaceYellow,
@@ -1356,7 +1490,7 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onLayOnFace,
-                enabled = !autoLaying && !splitting && !cutting,
+                enabled = !modelEditBusy,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF3A3B37),
@@ -1369,7 +1503,7 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onMeasure,
-                enabled = !autoLaying && !splitting && !cutting,
+                enabled = !modelEditBusy,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF3A3B37),
@@ -1381,8 +1515,21 @@ private fun ModelTransformSheet(
                 Text(stringResource(R.string.measure_model))
             }
             Button(
+                onClick = onSimplify,
+                enabled = !modelEditBusy && triangleCount >= MINIMUM_SIMPLIFIABLE_TRIANGLES,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF3A3B37),
+                    contentColor = Color(0xFFF4F4EE),
+                ),
+            ) {
+                Icon(Icons.Default.GridView, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.simplify_model))
+            }
+            Button(
                 onClick = onSplit,
-                enabled = !autoLaying && !splitting && !cutting,
+                enabled = !modelEditBusy,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF3A3B37),
@@ -1395,7 +1542,7 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onCut,
-                enabled = !autoLaying && !splitting && !cutting,
+                enabled = !modelEditBusy,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF3A3B37),
@@ -1408,7 +1555,7 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onSeamPaint,
-                enabled = !autoLaying && !splitting && !cutting,
+                enabled = !modelEditBusy,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF3A3B37),
@@ -1421,7 +1568,7 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onVariableLayerHeight,
-                enabled = !autoLaying && !splitting && !cutting,
+                enabled = !modelEditBusy,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF3A3B37),

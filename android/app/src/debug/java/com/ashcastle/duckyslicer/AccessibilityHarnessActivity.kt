@@ -45,6 +45,12 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                             onAdd = { _, _ -> },
                             onDismiss = {},
                         )
+                        SCREEN_SIMPLIFY -> SimplifyModelSheet(
+                            originalTriangleCount = 100_000,
+                            hasSurfacePaint = true,
+                            onApply = {},
+                            onDismiss = {},
+                        )
                         SCREEN_MODEL_TRANSFORM -> WorkspaceAccessibilityHarness(
                             projectObjects = listOf(accessibilityProjectObject()),
                         )
@@ -100,6 +106,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_WORKSPACE = "workspace"
         const val SCREEN_OBJECT_SETTINGS = "object-settings"
         const val SCREEN_SHAPES = "shapes"
+        const val SCREEN_SIMPLIFY = "simplify"
         const val SCREEN_MODEL_TRANSFORM = "model-transform"
         const val SCREEN_GCODE_EXPORT = "gcode-export"
         const val SCREEN_PROJECT_EXPORT = "project-export"
@@ -261,6 +268,7 @@ private fun WorkspaceAccessibilityHarness(
         arranging = false,
         splitting = false,
         cutting = false,
+        simplifying = false,
         projectEditActive = false,
         projectEditCancellationRequested = false,
         projectImporting = projectImporting,
@@ -297,6 +305,7 @@ private fun WorkspaceAccessibilityHarness(
         onLayOnFace = { _, _ -> },
         onSplit = {},
         onCut = { _, _ -> },
+        onSimplify = {},
         onCancelProjectEdit = {},
         onCancelProjectImport = {},
         onCancelProjectExport = {},

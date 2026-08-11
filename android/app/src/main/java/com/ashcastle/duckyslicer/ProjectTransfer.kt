@@ -39,6 +39,7 @@ internal enum class ProjectEditKind {
     ARRANGE,
     SPLIT,
     CUT,
+    SIMPLIFY,
 }
 
 internal data class ActiveProjectEdit(
@@ -63,6 +64,7 @@ internal data class ProjectEditCompletion(
     val sessionChanged: Boolean = false,
     val objectCount: Int = 0,
     val clearedObjectSettings: Boolean = false,
+    val triangleCount: Int = 0,
     val displayName: String? = null,
 )
 
@@ -491,6 +493,50 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     }
 
     @Synchronized
+    fun simplifySelectedModel(keepPercent: Int): Boolean {
+        val target = mutableState.value.history.current.selectedObject ?: return false
+        if (
+            target.model.triangles < MINIMUM_SIMPLIFIABLE_TRIANGLES ||
+            keepPercent !in MINIMUM_SIMPLIFY_KEEP_PERCENT..MAXIMUM_SIMPLIFY_KEEP_PERCENT
+        ) {
+            return false
+        }
+        val baseline = startEditLocked(ProjectEditKind.SIMPLIFY) ?: return false
+        viewModelScope.launch(Dispatchers.IO) {
+            var installed: ProjectObject? = null
+            try {
+                val result = simplifyProjectObject(
+                    target,
+                    projectStore,
+                    keepPercent,
+                    baseline.operation.requestId,
+                )
+                installed = result.projectObject
+                val nextHistory = baseline.history.replaceSelected(listOf(result.projectObject))
+                if (
+                    !completeEditSuccess(
+                        baseline,
+                        nextHistory,
+                        clearedObjectSettings = result.clearedSurfacePaint,
+                        triangleCount = result.projectObject.model.triangles,
+                    )
+                ) {
+                    listOf(result.projectObject).deleteInstalledModels()
+                }
+            } catch (failure: CancellationException) {
+                installed?.let { listOf(it).deleteInstalledModels() }
+                throw failure
+            } catch (failure: Exception) {
+                installed?.let { listOf(it).deleteInstalledModels() }
+                completeEditFailure(baseline, failure)
+            } finally {
+                SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId)
+            }
+        }
+        return true
+    }
+
+    @Synchronized
     fun createPrimitive(
         primitive: OrcaPrimitive,
         sizeMm: Float,
@@ -883,6 +929,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         nextHistory: ProjectHistoryState,
         objectCount: Int = 0,
         clearedObjectSettings: Boolean = false,
+        triangleCount: Int = 0,
         displayName: String? = null,
     ): Boolean = synchronized(this) {
         val completion = ProjectEditCompletion(
@@ -890,6 +937,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             kind = baseline.operation.kind,
             objectCount = objectCount,
             clearedObjectSettings = clearedObjectSettings,
+            triangleCount = triangleCount,
             displayName = displayName,
         )
         val updated = mutableState.value.withCompletedEdit(
