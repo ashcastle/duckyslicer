@@ -32,7 +32,7 @@ def valid_sources() -> dict[str, str]:
             'PRIVACY("legal/PRIVACY.md", R.string.privacy_policy) '
             "sliceNotificationsEnabled(context) openSliceNotificationSettings(context) "
             "Settings.ACTION_APP_NOTIFICATION_SETTINGS Settings.EXTRA_APP_PACKAGE "
-            "Lifecycle.Event.ON_RESUME "
+            "Lifecycle.Event.ON_RESUME stateDescription = notificationState "
             f"{settings_markers}"
         ),
         "MainActivity.kt": (
@@ -108,6 +108,14 @@ class VerifyDataPracticesTest(unittest.TestCase):
         sources = valid_sources()
         sources["AppSettingsSheet.kt"] = sources["AppSettingsSheet.kt"].replace(
             "Settings.EXTRA_APP_PACKAGE", ""
+        )
+        with self.assertRaisesRegex(VerificationError, "data-practice UI"):
+            verify_data_practices(sources)
+
+    def test_rejects_notification_action_without_current_state(self) -> None:
+        sources = valid_sources()
+        sources["AppSettingsSheet.kt"] = sources["AppSettingsSheet.kt"].replace(
+            "stateDescription = notificationState", ""
         )
         with self.assertRaisesRegex(VerificationError, "data-practice UI"):
             verify_data_practices(sources)

@@ -153,7 +153,10 @@ def valid_sources() -> dict[str, str]:
             "largeTextLandscapeKeepsMenuClearOfScrollableWorkspaceSheet "
             "SCREEN_ORIENTATION_LANDSCAPE menu.isVisibleToUser "
             "!Rect.intersects(menu.screenBounds(), printerProfile.screenBounds()) "
-            "it.isHeading menu.isFocusable printerProfile.isFocusable"
+            "it.isHeading menu.isFocusable printerProfile.isFocusable "
+            "modelTransformExposesIndependentAxesAndProportionLock "
+            "scrollAnchorLabel = placement target?.scrollableAncestor() retainedScrollBounds "
+            "AccessibilityNodeInfo.ACTION_SCROLL_FORWARD"
         ),
         "PreviewModelsTest.kt": (
             "nativePayloadKeepsMetadataSegmentsAndRolesWithoutJson "
@@ -242,6 +245,14 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "stateDescription = valueText", "missingState = valueText"
         )
         with self.assertRaisesRegex(VerificationError, "transform slider accessibility"):
+            verify_preview_boundary(sources)
+
+    def test_requires_target_anchored_accessibility_scrolling(self) -> None:
+        sources = valid_sources()
+        sources["AccessibilityInstrumentedTest.kt"] = sources[
+            "AccessibilityInstrumentedTest.kt"
+        ].replace("target?.scrollableAncestor()", "null")
+        with self.assertRaisesRegex(VerificationError, "device accessibility regression"):
             verify_preview_boundary(sources)
 
     def test_rejects_android_json_decoder(self) -> None:

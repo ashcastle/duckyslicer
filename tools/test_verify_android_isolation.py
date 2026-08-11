@@ -86,6 +86,7 @@ Stopping the Activity must not cancel the slice
 The slicer service must be foreground while a stopped Activity is slicing
 A slice that finishes during the background transition must retain its result
 Configuration recreation must retain the operation
+An idle canceled slice must release ownership before allowing restart
 """
 
 VALID_PROCESS_REATTACHMENT_HARNESS = """
@@ -134,6 +135,8 @@ def valid_sources() -> dict[str, str]:
             "SlicerProcessClient.awaitRecoveredSlice( "
             "Recovered foreground slice "
             "foregroundSession.close() "
+            "operationJob.set(null) "
+            "completedState?.let { mutableState.value = it } "
             "operationCancellation.get() "
             "operationCancellation.set(true) "
             "private val operationSession = AtomicReference<ForegroundSliceSession?>(null) "
@@ -230,9 +233,23 @@ class VerifyAndroidIsolationTest(unittest.TestCase):
                 "Configuration recreation must retain the operation",
                 "configuration/background",
             ),
+            (
+                "An idle canceled slice must release ownership before allowing restart",
+                "configuration/background",
+            ),
         ):
             with self.assertRaisesRegex(VerificationError, message):
                 verify_sources(valid_sources(), VALID_DEVICE_TEST.replace(missing, ""))
+
+    def test_requires_foreground_cleanup_before_idle_publication(self) -> None:
+        sources = valid_sources()
+        lifecycle_path = "com/ashcastle/duckyslicer/SliceOperationViewModel.kt"
+        sources[lifecycle_path] = sources[lifecycle_path].replace(
+            "operationJob.set(null) completedState?.let { mutableState.value = it }",
+            "completedState?.let { mutableState.value = it } operationJob.set(null)",
+        )
+        with self.assertRaisesRegex(VerificationError, "before publishing idle"):
+            verify_sources(sources, VALID_DEVICE_TEST)
 
     def test_requires_durable_process_reattachment(self) -> None:
         for source_path, marker in (

@@ -109,6 +109,7 @@ def verify_data_practices(sources: dict[str, str]) -> None:
         "Settings.ACTION_APP_NOTIFICATION_SETTINGS",
         "Settings.EXTRA_APP_PACKAGE",
         "Lifecycle.Event.ON_RESUME",
+        "stateDescription = notificationState",
     ):
         if marker not in settings:
             raise VerificationError(f"data-practice UI is missing: {marker}")

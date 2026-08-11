@@ -255,7 +255,10 @@ class SliceLifecycleInstrumentedTest {
                 }
                 scenario.onActivity {
                     retained.clearCompleted()
-                    assertTrue(retained.start(listOf(projectObject), options))
+                    assertTrue(
+                        "An idle canceled slice must release ownership before allowing restart",
+                        retained.start(listOf(projectObject), options),
+                    )
                 }
                 val notificationDeadline =
                     SystemClock.elapsedRealtime() + SERVICE_STATE_TIMEOUT_MILLIS

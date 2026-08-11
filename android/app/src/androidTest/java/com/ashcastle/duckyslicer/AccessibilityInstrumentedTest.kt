@@ -223,11 +223,10 @@ class AccessibilityInstrumentedTest {
         launchHarness(AccessibilityHarnessActivity.SCREEN_SETTINGS).use {
             val action = scrollUntilClickable(actionLabel)
             assertTrue(action.effectiveLabel().contains(actionLabel))
-            assertTrue(
-                "Settings must expose the current slice notification state",
-                currentNodes().any {
-                    it.isVisibleToUser && it.effectiveLabel().contains(expectedState)
-                },
+            assertEquals(
+                "The notification settings action must retain its current state when scrolled",
+                expectedState,
+                action.stateDescription?.toString(),
             )
         }
     }
@@ -454,19 +453,24 @@ class AccessibilityInstrumentedTest {
             tapCenter(checkNotNull(moreButton))
             waitForNodes(setOf(placement))
 
-            val proportionLock = scrollUntilClickable(keepProportions)
+            val proportionLock = scrollUntilClickable(
+                keepProportions,
+                scrollAnchorLabel = placement,
+            )
             assertTrue(
                 "The proportion lock must expose one switch action",
                 proportionLock.isCheckable,
             )
+            var scrollAnchor = keepProportions
             axisLabels.forEach { label ->
-                val axisControl = scrollUntilNode(label) {
+                val axisControl = scrollUntilNode(label, scrollAnchorLabel = scrollAnchor) {
                     it.className?.toString() == SEEK_BAR_CLASS
                 }
                 assertTrue(
                     "$label must remain visible and adjustable after scrolling",
                     axisControl.isVisibleToUser,
                 )
+                scrollAnchor = label
             }
         }
     }
@@ -545,8 +549,9 @@ class AccessibilityInstrumentedTest {
     private fun scrollUntilClickable(
         label: String,
         fastScroll: Boolean = false,
+        scrollAnchorLabel: String? = null,
     ): AccessibilityNodeInfo {
-        return scrollUntilNode(label, fastScroll) { it.isClickable }
+        return scrollUntilNode(label, fastScroll, scrollAnchorLabel) { it.isClickable }
     }
 
     private fun waitForNode(
@@ -566,32 +571,74 @@ class AccessibilityInstrumentedTest {
     private fun scrollUntilNode(
         label: String,
         fastScroll: Boolean = false,
+        scrollAnchorLabel: String? = null,
         matches: (AccessibilityNodeInfo) -> Boolean,
     ): AccessibilityNodeInfo {
         val deadline = SystemClock.elapsedRealtime() + NODE_TIMEOUT_MILLIS
+        var lastDiagnostic = "no accessibility nodes"
+        var scrollAttempts = 0
+        var retainedScrollBounds: Rect? = null
         do {
             val nodes = currentNodes()
-            nodes.firstOrNull { node ->
-                matches(node) && node.isVisibleToUser && node.effectiveLabel().contains(label)
-            }?.let { return it }
-            val scrollable = nodes.asSequence()
-                .filter { node -> node.isVisibleToUser }
-                .filter { node ->
-                    node.actionList.any { action ->
-                        action.id == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-                    }
-                }
-                .maxByOrNull { node ->
-                    val bounds = node.screenBounds()
-                    bounds.width().toLong() * bounds.height()
+            val target = nodes.firstOrNull { node ->
+                matches(node) && node.effectiveLabel().contains(label)
             }
-            if (scrollable != null) {
-                swipeForward(scrollable, fastScroll)
+            if (target?.isVisibleToUser == true) return target
+            val anchor = scrollAnchorLabel?.let { expected ->
+                nodes.firstOrNull { node ->
+                    node.isVisibleToUser && node.effectiveLabel().contains(expected)
+                }
+            }
+            val scrollable = target?.scrollableAncestor()
+                ?: anchor?.scrollableAncestor()
+                ?: nodes.asSequence()
+                .filter { node -> node.isVisibleToUser && node.isScrollContainer() }
+                .maxByOrNull { node -> node.screenBounds().run { width().toLong() * height() } }
+            if (retainedScrollBounds == null && scrollable != null) {
+                retainedScrollBounds = scrollable.screenBounds().takeUnless(Rect::isEmpty)
+            }
+            lastDiagnostic = nodes.asSequence()
+                .filter { node ->
+                    node.isScrollContainer() ||
+                        node.effectiveLabel().contains(label) ||
+                        (
+                            scrollAnchorLabel != null &&
+                                node.effectiveLabel().contains(scrollAnchorLabel)
+                        )
+                }
+                .take(MAX_SCROLL_DIAGNOSTIC_NODES)
+                .joinToString(separator = " | ") { node ->
+                    "${node.className}:${node.isVisibleToUser}:${node.isScrollContainer()}:" +
+                        "${node.screenBounds()}:${node.effectiveLabel().take(MAX_DIAGNOSTIC_LABEL_LENGTH)}"
+                }
+                .ifEmpty { "no matching target, anchor, or scrollable nodes" }
+            retainedScrollBounds?.let { bounds ->
+                scrollAttempts += 1
+                swipeForward(bounds, fastScroll)
             }
             SystemClock.sleep(SCROLL_SETTLE_MILLIS)
         } while (SystemClock.elapsedRealtime() < deadline)
-        throw AssertionError("Timed out scrolling to accessibility action: $label")
+        throw AssertionError(
+            "Timed out scrolling to accessibility action: $label; " +
+                "attempts=$scrollAttempts; nodes=$lastDiagnostic",
+        )
     }
+
+    private fun AccessibilityNodeInfo.scrollableAncestor(): AccessibilityNodeInfo? {
+        var candidate: AccessibilityNodeInfo? = this
+        repeat(MAX_SCROLL_ANCESTOR_DEPTH) {
+            val current = candidate ?: return null
+            if (current.isScrollContainer()) return current
+            candidate = current.parent
+        }
+        return null
+    }
+
+    private fun AccessibilityNodeInfo.isScrollContainer(): Boolean =
+        isScrollable && className?.toString() != SEEK_BAR_CLASS &&
+            actionList.any { action ->
+                action.id == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+            }
 
     private fun currentNodes(): List<AccessibilityNodeInfo> {
         // The 3D workspace continuously renders; bounded polling must not wait for global idleness.
@@ -611,12 +658,11 @@ class AccessibilityInstrumentedTest {
         executeShellInput("input tap ${bounds.centerX()} ${bounds.centerY()}")
     }
 
-    private fun swipeForward(node: AccessibilityNodeInfo, fastScroll: Boolean) {
-        val bounds = node.screenBounds()
+    private fun swipeForward(bounds: Rect, fastScroll: Boolean) {
         val travel = if (fastScroll) {
             bounds.height() * 2 / 5
         } else {
-            bounds.height() / 6
+            bounds.height() / 10
         }.coerceAtLeast(1)
         val durationMillis = if (fastScroll) 120 else 220
         executeShellInput(
@@ -651,6 +697,9 @@ class AccessibilityInstrumentedTest {
         const val PRIVACY_DOCUMENT_HEADING = "DuckySlicer Privacy Policy"
         const val THIRD_PARTY_DOCUMENT_HEADING = "DuckySlicer third-party licenses"
         const val MAX_LABEL_DEPTH = 12
+        const val MAX_SCROLL_ANCESTOR_DEPTH = 16
+        const val MAX_SCROLL_DIAGNOSTIC_NODES = 12
+        const val MAX_DIAGNOSTIC_LABEL_LENGTH = 80
         const val NODE_TIMEOUT_MILLIS = 5_000L
         const val NODE_POLL_MILLIS = 50L
         const val SCROLL_SETTLE_MILLIS = 200L

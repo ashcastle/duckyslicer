@@ -130,6 +130,16 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
     ):
         if marker not in lifecycle:
             raise VerificationError(f"retained slice lifecycle is missing: {marker}")
+    session_release = lifecycle.find("foregroundSession.close()")
+    job_release = lifecycle.find("operationJob.set(null)", session_release)
+    idle_publication = lifecycle.find(
+        "completedState?.let { mutableState.value = it }",
+        job_release,
+    )
+    if not 0 <= session_release < job_release < idle_publication:
+        raise VerificationError(
+            "foreground slice cleanup must release the session and job before publishing idle state"
+        )
     if "ViewModelProvider(this)[SliceOperationViewModel::class.java]" not in main:
         raise VerificationError("the Activity must retain active slicing across configuration changes")
     if "SlicerProcessClient.cancelUserSliceAsync(" in main:
@@ -235,6 +245,8 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         or "A slice that finishes during the background transition must retain its result"
         not in device_test
         or "Configuration recreation must retain the operation" not in device_test
+        or "An idle canceled slice must release ownership before allowing restart"
+        not in device_test
     ):
         raise VerificationError("ARM64 configuration/background slice regression is missing")
     return len(direct_calls)

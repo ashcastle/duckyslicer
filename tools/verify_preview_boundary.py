@@ -275,6 +275,11 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "it.isHeading",
         "menu.isFocusable",
         "printerProfile.isFocusable",
+        "modelTransformExposesIndependentAxesAndProportionLock",
+        "scrollAnchorLabel = placement",
+        "target?.scrollableAncestor()",
+        "retainedScrollBounds",
+        "AccessibilityNodeInfo.ACTION_SCROLL_FORWARD",
     ):
         if marker not in accessibility_test:
             raise VerificationError(f"device accessibility regression is missing: {marker}")

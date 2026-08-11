@@ -225,6 +225,7 @@ def valid_sources() -> dict[str, str]:
         "ProjectEditCancellationInstrumentedTest.kt": (
             "retainedOwnerCancelsOnlyItsNativeEditAndKeepsTheProjectUnchanged "
             "retainedModelImportCancellationInterruptsProviderOpenAcrossRecreation "
+            "AccessibilityHarnessActivity::class.java "
             "finalProjectOwnerStopsBlockedModelReadAndRemovesItsStaging "
             "BlockingImportProvider.MODEL_URI waitForModelStagingCleanup "
             "Canceling the exact edit request must restart the isolated worker "
@@ -405,6 +406,14 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
         sources = valid_sources()
         sources["OrcaModelImport.kt"] += " contentResolver.openInputStream(uri)"
         with self.assertRaisesRegex(VerificationError, "bypasses provider-open"):
+            verify_resilience(sources)
+
+    def test_rejects_model_import_completion_racing_the_main_ui_consumer(self) -> None:
+        sources = valid_sources()
+        sources["ProjectEditCancellationInstrumentedTest.kt"] = sources[
+            "ProjectEditCancellationInstrumentedTest.kt"
+        ].replace("AccessibilityHarnessActivity::class.java", "MainActivity::class.java")
+        with self.assertRaisesRegex(VerificationError, "resilience regression"):
             verify_resilience(sources)
 
     def test_rejects_final_project_owner_leaving_model_provider_blocked(self) -> None:

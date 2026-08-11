@@ -103,6 +103,13 @@ internal fun AppSettingsSheet(
     var notificationsEnabled by remember(context) {
         mutableStateOf(sliceNotificationsEnabled(context))
     }
+    val notificationState = stringResource(
+        if (notificationsEnabled) {
+            R.string.slice_notifications_on
+        } else {
+            R.string.slice_notifications_off
+        },
+    )
     DisposableEffect(context, lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -267,13 +274,7 @@ internal fun AppSettingsSheet(
 
             SettingsHeading(stringResource(R.string.background_slicing_title))
             Text(
-                stringResource(
-                    if (notificationsEnabled) {
-                        R.string.slice_notifications_on
-                    } else {
-                        R.string.slice_notifications_off
-                    },
-                ),
+                notificationState,
                 color = if (notificationsEnabled) Color(0xFF9FE2A2) else Color(0xFFC8C9C2),
                 fontWeight = FontWeight.SemiBold,
             )
@@ -282,7 +283,10 @@ internal fun AppSettingsSheet(
                 color = Color(0xFFC8C9C2),
                 style = MaterialTheme.typography.bodySmall,
             )
-            TextButton(onClick = { openSliceNotificationSettings(context) }) {
+            TextButton(
+                onClick = { openSliceNotificationSettings(context) },
+                modifier = Modifier.semantics { stateDescription = notificationState },
+            ) {
                 Text(stringResource(R.string.manage_slice_notifications))
             }
 

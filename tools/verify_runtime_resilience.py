@@ -513,6 +513,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "ProjectEditCancellationInstrumentedTest.kt": (
             "retainedOwnerCancelsOnlyItsNativeEditAndKeepsTheProjectUnchanged",
             "retainedModelImportCancellationInterruptsProviderOpenAcrossRecreation",
+            "AccessibilityHarnessActivity::class.java",
             "finalProjectOwnerStopsBlockedModelReadAndRemovesItsStaging",
             "BlockingImportProvider.MODEL_URI",
             "waitForModelStagingCleanup",

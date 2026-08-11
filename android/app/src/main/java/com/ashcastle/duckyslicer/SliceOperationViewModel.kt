@@ -100,6 +100,7 @@ internal class SliceOperationViewModel : ViewModel() {
         mutableState.value = SliceOperationState(slicing = true)
         operationCancellation.set(false)
         val job = viewModelScope.launch {
+            var completedState: SliceOperationState? = null
             try {
                 val outcome = withContext(Dispatchers.IO) {
                     slice { progress ->
@@ -125,7 +126,7 @@ internal class SliceOperationViewModel : ViewModel() {
                     if (cancellationRequested(foregroundSession)) {
                         throw SlicingCancelledException()
                     }
-                    mutableState.value = SliceOperationState(
+                    completedState = SliceOperationState(
                         progress = 100,
                         outcome = outcome.copy(layers = preview.layerCount),
                         preview = preview,
@@ -139,7 +140,7 @@ internal class SliceOperationViewModel : ViewModel() {
                     throw cancellation
                 } catch (failure: Exception) {
                     if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Initial Preview failed", failure)
-                    mutableState.value = SliceOperationState(
+                    completedState = SliceOperationState(
                         progress = 100,
                         outcome = outcome,
                         terminalStatus = SliceTerminalStatus.PREVIEW_FAILED,
@@ -148,17 +149,17 @@ internal class SliceOperationViewModel : ViewModel() {
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: SlicingCancelledException) {
-                mutableState.value = SliceOperationState(
+                completedState = SliceOperationState(
                     terminalStatus = SliceTerminalStatus.CANCELED,
                 )
             } catch (failure: Exception) {
                 if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Retained slice failed", failure)
-                mutableState.value = SliceOperationState(
+                completedState = SliceOperationState(
                     terminalStatus = SliceTerminalStatus.SLICE_FAILED,
                 )
             } finally {
                 if (foregroundSession.cancellationRequested()) {
-                    mutableState.value = SliceOperationState(
+                    completedState = SliceOperationState(
                         terminalStatus = SliceTerminalStatus.CANCELED,
                     )
                 }
@@ -166,6 +167,7 @@ internal class SliceOperationViewModel : ViewModel() {
                 foregroundSession.close()
                 operationCancellation.set(false)
                 operationJob.set(null)
+                completedState?.let { mutableState.value = it }
             }
         }
         operationJob.set(job)

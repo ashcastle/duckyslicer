@@ -1,6 +1,7 @@
 package com.ashcastle.duckyslicer
 
 import android.app.Application
+import android.content.Intent
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
@@ -35,7 +36,12 @@ class ProjectEditCancellationInstrumentedTest {
         source.writeBytes(ByteArray(1_024))
         try {
             prepareProvider(BlockingImportProvider.METHOD_PREPARE_OPEN_BLOCK, source)
-            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            val intent = Intent(context, AccessibilityHarnessActivity::class.java)
+                .putExtra(
+                    AccessibilityHarnessActivity.EXTRA_SCREEN,
+                    AccessibilityHarnessActivity.SCREEN_PROFILE,
+                )
+            ActivityScenario.launch<AccessibilityHarnessActivity>(intent).use { scenario ->
                 lateinit var retained: ProjectTransferViewModel
                 scenario.onActivity { activity ->
                     retained = ViewModelProvider(activity)[ProjectTransferViewModel::class.java]
