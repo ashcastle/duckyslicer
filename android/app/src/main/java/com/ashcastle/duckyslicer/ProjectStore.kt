@@ -84,10 +84,15 @@ internal class ProjectStore(
         checkCancellation()
         val modelRoot = modelsDirectory.canonicalFile
         snapshot.objects.forEach { projectObject ->
-            checkCancellation()
-            val modelFile = File(projectObject.model.localPath).canonicalFile
-            require(modelFile.parentFile == modelRoot && modelFile.isFile) {
-                "Project model is outside private storage"
+            require(projectObject.volumes.size <= SUPPORTED_PROJECT_VOLUMES_PER_OBJECT) {
+                "Multi-volume project export is not enabled yet"
+            }
+            projectObject.volumes.forEach { volume ->
+                checkCancellation()
+                val modelFile = File(volume.model.localPath).canonicalFile
+                require(modelFile.parentFile == modelRoot && modelFile.isFile) {
+                    "Project model is outside private storage"
+                }
             }
         }
         ProjectArchiveCodec.write(snapshot, sliceOptions, output, checkCancellation)
@@ -114,7 +119,11 @@ internal class ProjectStore(
             val installedModels = LinkedHashMap<String, Pair<File, ModelInfo>>()
             decoded.models.forEach { (entryName, stagedModel) ->
                 checkCancellation()
-                val displayName = decoded.objects.first { it.modelEntry == entryName }.displayName
+                val displayName = decoded.objects
+                    .asSequence()
+                    .flatMap { it.volumes.asSequence() }
+                    .first { it.modelEntry == entryName }
+                    .displayName
                 val destination = createModelDestination(displayName)
                 moveArchiveModel(stagedModel.file, destination)
                 installed += destination
@@ -125,20 +134,25 @@ internal class ProjectStore(
             val snapshot = ProjectSnapshot(
                 objects = decoded.objects.map { archived ->
                     checkCancellation()
-                    val (file, info) = requireNotNull(installedModels[archived.modelEntry])
                     ProjectObject(
                         id = archived.id,
-                        model = info.copy(
-                            fileName = archived.displayName,
-                            localPath = file.canonicalPath,
-                        ),
+                        volumes = archived.volumes.map { volume ->
+                            val (file, info) = requireNotNull(installedModels[volume.modelEntry])
+                            ProjectVolume(
+                                id = volume.id,
+                                model = info.copy(
+                                    fileName = volume.displayName,
+                                    localPath = file.canonicalPath,
+                                ),
+                                supportPaint = volume.supportPaint,
+                                seamPaint = volume.seamPaint,
+                                multiColorPaint = volume.multiColorPaint,
+                                filamentSlot = volume.filamentSlot,
+                            )
+                        },
                         transform = archived.transform,
-                        supportPaint = archived.supportPaint,
-                        seamPaint = archived.seamPaint,
-                        multiColorPaint = archived.multiColorPaint,
                         variableLayerHeights = archived.variableLayerHeights,
                         processOverrides = archived.processOverrides,
-                        filamentSlot = archived.filamentSlot,
                     )
                 },
                 selectedObjectId = decoded.selectedObjectId,
@@ -188,11 +202,24 @@ internal class ProjectStore(
         val declaredModels = HashSet<File>()
         for (index in 0 until values.length()) {
             val value = values.getJSONObject(index)
-            value.optString("modelFile")
-                .takeIf(String::isNotBlank)
-                ?.let(::resolveStoredModel)
-                ?.let(declaredModels::add)
-            val restored = restoreObject(value)
+            if (schemaVersion >= 9) {
+                val volumeValues = value.optJSONArray("volumes")
+                if (volumeValues != null) {
+                    repeat(volumeValues.length()) { volumeIndex ->
+                        volumeValues.optJSONObject(volumeIndex)
+                            ?.optString("modelFile")
+                            ?.takeIf(String::isNotBlank)
+                            ?.let(::resolveStoredModel)
+                            ?.let(declaredModels::add)
+                    }
+                }
+            } else {
+                value.optString("modelFile")
+                    .takeIf(String::isNotBlank)
+                    ?.let(::resolveStoredModel)
+                    ?.let(declaredModels::add)
+            }
+            val restored = restoreObject(value, schemaVersion)
             if (!objectIds.add(restored.id)) return null
             objects += restored
         }
@@ -205,8 +232,10 @@ internal class ProjectStore(
         }
         val availableSlots = restoredOptions?.resolvedFilamentSlots()?.indices ?: 0..0
         if (objects.any { projectObject ->
-                projectObject.filamentSlot !in availableSlots ||
-                    projectObject.multiColorPaint.facets.values.any { it !in availableSlots }
+                projectObject.volumes.any { volume ->
+                    volume.filamentSlot !in availableSlots ||
+                        volume.multiColorPaint.facets.values.any { it !in availableSlots }
+                }
             }
         ) {
             return null
@@ -230,13 +259,21 @@ internal class ProjectStore(
         require(snapshot.objects.map(ProjectObject::id).toSet().size == snapshot.objects.size) {
             "Project contains duplicate object ids"
         }
+        require(snapshot.objects.sumOf { it.volumes.size } <= MAX_PROJECT_VOLUMES) {
+            "Project has too many volumes"
+        }
+        require(snapshot.objects.all { it.volumes.size <= SUPPORTED_PROJECT_VOLUMES_PER_OBJECT }) {
+            "Multi-volume project persistence is not enabled yet"
+        }
         require(snapshot.selectedObjectId == null || snapshot.objects.any { it.id == snapshot.selectedObjectId }) {
             "Project selection is invalid"
         }
         require(snapshot.objects.all { projectObject ->
             val availableSlots = sliceOptions?.resolvedFilamentSlots()?.indices ?: 0..0
-            projectObject.filamentSlot in availableSlots &&
-                projectObject.multiColorPaint.facets.values.all { it in availableSlots }
+            projectObject.volumes.all { volume ->
+                volume.filamentSlot in availableSlots &&
+                    volume.multiColorPaint.facets.values.all { it in availableSlots }
+            }
         }) { "Project filament assignment is invalid" }
         check(projectRoot.isDirectory || projectRoot.mkdirs()) { "Project storage is unavailable" }
         check(modelsDirectory.isDirectory || modelsDirectory.mkdirs()) {
@@ -258,11 +295,14 @@ internal class ProjectStore(
     @Synchronized
     fun pruneUnreferencedModels(snapshot: ProjectSnapshot) {
         val modelRoot = modelsDirectory.canonicalFile
-        val referenced = snapshot.objects.mapNotNullTo(HashSet()) { projectObject ->
-            runCatching { File(projectObject.model.localPath).canonicalFile }
-                .getOrNull()
-                ?.takeIf { it.parentFile == modelRoot }
-        }
+        val referenced = snapshot.objects
+            .asSequence()
+            .flatMap { it.volumes.asSequence() }
+            .mapNotNullTo(HashSet()) { volume ->
+                runCatching { File(volume.model.localPath).canonicalFile }
+                    .getOrNull()
+                    ?.takeIf { it.parentFile == modelRoot }
+            }
         pruneUnreferencedModels(referenced)
     }
 
@@ -276,9 +316,41 @@ internal class ProjectStore(
         }
     }
 
-    private fun restoreObject(value: JSONObject): ProjectObject {
+    private fun restoreObject(value: JSONObject, schemaVersion: Int): ProjectObject {
         val id = value.getString("id").takeIf { it.length in 1..MAX_ID_LENGTH }
             ?: error("Invalid object id")
+        val transform = value.getJSONObject("transform").toModelTransform()
+        val variableLayerHeights = value.optJSONArray("variableLayerHeights")
+            ?.toVariableLayerHeights()
+            ?: VariableLayerHeights()
+        val processOverrides = value.optJSONObject("processOverrides")
+            ?.toObjectProcessOverrides()
+            ?: ObjectProcessOverrides()
+        val volumes = if (schemaVersion >= 9) {
+            val values = value.getJSONArray("volumes")
+            require(values.length() in 1..SUPPORTED_PROJECT_VOLUMES_PER_OBJECT) {
+                "Project volume count is unsupported"
+            }
+            List(values.length()) { index -> restoreVolume(values.getJSONObject(index)) }
+        } else {
+            listOf(restoreLegacyVolume(id, value))
+        }
+        return ProjectObject(
+            id = id,
+            volumes = volumes,
+            transform = transform,
+            variableLayerHeights = variableLayerHeights,
+            processOverrides = processOverrides,
+        )
+    }
+
+    private fun restoreLegacyVolume(objectId: String, value: JSONObject): ProjectVolume =
+        restoreVolume(value, legacyProjectVolumeId(objectId))
+
+    private fun restoreVolume(value: JSONObject, fallbackId: String? = null): ProjectVolume {
+        val volumeId = fallbackId ?: value.getString("id").takeIf {
+            it.length in 1..MAX_ID_LENGTH
+        } ?: error("Invalid volume id")
         val storedName = value.getString("modelFile")
         require(storedName.length in 1..MAX_FILE_NAME_LENGTH && File(storedName).name == storedName) {
             "Invalid model file"
@@ -289,7 +361,6 @@ internal class ProjectStore(
             .take(MAX_DISPLAY_NAME_LENGTH)
             .takeIf { it.endsWith(".stl", ignoreCase = true) }
             ?: "model.stl"
-        val transform = value.getJSONObject("transform").toModelTransform()
         val model = inspectModel(modelFile).copy(fileName = displayName)
         val supportPaint = value.optJSONArray("supportPaint")
             ?.toSupportPaint(model.triangles)
@@ -300,23 +371,14 @@ internal class ProjectStore(
         val multiColorPaint = value.optJSONArray("multiColorPaint")
             ?.toMultiColorPaint(model.triangles)
             ?: MultiColorPaint()
-        val variableLayerHeights = value.optJSONArray("variableLayerHeights")
-            ?.toVariableLayerHeights()
-            ?: VariableLayerHeights()
-        val processOverrides = value.optJSONObject("processOverrides")
-            ?.toObjectProcessOverrides()
-            ?: ObjectProcessOverrides()
         val filamentSlot = value.optInt("filamentSlot", 0)
         require(filamentSlot in 0 until MAX_FILAMENT_SLOTS) { "Filament slot is invalid" }
-        return ProjectObject(
-            id = id,
+        return ProjectVolume(
+            id = volumeId,
             model = model,
-            transform = transform,
             supportPaint = supportPaint,
             seamPaint = seamPaint,
             multiColorPaint = multiColorPaint,
-            variableLayerHeights = variableLayerHeights,
-            processOverrides = processOverrides,
             filamentSlot = filamentSlot,
         )
     }
@@ -353,24 +415,14 @@ internal class ProjectStore(
             val value = values.getJSONObject(index)
             val id = value.getString("id")
             require(id.length in 1..MAX_ID_LENGTH && ids.add(id))
-            val storedName = value.getString("modelFile")
-            require(storedName.length in 1..MAX_FILE_NAME_LENGTH && File(storedName).name == storedName)
-            val model = requireNotNull(resolveStoredModel(storedName))
-            require(model.length() in 1..MAX_MODEL_IMPORT_BYTES)
             value.getJSONObject("transform").toModelTransform()
-            if (schemaVersion >= 3) {
-                require(value.optJSONArray("supportPaint")?.isValidSupportPaintArray() == true)
-            }
-            if (schemaVersion >= 4) {
-                require(value.optJSONArray("seamPaint")?.isValidSeamPaintArray() == true)
-            }
             if (schemaVersion >= 5) {
                 require(
                     value.optJSONArray("variableLayerHeights")
                         ?.toVariableLayerHeights() != null,
                 )
             }
-            if (schemaVersion >= 6) {
+            if (schemaVersion in 6..8) {
                 require(value.optJSONArray("multiColorPaint")?.isValidMultiColorPaintArray() == true)
             }
             if (schemaVersion >= 7) {
@@ -380,7 +432,16 @@ internal class ProjectStore(
                 val transform = value.getJSONObject("transform")
                 require(transform.has("scaleY") && transform.has("scaleZ"))
             }
-            require(value.optInt("filamentSlot", 0) in 0 until MAX_FILAMENT_SLOTS)
+            if (schemaVersion >= 9) {
+                val volumeValues = value.getJSONArray("volumes")
+                require(volumeValues.length() in 1..SUPPORTED_PROJECT_VOLUMES_PER_OBJECT)
+                val volumeIds = HashSet<String>()
+                repeat(volumeValues.length()) { volumeIndex ->
+                    validateStoredVolume(volumeValues.getJSONObject(volumeIndex), volumeIds)
+                }
+            } else {
+                validateLegacyStoredVolume(value, schemaVersion)
+            }
         }
         val selected = root.takeUnless { it.isNull("selectedObjectId") }
             ?.optString("selectedObjectId")?.takeIf(String::isNotBlank)
@@ -394,24 +455,66 @@ internal class ProjectStore(
     private fun isCompatibleProjectRoot(root: JSONObject): Boolean =
         root.optInt("schemaVersion", 0) <= SCHEMA_VERSION
 
+    private fun validateLegacyStoredVolume(value: JSONObject, schemaVersion: Int) {
+        validateStoredModelReference(value)
+        if (schemaVersion >= 3) {
+            require(value.optJSONArray("supportPaint")?.isValidSupportPaintArray() == true)
+        }
+        if (schemaVersion >= 4) {
+            require(value.optJSONArray("seamPaint")?.isValidSeamPaintArray() == true)
+        }
+        if (schemaVersion >= 6) {
+            require(value.optJSONArray("multiColorPaint")?.isValidMultiColorPaintArray() == true)
+        }
+        require(value.optInt("filamentSlot", 0) in 0 until MAX_FILAMENT_SLOTS)
+    }
+
+    private fun validateStoredVolume(value: JSONObject, ids: MutableSet<String>) {
+        val id = value.getString("id")
+        require(id.length in 1..MAX_ID_LENGTH && ids.add(id))
+        validateStoredModelReference(value)
+        require(value.optJSONArray("supportPaint")?.isValidSupportPaintArray() == true)
+        require(value.optJSONArray("seamPaint")?.isValidSeamPaintArray() == true)
+        require(value.optJSONArray("multiColorPaint")?.isValidMultiColorPaintArray() == true)
+        require(value.optInt("filamentSlot", -1) in 0 until MAX_FILAMENT_SLOTS)
+    }
+
+    private fun validateStoredModelReference(value: JSONObject) {
+        val storedName = value.getString("modelFile")
+        require(storedName.length in 1..MAX_FILE_NAME_LENGTH && File(storedName).name == storedName)
+        val model = requireNotNull(resolveStoredModel(storedName))
+        require(model.length() in 1..MAX_MODEL_IMPORT_BYTES)
+    }
+
     private fun ProjectObject.toStoredJson(): JSONObject {
+        return JSONObject()
+            .put("id", id.takeIf { it.length in 1..MAX_ID_LENGTH } ?: error("Invalid object id"))
+            .put("transform", transform.toStoredJson())
+            .put("variableLayerHeights", variableLayerHeights.toStoredJson())
+            .put("processOverrides", processOverrides.toProjectJson())
+            .put("volumes", JSONArray().also { values ->
+                volumes.forEach { volume -> values.put(volume.toStoredJson()) }
+            })
+    }
+
+    private fun ProjectVolume.toStoredJson(): JSONObject {
         val modelRoot = modelsDirectory.canonicalFile
         val modelFile = File(model.localPath).canonicalFile
         require(modelFile.parentFile == modelRoot && modelFile.isFile) {
             "Project model is outside private storage"
         }
         return JSONObject()
-            .put("id", id.takeIf { it.length in 1..MAX_ID_LENGTH } ?: error("Invalid object id"))
+            .put("id", id.takeIf { it.length in 1..MAX_ID_LENGTH } ?: error("Invalid volume id"))
             .put("displayName", model.fileName.take(MAX_DISPLAY_NAME_LENGTH))
             .put("modelFile", modelFile.name)
-            .put("transform", transform.toStoredJson())
             .put("supportPaint", supportPaint.toStoredJson())
             .put("seamPaint", seamPaint.toStoredJson())
             .put("multiColorPaint", multiColorPaint.toStoredJson())
-            .put("variableLayerHeights", variableLayerHeights.toStoredJson())
-            .put("processOverrides", processOverrides.toProjectJson())
-            .put("filamentSlot", filamentSlot.takeIf { it in 0 until MAX_FILAMENT_SLOTS }
-                ?: error("Invalid filament slot"))
+            .put(
+                "filamentSlot",
+                filamentSlot.takeIf { it in 0 until MAX_FILAMENT_SLOTS }
+                    ?: error("Invalid filament slot"),
+            )
     }
 
     private fun ModelTransform.toStoredJson() = JSONObject()
@@ -628,7 +731,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 8
+        const val SCHEMA_VERSION = 9
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"
@@ -636,6 +739,8 @@ internal class ProjectStore(
         const val PROJECT_FILE = "current_project.json"
         const val MAX_PROJECT_BYTES = 1_048_576L
         const val MAX_PROJECT_OBJECTS = 256
+        const val MAX_PROJECT_VOLUMES = 256
+        const val SUPPORTED_PROJECT_VOLUMES_PER_OBJECT = 1
         const val MAX_ID_LENGTH = 128
         const val MAX_FILE_NAME_LENGTH = 240
         const val MAX_DISPLAY_NAME_LENGTH = 200

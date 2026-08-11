@@ -8,6 +8,7 @@ import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -77,15 +78,20 @@ class ProjectArchiveTest {
             )
             val second = first.copy(
                 id = "duck-b",
-                model = first.model.copy(fileName = "duck-copy.stl"),
+                volumes = listOf(
+                    first.singleVolume.copy(
+                        id = legacyProjectVolumeId("duck-b"),
+                        model = first.model.copy(fileName = "duck-copy.stl"),
+                        supportPaint = SupportPaint().paint(0, SupportPaintState.BLOCK),
+                        seamPaint = SeamPaint().paint(1, SeamPaintState.BLOCK),
+                        multiColorPaint = MultiColorPaint().paint(0, 1),
+                        filamentSlot = 1,
+                    ),
+                ),
                 transform = ModelTransform(offsetXmm = -18f, rotationXdeg = 90f),
-                supportPaint = SupportPaint().paint(0, SupportPaintState.BLOCK),
-                seamPaint = SeamPaint().paint(1, SeamPaintState.BLOCK),
-                multiColorPaint = MultiColorPaint().paint(0, 1),
                 variableLayerHeights = VariableLayerHeights(
                     listOf(VariableLayerRange(0.1f, 0.4f, 0.12f)),
                 ),
-                filamentSlot = 1,
             )
             val snapshot = ProjectSnapshot(listOf(first, second), selectedObjectId = second.id)
             val options = multiFilamentSettingsFixture()
@@ -106,14 +112,23 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedObjectId", "sliceOptions", "objects"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(6, manifest.getInt("schemaVersion"))
+            assertEquals(7, manifest.getInt("schemaVersion"))
             assertEquals(
                 setOf(
-                    "id", "displayName", "modelEntry", "transform", "supportPaint", "seamPaint",
-                    "multiColorPaint", "variableLayerHeights", "processOverrides", "filamentSlot",
+                    "id", "transform", "variableLayerHeights", "processOverrides", "volumes",
                 ),
                 manifest.getJSONArray("objects").getJSONObject(0).keys().asSequence().toSet(),
             )
+            val manifestVolume = manifest.getJSONArray("objects").getJSONObject(0)
+                .getJSONArray("volumes").getJSONObject(0)
+            assertEquals(
+                setOf(
+                    "id", "displayName", "modelEntry", "supportPaint", "seamPaint",
+                    "multiColorPaint", "filamentSlot",
+                ),
+                manifestVolume.keys().asSequence().toSet(),
+            )
+            assertEquals(first.singleVolume.id, manifestVolume.getString("id"))
             assertEquals(
                 setOf(
                     "offsetXmm", "offsetYmm", "offsetZmm", "rotationXdeg", "rotationYdeg",
@@ -129,6 +144,8 @@ class ProjectArchiveTest {
 
             assertEquals(second.id, imported.snapshot.selectedObjectId)
             assertEquals(2, imported.snapshot.objects.size)
+            assertEquals(first.singleVolume.id, imported.snapshot.objects[0].singleVolume.id)
+            assertEquals(second.singleVolume.id, imported.snapshot.objects[1].singleVolume.id)
             assertEquals("오리 모델.stl", imported.snapshot.objects[0].model.fileName)
             assertEquals("duck-copy.stl", imported.snapshot.objects[1].model.fileName)
             assertEquals(first.transform, imported.snapshot.objects[0].transform)
@@ -161,22 +178,36 @@ class ProjectArchiveTest {
             )
             assertEquals("solid duck\nendsolid duck\n", File(imported.snapshot.objects[0].model.localPath).readText())
 
-            val legacyManifest = JSONObject(manifest.toString()).apply {
-                put("schemaVersion", 1)
-                val objects = getJSONArray("objects")
-                for (index in 0 until objects.length()) {
-                    objects.getJSONObject(index).apply {
-                        remove("seamPaint")
-                        remove("multiColorPaint")
-                        remove("variableLayerHeights")
-                        remove("processOverrides")
-                        getJSONObject("transform").apply {
-                            remove("scaleY")
-                            remove("scaleZ")
+            val legacyManifest = JSONObject()
+                .put("format", manifest.getString("format"))
+                .put("schemaVersion", 1)
+                .put("selectedObjectId", manifest.getString("selectedObjectId"))
+                .put("sliceOptions", manifest.getJSONObject("sliceOptions"))
+                .put(
+                    "objects",
+                    JSONArray().also { legacyObjects ->
+                        val objects = manifest.getJSONArray("objects")
+                        repeat(objects.length()) { index ->
+                            val objectValue = objects.getJSONObject(index)
+                            val volumeValue = objectValue.getJSONArray("volumes").getJSONObject(0)
+                            val transform = JSONObject(
+                                objectValue.getJSONObject("transform").toString(),
+                            ).apply {
+                                remove("scaleY")
+                                remove("scaleZ")
+                            }
+                            legacyObjects.put(
+                                JSONObject()
+                                    .put("id", objectValue.getString("id"))
+                                    .put("displayName", volumeValue.getString("displayName"))
+                                    .put("modelEntry", volumeValue.getString("modelEntry"))
+                                    .put("transform", transform)
+                                    .put("supportPaint", volumeValue.getJSONArray("supportPaint"))
+                                    .put("filamentSlot", volumeValue.getInt("filamentSlot")),
+                            )
                         }
-                    }
-                }
-            }
+                    },
+                )
             val legacyArchive = zipOf(
                 "manifest.json" to legacyManifest.toString().toByteArray(),
                 "models/000.stl" to requireNotNull(archiveEntries["models/000.stl"]),
@@ -186,6 +217,10 @@ class ProjectArchiveTest {
             assertTrue(legacy.snapshot.objects.all { it.multiColorPaint.facets.isEmpty() })
             assertTrue(legacy.snapshot.objects.all { it.variableLayerHeights.ranges.isEmpty() })
             assertTrue(legacy.snapshot.objects.all { it.processOverrides.isEmpty })
+            assertEquals(
+                legacyProjectVolumeId("duck-a"),
+                legacy.snapshot.objects.first().singleVolume.id,
+            )
             assertEquals(
                 1,
                 File(destinationRoot, ProjectStore.MODELS_DIRECTORY).listFiles().orEmpty().size,

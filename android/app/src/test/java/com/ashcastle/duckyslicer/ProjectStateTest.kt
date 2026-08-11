@@ -77,6 +77,12 @@ class ProjectStateTest {
         state = state.duplicateSelected("copy")
         assertEquals(2, state.current.objects.size)
         assertEquals("copy", state.current.selectedObjectId)
+        assertEquals(legacyProjectVolumeId("part"), state.current.objects.first().singleVolume.id)
+        assertEquals(legacyProjectVolumeId("copy"), state.current.selectedObject!!.singleVolume.id)
+        assertTrue(
+            state.current.objects.first().singleVolume.id !=
+                state.current.selectedObject!!.singleVolume.id,
+        )
 
         state = state.applyOrcaArrangement(
             OrcaArrangement(

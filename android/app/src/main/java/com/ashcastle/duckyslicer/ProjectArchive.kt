@@ -16,17 +16,22 @@ import org.json.JSONObject
 
 internal class ProjectArchiveException : IllegalArgumentException("project_archive_invalid")
 
-internal data class ArchivedProjectObject(
+internal data class ArchivedProjectVolume(
     val id: String,
     val displayName: String,
     val modelEntry: String,
-    val transform: ModelTransform,
     val supportPaint: SupportPaint,
     val seamPaint: SeamPaint,
     val multiColorPaint: MultiColorPaint,
+    val filamentSlot: Int,
+)
+
+internal data class ArchivedProjectObject(
+    val id: String,
+    val volumes: List<ArchivedProjectVolume>,
+    val transform: ModelTransform,
     val variableLayerHeights: VariableLayerHeights,
     val processOverrides: ObjectProcessOverrides,
-    val filamentSlot: Int,
 )
 
 internal data class StagedArchiveModel(
@@ -57,16 +62,22 @@ internal object ProjectArchiveCodec {
         )
         val availableSlots = sliceOptions.resolvedFilamentSlots().indices
         require(snapshot.objects.all { projectObject ->
-            projectObject.filamentSlot in availableSlots &&
-                projectObject.multiColorPaint.facets.values.all { it in availableSlots }
+            projectObject.volumes.size <= ProjectStore.SUPPORTED_PROJECT_VOLUMES_PER_OBJECT &&
+                projectObject.volumes.all { volume ->
+                    volume.filamentSlot in availableSlots &&
+                        volume.multiColorPaint.facets.values.all { it in availableSlots }
+                }
         })
         val modelEntries = LinkedHashMap<File, String>()
         snapshot.objects.forEach { projectObject ->
-            checkCancellation()
-            val model = File(projectObject.model.localPath).canonicalFile
-            require(model.isFile && model.length() in 1..MAX_MODEL_IMPORT_BYTES)
-            modelEntries.getOrPut(model) { archiveModelEntry(modelEntries.size) }
+            projectObject.volumes.forEach { volume ->
+                checkCancellation()
+                val model = File(volume.model.localPath).canonicalFile
+                require(model.isFile && model.length() in 1..MAX_MODEL_IMPORT_BYTES)
+                modelEntries.getOrPut(model) { archiveModelEntry(modelEntries.size) }
+            }
         }
+        require(modelEntries.size <= ProjectStore.MAX_PROJECT_VOLUMES)
         val contentBytes = modelEntries.keys.fold(0L) { total, model ->
             checkedArchiveTotal(total, model.length())
         }
@@ -81,22 +92,48 @@ internal object ProjectArchiveCodec {
                 "objects",
                 JSONArray().also { objects ->
                     snapshot.objects.forEach { projectObject ->
-                        val model = File(projectObject.model.localPath).canonicalFile
                         objects.put(
                             JSONObject()
                                 .put("id", checkedArchiveId(projectObject.id))
-                                .put("displayName", checkedArchiveDisplayName(projectObject.model.fileName))
-                                .put("modelEntry", requireNotNull(modelEntries[model]))
                                 .put("transform", projectObject.transform.toArchiveJson())
-                                .put("supportPaint", projectObject.supportPaint.toArchiveJson())
-                                .put("seamPaint", projectObject.seamPaint.toArchiveJson())
-                                .put("multiColorPaint", projectObject.multiColorPaint.toArchiveJson())
                                 .put(
                                     "variableLayerHeights",
                                     projectObject.variableLayerHeights.toArchiveJson(),
                                 )
                                 .put("processOverrides", projectObject.processOverrides.toProjectJson())
-                                .put("filamentSlot", projectObject.filamentSlot),
+                                .put(
+                                    "volumes",
+                                    JSONArray().also { volumes ->
+                                        projectObject.volumes.forEach { volume ->
+                                            val model = File(volume.model.localPath).canonicalFile
+                                            volumes.put(
+                                                JSONObject()
+                                                    .put("id", checkedArchiveId(volume.id))
+                                                    .put(
+                                                        "displayName",
+                                                        checkedArchiveDisplayName(volume.model.fileName),
+                                                    )
+                                                    .put(
+                                                        "modelEntry",
+                                                        requireNotNull(modelEntries[model]),
+                                                    )
+                                                    .put(
+                                                        "supportPaint",
+                                                        volume.supportPaint.toArchiveJson(),
+                                                    )
+                                                    .put(
+                                                        "seamPaint",
+                                                        volume.seamPaint.toArchiveJson(),
+                                                    )
+                                                    .put(
+                                                        "multiColorPaint",
+                                                        volume.multiColorPaint.toArchiveJson(),
+                                                    )
+                                                    .put("filamentSlot", volume.filamentSlot),
+                                            )
+                                        }
+                                    },
+                                ),
                         )
                     }
                 },
@@ -162,7 +199,7 @@ internal object ProjectArchiveCodec {
                         )
                     }
                     PROJECT_ARCHIVE_MODEL_ENTRY.matches(entry.name) -> {
-                        require(models.size < ProjectStore.MAX_PROJECT_OBJECTS)
+                        require(models.size < ProjectStore.MAX_PROJECT_VOLUMES)
                         if (entry.size >= 0) require(entry.size in 1..MAX_MODEL_IMPORT_BYTES)
                         val staged = File(stagingDirectory, "model-${models.size}.stl")
                         FileOutputStream(staged).use { output ->
@@ -195,7 +232,10 @@ internal object ProjectArchiveCodec {
             MAX_PROJECT_ARCHIVE_MANIFEST_BYTES,
         )
         val metadata = parseManifest(manifest)
-        val referencedEntries = metadata.objects.mapTo(HashSet(), ArchivedProjectObject::modelEntry)
+        val referencedEntries = metadata.objects
+            .asSequence()
+            .flatMap { it.volumes.asSequence() }
+            .mapTo(HashSet(), ArchivedProjectVolume::modelEntry)
         require(referencedEntries == models.keys)
         val inspected = models.mapValues { (_, file) ->
             checkCancellation()
@@ -206,10 +246,12 @@ internal object ProjectArchiveCodec {
         }
         val validatedObjects = metadata.objects.map { archived ->
             checkCancellation()
-            val triangleCount = requireNotNull(inspected[archived.modelEntry]).info.triangles
-            require(archived.supportPaint.facets.keys.all { it in 0 until triangleCount })
-            require(archived.seamPaint.facets.keys.all { it in 0 until triangleCount })
-            require(archived.multiColorPaint.facets.keys.all { it in 0 until triangleCount })
+            archived.volumes.forEach { volume ->
+                val triangleCount = requireNotNull(inspected[volume.modelEntry]).info.triangles
+                require(volume.supportPaint.facets.keys.all { it in 0 until triangleCount })
+                require(volume.seamPaint.facets.keys.all { it in 0 until triangleCount })
+                require(volume.multiColorPaint.facets.keys.all { it in 0 until triangleCount })
+            }
             archived
         }
         checkCancellation()
@@ -234,23 +276,24 @@ internal object ProjectArchiveCodec {
             require(ids.add(id))
             ArchivedProjectObject(
                 id = id,
-                displayName = checkedArchiveDisplayName(value.getString("displayName")),
-                modelEntry = value.getString("modelEntry").takeIf(PROJECT_ARCHIVE_MODEL_ENTRY::matches)
-                    ?: throw ProjectArchiveException(),
+                volumes = if (schemaVersion >= 7) {
+                    val volumeValues = value.getJSONArray("volumes")
+                    require(
+                        volumeValues.length() in
+                            1..ProjectStore.SUPPORTED_PROJECT_VOLUMES_PER_OBJECT,
+                    )
+                    val volumeIds = HashSet<String>()
+                    List(volumeValues.length()) { volumeIndex ->
+                        parseVolume(volumeValues.getJSONObject(volumeIndex)).also { volume ->
+                            require(volumeIds.add(volume.id))
+                        }
+                    }
+                } else {
+                    listOf(parseLegacyVolume(id, value, schemaVersion))
+                },
                 transform = value.getJSONObject("transform").toArchiveTransform(
                     requireAxisScales = schemaVersion >= 6,
                 ),
-                supportPaint = value.getJSONArray("supportPaint").toArchiveSupportPaint(),
-                seamPaint = if (schemaVersion >= 2) {
-                    value.getJSONArray("seamPaint").toArchiveSeamPaint()
-                } else {
-                    SeamPaint()
-                },
-                multiColorPaint = if (schemaVersion >= 4) {
-                    value.getJSONArray("multiColorPaint").toArchiveMultiColorPaint()
-                } else {
-                    MultiColorPaint()
-                },
                 variableLayerHeights = if (schemaVersion >= 3) {
                     value.getJSONArray("variableLayerHeights").toArchiveVariableLayerHeights()
                 } else {
@@ -261,9 +304,6 @@ internal object ProjectArchiveCodec {
                 } else {
                     ObjectProcessOverrides()
                 },
-                filamentSlot = value.optInt("filamentSlot", 0).takeIf {
-                    it in 0 until MAX_FILAMENT_SLOTS
-                } ?: throw ProjectArchiveException(),
             )
         }
         val selected = root.takeUnless { it.isNull("selectedObjectId") }
@@ -273,11 +313,51 @@ internal object ProjectArchiveCodec {
             ?: throw ProjectArchiveException()
         val availableSlots = options.resolvedFilamentSlots().indices
         require(objects.all { archived ->
-            archived.filamentSlot in availableSlots &&
-                archived.multiColorPaint.facets.values.all { it in availableSlots }
+            archived.volumes.all { volume ->
+                volume.filamentSlot in availableSlots &&
+                    volume.multiColorPaint.facets.values.all { it in availableSlots }
+            }
         })
         return DecodedProjectArchive(objects, selected, options, emptyMap())
     }
+
+    private fun parseLegacyVolume(
+        objectId: String,
+        value: JSONObject,
+        schemaVersion: Int,
+    ): ArchivedProjectVolume = ArchivedProjectVolume(
+        id = legacyProjectVolumeId(objectId),
+        displayName = checkedArchiveDisplayName(value.getString("displayName")),
+        modelEntry = checkedArchiveModelEntry(value.getString("modelEntry")),
+        supportPaint = value.getJSONArray("supportPaint").toArchiveSupportPaint(),
+        seamPaint = if (schemaVersion >= 2) {
+            value.getJSONArray("seamPaint").toArchiveSeamPaint()
+        } else {
+            SeamPaint()
+        },
+        multiColorPaint = if (schemaVersion >= 4) {
+            value.getJSONArray("multiColorPaint").toArchiveMultiColorPaint()
+        } else {
+            MultiColorPaint()
+        },
+        filamentSlot = checkedArchiveFilamentSlot(value.optInt("filamentSlot", 0)),
+    )
+
+    private fun parseVolume(value: JSONObject): ArchivedProjectVolume = ArchivedProjectVolume(
+        id = checkedArchiveId(value.getString("id")),
+        displayName = checkedArchiveDisplayName(value.getString("displayName")),
+        modelEntry = checkedArchiveModelEntry(value.getString("modelEntry")),
+        supportPaint = value.getJSONArray("supportPaint").toArchiveSupportPaint(),
+        seamPaint = value.getJSONArray("seamPaint").toArchiveSeamPaint(),
+        multiColorPaint = value.getJSONArray("multiColorPaint").toArchiveMultiColorPaint(),
+        filamentSlot = checkedArchiveFilamentSlot(value.getInt("filamentSlot")),
+    )
+
+    private fun checkedArchiveModelEntry(value: String): String =
+        value.takeIf(PROJECT_ARCHIVE_MODEL_ENTRY::matches) ?: throw ProjectArchiveException()
+
+    private fun checkedArchiveFilamentSlot(value: Int): Int =
+        value.takeIf { it in 0 until MAX_FILAMENT_SLOTS } ?: throw ProjectArchiveException()
 }
 
 private fun ModelTransform.toArchiveJson() = JSONObject()
@@ -537,10 +617,10 @@ internal const val PROJECT_ARCHIVE_FILE_EXTENSION = ".duckyproject"
 internal const val MAX_PROJECT_ARCHIVE_MANIFEST_BYTES = 1_048_576
 internal const val MAX_PROJECT_ARCHIVE_CONTENT_BYTES = 1_073_741_824L
 internal const val MAX_PROJECT_ARCHIVE_FILE_BYTES = 1_082_130_432L
-private const val MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_OBJECTS + 1
+private const val MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1
 private const val MAX_PROJECT_ARCHIVE_ENTRY_NAME = 128
 private const val PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"
 private const val MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1
-private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 6
+private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 7
 private const val PROJECT_ARCHIVE_MANIFEST = "manifest.json"
 private val PROJECT_ARCHIVE_MODEL_ENTRY = Regex("models/[0-9]{3}\\.stl")

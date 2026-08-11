@@ -1,5 +1,6 @@
 package com.ashcastle.duckyslicer
 
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
 import org.json.JSONArray
@@ -103,7 +104,7 @@ class ProjectStoreTest {
     }
 
     @Test
-    fun schemaEightRestoresAxisScalesAndSchemaOneRemainsReadable() = withStore { root, store ->
+    fun schemaNinePersistsStableVolumeAndSchemaOneMigratesDeterministically() = withStore { root, store ->
         val modelFile = store.createModelDestination("settings.stl").apply { writeText("solid part") }
         val options = multiFilamentSettingsFixture()
         val snapshot = ProjectSnapshot(
@@ -114,9 +115,28 @@ class ProjectStoreTest {
 
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
-        assertEquals(8, JSONObject(File(root, "current_project.json").readText()).getInt("schemaVersion"))
+        val persisted = JSONObject(File(root, "current_project.json").readText())
+        assertEquals(9, persisted.getInt("schemaVersion"))
+        val persistedObject = persisted.getJSONArray("objects").getJSONObject(0)
+        assertEquals(
+            setOf("id", "transform", "variableLayerHeights", "processOverrides", "volumes"),
+            persistedObject.keys().asSequence().toSet(),
+        )
+        val persistedVolume = persistedObject.getJSONArray("volumes").getJSONObject(0)
+        assertEquals(
+            setOf(
+                "id", "displayName", "modelFile", "supportPaint", "seamPaint",
+                "multiColorPaint", "filamentSlot",
+            ),
+            persistedVolume.keys().asSequence().toSet(),
+        )
+        assertEquals(legacyProjectVolumeId("settings"), persistedVolume.getString("id"))
         assertEquals(snapshot.selectedObjectId, restored.snapshot.selectedObjectId)
         assertEquals(snapshot.objects.single().id, restored.snapshot.objects.single().id)
+        assertEquals(
+            snapshot.objects.single().singleVolume.id,
+            restored.snapshot.objects.single().singleVolume.id,
+        )
         assertEquals(snapshot.objects.single().transform, restored.snapshot.objects.single().transform)
         assertEquals(1, restored.snapshot.objects.single().filamentSlot)
         assertEquals(
@@ -124,23 +144,32 @@ class ProjectStoreTest {
             restored.sliceOptions?.toProjectJson()?.toString(),
         )
 
-        val current = JSONObject(File(root, "current_project.json").readText())
-        current.put("schemaVersion", 1).remove("sliceOptions")
-        current.getJSONArray("objects").getJSONObject(0).apply {
-            remove("filamentSlot")
-            remove("seamPaint")
-            remove("multiColorPaint")
-            remove("variableLayerHeights")
-            remove("processOverrides")
-            getJSONObject("transform").apply {
-                remove("scaleY")
-                remove("scaleZ")
-            }
+        val legacyTransform = JSONObject(persistedObject.getJSONObject("transform").toString()).apply {
+            remove("scaleY")
+            remove("scaleZ")
         }
-        File(root, "current_project.json").writeText(current.toString())
+        val legacy = JSONObject()
+            .put("schemaVersion", 1)
+            .put("selectedObjectId", "settings")
+            .put(
+                "objects",
+                JSONArray().put(
+                    JSONObject()
+                        .put("id", "settings")
+                        .put("displayName", persistedVolume.getString("displayName"))
+                        .put("modelFile", persistedVolume.getString("modelFile"))
+                        .put("transform", legacyTransform)
+                        .put("supportPaint", persistedVolume.getJSONArray("supportPaint")),
+                ),
+            )
+        File(root, "current_project.json").writeText(legacy.toString())
         val migrated = ProjectStore(root, ::inspectedModel).loadProject()
         assertEquals("settings", migrated.snapshot.selectedObjectId)
         assertEquals(null, migrated.sliceOptions)
+        assertEquals(
+            legacyProjectVolumeId("settings"),
+            migrated.snapshot.selectedObject!!.singleVolume.id,
+        )
         assertTrue(migrated.snapshot.selectedObject!!.seamPaint.facets.isEmpty())
         assertTrue(migrated.snapshot.selectedObject!!.multiColorPaint.facets.isEmpty())
         assertTrue(migrated.snapshot.selectedObject!!.variableLayerHeights.ranges.isEmpty())
@@ -187,6 +216,31 @@ class ProjectStoreTest {
         }
         outside.delete()
     }
+
+    @Test
+    fun multiVolumeProjectCannotPersistBeforeRendererAndSlicerIndexingIsEnabled() =
+        withStore { root, store ->
+            val first = store.createModelDestination("first.stl").apply { writeText("solid first") }
+            val second = store.createModelDestination("second.stl").apply { writeText("solid second") }
+            val snapshot = ProjectSnapshot(
+                objects = listOf(
+                    ProjectObject(
+                        id = "compound",
+                        volumes = listOf(
+                            ProjectVolume("first-volume", inspectedModel(first)),
+                            ProjectVolume("second-volume", inspectedModel(second)),
+                        ),
+                    ),
+                ),
+                selectedObjectId = "compound",
+            )
+
+            assertThrows(IllegalArgumentException::class.java) { store.save(snapshot) }
+            assertThrows(IllegalArgumentException::class.java) {
+                store.exportArchive(snapshot, SliceOptions(), ByteArrayOutputStream())
+            }
+            assertFalse(File(root, ProjectStore.PROJECT_FILE).isFile)
+        }
 
     @Test
     fun invalidMetadataPreservesRecoverablePrivateModelFiles() = withStore { root, store ->

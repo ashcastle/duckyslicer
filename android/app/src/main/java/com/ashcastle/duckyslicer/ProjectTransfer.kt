@@ -1135,5 +1135,8 @@ private fun ProjectTransferState.hasUnpersistedSession(): Boolean =
     restored && !persistenceBlocked && sessionRevision != persistedRevision
 
 private fun List<ProjectObject>.deleteInstalledModels() {
-    forEach { projectObject -> File(projectObject.model.localPath).delete() }
+    flatMap(ProjectObject::volumes)
+        .map { volume -> File(volume.model.localPath) }
+        .distinctBy { file -> runCatching { file.canonicalPath }.getOrDefault(file.absolutePath) }
+        .forEach(File::delete)
 }

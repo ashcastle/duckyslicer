@@ -1,16 +1,97 @@
 package com.ashcastle.duckyslicer
 
-data class ProjectObject(
+import java.util.UUID
+
+internal const val MAX_PROJECT_VOLUMES_PER_OBJECT = 64
+
+data class ProjectVolume(
     val id: String,
     val model: ModelInfo,
-    val transform: ModelTransform = ModelTransform(),
     val supportPaint: SupportPaint = SupportPaint(),
     val seamPaint: SeamPaint = SeamPaint(),
     val multiColorPaint: MultiColorPaint = MultiColorPaint(),
+    val filamentSlot: Int = 0,
+) {
+    init {
+        require(id.length in 1..ProjectStore.MAX_ID_LENGTH) { "Invalid project volume id" }
+    }
+}
+
+/**
+ * Stable identity for a legacy object's only volume. Once schema 9 is written, the value
+ * is persisted instead of regenerated. Volume ids are scoped to their owning object.
+ */
+internal fun legacyProjectVolumeId(objectId: String, index: Int = 0): String =
+    UUID.nameUUIDFromBytes(
+        "com.ashcastle.duckyslicer:$objectId:volume:$index".toByteArray(Charsets.UTF_8),
+    ).toString()
+
+data class ProjectObject(
+    val id: String,
+    val volumes: List<ProjectVolume>,
+    val transform: ModelTransform = ModelTransform(),
     val variableLayerHeights: VariableLayerHeights = VariableLayerHeights(),
     val processOverrides: ObjectProcessOverrides = ObjectProcessOverrides(),
-    val filamentSlot: Int = 0,
-)
+) {
+    init {
+        require(volumes.size in 1..MAX_PROJECT_VOLUMES_PER_OBJECT) {
+            "Project object volume count is invalid"
+        }
+        require(volumes.map(ProjectVolume::id).toSet().size == volumes.size) {
+            "Project object contains duplicate volume ids"
+        }
+    }
+
+    constructor(
+        id: String,
+        model: ModelInfo,
+        transform: ModelTransform = ModelTransform(),
+        supportPaint: SupportPaint = SupportPaint(),
+        seamPaint: SeamPaint = SeamPaint(),
+        multiColorPaint: MultiColorPaint = MultiColorPaint(),
+        variableLayerHeights: VariableLayerHeights = VariableLayerHeights(),
+        processOverrides: ObjectProcessOverrides = ObjectProcessOverrides(),
+        filamentSlot: Int = 0,
+    ) : this(
+        id = id,
+        volumes = listOf(
+            ProjectVolume(
+                id = legacyProjectVolumeId(id),
+                model = model,
+                supportPaint = supportPaint,
+                seamPaint = seamPaint,
+                multiColorPaint = multiColorPaint,
+                filamentSlot = filamentSlot,
+            ),
+        ),
+        transform = transform,
+        variableLayerHeights = variableLayerHeights,
+        processOverrides = processOverrides,
+    )
+
+    val singleVolumeOrNull: ProjectVolume?
+        get() = volumes.singleOrNull()
+
+    val singleVolume: ProjectVolume
+        get() = requireNotNull(singleVolumeOrNull) {
+            "This operation requires a single-volume object"
+        }
+
+    // Compatibility accessors keep existing one-volume behavior explicit while the next
+    // milestone teaches renderer and slicer boundaries to address a volume by id/index.
+    val model: ModelInfo get() = singleVolume.model
+    val supportPaint: SupportPaint get() = singleVolume.supportPaint
+    val seamPaint: SeamPaint get() = singleVolume.seamPaint
+    val multiColorPaint: MultiColorPaint get() = singleVolume.multiColorPaint
+    val filamentSlot: Int get() = singleVolume.filamentSlot
+
+    fun updateSingleVolume(update: (ProjectVolume) -> ProjectVolume): ProjectObject =
+        copy(volumes = listOf(update(singleVolume)))
+
+    fun rebaseVolumeIds(newObjectId: String): List<ProjectVolume> = volumes.mapIndexed { index, volume ->
+        volume.copy(id = legacyProjectVolumeId(newObjectId, index))
+    }
+}
 
 data class ProjectSnapshot(
     val objects: List<ProjectObject> = emptyList(),
@@ -93,6 +174,7 @@ data class ProjectHistoryState(
         require(current.objects.none { it.id == newId }) { "Duplicate project object id" }
         val duplicate = selected.copy(
             id = newId,
+            volumes = selected.rebaseVolumeIds(newId),
             transform = selected.transform.copy(
                 offsetXmm = selected.transform.offsetXmm + 12f,
                 offsetYmm = selected.transform.offsetYmm + 12f,
@@ -163,7 +245,7 @@ data class ProjectHistoryState(
             current.copy(
                 objects = current.objects.map { projectObject ->
                     if (projectObject.id == selected.id) {
-                        projectObject.copy(filamentSlot = slot)
+                        projectObject.updateSingleVolume { it.copy(filamentSlot = slot) }
                     } else {
                         projectObject
                     }
@@ -176,8 +258,12 @@ data class ProjectHistoryState(
         require(slotCount in 1..MAX_FILAMENT_SLOTS) { "Filament slot count is invalid" }
         val updated = current.objects.map { projectObject ->
             projectObject.copy(
-                filamentSlot = projectObject.filamentSlot.takeIf { it < slotCount } ?: 0,
-                multiColorPaint = projectObject.multiColorPaint.constrainedToSlotCount(slotCount),
+                volumes = projectObject.volumes.map { volume ->
+                    volume.copy(
+                        filamentSlot = volume.filamentSlot.takeIf { it < slotCount } ?: 0,
+                        multiColorPaint = volume.multiColorPaint.constrainedToSlotCount(slotCount),
+                    )
+                },
             )
         }
         return if (updated == current.objects) this else record(current.copy(objects = updated))
@@ -196,7 +282,7 @@ data class ProjectHistoryState(
         val next = current.copy(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
-                    projectObject.copy(supportPaint = supportPaint)
+                    projectObject.updateSingleVolume { it.copy(supportPaint = supportPaint) }
                 } else {
                     projectObject
                 }
@@ -211,7 +297,7 @@ data class ProjectHistoryState(
         val previousSnapshot = current.copy(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
-                    projectObject.copy(supportPaint = previous)
+                    projectObject.updateSingleVolume { it.copy(supportPaint = previous) }
                 } else {
                     projectObject
                 }
@@ -236,7 +322,7 @@ data class ProjectHistoryState(
         val next = current.copy(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
-                    projectObject.copy(seamPaint = seamPaint)
+                    projectObject.updateSingleVolume { it.copy(seamPaint = seamPaint) }
                 } else {
                     projectObject
                 }
@@ -251,7 +337,7 @@ data class ProjectHistoryState(
         val previousSnapshot = current.copy(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
-                    projectObject.copy(seamPaint = previous)
+                    projectObject.updateSingleVolume { it.copy(seamPaint = previous) }
                 } else {
                     projectObject
                 }
@@ -276,7 +362,7 @@ data class ProjectHistoryState(
         val next = current.copy(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
-                    projectObject.copy(multiColorPaint = multiColorPaint)
+                    projectObject.updateSingleVolume { it.copy(multiColorPaint = multiColorPaint) }
                 } else {
                     projectObject
                 }
@@ -294,7 +380,7 @@ data class ProjectHistoryState(
         val previousSnapshot = current.copy(
             objects = current.objects.map { projectObject ->
                 if (projectObject.id == objectId) {
-                    projectObject.copy(multiColorPaint = previous)
+                    projectObject.updateSingleVolume { it.copy(multiColorPaint = previous) }
                 } else {
                     projectObject
                 }

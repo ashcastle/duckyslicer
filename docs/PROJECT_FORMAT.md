@@ -4,7 +4,7 @@ DuckySlicer saves portable projects with the `.duckyproject` extension and the M
 type `application/vnd.duckyslicer.project+zip`. The format is a versioned ZIP archive
 so a project can be inspected and recovered with standard tools.
 
-## Schema 6
+## Schema 7
 
 An archive contains exactly:
 
@@ -16,13 +16,18 @@ models/001.stl
 ```
 
 `manifest.json` identifies the format as `com.ashcastle.duckyslicer.project`, declares
-schema version `6`, and stores the selected object, resolved printer, filament, and
-slicing settings, object transforms (including independent X, Y, and Z scale),
-object-specific process overrides, support, seam, multi-color painting, variable layer-height
-ranges, display names, and model-entry references. Objects that share one
-source model also share one model entry. Schema 1 through 5 projects remain readable;
-older uniform-scale transforms and missing object-specific settings receive safe
-defaults.
+schema version `7`, and stores the selected object, resolved printer, filament, and
+slicing settings. Each object owns a stable, bounded `volumes` list. The object owns its
+transform (including independent X, Y, and Z scale), variable layer-height ranges, and
+object-specific process overrides. Each volume owns its stable identity, display name,
+model-entry reference, filament assignment, and support, seam, and multi-color painting.
+Objects or volumes that share one source model also share one model entry.
+
+Schema 1 through 6 projects remain readable. Their single object-level model, filament,
+and paint fields migrate deterministically to one stable volume; older uniform-scale
+transforms and missing object-specific settings receive safe defaults. The current app
+still writes and accepts one volume per object until renderer and slicer volume indexing
+is enabled, so a future Split to Parts UI cannot create partially supported projects.
 
 The archive intentionally does not contain G-code, remote-printer profiles, printer
 addresses, access keys, support reports, or other app state. A project therefore
@@ -49,7 +54,7 @@ removes only abandoned private staging directories with the exact generated UUID
 
 The current bounds are:
 
-- 256 objects and unique models
+- 256 objects, volumes, and unique models
 - 1 MiB manifest
 - 512 MiB per model
 - 1 GiB total uncompressed content

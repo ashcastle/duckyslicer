@@ -39,12 +39,14 @@ internal fun ProjectObject.withSimplifiedModel(model: ModelInfo): SimplifyProjec
     val clearedSurfacePaint = supportPaint.facets.isNotEmpty() ||
         seamPaint.facets.isNotEmpty() || multiColorPaint.facets.isNotEmpty()
     return SimplifyProjectResult(
-        projectObject = copy(
-            model = model,
-            supportPaint = SupportPaint(),
-            seamPaint = SeamPaint(),
-            multiColorPaint = MultiColorPaint(),
-        ),
+        projectObject = updateSingleVolume { volume ->
+            volume.copy(
+                model = model,
+                supportPaint = SupportPaint(),
+                seamPaint = SeamPaint(),
+                multiColorPaint = MultiColorPaint(),
+            )
+        },
         clearedSurfacePaint = clearedSurfacePaint,
     )
 }
