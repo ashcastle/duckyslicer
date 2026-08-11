@@ -81,6 +81,7 @@ internal sealed interface ProjectTransferCompletion {
 
 internal data class ProjectTransferState(
     val busy: Boolean = false,
+    val activeTransferDirection: ProjectTransferDirection? = null,
     val completion: ProjectTransferCompletion? = null,
     val activeEdit: ActiveProjectEdit? = null,
     val editCompletion: ProjectEditCompletion? = null,
@@ -90,6 +91,7 @@ internal data class ProjectTransferState(
     val persistenceBlocked: Boolean = false,
     val persistenceMessage: ProjectPersistenceMessage? = null,
     val sessionRevision: Long = 0,
+    val persistedRevision: Long = 0,
 )
 
 internal fun ProjectTransferState.withUpdatedSession(
@@ -460,10 +462,17 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             mutableState.value.busy || mutableState.value.completion != null ||
             mutableState.value.editCompletion != null
         ) return false
-        persistenceJob?.cancel()
+        val pendingPersistence = persistenceJob
+        pendingPersistence?.cancel()
+        persistenceJob = null
         val operationId = ++nextOperationId
-        mutableState.value = mutableState.value.copy(busy = true, persistenceMessage = null)
+        mutableState.value = mutableState.value.copy(
+            busy = true,
+            activeTransferDirection = ProjectTransferDirection.IMPORT,
+            persistenceMessage = null,
+        )
         viewModelScope.launch(Dispatchers.IO) {
+            pendingPersistence?.join()
             val completion = try {
                 val document = getApplication<Application>().contentResolver.openInputStream(uri).use { input ->
                     projectStore.importArchive(requireNotNull(input) { "input_unavailable" })
@@ -483,6 +492,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 mutableState.value = when (completion) {
                     is ProjectTransferCompletion.Imported -> current.copy(
                         busy = false,
+                        activeTransferDirection = null,
                         completion = completion,
                         history = ProjectHistoryState(current = completion.document.snapshot),
                         sliceOptions = completion.document.sliceOptions ?: current.sliceOptions,
@@ -490,8 +500,13 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                         persistenceBlocked = false,
                         persistenceMessage = null,
                         sessionRevision = current.sessionRevision + 1,
+                        persistedRevision = current.sessionRevision + 1,
                     )
-                    else -> current.copy(busy = false, completion = completion)
+                    else -> current.copy(
+                        busy = false,
+                        activeTransferDirection = null,
+                        completion = completion,
+                    )
                 }
                 if (completion !is ProjectTransferCompletion.Imported) {
                     schedulePersistenceLocked(allowPendingCompletion = true)
@@ -513,7 +528,10 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             mutableState.value.editCompletion != null
         ) return false
         val operationId = ++nextOperationId
-        mutableState.value = mutableState.value.copy(busy = true)
+        mutableState.value = mutableState.value.copy(
+            busy = true,
+            activeTransferDirection = ProjectTransferDirection.EXPORT,
+        )
         viewModelScope.launch(Dispatchers.IO) {
             val application = getApplication<Application>()
             val completion = try {
@@ -540,6 +558,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             synchronized(this@ProjectTransferViewModel) {
                 mutableState.value = mutableState.value.copy(
                     busy = false,
+                    activeTransferDirection = null,
                     completion = completion,
                 )
                 schedulePersistenceLocked(allowPendingCompletion = true)
@@ -566,7 +585,6 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         val current = mutableState.value
         val operation = ActiveProjectEdit(++nextOperationId, kind)
         val started = current.withStartedEdit(operation) ?: return null
-        persistenceJob?.cancel()
         mutableState.value = started
         return ProjectEditBaseline(operation, current.history, current.sliceOptions)
     }
@@ -657,14 +675,28 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         return true
     }
 
-    private fun schedulePersistenceLocked(allowPendingCompletion: Boolean = false) {
+    @Synchronized
+    fun flushPersistence(): Boolean {
+        val current = mutableState.value
+        if (!current.hasPersistableChanges(allowActiveTransfer = false)) return false
+        schedulePersistenceLocked(
+            allowPendingCompletion = true,
+            delayMillis = 0L,
+        )
+        return true
+    }
+
+    private fun schedulePersistenceLocked(
+        allowPendingCompletion: Boolean = false,
+        delayMillis: Long = PROJECT_SAVE_DEBOUNCE_MILLIS,
+    ) {
         persistenceJob?.cancel()
         val expectedRevision = mutableState.value.sessionRevision
         persistenceJob = viewModelScope.launch {
-            delay(PROJECT_SAVE_DEBOUNCE_MILLIS)
+            if (delayMillis > 0L) delay(delayMillis)
             val document = synchronized(this@ProjectTransferViewModel) {
                 mutableState.value.takeIf { current ->
-                    current.restored && !current.busy &&
+                    current.hasPersistableChanges(allowActiveTransfer = true) &&
                         (
                             allowPendingCompletion ||
                                 (current.completion == null && current.editCompletion == null)
@@ -686,9 +718,12 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 val current = mutableState.value
                 if (current.sessionRevision != expectedRevision) return@synchronized
                 if (failure == null) {
-                    if (current.persistenceMessage == ProjectPersistenceMessage.SAVE_FAILED) {
-                        mutableState.value = current.copy(persistenceMessage = null)
-                    }
+                    mutableState.value = current.copy(
+                        persistedRevision = maxOf(current.persistedRevision, expectedRevision),
+                        persistenceMessage = current.persistenceMessage.takeUnless {
+                            it == ProjectPersistenceMessage.SAVE_FAILED
+                        },
+                    )
                 } else {
                     supportEvents.record(SupportEvent.PROJECT_SAVE_FAILED)
                     mutableState.value = current.copy(
@@ -699,10 +734,39 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         }
     }
 
+    override fun onCleared() {
+        val pending = synchronized(this) {
+            persistenceJob?.cancel()
+            persistenceJob = null
+            mutableState.value.takeIf { current ->
+                current.hasPersistableChanges(allowActiveTransfer = false)
+            }
+        }
+        try {
+            if (pending != null) {
+                try {
+                    projectStore.save(pending.history.current, pending.sliceOptions)
+                } catch (_: Exception) {
+                    supportEvents.record(SupportEvent.PROJECT_SAVE_FAILED)
+                }
+            }
+        } finally {
+            super.onCleared()
+        }
+    }
+
     private companion object {
         const val PROJECT_SAVE_DEBOUNCE_MILLIS = 400L
     }
 }
+
+private fun ProjectTransferState.hasPersistableChanges(
+    allowActiveTransfer: Boolean,
+): Boolean = restored && !persistenceBlocked && sessionRevision != persistedRevision &&
+    (
+        !busy || activeEdit != null ||
+            (allowActiveTransfer && activeTransferDirection == ProjectTransferDirection.EXPORT)
+    )
 
 private fun List<ProjectObject>.deleteInstalledModels() {
     forEach { projectObject -> File(projectObject.model.localPath).delete() }

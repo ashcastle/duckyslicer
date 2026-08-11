@@ -38,6 +38,9 @@ avoid introducing an account or cloud requirement.
 - Project history, active slicing options, restoration, and debounced persistence must
   share the same Activity-retained owner. Rotation must preserve unsaved edits and undo
   history, while the durable project generation remains the process-death recovery path.
+  Flush the latest dirty revision when the app enters the background or that owner is
+  finally cleared. Before an archive import commits its replacement, cancel and join
+  any older metadata write so it cannot later overwrite the imported generation.
 - Model import, primitive creation, automatic lay, arrangement, split, and cut must run
   through that retained project owner. Bind each result to its starting history and
   options, reject duplicate work after rotation, and delete every unaccepted model file.

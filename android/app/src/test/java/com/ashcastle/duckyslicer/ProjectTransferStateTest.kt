@@ -29,6 +29,7 @@ class ProjectTransferStateTest {
         assertFalse(updated.history.canRedo)
         assertEquals(0.37f, updated.sliceOptions.fillDensity)
         assertEquals(8L, updated.sessionRevision)
+        assertEquals(0L, updated.persistedRevision)
     }
 
     @Test
@@ -97,6 +98,7 @@ class ProjectTransferStateTest {
         assertTrue(requireNotNull(completed.editCompletion).sessionChanged)
         assertEquals(90f, completed.history.current.selectedObject?.transform?.rotationXdeg)
         assertEquals(9L, completed.sessionRevision)
+        assertEquals(0L, completed.persistedRevision)
 
         assertNull(
             completed.withCompletedEdit(

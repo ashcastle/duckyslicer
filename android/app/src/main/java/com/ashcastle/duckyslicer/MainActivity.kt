@@ -139,6 +139,11 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         externalProjectModel.enqueue(intent)
     }
+
+    override fun onStop() {
+        projectTransferModel.flushPersistence()
+        super.onStop()
+    }
 }
 
 @Composable

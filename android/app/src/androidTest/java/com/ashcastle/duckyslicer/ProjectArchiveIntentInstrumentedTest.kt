@@ -1,11 +1,13 @@
 package com.ashcastle.duckyslicer
 
+import android.app.Application
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -19,6 +21,48 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ProjectArchiveIntentInstrumentedTest {
+    @Test
+    fun clearingRetainedOwnerFlushesProjectBeforeDebounce() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        val owner = ViewModelStore()
+        projectRoot.deleteRecursively()
+        try {
+            seedCurrentProject("owner-clear-object", "owner-clear.stl")
+            val application = context.applicationContext as Application
+            val model = ViewModelProvider(
+                owner,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[ProjectTransferViewModel::class.java]
+            waitForSession(model, "owner-clear-object")
+            val initial = model.state.value
+            assertTrue(
+                model.updateSession(
+                    initial.history,
+                    initial.history.updateSelectedTransform(
+                        ModelTransform(offsetXmm = 29f, rotationYdeg = 11f),
+                    ),
+                    initial.sliceOptions,
+                    initial.sliceOptions.copy(fillDensity = 0.43f),
+                ),
+            )
+            val dirty = model.state.value
+            assertTrue(dirty.sessionRevision > dirty.persistedRevision)
+
+            // Clear immediately, before the 400 ms background save can run.
+            owner.clear()
+
+            val restored = ProjectStore(context).loadProject()
+            assertEquals("owner-clear-object", restored.snapshot.selectedObjectId)
+            assertEquals(29f, restored.snapshot.selectedObject?.transform?.offsetXmm)
+            assertEquals(11f, restored.snapshot.selectedObject?.transform?.rotationYdeg)
+            assertEquals(0.43f, restored.sliceOptions?.fillDensity)
+        } finally {
+            owner.clear()
+            projectRoot.deleteRecursively()
+        }
+    }
+
     @Test
     fun automaticLayKeepsOneRetainedOperationAcrossActivityRecreation() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

@@ -71,11 +71,15 @@ def valid_sources() -> dict[str, str]:
                 "ProjectStore.recoverAbandonedArchiveStaging",
                 "ProjectTransferState(busy = true)",
                 "val history: ProjectHistoryState val sliceOptions: SliceOptions "
-                "val restored: Boolean val sessionRevision: Long",
+                "val restored: Boolean val sessionRevision: Long "
+                "val persistedRevision: Long "
+                "val activeTransferDirection: ProjectTransferDirection?",
                 "fun updateHistory( fun updateSession(",
                 "projectStore.loadProject()",
                 "projectStore.save(document.history.current, document.sliceOptions)",
                 "PROJECT_SAVE_DEBOUNCE_MILLIS = 400L",
+                "pendingPersistence?.join() fun flushPersistence() "
+                "override fun onCleared() hasPersistableChanges",
                 "mutableState.value.completion != null",
                 "openInputStream(uri) projectStore.importArchive",
                 "uri.scheme != ContentResolver.SCHEME_CONTENT "
@@ -99,6 +103,7 @@ def valid_sources() -> dict[str, str]:
                 "SupportEvent.PROJECT_ARCHIVE_IMPORT_FAILED",
                 "override fun onNewIntent(intent: Intent)",
                 "externalProjectModel.enqueue(intent)",
+                "override fun onStop() projectTransferModel.flushPersistence()",
                 "ProjectTransferViewModel projectTransferState.completion ProjectReplacementDialog(",
                 "projectHistory = projectTransferState.history "
                 "sliceOptions = projectTransferState.sliceOptions "
@@ -123,6 +128,7 @@ def valid_sources() -> dict[str, str]:
         "ProjectArchiveIntentInstrumentedTest.kt": (
             "customProjectIntentSurvivesRecreationRestoresAndSlices "
             "unsavedProjectEditAndUndoSurviveImmediateActivityRecreation "
+            "clearingRetainedOwnerFlushesProjectBeforeDebounce "
             "compatibleZipIntentConfirmsBeforeReplacingTheCurrentProject "
             "projectViewIntentRejectsNetworkAndUnrelatedBinaryUris "
             "Intent.ACTION_VIEW Intent.FLAG_GRANT_READ_URI_PERMISSION "
@@ -180,6 +186,8 @@ def valid_sources() -> dict[str, str]:
         "CONTRIBUTING.md": (
             "Project history, active slicing options, restoration, and debounced persistence "
             "same Activity-retained owner process-death recovery "
+            "Flush the latest dirty revision app enters the background owner is finally cleared "
+            "archive import commits cancel and join any older metadata write "
             "Every `CreateDocument` writer delete it after cancellation or failure"
         ),
     }
@@ -279,6 +287,22 @@ class VerifyProjectArchiveTest(unittest.TestCase):
         sources = valid_sources()
         sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
             "deleteFailedCreatedDocument(application, uri)", "leave partial archive"
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_import_without_joining_older_persistence(self) -> None:
+        sources = valid_sources()
+        sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
+            "pendingPersistence?.join()", "start archive import immediately"
+        )
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_background_transition_without_project_flush(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+            "projectTransferModel.flushPersistence()", "leave debounce pending"
         )
         with self.assertRaisesRegex(VerificationError, "safeguards"):
             verify_project_archive(sources)

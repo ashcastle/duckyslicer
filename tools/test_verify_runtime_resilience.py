@@ -14,9 +14,13 @@ def valid_sources() -> dict[str, str]:
         ),
         "ProjectStore.kt": "DurableJsonFile( storageUnavailable validateProjectRoot",
         "ProjectTransfer.kt": (
-            "val persistenceBlocked: Boolean restored.storageUnavailable "
+            "val persistenceBlocked: Boolean val persistedRevision: Long "
+            "val activeTransferDirection: ProjectTransferDirection? "
+            "restored.storageUnavailable "
             "!current.persistenceBlocked "
             "projectStore.save(document.history.current, document.sliceOptions) "
+            "pendingPersistence?.join() fun flushPersistence() "
+            "override fun onCleared() hasPersistableChanges "
             "fun autoLaySelectedModel() fun arrangeProjectObjects() "
             "fun splitSelectedModel() "
             "fun cutSelectedModel(heightRatio: Float, placeOnCut: Boolean) "
@@ -78,6 +82,7 @@ def valid_sources() -> dict[str, str]:
             "ViewModelProvider(this)[AppSettingsViewModel::class.java] "
             "appSettingsModel.state.collectAsStateWithLifecycle() "
             "appSettingsModel.updateSettings(next) "
+            "override fun onStop() projectTransferModel.flushPersistence() "
             "projectTransferModel.autoLaySelectedModel() "
             "projectTransferModel.arrangeProjectObjects() "
             "projectTransferModel.splitSelectedModel() "
@@ -140,6 +145,7 @@ def valid_sources() -> dict[str, str]:
         ),
         "ProjectArchiveIntentInstrumentedTest.kt": (
             "automaticLayKeepsOneRetainedOperationAcrossActivityRecreation "
+            "clearingRetainedOwnerFlushesProjectBeforeDebounce "
             "assertSame( ProjectEditKind.AUTO_LAY waitForPersistedTransform"
         ),
         "CONTRIBUTING.md": (
@@ -153,6 +159,8 @@ def valid_sources() -> dict[str, str]:
             "only in the project session revision that "
             "Live app settings and their debounced persistence must share one "
             "Fixed support-event writers must serialize through the process-wide journal boundary "
+            "Flush the latest dirty revision app enters the background owner is finally cleared "
+            "archive import commits cancel and join any older metadata write "
             "Model import, primitive creation, automatic lay, arrangement, split, and cut must run "
             "UI disposal must not issue a process-wide slicer cancellation"
         ),
@@ -183,6 +191,22 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
             "!current.persistenceBlocked", "true"
         )
         with self.assertRaisesRegex(VerificationError, "autosave"):
+            verify_resilience(sources)
+
+    def test_rejects_import_without_joining_older_project_save(self) -> None:
+        sources = valid_sources()
+        sources["ProjectTransfer.kt"] = sources["ProjectTransfer.kt"].replace(
+            "pendingPersistence?.join()", "import before older save settles"
+        )
+        with self.assertRaisesRegex(VerificationError, "autosave"):
+            verify_resilience(sources)
+
+    def test_rejects_background_transition_without_project_flush(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+            "projectTransferModel.flushPersistence()", "leave project save pending"
+        )
+        with self.assertRaisesRegex(VerificationError, "project persistence lifecycle"):
             verify_resilience(sources)
 
     def test_rejects_remote_results_without_profile_binding(self) -> None:

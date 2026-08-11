@@ -76,9 +76,15 @@ def verify_resilience(sources: dict[str, str]) -> None:
     project_session = sources["ProjectTransfer.kt"]
     for marker in (
         "val persistenceBlocked: Boolean",
+        "val persistedRevision: Long",
+        "val activeTransferDirection: ProjectTransferDirection?",
         "restored.storageUnavailable",
         "!current.persistenceBlocked",
         "projectStore.save(document.history.current, document.sliceOptions)",
+        "pendingPersistence?.join()",
+        "fun flushPersistence()",
+        "override fun onCleared()",
+        "hasPersistableChanges",
         "fun autoLaySelectedModel()",
         "fun arrangeProjectObjects()",
         "fun splitSelectedModel()",
@@ -94,6 +100,14 @@ def verify_resilience(sources: dict[str, str]) -> None:
     main = sources["MainActivity.kt"]
     if "saved_data_unavailable" not in main:
         raise VerificationError("project autosave corruption warning is missing")
+    for marker in (
+        "override fun onStop()",
+        "projectTransferModel.flushPersistence()",
+    ):
+        if marker not in main:
+            raise VerificationError(
+                f"project persistence lifecycle contract is missing: {marker}"
+            )
     for marker in (
         "projectTransferModel.autoLaySelectedModel()",
         "projectTransferModel.arrangeProjectObjects()",
@@ -339,6 +353,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         ),
         "ProjectArchiveIntentInstrumentedTest.kt": (
             "automaticLayKeepsOneRetainedOperationAcrossActivityRecreation",
+            "clearingRetainedOwnerFlushesProjectBeforeDebounce",
             "assertSame(",
             "ProjectEditKind.AUTO_LAY",
             "waitForPersistedTransform",
@@ -384,6 +399,18 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "CONTRIBUTING.md"
     ]:
         raise VerificationError("contributor guidance does not serialize support diagnostics")
+    for marker in (
+        "Flush the latest dirty revision",
+        "app enters the background",
+        "finally cleared",
+        "archive import commits",
+        "cancel and join",
+        "older metadata write",
+    ):
+        if marker not in sources["CONTRIBUTING.md"]:
+            raise VerificationError(
+                f"contributor guidance does not preserve project persistence ordering: {marker}"
+            )
     if "Model import, primitive creation, automatic lay, arrangement, split, and cut must run" not in sources[
         "CONTRIBUTING.md"
     ]:
