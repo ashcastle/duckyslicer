@@ -11,5 +11,9 @@ observable G-code roles, and Preview coverage thresholds. Generate a device repo
 python3 tools/run_qualification_corpus.py --serial <adb-serial>
 ```
 
+For a local desktop-engine comparison, add `--retain-gcode build/qualification/android-gcode`.
+The option copies validation G-code out of app-private storage; it is never enabled by the app.
+After building the pinned desktop CLI, run `python3 tools/run_desktop_orca_qualification.py`.
+
 Use `python3 tools/qualification_corpus.py --check` after editing a fixture. Reports and
 G-code are local build evidence and are intentionally not committed.

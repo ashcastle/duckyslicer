@@ -52,6 +52,28 @@ def captured(command: Sequence[str], *, cwd: Path = ROOT, timeout: int = 1_800) 
     return output
 
 
+def captured_stdout_bytes(
+    command: Sequence[str],
+    *,
+    cwd: Path = ROOT,
+    timeout: int = 1_800,
+) -> bytes:
+    try:
+        result = subprocess.run(
+            list(command),
+            cwd=cwd,
+            check=False,
+            capture_output=True,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise RunnerError(f"Could not run {shlex.join(command)}: {error}") from error
+    if result.returncode != 0:
+        output = (result.stdout + result.stderr).decode("utf-8", errors="replace").strip()
+        raise RunnerError(f"Command failed ({result.returncode}): {shlex.join(command)}\n{output}")
+    return result.stdout
+
+
 def online_devices(output: str) -> list[str]:
     return [
         columns[0]
@@ -127,6 +149,7 @@ def run(
     *,
     skip_build: bool = False,
     case_ids: set[str] | None = None,
+    retain_gcode: Path | None = None,
 ) -> dict[str, object]:
     manifest = load_manifest()
     validate(manifest)
@@ -153,26 +176,28 @@ def run(
     if case_ids is not None and selected_ids != case_ids:
         raise RunnerError("Unknown qualification case: " + ", ".join(sorted(case_ids - selected_ids)))
     case_reports: list[dict[str, object]] = []
+    if retain_gcode is not None:
+        retain_gcode.mkdir(parents=True, exist_ok=True)
     for case in selected_cases:
         identifier = case["id"]
         print(f"[qualification] running {identifier}")
-        instrumented = captured(
-            adb(
-                serial,
-                "shell",
-                "am",
-                "instrument",
-                "-w",
-                "-r",
-                "-e",
-                "class",
-                TEST_CLASS,
-                "-e",
-                "corpusCase",
-                identifier,
-                f"{TEST_APPLICATION_ID}/{RUNNER}",
-            ),
-        )
+        arguments = [
+            "shell",
+            "am",
+            "instrument",
+            "-w",
+            "-r",
+            "-e",
+            "class",
+            TEST_CLASS,
+            "-e",
+            "corpusCase",
+            identifier,
+        ]
+        if retain_gcode is not None:
+            arguments.extend(("-e", "retainCorpusGcode", "true"))
+        arguments.append(f"{TEST_APPLICATION_ID}/{RUNNER}")
+        instrumented = captured(adb(serial, *arguments))
         if "FAILURES!!!" in instrumented or "INSTRUMENTATION_FAILED" in instrumented or "OK (" not in instrumented:
             raise RunnerError(f"Qualification case {identifier} did not pass:\n" + instrumented)
         payload = captured(
@@ -180,6 +205,20 @@ def run(
             timeout=30,
         )
         case_reports.append(validate_report(payload, manifest, {identifier}))
+        if retain_gcode is not None:
+            gcode = captured_stdout_bytes(
+                adb(
+                    serial,
+                    "exec-out",
+                    "run-as",
+                    APPLICATION_ID,
+                    "cat",
+                    f"files/qualification/gcode/{identifier}.gcode",
+                ),
+                timeout=120,
+            )
+            destination = retain_gcode / f"{identifier}.gcode"
+            destination.write_bytes(gcode)
     report = dict(case_reports[0])
     report["cases"] = [case for partial in case_reports for case in partial["cases"]]
     report = validate_report(json.dumps(report), manifest, selected_ids)
@@ -194,6 +233,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--serial", help="ADB serial; required when more than one device is online")
     parser.add_argument("--case", action="append", dest="cases", help="run one named case; repeatable")
     parser.add_argument("--skip-build", action="store_true", help="reuse existing debug APKs")
+    parser.add_argument(
+        "--retain-gcode",
+        type=Path,
+        metavar="DIR",
+        help="copy each selected case's G-code into a local directory for desktop comparison",
+    )
     parser.add_argument("--validate-only", action="store_true", help="validate checked-in corpus only")
     parser.add_argument(
         "--output",
@@ -210,7 +255,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         devices = online_devices(captured(("adb", "devices", "-l"), timeout=20))
         serial = choose_serial(args.serial, os.environ.get("ANDROID_SERIAL"), devices)
-        run(serial, args.output, skip_build=args.skip_build, case_ids=set(args.cases) if args.cases else None)
+        run(
+            serial,
+            args.output,
+            skip_build=args.skip_build,
+            case_ids=set(args.cases) if args.cases else None,
+            retain_gcode=args.retain_gcode,
+        )
     except (CorpusError, RunnerError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

@@ -3,7 +3,9 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from tools.qualification_corpus import (
     MANIFEST,
@@ -15,6 +17,12 @@ from tools.qualification_corpus import (
     validate,
 )
 from tools.run_qualification_corpus import RunnerError, choose_serial, online_devices, validate_report
+from tools.run_desktop_orca_qualification import (
+    analyze_gcode,
+    bed_center,
+    compare_case,
+    parse_config_block,
+)
 
 
 class QualificationCorpusTest(unittest.TestCase):
@@ -63,6 +71,50 @@ emulator-5554 device product:test
         report["manifestSha256"] = "0" * 64
         with self.assertRaisesRegex(RunnerError, "stale corpus manifest"):
             validate_report(json.dumps(report), manifest)
+
+    def test_desktop_comparison_parses_config_roles_and_material_differences(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            gcode = Path(directory) / "sample.gcode"
+            gcode.write_text(
+                """; total layer number: 2
+;TYPE:Outer wall
+G1 X1 E0.1
+;TYPE:Inner wall
+G1 X3 E0.1
+; CONFIG_BLOCK_START
+; layer_height = 0.2
+; wall_loops = 2
+; CONFIG_BLOCK_END
+""",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                {"layer_height": "0.2", "wall_loops": "2"},
+                parse_config_block(gcode),
+            )
+            metrics = analyze_gcode(gcode, ["layer_height", "wall_loops"])
+            self.assertEqual(2, metrics["layers"])
+            self.assertEqual(2, metrics["extrusionMotions"])
+            self.assertEqual(2.0, metrics["extrusionXSpanMm"])
+            self.assertEqual(1, metrics["roleMotions"]["outerWall"])
+            android = dict(metrics)
+            self.assertEqual([], compare_case(metrics, android, ["outerWall", "innerWall"]))
+            android["layers"] = 3
+            android["previewLayerCount"] = 2
+            self.assertEqual([], compare_case(metrics, android, ["outerWall"]))
+            android["previewLayerCount"] = 3
+            self.assertRegex(compare_case(metrics, android, ["outerWall"])[0], "layers")
+            role_mismatch = dict(metrics)
+            role_mismatch["roleMotions"] = dict(metrics["roleMotions"], outerWall=10)
+            self.assertTrue(
+                any(
+                    "outerWall motions" in difference
+                    for difference in compare_case(metrics, role_mismatch, ["outerWall"])
+                )
+            )
+
+    def test_desktop_comparison_uses_effective_bed_center(self) -> None:
+        self.assertEqual((135.0, 135.0), bed_center({"bed_shape": "0x0,270x0,270x270,0x270"}))
 
 
 if __name__ == "__main__":

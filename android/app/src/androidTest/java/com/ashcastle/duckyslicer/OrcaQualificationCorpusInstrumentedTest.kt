@@ -34,6 +34,10 @@ class OrcaQualificationCorpusInstrumentedTest {
         val fingerprintKeys = manifest.getJSONArray("profileFingerprintKeys").strings()
         val requestedCase = InstrumentationRegistry.getArguments().getString("corpusCase")
             ?: "simple-part"
+        val retainGcode = InstrumentationRegistry.getArguments()
+            .getString("retainCorpusGcode")
+            ?.toBooleanStrictOrNull()
+            ?: false
         val cases = manifest.getJSONArray("cases").objects().filter { case ->
             case.getString("id") == requestedCase
         }
@@ -70,6 +74,14 @@ class OrcaQualificationCorpusInstrumentedTest {
                 )
                 val outcome = OnDeviceSlicer.slice(objects, options)
                 outputs += outcome.output
+                if (retainGcode) {
+                    val retained = File(context.filesDir, "$GCODE_DIRECTORY/$identifier.gcode")
+                    retained.parentFile?.mkdirs()
+                    val staging = File(retained.parentFile, ".${retained.name}.tmp")
+                    staging.delete()
+                    outcome.output.copyTo(staging, overwrite = true)
+                    check(staging.renameTo(retained)) { "Could not retain qualification G-code" }
+                }
                 val preview = GcodeLayerPreview.fromNative(
                     NativeEngine.previewGcodeRange(outcome.output.absolutePath, 0, Int.MAX_VALUE),
                 )
@@ -318,6 +330,7 @@ class OrcaQualificationCorpusInstrumentedTest {
     companion object {
         private const val MANIFEST_ASSET = "manifest.json"
         private const val REPORT_PATH = "qualification/corpus-report.json"
+        private const val GCODE_DIRECTORY = "qualification/gcode"
         private val ROLE_NAMES = listOf(
             "outerWall",
             "innerWall",
