@@ -99,6 +99,25 @@ def adb(serial: str, *arguments: str) -> tuple[str, ...]:
     return ("adb", "-s", serial, *arguments)
 
 
+def target_metadata(abi: str, api: str, page_size: str) -> dict[str, object]:
+    if abi != "arm64-v8a":
+        raise RunnerError(f"Qualification requires an ARM64 Android target; target reports {abi}")
+    try:
+        api_level = int(api)
+        page_size_bytes = int(page_size)
+    except ValueError as error:
+        raise RunnerError("Android target returned invalid API or page-size metadata") from error
+    if api_level < 26:
+        raise RunnerError(f"Qualification requires Android API 26 or newer; target reports {api_level}")
+    if page_size_bytes < 4_096 or page_size_bytes & (page_size_bytes - 1):
+        raise RunnerError(f"Android target returned an invalid page size: {page_size_bytes}")
+    return {
+        "apiLevel": api_level,
+        "abi": abi,
+        "pageSizeBytes": page_size_bytes,
+    }
+
+
 def validate_report(
     payload: str,
     manifest: dict[str, object],
@@ -119,10 +138,13 @@ def validate_report(
         raise RunnerError("Device qualification report used a stale corpus manifest")
     required_ids = expected_ids or {case["id"] for case in cases if isinstance(case, dict)}
     actual_cases = report.get("cases")
-    actual_ids = {
-        case.get("id") for case in actual_cases if isinstance(case, dict)
-    } if isinstance(actual_cases, list) else set()
-    if actual_ids != required_ids:
+    actual_case_entries = (
+        [case for case in actual_cases if isinstance(case, dict)]
+        if isinstance(actual_cases, list)
+        else []
+    )
+    actual_ids = {case.get("id") for case in actual_case_entries}
+    if actual_ids != required_ids or len(actual_case_entries) != len(actual_ids):
         raise RunnerError("Device qualification report does not contain every corpus case")
     return report
 
@@ -161,11 +183,13 @@ def run(
             raise RunnerError(f"Expected Android artifact is missing: {artifact}")
 
     abi = captured(adb(serial, "shell", "getprop", "ro.product.cpu.abi"), timeout=20)
-    if abi != "arm64-v8a":
-        raise RunnerError(f"Qualification requires an ARM64 Android target; {serial} reports {abi}")
     api = captured(adb(serial, "shell", "getprop", "ro.build.version.sdk"), timeout=20)
     page_size = captured(adb(serial, "shell", "getconf", "PAGE_SIZE"), timeout=20)
-    print(f"[qualification] target {serial}: API {api}, {abi}, {page_size}-byte pages")
+    target = target_metadata(abi, api, page_size)
+    print(
+        f"[qualification] target {serial}: API {target['apiLevel']}, {target['abi']}, "
+        f"{target['pageSizeBytes']}-byte pages"
+    )
     captured(adb(serial, "install", "-r", "-t", str(DEBUG_APK)), timeout=180)
     captured(adb(serial, "install", "-r", "-t", str(TEST_APK)), timeout=180)
     selected_cases = [
@@ -221,6 +245,7 @@ def run(
             destination.write_bytes(gcode)
     report = dict(case_reports[0])
     report["cases"] = [case for partial in case_reports for case in partial["cases"]]
+    report["target"] = target
     report = validate_report(json.dumps(report), manifest, selected_ids)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

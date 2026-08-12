@@ -15,6 +15,21 @@ For a local desktop-engine comparison, add `--retain-gcode build/qualification/a
 The option copies validation G-code out of app-private storage; it is never enabled by the app.
 After building the pinned desktop CLI, run `python3 tools/run_desktop_orca_qualification.py`.
 
+For a page-size equivalence check, retain one report and G-code directory from a 4 KB ARM64
+target and one from a 16 KB ARM64 target, then run:
+
+```sh
+python3 tools/compare_android_qualification.py \
+  --baseline-report build/qualification/android-4kb-report.json \
+  --candidate-report build/qualification/android-16kb-report.json \
+  --baseline-gcode build/qualification/android-4kb-gcode \
+  --candidate-gcode build/qualification/android-16kb-gcode
+```
+
+The comparison requires target metadata in both reports and permits only the generated timestamp,
+staged-model nonce, trailing blank lines, and measured timings to differ. Geometry, profile,
+layer, role, Preview, material, and normalized G-code output must match exactly.
+
 The release-candidate hardware gate deliberately refuses emulators and requires one explicitly
 selected ARM64 API 30+ phone. It records per-case slicing and Preview parsing time, dense Preview
 frame pacing, peak PSS, thermal state, and crash/ANR evidence in an ignored local report:
