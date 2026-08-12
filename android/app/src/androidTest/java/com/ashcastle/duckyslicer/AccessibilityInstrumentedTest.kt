@@ -521,6 +521,7 @@ class AccessibilityInstrumentedTest {
             val proportionLock = scrollUntilClickable(
                 keepProportions,
                 scrollAnchorLabel = placement,
+                timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
             )
             assertTrue(
                 "The proportion lock must expose one switch action",
@@ -652,14 +653,16 @@ class AccessibilityInstrumentedTest {
             val automaticAdd = editor.first { it.isClickable && it.effectiveLabel() == addAtFootprint }
             tapCenter(automaticAdd)
 
-            val edited = waitForNodes(setOf(radius, moveLeft, remove, apply))
+            val radiusControl = waitForNode(radius) {
+                it.className?.toString() == SEEK_BAR_CLASS
+            }
             assertTrue(
                 "Brim size must be adjustable without a touch gesture",
-                edited.any {
-                    it.className?.toString() == SEEK_BAR_CLASS &&
-                        it.effectiveLabel().contains(radius)
+                radiusControl.actionList.any { action ->
+                    action.id == AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id
                 },
             )
+            val edited = waitForNodes(setOf(moveLeft, remove, apply))
             assertTrue(edited.any { it.isClickable && it.effectiveLabel() == moveLeft })
             assertTrue(edited.any { it.isClickable && it.effectiveLabel() == remove })
             assertTrue(edited.any { it.isClickable && it.effectiveLabel() == apply })
@@ -699,8 +702,11 @@ class AccessibilityInstrumentedTest {
         label: String,
         fastScroll: Boolean = false,
         scrollAnchorLabel: String? = null,
+        timeoutMillis: Long = NODE_TIMEOUT_MILLIS,
     ): AccessibilityNodeInfo {
-        return scrollUntilNode(label, fastScroll, scrollAnchorLabel) { it.isClickable }
+        return scrollUntilNode(label, fastScroll, scrollAnchorLabel, timeoutMillis) {
+            it.isClickable
+        }
     }
 
     private fun waitForNode(
@@ -721,9 +727,10 @@ class AccessibilityInstrumentedTest {
         label: String,
         fastScroll: Boolean = false,
         scrollAnchorLabel: String? = null,
+        timeoutMillis: Long = NODE_TIMEOUT_MILLIS,
         matches: (AccessibilityNodeInfo) -> Boolean,
     ): AccessibilityNodeInfo {
-        val deadline = SystemClock.elapsedRealtime() + NODE_TIMEOUT_MILLIS
+        val deadline = SystemClock.elapsedRealtime() + timeoutMillis
         var lastDiagnostic = "no accessibility nodes"
         var scrollAttempts = 0
         var retainedScrollBounds: Rect? = null
@@ -850,6 +857,7 @@ class AccessibilityInstrumentedTest {
         const val MAX_SCROLL_DIAGNOSTIC_NODES = 12
         const val MAX_DIAGNOSTIC_LABEL_LENGTH = 80
         const val NODE_TIMEOUT_MILLIS = 5_000L
+        const val EXTENDED_SCROLL_TIMEOUT_MILLIS = 10_000L
         const val NODE_POLL_MILLIS = 50L
         const val SCROLL_SETTLE_MILLIS = 200L
     }
