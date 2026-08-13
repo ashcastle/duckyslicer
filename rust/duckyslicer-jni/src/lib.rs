@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use jni::JNIEnv;
-use jni::objects::{JClass, JFloatArray, JIntArray, JString};
+use jni::objects::{JByteBuffer, JClass, JFloatArray, JIntArray, JString};
 use jni::sys::{jboolean, jfloat, jfloatArray, jint, jstring};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -2273,8 +2273,9 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_packToolpathG
     depth_contrast: jfloat,
     reverse_for_early_z: jboolean,
     render_as_lines: jboolean,
-) -> jfloatArray {
-    let payload = catch_unwind(AssertUnwindSafe(|| {
+    output: JByteBuffer<'_>,
+) -> jint {
+    catch_unwind(AssertUnwindSafe(|| {
         let segment_float_count = usize::try_from(env.get_array_length(&segments)?)
             .map_err(|_| EngineError::Parse("Toolpath segment array is invalid".to_owned()))?;
         let path_count = usize::try_from(env.get_array_length(&path_starts)?)
@@ -2295,7 +2296,7 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_packToolpathG
         env.get_float_array_region(&segments, 0, &mut segment_values)?;
         env.get_int_array_region(&path_starts, 0, &mut path_start_values)?;
         env.get_int_array_region(&path_ends_exclusive, 0, &mut path_end_values)?;
-        pack_toolpath_geometry(ToolpathPackingRequest {
+        let payload = pack_toolpath_geometry(ToolpathPackingRequest {
             segments: &segment_values,
             path_starts: &path_start_values,
             path_ends_exclusive: &path_end_values,
@@ -2307,21 +2308,35 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_packToolpathG
             depth_contrast,
             reverse_for_early_z: reverse_for_early_z != 0,
             render_as_lines: render_as_lines != 0,
-        })
-    }))
-    .ok()
-    .and_then(Result::ok);
-    let Some(payload) = payload else {
-        return std::ptr::null_mut();
-    };
-    catch_unwind(AssertUnwindSafe(|| {
-        let output = env.new_float_array(payload.len() as jint)?;
-        env.set_float_array_region(&output, 0, &payload)?;
-        Ok::<jfloatArray, jni::errors::Error>(output.into_raw())
+        })?;
+        let required_bytes = payload
+            .len()
+            .checked_mul(std::mem::size_of::<f32>())
+            .ok_or_else(|| EngineError::Parse("Toolpath output size overflow".to_owned()))?;
+        let output_capacity = env.get_direct_buffer_capacity(&output)?;
+        if output_capacity < required_bytes {
+            return Err(EngineError::Parse(
+                "Toolpath direct buffer is too small".to_owned(),
+            ));
+        }
+        let output_address = env.get_direct_buffer_address(&output)?;
+        if required_bytes > 0 {
+            // SAFETY: `output_address` belongs to the direct ByteBuffer retained by this JNI
+            // call, JNI reports at least `required_bytes` capacity above, the source Vec has
+            // exactly that many initialized bytes, and the two allocations cannot overlap.
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    payload.as_ptr().cast::<u8>(),
+                    output_address,
+                    required_bytes,
+                );
+            }
+        }
+        Ok::<jint, EngineError>((payload.len() / PACKED_TOOLPATH_FLOATS) as jint)
     }))
     .ok()
     .and_then(Result::ok)
-    .unwrap_or(std::ptr::null_mut())
+    .unwrap_or(-1)
 }
 
 #[cfg(test)]

@@ -1,5 +1,7 @@
 package com.ashcastle.duckyslicer
 
+import java.nio.ByteBuffer
+
 internal object NativeEngine {
     init {
         System.loadLibrary("duckyslicer")
@@ -31,7 +33,8 @@ internal object NativeEngine {
         depthContrast: Float,
         reverseForEarlyZ: Boolean,
         renderAsLines: Boolean,
-    ): FloatArray?
+        output: ByteBuffer,
+    ): Int
 }
 
 internal fun inspectModel(path: String): ModelInfo = ModelInfo.fromNative(

@@ -9,7 +9,8 @@ def valid_sources() -> dict[str, str]:
     return {
         "NativeEngine.kt": (
             "previewGcodeRange(path: String, startLayer: Int, endLayer: Int): FloatArray? "
-            "inspectStlPayload(path: String): FloatArray? external fun packToolpathGeometry("
+            "inspectStlPayload(path: String): FloatArray? external fun packToolpathGeometry( "
+            "output: ByteBuffer"
         ),
         "PreviewModels.kt": (
             "fun fromNative(raw: FloatArray?) PAYLOAD_MAGIC PAYLOAD_VERSION "
@@ -101,7 +102,10 @@ def valid_sources() -> dict[str, str]:
             "RENDERER_STARTUP_TIMEOUT_MS = 5_000L "
             "GLES30.glGetError() failRenderer(\"program_creation\") "
             "NativeToolpathPacker.pack(scene, plan, reverseForEarlyZ) "
-            "values.size <= plan.segmentCount * PACKED_TOOLPATH_FLOATS "
+            "val maximumBytes = plan.segmentCount * PACKED_TOOLPATH_FLOATS * Float.SIZE_BYTES "
+            "ByteBuffer.allocateDirect(maximumBytes).order(ByteOrder.nativeOrder()) "
+            "if (segmentCount !in 0..plan.segmentCount) return null "
+            "output.limit(usedBytes) "
             "nativePackingUsed = nativePacked != null"
         ),
         "PrepareModelPreviewView.kt": (
@@ -342,7 +346,9 @@ def valid_sources() -> dict[str, str]:
             "env.new_float_array env.set_float_array_region preview_payload(preview_gcode( "
             "MODEL_PREVIEW_PAYLOAD_MAGIC MODEL_PREVIEW_PAYLOAD_VERSION "
             "MODEL_PREVIEW_HEADER_FLOATS fn model_preview_payload( "
-            "NativeEngine_inspectStlPayload "
+            "NativeEngine_inspectStlPayload get_direct_buffer_capacity(&output) "
+            "get_direct_buffer_address(&output) std::ptr::copy_nonoverlapping( "
+            '"Toolpath direct buffer is too small" '
             "#[cfg(test)]"
         ),
         "strings.xml": (
@@ -526,7 +532,7 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
     def test_rejects_unbounded_native_toolpath_output(self) -> None:
         sources = valid_sources()
         sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
-            "values.size <= plan.segmentCount * PACKED_TOOLPATH_FLOATS", "true"
+            "if (segmentCount !in 0..plan.segmentCount) return null", ""
         )
         with self.assertRaisesRegex(VerificationError, "GPU preview upload contract"):
             verify_preview_boundary(sources)

@@ -1409,7 +1409,7 @@ internal object ToolpathMeshBuilder {
             }
         }
         val bedVertices = bedBuilder.finish()
-        val nativeBuffer = nativePacked?.toDirectByteBuffer()
+        val nativeBuffer = nativePacked?.buffer
         val toolpathInstances = when {
             nativeBuffer != null && !scene.renderAsLines -> nativeBuffer
             else -> instanceBuilder?.finish() ?: ByteBuffer.allocateDirect(0)
@@ -1418,7 +1418,7 @@ internal object ToolpathMeshBuilder {
             nativeBuffer != null && scene.renderAsLines -> nativeBuffer
             else -> lineBuilder?.finish() ?: ByteBuffer.allocateDirect(0)
         }
-        val nativeSegmentCount = nativePacked?.size?.div(PACKED_TOOLPATH_FLOATS)
+        val nativeSegmentCount = nativePacked?.segmentCount
         return ToolpathUploadPayload(
             bedVertices = bedVertices,
             toolpathInstances = toolpathInstances,
@@ -1448,9 +1448,11 @@ internal object ToolpathMeshBuilder {
             scene: ToolpathScene,
             plan: PreviewRenderPlan,
             reverseForEarlyZ: Boolean,
-        ): FloatArray? {
+        ): NativePackedToolpath? {
             if (!linkageAvailable) return null
-            val packed = try {
+            val maximumBytes = plan.segmentCount * PACKED_TOOLPATH_FLOATS * Float.SIZE_BYTES
+            val output = ByteBuffer.allocateDirect(maximumBytes).order(ByteOrder.nativeOrder())
+            val segmentCount = try {
                 NativeEngine.packToolpathGeometry(
                     segments = scene.preview.segments,
                     pathStarts = plan.pathStarts,
@@ -1463,17 +1465,24 @@ internal object ToolpathMeshBuilder {
                     depthContrast = scene.depthContrast,
                     reverseForEarlyZ = reverseForEarlyZ,
                     renderAsLines = scene.renderAsLines,
+                    output = output,
                 )
             } catch (_: LinkageError) {
                 linkageAvailable = false
-                null
+                return null
             }
-            return packed?.takeIf { values ->
-                values.size % PACKED_TOOLPATH_FLOATS == 0 &&
-                    values.size <= plan.segmentCount * PACKED_TOOLPATH_FLOATS
-            }
+            if (segmentCount !in 0..plan.segmentCount) return null
+            val usedBytes = segmentCount * PACKED_TOOLPATH_FLOATS * Float.SIZE_BYTES
+            output.position(0)
+            output.limit(usedBytes)
+            return NativePackedToolpath(output, segmentCount)
         }
     }
+
+    private data class NativePackedToolpath(
+        val buffer: ByteBuffer,
+        val segmentCount: Int,
+    )
 
     private fun packedColor(red: Float, green: Float, blue: Float, alpha: Float): Float =
         Float.fromBits(
@@ -1603,11 +1612,6 @@ internal data class ToolpathUploadPayload(
         get() = bedVertices.remaining() * Float.SIZE_BYTES +
             toolpathInstances.remaining() + lineVertices.remaining()
 }
-
-private fun FloatArray.toDirectByteBuffer(): ByteBuffer = ByteBuffer
-    .allocateDirect(size * Float.SIZE_BYTES)
-    .order(ByteOrder.nativeOrder())
-    .also { buffer -> buffer.asFloatBuffer().put(this) }
 
 private class ToolpathLineBuilder(initialSegmentCapacity: Int) {
     private var values = FloatArray(

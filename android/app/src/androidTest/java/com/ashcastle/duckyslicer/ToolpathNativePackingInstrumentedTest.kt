@@ -11,6 +11,31 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ToolpathNativePackingInstrumentedTest {
     @Test
+    fun rustPackingRejectsInvalidOutputBuffers() {
+        val segments = floatArrayOf(0f, 0f, 10f, 0f, 0.2f, 0f)
+        val pathStarts = intArrayOf(0)
+        val pathEndsExclusive = intArrayOf(1)
+
+        fun pack(output: ByteBuffer): Int = NativeEngine.packToolpathGeometry(
+            segments = segments,
+            pathStarts = pathStarts,
+            pathEndsExclusive = pathEndsExclusive,
+            bedOriginX = 0f,
+            bedOriginY = 0f,
+            minZMm = 0.2f,
+            maxZMm = 0.2f,
+            opacity = 1f,
+            depthContrast = 0.5f,
+            reverseForEarlyZ = false,
+            renderAsLines = false,
+            output = output,
+        )
+
+        assertEquals(-1, pack(ByteBuffer.allocateDirect(1)))
+        assertEquals(-1, pack(ByteBuffer.allocate(32)))
+    }
+
+    @Test
     fun rustPackingIsByteExactWithTheManagedFallback() {
         val preview = GcodeLayerPreview(
             startLayer = 0,

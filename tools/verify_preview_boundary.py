@@ -60,7 +60,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         raise VerificationError("Android preview JNI does not return a nullable primitive float array")
     if "inspectStlPayload(path: String): FloatArray?" not in native:
         raise VerificationError("Android model inspection JNI does not return a nullable primitive float array")
-    if "external fun packToolpathGeometry(" not in native:
+    if "external fun packToolpathGeometry(" not in native or "output: ByteBuffer" not in native:
         raise VerificationError("Android Preview does not expose bounded Rust geometry packing")
 
     model = sources["MainActivity.kt"]
@@ -212,7 +212,10 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "GLES30.glGetError()",
         'failRenderer("program_creation")',
         "NativeToolpathPacker.pack(scene, plan, reverseForEarlyZ)",
-        "values.size <= plan.segmentCount * PACKED_TOOLPATH_FLOATS",
+        "val maximumBytes = plan.segmentCount * PACKED_TOOLPATH_FLOATS * Float.SIZE_BYTES",
+        "ByteBuffer.allocateDirect(maximumBytes).order(ByteOrder.nativeOrder())",
+        "if (segmentCount !in 0..plan.segmentCount) return null",
+        "output.limit(usedBytes)",
         "nativePackingUsed = nativePacked != null",
     ):
         if marker not in renderer:
@@ -352,6 +355,10 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "MODEL_PREVIEW_HEADER_FLOATS",
         "fn model_preview_payload(",
         "NativeEngine_inspectStlPayload",
+        "get_direct_buffer_capacity(&output)",
+        "get_direct_buffer_address(&output)",
+        "std::ptr::copy_nonoverlapping(",
+        '"Toolpath direct buffer is too small"',
     ):
         if marker not in rust:
             raise VerificationError(f"native model payload contract is missing: {marker}")
