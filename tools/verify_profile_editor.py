@@ -22,6 +22,7 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "ProfileEditSessionTest.kt",
         "ProfileSettingsSearchTest.kt",
         "SlicingSettingsSectionTest.kt",
+        "SpiralVaseSettingsTest.kt",
         "strings.xml",
         "strings-ko.xml",
         "CONTRIBUTING.md",
@@ -77,6 +78,16 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         raise VerificationError("printer, filament, and slicing editors need separate profile lists")
     if editor.count("SettingChoices(") < 20:
         raise VerificationError("choice-based settings must participate in setting-name search")
+    for marker in (
+        "options.withSpiralMode(enabled)",
+        "R.string.spiral_vase",
+        "R.string.smooth_spiral",
+        "R.string.max_xy_smoothing",
+        "R.string.spiral_starting_flow",
+        "R.string.spiral_finishing_flow",
+    ):
+        if marker not in editor:
+            raise VerificationError(f"spiral-vase process controls are missing: {marker}")
 
     for marker in (
         "recentIds: List<String>",
@@ -189,6 +200,18 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
                 raise VerificationError(
                     f"localized profile disclosure state is missing from {source_name}: {resource}"
                 )
+        for resource in (
+            'name="spiral_vase"',
+            'name="spiral_vase_summary"',
+            'name="smooth_spiral"',
+            'name="max_xy_smoothing"',
+            'name="spiral_starting_flow"',
+            'name="spiral_finishing_flow"',
+        ):
+            if resource not in strings:
+                raise VerificationError(
+                    f"localized spiral-vase setting is missing from {source_name}: {resource}"
+                )
 
     test = sources["SlicingSettingsSectionTest.kt"]
     for marker in (
@@ -226,6 +249,16 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         if marker not in search_test:
             raise VerificationError(f"profile setting-search regression is missing: {marker}")
 
+    spiral_test = sources["SpiralVaseSettingsTest.kt"]
+    for marker in (
+        "enablingSpiralModeAppliesRequiredCompanionSettings",
+        "disablingSpiralModePreservesCompanionSettings",
+        ".withSpiralMode(true)",
+        ".withSpiralMode(false)",
+    ):
+        if marker not in spiral_test:
+            raise VerificationError(f"spiral-vase editor regression is missing: {marker}")
+
     for document in ("CONTRIBUTING.md",):
         lowered = sources[document].lower()
         if not all(term in lowered for term in ("quality", "strength", "speed", "support", "others")):
@@ -248,6 +281,9 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "SlicingSettingsSectionTest.kt": (tests / "SlicingSettingsSectionTest.kt").read_text(
+            encoding="utf-8"
+        ),
+        "SpiralVaseSettingsTest.kt": (tests / "SpiralVaseSettingsTest.kt").read_text(
             encoding="utf-8"
         ),
         "strings.xml": (resources / "values/strings.xml").read_text(encoding="utf-8"),

@@ -165,7 +165,7 @@ index 116a4a85..b870c593 100644
      // Temperature
      int nozzle_temp = 210;
      int bed_temp = 60;
-@@ -60,17 +134,100 @@ struct SliceConfig {
+@@ -60,17 +134,106 @@ struct SliceConfig {
      bool support_enabled = false;
      std::string support_type = "normal"; // "normal", "tree"
      float support_angle = 45.0f;
@@ -258,6 +258,12 @@ index 116a4a85..b870c593 100644
 +    int elephant_foot_compensation_layers = 1;
 +    float max_bridge_length = 10.0f;
 +    bool precise_outer_walls = true;
++    bool spiral_mode = false;
++    bool spiral_mode_smooth = false;
++    float spiral_mode_max_xy_smoothing = 200.0f;
++    bool spiral_mode_max_xy_smoothing_percent = true;
++    float spiral_starting_flow_ratio = 0.0f;
++    float spiral_finishing_flow_ratio = 0.0f;
 +
 +    // Printer build volume. bed_polygon stores flat XY pairs in millimetres.
      float bed_size_x = 270.0f;
@@ -496,7 +502,7 @@ index d93efb7d..276bb039 100644
      config.travel_speed = getFloat("travelSpeed");
      config.first_layer_speed = getFloat("firstLayerSpeed");
  
-@@ -108,15 +178,95 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -108,15 +178,101 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.support_enabled = getBool("supportEnabled");
      config.support_type = getString("supportType");
      config.support_angle = getFloat("supportAngle");
@@ -583,6 +589,12 @@ index d93efb7d..276bb039 100644
 +    config.elephant_foot_compensation_layers = getInt("elephantFootCompensationLayers");
 +    config.max_bridge_length = getFloat("maxBridgeLength");
 +    config.precise_outer_walls = getBool("preciseOuterWalls");
++    config.spiral_mode = getBool("spiralMode");
++    config.spiral_mode_smooth = getBool("spiralModeSmooth");
++    config.spiral_mode_max_xy_smoothing = getFloat("spiralModeMaxXySmoothing");
++    config.spiral_mode_max_xy_smoothing_percent = getBool("spiralModeMaxXySmoothingPercent");
++    config.spiral_starting_flow_ratio = getFloat("spiralStartingFlowRatio");
++    config.spiral_finishing_flow_ratio = getFloat("spiralFinishingFlowRatio");
  
      config.bed_size_x = getFloat("bedSizeX");
      config.bed_size_y = getFloat("bedSizeY");
@@ -706,7 +718,7 @@ index d93efb7d..276bb039 100644
      setFloat("travelSpeed", config.travel_speed);
      setFloat("firstLayerSpeed", config.first_layer_speed);
      setInt("nozzleTemp", config.nozzle_temp);
-@@ -247,13 +487,93 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -247,13 +487,99 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setBool("supportEnabled", config.support_enabled);
      setString("supportType", config.support_type);
      setFloat("supportAngle", config.support_angle);
@@ -792,6 +804,12 @@ index d93efb7d..276bb039 100644
 +    setInt("elephantFootCompensationLayers", config.elephant_foot_compensation_layers);
 +    setFloat("maxBridgeLength", config.max_bridge_length);
 +    setBool("preciseOuterWalls", config.precise_outer_walls);
++    setBool("spiralMode", config.spiral_mode);
++    setBool("spiralModeSmooth", config.spiral_mode_smooth);
++    setFloat("spiralModeMaxXySmoothing", config.spiral_mode_max_xy_smoothing);
++    setBool("spiralModeMaxXySmoothingPercent", config.spiral_mode_max_xy_smoothing_percent);
++    setFloat("spiralStartingFlowRatio", config.spiral_starting_flow_ratio);
++    setFloat("spiralFinishingFlowRatio", config.spiral_finishing_flow_ratio);
      setFloat("bedSizeX", config.bed_size_x);
      setFloat("bedSizeY", config.bed_size_y);
 +    setFloat("bedOriginX", config.bed_origin_x);
@@ -1099,7 +1117,7 @@ index 8d61c9cf..aaaa9bc9 100644
  
      // Deretraction speed — OrcaSlicer defaults to 0 (= same as retraction speed).
      // Snapmaker profile uses 35 mm/s for smoother prime-after-retract.
-@@ -480,32 +569,87 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -480,32 +569,93 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      // the literal 0, not the auto-resolved value, causing Flow::rounded_rectangle_extrusion_spacing()
      // to throw FlowErrorNegativeSpacing on multi-color models.
      double nd = config.nozzle_diameter;
@@ -1195,6 +1213,12 @@ index 8d61c9cf..aaaa9bc9 100644
 +    dpc.set_key_value("elefant_foot_compensation_layers", new Slic3r::ConfigOptionInt(config.elephant_foot_compensation_layers));
 +    dpc.set_key_value("max_bridge_length", new Slic3r::ConfigOptionFloat(config.max_bridge_length));
 +    dpc.set_key_value("precise_outer_wall", new Slic3r::ConfigOptionBool(config.precise_outer_walls));
++    dpc.set_key_value("spiral_mode", new Slic3r::ConfigOptionBool(config.spiral_mode));
++    dpc.set_key_value("spiral_mode_smooth", new Slic3r::ConfigOptionBool(config.spiral_mode_smooth));
++    dpc.set_key_value("spiral_mode_max_xy_smoothing", new Slic3r::ConfigOptionFloatOrPercent(
++        config.spiral_mode_max_xy_smoothing, config.spiral_mode_max_xy_smoothing_percent));
++    dpc.set_key_value("spiral_starting_flow_ratio", new Slic3r::ConfigOptionFloat(config.spiral_starting_flow_ratio));
++    dpc.set_key_value("spiral_finishing_flow_ratio", new Slic3r::ConfigOptionFloat(config.spiral_finishing_flow_ratio));
 +
 +    dpc.set_deserialize_strict("seam_position", config.seam_position);
 +    dpc.set_key_value("staggered_inner_seams", new Slic3r::ConfigOptionBool(config.staggered_inner_seams));

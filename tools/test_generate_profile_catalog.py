@@ -55,6 +55,29 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(profile["wipeTowerEnabled"])
         self.assertEqual(42.0, profile["wipeTowerWidth"])
 
+    def test_preserves_spiral_vase_process_values(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Smooth vase",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "spiral_mode": "1",
+                "spiral_mode_smooth": "1",
+                "spiral_mode_max_xy_smoothing": "250%",
+                "spiral_starting_flow_ratio": "0.35",
+                "spiral_finishing_flow_ratio": "0.2",
+            },
+            {},
+        )
+
+        self.assertTrue(profile["spiralMode"])
+        self.assertTrue(profile["spiralModeSmooth"])
+        self.assertEqual(250.0, profile["spiralModeMaxXySmoothing"])
+        self.assertTrue(profile["spiralModeMaxXySmoothingPercent"])
+        self.assertEqual(0.35, profile["spiralStartingFlowRatio"])
+        self.assertEqual(0.2, profile["spiralFinishingFlowRatio"])
+
 
 if __name__ == "__main__":
     unittest.main()

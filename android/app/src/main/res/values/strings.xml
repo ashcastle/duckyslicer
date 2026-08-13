@@ -204,6 +204,12 @@
     <string name="bed_temperature">Bed temperature</string>
     <string name="first_layer_bed_temperature">First layer bed temperature</string>
     <string name="flow_ratio">Flow ratio</string>
+    <string name="spiral_vase">Spiral vase</string>
+    <string name="spiral_vase_summary">Uses one wall, no infill, no top layers, and no supports.</string>
+    <string name="smooth_spiral">Smooth spiral</string>
+    <string name="max_xy_smoothing">Maximum XY smoothing</string>
+    <string name="spiral_starting_flow">Starting flow</string>
+    <string name="spiral_finishing_flow">Finishing flow</string>
     <string name="max_volumetric_speed">Maximum flow</string>
     <string name="retraction">Retraction</string>
     <string name="retraction_length">Retraction length</string>

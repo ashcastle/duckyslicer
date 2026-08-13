@@ -217,6 +217,12 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         elephantFootCompensationLayers = elephantFootCompensationLayers,
         maxBridgeLength = maxBridgeLength,
         preciseOuterWalls = preciseOuterWalls,
+        spiralMode = spiralMode,
+        spiralModeSmooth = spiralModeSmooth,
+        spiralModeMaxXySmoothing = spiralModeMaxXySmoothing,
+        spiralModeMaxXySmoothingPercent = spiralModeMaxXySmoothingPercent,
+        spiralStartingFlowRatio = spiralStartingFlowRatio,
+        spiralFinishingFlowRatio = spiralFinishingFlowRatio,
     )
     require(ProfileValidation.printer(printer)) { "Invalid project printer settings" }
     require(ProfileValidation.filament(filament)) { "Invalid project filament settings" }
@@ -274,7 +280,7 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 15
+private const val SLICE_OPTIONS_FORMAT_VERSION = 16
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f

@@ -174,6 +174,12 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var elephantFootCompensationLayers: Int = base.elephantFootCompensationLayers
     private var maxBridgeLength: Float = base.maxBridgeLength
     private var preciseOuterWalls: Boolean = base.preciseOuterWalls
+    private var spiralMode: Boolean = base.spiralMode
+    private var spiralModeSmooth: Boolean = base.spiralModeSmooth
+    private var spiralModeMaxXySmoothing: Float = base.spiralModeMaxXySmoothing
+    private var spiralModeMaxXySmoothingPercent: Boolean = base.spiralModeMaxXySmoothingPercent
+    private var spiralStartingFlowRatio: Float = base.spiralStartingFlowRatio
+    private var spiralFinishingFlowRatio: Float = base.spiralFinishingFlowRatio
     private var brand: String? = base.brand
     private var compatiblePrinters: List<String> = base.compatiblePrinters
 
@@ -385,6 +391,12 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         supportInterfaceFilament = input.readInt()
         wipeTowerEnabled = input.readCatalogBoolean()
         wipeTowerWidth = input.readFloat()
+        spiralMode = input.readCatalogBoolean()
+        spiralModeSmooth = input.readCatalogBoolean()
+        spiralModeMaxXySmoothing = input.readFloat()
+        spiralModeMaxXySmoothingPercent = input.readCatalogBoolean()
+        spiralStartingFlowRatio = input.readFloat()
+        spiralFinishingFlowRatio = input.readFloat()
         compatiblePrinters = input.readCatalogStringList()
     }
 
@@ -560,6 +572,12 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         elephantFootCompensationLayers = elephantFootCompensationLayers,
         maxBridgeLength = maxBridgeLength,
         preciseOuterWalls = preciseOuterWalls,
+        spiralMode = spiralMode,
+        spiralModeSmooth = spiralModeSmooth,
+        spiralModeMaxXySmoothing = spiralModeMaxXySmoothing,
+        spiralModeMaxXySmoothingPercent = spiralModeMaxXySmoothingPercent,
+        spiralStartingFlowRatio = spiralStartingFlowRatio,
+        spiralFinishingFlowRatio = spiralFinishingFlowRatio,
         brand = brand,
         compatiblePrinters = compatiblePrinters,
     )
@@ -737,5 +755,11 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("supportInterfaceFilament", BINARY_INT),
     BinaryField("wipeTowerEnabled", BINARY_BOOL),
     BinaryField("wipeTowerWidth", BINARY_FLOAT),
+    BinaryField("spiralMode", BINARY_BOOL),
+    BinaryField("spiralModeSmooth", BINARY_BOOL),
+    BinaryField("spiralModeMaxXySmoothing", BINARY_FLOAT),
+    BinaryField("spiralModeMaxXySmoothingPercent", BINARY_BOOL),
+    BinaryField("spiralStartingFlowRatio", BINARY_FLOAT),
+    BinaryField("spiralFinishingFlowRatio", BINARY_FLOAT),
     BinaryField("compatiblePrinters", BINARY_STRING_LIST),
 )

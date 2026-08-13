@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -440,6 +440,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     )
     seam_gap, seam_gap_percent = float_or_percent(raw.get("seam_gap"), "10%")
     wipe_speed, wipe_speed_percent = float_or_percent(raw.get("wipe_speed"), "80%")
+    spiral_xy_smoothing, spiral_xy_smoothing_percent = float_or_percent(
+        raw.get("spiral_mode_max_xy_smoothing"), "200%"
+    )
     legacy_wall_order = str(scalar(raw.get("wall_infill_order"), ""))
     resolved_wall_order = raw.get("wall_sequence", legacy_wall_order)
     profile = {
@@ -648,6 +651,12 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "supportInterfaceFilament": integer(raw.get("support_interface_filament"), 0),
         "wipeTowerEnabled": boolean(raw.get("enable_prime_tower")),
         "wipeTowerWidth": number(raw.get("prime_tower_width"), 60),
+        "spiralMode": boolean(raw.get("spiral_mode")),
+        "spiralModeSmooth": boolean(raw.get("spiral_mode_smooth")),
+        "spiralModeMaxXySmoothing": spiral_xy_smoothing,
+        "spiralModeMaxXySmoothingPercent": spiral_xy_smoothing_percent,
+        "spiralStartingFlowRatio": number(raw.get("spiral_starting_flow_ratio"), 0),
+        "spiralFinishingFlowRatio": number(raw.get("spiral_finishing_flow_ratio"), 0),
         "compatiblePrinters": compatible,
     }
     if not (
@@ -734,6 +743,11 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0 <= profile["elephantFootCompensation"] <= 2
         and 1 <= profile["elephantFootCompensationLayers"] <= 100
         and 0 <= profile["maxBridgeLength"] <= 1_000_000
+        and 0 <= profile["spiralModeMaxXySmoothing"] <= (
+            1_000 if profile["spiralModeMaxXySmoothingPercent"] else 10
+        )
+        and 0 <= profile["spiralStartingFlowRatio"] <= 1
+        and 0 <= profile["spiralFinishingFlowRatio"] <= 1
         and all(
             0.1 <= profile[key] <= 3
             for key in [

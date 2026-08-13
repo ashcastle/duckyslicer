@@ -195,6 +195,12 @@
     <string name="bed_width">베드 너비</string>
     <string name="bed_depth">베드 깊이</string>
     <string name="max_print_height">최대 출력 높이</string>
+    <string name="spiral_vase">나선형 꽃병 모드</string>
+    <string name="spiral_vase_summary">벽 한 줄만 사용하고 인필, 상단 레이어, 서포트는 사용하지 않습니다.</string>
+    <string name="smooth_spiral">나선 부드럽게</string>
+    <string name="max_xy_smoothing">최대 XY 스무딩</string>
+    <string name="spiral_starting_flow">시작 유량</string>
+    <string name="spiral_finishing_flow">종료 유량</string>
     <string name="build_volume_summary">출력 영역 · %1$d × %2$d × %3$d mm</string>
     <string name="build_volume">출력 영역</string>
     <string name="extruder">익스트루더</string>

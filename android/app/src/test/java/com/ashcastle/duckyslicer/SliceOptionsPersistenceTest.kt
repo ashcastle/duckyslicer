@@ -188,6 +188,12 @@ class SliceOptionsPersistenceTest {
         assertEquals(0.23f, restored.elephantFootCompensation)
         assertEquals(3, restored.elephantFootCompensationLayers)
         assertEquals(26f, restored.maxBridgeLength)
+        assertEquals(true, restored.spiralMode)
+        assertEquals(true, restored.spiralModeSmooth)
+        assertEquals(2.5f, restored.spiralModeMaxXySmoothing)
+        assertEquals(false, restored.spiralModeMaxXySmoothingPercent)
+        assertEquals(0.35f, restored.spiralStartingFlowRatio)
+        assertEquals(0.2f, restored.spiralFinishingFlowRatio)
         assertEquals(2, restored.skirtLoops)
         assertEquals(8f, restored.skirtDistance)
         assertEquals(3, restored.skirtHeight)
@@ -420,6 +426,12 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         elephantFootCompensation = 0.23f,
         elephantFootCompensationLayers = 3,
         maxBridgeLength = 26f,
+        spiralMode = true,
+        spiralModeSmooth = true,
+        spiralModeMaxXySmoothing = 2.5f,
+        spiralModeMaxXySmoothingPercent = false,
+        spiralStartingFlowRatio = 0.35f,
+        spiralFinishingFlowRatio = 0.2f,
         preciseOuterWalls = true,
         gcodeFlavor = "klipper",
         maxSpeedX = 330f,

@@ -381,6 +381,12 @@ data class QualityProfile(
     val elephantFootCompensationLayers: Int = 1,
     val maxBridgeLength: Float = 10f,
     val preciseOuterWalls: Boolean = true,
+    val spiralMode: Boolean = false,
+    val spiralModeSmooth: Boolean = false,
+    val spiralModeMaxXySmoothing: Float = 200f,
+    val spiralModeMaxXySmoothingPercent: Boolean = true,
+    val spiralStartingFlowRatio: Float = 0f,
+    val spiralFinishingFlowRatio: Float = 0f,
     val brand: String? = null,
     val compatiblePrinters: List<String> = emptyList(),
 ) {
@@ -454,7 +460,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 16,
+    val schemaVersion: Int = 17,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -665,6 +671,12 @@ data class SliceOptions(
     val elephantFootCompensationLayers: Int = quality.elephantFootCompensationLayers,
     val maxBridgeLength: Float = quality.maxBridgeLength,
     val preciseOuterWalls: Boolean = quality.preciseOuterWalls,
+    val spiralMode: Boolean = quality.spiralMode,
+    val spiralModeSmooth: Boolean = quality.spiralModeSmooth,
+    val spiralModeMaxXySmoothing: Float = quality.spiralModeMaxXySmoothing,
+    val spiralModeMaxXySmoothingPercent: Boolean = quality.spiralModeMaxXySmoothingPercent,
+    val spiralStartingFlowRatio: Float = quality.spiralStartingFlowRatio,
+    val spiralFinishingFlowRatio: Float = quality.spiralFinishingFlowRatio,
     val gcodeFlavor: String = printerProfile.gcodeFlavor,
     val maxSpeedX: Float = printerProfile.maxSpeedX,
     val maxSpeedY: Float = printerProfile.maxSpeedY,
@@ -953,6 +965,12 @@ data class SliceOptions(
         elephantFootCompensationLayers = profile.elephantFootCompensationLayers,
         maxBridgeLength = profile.maxBridgeLength,
         preciseOuterWalls = profile.preciseOuterWalls,
+        spiralMode = profile.spiralMode,
+        spiralModeSmooth = profile.spiralModeSmooth,
+        spiralModeMaxXySmoothing = profile.spiralModeMaxXySmoothing,
+        spiralModeMaxXySmoothingPercent = profile.spiralModeMaxXySmoothingPercent,
+        spiralStartingFlowRatio = profile.spiralStartingFlowRatio,
+        spiralFinishingFlowRatio = profile.spiralFinishingFlowRatio,
     )
 
     fun toNativeConfig(): SliceConfig {
@@ -1151,6 +1169,12 @@ data class SliceOptions(
             elephantFootCompensationLayers = elephantFootCompensationLayers,
             maxBridgeLength = maxBridgeLength,
             preciseOuterWalls = preciseOuterWalls,
+            spiralMode = spiralMode,
+            spiralModeSmooth = spiralModeSmooth,
+            spiralModeMaxXySmoothing = spiralModeMaxXySmoothing,
+            spiralModeMaxXySmoothingPercent = spiralModeMaxXySmoothingPercent,
+            spiralStartingFlowRatio = spiralStartingFlowRatio,
+            spiralFinishingFlowRatio = spiralFinishingFlowRatio,
             bedSizeX = bedSizeX,
             bedSizeY = bedSizeY,
             bedOriginX = bedOriginX,
@@ -1204,6 +1228,19 @@ data class SliceOptions(
     }
 }
 
+internal fun SliceOptions.withSpiralMode(enabled: Boolean): SliceOptions =
+    if (enabled) {
+        copy(
+            spiralMode = true,
+            perimeters = 1,
+            fillDensity = 0f,
+            topSolidLayers = 0,
+            supportEnabled = false,
+        )
+    } else {
+        copy(spiralMode = false)
+    }
+
 data class FilamentSlotAssignment(
     val options: SliceOptions,
     val slot: Int,
@@ -1243,6 +1280,22 @@ object OnDeviceSlicer {
         onProgress: (Int) -> Unit = {},
     ): SliceOutcome {
         val filamentSlots = options.resolvedFilamentSlots()
+        if (options.spiralMode) {
+            require(objects.size == 1) { "Spiral vase supports one object" }
+            require(
+                options.perimeters == 1 &&
+                    options.fillDensity == 0f &&
+                    options.topSolidLayers == 0 &&
+                    !options.supportEnabled,
+            ) { "Spiral vase requires one wall, no infill, no top layers, and no supports" }
+            val usedFilamentSlots = buildSet {
+                objects.single().volumes.forEach { volume ->
+                    add(volume.filamentSlot)
+                    addAll(volume.multiColorPaint.facets.values)
+                }
+            }
+            require(usedFilamentSlots.size <= 1) { "Spiral vase supports one filament" }
+        }
         require(objects.all { projectObject ->
             projectObject.volumes.all { it.filamentSlot in filamentSlots.indices }
         }) {

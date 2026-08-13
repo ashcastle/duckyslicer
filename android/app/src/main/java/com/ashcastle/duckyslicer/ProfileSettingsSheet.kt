@@ -2128,6 +2128,76 @@ private fun SlicingSettingsSheet(
             }
 
             SlicingSettingsSection.OTHERS -> {
+                SettingsGroupTitle(stringResource(R.string.spiral_vase))
+                SettingsSwitch(
+                    label = stringResource(R.string.spiral_vase),
+                    checked = options.spiralMode,
+                    onCheckedChange = { enabled ->
+                        onOptionsChanged(options.withSpiralMode(enabled))
+                    },
+                )
+                if (options.spiralMode || settingsQuery.isNotBlank()) {
+                    Text(
+                        stringResource(R.string.spiral_vase_summary),
+                        color = Color(0xFFC8C9C2),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    SettingsSwitch(
+                        label = stringResource(R.string.smooth_spiral),
+                        checked = options.spiralModeSmooth,
+                        onCheckedChange = {
+                            onOptionsChanged(options.copy(spiralModeSmooth = it))
+                        },
+                    )
+                    LengthOrPercentSetting(
+                        label = stringResource(R.string.max_xy_smoothing),
+                        value = options.spiralModeMaxXySmoothing,
+                        percent = options.spiralModeMaxXySmoothingPercent,
+                        maximumAbsolute = 10f,
+                        maximumPercent = 1_000f,
+                        onValueChange = {
+                            onOptionsChanged(options.copy(spiralModeMaxXySmoothing = it))
+                        },
+                        onPercentChange = { percent, value ->
+                            onOptionsChanged(
+                                options.copy(
+                                    spiralModeMaxXySmoothing = value,
+                                    spiralModeMaxXySmoothingPercent = percent,
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.spiral_starting_flow),
+                        valueText = stringResource(
+                            R.string.flow_ratio_value,
+                            options.spiralStartingFlowRatio,
+                        ),
+                        value = options.spiralStartingFlowRatio,
+                        range = 0f..1f,
+                        steps = 99,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(spiralStartingFlowRatio = (it * 100f).roundToInt() / 100f),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.spiral_finishing_flow),
+                        valueText = stringResource(
+                            R.string.flow_ratio_value,
+                            options.spiralFinishingFlowRatio,
+                        ),
+                        value = options.spiralFinishingFlowRatio,
+                        range = 0f..1f,
+                        steps = 99,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(spiralFinishingFlowRatio = (it * 100f).roundToInt() / 100f),
+                            )
+                        },
+                    )
+                }
                 SettingsGroupTitle(stringResource(R.string.prime_tower))
                 SettingsSwitch(
                     label = stringResource(R.string.enable_prime_tower),

@@ -193,6 +193,11 @@ internal object ProfileValidation {
             profile.elephantFootCompensation in 0f..2f &&
             profile.elephantFootCompensationLayers in 1..100 &&
             profile.maxBridgeLength in 0f..1_000_000f &&
+            profile.spiralModeMaxXySmoothing in 0f..(
+                if (profile.spiralModeMaxXySmoothingPercent) 1_000f else 10f
+            ) &&
+            profile.spiralStartingFlowRatio in 0f..1f &&
+            profile.spiralFinishingFlowRatio in 0f..1f &&
             profile.skirtLoops in 0..100 &&
             profile.skirtDistance in 0f..1_000f &&
             profile.skirtHeight in 0..10_000 &&

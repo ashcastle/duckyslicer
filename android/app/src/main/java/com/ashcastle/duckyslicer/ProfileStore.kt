@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 17
+internal const val USER_PROFILE_SCHEMA_VERSION = 18
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -308,6 +308,12 @@ class ProfileStore private constructor(
             elephantFootCompensationLayers = options.elephantFootCompensationLayers,
             maxBridgeLength = options.maxBridgeLength,
             preciseOuterWalls = options.preciseOuterWalls,
+            spiralMode = options.spiralMode,
+            spiralModeSmooth = options.spiralModeSmooth,
+            spiralModeMaxXySmoothing = options.spiralModeMaxXySmoothing,
+            spiralModeMaxXySmoothingPercent = options.spiralModeMaxXySmoothingPercent,
+            spiralStartingFlowRatio = options.spiralStartingFlowRatio,
+            spiralFinishingFlowRatio = options.spiralFinishingFlowRatio,
         )
         require(ProfileValidation.slicing(profile)) { "Slicing profile contains unsafe values" }
         append("slicing", profile.toProfileJson())
@@ -592,6 +598,12 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("elephantFootCompensationLayers", elephantFootCompensationLayers)
     .put("maxBridgeLength", maxBridgeLength)
     .put("preciseOuterWalls", preciseOuterWalls)
+    .put("spiralMode", spiralMode)
+    .put("spiralModeSmooth", spiralModeSmooth)
+    .put("spiralModeMaxXySmoothing", spiralModeMaxXySmoothing)
+    .put("spiralModeMaxXySmoothingPercent", spiralModeMaxXySmoothingPercent)
+    .put("spiralStartingFlowRatio", spiralStartingFlowRatio)
+    .put("spiralFinishingFlowRatio", spiralFinishingFlowRatio)
     .put("builtIn", builtIn)
     .put("brand", brand ?: JSONObject.NULL)
     .put("compatiblePrinters", JSONArray(compatiblePrinters))
@@ -826,6 +838,12 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         elephantFootCompensationLayers = optInt("elephantFootCompensationLayers", 1),
         maxBridgeLength = optDouble("maxBridgeLength", 10.0).toFloat(),
         preciseOuterWalls = optBoolean("preciseOuterWalls", true),
+        spiralMode = optBoolean("spiralMode"),
+        spiralModeSmooth = optBoolean("spiralModeSmooth"),
+        spiralModeMaxXySmoothing = optDouble("spiralModeMaxXySmoothing", 200.0).toFloat(),
+        spiralModeMaxXySmoothingPercent = optBoolean("spiralModeMaxXySmoothingPercent", true),
+        spiralStartingFlowRatio = optDouble("spiralStartingFlowRatio", 0.0).toFloat(),
+        spiralFinishingFlowRatio = optDouble("spiralFinishingFlowRatio", 0.0).toFloat(),
         brand = optionalString("brand"),
         compatiblePrinters = stringList("compatiblePrinters"),
     )

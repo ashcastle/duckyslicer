@@ -1174,7 +1174,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(16, catalog.schemaVersion)
+        assertEquals(17, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1234,6 +1234,8 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.filterOutGapFill > 0f })
         assertTrue(catalog.slicing.any { it.minimumSparseInfillArea != 15f })
         assertTrue(catalog.slicing.any { it.maxBridgeLength != 10f })
+        assertTrue("Vase process presets must retain spiral mode", catalog.slicing.any { it.spiralMode })
+        assertTrue("Smooth vase presets must retain smoothing mode", catalog.slicing.any { it.spiralModeSmooth })
         assertTrue(catalog.slicing.any { it.reduceCrossingWall })
         assertTrue(catalog.slicing.any { it.reduceInfillRetraction })
         assertTrue(catalog.slicing.any { it.maxTravelDetourDistancePercent })
@@ -2318,6 +2320,49 @@ class NativeEngineInstrumentedTest {
         assertTrue("Classic must generate outer walls", gcode.contains(";TYPE:Outer wall"))
         assertTrue("Classic must generate inner walls", gcode.contains(";TYPE:Inner wall"))
         assertTrue("Classic G-code must contain extrusion", gcode.lineSequence().any { it.startsWith("G1 ") && it.contains(" E") })
+    }
+
+    @Test
+    fun spiralVaseProducesContinuousZExtrusionOnDevice() {
+        val outcome = OnDeviceSlicer.slice(
+            fixtureModel(),
+            SliceOptions()
+                .selectPrinter(PrinterProfile.U1_04)
+                .selectFilament(FilamentProfile.PLA)
+                .selectQuality(QualityProfile.DRAFT)
+                .withSpiralMode(true)
+                .copy(
+                    bottomSolidLayers = 3,
+                    spiralModeSmooth = true,
+                    spiralModeMaxXySmoothing = 250f,
+                    spiralModeMaxXySmoothingPercent = true,
+                    spiralStartingFlowRatio = 0.35f,
+                    spiralFinishingFlowRatio = 0.2f,
+                ),
+        )
+
+        val gcode = outcome.output.readText()
+        val extrusionZValues = gcode.lineSequence()
+            .filter { it.startsWith("G1 ") && it.contains(" E") && it.contains(" Z") }
+            .mapNotNull { line ->
+                line.split(' ').firstOrNull { it.startsWith("Z") }?.drop(1)?.toFloatOrNull()
+            }
+            .distinct()
+            .take(32)
+            .toList()
+
+        assertTrue("Spiral mode must reach the slicing engine", gcode.contains("; spiral_mode = 1"))
+        assertTrue("Smooth spiral mode must reach the slicing engine", gcode.contains("; spiral_mode_smooth = 1"))
+        assertTrue(
+            "Spiral XY smoothing must preserve percent units",
+            gcode.contains("; spiral_mode_max_xy_smoothing = 250%"),
+        )
+        assertTrue("Spiral starting flow must reach the slicing engine", gcode.contains("; spiral_starting_flow_ratio = 0.35"))
+        assertTrue("Spiral finishing flow must reach the slicing engine", gcode.contains("; spiral_finishing_flow_ratio = 0.2"))
+        assertTrue(
+            "Spiral vase must raise Z continuously during extrusion instead of stacking closed layer loops",
+            extrusionZValues.size >= 16,
+        )
     }
 
     @Test

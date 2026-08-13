@@ -35,6 +35,9 @@ def valid_sources() -> dict[str, str]:
             "@Composable internal fun SettingSlider( modifier = Modifier.semantics "
             "contentDescription = label stateDescription = valueText @Composable"
             " LocalWindowInfo.current.containerSize.height.toDp()"
+            " options.withSpiralMode(enabled) R.string.spiral_vase R.string.smooth_spiral"
+            " R.string.max_xy_smoothing R.string.spiral_starting_flow"
+            " R.string.spiral_finishing_flow"
         ),
         "DeviceSheet.kt": (
             "profiles.forEach .selectable( role = Role.RadioButton "
@@ -64,17 +67,26 @@ def valid_sources() -> dict[str, str]:
             'listOf("QUALITY", "STRENGTH", "SPEED", "SUPPORT", "OTHERS") '
             "Every section must have its own localized title"
         ),
+        "SpiralVaseSettingsTest.kt": (
+            "enablingSpiralModeAppliesRequiredCompanionSettings "
+            "disablingSpiralModePreservesCompanionSettings "
+            ".withSpiralMode(true) .withSpiralMode(false)"
+        ),
         "strings.xml": (
             'name="quality" name="strength" name="speed" name="supports" name="others" '
             'name="recent_profiles" name="profile_list" name="search_settings" name="support_type" '
             'name="revert_changes" name="apply_changes"'
             ' name="expanded_state" name="collapsed_state"'
+            ' name="spiral_vase" name="spiral_vase_summary" name="smooth_spiral"'
+            ' name="max_xy_smoothing" name="spiral_starting_flow" name="spiral_finishing_flow"'
         ),
         "strings-ko.xml": (
             'name="quality" name="strength" name="speed" name="supports" name="others" '
             'name="recent_profiles" name="profile_list" name="search_settings" name="support_type" '
             'name="revert_changes" name="apply_changes"'
             ' name="expanded_state" name="collapsed_state"'
+            ' name="spiral_vase" name="spiral_vase_summary" name="smooth_spiral"'
+            ' name="max_xy_smoothing" name="spiral_starting_flow" name="spiral_finishing_flow"'
         ),
         "CONTRIBUTING.md": "Quality Strength Speed Support Others",
     }
