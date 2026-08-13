@@ -67,6 +67,9 @@ data class PrinterProfile(
     val maxJerkY: Float = 9f,
     val maxJerkZ: Float = 3f,
     val maxJerkE: Float = 2.5f,
+    val extruderClearanceRadius: Float = 40f,
+    val extruderClearanceHeightToRod: Float = 40f,
+    val extruderClearanceHeightToLid: Float = 120f,
     val bedOriginX: Float = 0f,
     val bedOriginY: Float = 0f,
     val bedPolygon: List<Float> = rectangularBedPolygon(bedSizeX, bedSizeY),
@@ -75,19 +78,19 @@ data class PrinterProfile(
     companion object {
         val U1_02 = PrinterProfile(
             "snapmaker-u1-02", "U1 · 0.2 mm", 270f, 270f, 270f, 0.2f, true, "Snapmaker",
-            extruderCount = 4,
+            extruderCount = 4, extruderClearanceRadius = 72.5f, extruderClearanceHeightToRod = 27.5f,
         )
         val U1_04 = PrinterProfile(
             "snapmaker-u1-04", "U1 · 0.4 mm", 270f, 270f, 270f, 0.4f, true, "Snapmaker",
-            extruderCount = 4,
+            extruderCount = 4, extruderClearanceRadius = 72.5f, extruderClearanceHeightToRod = 27.5f,
         )
         val U1_06 = PrinterProfile(
             "snapmaker-u1-06", "U1 · 0.6 mm", 270f, 270f, 270f, 0.6f, true, "Snapmaker",
-            extruderCount = 4,
+            extruderCount = 4, extruderClearanceRadius = 72.5f, extruderClearanceHeightToRod = 27.5f,
         )
         val U1_08 = PrinterProfile(
             "snapmaker-u1-08", "U1 · 0.8 mm", 270f, 270f, 270f, 0.8f, true, "Snapmaker",
-            extruderCount = 4,
+            extruderCount = 4, extruderClearanceRadius = 72.5f, extruderClearanceHeightToRod = 27.5f,
         )
         val CUSTOM_CARTESIAN = PrinterProfile(
             id = "custom-cartesian-04",
@@ -412,6 +415,8 @@ data class QualityProfile(
     val elephantFootCompensationLayers: Int = 1,
     val maxBridgeLength: Float = 10f,
     val preciseOuterWalls: Boolean = true,
+    val printSequence: String = "by layer",
+    val printOrder: String = "default",
     val spiralMode: Boolean = false,
     val spiralModeSmooth: Boolean = false,
     val spiralModeMaxXySmoothing: Float = 200f,
@@ -721,6 +726,8 @@ data class SliceOptions(
     val elephantFootCompensationLayers: Int = quality.elephantFootCompensationLayers,
     val maxBridgeLength: Float = quality.maxBridgeLength,
     val preciseOuterWalls: Boolean = quality.preciseOuterWalls,
+    val printSequence: String = quality.printSequence,
+    val printOrder: String = quality.printOrder,
     val spiralMode: Boolean = quality.spiralMode,
     val spiralModeSmooth: Boolean = quality.spiralModeSmooth,
     val spiralModeMaxXySmoothing: Float = quality.spiralModeMaxXySmoothing,
@@ -743,6 +750,9 @@ data class SliceOptions(
     val maxJerkY: Float = printerProfile.maxJerkY,
     val maxJerkZ: Float = printerProfile.maxJerkZ,
     val maxJerkE: Float = printerProfile.maxJerkE,
+    val extruderClearanceRadius: Float = printerProfile.extruderClearanceRadius,
+    val extruderClearanceHeightToRod: Float = printerProfile.extruderClearanceHeightToRod,
+    val extruderClearanceHeightToLid: Float = printerProfile.extruderClearanceHeightToLid,
 ) {
     fun selectPrinter(profile: PrinterProfile): SliceOptions {
         val nozzleMatches = abs(quality.nozzleDiameter - profile.nozzleDiameter) < 0.05f
@@ -773,6 +783,9 @@ data class SliceOptions(
             maxJerkY = profile.maxJerkY,
             maxJerkZ = profile.maxJerkZ,
             maxJerkE = profile.maxJerkE,
+            extruderClearanceRadius = profile.extruderClearanceRadius,
+            extruderClearanceHeightToRod = profile.extruderClearanceHeightToRod,
+            extruderClearanceHeightToLid = profile.extruderClearanceHeightToLid,
         )
         return if (nozzleMatches) {
             updated
@@ -1034,6 +1047,8 @@ data class SliceOptions(
         elephantFootCompensationLayers = profile.elephantFootCompensationLayers,
         maxBridgeLength = profile.maxBridgeLength,
         preciseOuterWalls = profile.preciseOuterWalls,
+        printSequence = profile.printSequence,
+        printOrder = profile.printOrder,
         spiralMode = profile.spiralMode,
         spiralModeSmooth = profile.spiralModeSmooth,
         spiralModeMaxXySmoothing = profile.spiralModeMaxXySmoothing,
@@ -1309,6 +1324,11 @@ data class SliceOptions(
             filamentNozzleTempInitialLayers = nativeFilaments.map(FilamentProfile::firstLayerNozzleTemp).toIntArray(),
             filamentBedTempInitialLayers = nativeFilaments.map(FilamentProfile::firstLayerBedTemp).toIntArray(),
         ).also { native ->
+            native.printSequence = printSequence
+            native.printOrder = printOrder
+            native.extruderClearanceRadius = extruderClearanceRadius
+            native.extruderClearanceHeightToRod = extruderClearanceHeightToRod
+            native.extruderClearanceHeightToLid = extruderClearanceHeightToLid
             native.treeSupportOrganicBranchAngle = treeSupportOrganicBranchAngle
             native.treeSupportOrganicBranchDistance = treeSupportOrganicBranchDistance
             native.treeSupportOrganicBranchDiameter = treeSupportOrganicBranchDiameter

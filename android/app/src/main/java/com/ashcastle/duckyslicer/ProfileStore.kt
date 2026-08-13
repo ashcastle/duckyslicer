@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 22
+internal const val USER_PROFILE_SCHEMA_VERSION = 23
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -73,6 +73,9 @@ class ProfileStore private constructor(
             maxJerkY = options.maxJerkY,
             maxJerkZ = options.maxJerkZ,
             maxJerkE = options.maxJerkE,
+            extruderClearanceRadius = options.extruderClearanceRadius,
+            extruderClearanceHeightToRod = options.extruderClearanceHeightToRod,
+            extruderClearanceHeightToLid = options.extruderClearanceHeightToLid,
             extruderCount = options.printerProfile.extruderCount,
         )
         require(ProfileValidation.printer(profile)) { "Printer profile contains unsafe values" }
@@ -327,6 +330,8 @@ class ProfileStore private constructor(
             elephantFootCompensationLayers = options.elephantFootCompensationLayers,
             maxBridgeLength = options.maxBridgeLength,
             preciseOuterWalls = options.preciseOuterWalls,
+            printSequence = options.printSequence,
+            printOrder = options.printOrder,
             spiralMode = options.spiralMode,
             spiralModeSmooth = options.spiralModeSmooth,
             spiralModeMaxXySmoothing = options.spiralModeMaxXySmoothing,
@@ -439,6 +444,9 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("maxAccelerationTravel", maxAccelerationTravel)
     .put("maxJerkX", maxJerkX).put("maxJerkY", maxJerkY)
     .put("maxJerkZ", maxJerkZ).put("maxJerkE", maxJerkE)
+    .put("extruderClearanceRadius", extruderClearanceRadius)
+    .put("extruderClearanceHeightToRod", extruderClearanceHeightToRod)
+    .put("extruderClearanceHeightToLid", extruderClearanceHeightToLid)
     .put("extruderCount", extruderCount)
     .put("builtIn", builtIn)
     .put("brand", brand ?: JSONObject.NULL)
@@ -636,6 +644,8 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("elephantFootCompensationLayers", elephantFootCompensationLayers)
     .put("maxBridgeLength", maxBridgeLength)
     .put("preciseOuterWalls", preciseOuterWalls)
+    .put("printSequence", printSequence)
+    .put("printOrder", printOrder)
     .put("spiralMode", spiralMode)
     .put("spiralModeSmooth", spiralModeSmooth)
     .put("spiralModeMaxXySmoothing", spiralModeMaxXySmoothing)
@@ -673,6 +683,9 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         maxJerkY = optDouble("maxJerkY", 9.0).toFloat(),
         maxJerkZ = optDouble("maxJerkZ", 3.0).toFloat(),
         maxJerkE = optDouble("maxJerkE", 2.5).toFloat(),
+        extruderClearanceRadius = optDouble("extruderClearanceRadius", 40.0).toFloat(),
+        extruderClearanceHeightToRod = optDouble("extruderClearanceHeightToRod", 40.0).toFloat(),
+        extruderClearanceHeightToLid = optDouble("extruderClearanceHeightToLid", 120.0).toFloat(),
         bedOriginX = optDouble("bedOriginX", 0.0).toFloat(),
         bedOriginY = optDouble("bedOriginY", 0.0).toFloat(),
         bedPolygon = if (has("bedPolygon")) {
@@ -895,6 +908,8 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         elephantFootCompensationLayers = optInt("elephantFootCompensationLayers", 1),
         maxBridgeLength = optDouble("maxBridgeLength", 10.0).toFloat(),
         preciseOuterWalls = optBoolean("preciseOuterWalls", true),
+        printSequence = optString("printSequence", "by layer"),
+        printOrder = optString("printOrder", "default"),
         spiralMode = optBoolean("spiralMode"),
         spiralModeSmooth = optBoolean("spiralModeSmooth"),
         spiralModeMaxXySmoothing = optDouble("spiralModeMaxXySmoothing", 200.0).toFloat(),

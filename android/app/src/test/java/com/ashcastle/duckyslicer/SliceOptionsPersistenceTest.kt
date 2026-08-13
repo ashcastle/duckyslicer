@@ -54,6 +54,9 @@ class SliceOptionsPersistenceTest {
         assertEquals(options.bedOriginX, restored.bedOriginX)
         assertEquals(options.bedOriginY, restored.bedOriginY)
         assertEquals(options.bedPolygon, restored.bedPolygon)
+        assertEquals(73f, restored.extruderClearanceRadius)
+        assertEquals(29f, restored.extruderClearanceHeightToRod)
+        assertEquals(117f, restored.extruderClearanceHeightToLid)
         assertEquals(options.filamentProfile.compatiblePrinters, restored.filamentProfile.compatiblePrinters)
         assertEquals(options.quality.compatiblePrinters, restored.quality.compatiblePrinters)
         assertEquals(248, restored.nozzleTemp)
@@ -88,6 +91,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(0.17f, restored.ironingSpacing)
         assertEquals(27f, restored.ironingSpeed)
         assertEquals("tree(auto)", restored.supportType)
+        assertEquals("by object", restored.printSequence)
+        assertEquals("as_obj_list", restored.printOrder)
         assertEquals("rectilinear-grid", restored.supportBasePattern)
         assertEquals("rectilinear_interlaced", restored.supportInterfacePattern)
         assertEquals("snug", restored.supportStyle)
@@ -263,6 +268,9 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         bedOriginY = -141f,
         bedPolygon = listOf(139f, 0f, 278f, 141f, 139f, 282f, 0f, 141f),
         maxPrintHeight = 290f,
+        extruderClearanceRadius = 73f,
+        extruderClearanceHeightToRod = 29f,
+        extruderClearanceHeightToLid = 117f,
         nozzleTemp = 248,
         firstLayerNozzleTemp = 252,
         bedTemp = 74,
@@ -465,6 +473,8 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         elephantFootCompensation = 0.23f,
         elephantFootCompensationLayers = 3,
         maxBridgeLength = 26f,
+        printSequence = "by object",
+        printOrder = "as_obj_list",
         spiralMode = true,
         spiralModeSmooth = true,
         spiralModeMaxXySmoothing = 2.5f,

@@ -197,6 +197,16 @@
     <string name="max_print_height">최대 출력 높이</string>
     <string name="spiral_vase">나선형 꽃병 모드</string>
     <string name="spiral_vase_summary">벽 한 줄만 사용하고 인필, 상단 레이어, 서포트는 사용하지 않습니다.</string>
+    <string name="print_sequence">출력 순서</string>
+    <string name="intra_layer_order">레이어 내부 순서</string>
+    <string name="print_by_layer">레이어별</string>
+    <string name="print_by_object">오브젝트별</string>
+    <string name="order_default">기본</string>
+    <string name="order_as_object_list">오브젝트 목록 순서</string>
+    <string name="sequential_printing_clearance">순차 출력 여유 공간</string>
+    <string name="extruder_clearance_radius">압출기 여유 반경</string>
+    <string name="extruder_clearance_height_to_rod">로드까지 높이</string>
+    <string name="extruder_clearance_height_to_lid">덮개까지 높이</string>
     <string name="smooth_spiral">나선 부드럽게</string>
     <string name="max_xy_smoothing">최대 XY 스무딩</string>
     <string name="spiral_starting_flow">시작 유량</string>

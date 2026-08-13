@@ -174,6 +174,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var elephantFootCompensationLayers: Int = base.elephantFootCompensationLayers
     private var maxBridgeLength: Float = base.maxBridgeLength
     private var preciseOuterWalls: Boolean = base.preciseOuterWalls
+    private var printSequence: String = base.printSequence
+    private var printOrder: String = base.printOrder
     private var spiralMode: Boolean = base.spiralMode
     private var spiralModeSmooth: Boolean = base.spiralModeSmooth
     private var spiralModeMaxXySmoothing: Float = base.spiralModeMaxXySmoothing
@@ -406,6 +408,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         elephantFootCompensationLayers = input.readInt()
         maxBridgeLength = input.readFloat()
         preciseOuterWalls = input.readCatalogBoolean()
+        printSequence = input.readCatalogString()
+        printOrder = input.readCatalogString()
         supportFilament = input.readInt()
         supportInterfaceFilament = input.readInt()
         wipeTowerEnabled = input.readCatalogBoolean()
@@ -610,6 +614,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         elephantFootCompensationLayers = elephantFootCompensationLayers,
         maxBridgeLength = maxBridgeLength,
         preciseOuterWalls = preciseOuterWalls,
+        printSequence = printSequence,
+        printOrder = printOrder,
         spiralMode = spiralMode,
         spiralModeSmooth = spiralModeSmooth,
         spiralModeMaxXySmoothing = spiralModeMaxXySmoothing,
@@ -808,6 +814,8 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("elephantFootCompensationLayers", BINARY_INT),
     BinaryField("maxBridgeLength", BINARY_FLOAT),
     BinaryField("preciseOuterWalls", BINARY_BOOL),
+    BinaryField("printSequence", BINARY_STRING),
+    BinaryField("printOrder", BINARY_STRING),
     BinaryField("supportFilament", BINARY_INT),
     BinaryField("supportInterfaceFilament", BINARY_INT),
     BinaryField("wipeTowerEnabled", BINARY_BOOL),

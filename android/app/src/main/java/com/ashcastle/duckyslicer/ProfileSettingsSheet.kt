@@ -436,6 +436,40 @@ private fun PrinterSettingsSheet(
         },
         onSelected = { onOptionsChanged(options.copy(gcodeFlavor = it)) },
     )
+    SettingsGroupTitle(stringResource(R.string.sequential_printing_clearance))
+    SettingSlider(
+        label = stringResource(R.string.extruder_clearance_radius),
+        valueText = stringResource(R.string.millimeters_value_precise, options.extruderClearanceRadius),
+        value = options.extruderClearanceRadius,
+        range = 0.5f..max(200f, options.extruderClearanceRadius),
+        steps = (((max(200f, options.extruderClearanceRadius) - 0.5f) * 2f).roundToInt() - 1)
+            .coerceAtLeast(0),
+        onValueChange = {
+            onOptionsChanged(options.copy(extruderClearanceRadius = (it * 2f).roundToInt() / 2f))
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.extruder_clearance_height_to_rod),
+        valueText = stringResource(R.string.millimeters_value_precise, options.extruderClearanceHeightToRod),
+        value = options.extruderClearanceHeightToRod,
+        range = 0.5f..max(500f, options.extruderClearanceHeightToRod),
+        steps = (((max(500f, options.extruderClearanceHeightToRod) - 0.5f) * 2f).roundToInt() - 1)
+            .coerceAtLeast(0),
+        onValueChange = {
+            onOptionsChanged(options.copy(extruderClearanceHeightToRod = (it * 2f).roundToInt() / 2f))
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.extruder_clearance_height_to_lid),
+        valueText = stringResource(R.string.millimeters_value_precise, options.extruderClearanceHeightToLid),
+        value = options.extruderClearanceHeightToLid,
+        range = 0.5f..max(500f, options.extruderClearanceHeightToLid),
+        steps = (((max(500f, options.extruderClearanceHeightToLid) - 0.5f) * 2f).roundToInt() - 1)
+            .coerceAtLeast(0),
+        onValueChange = {
+            onOptionsChanged(options.copy(extruderClearanceHeightToLid = (it * 2f).roundToInt() / 2f))
+        },
+    )
     SettingsGroupTitle(stringResource(R.string.motion_limits))
     SettingSlider(
         label = stringResource(R.string.maximum_x_speed),
@@ -2389,6 +2423,35 @@ private fun SlicingSettingsSheet(
             }
 
             SlicingSettingsSection.OTHERS -> {
+                SettingsGroupTitle(stringResource(R.string.print_sequence))
+                SettingChoices(
+                    settingLabel = stringResource(R.string.print_sequence),
+                    entries = listOf("by layer", "by object"),
+                    selected = options.printSequence,
+                    optionLabel = {
+                        stringResource(
+                            if (it == "by object") R.string.print_by_object else R.string.print_by_layer,
+                        )
+                    },
+                    onSelected = { onOptionsChanged(options.copy(printSequence = it)) },
+                )
+                if (options.printSequence == "by layer" || settingsQuery.isNotBlank()) {
+                    SettingChoices(
+                        settingLabel = stringResource(R.string.intra_layer_order),
+                        entries = listOf("default", "as_obj_list"),
+                        selected = options.printOrder,
+                        optionLabel = {
+                            stringResource(
+                                if (it == "as_obj_list") {
+                                    R.string.order_as_object_list
+                                } else {
+                                    R.string.order_default
+                                },
+                            )
+                        },
+                        onSelected = { onOptionsChanged(options.copy(printOrder = it)) },
+                    )
+                }
                 SettingsGroupTitle(stringResource(R.string.spiral_vase))
                 SettingsSwitch(
                     label = stringResource(R.string.spiral_vase),

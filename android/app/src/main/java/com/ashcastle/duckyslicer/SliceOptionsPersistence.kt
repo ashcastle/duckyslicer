@@ -28,6 +28,9 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         maxJerkY = maxJerkY,
         maxJerkZ = maxJerkZ,
         maxJerkE = maxJerkE,
+        extruderClearanceRadius = extruderClearanceRadius,
+        extruderClearanceHeightToRod = extruderClearanceHeightToRod,
+        extruderClearanceHeightToLid = extruderClearanceHeightToLid,
     )
     val filament = filamentProfile.copy(
         nozzleTemp = nozzleTemp,
@@ -236,6 +239,8 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         elephantFootCompensationLayers = elephantFootCompensationLayers,
         maxBridgeLength = maxBridgeLength,
         preciseOuterWalls = preciseOuterWalls,
+        printSequence = printSequence,
+        printOrder = printOrder,
         spiralMode = spiralMode,
         spiralModeSmooth = spiralModeSmooth,
         spiralModeMaxXySmoothing = spiralModeMaxXySmoothing,
@@ -299,7 +304,7 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 20
+private const val SLICE_OPTIONS_FORMAT_VERSION = 21
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f

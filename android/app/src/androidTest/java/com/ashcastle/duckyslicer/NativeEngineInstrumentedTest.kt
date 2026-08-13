@@ -1187,7 +1187,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(21, catalog.schemaVersion)
+        assertEquals(22, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1214,6 +1214,10 @@ class NativeEngineInstrumentedTest {
         val delta = catalog.printers.single { it.name == "FLSun V400 0.4 nozzle" }
         assertEquals(-150f, delta.bedOriginX, 0.01f)
         assertEquals(-150f, delta.bedOriginY, 0.01f)
+        assertTrue(
+            "The catalog must retain printer-specific sequential-print clearance",
+            catalog.printers.any { it.extruderClearanceRadius != 40f },
+        )
         assertTrue(catalog.filaments.all(ProfileValidation::filament))
         assertTrue(
             "Prime-tower process values must survive catalog normalization",
@@ -2604,6 +2608,60 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun printSequenceChangesRealMultiObjectToolpathOrdering() {
+        val model = inspectModel(fixtureModel().absolutePath)
+        val objects = listOf(
+            ProjectObject("first", model, ModelTransform(offsetXmm = -60f)),
+            ProjectObject("second", model, ModelTransform(offsetXmm = 60f)),
+        )
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.U1_04)
+            .selectFilament(FilamentProfile.PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(brimWidth = 0f, skirtLoops = 0)
+        val layered = OnDeviceSlicer.slice(
+            objects,
+            base.copy(printSequence = "by layer", printOrder = "as_obj_list"),
+        ).output.readText()
+        val sequential = OnDeviceSlicer.slice(
+            objects,
+            base.copy(printSequence = "by object", printOrder = "default"),
+        ).output.readText()
+        val layeredStarts = layered.lineSequence().filter { it.startsWith("; printing object ") }.toList()
+        val sequentialStarts = sequential.lineSequence().filter { it.startsWith("; printing object ") }.toList()
+        fun objectTransitions(markers: List<String>): Int = markers
+            .mapNotNull { marker -> Regex(" id:(\\d+) ").find(marker)?.groupValues?.get(1) }
+            .zipWithNext()
+            .count { (left, right) -> left != right }
+
+        assertTrue(layered.contains("; print_sequence = by layer"))
+        assertTrue(layered.contains("; print_order = as_obj_list"))
+        assertTrue("Object-list order must begin with the first project object", layeredStarts.first().contains(" id:0 "))
+        assertTrue(sequential.contains("; print_sequence = by object"))
+        assertTrue(sequential.contains("; print_order = default"))
+        assertTrue(
+            "By-object output must finish an object instead of alternating objects every layer",
+            objectTransitions(sequentialStarts) < objectTransitions(layeredStarts),
+        )
+        assertTrue("Both sequential objects must reach G-code", sequentialStarts.any { it.contains(" id:0 ") })
+        assertTrue("Both sequential objects must reach G-code", sequentialStarts.any { it.contains(" id:1 ") })
+
+        val unsafeSequential = runCatching {
+            OnDeviceSlicer.slice(
+                listOf(
+                    ProjectObject("overlap-first", model, ModelTransform(offsetXmm = -5f)),
+                    ProjectObject("overlap-second", model, ModelTransform(offsetXmm = 5f)),
+                ),
+                base.copy(printSequence = "by object"),
+            )
+        }
+        assertTrue(
+            "By-object mode must retain Orca's print-head clearance rejection",
+            unsafeSequential.isFailure,
+        )
+    }
+
+    @Test
     fun customPrinterGeometryAndMotionReachOrca() {
         val model = fixtureModel()
         val customPrinter = PrinterProfile.CUSTOM_CARTESIAN.copy(
@@ -2620,6 +2678,9 @@ class NativeEngineInstrumentedTest {
             maxAccelerationY = 4_300f,
             maxAccelerationExtruding = 3_100f,
             maxAccelerationTravel = 4_000f,
+            extruderClearanceRadius = 71f,
+            extruderClearanceHeightToRod = 29f,
+            extruderClearanceHeightToLid = 119f,
         )
         val options = SliceOptions()
             .selectPrinter(customPrinter)
@@ -2638,6 +2699,9 @@ class NativeEngineInstrumentedTest {
         assertTrue("Custom Y speed must reach Orca", gcode.contains("; machine_max_speed_y = 250,250"))
         assertTrue("Custom X acceleration must reach Orca", gcode.contains("; machine_max_acceleration_x = 4200,4200"))
         assertTrue("Custom Y acceleration must reach Orca", gcode.contains("; machine_max_acceleration_y = 4300,4300"))
+        assertTrue("Print-head radius must reach Orca", gcode.contains("; extruder_clearance_radius = 71"))
+        assertTrue("Print-head rod clearance must reach Orca", gcode.contains("; extruder_clearance_height_to_rod = 29"))
+        assertTrue("Print-head lid clearance must reach Orca", gcode.contains("; extruder_clearance_height_to_lid = 119"))
         assertTrue("Custom G-code flavor must reach Orca", gcode.contains("; gcode_flavor = marlin2"))
         val bounds = outerWallBounds(outcome.output)
         assertTrue("Centered-machine G-code must retain negative X coordinates", bounds.minX < -1f)

@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -203,6 +203,9 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "maxJerkY": motion("machine_max_jerk_y", 8),
         "maxJerkZ": motion("machine_max_jerk_z", 0.4),
         "maxJerkE": motion("machine_max_jerk_e", 5),
+        "extruderClearanceRadius": number(raw.get("extruder_clearance_radius"), 40),
+        "extruderClearanceHeightToRod": number(raw.get("extruder_clearance_height_to_rod"), 40),
+        "extruderClearanceHeightToLid": number(raw.get("extruder_clearance_height_to_lid"), 120),
     }
     if not (
         all(0.1 <= profile[key] <= 2_000 for key in ["maxSpeedX", "maxSpeedY", "maxSpeedZ", "maxSpeedE"])
@@ -218,6 +221,9 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
                 "maxAccelerationTravel",
             ]
         )
+        and 0.1 <= profile["extruderClearanceRadius"] <= 1_000
+        and 0.1 <= profile["extruderClearanceHeightToRod"] <= 1_500
+        and 0.1 <= profile["extruderClearanceHeightToLid"] <= 1_500
     ):
         raise ValueError("unsafe motion limits")
     return profile
@@ -660,6 +666,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "elephantFootCompensationLayers": integer(raw.get("elefant_foot_compensation_layers"), 1),
         "maxBridgeLength": number(raw.get("max_bridge_length"), 10),
         "preciseOuterWalls": boolean(raw.get("precise_outer_wall"), True),
+        "printSequence": enum_value(raw.get("print_sequence"), {"by layer", "by object"}, "by layer"),
+        "printOrder": enum_value(raw.get("print_order"), {"default", "as_obj_list"}, "default"),
         "supportFilament": integer(raw.get("support_filament"), 0),
         "supportInterfaceFilament": integer(raw.get("support_interface_filament"), 0),
         "wipeTowerEnabled": boolean(raw.get("enable_prime_tower")),
@@ -775,6 +783,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0 <= profile["elephantFootCompensation"] <= 2
         and 1 <= profile["elephantFootCompensationLayers"] <= 100
         and 0 <= profile["maxBridgeLength"] <= 1_000_000
+        and profile["printSequence"] in {"by layer", "by object"}
+        and profile["printOrder"] in {"default", "as_obj_list"}
         and 0 <= profile["spiralModeMaxXySmoothing"] <= (
             1_000 if profile["spiralModeMaxXySmoothingPercent"] else 10
         )

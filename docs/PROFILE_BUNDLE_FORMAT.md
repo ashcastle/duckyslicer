@@ -12,7 +12,7 @@ The top-level object contains exactly four fields:
 {
   "type": "com.ashcastle.duckyslicer.user-profiles",
   "bundleVersion": 1,
-  "profileSchemaVersion": 22,
+  "profileSchemaVersion": 23,
   "profiles": {
     "printers": [],
     "filaments": [],
@@ -30,8 +30,8 @@ Quality, Strength, Speed, Support, and Others process settings exposed by the ap
 The serializers and validators in `ProfileStore.kt` are the authoritative field
 definitions.
 
-Exports currently write profile schema 22. Bundle version 1 accepts supported profile
-schemas 1 through 22 and applies the same safe defaults used for an older private
+Exports currently write profile schema 23. Bundle version 1 accepts supported profile
+schemas 1 through 23 and applies the same safe defaults used for an older private
 profile store. A future bundle envelope or profile schema is rejected until an
 explicit migration is implemented.
 

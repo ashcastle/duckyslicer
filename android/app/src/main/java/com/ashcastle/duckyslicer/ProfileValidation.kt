@@ -27,6 +27,9 @@ internal object ProfileValidation {
             ).all { it in 0.1f..100_000f } &&
             listOf(profile.maxJerkX, profile.maxJerkY, profile.maxJerkZ, profile.maxJerkE)
                 .all { it in 0f..100_000f } &&
+            profile.extruderClearanceRadius in 0.1f..1_000f &&
+            profile.extruderClearanceHeightToRod in 0.1f..1_500f &&
+            profile.extruderClearanceHeightToLid in 0.1f..1_500f &&
             profile.machineStartGcode.length <= MAX_GCODE_TEMPLATE_LENGTH &&
             profile.machineEndGcode.length <= MAX_GCODE_TEMPLATE_LENGTH
 
@@ -210,6 +213,8 @@ internal object ProfileValidation {
             profile.elephantFootCompensation in 0f..2f &&
             profile.elephantFootCompensationLayers in 1..100 &&
             profile.maxBridgeLength in 0f..1_000_000f &&
+            profile.printSequence in setOf("by layer", "by object") &&
+            profile.printOrder in setOf("default", "as_obj_list") &&
             profile.spiralModeMaxXySmoothing in 0f..(
                 if (profile.spiralModeMaxXySmoothingPercent) 1_000f else 10f
             ) &&

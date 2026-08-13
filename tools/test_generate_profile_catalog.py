@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import unittest
 
-from tools.generate_profile_catalog import build_process, printable_geometry, support_type
+from tools.generate_profile_catalog import build_printer, build_process, printable_geometry, support_type
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
@@ -82,6 +82,41 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(profile["spiralModeMaxXySmoothingPercent"])
         self.assertEqual(0.35, profile["spiralStartingFlowRatio"])
         self.assertEqual(0.2, profile["spiralFinishingFlowRatio"])
+
+    def test_preserves_multi_object_print_sequence(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Sequential objects",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "print_sequence": "by object",
+                "print_order": "as_obj_list",
+            },
+            {},
+        )
+
+        self.assertEqual("by object", profile["printSequence"])
+        self.assertEqual("as_obj_list", profile["printOrder"])
+
+    def test_preserves_sequential_print_head_clearance(self) -> None:
+        profile = build_printer(
+            "Example",
+            {
+                "name": "Safe sequential printer",
+                "printable_area": ["0x0", "200x0", "200x200", "0x200"],
+                "printable_height": "220",
+                "nozzle_diameter": "0.4",
+                "gcode_flavor": "marlin",
+                "extruder_clearance_radius": "71.5",
+                "extruder_clearance_height_to_rod": "28.5",
+                "extruder_clearance_height_to_lid": "118",
+            },
+        )
+
+        self.assertEqual(71.5, profile["extruderClearanceRadius"])
+        self.assertEqual(28.5, profile["extruderClearanceHeightToRod"])
+        self.assertEqual(118.0, profile["extruderClearanceHeightToLid"])
 
     def test_preserves_advanced_support_generation_values(self) -> None:
         profile = build_process(
