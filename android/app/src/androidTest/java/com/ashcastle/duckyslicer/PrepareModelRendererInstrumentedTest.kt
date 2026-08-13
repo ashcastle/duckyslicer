@@ -6,6 +6,9 @@ import android.opengl.GLES30
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -303,6 +306,24 @@ class PrepareModelRendererInstrumentedTest {
             val renderer = PrepareModelRenderer()
             renderer.onSurfaceCreated(null, null)
             renderer.onSurfaceChanged(null, 720, 1280)
+            val preparationPriority = AtomicInteger(Int.MIN_VALUE)
+            val preparation = Thread {
+                runBlocking {
+                    withModelPreparationContext {
+                        preparationPriority.set(
+                            android.os.Process.getThreadPriority(android.os.Process.myTid()),
+                        )
+                        buildPreparePickingIndices(listOf(projectObject)) { ensureActive() }
+                        detectLayOnFaceCandidates(
+                            triangles,
+                            checkCancellation = { ensureActive() },
+                        )
+                    }
+                }
+            }.apply {
+                name = "DuckyPrepareBenchmark"
+                start()
+            }
             val durations = ArrayList<Long>()
             repeat(12) { frame ->
                 renderer.submit(
@@ -316,6 +337,12 @@ class PrepareModelRendererInstrumentedTest {
                 GLES30.glFinish()
                 durations += SystemClock.elapsedRealtimeNanos() - started
             }
+            preparation.join(5_000)
+            assertFalse("Background model preparation must complete", preparation.isAlive)
+            assertTrue(
+                "Optional model preparation must run below display priority",
+                preparationPriority.get() >= android.os.Process.THREAD_PRIORITY_BACKGROUND,
+            )
             assertTrue(GLES30.glGetError() == GLES30.GL_NO_ERROR)
             assertTrue("Camera changes must not re-upload topology", renderer.geometryUploadCountForTest() == 1)
             val sorted = durations.drop(2).sorted()

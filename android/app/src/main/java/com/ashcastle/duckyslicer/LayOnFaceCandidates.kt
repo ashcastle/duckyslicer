@@ -23,6 +23,7 @@ private data class CandidateFace(
 internal fun detectLayOnFaceCandidates(
     previewTriangles: FloatArray,
     maximumCandidates: Int = 24,
+    checkCancellation: () -> Unit = {},
 ): List<LayOnFaceCandidate> {
     require(previewTriangles.size % 9 == 0 && maximumCandidates > 0)
     val triangleCount = previewTriangles.size / 9
@@ -55,6 +56,7 @@ internal fun detectLayOnFaceCandidates(
     }
 
     repeat(triangleCount) { triangleIndex ->
+        if (triangleIndex % LAY_ON_FACE_CANCELLATION_INTERVAL == 0) checkCancellation()
         val offset = triangleIndex * 9
         val face = candidateFace(previewTriangles, offset)
         faces[triangleIndex] = face
@@ -76,6 +78,7 @@ internal fun detectLayOnFaceCandidates(
     val visited = BooleanArray(triangleCount)
     val candidates = ArrayList<LayOnFaceCandidate>()
     repeat(triangleCount) { seedIndex ->
+        if (seedIndex % LAY_ON_FACE_CANCELLATION_INTERVAL == 0) checkCancellation()
         if (visited[seedIndex]) return@repeat
         val seed = faces[seedIndex] ?: run {
             visited[seedIndex] = true
@@ -85,6 +88,7 @@ internal fun detectLayOnFaceCandidates(
         val grouped = ArrayList<Int>()
         queue += seedIndex
         while (queue.isNotEmpty()) {
+            if (grouped.size % LAY_ON_FACE_CANCELLATION_INTERVAL == 0) checkCancellation()
             val triangleIndex = queue.removeFirst()
             if (visited[triangleIndex]) continue
             val face = faces[triangleIndex] ?: continue
@@ -178,3 +182,4 @@ private const val MINIMUM_CANDIDATE_AREA_MM2 = 5f
 private const val MINIMUM_CANDIDATE_SIDE_MM = 1f
 private const val NORMAL_COMPONENT_TOLERANCE = 0.001f
 private const val MAXIMUM_FACE_NEIGHBORS = 3
+private const val LAY_ON_FACE_CANCELLATION_INTERVAL = 256

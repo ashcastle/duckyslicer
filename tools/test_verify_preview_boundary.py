@@ -128,7 +128,13 @@ def valid_sources() -> dict[str, str]:
             "PREPARE_PICKING_TRIANGLES_PER_LEAF = 48 intersectsProjectedBounds( "
             ".candidateTriangles( return result.copyOf(output) "
             "candidateCount = candidates?.size ?: triangleCount "
-            "candidates?.get(candidatePosition) ?: candidatePosition"
+            "candidates?.get(candidatePosition) ?: candidatePosition "
+            "PREPARE_PICKING_CANCELLATION_INTERVAL = 256 checkCancellation()"
+        ),
+        "ModelPreparationScheduler.kt": (
+            "Dispatchers.Default.limitedParallelism(1) "
+            "Process.THREAD_PRIORITY_BACKGROUND withModelPreparationContext( "
+            "Process.setThreadPriority(threadId, previousPriority)"
         ),
         "ModelTransform.kt": (
             "internal fun ModelTransform.minimumRotatedZ(projectObject: ProjectObject) "
@@ -159,7 +165,11 @@ def valid_sources() -> dict[str, str]:
             "onUnavailable = { depthPreviewRuntimeAvailable = false }"
             " placements = modelPlacements currentModelPlacements[activeObject.id] "
             "val placement = checkNotNull(modelPlacements[projectObject.id])"
-            " modelPickingIndices = withContext(Dispatchers.Default)"
+            " LaunchedEffect(modelTopology, interactionActive, layOnFaceObjectId)"
+            " interactionActive || layOnFaceObjectId != null"
+            " delay(PREPARE_PICKING_PREWARM_DELAY_MS)"
+            " modelPickingIndices = withModelPreparationContext"
+            " checkCancellation = { ensureActive() }"
             " pickingIndices = currentModelPickingIndices"
             " pickingIndices = currentModelPickingIndices"
             " pickingIndices = currentModelPickingIndices"
@@ -519,6 +529,14 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "pickingIndices = currentModelPickingIndices", "pickingIndices = emptyMap()", 1
         )
         with self.assertRaisesRegex(VerificationError, "touch paths"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_prepare_work_that_competes_at_display_priority(self) -> None:
+        sources = valid_sources()
+        sources["ModelPreparationScheduler.kt"] = sources[
+            "ModelPreparationScheduler.kt"
+        ].replace("Process.THREAD_PRIORITY_BACKGROUND", "Process.THREAD_PRIORITY_DEFAULT")
+        with self.assertRaisesRegex(VerificationError, "contention-safe"):
             verify_preview_boundary(sources)
 
     def test_rejects_prepare_index_that_has_no_exact_fallback(self) -> None:

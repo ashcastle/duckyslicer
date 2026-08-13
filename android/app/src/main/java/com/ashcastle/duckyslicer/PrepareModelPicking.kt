@@ -79,13 +79,16 @@ internal class PrepareVolumePickingIndex private constructor(
     }
 
     companion object {
-        fun build(vertices: FloatArray): PrepareVolumePickingIndex {
+        fun build(
+            vertices: FloatArray,
+            checkCancellation: () -> Unit = {},
+        ): PrepareVolumePickingIndex {
             require(vertices.size % 9 == 0) { "Prepare picking vertices are malformed" }
             val triangleCount = vertices.size / 9
             if (triangleCount == 0) {
                 return PrepareVolumePickingIndex(IntArray(0), FloatArray(0), IntArray(0), 0)
             }
-            return PreparePickingIndexBuilder(vertices, triangleCount).build()
+            return PreparePickingIndexBuilder(vertices, triangleCount, checkCancellation).build()
         }
 
         internal fun fromBuilt(
@@ -105,6 +108,7 @@ internal class PrepareVolumePickingIndex private constructor(
 private class PreparePickingIndexBuilder(
     private val vertices: FloatArray,
     triangleCount: Int,
+    private val checkCancellation: () -> Unit,
 ) {
     private val triangleOrder = IntArray(triangleCount) { it }
     private val triangleBounds = FloatArray(triangleCount * PREPARE_PICKING_BOUNDS_FLOATS)
@@ -114,6 +118,7 @@ private class PreparePickingIndexBuilder(
 
     init {
         repeat(triangleCount) { triangle ->
+            if (triangle % PREPARE_PICKING_CANCELLATION_INTERVAL == 0) checkCancellation()
             val source = triangle * 9
             val target = triangle * PREPARE_PICKING_BOUNDS_FLOATS
             val ax = vertices[source]
@@ -139,6 +144,7 @@ private class PreparePickingIndexBuilder(
     }
 
     fun build(): PrepareVolumePickingIndex {
+        checkCancellation()
         buildNode(0, triangleOrder.size)
         val bounds = FloatArray(nodes.size * PREPARE_PICKING_BOUNDS_FLOATS)
         val nodeData = IntArray(nodes.size * PREPARE_PICKING_NODE_INTS)
@@ -155,6 +161,7 @@ private class PreparePickingIndexBuilder(
     }
 
     private fun buildNode(start: Int, end: Int): Int {
+        checkCancellation()
         val nodeIndex = nodes.size
         nodes += null
         val nodeBounds = triangleBounds(start, end)
@@ -262,15 +269,17 @@ private data class PreparePickingBuildNode(
 
 internal fun buildPreparePickingIndices(
     projectObjects: List<ProjectObject>,
+    checkCancellation: () -> Unit = {},
 ): Map<PreparePickingIndexKey, PrepareVolumePickingIndex> = buildMap {
     projectObjects.forEach { projectObject ->
         projectObject.volumes.forEach { volume ->
-            // Warm the exact deduplicated support set on the same background pass. A later
-            // rotation or Place-on-face action can then resolve bed contact without UI work.
-            volume.model.placementVertices
+            checkCancellation()
             put(
                 PreparePickingIndexKey(projectObject.id, volume.id),
-                PrepareVolumePickingIndex.build(volume.model.previewTriangles),
+                PrepareVolumePickingIndex.build(
+                    volume.model.previewTriangles,
+                    checkCancellation,
+                ),
             )
         }
     }
@@ -608,6 +617,7 @@ internal class PreparePickingTransform(
 }
 
 private const val PREPARE_PICKING_TRIANGLES_PER_LEAF = 48
+private const val PREPARE_PICKING_CANCELLATION_INTERVAL = 256
 private const val PREPARE_PICKING_BOUNDS_FLOATS = 6
 private const val PREPARE_PICKING_NODE_INTS = 4
 private const val PREPARE_PICKING_INITIAL_CANDIDATES = 256

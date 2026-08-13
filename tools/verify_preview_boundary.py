@@ -24,6 +24,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "ModelTransform.kt",
         "PrepareModelPreviewView.kt",
         "PrepareModelPicking.kt",
+        "ModelPreparationScheduler.kt",
         "PreviewPerformanceHarnessActivity.kt",
         "WorkspaceScreen.kt",
         "MainActivity.kt",
@@ -283,9 +284,21 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "return result.copyOf(output)",
         "candidateCount = candidates?.size ?: triangleCount",
         "candidates?.get(candidatePosition) ?: candidatePosition",
+        "PREPARE_PICKING_CANCELLATION_INTERVAL = 256",
+        "checkCancellation()",
     ):
         if marker not in prepare_picking:
             raise VerificationError(f"exact Prepare picking acceleration is missing: {marker}")
+
+    model_preparation = sources["ModelPreparationScheduler.kt"]
+    for marker in (
+        "Dispatchers.Default.limitedParallelism(1)",
+        "Process.THREAD_PRIORITY_BACKGROUND",
+        "withModelPreparationContext(",
+        "Process.setThreadPriority(threadId, previousPriority)",
+    ):
+        if marker not in model_preparation:
+            raise VerificationError(f"contention-safe model preparation is missing: {marker}")
 
     transform = sources["ModelTransform.kt"]
     for marker in (
@@ -414,7 +427,11 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "placements = modelPlacements",
         "currentModelPlacements[activeObject.id]",
         "val placement = checkNotNull(modelPlacements[projectObject.id])",
-        "modelPickingIndices = withContext(Dispatchers.Default)",
+        "LaunchedEffect(modelTopology, interactionActive, layOnFaceObjectId)",
+        "interactionActive || layOnFaceObjectId != null",
+        "delay(PREPARE_PICKING_PREWARM_DELAY_MS)",
+        "modelPickingIndices = withModelPreparationContext",
+        "checkCancellation = { ensureActive() }",
     ):
         if marker not in workspace:
             raise VerificationError(f"preview device policy is not connected to the UI: {marker}")
@@ -777,6 +794,9 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "PrepareModelPicking.kt": (main / "PrepareModelPicking.kt").read_text(
+            encoding="utf-8"
+        ),
+        "ModelPreparationScheduler.kt": (main / "ModelPreparationScheduler.kt").read_text(
             encoding="utf-8"
         ),
         "ModelTransform.kt": (main / "ModelTransform.kt").read_text(encoding="utf-8"),

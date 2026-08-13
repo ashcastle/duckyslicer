@@ -141,6 +141,7 @@ import kotlin.math.sin
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 private val WorkspaceYellow = Color(0xFFF6C945)
@@ -164,6 +165,7 @@ private const val ModelFaceDepthBands = 32
 private const val ModelFaceShadeBands = 8
 // Keep broad curves smooth in the mobile preview while retaining structural creases.
 private const val ModelSharpEdgeCosine = 0.422618f
+private const val PREPARE_PICKING_PREWARM_DELAY_MS = 180L
 
 internal fun useWorkspaceNavigationRail(widthDp: Float, heightDp: Float): Boolean =
     minOf(widthDp, heightDp) >= TabletShortestSideDp
@@ -2992,10 +2994,17 @@ private fun BedScene(
     var modelPickingIndices by remember(modelTopology) {
         mutableStateOf<Map<PreparePickingIndexKey, PrepareVolumePickingIndex>>(emptyMap())
     }
-    LaunchedEffect(modelTopology) {
+    LaunchedEffect(modelTopology, interactionActive, layOnFaceObjectId) {
+        if (
+            interactionActive || layOnFaceObjectId != null ||
+            modelPickingIndices.size == modelTopology.size
+        ) {
+            return@LaunchedEffect
+        }
+        delay(PREPARE_PICKING_PREWARM_DELAY_MS)
         val snapshot = projectObjects
-        modelPickingIndices = withContext(Dispatchers.Default) {
-            buildPreparePickingIndices(snapshot)
+        modelPickingIndices = withModelPreparationContext {
+            buildPreparePickingIndices(snapshot) { ensureActive() }
         }
     }
     var layOnFaceCandidates by remember(layOnFaceObjectId, modelTopology) {
@@ -3006,9 +3015,12 @@ private fun BedScene(
         layOnFaceCandidates = if (selected == null) {
             emptyMap()
         } else {
-            withContext(Dispatchers.Default) {
+            withModelPreparationContext {
                 selected.volumes.associate { volume ->
-                    volume.id to detectLayOnFaceCandidates(volume.model.previewTriangles)
+                    volume.id to detectLayOnFaceCandidates(
+                        volume.model.previewTriangles,
+                        checkCancellation = { ensureActive() },
+                    )
                 }
             }
         }
