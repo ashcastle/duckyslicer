@@ -76,8 +76,10 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "fun fromNative(raw: FloatArray?, localPath: String)",
         "MODEL_PREVIEW_PAYLOAD_MAGIC",
         "MODEL_PREVIEW_PAYLOAD_VERSION",
-        "MODEL_PREVIEW_HEADER_FLOATS = 10",
+        "MODEL_PREVIEW_HEADER_FLOATS = 11",
         "MODEL_MAX_PREVIEW_TRIANGLES = 12_000",
+        "MODEL_MAX_DETAIL_PREVIEW_TRIANGLES = 48_000",
+        "detailPreviewTriangles",
         "raw.copyOfRange(vertexStart, vertexEnd)",
         "exactModelIntegerOrNull()",
         "MODEL_MAX_COORDINATE_ABS_MM",
@@ -270,6 +272,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "overlays.takeIf { sceneLoad.complete }.orEmpty()",
         "PrepareModelOverlayKey(",
         "overlays = withContext(Dispatchers.Default)",
+        "detailVertices: FloatArray = vertices",
+        "val useDetail = !frame.interactionActive && frame.overlays.isEmpty()",
     ):
         if marker not in prepare_renderer:
             raise VerificationError(f"Prepare model loading contract is missing: {marker}")
@@ -328,6 +332,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "facetP95Ms <= 16.0",
         "denseDefaultPlacementStaysWithinLoadBudget",
         "denseUnpaintedOverlayBuildStaysWithinLoadBudget",
+        "lastMeshVertexCountForTest()",
+        "interactionActive = true",
         "p95Ms <= 1.0",
     ):
         if marker not in prepare_tests:
@@ -383,6 +389,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "MODEL_PREVIEW_PAYLOAD_MAGIC",
         "MODEL_PREVIEW_PAYLOAD_VERSION",
         "MODEL_PREVIEW_HEADER_FLOATS",
+        "DETAIL_PREVIEW_TRIANGLE_LIMIT",
+        "detail_preview_triangles",
         "fn model_preview_payload(",
         "NativeEngine_inspectStlPayload",
         "get_direct_buffer_capacity(&output)",

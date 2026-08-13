@@ -436,7 +436,7 @@ class PrepareModelRendererInstrumentedTest {
 
             val model = ModelInfo(
                 fileName = "gpu-triangle.stl",
-                triangles = 1,
+                triangles = 2,
                 dimensions = listOf(50.0, 50.0, 10.0),
                 localPath = "",
                 minMm = listOf(0.0, 0.0, 0.0),
@@ -445,6 +445,14 @@ class PrepareModelRendererInstrumentedTest {
                     0f, 0f, 0f,
                     50f, 0f, 0f,
                     25f, 50f, 10f,
+                ),
+                detailPreviewTriangles = floatArrayOf(
+                    0f, 0f, 0f,
+                    50f, 0f, 0f,
+                    50f, 50f, 10f,
+                    0f, 0f, 0f,
+                    50f, 50f, 10f,
+                    0f, 50f, 10f,
                 ),
             )
             val projectObject = ProjectObject(id = "gpu-object", model = model)
@@ -470,6 +478,25 @@ class PrepareModelRendererInstrumentedTest {
             GLES30.glFinish()
             val withModel = framebufferRgba(framebufferSize)
             val topologyUploadsBeforeOverlay = renderer.geometryUploadCountForTest()
+            assertEquals(6, renderer.lastMeshVertexCountForTest())
+
+            renderer.submit(
+                geometry = geometry,
+                objects = mapOf(
+                    projectObject.id to PrepareObjectDrawState(
+                        objectId = projectObject.id,
+                        transform = projectObject.transform,
+                        minimumRotatedZ = projectObject.transform.minimumRotatedZ(projectObject),
+                    ),
+                ),
+                selectedObjectId = projectObject.id,
+                camera = camera,
+                interactionActive = true,
+            )
+            renderer.onDrawFrame(null)
+            GLES30.glFinish()
+            assertEquals(3, renderer.lastMeshVertexCountForTest())
+            assertEquals(topologyUploadsBeforeOverlay, renderer.geometryUploadCountForTest())
 
             renderer.submit(
                 geometry = geometry,
@@ -495,6 +522,7 @@ class PrepareModelRendererInstrumentedTest {
             renderer.onDrawFrame(null)
             GLES30.glFinish()
             val withOverlay = framebufferRgba(framebufferSize)
+            assertEquals(3, renderer.lastMeshVertexCountForTest())
 
             assertFalse("Model geometry must alter the rendered framebuffer", bedOnly.contentEquals(withModel))
             assertFalse(

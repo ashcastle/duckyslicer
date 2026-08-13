@@ -121,7 +121,9 @@ def valid_sources() -> dict[str, str]:
             "withContext(Dispatchers.Default) PrepareModelSceneBuilder.build(projectObjects "
             "PrepareModelSceneBuilder.build(\n                    emptyList() "
             "overlays.takeIf { sceneLoad.complete }.orEmpty() PrepareModelOverlayKey( "
-            "overlays = withContext(Dispatchers.Default)"
+            "overlays = withContext(Dispatchers.Default) "
+            "detailVertices: FloatArray = vertices "
+            "val useDetail = !frame.interactionActive && frame.overlays.isEmpty()"
         ),
         "PrepareModelPicking.kt": (
             "buildPreparePickingIndices( PreparePickingIndexBuilder( "
@@ -200,7 +202,8 @@ def valid_sources() -> dict[str, str]:
         "MainActivity.kt": (
             "fun fromNative(raw: FloatArray?, localPath: String) "
             "MODEL_PREVIEW_PAYLOAD_MAGIC MODEL_PREVIEW_PAYLOAD_VERSION "
-            "MODEL_PREVIEW_HEADER_FLOATS = 10 MODEL_MAX_PREVIEW_TRIANGLES = 12_000 "
+            "MODEL_PREVIEW_HEADER_FLOATS = 11 MODEL_MAX_PREVIEW_TRIANGLES = 12_000 "
+            "MODEL_MAX_DETAIL_PREVIEW_TRIANGLES = 48_000 detailPreviewTriangles "
             "raw.copyOfRange(vertexStart, vertexEnd) exactModelIntegerOrNull() "
             "MODEL_MAX_COORDINATE_ABS_MM "
             "var plateSliceResults by rememberSaveable var selectedTab by rememberSaveable "
@@ -262,7 +265,8 @@ def valid_sources() -> dict[str, str]:
             "p95Ms <= 50.0 renderer.geometryUploadCountForTest() == 1 "
             "p95Ms <= 16.0 objectP95Ms <= 16.0 facetP95Ms <= 16.0 "
             "denseDefaultPlacementStaysWithinLoadBudget "
-            "denseUnpaintedOverlayBuildStaysWithinLoadBudget p95Ms <= 1.0"
+            "denseUnpaintedOverlayBuildStaysWithinLoadBudget "
+            "lastMeshVertexCountForTest() interactionActive = true p95Ms <= 1.0"
         ),
         "PrepareModelPickingTest.kt": (
             "spatialIndexCullsArbitraryFacetOrderWithoutChangingExactHits "
@@ -370,7 +374,8 @@ def valid_sources() -> dict[str, str]:
             "write_preview_payload(preview, output_floats) "
             '"G-code preview direct buffer is too small" '
             "MODEL_PREVIEW_PAYLOAD_MAGIC MODEL_PREVIEW_PAYLOAD_VERSION "
-            "MODEL_PREVIEW_HEADER_FLOATS fn model_preview_payload( "
+            "MODEL_PREVIEW_HEADER_FLOATS DETAIL_PREVIEW_TRIANGLE_LIMIT "
+            "detail_preview_triangles fn model_preview_payload( "
             "NativeEngine_inspectStlPayload get_direct_buffer_capacity(&output) "
             "get_direct_buffer_address(&output) std::ptr::copy_nonoverlapping( "
             '"Toolpath direct buffer is too small" '

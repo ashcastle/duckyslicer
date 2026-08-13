@@ -140,11 +140,12 @@ const MAX_MODEL_IMPORT_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_TEXT_LINE_BYTES: usize = 64 * 1024;
 const MAX_STL_COORDINATE_ABS_MM: f32 = 1_000_000.0;
 const PREVIEW_TRIANGLE_LIMIT: usize = 12_000;
+const DETAIL_PREVIEW_TRIANGLE_LIMIT: usize = 48_000;
 const PREVIEW_CLUSTER_START_RESOLUTION: u16 = 36;
-const PREVIEW_CLUSTER_WORK_LIMIT: usize = PREVIEW_TRIANGLE_LIMIT * 8;
+const DETAIL_PREVIEW_CLUSTER_START_RESOLUTION: u16 = 72;
 const MODEL_PREVIEW_PAYLOAD_MAGIC: f32 = 17_492.0;
-const MODEL_PREVIEW_PAYLOAD_VERSION: f32 = 1.0;
-const MODEL_PREVIEW_HEADER_FLOATS: usize = 10;
+const MODEL_PREVIEW_PAYLOAD_VERSION: f32 = 2.0;
+const MODEL_PREVIEW_HEADER_FLOATS: usize = 11;
 const MODEL_PREVIEW_MAX_EXACT_INTEGER: usize = 1 << 24;
 const MAX_GCODE_COORDINATE_ABS_MM: f32 = 1_000_000.0;
 const MAX_PREVIEW_SEGMENTS: usize = 120_000;
@@ -379,6 +380,8 @@ struct StlInspection {
     max_mm: [f32; 3],
     preview_triangles: Vec<[f32; 9]>,
     preview_triangle_indices: Vec<usize>,
+    /// Empty when the interaction mesh already contains every retained surface triangle.
+    detail_preview_triangles: Vec<[f32; 9]>,
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -965,6 +968,8 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
     let mut max = [f32::NEG_INFINITY; 3];
     let mut preview_triangles = Vec::with_capacity(PREVIEW_TRIANGLE_LIMIT);
     let mut preview_triangle_indices = Vec::with_capacity(PREVIEW_TRIANGLE_LIMIT);
+    // Most models fit the interaction mesh, so do not reserve the larger visual LOD up front.
+    let mut detail_preview_triangles = Vec::new();
 
     for triangle in triangles {
         let triangle = triangle.map_err(|error| EngineError::Parse(error.to_string()))?;
@@ -986,10 +991,20 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
                 max[axis] = max[axis].max(vertex[axis]);
             }
         }
+        let [a, b, c] = vertices;
+        let packed = [a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]];
         if preview_triangles.len() < PREVIEW_TRIANGLE_LIMIT {
-            let [a, b, c] = vertices;
-            preview_triangles.push([a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]]);
+            preview_triangles.push(packed);
             preview_triangle_indices.push(ordinal);
+        }
+        if surface_triangle_count > PREVIEW_TRIANGLE_LIMIT
+            && detail_preview_triangles.len() < DETAIL_PREVIEW_TRIANGLE_LIMIT
+        {
+            if detail_preview_triangles.is_empty() {
+                detail_preview_triangles.reserve(DETAIL_PREVIEW_TRIANGLE_LIMIT);
+                detail_preview_triangles.extend_from_slice(&preview_triangles);
+            }
+            detail_preview_triangles.push(packed);
         }
     }
     if surface_triangle_count == 0 {
@@ -997,9 +1012,25 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
     }
 
     if surface_triangle_count > PREVIEW_TRIANGLE_LIMIT {
-        let clustered = clustered_stl_preview(path, min, max)?;
+        let clustered = clustered_stl_preview(
+            path,
+            min,
+            max,
+            PREVIEW_TRIANGLE_LIMIT,
+            PREVIEW_CLUSTER_START_RESOLUTION,
+        )?;
         preview_triangles = clustered.triangles;
         preview_triangle_indices = clustered.source_indices;
+    }
+    if surface_triangle_count > DETAIL_PREVIEW_TRIANGLE_LIMIT {
+        detail_preview_triangles = clustered_stl_preview(
+            path,
+            min,
+            max,
+            DETAIL_PREVIEW_TRIANGLE_LIMIT,
+            DETAIL_PREVIEW_CLUSTER_START_RESOLUTION,
+        )?
+        .triangles;
     }
 
     Ok(StlInspection {
@@ -1008,6 +1039,7 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
         max_mm: max,
         preview_triangles,
         preview_triangle_indices,
+        detail_preview_triangles,
     })
 }
 
@@ -1015,18 +1047,21 @@ fn clustered_stl_preview(
     path: &str,
     min: [f32; 3],
     max: [f32; 3],
+    triangle_limit: usize,
+    start_resolution: u16,
 ) -> Result<PreviewClusterResult, EngineError> {
     // Keeping every Nth source triangle produces isolated flakes on dense meshes.
     // Vertex clustering instead collapses neighboring facets onto shared cells so
     // the bounded Android preview remains a connected, opaque surface.
-    let mut resolution = PREVIEW_CLUSTER_START_RESOLUTION;
+    let mut resolution = start_resolution;
     loop {
-        if let Some(result) = clustered_stl_preview_at_resolution(path, min, max, resolution)? {
-            if result.triangles.len() <= PREVIEW_TRIANGLE_LIMIT || resolution <= 2 {
+        if let Some(result) =
+            clustered_stl_preview_at_resolution(path, min, max, resolution, triangle_limit)?
+        {
+            if result.triangles.len() <= triangle_limit || resolution <= 2 {
                 return Ok(result);
             }
-            let ratio =
-                (PREVIEW_TRIANGLE_LIMIT as f64 / result.triangles.len() as f64).sqrt() * 0.9;
+            let ratio = (triangle_limit as f64 / result.triangles.len() as f64).sqrt() * 0.9;
             let next =
                 ((resolution as f64 * ratio).floor() as u16).clamp(2, resolution.saturating_sub(1));
             resolution = next;
@@ -1041,6 +1076,7 @@ fn clustered_stl_preview_at_resolution(
     min: [f32; 3],
     max: [f32; 3],
     resolution: u16,
+    triangle_limit: usize,
 ) -> Result<Option<PreviewClusterResult>, EngineError> {
     let mut file = open_stl_input(path)?;
     let triangles = stl_io::create_stl_reader(&mut file)
@@ -1077,7 +1113,7 @@ fn clustered_stl_preview_at_resolution(
                 cells: triangle_cells,
                 source_index,
             });
-            if clustered_triangles.len() > PREVIEW_CLUSTER_WORK_LIMIT {
+            if clustered_triangles.len() > triangle_limit.saturating_mul(8) {
                 return Ok(None);
             }
         }
@@ -1131,9 +1167,12 @@ fn preview_cell(vertex: [f32; 3], min: [f32; 3], max: [f32; 3], resolution: u16)
 
 fn model_preview_payload(inspection: StlInspection) -> Result<Vec<f32>, EngineError> {
     let preview_count = inspection.preview_triangles.len();
+    let detail_preview_count = inspection.detail_preview_triangles.len();
     if preview_count == 0
         || preview_count > PREVIEW_TRIANGLE_LIMIT
         || preview_count != inspection.preview_triangle_indices.len()
+        || detail_preview_count > DETAIL_PREVIEW_TRIANGLE_LIMIT
+        || (detail_preview_count != 0 && detail_preview_count < preview_count)
         || inspection.triangles > MODEL_PREVIEW_MAX_EXACT_INTEGER
     {
         return Err(EngineError::Parse(
@@ -1146,6 +1185,7 @@ fn model_preview_payload(inspection: StlInspection) -> Result<Vec<f32>, EngineEr
                 .checked_mul(10)
                 .ok_or_else(|| EngineError::Parse("STL preview payload is too large".to_owned()))?,
         )
+        .and_then(|size| size.checked_add(detail_preview_count.checked_mul(9)?))
         .ok_or_else(|| EngineError::Parse("STL preview payload is too large".to_owned()))?;
     let mut payload = Vec::with_capacity(payload_floats);
     payload.extend_from_slice(&[
@@ -1159,12 +1199,16 @@ fn model_preview_payload(inspection: StlInspection) -> Result<Vec<f32>, EngineEr
         inspection.max_mm[1],
         inspection.max_mm[2],
         preview_count as f32,
+        detail_preview_count as f32,
     ]);
     for triangle in inspection.preview_triangles {
         payload.extend_from_slice(&triangle);
     }
     for source_index in inspection.preview_triangle_indices {
         payload.push(source_index as f32);
+    }
+    for triangle in inspection.detail_preview_triangles {
+        payload.extend_from_slice(&triangle);
     }
     if payload.len() != payload_floats {
         return Err(EngineError::Parse(
@@ -2582,16 +2626,22 @@ mod tests {
                 [-10.0, -20.0, 10.0, 10.0, 10.0, 10.0, -10.0, 10.0, 10.0],
             ],
             preview_triangle_indices: vec![0, 4],
+            detail_preview_triangles: vec![
+                [-10.0, -20.0, -30.0, 10.0, -20.0, -30.0, 10.0, 10.0, -30.0],
+                [-10.0, -20.0, 10.0, 10.0, 10.0, 10.0, -10.0, 10.0, 10.0],
+            ],
         })
         .expect("encode model preview payload");
 
-        assert_eq!(payload.len(), MODEL_PREVIEW_HEADER_FLOATS + 20);
+        assert_eq!(payload.len(), MODEL_PREVIEW_HEADER_FLOATS + 20 + 18);
         assert_eq!(payload[0], MODEL_PREVIEW_PAYLOAD_MAGIC);
         assert_eq!(payload[1], MODEL_PREVIEW_PAYLOAD_VERSION);
         assert_eq!(payload[2], 5.0);
         assert_eq!(&payload[3..9], &[-10.0, -20.0, -30.0, 10.0, 10.0, 10.0]);
         assert_eq!(payload[9], 2.0);
-        assert_eq!(&payload[payload.len() - 2..], &[0.0, 4.0]);
+        assert_eq!(payload[10], 2.0);
+        assert_eq!(&payload[29..31], &[0.0, 4.0]);
+        assert_eq!(&payload[31..40], &payload[11..20]);
     }
 
     #[test]
@@ -2602,6 +2652,7 @@ mod tests {
             max_mm: [1.0, 1.0, 0.0],
             preview_triangles: vec![[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0]],
             preview_triangle_indices: Vec::new(),
+            detail_preview_triangles: Vec::new(),
         });
 
         assert!(matches!(result, Err(EngineError::Parse(_))));
@@ -2794,6 +2845,9 @@ mod tests {
         );
         assert!(!inspection.preview_triangles.is_empty());
         assert!(inspection.preview_triangles.len() <= PREVIEW_TRIANGLE_LIMIT);
+        assert!(inspection.detail_preview_triangles.len() > inspection.preview_triangles.len());
+        assert!(inspection.detail_preview_triangles.len() <= DETAIL_PREVIEW_TRIANGLE_LIMIT);
+        assert_eq!(inspection.detail_preview_triangles.len(), 80 * 80 * 2);
         let vertex = |values: &[f32; 9], offset: usize| {
             (
                 values[offset].to_bits(),

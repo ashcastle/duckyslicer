@@ -40,6 +40,7 @@ class ModelImportPerformanceInstrumentedTest {
             println(
                 "DuckyModelImport sourceTriangles=${info.triangles} " +
                     "previewTriangles=${info.previewTriangles.size / 9} " +
+                    "detailPreviewTriangles=${info.detailPreviewTriangles.size / 9} " +
                     "nativeP50Ms=${native[native.size / 2] / 1_000_000.0} " +
                     "nativeP95Ms=${native.last() / 1_000_000.0} " +
                     "decodeP50Ms=${decode[decode.size / 2] / 1_000_000.0} " +
@@ -48,6 +49,8 @@ class ModelImportPerformanceInstrumentedTest {
             assertEquals(200_000, info.triangles)
             assertTrue(info.previewTriangles.isNotEmpty())
             assertTrue(info.previewTriangles.size / 9 <= 12_000)
+            assertTrue(info.detailPreviewTriangles.size / 9 in
+                (info.previewTriangles.size / 9)..48_000)
             assertEquals(info.previewTriangles.size / 9, info.previewTriangleIndices.size)
             assertTrue(
                 "200k-triangle native inspection must stay bounded: p95=${native.last() / 1_000_000.0} ms",

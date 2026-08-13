@@ -47,6 +47,7 @@ internal fun DepthTestedPrepareModelScene(
     zoom: Float,
     panX: Float,
     panY: Float,
+    interactionActive: Boolean,
     layOnFaceObjectId: String?,
     layOnFaceCandidateFacets: Map<String, BooleanArray>,
     onUnavailable: () -> Unit,
@@ -134,6 +135,7 @@ internal fun DepthTestedPrepareModelScene(
                     panX = panX,
                     panY = panY,
                 ),
+                interactionActive = interactionActive,
                 overlays = overlays.takeIf { sceneLoad.complete }.orEmpty(),
             )
         },
@@ -176,6 +178,7 @@ internal data class PrepareModelMeshData(
     val filamentSlot: Int,
     val sourceCenter: FloatArray,
     val vertices: FloatArray,
+    val detailVertices: FloatArray = vertices,
 ) {
     val vertexCount: Int get() = vertices.size / PREPARE_VERTEX_FLOATS
 }
@@ -247,6 +250,7 @@ internal object PrepareModelSceneBuilder {
                     // duplicated CPU normals per triangle. Flat normals are derived by the
                     // fragment shader from the transformed surface.
                     vertices = volume.model.previewTriangles,
+                    detailVertices = volume.model.detailPreviewTriangles,
                 )
             }
         }
@@ -331,10 +335,18 @@ private class PrepareModelSurfaceView(
         objects: Map<String, PrepareObjectDrawState>,
         selectedObjectId: String?,
         camera: PrepareModelCamera,
+        interactionActive: Boolean,
         overlays: List<PrepareModelOverlayData>,
     ) {
         sceneSubmitted = true
-        renderer.submit(geometry, objects, selectedObjectId, camera, overlays)
+        renderer.submit(
+            geometry,
+            objects,
+            selectedObjectId,
+            camera,
+            interactionActive,
+            overlays,
+        )
         removeCallbacks(startupWatchdog)
         if (!rendererReady) postDelayed(startupWatchdog, PREPARE_RENDERER_STARTUP_TIMEOUT_MS)
         requestTextureRender()
@@ -566,6 +578,7 @@ internal data class PrepareModelFrame(
     val objects: Map<String, PrepareObjectDrawState>,
     val selectedObjectId: String?,
     val camera: PrepareModelCamera,
+    val interactionActive: Boolean,
     val overlays: List<PrepareModelOverlayData>,
 )
 
@@ -581,6 +594,7 @@ internal class PrepareModelRenderer(
     private var bedGridBuffer = 0
     private var bedOutlineBuffer = 0
     private val meshBuffers = ArrayList<Int>()
+    private val detailMeshBuffers = ArrayList<Int>()
     private val overlayBuffers = ArrayList<PrepareOverlayGpuBuffers>()
     private var uploadedOverlays: List<PrepareModelOverlayData>? = null
     private var program = 0
@@ -606,14 +620,18 @@ internal class PrepareModelRenderer(
     private var unavailable = false
     private var frameReadyReported = false
     private var geometryUploadCount = 0
+    private var lastMeshVertexCount = 0
 
     internal fun geometryUploadCountForTest(): Int = geometryUploadCount
+
+    internal fun lastMeshVertexCountForTest(): Int = lastMeshVertexCount
 
     fun submit(
         geometry: PrepareModelSceneGeometry,
         objects: Map<String, PrepareObjectDrawState>,
         selectedObjectId: String?,
         camera: PrepareModelCamera,
+        interactionActive: Boolean = false,
         overlays: List<PrepareModelOverlayData> = emptyList(),
     ) {
         latestFrame = PrepareModelFrame(
@@ -621,6 +639,7 @@ internal class PrepareModelRenderer(
             objects = objects,
             selectedObjectId = selectedObjectId,
             camera = camera,
+            interactionActive = interactionActive,
             overlays = overlays,
         )
     }
@@ -712,16 +731,18 @@ internal class PrepareModelRenderer(
             if (bedGridBuffer != 0) add(bedGridBuffer)
             if (bedOutlineBuffer != 0) add(bedOutlineBuffer)
             addAll(meshBuffers)
+            addAll(detailMeshBuffers)
             overlayBuffers.forEach { buffers ->
                 if (buffers.fill != 0) add(buffers.fill)
                 if (buffers.lines != 0) add(buffers.lines)
             }
-        }.toIntArray()
+        }.distinct().toIntArray()
         if (ids.isNotEmpty()) GLES30.glDeleteBuffers(ids.size, ids, 0)
         bedFillBuffer = 0
         bedGridBuffer = 0
         bedOutlineBuffer = 0
         meshBuffers.clear()
+        detailMeshBuffers.clear()
         overlayBuffers.clear()
         uploadedGeometry = null
         uploadedOverlays = null
@@ -729,7 +750,10 @@ internal class PrepareModelRenderer(
 
     private fun upload(geometry: PrepareModelSceneGeometry): Boolean {
         releaseGpuGeometryForMemoryPressure()
-        val bufferCount = 3 + geometry.meshes.size
+        val detailBufferCount = geometry.meshes.count { mesh ->
+            mesh.detailVertices !== mesh.vertices
+        }
+        val bufferCount = 3 + geometry.meshes.size + detailBufferCount
         val buffers = IntArray(bufferCount)
         GLES30.glGenBuffers(bufferCount, buffers, 0)
         if (buffers.any { it == 0 }) {
@@ -741,11 +765,22 @@ internal class PrepareModelRenderer(
         bedGridBuffer = buffers[1]
         bedOutlineBuffer = buffers[2]
         meshBuffers += buffers.drop(3)
+            .take(geometry.meshes.size)
         uploadBuffer(bedFillBuffer, geometry.bedFill)
         uploadBuffer(bedGridBuffer, geometry.bedGrid)
         uploadBuffer(bedOutlineBuffer, geometry.bedOutline)
         geometry.meshes.forEachIndexed { index, mesh ->
             uploadBuffer(meshBuffers[index], mesh.vertices)
+        }
+        var nextDetailBuffer = 3 + geometry.meshes.size
+        geometry.meshes.forEachIndexed { index, mesh ->
+            if (mesh.detailVertices === mesh.vertices) {
+                detailMeshBuffers += meshBuffers[index]
+            } else {
+                val detailBuffer = buffers[nextDetailBuffer++]
+                detailMeshBuffers += detailBuffer
+                uploadBuffer(detailBuffer, mesh.detailVertices)
+            }
         }
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
         if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
@@ -873,6 +908,8 @@ internal class PrepareModelRenderer(
     private fun drawMeshes(frame: PrepareModelFrame) {
         GLES30.glUniform1i(lightingLocation, 1)
         setObjectMode(true)
+        val useDetail = !frame.interactionActive && frame.overlays.isEmpty()
+        lastMeshVertexCount = 0
         frame.geometry.meshes.forEachIndexed { index, mesh ->
             val objectState = frame.objects[mesh.objectId] ?: return@forEachIndexed
             applyObject(objectState, mesh.sourceCenter, frame.geometry)
@@ -881,9 +918,12 @@ internal class PrepareModelRenderer(
                 selectedLocation,
                 if (mesh.objectId == frame.selectedObjectId) 1 else 0,
             )
+            val vertices = if (useDetail) mesh.detailVertices else mesh.vertices
+            val buffer = if (useDetail) detailMeshBuffers[index] else meshBuffers[index]
+            lastMeshVertexCount += vertices.size / PREPARE_VERTEX_FLOATS
             drawBuffer(
-                meshBuffers[index],
-                mesh.vertexCount,
+                buffer,
+                vertices.size / PREPARE_VERTEX_FLOATS,
                 GLES30.GL_TRIANGLES,
                 floatArrayOf(color.red, color.green, color.blue),
             )

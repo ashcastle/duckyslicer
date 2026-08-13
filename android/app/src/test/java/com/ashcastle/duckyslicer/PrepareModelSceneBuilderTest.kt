@@ -20,6 +20,14 @@ class PrepareModelSceneBuilderTest {
                 2f, 0f, 0f,
                 0f, 2f, 0f,
             ),
+            detailPreviewTriangles = floatArrayOf(
+                0f, 0f, 0f,
+                2f, 0f, 0f,
+                0f, 2f, 0f,
+                2f, 0f, 0f,
+                2f, 2f, 0f,
+                0f, 2f, 0f,
+            ),
         )
         val projectObject = ProjectObject(
             id = "object",
@@ -50,6 +58,7 @@ class PrepareModelSceneBuilderTest {
             mesh.vertices,
             0f,
         )
+        assertEquals(6, mesh.detailVertices.size / 3)
         assertTrue(scene.bedFill.isNotEmpty())
         assertTrue(scene.bedGrid.isNotEmpty())
         assertEquals(4, scene.bedOutline.size / 3)

@@ -3141,6 +3141,7 @@ private fun BedScene(
                 zoom = zoom,
                 panX = pan.x,
                 panY = pan.y,
+                interactionActive = interactionActive,
                 layOnFaceObjectId = layOnFaceObjectId,
                 layOnFaceCandidateFacets = layOnFaceCandidateFacets,
                 onUnavailable = { prepareRendererRuntimeAvailable = false },
