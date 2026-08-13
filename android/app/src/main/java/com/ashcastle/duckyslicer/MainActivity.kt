@@ -220,6 +220,7 @@ private fun DuckySlicerScreen(
     val modelTooLargeError = stringResource(R.string.model_too_large_error)
     val shapeError = stringResource(R.string.shape_error)
     val autoLayDone = stringResource(R.string.auto_lay_done)
+    val autoLayUnchanged = stringResource(R.string.auto_lay_unchanged)
     val autoLayError = stringResource(R.string.auto_lay_error)
     val layOnFaceDone = stringResource(R.string.lay_on_face_done)
     val layOnFaceError = stringResource(R.string.lay_on_face_error)
@@ -439,7 +440,11 @@ private fun DuckySlicerScreen(
                     R.string.shape_added,
                     completion.displayName.orEmpty(),
                 )
-                ProjectEditKind.AUTO_LAY -> autoLayDone
+                ProjectEditKind.AUTO_LAY -> if (completion.sessionChanged) {
+                    autoLayDone
+                } else {
+                    autoLayUnchanged
+                }
                 ProjectEditKind.ARRANGE -> arrangeDone
                 ProjectEditKind.SPLIT -> resources.getString(
                     if (completion.clearedObjectSettings) {

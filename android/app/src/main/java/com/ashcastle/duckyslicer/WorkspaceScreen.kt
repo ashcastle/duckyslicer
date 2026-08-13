@@ -87,6 +87,9 @@ import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -557,8 +560,17 @@ internal fun WorkspaceScreen(
     var visibleToolpathRoles by remember { mutableStateOf(ToolpathStyles.indices.toSet()) }
     var previewControlsExpanded by rememberSaveable { mutableStateOf(false) }
     var plateRemovalRequested by remember { mutableStateOf(false) }
+    val statusHostState = remember { SnackbarHostState() }
     val plateActionsEnabled = !importing && !editingBusy && !projectImporting &&
         !projectExporting && !slicing && !previewLoading && !exportingGcode && !remoteBusy
+
+    LaunchedEffect(error, notice) {
+        val message = error ?: notice ?: return@LaunchedEffect
+        statusHostState.showSnackbar(
+            message = message,
+            duration = if (error != null) SnackbarDuration.Long else SnackbarDuration.Short,
+        )
+    }
 
     fun beginBrimEditing(projectObject: ProjectObject) {
         showModelTools = false
@@ -608,6 +620,7 @@ internal fun WorkspaceScreen(
     }
     Scaffold(
         containerColor = Color(0xFF191A18),
+        snackbarHost = { SnackbarHost(statusHostState) },
         bottomBar = {
             if (!tabletLayout) WorkspaceNavigation(selectedTab = selectedTab, onSelected = onTabSelected)
         },

@@ -89,6 +89,7 @@
     <string name="auto_lay">Lay flat</string>
     <string name="auto_lay_working">Finding a stable side…</string>
     <string name="auto_lay_done">Model placed on a stable side.</string>
+    <string name="auto_lay_unchanged">This model is already on the recommended side.</string>
     <string name="auto_lay_error">Couldn’t place this model automatically.</string>
     <string name="lay_on_face">Place on face</string>
     <string name="lay_on_face_hint">Drag to look around. Pinch to zoom. Tap the surface that should touch the bed.</string>

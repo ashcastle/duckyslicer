@@ -347,12 +347,13 @@ diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil
 index 44041ca3..574b380d 100644
 --- a/app/src/main/cpp/src/sapil_arrange.cpp
 +++ b/app/src/main/cpp/src/sapil_arrange.cpp
-@@ -1,6 +1,7 @@
+@@ -1,6 +1,8 @@
  #include "../include/sapil.h"
  #include "sapil_internal.h"
  #include "libslic3r/Model.hpp"
 +#include "libslic3r/ModelArrange.hpp"
  #include "libslic3r/Orient.hpp"
++#include <algorithm>
  #include <cmath>
  #include "libslic3r/BoundingBox.hpp"
 @@ -549,6 +550,54 @@ bool SlicerEngine::setObjectPositions(const std::vector<std::pair<float, float>>
@@ -1949,11 +1950,12 @@ diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
 diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil_arrange.cpp
 --- a/app/src/main/cpp/src/sapil_arrange.cpp
 +++ b/app/src/main/cpp/src/sapil_arrange.cpp
-@@ -3,6 +3,7 @@
+@@ -3,7 +3,8 @@
  #include "libslic3r/Model.hpp"
  #include "libslic3r/ModelArrange.hpp"
  #include "libslic3r/Orient.hpp"
 +#include "libslic3r/CutUtils.hpp"
+ #include <algorithm>
  #include <cmath>
  #include "libslic3r/BoundingBox.hpp"
  #include "libslic3r/TriangleMesh.hpp"
@@ -2157,28 +2159,36 @@ new file mode 100644
 diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil_arrange.cpp
 --- a/app/src/main/cpp/src/sapil_arrange.cpp
 +++ b/app/src/main/cpp/src/sapil_arrange.cpp
-@@ -4,6 +4,7 @@
- #include "libslic3r/ModelArrange.hpp"
- #include "libslic3r/Orient.hpp"
- #include "libslic3r/CutUtils.hpp"
-+#include <algorithm>
- #include <cmath>
- #include "libslic3r/BoundingBox.hpp"
- #include "libslic3r/TriangleMesh.hpp"
-@@ -669,6 +669,12 @@ std::optional<std::array<double, 3>> SlicerEngine::autoOrientObject(int objIdx)
+@@ -670,18 +670,35 @@ std::optional<std::array<double, 3>> SlicerEngine::autoOrientObject(int objIdx) {
      if (!f66_objIdxValid(objIdx)) return std::nullopt;
      auto* obj = getGlobalModel().objects[objIdx];
      if (obj->instances.empty()) return std::nullopt;
-+    auto reference = std::find_if(
-+        obj->volumes.begin(), obj->volumes.end(),
-+        [](const Slic3r::ModelVolume* volume) {
-+            return volume != nullptr && volume->is_model_part();
-+        });
-+    if (reference == obj->volumes.end()) return std::nullopt;
++    std::array<double, 3> rotation{};
      try {
-         Slic3r::orientation::orient(obj);
+-        Slic3r::orientation::orient(obj);
++        Slic3r::orientation::OrientMeshs selected(1);
++        selected.front().name = obj->name;
++        selected.front().mesh = obj->mesh();
++        Slic3r::orientation::OrientParams params;
++        // Match Orca's default OrientJob mode. The convenience overload uses
++        // the older minimum-area scoring path and can legitimately return an
++        // identity transform for models the desktop job rotates.
++        params.min_volume = true;
++        params.parallel = false;
++        params.progressind = [](unsigned, std::string) {};
++        params.stopcondition = []() { return false; };
++        Slic3r::orientation::orient(selected, {}, params);
++        const Slic3r::Matrix3d& matrix = selected.front().rotation_matrix;
++        const double y = std::asin(std::clamp(-matrix(2, 0), -1.0, 1.0));
++        const double cosine_y = std::cos(y);
++        const double x = std::abs(cosine_y) > 1e-8 ?
++            std::atan2(matrix(2, 1), matrix(2, 2)) :
++            std::atan2(-matrix(1, 2), matrix(1, 1));
++        const double z = std::abs(cosine_y) > 1e-8 ?
++            std::atan2(matrix(1, 0), matrix(0, 0)) : 0.0;
++        rotation = {x, y, z};
      } catch (...) {
-@@ -677,10 +683,10 @@ std::optional<std::array<double, 3>> SlicerEngine::autoOrientObject(int objIdx)
+         SAPIL_LOGE("autoOrientObject: orient threw on object %d", objIdx);
          return std::nullopt;
      }
      obj->invalidate_bounding_box();
@@ -2186,10 +2196,8 @@ diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil
 -    // F66 review-2026-05-30 P1: orient mutates per-instance rotation; if any
 -    // user later calls global setModelRotation it must re-snapshot against
 -    // the new orientation, not stack on the pre-orient base.
-+    // orient(ModelObject*) rotates every model-part volume and only updates the
-+    // instance's assembly transform. Reading the ordinary instance rotation
-+    // returned an unchanged identity transform to Android.
-+    const Slic3r::Vec3d rot = (*reference)->get_rotation();
      resetRotationBases();
      invalidatePreviewMeshCache();
-     return std::array<double, 3>{rot.x(), rot.y(), rot.z()};
+-    return std::array<double, 3>{rot.x(), rot.y(), rot.z()};
++    return rotation;
+ }

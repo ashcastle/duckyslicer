@@ -89,6 +89,7 @@
     <string name="auto_lay">자동으로 눕히기</string>
     <string name="auto_lay_working">안정적인 면을 찾는 중…</string>
     <string name="auto_lay_done">안정적인 면을 바닥에 놓았습니다.</string>
+    <string name="auto_lay_unchanged">이미 추천된 안정 방향으로 놓여 있습니다.</string>
     <string name="auto_lay_error">이 모델을 자동으로 놓지 못했습니다.</string>
     <string name="lay_on_face">선택한 면으로 놓기</string>
     <string name="lay_on_face_hint">드래그해서 둘러보고 핀치로 확대하세요. 베드에 닿게 할 면을 탭하세요.</string>

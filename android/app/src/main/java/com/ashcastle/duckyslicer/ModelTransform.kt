@@ -69,8 +69,17 @@ internal fun ModelTransform.placementOrientation(): ModelPlacementOrientation =
         mirrorZ = mirrorZ,
     )
 
-private fun Double.toCanonicalDegreeFloat(): Float =
-    Math.toDegrees(this).toFloat().let { degrees -> if (degrees == 0f) 0f else degrees }
+private fun Double.toCanonicalDegreeFloat(): Float {
+    val degrees = Math.toDegrees(this)
+    val normalized = ((degrees + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+    return if (abs(normalized) < ORIENTATION_ZERO_TOLERANCE_DEGREES) {
+        0f
+    } else {
+        normalized.toFloat()
+    }
+}
+
+private const val ORIENTATION_ZERO_TOLERANCE_DEGREES = 0.001
 
 internal enum class ModelScaleAxis { X, Y, Z }
 

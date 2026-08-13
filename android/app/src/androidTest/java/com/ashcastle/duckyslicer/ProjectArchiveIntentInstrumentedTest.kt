@@ -118,6 +118,36 @@ class ProjectArchiveIntentInstrumentedTest {
     }
 
     @Test
+    fun automaticLayReportsAnAlreadyStableModelWithoutCreatingFakeHistory() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        projectRoot.deleteRecursively()
+        try {
+            seedCurrentProject("stable-auto-lay", "stable-auto-lay.stl")
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                lateinit var retainedModel: ProjectTransferViewModel
+                scenario.onActivity { activity ->
+                    retainedModel = ViewModelProvider(activity)[ProjectTransferViewModel::class.java]
+                }
+                waitForSession(retainedModel, "stable-auto-lay")
+                val starting = retainedModel.state.value
+                val layFlat = waitForNode(context.getString(R.string.auto_lay)) { node ->
+                    node.isClickable && node.isEnabled
+                }
+                assertTrue(layFlat.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                waitForActiveEdit(retainedModel, ProjectEditKind.AUTO_LAY)
+
+                val completed = waitForEditCompletion(retainedModel, starting.sessionRevision)
+                assertEquals(starting.history, completed.history)
+                assertEquals(starting.sessionRevision, completed.sessionRevision)
+                waitForNode(context.getString(R.string.auto_lay_unchanged))
+            }
+        } finally {
+            projectRoot.deleteRecursively()
+        }
+    }
+
+    @Test
     fun unsavedProjectEditAndUndoSurviveImmediateActivityRecreation() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)

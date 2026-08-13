@@ -63,6 +63,21 @@ class ModelTransformTest {
     }
 
     @Test
+    fun orcaOrientationCanonicalizesNumericalIdentityNoise() {
+        val transformed = ModelTransform().withOrcaOrientation(
+            OrcaOrientation(
+                doubleArrayOf(
+                    Math.toRadians(-0.0000028),
+                    Math.toRadians(0.0000197),
+                    Math.toRadians(-0.0000000000005),
+                ),
+            ),
+        )
+
+        assertEquals(ModelTransform(), transformed)
+    }
+
+    @Test
     fun orcaOrientationRejectsMalformedNativeData() {
         val malformed = listOf(doubleArrayOf(), doubleArrayOf(0.0, 0.0), doubleArrayOf(0.0, Double.NaN, 0.0))
 

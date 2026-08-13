@@ -1428,6 +1428,26 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun automaticLayReturnsCanonicalIdentityForAnAlreadyStableSolid() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val source = File(context.cacheDir, "automatic-lay-stable-${System.nanoTime()}.stl")
+        try {
+            instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
+                source.outputStream().use(input::copyTo)
+            }
+            val orientation = SlicerProcessClient.autoOrient(source)
+            assertTrue(
+                "A stable solid must not return an Euler-equivalent 180/180/180 fake change",
+                orientation.rotationRadians.all { abs(Math.toDegrees(it)) < 0.001 },
+            )
+            assertEquals(ModelTransform(), ModelTransform().withOrcaOrientation(orientation))
+        } finally {
+            source.delete()
+        }
+    }
+
+    @Test
     fun selectedFaceUsesRustAlignmentAndStillProducesRealGcodeOnDevice() {
         val source = fixtureModel()
         val model = inspectModel(source.absolutePath)
