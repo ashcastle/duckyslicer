@@ -37,56 +37,51 @@ class PreviewPerformancePolicyTest {
     }
 
     @Test
-    fun automaticPromotesOnlyAfterTwoCompletedFastFramesPerTier() {
-        val controller = AdaptivePreviewDetailController(fastFrameMs = 48.0, requiredFastSamples = 2)
+    fun automaticPromotesOnlyAfterThreeCompletedResponsiveFramesPerTier() {
+        val controller = AdaptivePreviewDetailController()
         val workload = Any()
 
         assertEquals(PreviewDetail.PERFORMANCE, controller.detailFor(PreviewDetail.AUTOMATIC, workload))
         assertTrue(controller.shouldMeasure(PreviewDetail.AUTOMATIC, workload))
-        assertTrue(
-            controller.recordCompletedFrame(
-                PreviewDetail.AUTOMATIC,
-                workload,
-                PreviewDetail.PERFORMANCE,
-                completionMs = 20.0,
-            ),
-        )
-        assertEquals(PreviewDetail.PERFORMANCE, controller.detailFor(PreviewDetail.AUTOMATIC, workload))
-        assertTrue(
-            controller.recordCompletedFrame(
-                PreviewDetail.AUTOMATIC,
-                workload,
-                PreviewDetail.PERFORMANCE,
-                completionMs = 22.0,
-            ),
-        )
+        repeat(3) { sample ->
+            assertTrue(
+                controller.recordCompletedFrame(
+                    PreviewDetail.AUTOMATIC,
+                    workload,
+                    PreviewDetail.PERFORMANCE,
+                    completionMs = 20.0 + sample,
+                ),
+            )
+        }
         assertEquals(PreviewDetail.BALANCED, controller.detailFor(PreviewDetail.AUTOMATIC, workload))
 
-        repeat(2) {
+        repeat(3) {
             assertTrue(
                 controller.recordCompletedFrame(
                     PreviewDetail.AUTOMATIC,
                     workload,
                     PreviewDetail.BALANCED,
-                    completionMs = 30.0,
+                    completionMs = 20.0,
                 ),
             )
         }
         assertEquals(PreviewDetail.DETAIL, controller.detailFor(PreviewDetail.AUTOMATIC, workload))
-        assertTrue(
-            controller.recordCompletedFrame(
-                PreviewDetail.AUTOMATIC,
-                workload,
-                PreviewDetail.DETAIL,
-                completionMs = 35.0,
-            ),
-        )
+        repeat(2) {
+            assertTrue(
+                controller.recordCompletedFrame(
+                    PreviewDetail.AUTOMATIC,
+                    workload,
+                    PreviewDetail.DETAIL,
+                    completionMs = 23.0,
+                ),
+            )
+        }
         assertFalse(
             controller.recordCompletedFrame(
                 PreviewDetail.AUTOMATIC,
                 workload,
                 PreviewDetail.DETAIL,
-                completionMs = 36.0,
+                completionMs = 23.0,
             ),
         )
         assertEquals(PreviewDetail.DETAIL, controller.detailFor(PreviewDetail.AUTOMATIC, workload))
@@ -96,10 +91,10 @@ class PreviewPerformancePolicyTest {
 
     @Test
     fun slowCandidateFallsBackToLastProvenTierWithoutOscillation() {
-        val controller = AdaptivePreviewDetailController(fastFrameMs = 48.0, requiredFastSamples = 2)
+        val controller = AdaptivePreviewDetailController()
         val workload = Any()
 
-        repeat(2) {
+        repeat(3) {
             assertTrue(
                 controller.recordCompletedFrame(
                     PreviewDetail.AUTOMATIC,
@@ -115,7 +110,7 @@ class PreviewPerformancePolicyTest {
                 PreviewDetail.AUTOMATIC,
                 workload,
                 PreviewDetail.BALANCED,
-                completionMs = 80.0,
+                completionMs = 25.0,
             ),
         )
         assertEquals(PreviewDetail.PERFORMANCE, controller.detailFor(PreviewDetail.AUTOMATIC, workload))

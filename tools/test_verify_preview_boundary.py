@@ -44,8 +44,8 @@ def valid_sources() -> dict[str, str]:
             "DENSE_PREVIEW_OVERVIEW_SEGMENTS = 40_000 DENSE_PREVIEW_RIBBON_ZOOM = 1.5f "
             "DENSE_PREVIEW_MIN_SEGMENTS = 10_000 DENSE_PREVIEW_MAX_SEGMENTS = 32_000 "
             "compatibilityPreviewSegmentBudget( AdaptivePreviewDetailController( "
-            "ADAPTIVE_PREVIEW_FAST_FRAME_MS = 48.0 "
-            "ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 2 recordCompletedFrame( "
+            "ADAPTIVE_PREVIEW_FAST_FRAME_MS = 24.0 "
+            "ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 3 recordCompletedFrame( "
             "currentDetail = lastProvenDetail"
         ),
         "AppSettingsSheet.kt": (
@@ -149,7 +149,7 @@ def valid_sources() -> dict[str, str]:
             "detail = PreviewDetail.AUTOMATIC "
             "renderer.automaticCalibrationSettledForTest() "
             "automaticDetail = checkNotNull(renderer.effectiveDetailForTest()) "
-            "MAXIMUM_AUTOMATIC_CALIBRATION_FRAMES = 12"
+            "renderer.zoomBy( MAXIMUM_AUTOMATIC_CALIBRATION_FRAMES = 18"
         ),
         "WorkspaceScreen.kt": (
             "previewDeviceCapabilities(context) resolvePreviewDetail(previewDetail, previewCapabilities) "
@@ -327,7 +327,7 @@ def valid_sources() -> dict[str, str]:
             "gesturesTemporarilyUseOneLowerGeometryTier "
             "segmentBudgetsStayBoundedForBothRenderers "
             "depthRendererFailureFallsBackWithoutOverwritingTheUserPreference "
-            "automaticPromotesOnlyAfterTwoCompletedFastFramesPerTier "
+            "automaticPromotesOnlyAfterThreeCompletedResponsiveFramesPerTier "
             "slowCandidateFallsBackToLastProvenTierWithoutOscillation "
             "automaticCalibrationResetsForAChangedPreviewWorkload "
             "explicitQualityNeverRunsAutomaticCalibration"

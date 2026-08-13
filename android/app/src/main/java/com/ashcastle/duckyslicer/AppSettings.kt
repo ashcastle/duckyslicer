@@ -105,8 +105,11 @@ internal const val DENSE_PREVIEW_MIN_SEGMENTS = 10_000
 internal const val DENSE_PREVIEW_MAX_SEGMENTS = 32_000
 private const val DENSE_PREVIEW_PIXELS_PER_SEGMENT = 48L
 
-internal const val ADAPTIVE_PREVIEW_FAST_FRAME_MS = 48.0
-internal const val ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 2
+// Promotion is allowed only while completed GPU work leaves enough room for a responsive
+// 60 Hz gesture frame. Emulator profiling showed that a 48 ms threshold promoted a one-vCPU
+// SwiftShader workload all the way to Detail even while interaction frames exceeded 30 ms.
+internal const val ADAPTIVE_PREVIEW_FAST_FRAME_MS = 24.0
+internal const val ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 3
 
 /**
  * Promotes Automatic Preview one bounded tier at a time after measuring completed GPU work.

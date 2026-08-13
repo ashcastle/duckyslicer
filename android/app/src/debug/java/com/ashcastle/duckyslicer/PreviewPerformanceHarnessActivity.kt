@@ -216,7 +216,13 @@ private class ForegroundPreviewBenchmarkRenderer(
             lastFrameStartedNanos = started
             when (phase) {
                 Phase.SETTLED -> renderer.orbitBy(1.5f, -0.5f)
-                Phase.INTERACTION -> renderer.orbitBy(-1.25f, 0.4f)
+                Phase.INTERACTION -> {
+                    renderer.orbitBy(-1.25f, 0.4f)
+                    // Exercise the same matrix path as a two-finger pinch without depending on
+                    // host input timing. Alternate around the current scale so every tier sees
+                    // the same bounded zoom workload.
+                    renderer.zoomBy(if (interactionIntervals.size % 2 == 0) 1.01f else 1f / 1.01f)
+                }
                 else -> Unit
             }
             renderer.onDrawFrame(unused)
@@ -401,6 +407,6 @@ private class ForegroundPreviewBenchmarkRenderer(
 
     private companion object {
         const val WARMUP_FRAMES = 3
-        const val MAXIMUM_AUTOMATIC_CALIBRATION_FRAMES = 12
+        const val MAXIMUM_AUTOMATIC_CALIBRATION_FRAMES = 18
     }
 }

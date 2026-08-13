@@ -402,7 +402,7 @@ class NativeEngineInstrumentedTest {
             adaptiveRenderer.submit(scene.copy(detail = PreviewDetail.AUTOMATIC))
             adaptiveRenderer.onSurfaceCreated(null, null)
             adaptiveRenderer.onSurfaceChanged(null, framebufferSize, framebufferSize)
-            repeat(9) { adaptiveRenderer.onDrawFrame(null) }
+            repeat(15) { adaptiveRenderer.onDrawFrame(null) }
             assertEquals(
                 "A trivial Preview workload must promote Automatic through measured tiers",
                 PreviewDetail.DETAIL,

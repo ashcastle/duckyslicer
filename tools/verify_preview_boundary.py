@@ -150,8 +150,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "DENSE_PREVIEW_MAX_SEGMENTS = 32_000",
         "compatibilityPreviewSegmentBudget(",
         "AdaptivePreviewDetailController(",
-        "ADAPTIVE_PREVIEW_FAST_FRAME_MS = 48.0",
-        "ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 2",
+        "ADAPTIVE_PREVIEW_FAST_FRAME_MS = 24.0",
+        "ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 3",
         "recordCompletedFrame(",
         "currentDetail = lastProvenDetail",
     ):
@@ -398,7 +398,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "detail = PreviewDetail.AUTOMATIC",
         "renderer.automaticCalibrationSettledForTest()",
         "automaticDetail = checkNotNull(renderer.effectiveDetailForTest())",
-        "MAXIMUM_AUTOMATIC_CALIBRATION_FRAMES = 12",
+        "renderer.zoomBy(",
+        "MAXIMUM_AUTOMATIC_CALIBRATION_FRAMES = 18",
     ):
         if marker not in benchmark:
             raise VerificationError(f"foreground adaptive Preview benchmark is missing: {marker}")
@@ -748,7 +749,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "gesturesTemporarilyUseOneLowerGeometryTier",
         "segmentBudgetsStayBoundedForBothRenderers",
         "depthRendererFailureFallsBackWithoutOverwritingTheUserPreference",
-        "automaticPromotesOnlyAfterTwoCompletedFastFramesPerTier",
+        "automaticPromotesOnlyAfterThreeCompletedResponsiveFramesPerTier",
         "slowCandidateFallsBackToLastProvenTierWithoutOscillation",
         "automaticCalibrationResetsForAChangedPreviewWorkload",
         "explicitQualityNeverRunsAutomaticCalibration",
