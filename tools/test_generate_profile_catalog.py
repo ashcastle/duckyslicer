@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import unittest
 
-from tools.generate_profile_catalog import build_printer, build_process, printable_geometry, support_type
+from tools.generate_profile_catalog import build_filament, build_printer, build_process, printable_geometry, support_type
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
@@ -143,6 +143,62 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(71.5, profile["extruderClearanceRadius"])
         self.assertEqual(28.5, profile["extruderClearanceHeightToRod"])
         self.assertEqual(118.0, profile["extruderClearanceHeightToLid"])
+
+    def test_preserves_printer_retraction_and_nullable_filament_overrides(self) -> None:
+        printer = build_printer(
+            "Example",
+            {
+                "name": "Retraction printer",
+                "printable_area": ["0x0", "200x0", "200x200", "0x200"],
+                "printable_height": "220",
+                "nozzle_diameter": "0.4",
+                "gcode_flavor": "marlin",
+                "retraction_length": ["1.3"],
+                "retraction_speed": ["42"],
+                "deretraction_speed": ["37"],
+                "retraction_minimum_travel": ["2.4"],
+                "retract_when_changing_layer": ["1"],
+                "wipe": ["1"],
+                "wipe_distance": ["3.2"],
+                "retract_before_wipe": ["65%"],
+                "retract_restart_extra": ["0.08"],
+                "z_hop": ["0.7"],
+                "z_hop_types": ["Spiral Lift"],
+            },
+        )
+        inherited = build_filament(
+            "Example",
+            {
+                "name": "Inherited PLA",
+                "filament_type": ["PLA"],
+                "nozzle_temperature": ["220"],
+                "hot_plate_temp": ["60"],
+                "filament_retraction_length": ["nil"],
+            },
+        )
+        overridden = build_filament(
+            "Example",
+            {
+                "name": "Override PLA",
+                "filament_type": ["PLA"],
+                "nozzle_temperature": ["220"],
+                "hot_plate_temp": ["60"],
+                "filament_retraction_length": ["0.55"],
+                "filament_z_hop_types": ["Normal Lift"],
+                "filament_wipe": ["0"],
+            },
+        )
+
+        self.assertEqual(1.3, printer["retractLength"])
+        self.assertEqual(37.0, printer["deretractSpeed"])
+        self.assertTrue(printer["retractWhenChangingLayer"])
+        self.assertEqual(65.0, printer["retractBeforeWipe"])
+        self.assertEqual("spiral", printer["zHopType"])
+        self.assertIsNone(inherited["retractLength"])
+        self.assertIsNone(inherited["zHopType"])
+        self.assertEqual(0.55, overridden["retractLength"])
+        self.assertEqual("normal", overridden["zHopType"])
+        self.assertFalse(overridden["wipeWhileRetracting"])
 
     def test_preserves_advanced_support_generation_values(self) -> None:
         profile = build_process(

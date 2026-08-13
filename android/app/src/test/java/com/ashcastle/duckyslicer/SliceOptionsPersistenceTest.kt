@@ -29,6 +29,8 @@ class SliceOptionsPersistenceTest {
         val native = restored.toNativeConfig()
 
         assertEquals(listOf(primary.id, secondary.id), restored.resolvedFilamentSlots().map { it.id })
+        assertNull(restored.filamentProfile.retractLength)
+        assertNull(restored.filamentProfile.zHopType)
         assertEquals(2, native.extruderCount)
         assertEquals(listOf("PLA", "PETG"), native.filamentTypes.toList())
         assertEquals(listOf(primary.nozzleTemp, secondary.nozzleTemp), native.extruderTemps.toList())
@@ -262,6 +264,17 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
     .selectFilament(
         FilamentProfile.PETG.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_06.name),
+            retractLength = 1.1f,
+            retractSpeed = 37f,
+            deretractSpeed = 35f,
+            retractionMinimumTravel = 1f,
+            retractWhenChangingLayer = false,
+            wipeWhileRetracting = false,
+            wipeDistance = 0f,
+            retractBeforeWipe = 0f,
+            retractRestartExtra = 0f,
+            zHop = 0.4f,
+            zHopType = "auto",
         ),
     )
     .selectQuality(
@@ -285,8 +298,6 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         firstLayerBedTemp = 78,
         flowRatio = 0.97f,
         maxVolumetricSpeed = 11f,
-        retractLength = 1.1f,
-        retractSpeed = 37f,
         fanMinSpeed = 35,
         fanMaxSpeed = 72,
         overhangFanSpeed = 88,

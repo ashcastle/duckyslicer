@@ -27,6 +27,15 @@ internal object ProfileValidation {
             ).all { it in 0.1f..100_000f } &&
             listOf(profile.maxJerkX, profile.maxJerkY, profile.maxJerkZ, profile.maxJerkE)
                 .all { it in 0f..100_000f } &&
+            profile.retractLength in 0f..100f &&
+            profile.retractSpeed in 0f..500f &&
+            profile.deretractSpeed in 0f..500f &&
+            profile.retractionMinimumTravel in 0f..1_000f &&
+            profile.wipeDistance in 0f..100f &&
+            profile.retractBeforeWipe in 0f..100f &&
+            profile.retractRestartExtra in -100f..100f &&
+            profile.zHop in 0f..5f &&
+            profile.zHopType in Z_HOP_TYPES &&
             profile.extruderClearanceRadius in 0.1f..1_000f &&
             profile.extruderClearanceHeightToRod in 0.1f..1_500f &&
             profile.extruderClearanceHeightToLid in 0.1f..1_500f &&
@@ -46,8 +55,15 @@ internal object ProfileValidation {
             profile.maxVolumetricSpeed in 0.1f..100f &&
             listOf(profile.fanMinSpeed, profile.fanMaxSpeed, profile.overhangFanSpeed)
                 .all { it in 0..100 } &&
-            profile.retractLength in 0f..100f &&
-            profile.retractSpeed in 0f..500f &&
+            profile.retractLength.isNullOrIn(0f..100f) &&
+            profile.retractSpeed.isNullOrIn(0f..500f) &&
+            profile.deretractSpeed.isNullOrIn(0f..500f) &&
+            profile.retractionMinimumTravel.isNullOrIn(0f..1_000f) &&
+            profile.wipeDistance.isNullOrIn(0f..100f) &&
+            profile.retractBeforeWipe.isNullOrIn(0f..100f) &&
+            profile.retractRestartExtra.isNullOrIn(-100f..100f) &&
+            profile.zHop.isNullOrIn(0f..5f) &&
+            (profile.zHopType == null || profile.zHopType in Z_HOP_TYPES) &&
             profile.slowDownLayerTime in 0f..600f &&
             profile.slowDownMinSpeed in 0f..500f &&
             profile.closeFanFirstLayers in 0..10_000 &&
@@ -260,6 +276,9 @@ internal object ProfileValidation {
     private fun combinationHeightIsValid(value: Float, percent: Boolean): Boolean =
         value in 0f..(if (percent) 1_000f else 10f)
 
+    private fun Float?.isNullOrIn(range: ClosedFloatingPointRange<Float>): Boolean =
+        this == null || this in range
+
     private val INFILL_PATTERNS = setOf(
         "monotonic", "monotonicline", "rectilinear", "alignedrectilinear", "zigzag",
         "crosszag", "lockedzag", "line", "grid", "triangles", "tri-hexagon", "cubic",
@@ -279,6 +298,7 @@ internal object ProfileValidation {
     )
     private val SEAM_POSITIONS = setOf("aligned", "nearest", "back", "random")
     private val IRONING_TYPES = setOf("no ironing", "top", "topmost", "solid")
+    private val Z_HOP_TYPES = setOf("auto", "normal", "slope", "spiral")
 
     private const val MAX_LABEL_LENGTH = 512
     private const val MAX_COMPATIBILITY_ENTRIES = 512

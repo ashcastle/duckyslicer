@@ -436,6 +436,133 @@ private fun PrinterSettingsSheet(
         },
         onSelected = { onOptionsChanged(options.copy(gcodeFlavor = it)) },
     )
+    SettingsGroupTitle(stringResource(R.string.retraction_defaults))
+    SettingSlider(
+        label = stringResource(R.string.retraction_length),
+        valueText = stringResource(R.string.millimeters_value_precise, options.printerProfile.retractLength),
+        value = options.printerProfile.retractLength,
+        range = 0f..8f,
+        steps = 79,
+        onValueChange = {
+            onOptionsChanged(options.updatePrinterRetraction(options.printerProfile.copy(retractLength = it)))
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.retraction_speed),
+        valueText = stringResource(R.string.print_speed_value, options.printerProfile.retractSpeed),
+        value = options.printerProfile.retractSpeed,
+        range = 0f..100f,
+        steps = 99,
+        onValueChange = {
+            onOptionsChanged(options.updatePrinterRetraction(
+                options.printerProfile.copy(retractSpeed = it.roundToInt().toFloat()),
+            ))
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.deretraction_speed),
+        valueText = stringResource(R.string.print_speed_value, options.printerProfile.deretractSpeed),
+        value = options.printerProfile.deretractSpeed,
+        range = 0f..100f,
+        steps = 99,
+        onValueChange = {
+            onOptionsChanged(options.updatePrinterRetraction(
+                options.printerProfile.copy(deretractSpeed = it.roundToInt().toFloat()),
+            ))
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.retraction_minimum_travel),
+        valueText = stringResource(
+            R.string.millimeters_value_precise, options.printerProfile.retractionMinimumTravel,
+        ),
+        value = options.printerProfile.retractionMinimumTravel,
+        range = 0f..20f,
+        steps = 199,
+        onValueChange = {
+            onOptionsChanged(options.updatePrinterRetraction(
+                options.printerProfile.copy(retractionMinimumTravel = it),
+            ))
+        },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.retract_when_changing_layer),
+        checked = options.printerProfile.retractWhenChangingLayer,
+        onCheckedChange = {
+            onOptionsChanged(options.updatePrinterRetraction(
+                options.printerProfile.copy(retractWhenChangingLayer = it),
+            ))
+        },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.wipe_while_retracting),
+        checked = options.printerProfile.wipeWhileRetracting,
+        onCheckedChange = {
+            onOptionsChanged(options.updatePrinterRetraction(
+                options.printerProfile.copy(wipeWhileRetracting = it),
+            ))
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.wipe_distance),
+        valueText = stringResource(R.string.millimeters_value_precise, options.printerProfile.wipeDistance),
+        value = options.printerProfile.wipeDistance,
+        range = 0f..10f,
+        steps = 99,
+        onValueChange = {
+            onOptionsChanged(options.updatePrinterRetraction(options.printerProfile.copy(wipeDistance = it)))
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.retract_before_wipe),
+        valueText = stringResource(R.string.percent_value, options.printerProfile.retractBeforeWipe.roundToInt()),
+        value = options.printerProfile.retractBeforeWipe,
+        range = 0f..100f,
+        steps = 99,
+        onValueChange = {
+            onOptionsChanged(options.updatePrinterRetraction(
+                options.printerProfile.copy(retractBeforeWipe = it.roundToInt().toFloat()),
+            ))
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.retract_restart_extra),
+        valueText = stringResource(
+            R.string.millimeters_value_precise, options.printerProfile.retractRestartExtra,
+        ),
+        value = options.printerProfile.retractRestartExtra,
+        range = -2f..2f,
+        steps = 79,
+        onValueChange = {
+            onOptionsChanged(options.updatePrinterRetraction(
+                options.printerProfile.copy(retractRestartExtra = it),
+            ))
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.z_hop_height),
+        valueText = stringResource(R.string.millimeters_value_precise, options.printerProfile.zHop),
+        value = options.printerProfile.zHop,
+        range = 0f..5f,
+        steps = 99,
+        onValueChange = {
+            onOptionsChanged(options.updatePrinterRetraction(options.printerProfile.copy(zHop = it)))
+        },
+    )
+    SettingChoices(
+        settingLabel = stringResource(R.string.z_hop_type),
+        entries = listOf("auto", "normal", "slope", "spiral"),
+        selected = options.printerProfile.zHopType,
+        optionLabel = { stringResource(when (it) {
+            "auto" -> R.string.z_hop_auto
+            "normal" -> R.string.z_hop_normal
+            "spiral" -> R.string.z_hop_spiral
+            else -> R.string.z_hop_slope
+        }) },
+        onSelected = {
+            onOptionsChanged(options.updatePrinterRetraction(options.printerProfile.copy(zHopType = it)))
+        },
+    )
     SettingsGroupTitle(stringResource(R.string.sequential_printing_clearance))
     SettingSlider(
         label = stringResource(R.string.extruder_clearance_radius),
@@ -565,6 +692,13 @@ private fun FilamentSettingsSheet(
         selectedSlot = selectedSlot.coerceIn(0, slots.lastIndex)
     }
     val activeProfile = slots.getOrElse(selectedSlot) { slots.last() }
+    val resolvedRetraction = activeProfile.resolveRetraction(options.printerProfile)
+    val inheritsPrinterRetraction = activeProfile.retractLength == null &&
+        activeProfile.retractSpeed == null && activeProfile.deretractSpeed == null &&
+        activeProfile.retractionMinimumTravel == null && activeProfile.retractWhenChangingLayer == null &&
+        activeProfile.wipeWhileRetracting == null && activeProfile.wipeDistance == null &&
+        activeProfile.retractBeforeWipe == null && activeProfile.retractRestartExtra == null &&
+        activeProfile.zHop == null && activeProfile.zHopType == null
     SettingsSheet(
         title = stringResource(R.string.filament_profile),
         onDismiss = onDismiss,
@@ -680,10 +814,39 @@ private fun FilamentSettingsSheet(
             },
         )
         SettingsGroupTitle(stringResource(R.string.retraction))
+        SettingsSwitch(
+            label = stringResource(R.string.use_printer_retraction_defaults),
+            checked = inheritsPrinterRetraction,
+            onCheckedChange = { inherit ->
+                val updated = if (inherit) {
+                    activeProfile.copy(
+                        retractLength = null, retractSpeed = null, deretractSpeed = null,
+                        retractionMinimumTravel = null, retractWhenChangingLayer = null,
+                        wipeWhileRetracting = null, wipeDistance = null, retractBeforeWipe = null,
+                        retractRestartExtra = null, zHop = null, zHopType = null,
+                    )
+                } else {
+                    activeProfile.copy(
+                        retractLength = resolvedRetraction.length,
+                        retractSpeed = resolvedRetraction.speed,
+                        deretractSpeed = resolvedRetraction.deretractSpeed,
+                        retractionMinimumTravel = resolvedRetraction.minimumTravel,
+                        retractWhenChangingLayer = resolvedRetraction.whenChangingLayer,
+                        wipeWhileRetracting = resolvedRetraction.wipe,
+                        wipeDistance = resolvedRetraction.wipeDistance,
+                        retractBeforeWipe = resolvedRetraction.beforeWipe,
+                        retractRestartExtra = resolvedRetraction.restartExtra,
+                        zHop = resolvedRetraction.zHop,
+                        zHopType = resolvedRetraction.zHopType,
+                    )
+                }
+                onOptionsChanged(options.updateFilamentSlot(selectedSlot, updated))
+            },
+        )
         SettingSlider(
             label = stringResource(R.string.retraction_length),
-            valueText = stringResource(R.string.millimeters_value_precise, activeProfile.retractLength),
-            value = activeProfile.retractLength,
+            valueText = stringResource(R.string.millimeters_value_precise, resolvedRetraction.length),
+            value = resolvedRetraction.length,
             range = 0f..8f,
             steps = 79,
             onValueChange = {
@@ -692,10 +855,10 @@ private fun FilamentSettingsSheet(
         )
         SettingSlider(
             label = stringResource(R.string.retraction_speed),
-            valueText = stringResource(R.string.print_speed_value, activeProfile.retractSpeed),
-            value = activeProfile.retractSpeed,
-            range = 10f..100f,
-            steps = 89,
+            valueText = stringResource(R.string.print_speed_value, resolvedRetraction.speed),
+            value = resolvedRetraction.speed,
+            range = 0f..100f,
+            steps = 99,
             onValueChange = {
                 onOptionsChanged(
                     options.updateFilamentSlot(
@@ -703,6 +866,110 @@ private fun FilamentSettingsSheet(
                         activeProfile.copy(retractSpeed = it.roundToInt().toFloat()),
                     ),
                 )
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.deretraction_speed),
+            valueText = stringResource(R.string.print_speed_value, resolvedRetraction.deretractSpeed),
+            value = resolvedRetraction.deretractSpeed,
+            range = 0f..100f,
+            steps = 99,
+            onValueChange = {
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(deretractSpeed = it.roundToInt().toFloat()),
+                ))
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.retraction_minimum_travel),
+            valueText = stringResource(R.string.millimeters_value_precise, resolvedRetraction.minimumTravel),
+            value = resolvedRetraction.minimumTravel,
+            range = 0f..20f,
+            steps = 199,
+            onValueChange = {
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(retractionMinimumTravel = it),
+                ))
+            },
+        )
+        SettingsSwitch(
+            label = stringResource(R.string.retract_when_changing_layer),
+            checked = resolvedRetraction.whenChangingLayer,
+            onCheckedChange = {
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(retractWhenChangingLayer = it),
+                ))
+            },
+        )
+        SettingsSwitch(
+            label = stringResource(R.string.wipe_while_retracting),
+            checked = resolvedRetraction.wipe,
+            onCheckedChange = {
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(wipeWhileRetracting = it),
+                ))
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.wipe_distance),
+            valueText = stringResource(R.string.millimeters_value_precise, resolvedRetraction.wipeDistance),
+            value = resolvedRetraction.wipeDistance,
+            range = 0f..10f,
+            steps = 99,
+            onValueChange = {
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(wipeDistance = it),
+                ))
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.retract_before_wipe),
+            valueText = stringResource(R.string.percent_value, resolvedRetraction.beforeWipe.roundToInt()),
+            value = resolvedRetraction.beforeWipe,
+            range = 0f..100f,
+            steps = 99,
+            onValueChange = {
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(retractBeforeWipe = it.roundToInt().toFloat()),
+                ))
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.retract_restart_extra),
+            valueText = stringResource(R.string.millimeters_value_precise, resolvedRetraction.restartExtra),
+            value = resolvedRetraction.restartExtra,
+            range = -2f..2f,
+            steps = 79,
+            onValueChange = {
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(retractRestartExtra = it),
+                ))
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.z_hop_height),
+            valueText = stringResource(R.string.millimeters_value_precise, resolvedRetraction.zHop),
+            value = resolvedRetraction.zHop,
+            range = 0f..5f,
+            steps = 99,
+            onValueChange = {
+                onOptionsChanged(options.updateFilamentSlot(selectedSlot, activeProfile.copy(zHop = it)))
+            },
+        )
+        SettingChoices(
+            settingLabel = stringResource(R.string.z_hop_type),
+            entries = listOf("auto", "normal", "slope", "spiral"),
+            selected = resolvedRetraction.zHopType,
+            optionLabel = { stringResource(when (it) {
+                "auto" -> R.string.z_hop_auto
+                "normal" -> R.string.z_hop_normal
+                "spiral" -> R.string.z_hop_spiral
+                else -> R.string.z_hop_slope
+            }) },
+            onSelected = {
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(zHopType = it),
+                ))
             },
         )
         SettingsGroupTitle(stringResource(R.string.cooling))

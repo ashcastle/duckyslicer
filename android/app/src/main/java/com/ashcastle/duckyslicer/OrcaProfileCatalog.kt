@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v23.bin"
+private const val CATALOG_ASSET = "profile_catalog_v24.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -16,6 +16,9 @@ internal const val BINARY_INT = 3
 internal const val BINARY_BOOL = 4
 internal const val BINARY_STRING_LIST = 5
 internal const val BINARY_FLOAT_LIST = 6
+internal const val BINARY_NULLABLE_FLOAT = 7
+internal const val BINARY_NULLABLE_BOOL = 8
+internal const val BINARY_NULLABLE_STRING = 9
 
 internal data class BinaryField(val name: String, val kind: Int)
 
@@ -31,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 23) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 24) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -81,6 +84,17 @@ class OrcaProfileCatalog(private val context: Context) {
         maxJerkY = input.readFloat(),
         maxJerkZ = input.readFloat(),
         maxJerkE = input.readFloat(),
+        retractLength = input.readFloat(),
+        retractSpeed = input.readFloat(),
+        deretractSpeed = input.readFloat(),
+        retractionMinimumTravel = input.readFloat(),
+        retractWhenChangingLayer = input.readCatalogBoolean(),
+        wipeWhileRetracting = input.readCatalogBoolean(),
+        wipeDistance = input.readFloat(),
+        retractBeforeWipe = input.readFloat(),
+        retractRestartExtra = input.readFloat(),
+        zHop = input.readFloat(),
+        zHopType = input.readCatalogString(),
         extruderClearanceRadius = input.readFloat(),
         extruderClearanceHeightToRod = input.readFloat(),
         extruderClearanceHeightToLid = input.readFloat(),
@@ -98,8 +112,17 @@ class OrcaProfileCatalog(private val context: Context) {
         firstLayerBedTemp = input.readInt(),
         flowRatio = input.readFloat(),
         maxVolumetricSpeed = input.readFloat(),
-        retractLength = input.readFloat(),
-        retractSpeed = input.readFloat(),
+        retractLength = input.readCatalogNullableFloat(),
+        retractSpeed = input.readCatalogNullableFloat(),
+        deretractSpeed = input.readCatalogNullableFloat(),
+        retractionMinimumTravel = input.readCatalogNullableFloat(),
+        retractWhenChangingLayer = input.readCatalogNullableBoolean(),
+        wipeWhileRetracting = input.readCatalogNullableBoolean(),
+        wipeDistance = input.readCatalogNullableFloat(),
+        retractBeforeWipe = input.readCatalogNullableFloat(),
+        retractRestartExtra = input.readCatalogNullableFloat(),
+        zHop = input.readCatalogNullableFloat(),
+        zHopType = input.readCatalogNullableString(),
         fanMinSpeed = input.readInt(),
         fanMaxSpeed = input.readInt(),
         overhangFanSpeed = input.readInt(),
@@ -145,6 +168,21 @@ internal fun DataInputStream.readCatalogBoolean(): Boolean = when (val value = r
     1 -> true
     else -> error("Invalid profile catalog boolean: $value")
 }
+
+private fun DataInputStream.readCatalogPresence(): Boolean = when (val value = readUnsignedByte()) {
+    0 -> false
+    1 -> true
+    else -> error("Invalid nullable field marker: $value")
+}
+
+internal fun DataInputStream.readCatalogNullableFloat(): Float? =
+    if (readCatalogPresence()) readFloat() else null
+
+internal fun DataInputStream.readCatalogNullableBoolean(): Boolean? =
+    if (readCatalogPresence()) readCatalogBoolean() else null
+
+internal fun DataInputStream.readCatalogNullableString(): String? =
+    if (readCatalogPresence()) readCatalogString() else null
 
 internal fun DataInputStream.readCatalogStringList(): List<String> {
     val count = readBoundedCount(MAX_BINARY_RECORDS, "string list")
@@ -192,6 +230,17 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("maxJerkY", BINARY_FLOAT),
     BinaryField("maxJerkZ", BINARY_FLOAT),
     BinaryField("maxJerkE", BINARY_FLOAT),
+    BinaryField("retractLength", BINARY_FLOAT),
+    BinaryField("retractSpeed", BINARY_FLOAT),
+    BinaryField("deretractSpeed", BINARY_FLOAT),
+    BinaryField("retractionMinimumTravel", BINARY_FLOAT),
+    BinaryField("retractWhenChangingLayer", BINARY_BOOL),
+    BinaryField("wipeWhileRetracting", BINARY_BOOL),
+    BinaryField("wipeDistance", BINARY_FLOAT),
+    BinaryField("retractBeforeWipe", BINARY_FLOAT),
+    BinaryField("retractRestartExtra", BINARY_FLOAT),
+    BinaryField("zHop", BINARY_FLOAT),
+    BinaryField("zHopType", BINARY_STRING),
     BinaryField("extruderClearanceRadius", BINARY_FLOAT),
     BinaryField("extruderClearanceHeightToRod", BINARY_FLOAT),
     BinaryField("extruderClearanceHeightToLid", BINARY_FLOAT),
@@ -210,8 +259,17 @@ private val FILAMENT_BINARY_FIELDS = arrayOf(
     BinaryField("firstLayerBedTemp", BINARY_INT),
     BinaryField("flowRatio", BINARY_FLOAT),
     BinaryField("maxVolumetricSpeed", BINARY_FLOAT),
-    BinaryField("retractLength", BINARY_FLOAT),
-    BinaryField("retractSpeed", BINARY_FLOAT),
+    BinaryField("retractLength", BINARY_NULLABLE_FLOAT),
+    BinaryField("retractSpeed", BINARY_NULLABLE_FLOAT),
+    BinaryField("deretractSpeed", BINARY_NULLABLE_FLOAT),
+    BinaryField("retractionMinimumTravel", BINARY_NULLABLE_FLOAT),
+    BinaryField("retractWhenChangingLayer", BINARY_NULLABLE_BOOL),
+    BinaryField("wipeWhileRetracting", BINARY_NULLABLE_BOOL),
+    BinaryField("wipeDistance", BINARY_NULLABLE_FLOAT),
+    BinaryField("retractBeforeWipe", BINARY_NULLABLE_FLOAT),
+    BinaryField("retractRestartExtra", BINARY_NULLABLE_FLOAT),
+    BinaryField("zHop", BINARY_NULLABLE_FLOAT),
+    BinaryField("zHopType", BINARY_NULLABLE_STRING),
     BinaryField("fanMinSpeed", BINARY_INT),
     BinaryField("fanMaxSpeed", BINARY_INT),
     BinaryField("overhangFanSpeed", BINARY_INT),

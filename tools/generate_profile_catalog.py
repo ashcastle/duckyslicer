@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 23
+SCHEMA_VERSION = 24
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -32,6 +32,9 @@ BINARY_INT = 3
 BINARY_BOOL = 4
 BINARY_STRING_LIST = 5
 BINARY_FLOAT_LIST = 6
+BINARY_NULLABLE_FLOAT = 7
+BINARY_NULLABLE_BOOL = 8
+BINARY_NULLABLE_STRING = 9
 
 
 def scalar(value: Any, default: Any = None) -> Any:
@@ -56,6 +59,44 @@ def integer(value: Any, default: int) -> int:
 def boolean(value: Any, default: bool = False) -> bool:
     candidate = str(scalar(value, "1" if default else "0")).strip().lower()
     return candidate in {"1", "true", "yes", "on"}
+
+
+def nullable_scalar(value: Any) -> Any | None:
+    candidate = scalar(value)
+    if candidate is None or str(candidate).strip().lower() == "nil":
+        return None
+    return candidate
+
+
+def nullable_number(value: Any) -> float | None:
+    candidate = nullable_scalar(value)
+    if candidate is None:
+        return None
+    try:
+        parsed = float(str(candidate).strip().removesuffix("%"))
+    except ValueError:
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def nullable_boolean(value: Any) -> bool | None:
+    candidate = nullable_scalar(value)
+    if candidate is None:
+        return None
+    return str(candidate).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def z_hop_type(value: Any, default: str | None) -> str | None:
+    candidate = nullable_scalar(value)
+    if candidate is None:
+        return default
+    normalized = str(candidate).strip().lower()
+    return {
+        "auto": "auto", "auto lift": "auto",
+        "normal": "normal", "normal lift": "normal",
+        "slope": "slope", "slope lift": "slope",
+        "spiral": "spiral", "spiral lift": "spiral",
+    }.get(normalized, default)
 
 
 def values(value: Any) -> list[str]:
@@ -203,6 +244,17 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "maxJerkY": motion("machine_max_jerk_y", 8),
         "maxJerkZ": motion("machine_max_jerk_z", 0.4),
         "maxJerkE": motion("machine_max_jerk_e", 5),
+        "retractLength": number(raw.get("retraction_length"), 0.8),
+        "retractSpeed": number(raw.get("retraction_speed"), 30),
+        "deretractSpeed": number(raw.get("deretraction_speed"), 0),
+        "retractionMinimumTravel": number(raw.get("retraction_minimum_travel"), 2),
+        "retractWhenChangingLayer": boolean(raw.get("retract_when_changing_layer")),
+        "wipeWhileRetracting": boolean(raw.get("wipe")),
+        "wipeDistance": number(raw.get("wipe_distance"), 1),
+        "retractBeforeWipe": number(raw.get("retract_before_wipe"), 100),
+        "retractRestartExtra": number(raw.get("retract_restart_extra"), 0),
+        "zHop": number(raw.get("z_hop"), 0.4),
+        "zHopType": z_hop_type(raw.get("z_hop_types"), "slope"),
         "extruderClearanceRadius": number(raw.get("extruder_clearance_radius"), 40),
         "extruderClearanceHeightToRod": number(raw.get("extruder_clearance_height_to_rod"), 40),
         "extruderClearanceHeightToLid": number(raw.get("extruder_clearance_height_to_lid"), 120),
@@ -224,6 +276,15 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and 0.1 <= profile["extruderClearanceRadius"] <= 1_000
         and 0.1 <= profile["extruderClearanceHeightToRod"] <= 1_500
         and 0.1 <= profile["extruderClearanceHeightToLid"] <= 1_500
+        and 0 <= profile["retractLength"] <= 100
+        and 0 <= profile["retractSpeed"] <= 500
+        and 0 <= profile["deretractSpeed"] <= 500
+        and 0 <= profile["retractionMinimumTravel"] <= 1_000
+        and 0 <= profile["wipeDistance"] <= 100
+        and 0 <= profile["retractBeforeWipe"] <= 100
+        and -100 <= profile["retractRestartExtra"] <= 100
+        and 0 <= profile["zHop"] <= 5
+        and profile["zHopType"] in {"auto", "normal", "slope", "spiral"}
     ):
         raise ValueError("unsafe motion limits")
     return profile
@@ -345,8 +406,17 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "firstLayerBedTemp": first_bed,
         "flowRatio": number(raw.get("filament_flow_ratio"), 1.0),
         "maxVolumetricSpeed": number(raw.get("filament_max_volumetric_speed"), 12),
-        "retractLength": number(raw.get("retraction_length"), 0.8),
-        "retractSpeed": number(raw.get("retraction_speed"), 45),
+        "retractLength": nullable_number(raw.get("filament_retraction_length")),
+        "retractSpeed": nullable_number(raw.get("filament_retraction_speed")),
+        "deretractSpeed": nullable_number(raw.get("filament_deretraction_speed")),
+        "retractionMinimumTravel": nullable_number(raw.get("filament_retraction_minimum_travel")),
+        "retractWhenChangingLayer": nullable_boolean(raw.get("filament_retract_when_changing_layer")),
+        "wipeWhileRetracting": nullable_boolean(raw.get("filament_wipe")),
+        "wipeDistance": nullable_number(raw.get("filament_wipe_distance")),
+        "retractBeforeWipe": nullable_number(raw.get("filament_retract_before_wipe")),
+        "retractRestartExtra": nullable_number(raw.get("filament_retract_restart_extra")),
+        "zHop": nullable_number(raw.get("filament_z_hop")),
+        "zHopType": z_hop_type(raw.get("filament_z_hop_types"), None),
         "fanMinSpeed": integer(raw.get("fan_min_speed"), 30),
         "fanMaxSpeed": integer(raw.get("fan_max_speed"), 100),
         "overhangFanSpeed": integer(raw.get("overhang_fan_speed"), 100),
@@ -362,6 +432,15 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         0.5 <= profile["flowRatio"] <= 1.5
         and 0.1 <= profile["maxVolumetricSpeed"] <= 100
         and all(0 <= profile[key] <= 100 for key in ["fanMinSpeed", "fanMaxSpeed", "overhangFanSpeed"])
+        and (profile["retractLength"] is None or 0 <= profile["retractLength"] <= 100)
+        and (profile["retractSpeed"] is None or 0 <= profile["retractSpeed"] <= 500)
+        and (profile["deretractSpeed"] is None or 0 <= profile["deretractSpeed"] <= 500)
+        and (profile["retractionMinimumTravel"] is None or 0 <= profile["retractionMinimumTravel"] <= 1_000)
+        and (profile["wipeDistance"] is None or 0 <= profile["wipeDistance"] <= 100)
+        and (profile["retractBeforeWipe"] is None or 0 <= profile["retractBeforeWipe"] <= 100)
+        and (profile["retractRestartExtra"] is None or -100 <= profile["retractRestartExtra"] <= 100)
+        and (profile["zHop"] is None or 0 <= profile["zHop"] <= 5)
+        and (profile["zHopType"] is None or profile["zHopType"] in {"auto", "normal", "slope", "spiral"})
     ):
         raise ValueError("unsafe filament limits")
     return profile
@@ -874,6 +953,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
 
 
 def binary_kind(value: Any) -> int:
+    if value is None:
+        return 0
     if isinstance(value, bool):
         return BINARY_BOOL
     if isinstance(value, int):
@@ -891,6 +972,16 @@ def binary_kind(value: Any) -> int:
 
 def infer_binary_kind(records: list[dict[str, Any]], field: str) -> int:
     kinds = {binary_kind(record[field]) for record in records}
+    nullable = 0 in kinds
+    kinds.discard(0)
+    if nullable:
+        if kinds <= {BINARY_INT, BINARY_FLOAT}:
+            return BINARY_NULLABLE_FLOAT
+        if kinds == {BINARY_BOOL}:
+            return BINARY_NULLABLE_BOOL
+        if kinds == {BINARY_STRING}:
+            return BINARY_NULLABLE_STRING
+        raise ValueError(f"unsupported nullable binary catalog field: {field}")
     if kinds <= {BINARY_INT, BINARY_FLOAT}:
         return BINARY_FLOAT if BINARY_FLOAT in kinds else BINARY_INT
     if len(kinds) == 1:
@@ -921,6 +1012,15 @@ def write_binary_value(output: Any, kind: int, value: Any) -> None:
         output.write(struct.pack(">I", len(value)))
         for item in value:
             output.write(struct.pack(">f", item))
+    elif kind in {BINARY_NULLABLE_FLOAT, BINARY_NULLABLE_BOOL, BINARY_NULLABLE_STRING}:
+        output.write(b"\x00" if value is None else b"\x01")
+        if value is not None:
+            if kind == BINARY_NULLABLE_FLOAT:
+                output.write(struct.pack(">f", value))
+            elif kind == BINARY_NULLABLE_BOOL:
+                output.write(b"\x01" if value else b"\x00")
+            else:
+                write_binary_string(output, value)
     else:
         raise ValueError(f"unsupported binary catalog kind: {kind}")
 
@@ -939,7 +1039,12 @@ def write_binary_section(output: Any, records: list[dict[str, Any]]) -> None:
             raise ValueError("binary catalog record has inconsistent fields")
         for field, kind in zip(fields, kinds):
             actual_kind = binary_kind(record[field])
-            if actual_kind != kind and not (
+            nullable_match = (
+                (kind == BINARY_NULLABLE_FLOAT and actual_kind in {0, BINARY_INT, BINARY_FLOAT})
+                or (kind == BINARY_NULLABLE_BOOL and actual_kind in {0, BINARY_BOOL})
+                or (kind == BINARY_NULLABLE_STRING and actual_kind in {0, BINARY_STRING})
+            )
+            if actual_kind != kind and not nullable_match and not (
                 kind == BINARY_FLOAT and actual_kind == BINARY_INT
             ):
                 raise ValueError(f"binary catalog field changed type: {field}")

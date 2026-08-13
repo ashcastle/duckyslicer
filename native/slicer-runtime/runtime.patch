@@ -2406,3 +2406,153 @@ index 57431bb5..415d2590 100644
  
      // Multi-extruder setup
      int n_ext = std::max(1, config.extruder_count);
+
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -283,6 +283,15 @@ struct SliceConfig {
+     std::vector<int> extruder_temps;           // per-extruder nozzle temps
+     std::vector<float> extruder_retract_length; // per-extruder retraction
+     std::vector<float> extruder_retract_speed;  // per-extruder retraction speed
++    std::vector<float> extruder_deretract_speed;
++    std::vector<float> extruder_retraction_minimum_travel;
++    std::vector<int> extruder_retract_when_changing_layer;
++    std::vector<int> extruder_wipe_while_retracting;
++    std::vector<float> extruder_wipe_distance;
++    std::vector<float> extruder_retract_before_wipe;
++    std::vector<float> extruder_retract_restart_extra;
++    std::vector<float> extruder_z_hop;
++    std::vector<std::string> extruder_z_hop_type;
+ 
+     // Wipe tower (for multi-extruder)
+     bool wipe_tower_enabled = false;
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -317,6 +317,15 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.extruder_temps = getIntArray("extruderTemps");
+     config.extruder_retract_length = getFloatArray("extruderRetractLength");
+     config.extruder_retract_speed = getFloatArray("extruderRetractSpeed");
++    config.extruder_deretract_speed = getFloatArray("extruderDeretractSpeed");
++    config.extruder_retraction_minimum_travel = getFloatArray("extruderRetractionMinimumTravel");
++    config.extruder_retract_when_changing_layer = getIntArray("extruderRetractWhenChangingLayer");
++    config.extruder_wipe_while_retracting = getIntArray("extruderWipeWhileRetracting");
++    config.extruder_wipe_distance = getFloatArray("extruderWipeDistance");
++    config.extruder_retract_before_wipe = getFloatArray("extruderRetractBeforeWipe");
++    config.extruder_retract_restart_extra = getFloatArray("extruderRetractRestartExtra");
++    config.extruder_z_hop = getFloatArray("extruderZHop");
++    config.extruder_z_hop_type = getStringArray("extruderZHopType");
+     config.wipe_tower_enabled = getBool("wipeTowerEnabled");
+     config.wipe_tower_x = getFloat("wipeTowerX");
+     config.wipe_tower_y = getFloat("wipeTowerY");
+@@ -660,6 +669,15 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setIntArray("extruderTemps", config.extruder_temps);
+     setFloatArray("extruderRetractLength", config.extruder_retract_length);
+     setFloatArray("extruderRetractSpeed", config.extruder_retract_speed);
++    setFloatArray("extruderDeretractSpeed", config.extruder_deretract_speed);
++    setFloatArray("extruderRetractionMinimumTravel", config.extruder_retraction_minimum_travel);
++    setIntArray("extruderRetractWhenChangingLayer", config.extruder_retract_when_changing_layer);
++    setIntArray("extruderWipeWhileRetracting", config.extruder_wipe_while_retracting);
++    setFloatArray("extruderWipeDistance", config.extruder_wipe_distance);
++    setFloatArray("extruderRetractBeforeWipe", config.extruder_retract_before_wipe);
++    setFloatArray("extruderRetractRestartExtra", config.extruder_retract_restart_extra);
++    setFloatArray("extruderZHop", config.extruder_z_hop);
++    setStringArray("extruderZHopType", config.extruder_z_hop_type);
+     setBool("wipeTowerEnabled", config.wipe_tower_enabled);
+     setFloat("wipeTowerX", config.wipe_tower_x);
+     setFloat("wipeTowerY", config.wipe_tower_y);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -372,6 +372,33 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     std::vector<int> bed_temps(n_ext, config.bed_temp);
+     std::vector<double> retract_len(n_ext, config.retract_length);
+     std::vector<double> retract_spd(n_ext, config.retract_speed);
++    auto per_ext_floats = [n_ext](const std::vector<float>& values, double fallback) {
++        std::vector<double> result(n_ext, fallback);
++        for (int i = 0; i < n_ext && i < static_cast<int>(values.size()); ++i)
++            result[i] = values[i];
++        return result;
++    };
++    auto per_ext_bools = [n_ext](const std::vector<int>& values, bool fallback) {
++        std::vector<unsigned char> result(n_ext, fallback ? 1 : 0);
++        for (int i = 0; i < n_ext && i < static_cast<int>(values.size()); ++i)
++            result[i] = values[i] != 0 ? 1 : 0;
++        return result;
++    };
++    const auto deretract_spd = per_ext_floats(config.extruder_deretract_speed, 0.0);
++    const auto retract_minimum_travel = per_ext_floats(config.extruder_retraction_minimum_travel, 2.0);
++    const auto retract_layer_change = per_ext_bools(config.extruder_retract_when_changing_layer, false);
++    const auto wipe = per_ext_bools(config.extruder_wipe_while_retracting, false);
++    const auto wipe_distance = per_ext_floats(config.extruder_wipe_distance, 1.0);
++    const auto retract_before_wipe = per_ext_floats(config.extruder_retract_before_wipe, 100.0);
++    const auto retract_restart_extra = per_ext_floats(config.extruder_retract_restart_extra, 0.0);
++    const auto z_hop = per_ext_floats(config.extruder_z_hop, 0.4);
++    std::vector<int> z_hop_types(n_ext, Slic3r::ZHopType::zhtSlope);
++    for (int i = 0; i < n_ext && i < static_cast<int>(config.extruder_z_hop_type.size()); ++i) {
++        const auto& value = config.extruder_z_hop_type[i];
++        z_hop_types[i] = value == "auto" ? Slic3r::ZHopType::zhtAuto :
++            value == "normal" ? Slic3r::ZHopType::zhtNormal :
++            value == "spiral" ? Slic3r::ZHopType::zhtSpiral : Slic3r::ZHopType::zhtSlope;
++    }
+ 
+     // Override with per-extruder values if provided.
+     // When the array covers all extruders, use ALL values (including 0 for unused slots)
+@@ -431,6 +458,20 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     // ship 10mm bowden defaults that cause heat-creep clogs.
+     dpc.set_key_value("retraction_length", new Slic3r::ConfigOptionFloats(retract_len));
+     dpc.set_key_value("retraction_speed", new Slic3r::ConfigOptionFloats(retract_spd));
++    dpc.set_key_value("deretraction_speed", new Slic3r::ConfigOptionFloats(deretract_spd));
++    dpc.set_key_value("retraction_minimum_travel", new Slic3r::ConfigOptionFloats(retract_minimum_travel));
++    dpc.set_key_value("retract_when_changing_layer", new Slic3r::ConfigOptionBools(retract_layer_change));
++    dpc.set_key_value("wipe", new Slic3r::ConfigOptionBools(wipe));
++    dpc.set_key_value("wipe_distance", new Slic3r::ConfigOptionFloats(wipe_distance));
++    dpc.set_key_value("retract_before_wipe", new Slic3r::ConfigOptionPercents(retract_before_wipe));
++    dpc.set_key_value("retract_restart_extra", new Slic3r::ConfigOptionFloats(retract_restart_extra));
++    dpc.set_key_value("z_hop", new Slic3r::ConfigOptionFloats(z_hop));
++    auto* z_hop_type_option = dpc.option<Slic3r::ConfigOptionEnumsGeneric>("z_hop_types");
++    if (z_hop_type_option != nullptr) {
++        // Keep Orca's enum key map: replacing this option with a raw value-only
++        // instance makes G-code config serialization dereference a null map.
++        z_hop_type_option->values = std::move(z_hop_types);
++    }
+     // Toolchange retraction — OrcaSlicer defaults to 10mm (bowden).  For the Snapmaker U1's
+     // direct-drive extruders this pulls filament past the heat break, causing heat-creep clogs
+     // during the standby period between tool changes.  Use the same length as normal retraction.
+@@ -563,13 +604,6 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     // profile must provide a compatible start template because Orca delegates
+     // part of temperature setup to that template for this flavor.
+ 
+-    // Deretraction speed — OrcaSlicer defaults to 0 (= same as retraction speed).
+-    // Snapmaker profile uses 35 mm/s for smoother prime-after-retract.
+-    // Hardware-tuned (direct-drive vs bowden); always write the JNI value,
+-    // never let an embed override it.
+-    dpc.set_key_value("deretraction_speed", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, 35.0)));
+-    dpc.set_key_value("retraction_minimum_travel", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, 1.0)));
+-
+     // Line widths — must be set explicitly.
+     // When left at 0 (absolute), MultiMaterialSegmentation calls
+     // config.get_abs_value("outer_wall_line_width", nozzle_diameter) which returns
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -1324,8 +1324,17 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+                 pad_floats("filament_toolchange_delay");
+ 
+                 // Retraction arrays (set by applyConfigToPrusa from JNI config)
+-                pad_floats("retract_length");
+-                pad_floats("retract_speed");
++                pad_floats("retraction_length");
++                pad_floats("retraction_speed");
++                pad_floats("deretraction_speed");
++                pad_floats("retraction_minimum_travel");
++                pad_bools("retract_when_changing_layer");
++                pad_bools("wipe");
++                pad_floats("wipe_distance");
++                pad_floats("retract_before_wipe");
++                pad_floats("retract_restart_extra");
++                pad_floats("z_hop");
++                pad_ints("z_hop_types");
+                 pad_floats("retract_length_toolchange");
+ 
+                 // Extruder offsets

@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 24
+internal const val USER_PROFILE_SCHEMA_VERSION = 25
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -73,6 +73,17 @@ class ProfileStore private constructor(
             maxJerkY = options.maxJerkY,
             maxJerkZ = options.maxJerkZ,
             maxJerkE = options.maxJerkE,
+            retractLength = options.printerProfile.retractLength,
+            retractSpeed = options.printerProfile.retractSpeed,
+            deretractSpeed = options.printerProfile.deretractSpeed,
+            retractionMinimumTravel = options.printerProfile.retractionMinimumTravel,
+            retractWhenChangingLayer = options.printerProfile.retractWhenChangingLayer,
+            wipeWhileRetracting = options.printerProfile.wipeWhileRetracting,
+            wipeDistance = options.printerProfile.wipeDistance,
+            retractBeforeWipe = options.printerProfile.retractBeforeWipe,
+            retractRestartExtra = options.printerProfile.retractRestartExtra,
+            zHop = options.printerProfile.zHop,
+            zHopType = options.printerProfile.zHopType,
             extruderClearanceRadius = options.extruderClearanceRadius,
             extruderClearanceHeightToRod = options.extruderClearanceHeightToRod,
             extruderClearanceHeightToLid = options.extruderClearanceHeightToLid,
@@ -96,8 +107,6 @@ class ProfileStore private constructor(
                 firstLayerBedTemp = options.firstLayerBedTemp,
                 flowRatio = options.flowRatio,
                 maxVolumetricSpeed = options.maxVolumetricSpeed,
-                retractLength = options.retractLength,
-                retractSpeed = options.retractSpeed,
                 fanMinSpeed = options.fanMinSpeed,
                 fanMaxSpeed = options.fanMaxSpeed,
                 overhangFanSpeed = options.overhangFanSpeed,
@@ -123,6 +132,15 @@ class ProfileStore private constructor(
             maxVolumetricSpeed = effective.maxVolumetricSpeed,
             retractLength = effective.retractLength,
             retractSpeed = effective.retractSpeed,
+            deretractSpeed = effective.deretractSpeed,
+            retractionMinimumTravel = effective.retractionMinimumTravel,
+            retractWhenChangingLayer = effective.retractWhenChangingLayer,
+            wipeWhileRetracting = effective.wipeWhileRetracting,
+            wipeDistance = effective.wipeDistance,
+            retractBeforeWipe = effective.retractBeforeWipe,
+            retractRestartExtra = effective.retractRestartExtra,
+            zHop = effective.zHop,
+            zHopType = effective.zHopType,
             fanMinSpeed = effective.fanMinSpeed,
             fanMaxSpeed = effective.fanMaxSpeed,
             overhangFanSpeed = effective.overhangFanSpeed,
@@ -451,6 +469,13 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("maxAccelerationTravel", maxAccelerationTravel)
     .put("maxJerkX", maxJerkX).put("maxJerkY", maxJerkY)
     .put("maxJerkZ", maxJerkZ).put("maxJerkE", maxJerkE)
+    .put("retractLength", retractLength).put("retractSpeed", retractSpeed)
+    .put("deretractSpeed", deretractSpeed)
+    .put("retractionMinimumTravel", retractionMinimumTravel)
+    .put("retractWhenChangingLayer", retractWhenChangingLayer)
+    .put("wipeWhileRetracting", wipeWhileRetracting).put("wipeDistance", wipeDistance)
+    .put("retractBeforeWipe", retractBeforeWipe).put("retractRestartExtra", retractRestartExtra)
+    .put("zHop", zHop).put("zHopType", zHopType)
     .put("extruderClearanceRadius", extruderClearanceRadius)
     .put("extruderClearanceHeightToRod", extruderClearanceHeightToRod)
     .put("extruderClearanceHeightToLid", extruderClearanceHeightToLid)
@@ -463,7 +488,16 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("nozzleTemp", nozzleTemp).put("firstLayerNozzleTemp", firstLayerNozzleTemp)
     .put("bedTemp", bedTemp).put("firstLayerBedTemp", firstLayerBedTemp)
     .put("flowRatio", flowRatio).put("maxVolumetricSpeed", maxVolumetricSpeed)
-    .put("retractLength", retractLength).put("retractSpeed", retractSpeed)
+    .put("retractLength", retractLength ?: JSONObject.NULL)
+    .put("retractSpeed", retractSpeed ?: JSONObject.NULL)
+    .put("deretractSpeed", deretractSpeed ?: JSONObject.NULL)
+    .put("retractionMinimumTravel", retractionMinimumTravel ?: JSONObject.NULL)
+    .put("retractWhenChangingLayer", retractWhenChangingLayer ?: JSONObject.NULL)
+    .put("wipeWhileRetracting", wipeWhileRetracting ?: JSONObject.NULL)
+    .put("wipeDistance", wipeDistance ?: JSONObject.NULL)
+    .put("retractBeforeWipe", retractBeforeWipe ?: JSONObject.NULL)
+    .put("retractRestartExtra", retractRestartExtra ?: JSONObject.NULL)
+    .put("zHop", zHop ?: JSONObject.NULL).put("zHopType", zHopType ?: JSONObject.NULL)
     .put("fanMinSpeed", fanMinSpeed).put("fanMaxSpeed", fanMaxSpeed)
     .put("overhangFanSpeed", overhangFanSpeed)
     .put("slowDownLayerTime", slowDownLayerTime).put("slowDownMinSpeed", slowDownMinSpeed)
@@ -697,6 +731,17 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         maxJerkY = optDouble("maxJerkY", 9.0).toFloat(),
         maxJerkZ = optDouble("maxJerkZ", 3.0).toFloat(),
         maxJerkE = optDouble("maxJerkE", 2.5).toFloat(),
+        retractLength = optDouble("retractLength", 0.8).toFloat(),
+        retractSpeed = optDouble("retractSpeed", 45.0).toFloat(),
+        deretractSpeed = optDouble("deretractSpeed", 35.0).toFloat(),
+        retractionMinimumTravel = optDouble("retractionMinimumTravel", 1.0).toFloat(),
+        retractWhenChangingLayer = optBoolean("retractWhenChangingLayer"),
+        wipeWhileRetracting = optBoolean("wipeWhileRetracting"),
+        wipeDistance = optDouble("wipeDistance", 1.0).toFloat(),
+        retractBeforeWipe = optDouble("retractBeforeWipe", 100.0).toFloat(),
+        retractRestartExtra = optDouble("retractRestartExtra", 0.0).toFloat(),
+        zHop = optDouble("zHop", 0.4).toFloat(),
+        zHopType = optString("zHopType", "slope"),
         extruderClearanceRadius = optDouble("extruderClearanceRadius", 40.0).toFloat(),
         extruderClearanceHeightToRod = optDouble("extruderClearanceHeightToRod", 40.0).toFloat(),
         extruderClearanceHeightToLid = optDouble("extruderClearanceHeightToLid", 120.0).toFloat(),
@@ -719,8 +764,17 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         getDouble("flowRatio").toFloat(), getDouble("maxVolumetricSpeed").toFloat(),
         builtIn = optBoolean("builtIn"),
         brand = optionalString("brand"),
-        retractLength = optDouble("retractLength", 0.8).toFloat(),
-        retractSpeed = optDouble("retractSpeed", 45.0).toFloat(),
+        retractLength = nullableFloat("retractLength"),
+        retractSpeed = nullableFloat("retractSpeed"),
+        deretractSpeed = nullableFloat("deretractSpeed"),
+        retractionMinimumTravel = nullableFloat("retractionMinimumTravel"),
+        retractWhenChangingLayer = nullableBoolean("retractWhenChangingLayer"),
+        wipeWhileRetracting = nullableBoolean("wipeWhileRetracting"),
+        wipeDistance = nullableFloat("wipeDistance"),
+        retractBeforeWipe = nullableFloat("retractBeforeWipe"),
+        retractRestartExtra = nullableFloat("retractRestartExtra"),
+        zHop = nullableFloat("zHop"),
+        zHopType = nullableString("zHopType"),
         fanMinSpeed = optInt("fanMinSpeed", 30),
         fanMaxSpeed = optInt("fanMaxSpeed", 100),
         overhangFanSpeed = optInt("overhangFanSpeed", 100),
@@ -950,6 +1004,15 @@ private fun JSONArray?.toQualityProfiles() = objects().mapNotNull(JSONObject::to
 
 private fun JSONObject.optionalString(key: String): String? =
     takeUnless { isNull(key) }?.optString(key)?.takeIf(String::isNotBlank)
+
+private fun JSONObject.nullableString(key: String): String? =
+    if (!has(key) || isNull(key)) null else getString(key)
+
+private fun JSONObject.nullableFloat(key: String): Float? =
+    if (!has(key) || isNull(key)) null else getDouble(key).toFloat()
+
+private fun JSONObject.nullableBoolean(key: String): Boolean? =
+    if (!has(key) || isNull(key)) null else getBoolean(key)
 
 private fun JSONObject.stringList(key: String): List<String> =
     optJSONArray(key)?.let { values ->

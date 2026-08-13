@@ -67,6 +67,17 @@ data class PrinterProfile(
     val maxJerkY: Float = 9f,
     val maxJerkZ: Float = 3f,
     val maxJerkE: Float = 2.5f,
+    val retractLength: Float = 0.8f,
+    val retractSpeed: Float = 45f,
+    val deretractSpeed: Float = 35f,
+    val retractionMinimumTravel: Float = 1f,
+    val retractWhenChangingLayer: Boolean = false,
+    val wipeWhileRetracting: Boolean = false,
+    val wipeDistance: Float = 1f,
+    val retractBeforeWipe: Float = 100f,
+    val retractRestartExtra: Float = 0f,
+    val zHop: Float = 0.4f,
+    val zHopType: String = "slope",
     val extruderClearanceRadius: Float = 40f,
     val extruderClearanceHeightToRod: Float = 40f,
     val extruderClearanceHeightToLid: Float = 120f,
@@ -116,6 +127,9 @@ data class PrinterProfile(
             maxJerkY = 8f,
             maxJerkZ = 0.4f,
             maxJerkE = 5f,
+            retractSpeed = 30f,
+            deretractSpeed = 0f,
+            retractionMinimumTravel = 2f,
         )
         val builtIns = listOf(U1_02, U1_04, U1_06, U1_08, CUSTOM_CARTESIAN)
     }
@@ -133,8 +147,17 @@ data class FilamentProfile(
     val maxVolumetricSpeed: Float,
     val builtIn: Boolean = false,
     val brand: String? = null,
-    val retractLength: Float = 0.8f,
-    val retractSpeed: Float = 45f,
+    val retractLength: Float? = null,
+    val retractSpeed: Float? = null,
+    val deretractSpeed: Float? = null,
+    val retractionMinimumTravel: Float? = null,
+    val retractWhenChangingLayer: Boolean? = null,
+    val wipeWhileRetracting: Boolean? = null,
+    val wipeDistance: Float? = null,
+    val retractBeforeWipe: Float? = null,
+    val retractRestartExtra: Float? = null,
+    val zHop: Float? = null,
+    val zHopType: String? = null,
     val fanMinSpeed: Int = 30,
     val fanMaxSpeed: Int = 100,
     val overhangFanSpeed: Int = 100,
@@ -223,6 +246,34 @@ data class FilamentProfile(
         )
     }
 }
+
+data class RetractionSettings(
+    val length: Float,
+    val speed: Float,
+    val deretractSpeed: Float,
+    val minimumTravel: Float,
+    val whenChangingLayer: Boolean,
+    val wipe: Boolean,
+    val wipeDistance: Float,
+    val beforeWipe: Float,
+    val restartExtra: Float,
+    val zHop: Float,
+    val zHopType: String,
+)
+
+internal fun FilamentProfile.resolveRetraction(printer: PrinterProfile) = RetractionSettings(
+    length = retractLength ?: printer.retractLength,
+    speed = retractSpeed ?: printer.retractSpeed,
+    deretractSpeed = deretractSpeed ?: printer.deretractSpeed,
+    minimumTravel = retractionMinimumTravel ?: printer.retractionMinimumTravel,
+    whenChangingLayer = retractWhenChangingLayer ?: printer.retractWhenChangingLayer,
+    wipe = wipeWhileRetracting ?: printer.wipeWhileRetracting,
+    wipeDistance = wipeDistance ?: printer.wipeDistance,
+    beforeWipe = retractBeforeWipe ?: printer.retractBeforeWipe,
+    restartExtra = retractRestartExtra ?: printer.retractRestartExtra,
+    zHop = zHop ?: printer.zHop,
+    zHopType = zHopType ?: printer.zHopType,
+)
 
 data class QualityProfile(
     val id: String,
@@ -523,7 +574,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 23,
+    val schemaVersion: Int = 24,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -547,8 +598,6 @@ data class SliceOptions(
     val filamentDiameter: Float = 1.75f,
     val flowRatio: Float = filamentProfile.flowRatio,
     val maxVolumetricSpeed: Float = filamentProfile.maxVolumetricSpeed,
-    val retractLength: Float = filamentProfile.retractLength,
-    val retractSpeed: Float = filamentProfile.retractSpeed,
     val fanMinSpeed: Int = filamentProfile.fanMinSpeed,
     val fanMaxSpeed: Int = filamentProfile.fanMaxSpeed,
     val overhangFanSpeed: Int = filamentProfile.overhangFanSpeed,
@@ -782,6 +831,19 @@ data class SliceOptions(
     val extruderClearanceHeightToRod: Float = printerProfile.extruderClearanceHeightToRod,
     val extruderClearanceHeightToLid: Float = printerProfile.extruderClearanceHeightToLid,
 ) {
+    val retraction: RetractionSettings get() = filamentProfile.resolveRetraction(printerProfile)
+    val retractLength: Float get() = retraction.length
+    val retractSpeed: Float get() = retraction.speed
+    val deretractSpeed: Float get() = retraction.deretractSpeed
+    val retractionMinimumTravel: Float get() = retraction.minimumTravel
+    val retractWhenChangingLayer: Boolean get() = retraction.whenChangingLayer
+    val wipeWhileRetracting: Boolean get() = retraction.wipe
+    val wipeDistance: Float get() = retraction.wipeDistance
+    val retractBeforeWipe: Float get() = retraction.beforeWipe
+    val retractRestartExtra: Float get() = retraction.restartExtra
+    val zHop: Float get() = retraction.zHop
+    val zHopType: String get() = retraction.zHopType
+
     val defaultJerk: Float get() = jerk.defaultJerk
     val outerWallJerk: Float get() = jerk.outerWallJerk
     val innerWallJerk: Float get() = jerk.innerWallJerk
@@ -841,8 +903,6 @@ data class SliceOptions(
         firstLayerBedTemp = profile.firstLayerBedTemp,
         flowRatio = profile.flowRatio,
         maxVolumetricSpeed = profile.maxVolumetricSpeed,
-        retractLength = profile.retractLength,
-        retractSpeed = profile.retractSpeed,
         fanMinSpeed = profile.fanMinSpeed,
         fanMaxSpeed = profile.fanMaxSpeed,
         overhangFanSpeed = profile.overhangFanSpeed,
@@ -853,6 +913,10 @@ data class SliceOptions(
         pressureAdvanceEnabled = profile.pressureAdvanceEnabled,
         pressureAdvance = profile.pressureAdvance,
     )
+
+    fun updatePrinterRetraction(profile: PrinterProfile): SliceOptions {
+        return copy(printerProfile = profile)
+    }
 
     fun resolvedFilamentSlots(): List<FilamentProfile> = filamentSlots
         .take(printerProfile.extruderCount.coerceIn(1, MAX_FILAMENT_SLOTS))
@@ -1108,6 +1172,15 @@ data class SliceOptions(
                     maxVolumetricSpeed = maxVolumetricSpeed,
                     retractLength = retractLength,
                     retractSpeed = retractSpeed,
+                    deretractSpeed = deretractSpeed,
+                    retractionMinimumTravel = retractionMinimumTravel,
+                    retractWhenChangingLayer = retractWhenChangingLayer,
+                    wipeWhileRetracting = wipeWhileRetracting,
+                    wipeDistance = wipeDistance,
+                    retractBeforeWipe = retractBeforeWipe,
+                    retractRestartExtra = retractRestartExtra,
+                    zHop = zHop,
+                    zHopType = zHopType,
                     fanMinSpeed = fanMinSpeed,
                     fanMaxSpeed = fanMaxSpeed,
                     overhangFanSpeed = overhangFanSpeed,
@@ -1120,6 +1193,7 @@ data class SliceOptions(
                 )
             }
         }
+        val nativeRetractions = nativeFilaments.map { it.resolveRetraction(printerProfile) }
         return SliceConfig(
             layerHeight = layerHeight,
             firstLayerHeight = firstLayerHeight,
@@ -1323,8 +1397,8 @@ data class SliceOptions(
             filamentTypes = nativeFilaments.map(FilamentProfile::nativeName).toTypedArray(),
             extruderCount = nativeFilaments.size,
             extruderTemps = nativeFilaments.map(FilamentProfile::nozzleTemp).toIntArray(),
-            extruderRetractLength = nativeFilaments.map(FilamentProfile::retractLength).toFloatArray(),
-            extruderRetractSpeed = nativeFilaments.map(FilamentProfile::retractSpeed).toFloatArray(),
+            extruderRetractLength = nativeRetractions.map(RetractionSettings::length).toFloatArray(),
+            extruderRetractSpeed = nativeRetractions.map(RetractionSettings::speed).toFloatArray(),
             wipeTowerEnabled = wipeTowerEnabled && nativeFilaments.size > 1,
             wipeTowerWidth = wipeTowerWidth,
             machineStartGcode = printerProfile.machineStartGcode,
@@ -1377,6 +1451,22 @@ data class SliceOptions(
             native.infillJerk = infillJerk
             native.firstLayerJerk = firstLayerJerk
             native.travelJerk = travelJerk
+            native.extruderDeretractSpeed = nativeRetractions
+                .map(RetractionSettings::deretractSpeed).toFloatArray()
+            native.extruderRetractionMinimumTravel = nativeRetractions
+                .map(RetractionSettings::minimumTravel).toFloatArray()
+            native.extruderRetractWhenChangingLayer = nativeRetractions
+                .map { if (it.whenChangingLayer) 1 else 0 }.toIntArray()
+            native.extruderWipeWhileRetracting = nativeRetractions
+                .map { if (it.wipe) 1 else 0 }.toIntArray()
+            native.extruderWipeDistance = nativeRetractions
+                .map(RetractionSettings::wipeDistance).toFloatArray()
+            native.extruderRetractBeforeWipe = nativeRetractions
+                .map(RetractionSettings::beforeWipe).toFloatArray()
+            native.extruderRetractRestartExtra = nativeRetractions
+                .map(RetractionSettings::restartExtra).toFloatArray()
+            native.extruderZHop = nativeRetractions.map(RetractionSettings::zHop).toFloatArray()
+            native.extruderZHopType = nativeRetractions.map(RetractionSettings::zHopType).toTypedArray()
         }
     }
 }

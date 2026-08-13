@@ -137,6 +137,33 @@ class ProfileStoreMigrationTest {
     }
 
     @Test
+    fun filamentRetractionInheritanceSurvivesUserProfileSave() {
+        val directory = Files.createTempDirectory("duckyslicer-profile-retraction-").toFile()
+        val file = directory.resolve("user_profiles.json")
+        try {
+            val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(
+                retractLength = 1.35f,
+                zHopType = "spiral",
+            )
+            val options = SliceOptions()
+                .selectPrinter(printer)
+                .selectFilament(FilamentProfile.GENERIC_PLA)
+
+            val saved = ProfileStore(file).saveFilament("Inherited PLA", options)
+            val restored = ProfileStore(file).load().filaments.single { it.id == saved.id }
+
+            assertNull(saved.retractLength)
+            assertNull(saved.zHopType)
+            assertNull(restored.retractLength)
+            assertNull(restored.zHopType)
+            assertEquals(1.35f, restored.resolveRetraction(printer).length)
+            assertEquals("spiral", restored.resolveRetraction(printer).zHopType)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun unreadableOrFutureProfilesAreNotOverwrittenBySave() {
         val semanticallyInvalid = JSONObject()
             .put("schemaVersion", 14)

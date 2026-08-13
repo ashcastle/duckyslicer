@@ -868,7 +868,19 @@ class NativeEngineInstrumentedTest {
         val store = ProfileStore(file)
         val edited = SliceOptions()
             .selectPrinter(PrinterProfile.U1_06)
-            .selectFilament(FilamentProfile.PETG)
+            .selectFilament(FilamentProfile.PETG.copy(
+                retractLength = 1.2f,
+                retractSpeed = 41f,
+                deretractSpeed = 36f,
+                retractionMinimumTravel = 2.3f,
+                retractWhenChangingLayer = true,
+                wipeWhileRetracting = true,
+                wipeDistance = 2.6f,
+                retractBeforeWipe = 64f,
+                retractRestartExtra = 0.07f,
+                zHop = 0.65f,
+                zHopType = "spiral",
+            ))
             .copy(nozzleTemp = 248, firstLayerNozzleTemp = 253)
             .selectQuality(QualityProfile.FINE_06)
             .copy(fillDensity = 0.22f, supportEnabled = true)
@@ -879,7 +891,6 @@ class NativeEngineInstrumentedTest {
                 internalSolidInfillPattern = "rectilinear",
                 topSolidLayers = 7,
                 travelSpeed = 420f,
-                retractLength = 1.2f,
                 fanMinSpeed = 40,
                 pressureAdvanceEnabled = true,
                 pressureAdvance = 0.035f,
@@ -1106,6 +1117,16 @@ class NativeEngineInstrumentedTest {
         assertEquals(7, restored.slicing.last().topSolidLayers)
         assertEquals(420f, restored.slicing.last().travelSpeed)
         assertEquals(1.2f, restored.filaments.last().retractLength)
+        assertEquals(41f, restored.filaments.last().retractSpeed)
+        assertEquals(36f, restored.filaments.last().deretractSpeed)
+        assertEquals(2.3f, restored.filaments.last().retractionMinimumTravel)
+        assertEquals(true, restored.filaments.last().retractWhenChangingLayer)
+        assertEquals(true, restored.filaments.last().wipeWhileRetracting)
+        assertEquals(2.6f, restored.filaments.last().wipeDistance)
+        assertEquals(64f, restored.filaments.last().retractBeforeWipe)
+        assertEquals(0.07f, restored.filaments.last().retractRestartExtra)
+        assertEquals(0.65f, restored.filaments.last().zHop)
+        assertEquals("spiral", restored.filaments.last().zHopType)
         assertEquals(40, restored.filaments.last().fanMinSpeed)
         assertTrue(restored.filaments.last().pressureAdvanceEnabled)
         assertEquals(0.035f, restored.filaments.last().pressureAdvance)
@@ -1230,7 +1251,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(23, catalog.schemaVersion)
+        assertEquals(24, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2084,7 +2105,19 @@ class NativeEngineInstrumentedTest {
 
         val options = SliceOptions()
             .selectPrinter(PrinterProfile.U1_06)
-            .selectFilament(FilamentProfile.PETG)
+            .selectFilament(FilamentProfile.PETG.copy(
+                retractLength = 1.1f,
+                retractSpeed = 38f,
+                deretractSpeed = 33f,
+                retractionMinimumTravel = 2.2f,
+                retractWhenChangingLayer = true,
+                wipeWhileRetracting = true,
+                wipeDistance = 2.4f,
+                retractBeforeWipe = 63f,
+                retractRestartExtra = 0.09f,
+                zHop = 0.6f,
+                zHopType = "spiral",
+            ))
             .selectQuality(QualityProfile.DRAFT_06)
             .copy(
                 topSolidLayers = 6,
@@ -2095,8 +2128,6 @@ class NativeEngineInstrumentedTest {
                 internalSolidInfillPattern = "rectilinear",
                 travelSpeed = 420f,
                 firstLayerSpeed = 35f,
-                retractLength = 1.1f,
-                retractSpeed = 38f,
                 skirtLoops = 2,
                 skirtDistance = 7f,
                 skirtHeight = 3,
@@ -2300,7 +2331,27 @@ class NativeEngineInstrumentedTest {
         assertTrue("Bridge speed must reach Orca", gcode.contains("; bridge_speed = 43"))
         assertTrue("Internal bridge speed must preserve percent units", gcode.contains("; internal_bridge_speed = 163%"))
         assertTrue("Gap-infill speed must reach Orca", gcode.contains("; gap_infill_speed = 137"))
-        assertTrue("Retraction length must reach G-code", gcode.contains("; retraction_length = 1.1"))
+        val retractionHeader = gcode.lineSequence()
+            .filter { line ->
+                line.startsWith("; retraction_") || line.startsWith("; deretraction_") ||
+                    line.startsWith("; retract_") || line.startsWith("; wipe") ||
+                    line.startsWith("; z_hop")
+            }
+            .joinToString(" | ")
+        assertTrue(
+            "Retraction length must reach G-code; actual: $retractionHeader",
+            gcode.contains("; retraction_length = 1.1"),
+        )
+        assertTrue("Retraction speed must reach G-code", gcode.contains("; retraction_speed = 38"))
+        assertTrue("De-retraction speed must reach G-code", gcode.contains("; deretraction_speed = 33"))
+        assertTrue("Retraction travel threshold must reach G-code", gcode.contains("; retraction_minimum_travel = 2.2"))
+        assertTrue("Layer-change retraction must reach G-code", gcode.contains("; retract_when_changing_layer = 1"))
+        assertTrue("Retraction wipe must reach G-code", gcode.contains("; wipe = 1"))
+        assertTrue("Wipe distance must reach G-code", gcode.contains("; wipe_distance = 2.4"))
+        assertTrue("Pre-wipe amount must reach G-code", gcode.contains("; retract_before_wipe = 63%"))
+        assertTrue("Restart extra must reach G-code", gcode.contains("; retract_restart_extra = 0.09"))
+        assertTrue("Z-hop height must reach G-code", gcode.contains("; z_hop = 0.6"))
+        assertTrue("Z-hop type must reach G-code", gcode.contains("; z_hop_types = Spiral Lift"))
         assertTrue("Skirt loops must reach G-code", gcode.contains("; skirt_loops = 2"))
         assertTrue("Skirt distance must reach Orca", gcode.contains("; skirt_distance = 7"))
         assertTrue("Skirt height must reach Orca", gcode.contains("; skirt_height = 3"))

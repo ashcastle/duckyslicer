@@ -268,4 +268,13 @@ data class SliceConfig(
     @JvmField var infillJerk: Float = 9f
     @JvmField var firstLayerJerk: Float = 9f
     @JvmField var travelJerk: Float = 12f
+    @JvmField var extruderDeretractSpeed: FloatArray = floatArrayOf()
+    @JvmField var extruderRetractionMinimumTravel: FloatArray = floatArrayOf()
+    @JvmField var extruderRetractWhenChangingLayer: IntArray = intArrayOf()
+    @JvmField var extruderWipeWhileRetracting: IntArray = intArrayOf()
+    @JvmField var extruderWipeDistance: FloatArray = floatArrayOf()
+    @JvmField var extruderRetractBeforeWipe: FloatArray = floatArrayOf()
+    @JvmField var extruderRetractRestartExtra: FloatArray = floatArrayOf()
+    @JvmField var extruderZHop: FloatArray = floatArrayOf()
+    @JvmField var extruderZHopType: Array<String> = arrayOf()
 }
