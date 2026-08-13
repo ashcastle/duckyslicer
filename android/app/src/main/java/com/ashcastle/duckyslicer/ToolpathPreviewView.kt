@@ -19,6 +19,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.PI
@@ -80,7 +83,7 @@ internal fun supportsDepthTestedPreview(context: Context): Boolean {
     return (manager?.deviceConfigurationInfo?.reqGlEsVersion ?: 0) >= 0x00030000
 }
 
-private class ToolpathSurfaceView(
+internal class ToolpathSurfaceView(
     context: Context,
     private val onUnavailable: () -> Unit,
 ) : GLSurfaceView(context) {
@@ -88,13 +91,17 @@ private class ToolpathSurfaceView(
     private var rendererReady = false
     private var unavailableReported = false
     private var sceneSubmitted = false
+    private var latestSubmittedScene: ToolpathScene? = null
     private var startupWatchdogScheduled = false
+    private val geometryGeneration = AtomicInteger()
+    private val pendingGeometry = ConcurrentHashMap.newKeySet<PendingToolpathGeometry>()
     private val startupWatchdog = Runnable {
         startupWatchdogScheduled = false
         if (!rendererReady) reportUnavailableOnce()
     }
     private val toolpathRenderer = ToolpathRenderer(
         requestPrewarmFrame = { post { requestRender() } },
+        requestGeometryBuild = ::requestGeometryBuild,
         reportRendererStarting = { post { markRendererStarting() } },
         reportFrameReady = { post(::markRendererReady) },
         reportUnavailable = { post(::reportUnavailableOnce) },
@@ -140,24 +147,32 @@ private class ToolpathSurfaceView(
         visibleRoles: Set<Int>,
         detail: PreviewDetail,
     ) {
-        sceneSubmitted = true
-        toolpathRenderer.submit(
-            ToolpathScene(
-                preview = preview,
-                bedSizeX = bedSizeX,
-                bedSizeY = bedSizeY,
-                bedOriginX = bedOriginX,
-                bedOriginY = bedOriginY,
-                bedPolygon = bedPolygon,
-                opacity = opacity,
-                depthContrast = depthContrast,
-                detail = detail,
-                visibleRoles = visibleRoles,
-            ),
+        val scene = ToolpathScene(
+            preview = preview,
+            bedSizeX = bedSizeX,
+            bedSizeY = bedSizeY,
+            bedOriginX = bedOriginX,
+            bedOriginY = bedOriginY,
+            bedPolygon = bedPolygon,
+            opacity = opacity,
+            depthContrast = depthContrast,
+            detail = detail,
+            visibleRoles = visibleRoles,
         )
+        if (scene != latestSubmittedScene) {
+            geometryGeneration.incrementAndGet()
+            pendingGeometry.clear()
+            latestSubmittedScene = scene
+        }
+        sceneSubmitted = true
+        toolpathRenderer.submit(scene)
         scheduleStartupWatchdog()
         requestRender()
     }
+
+    internal fun rendererReadyForTest(): Boolean = rendererReady
+
+    internal fun geometryUploadCountForTest(): Int = toolpathRenderer.geometryUploadCountForTest()
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
@@ -217,6 +232,9 @@ private class ToolpathSurfaceView(
     }
 
     override fun onDetachedFromWindow() {
+        geometryGeneration.incrementAndGet()
+        pendingGeometry.clear()
+        latestSubmittedScene = null
         removeCallbacks(restoreDetail)
         cancelStartupWatchdog()
         if (memoryCallbacksRegistered) {
@@ -261,6 +279,24 @@ private class ToolpathSurfaceView(
 
     private fun releaseGpuMemory() {
         queueEvent { toolpathRenderer.releaseGpuGeometryForMemoryPressure() }
+    }
+
+    private fun requestGeometryBuild(scene: ToolpathScene) {
+        val generation = geometryGeneration.get()
+        val request = PendingToolpathGeometry(scene, generation)
+        if (!pendingGeometry.add(request)) return
+        ToolpathGeometryBuildExecutor.execute {
+            val result = runCatching { ToolpathMeshBuilder.build(scene) }
+            pendingGeometry.remove(request)
+            if (generation != geometryGeneration.get() || !isAttachedToWindow) return@execute
+            queueEvent {
+                result.fold(
+                    onSuccess = { payload -> toolpathRenderer.submitPreparedGeometry(scene, payload) },
+                    onFailure = toolpathRenderer::reportGeometryBuildFailure,
+                )
+            }
+            post { requestRender() }
+        }
     }
 
     private fun captureTwoFingerState(event: MotionEvent) {
@@ -312,6 +348,24 @@ private class ToolpathSurfaceView(
     private companion object {
         const val DETAIL_RESTORE_DELAY_MS = 220L
         const val RENDERER_STARTUP_TIMEOUT_MS = 5_000L
+    }
+}
+
+private data class PendingToolpathGeometry(
+    val scene: ToolpathScene,
+    val generation: Int,
+)
+
+private object ToolpathGeometryBuildExecutor {
+    private val executor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "DuckyPreviewGeometry").apply {
+            priority = Thread.NORM_PRIORITY - 1
+            isDaemon = true
+        }
+    }
+
+    fun execute(block: () -> Unit) {
+        executor.execute(block)
     }
 }
 
@@ -370,8 +424,17 @@ internal data class ToolpathScene(
     }
 }
 
+internal data class ToolpathRendererTelemetry(
+    val geometryBuildMs: Double,
+    val renderPlanMs: Double,
+    val geometryPackMs: Double,
+    val geometryUploadMs: Double,
+    val lastDrawSubmitMs: Double,
+)
+
 internal class ToolpathRenderer(
     private val requestPrewarmFrame: () -> Unit = {},
+    private val requestGeometryBuild: ((ToolpathScene) -> Unit)? = null,
     private val reportRendererStarting: () -> Unit = {},
     private val reportFrameReady: () -> Unit = {},
     private val reportUnavailable: () -> Unit = {},
@@ -381,6 +444,7 @@ internal class ToolpathRenderer(
     private var latestScene: ToolpathScene? = null
     private val uploadState = ToolpathGeometryUploadState(capacity = GPU_GEOMETRY_CACHE_SIZE)
     private val gpuGeometry = HashMap<ToolpathScene, ToolpathGpuGeometry>()
+    private val preparedGeometry = LinkedHashMap<ToolpathScene, ToolpathUploadPayload>()
     private val adaptivePreviewController = AdaptivePreviewDetailController()
     private var pendingPrewarmScene: ToolpathScene? = null
     private var refinementRequestedForScene: ToolpathScene? = null
@@ -407,6 +471,11 @@ internal class ToolpathRenderer(
     private var panX = 0f
     private var panY = 0f
     private var geometryUploadCount = 0
+    private var geometryBuildNanos = 0L
+    private var renderPlanNanos = 0L
+    private var geometryPackNanos = 0L
+    private var geometryUploadNanos = 0L
+    private var lastDrawSubmitNanos = 0L
     private var rendererUnavailable = false
     private var lastEffectiveDetail: PreviewDetail? = null
     @Volatile
@@ -415,6 +484,14 @@ internal class ToolpathRenderer(
     private var interactionActive = false
 
     internal fun geometryUploadCountForTest(): Int = geometryUploadCount
+
+    internal fun telemetryForTest(): ToolpathRendererTelemetry = ToolpathRendererTelemetry(
+        geometryBuildMs = geometryBuildNanos / 1_000_000.0,
+        renderPlanMs = renderPlanNanos / 1_000_000.0,
+        geometryPackMs = geometryPackNanos / 1_000_000.0,
+        geometryUploadMs = geometryUploadNanos / 1_000_000.0,
+        lastDrawSubmitMs = lastDrawSubmitNanos / 1_000_000.0,
+    )
 
     internal fun cachedGeometryCountForTest(): Int = gpuGeometry.size
 
@@ -431,8 +508,24 @@ internal class ToolpathRenderer(
         gpuGeometry.values.forEach(::deleteGeometry)
         gpuGeometry.clear()
         uploadState.invalidate()
+        preparedGeometry.clear()
         pendingPrewarmScene = null
         refinementRequestedForScene = null
+    }
+
+    internal fun submitPreparedGeometry(scene: ToolpathScene, payload: ToolpathUploadPayload) {
+        preparedGeometry[scene] = payload
+        while (preparedGeometry.size > PREPARED_GEOMETRY_CACHE_SIZE) {
+            val iterator = preparedGeometry.entries.iterator()
+            if (iterator.hasNext()) {
+                iterator.next()
+                iterator.remove()
+            }
+        }
+    }
+
+    internal fun reportGeometryBuildFailure(failure: Throwable) {
+        failRenderer("geometry_build", failure)
     }
 
     fun submit(scene: ToolpathScene) {
@@ -466,9 +559,15 @@ internal class ToolpathRenderer(
         toolpathProgram = 0
         lineProgram = 0
         geometryUploadCount = 0
+        geometryBuildNanos = 0L
+        renderPlanNanos = 0L
+        geometryPackNanos = 0L
+        geometryUploadNanos = 0L
+        lastDrawSubmitNanos = 0L
         pendingPrewarmScene = null
         refinementRequestedForScene = null
         gpuGeometry.clear()
+        preparedGeometry.clear()
         uploadState.invalidate()
         if (rendererUnavailable) return
         GLES30.glClearColor(0.098f, 0.102f, 0.094f, 1f)
@@ -602,8 +701,10 @@ internal class ToolpathRenderer(
         val measureAutomaticFrame = !interactionActive && !initialPreview &&
             adaptivePreviewController.shouldMeasure(requestedScene.detail, adaptiveWorkload)
         val measurementStartedNanos = if (measureAutomaticFrame) System.nanoTime() else 0L
+        val drawStartedNanos = System.nanoTime()
         drawBed(geometry, matrix)
         drawToolpaths(geometry, matrix, scene.renderAsLines)
+        lastDrawSubmitNanos = System.nanoTime() - drawStartedNanos
         if (!glOperationSucceeded("frame_draw")) return
         if (measureAutomaticFrame) {
             // Calibration is limited to two settled frames per tier. glFinish gives a
@@ -806,12 +907,20 @@ internal class ToolpathRenderer(
             gpuGeometry.remove(staleScene)?.let(::deleteGeometry)
             uploadState.remove(staleScene)
         }
+        preparedGeometry.keys.removeAll { scene -> scene !in retainedScenes }
     }
 
     private fun geometryFor(scene: ToolpathScene): ToolpathGpuGeometry? {
         if (!uploadState.needsUpload(scene)) {
             uploadState.markUsed(scene)
             return gpuGeometry[scene]
+        }
+        preparedGeometry.remove(scene)?.let { payload ->
+            return uploadGeometry(scene, payload)
+        }
+        requestGeometryBuild?.let { request ->
+            request(scene)
+            return null
         }
         return uploadGeometry(scene)
     }
@@ -823,6 +932,16 @@ internal class ToolpathRenderer(
             failRenderer("geometry_build", failure)
             return null
         }
+        return uploadGeometry(scene, payload)
+    }
+
+    private fun uploadGeometry(
+        scene: ToolpathScene,
+        payload: ToolpathUploadPayload,
+    ): ToolpathGpuGeometry? {
+        geometryBuildNanos += payload.geometryBuildNanos
+        renderPlanNanos += payload.renderPlanNanos
+        geometryPackNanos += payload.geometryPackNanos
         val buffers = IntArray(3)
         GLES30.glGenBuffers(buffers.size, buffers, 0)
         if (buffers.any { it == 0 } || GLES30.glGetError() != GLES30.GL_NO_ERROR) {
@@ -838,6 +957,7 @@ internal class ToolpathRenderer(
             lineBufferId = buffers[2],
             lineVertexCount = payload.lineVertexCount,
         )
+        val uploadStartedNanos = System.nanoTime()
         traced("DuckyPreview.uploadGeometry") {
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.bedBufferId)
             GLES30.glBufferData(
@@ -862,6 +982,7 @@ internal class ToolpathRenderer(
             )
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
         }
+        geometryUploadNanos += System.nanoTime() - uploadStartedNanos
         if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
             deleteGeometry(geometry)
             failRenderer("buffer_upload")
@@ -999,6 +1120,7 @@ internal class ToolpathRenderer(
     private companion object {
         const val RENDERER_LOG_TAG = "DuckyPreview"
         const val GPU_GEOMETRY_CACHE_SIZE = 2
+        const val PREPARED_GEOMETRY_CACHE_SIZE = 3
         const val BED_FLOATS_PER_VERTEX = 8
         const val BED_STRIDE_BYTES = BED_FLOATS_PER_VERTEX * Float.SIZE_BYTES
         const val BED_POSITION_OFFSET_BYTES = 0
@@ -1144,8 +1266,12 @@ internal object ToolpathMeshBuilder {
     internal const val EARLY_Z_OPACITY_THRESHOLD = 0.85f
 
     fun build(scene: ToolpathScene): ToolpathUploadPayload {
+        val buildStartedNanos = System.nanoTime()
         val budget = scene.segmentBudgetOverride ?: depthPreviewSegmentBudget(scene.detail)
+        val planStartedNanos = System.nanoTime()
         val plan = scene.preview.buildRenderPlan(budget, scene.visibleRoles)
+        val renderPlanNanos = System.nanoTime() - planStartedNanos
+        val packingStartedNanos = System.nanoTime()
         val bedBuilder = FloatBuilder(2_400)
         val instanceBuilder = if (scene.renderAsLines) null else {
             ToolpathInstanceBuilder(plan.segmentOffsets.size)
@@ -1194,12 +1320,18 @@ internal object ToolpathMeshBuilder {
                 scene.opacity,
             )
         }
+        val bedVertices = bedBuilder.finish()
+        val toolpathInstances = instanceBuilder?.finish() ?: ByteBuffer.allocateDirect(0)
+        val lineVertices = lineBuilder?.finish() ?: ByteBuffer.allocateDirect(0)
         return ToolpathUploadPayload(
-            bedVertices = bedBuilder.finish(),
-            toolpathInstances = instanceBuilder?.finish() ?: ByteBuffer.allocateDirect(0),
+            bedVertices = bedVertices,
+            toolpathInstances = toolpathInstances,
             instanceCount = instanceBuilder?.instanceCount ?: 0,
-            lineVertices = lineBuilder?.finish() ?: ByteBuffer.allocateDirect(0),
+            lineVertices = lineVertices,
             lineVertexCount = lineBuilder?.vertexCount ?: 0,
+            geometryBuildNanos = System.nanoTime() - buildStartedNanos,
+            renderPlanNanos = renderPlanNanos,
+            geometryPackNanos = System.nanoTime() - packingStartedNanos,
         )
     }
 
@@ -1311,6 +1443,9 @@ internal data class ToolpathUploadPayload(
     val instanceCount: Int,
     val lineVertices: ByteBuffer,
     val lineVertexCount: Int,
+    val geometryBuildNanos: Long = 0L,
+    val renderPlanNanos: Long = 0L,
+    val geometryPackNanos: Long = 0L,
 ) {
     val stagingByteCount: Int
         get() = bedVertices.remaining() * Float.SIZE_BYTES +

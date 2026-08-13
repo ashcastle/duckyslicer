@@ -362,6 +362,18 @@ class OrcaQualificationCorpusInstrumentedTest {
                     .put("settledFrameP95Ms", metrics.settledFrameP95Ms)
                     .put("interactionFrameP50Ms", metrics.interactionFrameP50Ms)
                     .put("interactionFrameP95Ms", metrics.interactionFrameP95Ms)
+                    .put("settledCompletionP50Ms", metrics.settledCompletionP50Ms)
+                    .put("settledCompletionP95Ms", metrics.settledCompletionP95Ms)
+                    .put("interactionCompletionP50Ms", metrics.interactionCompletionP50Ms)
+                    .put("interactionCompletionP95Ms", metrics.interactionCompletionP95Ms)
+                    .put("settledDrawSubmitP50Ms", metrics.settledDrawSubmitP50Ms)
+                    .put("settledDrawSubmitP95Ms", metrics.settledDrawSubmitP95Ms)
+                    .put("interactionDrawSubmitP50Ms", metrics.interactionDrawSubmitP50Ms)
+                    .put("interactionDrawSubmitP95Ms", metrics.interactionDrawSubmitP95Ms)
+                    .put("geometryBuildMs", metrics.geometryBuildMs)
+                    .put("renderPlanMs", metrics.renderPlanMs)
+                    .put("geometryPackMs", metrics.geometryPackMs)
+                    .put("geometryUploadMs", metrics.geometryUploadMs)
                     .put("geometryUploads", metrics.geometryUploads),
             )
         }

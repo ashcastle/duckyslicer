@@ -28,6 +28,18 @@ internal data class PreviewTierMetrics(
     val settledFrameP95Ms: Double,
     val interactionFrameP50Ms: Double,
     val interactionFrameP95Ms: Double,
+    val settledCompletionP50Ms: Double,
+    val settledCompletionP95Ms: Double,
+    val interactionCompletionP50Ms: Double,
+    val interactionCompletionP95Ms: Double,
+    val settledDrawSubmitP50Ms: Double,
+    val settledDrawSubmitP95Ms: Double,
+    val interactionDrawSubmitP50Ms: Double,
+    val interactionDrawSubmitP95Ms: Double,
+    val geometryBuildMs: Double,
+    val renderPlanMs: Double,
+    val geometryPackMs: Double,
+    val geometryUploadMs: Double,
     val geometryUploads: Int,
 )
 
@@ -159,9 +171,14 @@ private class ForegroundPreviewBenchmarkRenderer(
     private var lastFrameStartedNanos = 0L
     private var firstFrameStartedNanos = 0L
     private var uploadsAtTierStart = 0
+    private var telemetryAtTierStart = ToolpathRendererTelemetry(0.0, 0.0, 0.0, 0.0, 0.0)
     private var firstFrameMs = 0.0
     private val settledIntervals = mutableListOf<Double>()
     private val interactionIntervals = mutableListOf<Double>()
+    private val settledCompletions = mutableListOf<Double>()
+    private val interactionCompletions = mutableListOf<Double>()
+    private val settledDrawSubmissions = mutableListOf<Double>()
+    private val interactionDrawSubmissions = mutableListOf<Double>()
     private var width = 0
     private var height = 0
     private var gpuRenderer = ""
@@ -203,9 +220,20 @@ private class ForegroundPreviewBenchmarkRenderer(
                 else -> Unit
             }
             renderer.onDrawFrame(unused)
+            val drawSubmitMs = renderer.telemetryForTest().lastDrawSubmitMs
+            val completionMs = when (phase) {
+                Phase.FIRST,
+                Phase.SETTLED_WARMUP,
+                Phase.SETTLED,
+                Phase.INTERACTION_WARMUP,
+                Phase.INTERACTION -> {
+                    GLES30.glFinish()
+                    (SystemClock.elapsedRealtimeNanos() - started) / 1_000_000.0
+                }
+                Phase.AUTOMATIC_CALIBRATION -> null
+            }
             when (phase) {
                 Phase.FIRST -> {
-                    GLES30.glFinish()
                     firstFrameMs = (SystemClock.elapsedRealtimeNanos() - firstFrameStartedNanos) / 1_000_000.0
                     transition(Phase.SETTLED_WARMUP)
                 }
@@ -214,6 +242,8 @@ private class ForegroundPreviewBenchmarkRenderer(
                 }
                 Phase.SETTLED -> {
                     interval?.let(settledIntervals::add)
+                    checkNotNull(completionMs).let(settledCompletions::add)
+                    settledDrawSubmissions += drawSubmitMs
                     if (settledIntervals.size >= request.frameCount) {
                         renderer.setInteractionActive(true)
                         transition(Phase.INTERACTION_WARMUP)
@@ -224,6 +254,8 @@ private class ForegroundPreviewBenchmarkRenderer(
                 }
                 Phase.INTERACTION -> {
                     interval?.let(interactionIntervals::add)
+                    checkNotNull(completionMs).let(interactionCompletions::add)
+                    interactionDrawSubmissions += drawSubmitMs
                     if (interactionIntervals.size >= request.frameCount) finishTier()
                 }
                 Phase.AUTOMATIC_CALIBRATION -> {
@@ -261,8 +293,13 @@ private class ForegroundPreviewBenchmarkRenderer(
             ),
         )
         uploadsAtTierStart = renderer.geometryUploadCountForTest()
+        telemetryAtTierStart = renderer.telemetryForTest()
         settledIntervals.clear()
         interactionIntervals.clear()
+        settledCompletions.clear()
+        interactionCompletions.clear()
+        settledDrawSubmissions.clear()
+        interactionDrawSubmissions.clear()
         firstFrameStartedNanos = SystemClock.elapsedRealtimeNanos()
         lastFrameStartedNanos = 0L
         transition(Phase.FIRST)
@@ -270,12 +307,25 @@ private class ForegroundPreviewBenchmarkRenderer(
 
     private fun finishTier() {
         val detail = details[detailIndex]
+        val telemetry = renderer.telemetryForTest()
         results[detail] = PreviewTierMetrics(
             firstFrameMs = firstFrameMs,
             settledFrameP50Ms = percentile(settledIntervals, 0.50),
             settledFrameP95Ms = percentile(settledIntervals, 0.95),
             interactionFrameP50Ms = percentile(interactionIntervals, 0.50),
             interactionFrameP95Ms = percentile(interactionIntervals, 0.95),
+            settledCompletionP50Ms = percentile(settledCompletions, 0.50),
+            settledCompletionP95Ms = percentile(settledCompletions, 0.95),
+            interactionCompletionP50Ms = percentile(interactionCompletions, 0.50),
+            interactionCompletionP95Ms = percentile(interactionCompletions, 0.95),
+            settledDrawSubmitP50Ms = percentile(settledDrawSubmissions, 0.50),
+            settledDrawSubmitP95Ms = percentile(settledDrawSubmissions, 0.95),
+            interactionDrawSubmitP50Ms = percentile(interactionDrawSubmissions, 0.50),
+            interactionDrawSubmitP95Ms = percentile(interactionDrawSubmissions, 0.95),
+            geometryBuildMs = telemetry.geometryBuildMs - telemetryAtTierStart.geometryBuildMs,
+            renderPlanMs = telemetry.renderPlanMs - telemetryAtTierStart.renderPlanMs,
+            geometryPackMs = telemetry.geometryPackMs - telemetryAtTierStart.geometryPackMs,
+            geometryUploadMs = telemetry.geometryUploadMs - telemetryAtTierStart.geometryUploadMs,
             geometryUploads = renderer.geometryUploadCountForTest() - uploadsAtTierStart,
         )
         detailIndex += 1

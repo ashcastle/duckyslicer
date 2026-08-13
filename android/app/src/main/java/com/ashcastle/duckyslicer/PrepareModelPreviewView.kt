@@ -33,7 +33,6 @@ import javax.microedition.khronos.opengles.GL10
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.max
-import kotlin.math.sqrt
 
 @Composable
 internal fun DepthTestedPrepareModelScene(
@@ -208,9 +207,6 @@ internal object PrepareModelSceneBuilder {
                 bedPolygon[index * 2],
                 bedPolygon[index * 2 + 1],
                 PREPARE_BED_FILL_Z,
-                0f,
-                0f,
-                1f,
             )
         }
         val bedGrid = ArrayList<Float>()
@@ -236,9 +232,6 @@ internal object PrepareModelSceneBuilder {
                 bedPolygon[index],
                 bedPolygon[index + 1],
                 PREPARE_BED_OUTLINE_Z,
-                0f,
-                0f,
-                1f,
             )
         }
         val meshes = projectObjects.flatMap { projectObject ->
@@ -249,7 +242,11 @@ internal object PrepareModelSceneBuilder {
                     volumeId = volume.id,
                     filamentSlot = volume.filamentSlot,
                     sourceCenter = center,
-                    vertices = buildMeshVertices(volume.model.previewTriangles),
+                    // The imported preview already is a packed triangle-position stream.
+                    // Keep it by reference instead of rebuilding and doubling it with three
+                    // duplicated CPU normals per triangle. Flat normals are derived by the
+                    // fragment shader from the transformed surface.
+                    vertices = volume.model.previewTriangles,
                 )
             }
         }
@@ -263,63 +260,6 @@ internal object PrepareModelSceneBuilder {
         )
     }
 
-    private fun buildMeshVertices(triangles: FloatArray): FloatArray {
-        require(triangles.size % 9 == 0 && triangles.all(Float::isFinite))
-        val result = FloatArray(triangles.size / 3 * PREPARE_VERTEX_FLOATS)
-        var source = 0
-        var target = 0
-        while (source + 8 < triangles.size) {
-            val ax = triangles[source]
-            val ay = triangles[source + 1]
-            val az = triangles[source + 2]
-            val bx = triangles[source + 3]
-            val by = triangles[source + 4]
-            val bz = triangles[source + 5]
-            val cx = triangles[source + 6]
-            val cy = triangles[source + 7]
-            val cz = triangles[source + 8]
-            val ux = bx - ax
-            val uy = by - ay
-            val uz = bz - az
-            val vx = cx - ax
-            val vy = cy - ay
-            val vz = cz - az
-            var nx = uy * vz - uz * vy
-            var ny = uz * vx - ux * vz
-            var nz = ux * vy - uy * vx
-            val length = sqrt(nx * nx + ny * ny + nz * nz)
-            if (length.isFinite() && length > 0.000001f) {
-                nx /= length
-                ny /= length
-                nz /= length
-            } else {
-                nx = 0f
-                ny = 0f
-                nz = 1f
-            }
-            result[target++] = ax
-            result[target++] = ay
-            result[target++] = az
-            result[target++] = nx
-            result[target++] = ny
-            result[target++] = nz
-            result[target++] = bx
-            result[target++] = by
-            result[target++] = bz
-            result[target++] = nx
-            result[target++] = ny
-            result[target++] = nz
-            result[target++] = cx
-            result[target++] = cy
-            result[target++] = cz
-            result[target++] = nx
-            result[target++] = ny
-            result[target++] = nz
-            source += 9
-        }
-        return result
-    }
-
     private fun addLine(
         destination: MutableList<Float>,
         x1: Float,
@@ -328,8 +268,8 @@ internal object PrepareModelSceneBuilder {
         y2: Float,
         z: Float,
     ) {
-        addVertex(destination, x1, y1, z, 0f, 0f, 1f)
-        addVertex(destination, x2, y2, z, 0f, 0f, 1f)
+        addVertex(destination, x1, y1, z)
+        addVertex(destination, x2, y2, z)
     }
 
     private fun addVertex(
@@ -337,16 +277,10 @@ internal object PrepareModelSceneBuilder {
         x: Float,
         y: Float,
         z: Float,
-        nx: Float,
-        ny: Float,
-        nz: Float,
     ) {
         destination += x
         destination += y
         destination += z
-        destination += nx
-        destination += ny
-        destination += nz
     }
 }
 
@@ -651,7 +585,6 @@ internal class PrepareModelRenderer(
     private var uploadedOverlays: List<PrepareModelOverlayData>? = null
     private var program = 0
     private var positionLocation = -1
-    private var normalLocation = -1
     private var viewportLocation = -1
     private var sceneCenterLocation = -1
     private var bedSizeLocation = -1
@@ -705,7 +638,6 @@ internal class PrepareModelRenderer(
             return
         }
         positionLocation = GLES30.glGetAttribLocation(program, "aPosition")
-        normalLocation = GLES30.glGetAttribLocation(program, "aNormal")
         viewportLocation = GLES30.glGetUniformLocation(program, "uViewport")
         sceneCenterLocation = GLES30.glGetUniformLocation(program, "uSceneCenter")
         bedSizeLocation = GLES30.glGetUniformLocation(program, "uBedSize")
@@ -725,7 +657,6 @@ internal class PrepareModelRenderer(
         if (
             intArrayOf(
                 positionLocation,
-                normalLocation,
                 viewportLocation,
                 sceneCenterLocation,
                 bedSizeLocation,
@@ -1059,15 +990,6 @@ internal class PrepareModelRenderer(
             0,
         )
         GLES30.glEnableVertexAttribArray(positionLocation)
-        GLES30.glVertexAttribPointer(
-            normalLocation,
-            3,
-            GLES30.GL_FLOAT,
-            false,
-            PREPARE_VERTEX_STRIDE_BYTES,
-            3 * Float.SIZE_BYTES,
-        )
-        GLES30.glEnableVertexAttribArray(normalLocation)
     }
 
     private fun createProgramSafely(vertexSource: String, fragmentSource: String): Int = try {
@@ -1149,7 +1071,7 @@ private data class PrepareOverlayGpuBuffers(
     val lines: Int,
 )
 
-private const val PREPARE_VERTEX_FLOATS = 6
+private const val PREPARE_VERTEX_FLOATS = 3
 private const val PREPARE_VERTEX_STRIDE_BYTES = PREPARE_VERTEX_FLOATS * Float.SIZE_BYTES
 private const val PREPARE_BED_FILL_Z = -0.08f
 private const val PREPARE_BED_GRID_Z = -0.06f
@@ -1172,8 +1094,7 @@ private const val PREPARE_VERTEX_SHADER = """#version 300 es
     uniform vec3 uRotation;
     uniform vec3 uTranslation;
     in vec3 aPosition;
-    in vec3 aNormal;
-    out float vDiffuse;
+    out vec3 vWorldPosition;
 
     vec3 rotatePoint(vec3 point) {
         float sx = sin(uRotation.x);
@@ -1193,11 +1114,8 @@ private const val PREPARE_VERTEX_SHADER = """#version 300 es
 
     void main() {
         vec3 world = aPosition;
-        vec3 normal = aNormal;
         if (uObjectMode != 0) {
             world = rotatePoint((aPosition - uSourceCenter) * uSignedScale) + uTranslation;
-            vec3 safeScale = sign(uSignedScale) * max(abs(uSignedScale), vec3(0.000001));
-            normal = normalize(rotatePoint(aNormal / safeScale));
         }
         vec2 delta = world.xy - uBedSize * 0.5;
         float yawCos = cos(uYaw);
@@ -1213,21 +1131,27 @@ private const val PREPARE_VERTEX_SHADER = """#version 300 es
         float depth = rotatedY * pitchCos + world.z * pitchSin;
         vec2 ndc = vec2(screen.x / uViewport.x * 2.0 - 1.0, 1.0 - screen.y / uViewport.y * 2.0);
         gl_Position = vec4(ndc, clamp(-depth / uDepthScale, -0.98, 0.98), 1.0);
-        vec3 lightDirection = normalize(vec3(0.36, -0.48, 0.80));
-        vDiffuse = 0.55 + abs(dot(normalize(normal), lightDirection)) * 0.45;
+        vWorldPosition = world;
     }
 """
 
 private const val PREPARE_FRAGMENT_SHADER = """#version 300 es
-    precision mediump float;
+    precision highp float;
     uniform vec3 uBaseColor;
     uniform float uOpacity;
     uniform int uLighting;
     uniform int uSelected;
-    in float vDiffuse;
+    in vec3 vWorldPosition;
     out vec4 outColor;
     void main() {
-        float light = uLighting != 0 ? vDiffuse : 1.0;
+        float light = 1.0;
+        if (uLighting != 0) {
+            vec3 xGradient = dFdx(vWorldPosition);
+            vec3 yGradient = dFdy(vWorldPosition);
+            vec3 normal = normalize(cross(xGradient, yGradient));
+            vec3 lightDirection = normalize(vec3(0.36, -0.48, 0.80));
+            light = 0.55 + abs(dot(normal, lightDirection)) * 0.45;
+        }
         if (uSelected != 0) light = min(1.0, light + 0.10);
         vec3 color = mix(vec3(0.067, 0.075, 0.059), uBaseColor, light);
         outColor = vec4(color, uOpacity);

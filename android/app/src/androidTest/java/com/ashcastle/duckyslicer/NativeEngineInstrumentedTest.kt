@@ -297,6 +297,37 @@ class NativeEngineInstrumentedTest {
             )
             adaptiveRenderer.releaseGpuGeometryForMemoryPressure()
 
+            var requestedGeometry: ToolpathScene? = null
+            val asynchronousRenderer = ToolpathRenderer(
+                requestGeometryBuild = { requestedGeometry = it },
+            )
+            asynchronousRenderer.submit(scene)
+            asynchronousRenderer.onSurfaceCreated(null, null)
+            asynchronousRenderer.onSurfaceChanged(null, framebufferSize, framebufferSize)
+            asynchronousRenderer.onDrawFrame(null)
+            assertEquals(
+                "An asynchronous renderer must not build geometry on its GL thread",
+                0,
+                asynchronousRenderer.geometryUploadCountForTest(),
+            )
+            val requested = checkNotNull(requestedGeometry)
+            asynchronousRenderer.submitPreparedGeometry(
+                requested,
+                ToolpathMeshBuilder.build(requested),
+            )
+            asynchronousRenderer.onDrawFrame(null)
+            assertEquals(
+                "Prepared CPU geometry must upload exactly once on the GL thread",
+                1,
+                asynchronousRenderer.geometryUploadCountForTest(),
+            )
+            assertEquals(
+                "Asynchronous geometry upload must leave GLES valid",
+                GLES30.GL_NO_ERROR,
+                GLES30.glGetError(),
+            )
+            asynchronousRenderer.releaseGpuGeometryForMemoryPressure()
+
             var rendererFailures = 0
             val failingRenderer = ToolpathRenderer(
                 reportUnavailable = { rendererFailures += 1 },
