@@ -23,10 +23,7 @@ class OrcaModelCutInstrumentedTest {
             val source = store.createModelDestination("cut-cube.stl").apply {
                 writeText(cubeStl())
             }
-            val model = ModelInfo.fromJson(
-                NativeEngine.inspectStl(source.absolutePath),
-                source.absolutePath,
-            ).copy(fileName = "cut-cube.stl")
+            val model = inspectModel(source.absolutePath).copy(fileName = "cut-cube.stl")
             val options = SliceOptions().addFilamentSlot(FilamentProfile.PETG).copy(
                 bedSizeX = 100f,
                 bedSizeY = 100f,
@@ -54,10 +51,7 @@ class OrcaModelCutInstrumentedTest {
                     ),
                 ).optBoolean("ok"),
             )
-            val expected = ModelInfo.fromJson(
-                NativeEngine.inspectStl(expectedFile.absolutePath),
-                expectedFile.absolutePath,
-            )
+            val expected = inspectModel(expectedFile.absolutePath)
 
             val cut = cutProjectObject(parent, store, options, 0.5f, placeOnCut = false)
 
@@ -82,7 +76,7 @@ class OrcaModelCutInstrumentedTest {
                         ),
                     ).optBoolean("ok"),
                 )
-                ModelInfo.fromJson(NativeEngine.inspectStl(output.absolutePath), output.absolutePath)
+                inspectModel(output.absolutePath)
             }
             repeat(3) { axis ->
                 assertEquals(

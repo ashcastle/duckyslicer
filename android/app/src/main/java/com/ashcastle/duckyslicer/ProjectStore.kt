@@ -18,7 +18,7 @@ internal class ProjectStore(
     constructor(context: Context) : this(
         projectRoot = File(context.filesDir, PROJECT_DIRECTORY),
         inspectModel = { model ->
-            ModelInfo.fromJson(NativeEngine.inspectStl(model.absolutePath), model.absolutePath)
+            inspectModel(model.absolutePath)
         },
     )
 

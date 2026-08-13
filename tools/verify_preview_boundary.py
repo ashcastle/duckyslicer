@@ -27,12 +27,16 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "PreviewPerformanceHarnessActivity.kt",
         "WorkspaceScreen.kt",
         "MainActivity.kt",
+        "ProjectStore.kt",
+        "OrcaModelCut.kt",
         "SliceOperationViewModel.kt",
         "OnDeviceSlicer.kt",
         "SlicerProcessService.kt",
         "NativeEngineInstrumentedTest.kt",
         "PrepareModelRendererInstrumentedTest.kt",
         "PrepareModelPickingTest.kt",
+        "ModelInfoTest.kt",
+        "ModelImportPerformanceInstrumentedTest.kt",
         "AccessibilityInstrumentedTest.kt",
         "PreviewModelsTest.kt",
         "PreviewSummaryTest.kt",
@@ -52,6 +56,30 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     native = sources["NativeEngine.kt"]
     if "previewGcodeRange(path: String, startLayer: Int, endLayer: Int): FloatArray?" not in native:
         raise VerificationError("Android preview JNI does not return a nullable primitive float array")
+    if "inspectStlPayload(path: String): FloatArray?" not in native:
+        raise VerificationError("Android model inspection JNI does not return a nullable primitive float array")
+
+    model = sources["MainActivity.kt"]
+    for marker in (
+        "fun fromNative(raw: FloatArray?, localPath: String)",
+        "MODEL_PREVIEW_PAYLOAD_MAGIC",
+        "MODEL_PREVIEW_PAYLOAD_VERSION",
+        "MODEL_PREVIEW_HEADER_FLOATS = 10",
+        "MODEL_MAX_PREVIEW_TRIANGLES = 12_000",
+        "raw.copyOfRange(vertexStart, vertexEnd)",
+        "exactModelIntegerOrNull()",
+        "MODEL_MAX_COORDINATE_ABS_MM",
+    ):
+        if marker not in model:
+            raise VerificationError(f"Android model payload validation is missing: {marker}")
+    for source_name in ("ProjectStore.kt", "OrcaModelCut.kt", "OnDeviceSlicer.kt"):
+        source = sources[source_name]
+        if "NativeEngine.inspectStl(" in source or "ModelInfo.fromJson(" in source:
+            raise VerificationError(
+                f"production model loading reverted to JSON decoding in {source_name}"
+            )
+        if "inspectModel(" not in source:
+            raise VerificationError(f"primitive model loading is missing from {source_name}")
 
     preview = sources["PreviewModels.kt"]
     for marker in (
@@ -217,6 +245,38 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     ):
         if marker not in picking_tests:
             raise VerificationError(f"exact Prepare picking regression is missing: {marker}")
+
+    model_tests = sources["ModelInfoTest.kt"]
+    for marker in (
+        "nativePayloadDecodesBoundedGeometryAndSourceFacetMapping",
+        "nativePayloadRejectsMissingOrUnknownEnvelope",
+        "nativePayloadRejectsNonFiniteOrInconsistentGeometry",
+        "nativePayloadRejectsInvalidSourceTriangleIndices",
+    ):
+        if marker not in model_tests:
+            raise VerificationError(f"model payload host regression is missing: {marker}")
+
+    model_performance = sources["ModelImportPerformanceInstrumentedTest.kt"]
+    for marker in (
+        "denseBinaryStlUsesBoundedPrimitiveImportWithinBudget",
+        "sourceTriangles=${info.triangles}",
+        "native.last() / 1_000_000.0 <= 250.0",
+        "decode.last() / 1_000_000.0 <= 100.0",
+        "(native.last() + decode.last()) / 1_000_000.0 <= 300.0",
+    ):
+        if marker not in model_performance:
+            raise VerificationError(f"model import performance regression is missing: {marker}")
+
+    rust = sources["lib.rs"]
+    for marker in (
+        "MODEL_PREVIEW_PAYLOAD_MAGIC",
+        "MODEL_PREVIEW_PAYLOAD_VERSION",
+        "MODEL_PREVIEW_HEADER_FLOATS",
+        "fn model_preview_payload(",
+        "NativeEngine_inspectStlPayload",
+    ):
+        if marker not in rust:
+            raise VerificationError(f"native model payload contract is missing: {marker}")
 
     benchmark = sources["PreviewPerformanceHarnessActivity.kt"]
     for marker in (
@@ -566,6 +626,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
             or "instanced" not in lowered
             or "32-byte" not in lowered
             or "fallback" not in lowered
+            or "large-model inspection" not in lowered
+            or "source-facet" not in lowered
         ):
             raise VerificationError(f"primitive preview boundary is not documented in {document}")
 
@@ -598,6 +660,8 @@ def read_sources() -> dict[str, str]:
         ).read_text(encoding="utf-8"),
         "WorkspaceScreen.kt": (main / "WorkspaceScreen.kt").read_text(encoding="utf-8"),
         "MainActivity.kt": (main / "MainActivity.kt").read_text(encoding="utf-8"),
+        "ProjectStore.kt": (main / "ProjectStore.kt").read_text(encoding="utf-8"),
+        "OrcaModelCut.kt": (main / "OrcaModelCut.kt").read_text(encoding="utf-8"),
         "SliceOperationViewModel.kt": (main / "SliceOperationViewModel.kt").read_text(
             encoding="utf-8"
         ),
@@ -614,6 +678,10 @@ def read_sources() -> dict[str, str]:
         "PrepareModelPickingTest.kt": (tests / "PrepareModelPickingTest.kt").read_text(
             encoding="utf-8"
         ),
+        "ModelInfoTest.kt": (tests / "ModelInfoTest.kt").read_text(encoding="utf-8"),
+        "ModelImportPerformanceInstrumentedTest.kt": (
+            device / "ModelImportPerformanceInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
         "AccessibilityInstrumentedTest.kt": (
             device / "AccessibilityInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
@@ -652,7 +720,7 @@ def main() -> None:
     except (OSError, VerificationError) as error:
         raise SystemExit(f"Preview boundary verification failed: {error}") from error
     print(
-        "Verified bounded FloatArray preview, responsive controls, adaptive detail, "
+        "Verified bounded FloatArray model/toolpath previews, responsive controls, adaptive detail, "
         "compact instanced toolpaths, bounded GPU caching, and automatic compatibility fallback"
     )
 

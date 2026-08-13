@@ -8,7 +8,8 @@ from tools.verify_preview_boundary import VerificationError, verify_preview_boun
 def valid_sources() -> dict[str, str]:
     return {
         "NativeEngine.kt": (
-            "previewGcodeRange(path: String, startLayer: Int, endLayer: Int): FloatArray?"
+            "previewGcodeRange(path: String, startLayer: Int, endLayer: Int): FloatArray? "
+            "inspectStlPayload(path: String): FloatArray?"
         ),
         "PreviewModels.kt": (
             "fun fromNative(raw: FloatArray?) PAYLOAD_MAGIC PAYLOAD_VERSION "
@@ -146,6 +147,11 @@ def valid_sources() -> dict[str, str]:
             "workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading)"
         ),
         "MainActivity.kt": (
+            "fun fromNative(raw: FloatArray?, localPath: String) "
+            "MODEL_PREVIEW_PAYLOAD_MAGIC MODEL_PREVIEW_PAYLOAD_VERSION "
+            "MODEL_PREVIEW_HEADER_FLOATS = 10 MODEL_MAX_PREVIEW_TRIANGLES = 12_000 "
+            "raw.copyOfRange(vertexStart, vertexEnd) exactModelIntegerOrNull() "
+            "MODEL_MAX_COORDINATE_ABS_MM "
             "var plateSliceResults by rememberSaveable var selectedTab by rememberSaveable "
             "restored.isRestorableFrom(context.filesDir) "
             "completed?.isRestorableFrom(context.filesDir) == true "
@@ -153,9 +159,11 @@ def valid_sources() -> dict[str, str]:
             "requested.plateId requested.outcome "
             "loadPreviewRange(0, Int.MAX_VALUE)"
         ),
+        "ProjectStore.kt": "inspectModel(",
+        "OrcaModelCut.kt": "inspectModel(",
         "SliceOperationViewModel.kt": "GcodeLayerPreview.fromNative",
         "OnDeviceSlicer.kt": (
-            "val filamentMm: Float ) : Serializable "
+            "inspectModel( val filamentMm: Float ) : Serializable "
             "fun SliceOutcome.isRestorableFrom(filesRoot: File) "
             "canonicalOutput.parentFile == outputRoot "
             "canonicalOutput.length() in 1..SliceArtifactStore.MAXIMUM_OUTPUT_BYTES"
@@ -203,6 +211,19 @@ def valid_sources() -> dict[str, str]:
         "PrepareModelPickingTest.kt": (
             "coarseIndexCullsDenseChunksWithoutChangingExactHits "
             "candidateTriangleCount in 1 until model.triangles pickingIndices = indices"
+        ),
+        "ModelInfoTest.kt": (
+            "nativePayloadDecodesBoundedGeometryAndSourceFacetMapping "
+            "nativePayloadRejectsMissingOrUnknownEnvelope "
+            "nativePayloadRejectsNonFiniteOrInconsistentGeometry "
+            "nativePayloadRejectsInvalidSourceTriangleIndices"
+        ),
+        "ModelImportPerformanceInstrumentedTest.kt": (
+            "denseBinaryStlUsesBoundedPrimitiveImportWithinBudget "
+            "sourceTriangles=${info.triangles} "
+            "native.last() / 1_000_000.0 <= 250.0 "
+            "decode.last() / 1_000_000.0 <= 100.0 "
+            "(native.last() + decode.last()) / 1_000_000.0 <= 300.0"
         ),
         "AccessibilityInstrumentedTest.kt": (
             "appSettingsExposeNamedSlidersWholeRowSwitchesAndHeadings "
@@ -269,6 +290,9 @@ def valid_sources() -> dict[str, str]:
             "PREVIEW_PAYLOAD_MAGIC PREVIEW_PAYLOAD_VERSION PREVIEW_HEADER_FLOATS "
             "MAX_PREVIEW_SEGMENTS: usize = 120_000 MAX_PREVIEW_LAYERS: usize = 1_000_000 "
             "env.new_float_array env.set_float_array_region preview_payload(preview_gcode( "
+            "MODEL_PREVIEW_PAYLOAD_MAGIC MODEL_PREVIEW_PAYLOAD_VERSION "
+            "MODEL_PREVIEW_HEADER_FLOATS fn model_preview_payload( "
+            "NativeEngine_inspectStlPayload "
             "#[cfg(test)]"
         ),
         "strings.xml": (
@@ -285,7 +309,10 @@ def valid_sources() -> dict[str, str]:
             'name="toolpath_visibility_control" name="toolpath_depth_contrast_control" '
             'name="connection_timeout_control"'
         ),
-        "CONTRIBUTING.md": "Preview FloatArray VBO Automatic instanced 32-byte fallback",
+        "CONTRIBUTING.md": (
+            "Preview FloatArray VBO Automatic instanced 32-byte fallback "
+            "Large-model inspection source-facet"
+        ),
     }
 
 
@@ -322,6 +349,28 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
         sources = valid_sources()
         sources["PreviewModels.kt"] += " JSONObject fun fromJson"
         with self.assertRaisesRegex(VerificationError, "JSON decoding"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_model_import_that_reverts_to_json(self) -> None:
+        sources = valid_sources()
+        sources["ProjectStore.kt"] = "ModelInfo.fromJson(NativeEngine.inspectStl(path), path)"
+        with self.assertRaisesRegex(VerificationError, "reverted to JSON"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_missing_primitive_model_jni_boundary(self) -> None:
+        sources = valid_sources()
+        sources["NativeEngine.kt"] = sources["NativeEngine.kt"].replace(
+            "inspectStlPayload(path: String): FloatArray?", "inspectStl(path: String): String"
+        )
+        with self.assertRaisesRegex(VerificationError, "model inspection JNI"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_model_decode_without_a_frame_budget(self) -> None:
+        sources = valid_sources()
+        sources["ModelImportPerformanceInstrumentedTest.kt"] = sources[
+            "ModelImportPerformanceInstrumentedTest.kt"
+        ].replace("decode.last() / 1_000_000.0 <= 100.0", "decode.isNotEmpty()")
+        with self.assertRaisesRegex(VerificationError, "model import performance"):
             verify_preview_boundary(sources)
 
     def test_rejects_rust_json_serialization(self) -> None:

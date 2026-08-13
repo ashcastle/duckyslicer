@@ -23,17 +23,11 @@ class OrcaModelSplitInstrumentedTest {
             val sourceFile = store.createModelDestination("compound-volume.stl").apply {
                 writeText(cubeStl(0f) + cubeStl(30f, includeEnvelope = false))
             }
-            val sourceModel = ModelInfo.fromJson(
-                NativeEngine.inspectStl(sourceFile.absolutePath),
-                sourceFile.absolutePath,
-            ).copy(fileName = "compound-volume.stl")
+            val sourceModel = inspectModel(sourceFile.absolutePath).copy(fileName = "compound-volume.stl")
             val siblingFile = store.createModelDestination("sibling-volume.stl").apply {
                 writeText(cubeStl(60f) + "endsolid compound\n")
             }
-            val siblingModel = ModelInfo.fromJson(
-                NativeEngine.inspectStl(siblingFile.absolutePath),
-                siblingFile.absolutePath,
-            ).copy(fileName = "sibling-volume.stl")
+            val siblingModel = inspectModel(siblingFile.absolutePath).copy(fileName = "sibling-volume.stl")
             val sourceVolume = ProjectVolume(
                 id = "source-volume",
                 model = sourceModel,
@@ -142,10 +136,7 @@ class OrcaModelSplitInstrumentedTest {
             val source = store.createModelDestination("two-cubes.stl").apply {
                 writeText(cubeStl(0f) + cubeStl(30f, includeEnvelope = false))
             }
-            val model = ModelInfo.fromJson(
-                NativeEngine.inspectStl(source.absolutePath),
-                source.absolutePath,
-            ).copy(fileName = "two-cubes.stl")
+            val model = inspectModel(source.absolutePath).copy(fileName = "two-cubes.stl")
             val options = SliceOptions().copy(
                 bedSizeX = 100f,
                 bedSizeY = 100f,
@@ -178,10 +169,7 @@ class OrcaModelSplitInstrumentedTest {
                 ),
             )
             assertTrue(transformed.optBoolean("ok"))
-            val expected = ModelInfo.fromJson(
-                NativeEngine.inspectStl(expectedFile.absolutePath),
-                expectedFile.absolutePath,
-            )
+            val expected = inspectModel(expectedFile.absolutePath)
 
             val split = splitProjectObject(parent, store, options)
 
@@ -204,7 +192,7 @@ class OrcaModelSplitInstrumentedTest {
                     ),
                 )
                 assertTrue(response.optBoolean("ok"))
-                ModelInfo.fromJson(NativeEngine.inspectStl(output.absolutePath), output.absolutePath)
+                inspectModel(output.absolutePath)
             }
             repeat(3) { axis ->
                 assertEquals(expected.minMm[axis], placed.minOf { it.minMm[axis] }, 0.01)

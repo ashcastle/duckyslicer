@@ -548,7 +548,7 @@ class NativeEngineInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val root = File(context.cacheDir, "project-store-${System.nanoTime()}")
         val inspector: (File) -> ModelInfo = { model ->
-            ModelInfo.fromJson(NativeEngine.inspectStl(model.absolutePath), model.absolutePath)
+            inspectModel(model.absolutePath)
         }
         try {
             val firstStore = ProjectStore(root, inspector)
@@ -677,7 +677,7 @@ class NativeEngineInstrumentedTest {
         val sourceRoot = File(context.cacheDir, "archive-source-${System.nanoTime()}")
         val destinationRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
         val inspector: (File) -> ModelInfo = { model ->
-            ModelInfo.fromJson(NativeEngine.inspectStl(model.absolutePath), model.absolutePath)
+            inspectModel(model.absolutePath)
         }
         var gcode: File? = null
         try {
@@ -1235,13 +1235,12 @@ class NativeEngineInstrumentedTest {
         assertTrue("Bundled model fixture must be available", model.isFile)
         assertTrue(NativeEngine.version().startsWith("DuckySlicer native bridge"))
 
-        val result = JSONObject(NativeEngine.inspectStl(model.absolutePath))
-        assertTrue(result.optString("error"), result.optBoolean("ok"))
-        assertTrue("STL must contain triangles", result.getInt("triangles") > 0)
-        assertTrue("STL preview must contain sampled mesh triangles", result.getJSONArray("previewTriangles").length() > 0)
-        assertTrue("STL X dimension must be positive", result.getJSONArray("dimensionsMm").getDouble(0) > 0.0)
-        assertTrue("STL Y dimension must be positive", result.getJSONArray("dimensionsMm").getDouble(1) > 0.0)
-        assertTrue("STL Z dimension must be positive", result.getJSONArray("dimensionsMm").getDouble(2) > 0.0)
+        val result = inspectModel(model.absolutePath)
+        assertTrue("STL must contain triangles", result.triangles > 0)
+        assertTrue("STL preview must contain sampled mesh triangles", result.previewTriangles.isNotEmpty())
+        assertTrue("STL X dimension must be positive", result.dimensions[0] > 0.0)
+        assertTrue("STL Y dimension must be positive", result.dimensions[1] > 0.0)
+        assertTrue("STL Z dimension must be positive", result.dimensions[2] > 0.0)
     }
 
     @Test
@@ -1274,11 +1273,9 @@ class NativeEngineInstrumentedTest {
                 endsolid extreme
                 """.trimIndent(),
             )
-            val stlResult = JSONObject(NativeEngine.inspectStl(extremeStl.absolutePath))
-            assertTrue("Out-of-range STL coordinates must be rejected", !stlResult.optBoolean("ok"))
             assertTrue(
-                "STL rejection must identify the coordinate",
-                stlResult.optString("error").contains("coordinate"),
+                "Out-of-range STL coordinates must be rejected",
+                NativeEngine.inspectStlPayload(extremeStl.absolutePath) == null,
             )
 
             val samePath = File(root, "same-path.stl")
@@ -1294,10 +1291,9 @@ class NativeEngineInstrumentedTest {
             assertTrue("In-place STL transforms must be rejected", !transformResult.optBoolean("ok"))
             assertTrue("Rejected transforms must preserve the source", originalBytes.contentEquals(samePath.readBytes()))
 
-            val recoveryResult = JSONObject(NativeEngine.inspectStl(fixtureModel().absolutePath))
             assertTrue(
-                "JNI must remain usable after malformed inputs: ${recoveryResult.optString("error")}",
-                recoveryResult.optBoolean("ok"),
+                "JNI must remain usable after malformed inputs",
+                inspectModel(fixtureModel().absolutePath).triangles > 0,
             )
         } finally {
             root.deleteRecursively()
@@ -1337,11 +1333,10 @@ class NativeEngineInstrumentedTest {
                 "Automatic lay transform failed: ${transformResult.optString("error")}",
                 transformResult.optBoolean("ok"),
             )
-            val inspection = JSONObject(NativeEngine.inspectStl(output.absolutePath))
-            assertTrue("Transformed model must remain readable", inspection.optBoolean("ok"))
+            val inspection = inspectModel(output.absolutePath)
             assertTrue(
                 "Automatic lay must put the model on Z=0",
-                abs(inspection.getJSONArray("minMm").getDouble(2)) < 0.001,
+                abs(inspection.minMm[2]) < 0.001,
             )
         } finally {
             output.delete()
@@ -1368,7 +1363,7 @@ class NativeEngineInstrumentedTest {
     @Test
     fun selectedFaceUsesRustAlignmentAndStillProducesRealGcodeOnDevice() {
         val source = fixtureModel()
-        val model = ModelInfo.fromJson(NativeEngine.inspectStl(source.absolutePath), source.absolutePath)
+        val model = inspectModel(source.absolutePath)
         val triangle = model.previewTriangles.copyOfRange(0, 9)
         val transform = ModelTransform(
             rotationXdeg = 19f,
@@ -1422,11 +1417,10 @@ class NativeEngineInstrumentedTest {
                 ),
             )
             assertTrue(result.optString("error"), result.optBoolean("ok"))
-            val inspection = JSONObject(NativeEngine.inspectStl(transformedModel.absolutePath))
-            assertTrue("Placed model must remain readable", inspection.optBoolean("ok"))
+            val inspection = inspectModel(transformedModel.absolutePath)
             assertTrue(
                 "Placed model must touch Z=0",
-                abs(inspection.getJSONArray("minMm").getDouble(2)) < 0.001,
+                abs(inspection.minMm[2]) < 0.001,
             )
 
             val outcome = OnDeviceSlicer.slice(transformedModel, options)
@@ -1444,10 +1438,7 @@ class NativeEngineInstrumentedTest {
     @Test
     fun automaticArrangementUsesOrcaInTheIsolatedArm64WorkerAndRecoversAfterNoFit() {
         val source = fixtureModel()
-        val model = ModelInfo.fromJson(
-            NativeEngine.inspectStl(source.absolutePath),
-            source.absolutePath,
-        )
+        val model = inspectModel(source.absolutePath)
         val objects = listOf(
             ProjectObject("arrange-first", model, ModelTransform(offsetXmm = -25f)),
             ProjectObject("arrange-second", model, ModelTransform(offsetXmm = 25f)),
@@ -1536,10 +1527,7 @@ class NativeEngineInstrumentedTest {
     @Test
     fun supportPaintReachesOrcaAndCreatesSupportToolpaths() {
         val modelFile = supportPaintOverhangModel()
-        val model = ModelInfo.fromJson(
-            NativeEngine.inspectStl(modelFile.absolutePath),
-            modelFile.absolutePath,
-        )
+        val model = inspectModel(modelFile.absolutePath)
         assertEquals("Support fixture facet order must remain stable", 24, model.triangles)
         val options = SliceOptions()
             .selectQuality(QualityProfile.DRAFT)
@@ -2252,10 +2240,7 @@ class NativeEngineInstrumentedTest {
     @Test
     fun multipleObjectsReachTheOrcaProjectAndSliceTogether() {
         val modelFile = fixtureModel()
-        val model = ModelInfo.fromJson(
-            NativeEngine.inspectStl(modelFile.absolutePath),
-            modelFile.absolutePath,
-        )
+        val model = inspectModel(modelFile.absolutePath)
         val outcome = OnDeviceSlicer.slice(
             listOf(
                 ProjectObject("left", model, ModelTransform(offsetXmm = -18f)),

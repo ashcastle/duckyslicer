@@ -64,7 +64,7 @@ class VulkanAccelerationInstrumentedTest {
         assumeTrue("The staged large model must exist", model.isFile)
 
         val inspectStarted = SystemClock.elapsedRealtime()
-        val info = ModelInfo.fromJson(NativeEngine.inspectStl(model.absolutePath), model.absolutePath)
+        val info = inspectModel(model.absolutePath)
         val inspectMillis = SystemClock.elapsedRealtime() - inspectStarted
         val longestDimension = info.dimensions.maxOrNull()?.toFloat() ?: 0f
         assertTrue("The large model must have printable dimensions", longestDimension > 0f)

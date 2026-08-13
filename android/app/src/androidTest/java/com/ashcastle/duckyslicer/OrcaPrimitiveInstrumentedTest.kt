@@ -23,10 +23,7 @@ class OrcaPrimitiveInstrumentedTest {
                 val staging = store.createModelImportStaging()
                 try {
                     val generated = SlicerProcessClient.createPrimitive(primitive, 20f, staging)
-                    val info = ModelInfo.fromJson(
-                        NativeEngine.inspectStl(generated.file.absolutePath),
-                        generated.file.absolutePath,
-                    )
+                    val info = inspectModel(generated.file.absolutePath)
                     assertTrue("$primitive must contain triangles", info.triangles >= 12)
                     assertTrue("$primitive must be finite", info.dimensions.all(Double::isFinite))
                     assertEquals(20.0, info.dimensions[0], 0.25)
@@ -74,10 +71,7 @@ class OrcaPrimitiveInstrumentedTest {
                             "Independent-axis STL transform failed: ${transformResult.optString("error")}",
                             transformResult.optBoolean("ok"),
                         )
-                        val transformedInfo = ModelInfo.fromJson(
-                            NativeEngine.inspectStl(transformed.absolutePath),
-                            transformed.absolutePath,
-                        )
+                        val transformedInfo = inspectModel(transformed.absolutePath)
                         assertEquals(20.0, transformedInfo.dimensions[0], 0.25)
                         assertEquals(30.0, transformedInfo.dimensions[1], 0.25)
                         assertEquals(40.0, transformedInfo.dimensions[2], 0.25)

@@ -611,7 +611,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         sources["NativeEngineInstrumentedTest.kt"],
         (
             "projectArchiveRoundTripReinspectsAndSlicesOnArm64",
-            "NativeEngine.inspectStl",
+            "inspectModel(",
             "OnDeviceSlicer.slice(",
         ),
     )

@@ -19,7 +19,7 @@ class MultiFilamentInstrumentedTest {
             instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
                 model.outputStream().use(input::copyTo)
             }
-            val info = ModelInfo.fromJson(NativeEngine.inspectStl(model.absolutePath), model.absolutePath)
+            val info = inspectModel(model.absolutePath)
             val primary = FilamentProfile.GENERIC_PLA.copy(
                 compatiblePrinters = listOf(PrinterProfile.U1_04.name),
             )

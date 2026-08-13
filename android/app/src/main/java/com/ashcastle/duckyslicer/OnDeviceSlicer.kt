@@ -1211,7 +1211,7 @@ object OnDeviceSlicer {
         listOf(
             ProjectObject(
                 id = model.absolutePath,
-                model = ModelInfo.fromJson(NativeEngine.inspectStl(model.absolutePath), model.absolutePath),
+                model = inspectModel(model.absolutePath),
                 transform = modelTransform,
             ),
         ),

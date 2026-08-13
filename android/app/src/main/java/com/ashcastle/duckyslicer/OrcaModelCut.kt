@@ -51,10 +51,7 @@ internal suspend fun cutProjectObject(
         if (SlicerProcessClient.projectRequestCancellationRequested(requestId)) {
             throw ProjectEditCancelledException()
         }
-        val transformedModel = ModelInfo.fromJson(
-            NativeEngine.inspectStl(transformed.absolutePath),
-            transformed.absolutePath,
-        )
+        val transformedModel = inspectModel(transformed.absolutePath)
         val originalMinimumZ = transformedModel.minMm[2].toFloat()
         val cutPlaneZ = originalMinimumZ + transformedModel.dimensions[2].toFloat() * heightRatio
         val originalCenterX = ((transformedModel.minMm[0] + transformedModel.maxMm[0]) / 2.0).toFloat()

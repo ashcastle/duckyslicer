@@ -19,10 +19,7 @@ class OrcaMultiColorPaintInstrumentedTest {
             instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
                 modelFile.outputStream().use(input::copyTo)
             }
-            val model = ModelInfo.fromJson(
-                NativeEngine.inspectStl(modelFile.absolutePath),
-                modelFile.absolutePath,
-            )
+            val model = inspectModel(modelFile.absolutePath)
             val primary = FilamentProfile.GENERIC_PLA.copy(
                 compatiblePrinters = listOf(PrinterProfile.U1_04.name),
             )

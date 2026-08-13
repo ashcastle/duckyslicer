@@ -32,7 +32,6 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import org.json.JSONObject
 import java.util.UUID
 
 private val DuckyColors = darkColorScheme(
@@ -62,39 +61,77 @@ data class ModelInfo(
     val previewTriangleIndices: IntArray = IntArray(previewTriangles.size / 9) { it },
 ) {
     companion object {
-        fun fromJson(raw: String, localPath: String): ModelInfo {
-            val json = JSONObject(raw)
-            check(json.optBoolean("ok")) { "model_invalid" }
-            val values = json.getJSONArray("dimensionsMm")
-            val minValues = json.getJSONArray("minMm")
-            val maxValues = json.getJSONArray("maxMm")
-            val triangleValues = json.getJSONArray("previewTriangles")
-            val triangleIndices = json.getJSONArray("previewTriangleIndices")
-            check(triangleIndices.length() == triangleValues.length()) { "model_invalid" }
-            val previewTriangles = FloatArray(triangleValues.length() * 9)
-            repeat(triangleValues.length()) { triangleIndex ->
-                val triangle = triangleValues.getJSONArray(triangleIndex)
-                repeat(9) { valueIndex ->
-                    previewTriangles[triangleIndex * 9 + valueIndex] = triangle.getDouble(valueIndex).toFloat()
+        fun fromNative(raw: FloatArray?, localPath: String): ModelInfo {
+            checkNotNull(raw) { "model_invalid" }
+            check(raw.size >= MODEL_PREVIEW_HEADER_FLOATS) { "model_invalid" }
+            check(raw[0] == MODEL_PREVIEW_PAYLOAD_MAGIC) { "model_invalid" }
+            check(raw[1] == MODEL_PREVIEW_PAYLOAD_VERSION) { "model_invalid" }
+            val sourceTriangleCount = raw[2].exactModelIntegerOrNull()
+            check(sourceTriangleCount != null && sourceTriangleCount in 1..MODEL_MAX_SOURCE_TRIANGLES) {
+                "model_invalid"
+            }
+            val minMm = List(3) { index -> raw[index + 3].toDouble() }
+            val maxMm = List(3) { index -> raw[index + 6].toDouble() }
+            check(
+                minMm.indices.all { axis ->
+                    minMm[axis].isFinite() && maxMm[axis].isFinite() &&
+                        minMm[axis] <= maxMm[axis] &&
+                        kotlin.math.abs(minMm[axis]) <= MODEL_MAX_COORDINATE_ABS_MM &&
+                        kotlin.math.abs(maxMm[axis]) <= MODEL_MAX_COORDINATE_ABS_MM
+                },
+            ) { "model_invalid" }
+            val previewTriangleCount = raw[9].exactModelIntegerOrNull()
+            check(previewTriangleCount != null && previewTriangleCount in 1..MODEL_MAX_PREVIEW_TRIANGLES) {
+                "model_invalid"
+            }
+            val expectedFloats = MODEL_PREVIEW_HEADER_FLOATS.toLong() +
+                previewTriangleCount.toLong() * MODEL_PREVIEW_FLOATS_PER_TRIANGLE
+            check(expectedFloats == raw.size.toLong()) { "model_invalid" }
+            val vertexStart = MODEL_PREVIEW_HEADER_FLOATS
+            val vertexEnd = vertexStart + previewTriangleCount * MODEL_PREVIEW_VERTEX_FLOATS
+            val previewTriangles = raw.copyOfRange(vertexStart, vertexEnd)
+            check(
+                previewTriangles.all { value ->
+                    value.isFinite() && kotlin.math.abs(value) <= MODEL_MAX_COORDINATE_ABS_MM
+                },
+            ) { "model_invalid" }
+            val previewTriangleIndices = IntArray(previewTriangleCount) { index ->
+                val sourceIndex = raw[vertexEnd + index].exactModelIntegerOrNull()
+                check(sourceIndex != null && sourceIndex in 0 until sourceTriangleCount) {
+                    "model_invalid"
                 }
+                sourceIndex
             }
             return ModelInfo(
-                fileName = json.getString("fileName"),
-                triangles = json.getInt("triangles"),
-                dimensions = List(3) { index -> values.getDouble(index) },
+                fileName = java.io.File(localPath).name.ifBlank { "model.stl" },
+                triangles = sourceTriangleCount,
+                dimensions = List(3) { axis -> maxMm[axis] - minMm[axis] },
                 localPath = localPath,
-                minMm = List(3) { index -> minValues.getDouble(index) },
-                maxMm = List(3) { index -> maxValues.getDouble(index) },
+                minMm = minMm,
+                maxMm = maxMm,
                 previewTriangles = previewTriangles,
-                previewTriangleIndices = IntArray(triangleIndices.length()) { index ->
-                    triangleIndices.getInt(index).also { sourceIndex ->
-                        check(sourceIndex in 0 until json.getInt("triangles")) { "model_invalid" }
-                    }
-                },
+                previewTriangleIndices = previewTriangleIndices,
             )
         }
+
     }
 }
+
+private fun Float.exactModelIntegerOrNull(): Int? {
+    if (!isFinite() || this < 0f || this > MODEL_MAX_EXACT_FLOAT_INTEGER.toFloat()) return null
+    val value = toInt()
+    return value.takeIf { it.toFloat() == this }
+}
+
+private const val MODEL_PREVIEW_PAYLOAD_MAGIC = 17_492f
+private const val MODEL_PREVIEW_PAYLOAD_VERSION = 1f
+private const val MODEL_PREVIEW_HEADER_FLOATS = 10
+private const val MODEL_PREVIEW_VERTEX_FLOATS = 9
+private const val MODEL_PREVIEW_FLOATS_PER_TRIANGLE = 10
+private const val MODEL_MAX_PREVIEW_TRIANGLES = 12_000
+private const val MODEL_MAX_SOURCE_TRIANGLES = 11_000_000
+private const val MODEL_MAX_EXACT_FLOAT_INTEGER = 16_777_216
+private const val MODEL_MAX_COORDINATE_ABS_MM = 1_000_000.0
 
 class MainActivity : ComponentActivity() {
     private lateinit var appSettingsModel: AppSettingsViewModel

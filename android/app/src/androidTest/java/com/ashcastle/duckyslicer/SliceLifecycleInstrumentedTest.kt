@@ -58,10 +58,7 @@ class SliceLifecycleInstrumentedTest {
         instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
             storedModel.outputStream().use(input::copyTo)
         }
-        val model = ModelInfo.fromJson(
-            NativeEngine.inspectStl(storedModel.absolutePath),
-            storedModel.absolutePath,
-        )
+        val model = inspectModel(storedModel.absolutePath)
         val projectObject = ProjectObject(
             id = "final-owner-slice",
             model = model,
@@ -115,10 +112,7 @@ class SliceLifecycleInstrumentedTest {
         instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
             storedModel.outputStream().use(input::copyTo)
         }
-        val model = ModelInfo.fromJson(
-            NativeEngine.inspectStl(storedModel.absolutePath),
-            storedModel.absolutePath,
-        )
+        val model = inspectModel(storedModel.absolutePath)
         val projectObject = ProjectObject(
             id = "lifecycle-rotation",
             model = model,

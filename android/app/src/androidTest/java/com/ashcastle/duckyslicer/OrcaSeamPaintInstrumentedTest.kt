@@ -21,10 +21,7 @@ class OrcaSeamPaintInstrumentedTest {
             val source = store.createModelDestination("seam-cube.stl").apply {
                 writeText(cubeStl())
             }
-            val model = ModelInfo.fromJson(
-                NativeEngine.inspectStl(source.absolutePath),
-                source.absolutePath,
-            ).copy(fileName = "seam-cube.stl")
+            val model = inspectModel(source.absolutePath).copy(fileName = "seam-cube.stl")
             val options = SliceOptions().copy(
                 bedSizeX = 100f,
                 bedSizeY = 100f,

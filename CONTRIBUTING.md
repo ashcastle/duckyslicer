@@ -164,6 +164,9 @@ The Rust-to-Kotlin G-code preview boundary must remain a versioned, bounded prim
 `FloatArray`; do not reintroduce a JSON string or per-segment JSON objects. Payload
 format changes require Rust encoding, Kotlin validation, malformed-payload host tests,
 and the ARM64 production parser test to change together.
+Large-model inspection follows the same rule: keep its bounded vertices and source-facet
+mapping in the versioned primitive `FloatArray` payload, and keep JSON decoding out of
+the production import path.
 Depth-tested preview geometry must be built directly in native-order direct memory and
 uploaded only when the layer range, role visibility, quality, or visual style changes.
 Toolpaths use one 32-byte instance per retained segment and OpenGL ES 3 instanced draws;

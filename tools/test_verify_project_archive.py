@@ -217,7 +217,7 @@ def valid_sources() -> dict[str, str]:
         ),
         "NativeEngineInstrumentedTest.kt": (
             "projectArchiveRoundTripReinspectsAndSlicesOnArm64 "
-            "NativeEngine.inspectStl OnDeviceSlicer.slice("
+            "inspectModel( OnDeviceSlicer.slice("
         ),
         "strings.xml": string_resources(),
         "strings-ko.xml": string_resources(),

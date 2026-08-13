@@ -22,10 +22,7 @@ class OrcaModelSimplifyInstrumentedTest {
             val staging = store.createModelImportStaging()
             try {
                 val source = SlicerProcessClient.createPrimitive(OrcaPrimitive.SPHERE, 30f, staging)
-                val sourceInfo = ModelInfo.fromJson(
-                    NativeEngine.inspectStl(source.file.absolutePath),
-                    source.file.absolutePath,
-                )
+                val sourceInfo = inspectModel(source.file.absolutePath)
                 assertTrue(sourceInfo.triangles >= MINIMUM_SIMPLIFIABLE_TRIANGLES)
                 val target = simplificationTargetTriangleCount(
                     sourceInfo.triangles,
@@ -37,10 +34,7 @@ class OrcaModelSimplifyInstrumentedTest {
                     staging,
                     target,
                 )
-                val simplifiedInfo = ModelInfo.fromJson(
-                    NativeEngine.inspectStl(simplified.file.absolutePath),
-                    simplified.file.absolutePath,
-                )
+                val simplifiedInfo = inspectModel(simplified.file.absolutePath)
 
                 assertTrue(simplifiedInfo.triangles < sourceInfo.triangles)
                 assertTrue(simplifiedInfo.triangles <= target)

@@ -142,6 +142,10 @@ const MAX_STL_COORDINATE_ABS_MM: f32 = 1_000_000.0;
 const PREVIEW_TRIANGLE_LIMIT: usize = 12_000;
 const PREVIEW_CLUSTER_START_RESOLUTION: u16 = 36;
 const PREVIEW_CLUSTER_WORK_LIMIT: usize = PREVIEW_TRIANGLE_LIMIT * 8;
+const MODEL_PREVIEW_PAYLOAD_MAGIC: f32 = 17_492.0;
+const MODEL_PREVIEW_PAYLOAD_VERSION: f32 = 1.0;
+const MODEL_PREVIEW_HEADER_FLOATS: usize = 10;
+const MODEL_PREVIEW_MAX_EXACT_INTEGER: usize = 1 << 24;
 const MAX_GCODE_COORDINATE_ABS_MM: f32 = 1_000_000.0;
 const MAX_PREVIEW_SEGMENTS: usize = 120_000;
 const PREVIEW_COMPACTION_THRESHOLD: usize = MAX_PREVIEW_SEGMENTS * 2;
@@ -163,13 +167,8 @@ enum EngineError {
     Empty,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 struct StlInspection {
-    ok: bool,
-    file_name: String,
     triangles: usize,
-    dimensions_mm: [f32; 3],
     min_mm: [f32; 3],
     max_mm: [f32; 3],
     preview_triangles: Vec<[f32; 9]>,
@@ -778,14 +777,7 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
     }
 
     Ok(StlInspection {
-        ok: true,
-        file_name: Path::new(path)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("model.stl")
-            .to_owned(),
         triangles: triangle_count,
-        dimensions_mm: [max[0] - min[0], max[1] - min[1], max[2] - min[2]],
         min_mm: min,
         max_mm: max,
         preview_triangles,
@@ -909,6 +901,51 @@ fn preview_cell(vertex: [f32; 3], min: [f32; 3], max: [f32; 3], resolution: u16)
         y: coordinate(1),
         z: coordinate(2),
     }
+}
+
+fn model_preview_payload(inspection: StlInspection) -> Result<Vec<f32>, EngineError> {
+    let preview_count = inspection.preview_triangles.len();
+    if preview_count == 0
+        || preview_count > PREVIEW_TRIANGLE_LIMIT
+        || preview_count != inspection.preview_triangle_indices.len()
+        || inspection.triangles > MODEL_PREVIEW_MAX_EXACT_INTEGER
+    {
+        return Err(EngineError::Parse(
+            "STL preview payload is inconsistent".to_owned(),
+        ));
+    }
+    let payload_floats = MODEL_PREVIEW_HEADER_FLOATS
+        .checked_add(
+            preview_count
+                .checked_mul(10)
+                .ok_or_else(|| EngineError::Parse("STL preview payload is too large".to_owned()))?,
+        )
+        .ok_or_else(|| EngineError::Parse("STL preview payload is too large".to_owned()))?;
+    let mut payload = Vec::with_capacity(payload_floats);
+    payload.extend_from_slice(&[
+        MODEL_PREVIEW_PAYLOAD_MAGIC,
+        MODEL_PREVIEW_PAYLOAD_VERSION,
+        inspection.triangles as f32,
+        inspection.min_mm[0],
+        inspection.min_mm[1],
+        inspection.min_mm[2],
+        inspection.max_mm[0],
+        inspection.max_mm[1],
+        inspection.max_mm[2],
+        preview_count as f32,
+    ]);
+    for triangle in inspection.preview_triangles {
+        payload.extend_from_slice(&triangle);
+    }
+    for source_index in inspection.preview_triangle_indices {
+        payload.push(source_index as f32);
+    }
+    if payload.len() != payload_floats {
+        return Err(EngineError::Parse(
+            "STL preview payload length is inconsistent".to_owned(),
+        ));
+    }
+    Ok(payload)
 }
 
 fn triangle_area_squared(vertices: [[f32; 3]; 3]) -> f32 {
@@ -1883,20 +1920,31 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_vulkanCapabil
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_inspectStl(
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_inspectStlPayload(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     path: JString<'_>,
-) -> jstring {
-    let response = guarded_json(|| {
+) -> jfloatArray {
+    let payload = catch_unwind(AssertUnwindSafe(|| {
         let path = env
             .get_string(&path)
             .map(|path| path.to_string_lossy().into_owned())
             .map_err(|error| EngineError::Parse(format!("Unable to read file path: {error}")))?;
-        inspect_stl(&path)
-    });
-
-    make_java_string(&env, &response)
+        model_preview_payload(inspect_stl(&path)?)
+    }))
+    .ok()
+    .and_then(Result::ok);
+    let Some(payload) = payload else {
+        return std::ptr::null_mut();
+    };
+    catch_unwind(AssertUnwindSafe(|| {
+        let output = env.new_float_array(payload.len() as jint)?;
+        env.set_float_array_region(&output, 0, &payload)?;
+        Ok::<jfloatArray, jni::errors::Error>(output.into_raw())
+    }))
+    .ok()
+    .and_then(Result::ok)
+    .unwrap_or(std::ptr::null_mut())
 }
 
 #[unsafe(no_mangle)]
@@ -2074,6 +2122,42 @@ mod tests {
     }
 
     #[test]
+    fn model_preview_payload_is_versioned_bounded_and_contiguous() {
+        let payload = model_preview_payload(StlInspection {
+            triangles: 5,
+            min_mm: [-10.0, -20.0, -30.0],
+            max_mm: [10.0, 10.0, 10.0],
+            preview_triangles: vec![
+                [-10.0, -20.0, -30.0, 10.0, -20.0, -30.0, 10.0, 10.0, -30.0],
+                [-10.0, -20.0, 10.0, 10.0, 10.0, 10.0, -10.0, 10.0, 10.0],
+            ],
+            preview_triangle_indices: vec![0, 4],
+        })
+        .expect("encode model preview payload");
+
+        assert_eq!(payload.len(), MODEL_PREVIEW_HEADER_FLOATS + 20);
+        assert_eq!(payload[0], MODEL_PREVIEW_PAYLOAD_MAGIC);
+        assert_eq!(payload[1], MODEL_PREVIEW_PAYLOAD_VERSION);
+        assert_eq!(payload[2], 5.0);
+        assert_eq!(&payload[3..9], &[-10.0, -20.0, -30.0, 10.0, 10.0, 10.0]);
+        assert_eq!(payload[9], 2.0);
+        assert_eq!(&payload[payload.len() - 2..], &[0.0, 4.0]);
+    }
+
+    #[test]
+    fn model_preview_payload_rejects_inconsistent_source_mapping() {
+        let result = model_preview_payload(StlInspection {
+            triangles: 1,
+            min_mm: [0.0, 0.0, 0.0],
+            max_mm: [1.0, 1.0, 0.0],
+            preview_triangles: vec![[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0]],
+            preview_triangle_indices: Vec::new(),
+        });
+
+        assert!(matches!(result, Err(EngineError::Parse(_))));
+    }
+
+    #[test]
     fn host_vulkan_probe_never_enables_android_acceleration() {
         let capabilities = probe_vulkan();
 
@@ -2129,7 +2213,7 @@ mod tests {
                 .windows(2)
                 .all(|indices| indices[0] < indices[1])
         );
-        assert!(inspection.dimensions_mm[0] > 79.0);
+        assert!(inspection.max_mm[0] - inspection.min_mm[0] > 79.0);
     }
 
     #[test]
@@ -2168,7 +2252,14 @@ mod tests {
         std::fs::remove_file(path).expect("remove fixture");
 
         assert_eq!(inspection.triangles, 80 * 80 * 2 + 512);
-        assert_eq!(inspection.dimensions_mm, [80.0, 80.0, 0.0]);
+        assert_eq!(
+            [
+                inspection.max_mm[0] - inspection.min_mm[0],
+                inspection.max_mm[1] - inspection.min_mm[1],
+                inspection.max_mm[2] - inspection.min_mm[2],
+            ],
+            [80.0, 80.0, 0.0],
+        );
         assert!(!inspection.preview_triangles.is_empty());
         assert!(inspection.preview_triangles.len() <= PREVIEW_TRIANGLE_LIMIT);
         let vertex = |values: &[f32; 9], offset: usize| {
@@ -2297,8 +2388,9 @@ mod tests {
                     );
                     assert!(
                         inspection
-                            .dimensions_mm
+                            .min_mm
                             .iter()
+                            .chain(inspection.max_mm.iter())
                             .all(|value| value.is_finite())
                     );
                     assert!(inspection.preview_triangles.iter().flatten().all(|value| {
@@ -2711,8 +2803,8 @@ mod tests {
 
         std::fs::remove_file(input_path).expect("remove fixture");
         std::fs::remove_file(output_path).expect("remove output");
-        assert!((inspection.dimensions_mm[0] - 8.0).abs() < 0.001);
-        assert!((inspection.dimensions_mm[1] - 4.0).abs() < 0.001);
+        assert!((inspection.max_mm[0] - inspection.min_mm[0] - 8.0).abs() < 0.001);
+        assert!((inspection.max_mm[1] - inspection.min_mm[1] - 4.0).abs() < 0.001);
         assert!((inspection.min_mm[0] - 101.0).abs() < 0.001);
         assert!((inspection.max_mm[1] - 99.0).abs() < 0.001);
         assert_eq!(inspection.min_mm[2], 7.0);

@@ -290,7 +290,7 @@ class ProjectArchiveIntentInstrumentedTest {
         }
         val archive = File(context.cacheDir, "$objectId.duckyproject").apply { delete() }
         val inspector: (File) -> ModelInfo = { model ->
-            ModelInfo.fromJson(NativeEngine.inspectStl(model.absolutePath), model.absolutePath)
+            inspectModel(model.absolutePath)
         }
         try {
             val store = ProjectStore(sourceRoot, inspector)
@@ -330,10 +330,7 @@ class ProjectArchiveIntentInstrumentedTest {
         instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
             modelFile.outputStream().use(input::copyTo)
         }
-        val model = ModelInfo.fromJson(
-            NativeEngine.inspectStl(modelFile.absolutePath),
-            modelFile.absolutePath,
-        ).copy(fileName = displayName)
+        val model = inspectModel(modelFile.absolutePath).copy(fileName = displayName)
         store.save(
             ProjectSnapshot(
                 objects = listOf(ProjectObject(objectId, model)),

@@ -22,10 +22,7 @@ class OrcaObjectProcessOverridesInstrumentedTest {
             instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
                 source.outputStream().use(input::copyTo)
             }
-            val model = ModelInfo.fromJson(
-                NativeEngine.inspectStl(source.absolutePath),
-                source.absolutePath,
-            ).copy(fileName = "object-settings-box.stl")
+            val model = inspectModel(source.absolutePath).copy(fileName = "object-settings-box.stl")
             val options = SliceOptions().copy(
                 layerHeight = 0.2f,
                 firstLayerHeight = 0.2f,

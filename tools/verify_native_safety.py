@@ -21,7 +21,7 @@ FORBIDDEN_PRODUCTION_PANIC = re.compile(
 EXPECTED_ENTRYPOINTS = {
     "Java_com_ashcastle_duckyslicer_NativeEngine_version",
     "Java_com_ashcastle_duckyslicer_NativeEngine_vulkanCapabilities",
-    "Java_com_ashcastle_duckyslicer_NativeEngine_inspectStl",
+    "Java_com_ashcastle_duckyslicer_NativeEngine_inspectStlPayload",
     "Java_com_ashcastle_duckyslicer_NativeEngine_transformStl",
     "Java_com_ashcastle_duckyslicer_NativeEngine_transformStlGroup",
     "Java_com_ashcastle_duckyslicer_NativeEngine_layOnFace",

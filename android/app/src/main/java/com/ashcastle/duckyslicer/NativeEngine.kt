@@ -9,7 +9,7 @@ internal object NativeEngine {
 
     external fun vulkanCapabilities(): String
 
-    external fun inspectStl(path: String): String
+    external fun inspectStlPayload(path: String): FloatArray?
 
     external fun transformStl(inputPath: String, outputPath: String, transformJson: String): String
 
@@ -19,3 +19,8 @@ internal object NativeEngine {
 
     external fun previewGcodeRange(path: String, startLayer: Int, endLayer: Int): FloatArray?
 }
+
+internal fun inspectModel(path: String): ModelInfo = ModelInfo.fromNative(
+    NativeEngine.inspectStlPayload(path),
+    path,
+)

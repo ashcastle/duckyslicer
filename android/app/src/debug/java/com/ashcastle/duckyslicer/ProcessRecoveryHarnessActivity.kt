@@ -29,10 +29,7 @@ class ProcessRecoveryHarnessActivity : ComponentActivity() {
                     val modelFile = createCubeStl(File(cacheDir, "process-recovery-cube.stl"))
                     ProjectObject(
                         id = "process-recovery",
-                        model = ModelInfo.fromJson(
-                            NativeEngine.inspectStl(modelFile.absolutePath),
-                            modelFile.absolutePath,
-                        ),
+                        model = inspectModel(modelFile.absolutePath),
                         transform = ModelTransform(scale = 1.5f),
                     )
                 }

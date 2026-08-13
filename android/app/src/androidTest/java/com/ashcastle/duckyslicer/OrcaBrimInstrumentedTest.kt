@@ -21,10 +21,7 @@ class OrcaBrimInstrumentedTest {
             instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
                 source.outputStream().use(input::copyTo)
             }
-            val model = ModelInfo.fromJson(
-                NativeEngine.inspectStl(source.absolutePath),
-                source.absolutePath,
-            )
+            val model = inspectModel(source.absolutePath)
             val base = SliceOptions()
                 .selectPrinter(PrinterProfile.U1_04)
                 .selectFilament(FilamentProfile.GENERIC_PLA.copy(
@@ -81,10 +78,7 @@ class OrcaBrimInstrumentedTest {
             instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
                 source.outputStream().use(input::copyTo)
             }
-            val model = ModelInfo.fromJson(
-                NativeEngine.inspectStl(source.absolutePath),
-                source.absolutePath,
-            )
+            val model = inspectModel(source.absolutePath)
             val options = SliceOptions()
                 .selectPrinter(PrinterProfile.U1_04)
                 .selectFilament(

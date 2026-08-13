@@ -93,10 +93,7 @@ class OrcaQualificationCorpusInstrumentedTest {
                         source.outputStream().use(input::copyTo)
                     }
                     temporaryModels += source
-                    val model = ModelInfo.fromJson(
-                        NativeEngine.inspectStl(source.absolutePath),
-                        source.absolutePath,
-                    )
+                    val model = inspectModel(source.absolutePath)
                     ProjectObject(
                         id = "$identifier-$index",
                         model = model,

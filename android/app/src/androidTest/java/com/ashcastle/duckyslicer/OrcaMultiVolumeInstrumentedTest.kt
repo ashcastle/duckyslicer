@@ -183,10 +183,7 @@ class OrcaMultiVolumeInstrumentedTest {
         }
     }
 
-    private fun inspect(file: File): ModelInfo = ModelInfo.fromJson(
-        NativeEngine.inspectStl(file.absolutePath),
-        file.absolutePath,
-    )
+    private fun inspect(file: File): ModelInfo = inspectModel(file.absolutePath)
 
     private fun transform(source: File, output: File, xOffsetMm: Float) {
         val result = JSONObject(
