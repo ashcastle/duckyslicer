@@ -43,6 +43,8 @@ class NativeLibrary(
     external fun getObjectBoundingBoxes(): FloatArray
     external fun nativeGetObjectWorldAABBMins(): FloatArray
     external fun nativeExportLoadedObjects(outputDirectory: String): Array<String>?
+    external fun nativeGetUnsupportedProjectSemanticCount(): Int
+    external fun nativeExportLoadedProjectVolumes(outputDirectory: String): Array<String>?
     external fun nativeExportObjectVolumeRange(
         outputDirectory: String,
         objectIndex: Int,

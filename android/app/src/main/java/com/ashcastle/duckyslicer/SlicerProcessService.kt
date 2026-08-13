@@ -196,13 +196,16 @@ internal object SlicerProcessClient {
         model: File,
         stagingDirectory: File,
         requestId: String = UUID.randomUUID().toString(),
-    ): List<OrcaImportedObject> =
-        runModelOperation(
-            message = SlicerProcessContract.MESSAGE_NORMALIZE_MODEL,
-            model = model,
+    ): List<OrcaImportedProjectObject> =
+        parseProjectModelRecords(
+            response = requestModelOperation(
+                message = SlicerProcessContract.MESSAGE_NORMALIZE_MODEL,
+                model = model,
+                stagingDirectory = stagingDirectory,
+                fallbackError = "Slicer could not import the model",
+                requestId = requestId,
+            ),
             stagingDirectory = stagingDirectory,
-            fallbackError = "Slicer could not import the model",
-            requestId = requestId,
         )
 
     /** Splits a model object in the native worker and exports each result. */
@@ -317,7 +320,26 @@ internal object SlicerProcessClient {
         fallbackError: String,
         requestId: String,
         configureRequest: Bundle.() -> Unit = {},
-    ): List<OrcaImportedObject> {
+    ): List<OrcaImportedObject> = parseFlatModelRecords(
+        response = requestModelOperation(
+            message = message,
+            model = model,
+            stagingDirectory = stagingDirectory,
+            fallbackError = fallbackError,
+            requestId = requestId,
+            configureRequest = configureRequest,
+        ),
+        stagingDirectory = stagingDirectory,
+    )
+
+    private fun requestModelOperation(
+        message: Int,
+        model: File?,
+        stagingDirectory: File,
+        fallbackError: String,
+        requestId: String,
+        configureRequest: Bundle.() -> Unit = {},
+    ): Bundle {
         check(Looper.myLooper() != Looper.getMainLooper()) {
             "Model operations must run outside the application main thread"
         }
@@ -356,35 +378,7 @@ internal object SlicerProcessClient {
                 response.getString(SlicerProcessContract.KEY_ERROR) ?: fallbackError
             }
             latestWorkerPid = response.getInt(SlicerProcessContract.KEY_PID)
-            val records = requireNotNull(
-                response.getStringArrayList(SlicerProcessContract.KEY_NORMALIZED_MODELS),
-            ) { "Slicer returned no model objects" }
-            val canonicalStaging = stagingDirectory.canonicalFile
-            val seen = HashSet<File>()
-            records.map { record ->
-                val values = record.split('\t', limit = 4)
-                require(values.size == 4) { "Slicer returned invalid model metadata" }
-                val output = File(values[0]).canonicalFile
-                val name = values[1].trim().takeIf { it.length in 1..200 } ?: "model.stl"
-                val centerX = requireNotNull(values[2].toFloatOrNull()) {
-                    "Slicer returned invalid model placement"
-                }
-                val centerY = requireNotNull(values[3].toFloatOrNull()) {
-                    "Slicer returned invalid model placement"
-                }
-                require(
-                    output.parentFile == canonicalStaging && seen.add(output) &&
-                        output.isFile && output.length() in 1..MAX_MODEL_IMPORT_BYTES &&
-                        centerX.isFinite() && centerY.isFinite() &&
-                        kotlin.math.abs(centerX) <= MAX_MODEL_COORDINATE_MM &&
-                        kotlin.math.abs(centerY) <= MAX_MODEL_COORDINATE_MM
-                ) { "Slicer returned an unsafe model object" }
-                OrcaImportedObject(output, name, centerX, centerY)
-            }.also { imported ->
-                require(imported.size in 1..SlicerProcessService.MAX_OBJECTS) {
-                    "Slicer returned an invalid model count"
-                }
-            }
+            response
         } catch (failure: Exception) {
             if (projectRequestCancellationRequested(requestId)) {
                 throw ProjectEditCancelledException()
@@ -395,6 +389,117 @@ internal object SlicerProcessClient {
             cancelledRequestId.compareAndSet(requestId, null)
         }
     }
+
+    private fun parseFlatModelRecords(
+        response: Bundle,
+        stagingDirectory: File,
+    ): List<OrcaImportedObject> {
+        val records = requireNotNull(
+            response.getStringArrayList(SlicerProcessContract.KEY_NORMALIZED_MODELS),
+        ) { "Slicer returned no model objects" }
+        val canonicalStaging = stagingDirectory.canonicalFile
+        val seen = HashSet<File>()
+        return records.map { record ->
+            val values = record.split('\t', limit = 4)
+            require(values.size == 4) { "Slicer returned invalid model metadata" }
+            val output = checkedImportedModelFile(values[0], canonicalStaging, seen)
+            val name = values[1].trim().takeIf { it.length in 1..200 } ?: "model.stl"
+            val centerX = checkedImportedCoordinate(values[2])
+            val centerY = checkedImportedCoordinate(values[3])
+            OrcaImportedObject(output, name, centerX, centerY)
+        }.also { imported ->
+            require(imported.size in 1..SlicerProcessService.MAX_OBJECTS) {
+                "Slicer returned an invalid model count"
+            }
+        }
+    }
+
+    private fun parseProjectModelRecords(
+        response: Bundle,
+        stagingDirectory: File,
+    ): List<OrcaImportedProjectObject> {
+        val records = requireNotNull(
+            response.getStringArrayList(SlicerProcessContract.KEY_NORMALIZED_MODELS),
+        ) { "Slicer returned no model volumes" }
+        require(records.size in 1..ProjectStore.MAX_PROJECT_VOLUMES) {
+            "Slicer returned an invalid model volume count"
+        }
+        val canonicalStaging = stagingDirectory.canonicalFile
+        val seen = HashSet<File>()
+        val grouped = ArrayList<MutableList<OrcaImportedProjectVolumeRecord>>()
+        records.forEach { record ->
+            val values = record.split('\t', limit = 7)
+            require(values.size == 7) { "Slicer returned invalid project model metadata" }
+            val output = checkedImportedModelFile(values[0], canonicalStaging, seen)
+            val objectName = values[1].trim().takeIf { it.length in 1..200 } ?: "model"
+            val volumeName = values[2].trim().takeIf { it.length in 1..200 } ?: "part.stl"
+            val centerX = checkedImportedCoordinate(values[3])
+            val centerY = checkedImportedCoordinate(values[4])
+            val filamentSlot = requireNotNull(values[5].toIntOrNull()) {
+                "Slicer returned invalid volume filament metadata"
+            }
+            val objectOrdinal = requireNotNull(values[6].toIntOrNull()) {
+                "Slicer returned invalid object grouping metadata"
+            }
+            require(filamentSlot in 0 until MAX_FILAMENT_SLOTS) {
+                "Slicer returned an invalid volume filament"
+            }
+            require(objectOrdinal in 0 until SlicerProcessService.MAX_OBJECTS) {
+                "Slicer returned an invalid object group"
+            }
+            if (objectOrdinal == grouped.size) grouped.add(ArrayList())
+            require(objectOrdinal == grouped.lastIndex) {
+                "Slicer returned non-contiguous object groups"
+            }
+            val group = grouped.last()
+            require(group.size < MAX_PROJECT_VOLUMES_PER_OBJECT) {
+                "Slicer returned too many volumes for one object"
+            }
+            group += OrcaImportedProjectVolumeRecord(
+                volume = OrcaImportedProjectVolume(output, volumeName, filamentSlot),
+                objectName = objectName,
+                centerXmm = centerX,
+                centerYmm = centerY,
+            )
+        }
+        require(grouped.size in 1..SlicerProcessService.MAX_OBJECTS) {
+            "Slicer returned an invalid object count"
+        }
+        return grouped.map { group ->
+            val first = group.first()
+            require(group.all { record ->
+                record.objectName == first.objectName &&
+                    kotlin.math.abs(record.centerXmm - first.centerXmm) <= 0.001f &&
+                    kotlin.math.abs(record.centerYmm - first.centerYmm) <= 0.001f
+            }) { "Slicer returned inconsistent object metadata" }
+            OrcaImportedProjectObject(
+                volumes = group.map(OrcaImportedProjectVolumeRecord::volume),
+                displayName = first.objectName,
+                centerXmm = first.centerXmm,
+                centerYmm = first.centerYmm,
+            )
+        }
+    }
+
+    private fun checkedImportedModelFile(
+        path: String,
+        canonicalStaging: File,
+        seen: MutableSet<File>,
+    ): File = File(path).canonicalFile.also { output ->
+        require(
+            output.parentFile == canonicalStaging && seen.add(output) &&
+                output.isFile && output.length() in 1..MAX_MODEL_IMPORT_BYTES
+        ) { "Slicer returned an unsafe model object" }
+    }
+
+    private fun checkedImportedCoordinate(value: String): Float =
+        requireNotNull(value.toFloatOrNull()) {
+            "Slicer returned invalid model placement"
+        }.also { coordinate ->
+            require(
+                coordinate.isFinite() && kotlin.math.abs(coordinate) <= MAX_MODEL_COORDINATE_MM
+            ) { "Slicer returned an unsafe model placement" }
+        }
 
     /** Uses the silhouette-aware arrangement engine in the isolated worker. */
     fun autoArrange(
@@ -1161,6 +1266,26 @@ internal data class OrcaImportedObject(
     val centerYmm: Float,
 )
 
+internal data class OrcaImportedProjectVolume(
+    val file: File,
+    val displayName: String,
+    val filamentSlot: Int,
+)
+
+internal data class OrcaImportedProjectObject(
+    val volumes: List<OrcaImportedProjectVolume>,
+    val displayName: String,
+    val centerXmm: Float,
+    val centerYmm: Float,
+)
+
+private data class OrcaImportedProjectVolumeRecord(
+    val volume: OrcaImportedProjectVolume,
+    val objectName: String,
+    val centerXmm: Float,
+    val centerYmm: Float,
+)
+
 private const val MAX_MODEL_COORDINATE_MM = 1_000_000f
 
 class SlicerProcessService : Service() {
@@ -1911,10 +2036,15 @@ class SlicerProcessService : Service() {
         val runtime = createNativeRuntime()
         try {
             check(runtime.loadModel(source.absolutePath)) { "Model could not be prepared" }
+            check(runtime.nativeGetUnsupportedProjectSemanticCount() == 0) {
+                "Model contains paint, modifier, negative, or support data that is not importable yet"
+            }
             val records = requireNotNull(
-                runtime.nativeExportLoadedObjects(outputDirectory.absolutePath),
-            ) { "Model objects could not be exported" }
-            require(records.size in 1..MAX_OBJECTS) { "Invalid imported object count" }
+                runtime.nativeExportLoadedProjectVolumes(outputDirectory.absolutePath),
+            ) { "Model objects and parts could not be exported" }
+            require(records.size in 1..ProjectStore.MAX_PROJECT_VOLUMES) {
+                "Invalid imported model volume count"
+            }
             Bundle().apply {
                 putBoolean(SlicerProcessContract.KEY_OK, true)
                 putInt(SlicerProcessContract.KEY_PID, Process.myPid())

@@ -227,6 +227,7 @@ internal fun ProjectTransferState.withCompletedEdit(
     expectedOptions: SliceOptions,
     nextHistory: ProjectHistoryState?,
     completion: ProjectEditCompletion,
+    nextOptions: SliceOptions = expectedOptions,
 ): ProjectTransferState? {
     require(completion.id == operation.id && completion.kind == operation.kind) {
         "Project edit completion does not match its operation"
@@ -243,7 +244,8 @@ internal fun ProjectTransferState.withCompletedEdit(
     }
     val canceled = running.cancellationRequested || completion.failure == ProjectEditFailure.CANCELED
     val appliedHistory = if (canceled) history else nextHistory ?: history
-    val changed = appliedHistory != history
+    val appliedOptions = if (canceled || completion.failure != null) sliceOptions else nextOptions
+    val changed = appliedHistory != history || appliedOptions != sliceOptions
     return copy(
         busy = false,
         activeEdit = null,
@@ -252,6 +254,12 @@ internal fun ProjectTransferState.withCompletedEdit(
             sessionChanged = changed,
         ),
         history = appliedHistory,
+        sliceOptions = appliedOptions,
+        plateOptions = if (appliedOptions == sliceOptions) {
+            plateOptions
+        } else {
+            plateOptions + (appliedHistory.current.selectedPlateId to appliedOptions)
+        },
         persistenceMessage = ProjectPersistenceMessage.STORAGE_UNAVAILABLE.takeIf {
             changed && persistenceBlocked
         } ?: persistenceMessage,
@@ -267,6 +275,18 @@ private data class ProjectEditBaseline(
     val history: ProjectHistoryState,
     val options: SliceOptions,
 )
+
+internal fun SliceOptions.withMinimumFilamentSlots(requiredCount: Int): SliceOptions {
+    val targetCount = requiredCount.coerceIn(
+        1,
+        printerProfile.extruderCount.coerceIn(1, MAX_FILAMENT_SLOTS),
+    )
+    val current = resolvedFilamentSlots()
+    if (current.size >= targetCount) return this
+    return copy(
+        filamentSlots = current + List(targetCount - current.size) { filamentProfile },
+    )
+}
 
 private data class ActiveProjectDocumentTransfer(
     val operation: ActiveProjectTransfer,
@@ -662,6 +682,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         val snapshot = mutableState.value.history.current
         val objectCount = snapshot.objects.size
         val totalObjectCount = snapshot.allObjects.size
+        val totalVolumeCount = snapshot.allObjects.sumOf { it.volumes.size }
         if (totalObjectCount >= ProjectStore.MAX_PROJECT_OBJECTS) return false
         val baseline = startEditLocked(ProjectEditKind.MODEL_IMPORT) ?: return false
         val cancellation = DocumentTransferCancellation()
@@ -681,6 +702,10 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 require(totalObjectCount + imported.size <= ProjectStore.MAX_PROJECT_OBJECTS) {
                     "Project has too many imported objects"
                 }
+                require(
+                    totalVolumeCount + imported.sumOf { it.volumes.size } <=
+                        ProjectStore.MAX_PROJECT_VOLUMES
+                ) { "Project has too many imported volumes" }
                 val distance = ((objectCount + 1) / 2) * 24f
                 val offset = when {
                     objectCount == 0 -> 0f
@@ -695,11 +720,18 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                     )
                 }
                 val nextHistory = baseline.history.addAll(placed)
+                val requiredFilamentSlots = placed
+                    .flatMap(ProjectObject::volumes)
+                    .maxOfOrNull(ProjectVolume::filamentSlot)
+                    ?.plus(1)
+                    ?: 1
+                val nextOptions = baseline.options.withMinimumFilamentSlots(requiredFilamentSlots)
                 cancellation.complete()
                 if (
                     !completeEditSuccess(
                         baseline,
                         nextHistory,
+                        nextOptions = nextOptions,
                         objectCount = placed.size,
                     )
                 ) {
@@ -993,6 +1025,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     private fun completeEditSuccess(
         baseline: ProjectEditBaseline,
         nextHistory: ProjectHistoryState,
+        nextOptions: SliceOptions = baseline.options,
         objectCount: Int = 0,
         clearedObjectSettings: Boolean = false,
         triangleCount: Int = 0,
@@ -1012,6 +1045,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
             expectedOptions = baseline.options,
             nextHistory = nextHistory,
             completion = completion,
+            nextOptions = nextOptions,
         ) ?: return@synchronized false
         mutableState.value = updated
         schedulePersistenceLocked(allowPendingCompletion = true)

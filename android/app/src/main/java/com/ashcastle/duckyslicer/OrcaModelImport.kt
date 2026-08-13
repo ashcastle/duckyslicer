@@ -70,28 +70,65 @@ internal suspend fun importOrcaModels(
                 }
                 throwIfCancellationRequested()
                 val exported = if (format == OrcaModelFormat.STL) {
-                    listOf(OrcaImportedObject(source, metadata.displayName, 0f, 0f))
+                    listOf(
+                        OrcaImportedProjectObject(
+                            volumes = listOf(
+                                OrcaImportedProjectVolume(source, metadata.displayName, 0),
+                            ),
+                            displayName = metadata.displayName,
+                            centerXmm = 0f,
+                            centerYmm = 0f,
+                        ),
+                    )
                 } else {
                     SlicerProcessClient.normalizeModel(source, staging, requestId)
                 }
-                val imported = exported.mapIndexed { index, normalized ->
+                val availableFilamentSlots = options.printerProfile.extruderCount
+                    .coerceIn(1, MAX_FILAMENT_SLOTS)
+                val imported = exported.mapIndexed { objectIndex, normalized ->
                     throwIfCancellationRequested()
-                    val displayName = importedObjectName(
+                    val objectName = importedObjectName(
                         sourceName = metadata.displayName,
                         objectName = normalized.displayName,
-                        index = index,
+                        index = objectIndex,
                         objectCount = exported.size,
                     )
-                    val model = projectStore.installImportedModel(normalized.file, displayName)
-                    installed += File(model.localPath)
-                    ImportedGeometry(model, normalized.centerXmm, normalized.centerYmm)
+                    val volumes = normalized.volumes.mapIndexed { volumeIndex, volume ->
+                        throwIfCancellationRequested()
+                        val displayName = importedVolumeName(
+                            objectName = objectName,
+                            volumeName = volume.displayName,
+                            volumeIndex = volumeIndex,
+                            volumeCount = normalized.volumes.size,
+                        )
+                        val model = projectStore.installImportedModel(volume.file, displayName)
+                        installed += File(model.localPath)
+                        ImportedVolumeGeometry(
+                            model = model,
+                            filamentSlot = volume.filamentSlot.takeIf {
+                                it in 0 until availableFilamentSlots
+                            } ?: 0,
+                        )
+                    }
+                    ImportedGeometry(
+                        volumes = volumes,
+                        originalCenterX = normalized.centerXmm,
+                        originalCenterY = normalized.centerYmm,
+                    )
                 }
                 throwIfCancellationRequested()
                 val transforms = importedTransforms(imported, format, options)
                 imported.mapIndexed { index, geometry ->
+                    val objectId = UUID.randomUUID().toString()
                     ProjectObject(
-                        id = UUID.randomUUID().toString(),
-                        model = geometry.model,
+                        id = objectId,
+                        volumes = geometry.volumes.mapIndexed { volumeIndex, volume ->
+                            ProjectVolume(
+                                id = legacyProjectVolumeId(objectId, volumeIndex),
+                                model = volume.model,
+                                filamentSlot = volume.filamentSlot,
+                            )
+                        },
                         transform = transforms[index],
                     )
                 }
@@ -113,11 +150,23 @@ private data class ModelDocumentMetadata(
     val mimeType: String?,
 )
 
-private data class ImportedGeometry(
+private data class ImportedVolumeGeometry(
     val model: ModelInfo,
+    val filamentSlot: Int,
+)
+
+private data class ImportedGeometry(
+    val volumes: List<ImportedVolumeGeometry>,
     val originalCenterX: Float,
     val originalCenterY: Float,
-)
+) {
+    val minX: Double get() = volumes.minOf { it.model.minMm[0] }
+    val minY: Double get() = volumes.minOf { it.model.minMm[1] }
+    val minZ: Double get() = volumes.minOf { it.model.minMm[2] }
+    val maxX: Double get() = volumes.maxOf { it.model.maxMm[0] }
+    val maxY: Double get() = volumes.maxOf { it.model.maxMm[1] }
+    val maxZ: Double get() = volumes.maxOf { it.model.maxMm[2] }
+}
 
 private fun queryModelMetadata(
     provider: ContentProviderClient,
@@ -200,6 +249,25 @@ private fun importedObjectName(
     return "${base.take(190).ifBlank { "model ${index + 1}" }}.stl"
 }
 
+private fun importedVolumeName(
+    objectName: String,
+    volumeName: String,
+    volumeIndex: Int,
+    volumeCount: Int,
+): String {
+    if (volumeCount == 1) return objectName
+    val objectBase = objectName.substringBeforeLast('.').take(96).ifBlank { "model" }
+    val volumeBase = volumeName
+        .substringAfterLast('/')
+        .substringAfterLast('\\')
+        .substringBeforeLast('.')
+        .replace(Regex("[\\p{Cc}/\\\\]"), " ")
+        .trim()
+        .take(80)
+        .ifBlank { "part ${volumeIndex + 1}" }
+    return "$objectBase - $volumeBase.stl"
+}
+
 private fun importedTransforms(
     imported: List<ImportedGeometry>,
     format: OrcaModelFormat,
@@ -212,24 +280,23 @@ private fun importedTransforms(
         options.bedOriginY,
     )
     val preserveProjectPlacement = format == OrcaModelFormat.THREE_MF && imported.all { geometry ->
-        val minX = geometry.model.minMm[0].toFloat()
-        val minY = geometry.model.minMm[1].toFloat()
-        val maxX = geometry.model.maxMm[0].toFloat()
-        val maxY = geometry.model.maxMm[1].toFloat()
+        val minX = geometry.minX.toFloat()
+        val minY = geometry.minY.toFloat()
+        val maxX = geometry.maxX.toFloat()
+        val maxY = geometry.maxY.toFloat()
         pointInsideBedPolygon(minX, minY, machinePolygon) &&
             pointInsideBedPolygon(minX, maxY, machinePolygon) &&
             pointInsideBedPolygon(maxX, minY, machinePolygon) &&
             pointInsideBedPolygon(maxX, maxY, machinePolygon) &&
-            geometry.model.minMm[2] >= 0.0 &&
-            geometry.model.maxMm[2] <= options.maxPrintHeight.toDouble()
+            geometry.minZ >= 0.0 && geometry.maxZ <= options.maxPrintHeight.toDouble()
     }
-    val groupCenterX = (imported.minOf { it.model.minMm[0] } +
-        imported.maxOf { it.model.maxMm[0] }).toFloat() / 2f
-    val groupCenterY = (imported.minOf { it.model.minMm[1] } +
-        imported.maxOf { it.model.maxMm[1] }).toFloat() / 2f
+    val groupCenterX = (imported.minOf(ImportedGeometry::minX) +
+        imported.maxOf(ImportedGeometry::maxX)).toFloat() / 2f
+    val groupCenterY = (imported.minOf(ImportedGeometry::minY) +
+        imported.maxOf(ImportedGeometry::maxY)).toFloat() / 2f
     val targetCenterX = options.bedOriginX + options.bedSizeX / 2f
     val targetCenterY = options.bedOriginY + options.bedSizeY / 2f
-    val groupMinimumZ = imported.minOf { it.model.minMm[2] }.toFloat()
+    val groupMinimumZ = imported.minOf(ImportedGeometry::minZ).toFloat()
     return imported.map { geometry ->
         val centerX = if (preserveProjectPlacement) geometry.originalCenterX else {
             targetCenterX + geometry.originalCenterX - groupCenterX
@@ -240,7 +307,7 @@ private fun importedTransforms(
         ModelTransform(
             offsetXmm = centerX - targetCenterX,
             offsetYmm = centerY - targetCenterY,
-            offsetZmm = geometry.model.minMm[2].toFloat() -
+            offsetZmm = geometry.minZ.toFloat() -
                 if (preserveProjectPlacement) 0f else groupMinimumZ,
         )
     }

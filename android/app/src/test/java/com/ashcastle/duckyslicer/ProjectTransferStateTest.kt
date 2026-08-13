@@ -9,6 +9,21 @@ import org.junit.Test
 
 class ProjectTransferStateTest {
     @Test
+    fun importedPartAssignmentsExpandAvailableFilamentSlotsWithinPrinterCapacity() {
+        val options = SliceOptions().copy(filamentSlots = listOf(FilamentProfile.PLA))
+
+        val expanded = options.withMinimumFilamentSlots(2)
+
+        assertEquals(2, expanded.resolvedFilamentSlots().size)
+        assertEquals(FilamentProfile.PLA.id, expanded.resolvedFilamentSlots()[0].id)
+        assertEquals(FilamentProfile.PLA.id, expanded.resolvedFilamentSlots()[1].id)
+        assertEquals(
+            options.printerProfile.extruderCount,
+            options.withMinimumFilamentSlots(MAX_FILAMENT_SLOTS).resolvedFilamentSlots().size,
+        )
+    }
+
+    @Test
     fun projectExportCancellationIsBoundToTheExactActiveTransfer() {
         val operation = ActiveProjectTransfer(91, ProjectTransferDirection.EXPORT)
         val started = requireNotNull(
@@ -146,6 +161,45 @@ class ProjectTransferStateTest {
                 completion,
             ),
         )
+    }
+
+    @Test
+    fun retainedModelImportAppliesRequiredFilamentSlotsAtomically() {
+        val history = history()
+        val options = SliceOptions()
+        val nextOptions = options.copy(
+            filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+        )
+        val operation = ActiveProjectEdit(42, ProjectEditKind.MODEL_IMPORT)
+        val started = requireNotNull(
+            ProjectTransferState(
+                history = history,
+                sliceOptions = options,
+                restored = true,
+                sessionRevision = 3,
+            ).withStartedEdit(operation),
+        )
+        val nextHistory = history.updateSelectedTransform(ModelTransform(offsetXmm = 12f))
+
+        val completed = requireNotNull(
+            started.withCompletedEdit(
+                operation = operation,
+                expectedHistory = history,
+                expectedOptions = options,
+                nextHistory = nextHistory,
+                completion = ProjectEditCompletion(operation.id, operation.kind),
+                nextOptions = nextOptions,
+            ),
+        )
+
+        assertEquals(12f, completed.history.current.selectedObject?.transform?.offsetXmm)
+        assertEquals(2, completed.sliceOptions.resolvedFilamentSlots().size)
+        assertEquals(
+            nextOptions,
+            completed.plateOptions[completed.history.current.selectedPlateId],
+        )
+        assertTrue(requireNotNull(completed.editCompletion).sessionChanged)
+        assertEquals(4L, completed.sessionRevision)
     }
 
     @Test
