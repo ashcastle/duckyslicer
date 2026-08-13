@@ -951,7 +951,11 @@ class NativeEngineInstrumentedTest {
                     standbyTemperatureDelta = -42,
                     interfaceShells = true,
                 ),
-                gcodeSettings = GcodeSettings(arcFitting = true),
+                gcodeSettings = GcodeSettings(
+                    arcFitting = true,
+                    labelObjects = false,
+                    excludeObjects = true,
+                ),
                 infillFirst = true,
                 infillWallOverlap = 18f,
                 topBottomInfillWallOverlap = 32f,
@@ -1087,6 +1091,8 @@ class NativeEngineInstrumentedTest {
         assertEquals(-42, restored.slicing.last().multiMaterial.standbyTemperatureDelta)
         assertTrue(restored.slicing.last().multiMaterial.interfaceShells)
         assertTrue(restored.slicing.last().gcodeSettings.arcFitting)
+        assertFalse(restored.slicing.last().gcodeSettings.labelObjects)
+        assertTrue(restored.slicing.last().gcodeSettings.excludeObjects)
         assertEquals("nearest", restored.slicing.last().seamPosition)
         assertEquals("top", restored.slicing.last().ironingType)
         assertEquals("concentric", restored.slicing.last().ironingPattern)
@@ -1267,7 +1273,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(26, catalog.schemaVersion)
+        assertEquals(27, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1318,6 +1324,16 @@ class NativeEngineInstrumentedTest {
             "The catalog must retain both arc-fitting policies",
             catalog.slicing.any { it.gcodeSettings.arcFitting } &&
                 catalog.slicing.any { !it.gcodeSettings.arcFitting },
+        )
+        assertTrue(
+            "The catalog must retain both object-label policies",
+            catalog.slicing.any { it.gcodeSettings.labelObjects } &&
+                catalog.slicing.any { !it.gcodeSettings.labelObjects },
+        )
+        assertTrue(
+            "The catalog must retain both object-exclusion policies",
+            catalog.slicing.any { it.gcodeSettings.excludeObjects } &&
+                catalog.slicing.any { !it.gcodeSettings.excludeObjects },
         )
         assertTrue(catalog.slicing.any { it.outerWallLineWidth != it.innerWallLineWidth })
         assertTrue(catalog.slicing.any { it.topSurfaceLineWidth != it.internalSolidInfillLineWidth })
@@ -2789,6 +2805,63 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun objectOutputControlsEmitFirmwareSpecificCancellationRanges() {
+        val model = inspectModel(fixtureModel().absolutePath)
+        val objects = listOf(
+            ProjectObject("left-object", model, ModelTransform(offsetXmm = -18f)),
+            ProjectObject("right-object", model, ModelTransform(offsetXmm = 18f)),
+        )
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.U1_04)
+            .selectFilament(FilamentProfile.PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(brimWidth = 0f, skirtLoops = 0)
+
+        val klipper = OnDeviceSlicer.slice(
+            objects,
+            base.copy(
+                gcodeFlavor = "klipper",
+                gcodeSettings = GcodeSettings(labelObjects = true, excludeObjects = true),
+            ),
+        ).output.readText()
+        val klipperStarts = klipper.lineSequence()
+            .filter { it.startsWith("EXCLUDE_OBJECT_START NAME=") }
+            .map { it.substringAfter('=') }
+            .toSet()
+        val klipperEnds = klipper.lineSequence()
+            .filter { it.startsWith("EXCLUDE_OBJECT_END NAME=") }
+            .map { it.substringAfter('=') }
+            .toSet()
+        assertEquals("Both Klipper objects need distinct cancellation ranges", 2, klipperStarts.size)
+        assertEquals(klipperStarts, klipperEnds)
+        assertTrue(klipper.contains("; printing object "))
+
+        val marlin = OnDeviceSlicer.slice(
+            objects,
+            base.copy(
+                gcodeFlavor = "marlin2",
+                gcodeSettings = GcodeSettings(labelObjects = false, excludeObjects = true),
+            ),
+        ).output.readText()
+        val marlinStarts = marlin.lineSequence()
+            .mapNotNull { line -> Regex("^M486 S(\\d+)$").matchEntire(line)?.groupValues?.get(1) }
+            .toSet()
+        assertEquals("Both Marlin objects need distinct M486 ranges", 2, marlinStarts.size)
+        assertTrue(marlin.lineSequence().any { it == "M486 S-1" })
+        assertFalse(marlin.contains("; printing object "))
+
+        val disabled = OnDeviceSlicer.slice(
+            objects,
+            base.copy(
+                gcodeFlavor = "klipper",
+                gcodeSettings = GcodeSettings(labelObjects = false, excludeObjects = false),
+            ),
+        ).output.readText()
+        assertFalse(disabled.contains("; printing object "))
+        assertFalse(disabled.contains("EXCLUDE_OBJECT_"))
+    }
+
+    @Test
     fun printSequenceChangesRealMultiObjectToolpathOrdering() {
         val model = inspectModel(fixtureModel().absolutePath)
         val objects = listOf(
@@ -2810,22 +2883,27 @@ class NativeEngineInstrumentedTest {
         ).output.readText()
         val layeredStarts = layered.lineSequence().filter { it.startsWith("; printing object ") }.toList()
         val sequentialStarts = sequential.lineSequence().filter { it.startsWith("; printing object ") }.toList()
+        fun objectName(marker: String): String = marker
+            .removePrefix("; printing object ")
+            .substringBefore(" id:")
         fun objectTransitions(markers: List<String>): Int = markers
-            .mapNotNull { marker -> Regex(" id:(\\d+) ").find(marker)?.groupValues?.get(1) }
+            .map(::objectName)
             .zipWithNext()
             .count { (left, right) -> left != right }
 
         assertTrue(layered.contains("; print_sequence = by layer"))
         assertTrue(layered.contains("; print_order = as_obj_list"))
-        assertTrue("Object-list order must begin with the first project object", layeredStarts.first().contains(" id:0 "))
+        assertTrue(
+            "Object-list order must begin with the first project object",
+            objectName(layeredStarts.first()).contains("slicer-input-0-"),
+        )
         assertTrue(sequential.contains("; print_sequence = by object"))
         assertTrue(sequential.contains("; print_order = default"))
         assertTrue(
             "By-object output must finish an object instead of alternating objects every layer",
             objectTransitions(sequentialStarts) < objectTransitions(layeredStarts),
         )
-        assertTrue("Both sequential objects must reach G-code", sequentialStarts.any { it.contains(" id:0 ") })
-        assertTrue("Both sequential objects must reach G-code", sequentialStarts.any { it.contains(" id:1 ") })
+        assertEquals("Both sequential objects must reach G-code", 2, sequentialStarts.map(::objectName).toSet().size)
 
         val unsafeSequential = runCatching {
             OnDeviceSlicer.slice(

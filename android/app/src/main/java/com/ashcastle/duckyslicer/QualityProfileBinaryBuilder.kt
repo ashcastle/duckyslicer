@@ -126,6 +126,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var standbyTemperatureDelta: Int = base.multiMaterial.standbyTemperatureDelta
     private var interfaceShells: Boolean = base.multiMaterial.interfaceShells
     private var enableArcFitting: Boolean = base.gcodeSettings.arcFitting
+    private var gcodeLabelObjects: Boolean = base.gcodeSettings.labelObjects
+    private var excludeObject: Boolean = base.gcodeSettings.excludeObjects
     private var skirtLoops: Int = base.skirtLoops
     private var skirtDistance: Float = base.skirtDistance
     private var skirtHeight: Int = base.skirtHeight
@@ -436,6 +438,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         standbyTemperatureDelta = input.readInt()
         interfaceShells = input.readCatalogBoolean()
         enableArcFitting = input.readCatalogBoolean()
+        gcodeLabelObjects = input.readCatalogBoolean()
+        excludeObject = input.readCatalogBoolean()
         spiralMode = input.readCatalogBoolean()
         spiralModeSmooth = input.readCatalogBoolean()
         spiralModeMaxXySmoothing = input.readFloat()
@@ -601,6 +605,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         ),
         gcodeSettings = GcodeSettings(
             arcFitting = enableArcFitting,
+            labelObjects = gcodeLabelObjects,
+            excludeObjects = excludeObject,
         ),
         skirtLoops = skirtLoops,
         skirtDistance = skirtDistance,
@@ -877,6 +883,8 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("standbyTemperatureDelta", BINARY_INT),
     BinaryField("interfaceShells", BINARY_BOOL),
     BinaryField("enableArcFitting", BINARY_BOOL),
+    BinaryField("gcodeLabelObjects", BINARY_BOOL),
+    BinaryField("excludeObject", BINARY_BOOL),
     BinaryField("spiralMode", BINARY_BOOL),
     BinaryField("spiralModeSmooth", BINARY_BOOL),
     BinaryField("spiralModeMaxXySmoothing", BINARY_FLOAT),

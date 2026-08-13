@@ -58,6 +58,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "standby_temperature_delta": "-35",
                 "interface_shells": "1",
                 "enable_arc_fitting": "1",
+                "gcode_label_objects": "0",
+                "exclude_object": "1",
             },
             {},
         )
@@ -73,6 +75,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(-35, profile["standbyTemperatureDelta"])
         self.assertTrue(profile["interfaceShells"])
         self.assertTrue(profile["enableArcFitting"])
+        self.assertFalse(profile["gcodeLabelObjects"])
+        self.assertTrue(profile["excludeObject"])
 
     def test_preserves_spiral_vase_process_values(self) -> None:
         profile = build_process(

@@ -284,4 +284,6 @@ data class SliceConfig(
     @JvmField var standbyTemperatureDelta: Int = -5
     @JvmField var interfaceShells: Boolean = false
     @JvmField var enableArcFitting: Boolean = false
+    @JvmField var gcodeLabelObjects: Boolean = true
+    @JvmField var excludeObject: Boolean = false
 }

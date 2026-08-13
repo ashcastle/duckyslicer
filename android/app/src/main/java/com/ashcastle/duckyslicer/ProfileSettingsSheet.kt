@@ -2828,6 +2828,29 @@ private fun SlicingSettingsSheet(
                         onSelected = { onOptionsChanged(options.copy(printOrder = it)) },
                     )
                 }
+                SettingsGroupTitle(stringResource(R.string.gcode_output))
+                SettingsSwitch(
+                    label = stringResource(R.string.label_objects),
+                    checked = options.gcodeSettings.labelObjects,
+                    onCheckedChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                gcodeSettings = options.gcodeSettings.copy(labelObjects = it),
+                            ),
+                        )
+                    },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.exclude_objects),
+                    checked = options.gcodeSettings.excludeObjects,
+                    onCheckedChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                gcodeSettings = options.gcodeSettings.copy(excludeObjects = it),
+                            ),
+                        )
+                    },
+                )
                 SettingsGroupTitle(stringResource(R.string.spiral_vase))
                 SettingsSwitch(
                     label = stringResource(R.string.spiral_vase),

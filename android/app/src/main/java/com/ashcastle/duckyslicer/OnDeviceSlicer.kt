@@ -272,6 +272,8 @@ data class MultiMaterialSettings(
 
 data class GcodeSettings(
     val arcFitting: Boolean = false,
+    val labelObjects: Boolean = true,
+    val excludeObjects: Boolean = false,
 )
 
 internal fun FilamentProfile.resolveRetraction(printer: PrinterProfile) = RetractionSettings(
@@ -589,7 +591,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 26,
+    val schemaVersion: Int = 27,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1493,6 +1495,8 @@ data class SliceOptions(
             native.standbyTemperatureDelta = multiMaterial.standbyTemperatureDelta
             native.interfaceShells = multiMaterial.interfaceShells
             native.enableArcFitting = gcodeSettings.arcFitting
+            native.gcodeLabelObjects = gcodeSettings.labelObjects
+            native.excludeObject = gcodeSettings.excludeObjects
         }
     }
 }

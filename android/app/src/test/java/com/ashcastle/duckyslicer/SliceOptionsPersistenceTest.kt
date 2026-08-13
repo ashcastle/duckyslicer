@@ -31,7 +31,11 @@ class SliceOptionsPersistenceTest {
                     standbyTemperatureDelta = -35,
                     interfaceShells = true,
                 ),
-                gcodeSettings = GcodeSettings(arcFitting = true),
+                gcodeSettings = GcodeSettings(
+                    arcFitting = true,
+                    labelObjects = false,
+                    excludeObjects = true,
+                ),
             )
 
         val restored = requireNotNull(options.toProjectJson().toProjectSliceOptionsOrNull())
@@ -55,6 +59,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(-35, native.standbyTemperatureDelta)
         assertEquals(true, native.interfaceShells)
         assertEquals(true, native.enableArcFitting)
+        assertEquals(false, native.gcodeLabelObjects)
+        assertEquals(true, native.excludeObject)
     }
 
     @Test
@@ -437,7 +443,11 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             standbyTemperatureDelta = -42,
             interfaceShells = true,
         ),
-        gcodeSettings = GcodeSettings(arcFitting = true),
+        gcodeSettings = GcodeSettings(
+            arcFitting = true,
+            labelObjects = false,
+            excludeObjects = true,
+        ),
         infillFirst = true,
         infillWallOverlap = 19f,
         topBottomInfillWallOverlap = 31f,

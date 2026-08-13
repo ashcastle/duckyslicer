@@ -207,6 +207,9 @@
     <string name="spiral_vase">Spiral vase</string>
     <string name="spiral_vase_summary">Uses one wall, no infill, no top layers, and no supports.</string>
     <string name="print_sequence">Print sequence</string>
+    <string name="gcode_output">G-code output</string>
+    <string name="label_objects">Label objects</string>
+    <string name="exclude_objects">Exclude objects</string>
     <string name="intra_layer_order">Intra-layer order</string>
     <string name="print_by_layer">By layer</string>
     <string name="print_by_object">By object</string>

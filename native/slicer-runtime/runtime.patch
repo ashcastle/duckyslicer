@@ -2675,3 +2675,59 @@ diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_p
      if (n_ext > 1) {
          dpc.set_key_value("idle_temperature", new Slic3r::ConfigOptionInts(std::vector<int>(n_ext, 0)));
      }
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -306,5 +306,7 @@ struct SliceConfig {
+     bool interface_shells = false;
+     bool enable_arc_fitting = false;
++    bool gcode_label_objects = true;
++    bool exclude_object = false;
+ 
+     // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
+     // Empty = use OrcaSlicer's built-in default. OrcaSlicer resolves {variable}
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -338,5 +338,7 @@ static SliceConfig readConfig(JNIEnv* env, jobject configObj) {
+     config.interface_shells = getBool("interfaceShells");
+     config.enable_arc_fitting = getBool("enableArcFitting");
++    config.gcode_label_objects = getBool("gcodeLabelObjects");
++    config.exclude_object = getBool("excludeObject");
+ 
+     // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
+     config.machine_start_gcode = getString("machineStartGcode");
+@@ -697,5 +699,7 @@ static void writeConfig(JNIEnv* env, jobject configObj, const SliceConfig& config
+     setBool("interfaceShells", config.interface_shells);
+     setBool("enableArcFitting", config.enable_arc_fitting);
++    setBool("gcodeLabelObjects", config.gcode_label_objects);
++    setBool("excludeObject", config.exclude_object);
+     setString("machineStartGcode", config.machine_start_gcode);
+     setString("machineEndGcode", config.machine_end_gcode);
+     setString("gcodeFlavor", config.gcode_flavor);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -813,5 +813,7 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     dpc.set_key_value("interface_shells", new Slic3r::ConfigOptionBool(config.interface_shells));
+     dpc.set_key_value("enable_arc_fitting", new Slic3r::ConfigOptionBool(config.enable_arc_fitting));
++    dpc.set_key_value("gcode_label_objects", new Slic3r::ConfigOptionBool(config.gcode_label_objects));
++    dpc.set_key_value("exclude_object", new Slic3r::ConfigOptionBool(config.exclude_object));
+     if (n_ext > 1) {
+         dpc.set_key_value("idle_temperature", new Slic3r::ConfigOptionInts(std::vector<int>(n_ext, 0)));
+     }
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -912,11 +912,6 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+         }
+     }
+ 
+-    // Exclude object / cancel object support — enables EXCLUDE_OBJECT_DEFINE / EXCLUDE_OBJECT_START /
+-    // EXCLUDE_OBJECT_END G-code markers so firmware can cancel individual objects mid-print.
+-    // OrcaSlicer defaults to false; enable unconditionally for all U1 prints.
+-    dpc.set_key_value("exclude_object", new Slic3r::ConfigOptionBool(true));
+-
+     // Full-spectrum mixed-filament (stage 2): when the caller passed a
+     // recipe via SliceConfig.mixed_filament_definitions, write it into
+     // the engine's config key. Empty (default) is a no-op — engine
