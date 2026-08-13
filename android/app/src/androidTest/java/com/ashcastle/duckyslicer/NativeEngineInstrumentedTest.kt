@@ -1174,7 +1174,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(19, catalog.schemaVersion)
+        assertEquals(20, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1232,6 +1232,12 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.treeSupportBranchDistance != 5f })
         assertTrue(catalog.slicing.any { it.treeSupportBranchDiameter != 5f })
         assertTrue(catalog.slicing.any { it.treeSupportWallCount != 0 })
+        assertTrue(catalog.slicing.any { it.treeSupportTipDiameter != 0.8f })
+        assertTrue(catalog.slicing.any { it.treeSupportPreferredBranchAngle != 25f })
+        assertTrue(catalog.slicing.any { it.treeSupportBranchDensity != 30f })
+        assertTrue(catalog.slicing.any { !it.treeSupportAdaptiveLayerHeight })
+        assertTrue(catalog.slicing.any { !it.treeSupportAutoBrim })
+        assertTrue(catalog.slicing.any { it.treeSupportBrimWidth != 3f })
         assertTrue(catalog.slicing.any { it.infillFirst })
         assertTrue(catalog.slicing.any { it.wallSequence == "outer-inner" })
         assertTrue(catalog.slicing.any { it.infillCombination })
@@ -1700,6 +1706,12 @@ class NativeEngineInstrumentedTest {
                 treeSupportBranchDistance = 6.2f,
                 treeSupportBranchDiameter = 2.4f,
                 treeSupportWallCount = 2,
+                treeSupportTipDiameter = 1.3f,
+                treeSupportPreferredBranchAngle = 31f,
+                treeSupportBranchDensity = 37f,
+                treeSupportAdaptiveLayerHeight = false,
+                treeSupportAutoBrim = false,
+                treeSupportBrimWidth = 4.6f,
             )
 
         val outcome = OnDeviceSlicer.slice(listOf(ProjectObject("tree-auto", model)), options)
@@ -1714,6 +1726,12 @@ class NativeEngineInstrumentedTest {
         assertTrue(gcode.contains("; tree_support_branch_distance = 6.2"))
         assertTrue(gcode.contains("; tree_support_branch_diameter = 2.4"))
         assertTrue(gcode.contains("; tree_support_wall_count = 2"))
+        assertTrue(gcode.contains("; tree_support_tip_diameter = 1.3"))
+        assertTrue(gcode.contains("; tree_support_angle_slow = 31"))
+        assertTrue(gcode.contains("; tree_support_top_rate = 37%"))
+        assertTrue(gcode.contains("; tree_support_adaptive_layer_height = 0"))
+        assertTrue(gcode.contains("; tree_support_auto_brim = 0"))
+        assertTrue(gcode.contains("; tree_support_brim_width = 4.6"))
     }
 
     @Test
@@ -2048,6 +2066,12 @@ class NativeEngineInstrumentedTest {
                 treeSupportBranchDistance = 6.2f,
                 treeSupportBranchDiameter = 2.4f,
                 treeSupportWallCount = 2,
+                treeSupportTipDiameter = 1.3f,
+                treeSupportPreferredBranchAngle = 31f,
+                treeSupportBranchDensity = 37f,
+                treeSupportAdaptiveLayerHeight = false,
+                treeSupportAutoBrim = false,
+                treeSupportBrimWidth = 4.6f,
                 infillFirst = true,
                 infillWallOverlap = 19f,
                 topBottomInfillWallOverlap = 31f,
@@ -2227,6 +2251,12 @@ class NativeEngineInstrumentedTest {
         assertTrue("Tree branch distance must reach Orca", gcode.contains("; tree_support_branch_distance = 6.2"))
         assertTrue("Tree branch diameter must reach Orca", gcode.contains("; tree_support_branch_diameter = 2.4"))
         assertTrue("Tree support wall loops must reach Orca", gcode.contains("; tree_support_wall_count = 2"))
+        assertTrue("Tree tip diameter must reach Orca", gcode.contains("; tree_support_tip_diameter = 1.3"))
+        assertTrue("Preferred tree branch angle must reach Orca", gcode.contains("; tree_support_angle_slow = 31"))
+        assertTrue("Tree branch density must reach Orca", gcode.contains("; tree_support_top_rate = 37%"))
+        assertTrue("Adaptive tree layers must reach Orca", gcode.contains("; tree_support_adaptive_layer_height = 0"))
+        assertTrue("Automatic tree brim must reach Orca", gcode.contains("; tree_support_auto_brim = 0"))
+        assertTrue("Tree brim width must reach Orca", gcode.contains("; tree_support_brim_width = 4.6"))
         assertTrue("Seam position must reach Orca", gcode.contains("; seam_position = nearest"))
         assertTrue("Ironing type must reach Orca", gcode.contains("; ironing_type = top"))
         assertTrue("Ironing pattern must reach Orca", gcode.contains("; ironing_pattern = concentric"))

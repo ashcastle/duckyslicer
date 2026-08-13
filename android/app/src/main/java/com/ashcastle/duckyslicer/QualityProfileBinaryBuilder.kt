@@ -189,6 +189,12 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var treeSupportBranchDistance: Float = base.treeSupportBranchDistance
     private var treeSupportBranchDiameter: Float = base.treeSupportBranchDiameter
     private var treeSupportWallCount: Int = base.treeSupportWallCount
+    private var treeSupportTipDiameter: Float = base.treeSupportTipDiameter
+    private var treeSupportPreferredBranchAngle: Float = base.treeSupportPreferredBranchAngle
+    private var treeSupportBranchDensity: Float = base.treeSupportBranchDensity
+    private var treeSupportAdaptiveLayerHeight: Boolean = base.treeSupportAdaptiveLayerHeight
+    private var treeSupportAutoBrim: Boolean = base.treeSupportAutoBrim
+    private var treeSupportBrimWidth: Float = base.treeSupportBrimWidth
     private var brand: String? = base.brand
     private var compatiblePrinters: List<String> = base.compatiblePrinters
 
@@ -415,6 +421,12 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         treeSupportBranchDistance = input.readFloat()
         treeSupportBranchDiameter = input.readFloat()
         treeSupportWallCount = input.readInt()
+        treeSupportTipDiameter = input.readFloat()
+        treeSupportPreferredBranchAngle = input.readFloat()
+        treeSupportBranchDensity = input.readFloat()
+        treeSupportAdaptiveLayerHeight = input.readCatalogBoolean()
+        treeSupportAutoBrim = input.readCatalogBoolean()
+        treeSupportBrimWidth = input.readFloat()
         compatiblePrinters = input.readCatalogStringList()
     }
 
@@ -605,6 +617,12 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         treeSupportBranchDistance = treeSupportBranchDistance,
         treeSupportBranchDiameter = treeSupportBranchDiameter,
         treeSupportWallCount = treeSupportWallCount,
+        treeSupportTipDiameter = treeSupportTipDiameter,
+        treeSupportPreferredBranchAngle = treeSupportPreferredBranchAngle,
+        treeSupportBranchDensity = treeSupportBranchDensity,
+        treeSupportAdaptiveLayerHeight = treeSupportAdaptiveLayerHeight,
+        treeSupportAutoBrim = treeSupportAutoBrim,
+        treeSupportBrimWidth = treeSupportBrimWidth,
         brand = brand,
         compatiblePrinters = compatiblePrinters,
     )
@@ -797,5 +815,11 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("treeSupportBranchDistance", BINARY_FLOAT),
     BinaryField("treeSupportBranchDiameter", BINARY_FLOAT),
     BinaryField("treeSupportWallCount", BINARY_INT),
+    BinaryField("treeSupportTipDiameter", BINARY_FLOAT),
+    BinaryField("treeSupportPreferredBranchAngle", BINARY_FLOAT),
+    BinaryField("treeSupportBranchDensity", BINARY_FLOAT),
+    BinaryField("treeSupportAdaptiveLayerHeight", BINARY_BOOL),
+    BinaryField("treeSupportAutoBrim", BINARY_BOOL),
+    BinaryField("treeSupportBrimWidth", BINARY_FLOAT),
     BinaryField("compatiblePrinters", BINARY_STRING_LIST),
 )

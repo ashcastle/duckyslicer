@@ -2062,6 +2062,81 @@ private fun SlicingSettingsSheet(
                                 onOptionsChanged(options.copy(treeSupportWallCount = it.roundToInt()))
                             },
                         )
+                        SettingSlider(
+                            label = stringResource(R.string.tree_support_tip_diameter),
+                            valueText = stringResource(
+                                R.string.millimeters_value_precise,
+                                options.treeSupportTipDiameter,
+                            ),
+                            value = options.treeSupportTipDiameter,
+                            range = 0.1f..max(10f, options.treeSupportTipDiameter),
+                            steps = ((max(10f, options.treeSupportTipDiameter) - 0.1f) * 10f)
+                                .roundToInt() - 1,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(treeSupportTipDiameter = (it * 10f).roundToInt() / 10f),
+                                )
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.tree_support_preferred_branch_angle),
+                            valueText = stringResource(
+                                R.string.degrees_value,
+                                options.treeSupportPreferredBranchAngle,
+                            ),
+                            value = options.treeSupportPreferredBranchAngle,
+                            range = 10f..85f,
+                            steps = 74,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(treeSupportPreferredBranchAngle = it.roundToInt().toFloat()),
+                                )
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.tree_support_branch_density),
+                            valueText = stringResource(
+                                R.string.percent_value,
+                                options.treeSupportBranchDensity.roundToInt(),
+                            ),
+                            value = options.treeSupportBranchDensity,
+                            range = 5f..max(35f, options.treeSupportBranchDensity),
+                            steps = (max(35f, options.treeSupportBranchDensity) - 5f).roundToInt() - 1,
+                            onValueChange = {
+                                onOptionsChanged(options.copy(treeSupportBranchDensity = it.roundToInt().toFloat()))
+                            },
+                        )
+                        SettingsSwitch(
+                            label = stringResource(R.string.tree_support_adaptive_layer_height),
+                            checked = options.treeSupportAdaptiveLayerHeight,
+                            onCheckedChange = {
+                                onOptionsChanged(options.copy(treeSupportAdaptiveLayerHeight = it))
+                            },
+                        )
+                        SettingsSwitch(
+                            label = stringResource(R.string.tree_support_auto_brim),
+                            checked = options.treeSupportAutoBrim,
+                            onCheckedChange = {
+                                onOptionsChanged(options.copy(treeSupportAutoBrim = it))
+                            },
+                        )
+                        if (!options.treeSupportAutoBrim || settingsQuery.isNotBlank()) {
+                            SettingSlider(
+                                label = stringResource(R.string.tree_support_brim_width),
+                                valueText = stringResource(
+                                    R.string.millimeters_value_precise,
+                                    options.treeSupportBrimWidth,
+                                ),
+                                value = options.treeSupportBrimWidth,
+                                range = 0f..max(20f, options.treeSupportBrimWidth),
+                                steps = (max(20f, options.treeSupportBrimWidth) * 10f).roundToInt() - 1,
+                                onValueChange = {
+                                    onOptionsChanged(
+                                        options.copy(treeSupportBrimWidth = (it * 10f).roundToInt() / 10f),
+                                    )
+                                },
+                            )
+                        }
                     }
                     SettingChoices(
                         settingLabel = stringResource(R.string.support_style),

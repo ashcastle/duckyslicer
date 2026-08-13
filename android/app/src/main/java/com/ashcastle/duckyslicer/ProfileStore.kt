@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 20
+internal const val USER_PROFILE_SCHEMA_VERSION = 21
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -251,6 +251,12 @@ class ProfileStore private constructor(
             treeSupportBranchDistance = options.treeSupportBranchDistance,
             treeSupportBranchDiameter = options.treeSupportBranchDiameter,
             treeSupportWallCount = options.treeSupportWallCount,
+            treeSupportTipDiameter = options.treeSupportTipDiameter,
+            treeSupportPreferredBranchAngle = options.treeSupportPreferredBranchAngle,
+            treeSupportBranchDensity = options.treeSupportBranchDensity,
+            treeSupportAdaptiveLayerHeight = options.treeSupportAdaptiveLayerHeight,
+            treeSupportAutoBrim = options.treeSupportAutoBrim,
+            treeSupportBrimWidth = options.treeSupportBrimWidth,
             supportFilament = options.supportFilament,
             supportInterfaceFilament = options.supportInterfaceFilament,
             wipeTowerEnabled = options.wipeTowerEnabled,
@@ -551,6 +557,12 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("treeSupportBranchDistance", treeSupportBranchDistance)
     .put("treeSupportBranchDiameter", treeSupportBranchDiameter)
     .put("treeSupportWallCount", treeSupportWallCount)
+    .put("treeSupportTipDiameter", treeSupportTipDiameter)
+    .put("treeSupportPreferredBranchAngle", treeSupportPreferredBranchAngle)
+    .put("treeSupportBranchDensity", treeSupportBranchDensity)
+    .put("treeSupportAdaptiveLayerHeight", treeSupportAdaptiveLayerHeight)
+    .put("treeSupportAutoBrim", treeSupportAutoBrim)
+    .put("treeSupportBrimWidth", treeSupportBrimWidth)
     .put("supportFilament", supportFilament)
     .put("supportInterfaceFilament", supportInterfaceFilament)
     .put("wipeTowerEnabled", wipeTowerEnabled)
@@ -799,6 +811,12 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         treeSupportBranchDistance = optDouble("treeSupportBranchDistance", 5.0).toFloat(),
         treeSupportBranchDiameter = optDouble("treeSupportBranchDiameter", 5.0).toFloat(),
         treeSupportWallCount = optInt("treeSupportWallCount", 0),
+        treeSupportTipDiameter = optDouble("treeSupportTipDiameter", 0.8).toFloat(),
+        treeSupportPreferredBranchAngle = optDouble("treeSupportPreferredBranchAngle", 25.0).toFloat(),
+        treeSupportBranchDensity = optDouble("treeSupportBranchDensity", 30.0).toFloat(),
+        treeSupportAdaptiveLayerHeight = optBoolean("treeSupportAdaptiveLayerHeight", true),
+        treeSupportAutoBrim = optBoolean("treeSupportAutoBrim", true),
+        treeSupportBrimWidth = optDouble("treeSupportBrimWidth", 3.0).toFloat(),
         supportFilament = optInt("supportFilament", 0),
         supportInterfaceFilament = optInt("supportInterfaceFilament", 0),
         wipeTowerEnabled = optBoolean("wipeTowerEnabled"),

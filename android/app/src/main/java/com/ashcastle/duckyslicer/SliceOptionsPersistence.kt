@@ -160,6 +160,12 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         treeSupportBranchDistance = treeSupportBranchDistance,
         treeSupportBranchDiameter = treeSupportBranchDiameter,
         treeSupportWallCount = treeSupportWallCount,
+        treeSupportTipDiameter = treeSupportTipDiameter,
+        treeSupportPreferredBranchAngle = treeSupportPreferredBranchAngle,
+        treeSupportBranchDensity = treeSupportBranchDensity,
+        treeSupportAdaptiveLayerHeight = treeSupportAdaptiveLayerHeight,
+        treeSupportAutoBrim = treeSupportAutoBrim,
+        treeSupportBrimWidth = treeSupportBrimWidth,
         supportFilament = supportFilament,
         supportInterfaceFilament = supportInterfaceFilament,
         wipeTowerEnabled = wipeTowerEnabled,
@@ -289,7 +295,7 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 18
+private const val SLICE_OPTIONS_FORMAT_VERSION = 19
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f

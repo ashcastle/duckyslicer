@@ -483,7 +483,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "`.duckyprofiles`",
         "application/vnd.duckyslicer.profiles+json",
         '"bundleVersion": 1',
-        '"profileSchemaVersion": 20',
+        '"profileSchemaVersion": 21',
         "exact profile duplicates are skipped",
         "additive and atomic",
         "24 MiB",

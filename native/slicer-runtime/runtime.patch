@@ -165,7 +165,7 @@ index 116a4a85..b870c593 100644
      // Temperature
      int nozzle_temp = 210;
      int bed_temp = 60;
-@@ -60,17 +134,115 @@ struct SliceConfig {
+@@ -60,17 +134,121 @@ struct SliceConfig {
      bool support_enabled = false;
 -    std::string support_type = "normal"; // "normal", "tree"
 +    std::string support_type = "normal(auto)"; // normal/tree, automatic/manual
@@ -189,6 +189,12 @@ index 116a4a85..b870c593 100644
 +    float tree_support_branch_distance = 5.0f;
 +    float tree_support_branch_diameter = 5.0f;
 +    int tree_support_wall_count = 0;
++    float tree_support_tip_diameter = 0.8f;
++    float tree_support_preferred_branch_angle = 25.0f;
++    float tree_support_branch_density = 30.0f;
++    bool tree_support_adaptive_layer_height = true;
++    bool tree_support_auto_brim = true;
++    float tree_support_brim_width = 3.0f;
      int support_filament = 0;            // 1-based Orca filament index; 0 = default
      int support_interface_filament = 0;  // 1-based Orca filament index; 0 = default
  
@@ -512,7 +518,7 @@ index d93efb7d..276bb039 100644
      config.travel_speed = getFloat("travelSpeed");
      config.first_layer_speed = getFloat("firstLayerSpeed");
  
-@@ -108,15 +178,110 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -108,15 +178,116 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.support_enabled = getBool("supportEnabled");
      config.support_type = getString("supportType");
      config.support_angle = getFloat("supportAngle");
@@ -535,6 +541,12 @@ index d93efb7d..276bb039 100644
 +    config.tree_support_branch_distance = getFloat("treeSupportBranchDistance");
 +    config.tree_support_branch_diameter = getFloat("treeSupportBranchDiameter");
 +    config.tree_support_wall_count = getInt("treeSupportWallCount");
++    config.tree_support_tip_diameter = getFloat("treeSupportTipDiameter");
++    config.tree_support_preferred_branch_angle = getFloat("treeSupportPreferredBranchAngle");
++    config.tree_support_branch_density = getFloat("treeSupportBranchDensity");
++    config.tree_support_adaptive_layer_height = getBool("treeSupportAdaptiveLayerHeight");
++    config.tree_support_auto_brim = getBool("treeSupportAutoBrim");
++    config.tree_support_brim_width = getFloat("treeSupportBrimWidth");
      config.support_filament = getInt("supportFilament");
      config.support_interface_filament = getInt("supportInterfaceFilament");
  
@@ -737,7 +749,7 @@ index d93efb7d..276bb039 100644
      setFloat("travelSpeed", config.travel_speed);
      setFloat("firstLayerSpeed", config.first_layer_speed);
      setInt("nozzleTemp", config.nozzle_temp);
-@@ -247,13 +487,108 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -247,13 +487,114 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setBool("supportEnabled", config.support_enabled);
      setString("supportType", config.support_type);
      setFloat("supportAngle", config.support_angle);
@@ -760,6 +772,12 @@ index d93efb7d..276bb039 100644
 +    setFloat("treeSupportBranchDistance", config.tree_support_branch_distance);
 +    setFloat("treeSupportBranchDiameter", config.tree_support_branch_diameter);
 +    setInt("treeSupportWallCount", config.tree_support_wall_count);
++    setFloat("treeSupportTipDiameter", config.tree_support_tip_diameter);
++    setFloat("treeSupportPreferredBranchAngle", config.tree_support_preferred_branch_angle);
++    setFloat("treeSupportBranchDensity", config.tree_support_branch_density);
++    setBool("treeSupportAdaptiveLayerHeight", config.tree_support_adaptive_layer_height);
++    setBool("treeSupportAutoBrim", config.tree_support_auto_brim);
++    setFloat("treeSupportBrimWidth", config.tree_support_brim_width);
      setInt("supportFilament", config.support_filament);
      setInt("supportInterfaceFilament", config.support_interface_filament);
      setInt("skirtLoops", config.skirt_loops);
@@ -1263,7 +1281,7 @@ index 8d61c9cf..aaaa9bc9 100644
      // F91 (2026-05-25) — SliceConfig user overrides for the per-filament tuning keys
      // that applyConfigToPrusa doesn't otherwise touch. When the user sets a value via the
      // Filament Library, populate dpc here so the slicer picks it up. When unset, the
-@@ -568,19 +712,36 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -568,19 +712,42 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          dpc.set_key_value("filament_cost", new Slic3r::ConfigOptionFloats(std::move(v)));
      }
  
@@ -1302,6 +1320,12 @@ index 8d61c9cf..aaaa9bc9 100644
 +    dpc.set_key_value("tree_support_branch_distance", new Slic3r::ConfigOptionFloat(config.tree_support_branch_distance));
 +    dpc.set_key_value("tree_support_branch_diameter", new Slic3r::ConfigOptionFloat(config.tree_support_branch_diameter));
 +    dpc.set_key_value("tree_support_wall_count", new Slic3r::ConfigOptionInt(config.tree_support_wall_count));
++    dpc.set_key_value("tree_support_tip_diameter", new Slic3r::ConfigOptionFloat(config.tree_support_tip_diameter));
++    dpc.set_key_value("tree_support_angle_slow", new Slic3r::ConfigOptionFloat(config.tree_support_preferred_branch_angle));
++    dpc.set_key_value("tree_support_top_rate", new Slic3r::ConfigOptionPercent(config.tree_support_branch_density));
++    dpc.set_key_value("tree_support_adaptive_layer_height", new Slic3r::ConfigOptionBool(config.tree_support_adaptive_layer_height));
++    dpc.set_key_value("tree_support_auto_brim", new Slic3r::ConfigOptionBool(config.tree_support_auto_brim));
++    dpc.set_key_value("tree_support_brim_width", new Slic3r::ConfigOptionFloat(config.tree_support_brim_width));
 +
 +    // Orca profiles intentionally mix absolute mm/s and percentages of outer-wall
 +    // speed. Preserve both the numeric value and its unit semantics per stage.

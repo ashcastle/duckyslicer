@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -679,6 +679,12 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "treeSupportBranchDistance": number(raw.get("tree_support_branch_distance"), 5),
         "treeSupportBranchDiameter": number(raw.get("tree_support_branch_diameter"), 5),
         "treeSupportWallCount": integer(raw.get("tree_support_wall_count"), 0),
+        "treeSupportTipDiameter": number(raw.get("tree_support_tip_diameter"), 0.8),
+        "treeSupportPreferredBranchAngle": number(raw.get("tree_support_angle_slow"), 25),
+        "treeSupportBranchDensity": number(raw.get("tree_support_top_rate"), 30),
+        "treeSupportAdaptiveLayerHeight": boolean(raw.get("tree_support_adaptive_layer_height"), True),
+        "treeSupportAutoBrim": boolean(raw.get("tree_support_auto_brim"), True),
+        "treeSupportBrimWidth": number(raw.get("tree_support_brim_width"), 3),
         "compatiblePrinters": compatible,
     }
     if not (
@@ -776,6 +782,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 1 <= profile["treeSupportBranchDistance"] <= 10
         and 1 <= profile["treeSupportBranchDiameter"] <= 10
         and 0 <= profile["treeSupportWallCount"] <= 2
+        and 0.1 <= profile["treeSupportTipDiameter"] <= 100
+        and 10 <= profile["treeSupportPreferredBranchAngle"] <= 85
+        and 5 <= profile["treeSupportBranchDensity"] <= 100
+        and 0 <= profile["treeSupportBrimWidth"] <= 100
         and all(
             0.1 <= profile[key] <= 3
             for key in [

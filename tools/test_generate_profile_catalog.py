@@ -117,6 +117,12 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "tree_support_branch_distance": "6.2",
                 "tree_support_branch_diameter": "2.4",
                 "tree_support_wall_count": "2",
+                "tree_support_tip_diameter": "1.3",
+                "tree_support_angle_slow": "31",
+                "tree_support_top_rate": "37%",
+                "tree_support_adaptive_layer_height": "0",
+                "tree_support_auto_brim": "0",
+                "tree_support_brim_width": "4.6",
             },
             {},
         )
@@ -126,6 +132,12 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(6.2, profile["treeSupportBranchDistance"])
         self.assertEqual(2.4, profile["treeSupportBranchDiameter"])
         self.assertEqual(2, profile["treeSupportWallCount"])
+        self.assertEqual(1.3, profile["treeSupportTipDiameter"])
+        self.assertEqual(31, profile["treeSupportPreferredBranchAngle"])
+        self.assertEqual(37, profile["treeSupportBranchDensity"])
+        self.assertFalse(profile["treeSupportAdaptiveLayerHeight"])
+        self.assertFalse(profile["treeSupportAutoBrim"])
+        self.assertEqual(4.6, profile["treeSupportBrimWidth"])
 
 
 if __name__ == "__main__":
