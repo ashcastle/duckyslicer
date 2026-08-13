@@ -274,6 +274,10 @@ data class GcodeSettings(
     val arcFitting: Boolean = false,
     val labelObjects: Boolean = true,
     val excludeObjects: Boolean = false,
+    val initialLayerTravelSpeed: Float = 100f,
+    val initialLayerTravelSpeedPercent: Boolean = true,
+    val accelToDecelEnabled: Boolean = true,
+    val accelToDecelFactor: Float = 50f,
 )
 
 internal fun FilamentProfile.resolveRetraction(printer: PrinterProfile) = RetractionSettings(
@@ -591,7 +595,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 27,
+    val schemaVersion: Int = 28,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1497,6 +1501,10 @@ data class SliceOptions(
             native.enableArcFitting = gcodeSettings.arcFitting
             native.gcodeLabelObjects = gcodeSettings.labelObjects
             native.excludeObject = gcodeSettings.excludeObjects
+            native.initialLayerTravelSpeed = gcodeSettings.initialLayerTravelSpeed
+            native.initialLayerTravelSpeedPercent = gcodeSettings.initialLayerTravelSpeedPercent
+            native.accelToDecelEnabled = gcodeSettings.accelToDecelEnabled
+            native.accelToDecelFactor = gcodeSettings.accelToDecelFactor
         }
     }
 }

@@ -1893,6 +1893,62 @@ private fun SlicingSettingsSheet(
                     steps = ((max(700f, options.travelSpeed) - 10f) / 5f).roundToInt().coerceAtLeast(2) - 1,
                     onValueChange = { onOptionsChanged(options.copy(travelSpeed = (it / 5f).roundToInt() * 5f)) },
                 )
+                OverhangSpeedSetting(
+                    label = stringResource(R.string.initial_layer_travel_speed),
+                    value = options.gcodeSettings.initialLayerTravelSpeed,
+                    percent = options.gcodeSettings.initialLayerTravelSpeedPercent,
+                    maximumAbsolute = max(700f, options.gcodeSettings.initialLayerTravelSpeed),
+                    maximumPercent = max(300f, options.gcodeSettings.initialLayerTravelSpeed),
+                    onValueChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                gcodeSettings = options.gcodeSettings.copy(initialLayerTravelSpeed = it),
+                            ),
+                        )
+                    },
+                    onPercentChange = { selectedPercent, adjustedValue ->
+                        onOptionsChanged(
+                            options.copy(
+                                gcodeSettings = options.gcodeSettings.copy(
+                                    initialLayerTravelSpeed = adjustedValue,
+                                    initialLayerTravelSpeedPercent = selectedPercent,
+                                ),
+                            ),
+                        )
+                    },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.acceleration_smoothing),
+                    checked = options.gcodeSettings.accelToDecelEnabled,
+                    onCheckedChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                gcodeSettings = options.gcodeSettings.copy(accelToDecelEnabled = it),
+                            ),
+                        )
+                    },
+                )
+                if (options.gcodeSettings.accelToDecelEnabled || settingsQuery.isNotBlank()) {
+                    SettingSlider(
+                        label = stringResource(R.string.acceleration_smoothing_ratio),
+                        valueText = stringResource(
+                            R.string.percent_value,
+                            options.gcodeSettings.accelToDecelFactor.roundToInt(),
+                        ),
+                        value = options.gcodeSettings.accelToDecelFactor,
+                        range = 1f..100f,
+                        steps = 98,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    gcodeSettings = options.gcodeSettings.copy(
+                                        accelToDecelFactor = it.roundToInt().toFloat(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                }
                 SettingsSwitch(
                     label = stringResource(R.string.avoid_crossing_walls),
                     checked = options.reduceCrossingWall,

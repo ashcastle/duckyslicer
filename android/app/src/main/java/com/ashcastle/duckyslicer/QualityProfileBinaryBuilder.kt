@@ -128,6 +128,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var enableArcFitting: Boolean = base.gcodeSettings.arcFitting
     private var gcodeLabelObjects: Boolean = base.gcodeSettings.labelObjects
     private var excludeObject: Boolean = base.gcodeSettings.excludeObjects
+    private var initialLayerTravelSpeed: Float = base.gcodeSettings.initialLayerTravelSpeed
+    private var initialLayerTravelSpeedPercent: Boolean = base.gcodeSettings.initialLayerTravelSpeedPercent
+    private var accelToDecelEnabled: Boolean = base.gcodeSettings.accelToDecelEnabled
+    private var accelToDecelFactor: Float = base.gcodeSettings.accelToDecelFactor
     private var skirtLoops: Int = base.skirtLoops
     private var skirtDistance: Float = base.skirtDistance
     private var skirtHeight: Int = base.skirtHeight
@@ -440,6 +444,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         enableArcFitting = input.readCatalogBoolean()
         gcodeLabelObjects = input.readCatalogBoolean()
         excludeObject = input.readCatalogBoolean()
+        initialLayerTravelSpeed = input.readFloat()
+        initialLayerTravelSpeedPercent = input.readCatalogBoolean()
+        accelToDecelEnabled = input.readCatalogBoolean()
+        accelToDecelFactor = input.readFloat()
         spiralMode = input.readCatalogBoolean()
         spiralModeSmooth = input.readCatalogBoolean()
         spiralModeMaxXySmoothing = input.readFloat()
@@ -607,6 +615,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             arcFitting = enableArcFitting,
             labelObjects = gcodeLabelObjects,
             excludeObjects = excludeObject,
+            initialLayerTravelSpeed = initialLayerTravelSpeed,
+            initialLayerTravelSpeedPercent = initialLayerTravelSpeedPercent,
+            accelToDecelEnabled = accelToDecelEnabled,
+            accelToDecelFactor = accelToDecelFactor,
         ),
         skirtLoops = skirtLoops,
         skirtDistance = skirtDistance,
@@ -885,6 +897,10 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("enableArcFitting", BINARY_BOOL),
     BinaryField("gcodeLabelObjects", BINARY_BOOL),
     BinaryField("excludeObject", BINARY_BOOL),
+    BinaryField("initialLayerTravelSpeed", BINARY_FLOAT),
+    BinaryField("initialLayerTravelSpeedPercent", BINARY_BOOL),
+    BinaryField("accelToDecelEnabled", BINARY_BOOL),
+    BinaryField("accelToDecelFactor", BINARY_FLOAT),
     BinaryField("spiralMode", BINARY_BOOL),
     BinaryField("spiralModeSmooth", BINARY_BOOL),
     BinaryField("spiralModeMaxXySmoothing", BINARY_FLOAT),

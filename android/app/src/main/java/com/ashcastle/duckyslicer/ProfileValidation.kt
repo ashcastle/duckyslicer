@@ -135,6 +135,11 @@ internal object ProfileValidation {
             ) &&
             profile.internalBridgeFilter in setOf("disabled", "limited", "nofilter") &&
             profile.travelSpeed in 1f..2_000f &&
+            featureSpeedIsValid(
+                profile.gcodeSettings.initialLayerTravelSpeed,
+                profile.gcodeSettings.initialLayerTravelSpeedPercent,
+            ) &&
+            profile.gcodeSettings.accelToDecelFactor in 1f..100f &&
             profile.maxTravelDetourDistance in 0f..1_000f &&
             optionalFeatureSpeedIsValid(profile.smallPerimeterSpeed, profile.smallPerimeterSpeedPercent) &&
             profile.smallPerimeterThreshold in 0f..1_000_000f &&

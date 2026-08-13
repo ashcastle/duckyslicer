@@ -60,6 +60,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "enable_arc_fitting": "1",
                 "gcode_label_objects": "0",
                 "exclude_object": "1",
+                "initial_layer_travel_speed": "35%",
+                "accel_to_decel_enable": "0",
+                "accel_to_decel_factor": "27%",
             },
             {},
         )
@@ -77,6 +80,10 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(profile["enableArcFitting"])
         self.assertFalse(profile["gcodeLabelObjects"])
         self.assertTrue(profile["excludeObject"])
+        self.assertEqual(35.0, profile["initialLayerTravelSpeed"])
+        self.assertTrue(profile["initialLayerTravelSpeedPercent"])
+        self.assertFalse(profile["accelToDecelEnabled"])
+        self.assertEqual(27.0, profile["accelToDecelFactor"])
 
     def test_preserves_spiral_vase_process_values(self) -> None:
         profile = build_process(

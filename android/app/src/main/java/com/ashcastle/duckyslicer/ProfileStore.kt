@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 28
+internal const val USER_PROFILE_SCHEMA_VERSION = 29
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -642,6 +642,10 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("enableArcFitting", gcodeSettings.arcFitting)
     .put("gcodeLabelObjects", gcodeSettings.labelObjects)
     .put("excludeObject", gcodeSettings.excludeObjects)
+    .put("initialLayerTravelSpeed", gcodeSettings.initialLayerTravelSpeed)
+    .put("initialLayerTravelSpeedPercent", gcodeSettings.initialLayerTravelSpeedPercent)
+    .put("accelToDecelEnabled", gcodeSettings.accelToDecelEnabled)
+    .put("accelToDecelFactor", gcodeSettings.accelToDecelFactor)
     .put("skirtHeight", skirtHeight)
     .put("skirtSpeed", skirtSpeed)
     .put("minimumSkirtLength", minimumSkirtLength)
@@ -944,6 +948,10 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
             arcFitting = optBoolean("enableArcFitting"),
             labelObjects = optBoolean("gcodeLabelObjects", true),
             excludeObjects = optBoolean("excludeObject"),
+            initialLayerTravelSpeed = optDouble("initialLayerTravelSpeed", 100.0).toFloat(),
+            initialLayerTravelSpeedPercent = optBoolean("initialLayerTravelSpeedPercent", true),
+            accelToDecelEnabled = optBoolean("accelToDecelEnabled", true),
+            accelToDecelFactor = optDouble("accelToDecelFactor", 50.0).toFloat(),
         ),
         skirtLoops = optInt("skirtLoops", 0),
         skirtDistance = optDouble("skirtDistance", 6.0).toFloat(),

@@ -326,6 +326,9 @@
     <string name="top_surface_flow_ratio">Top surface flow</string>
     <string name="bottom_surface_flow_ratio">Bottom surface flow</string>
     <string name="travel_speed">Travel speed</string>
+    <string name="initial_layer_travel_speed">Initial layer travel</string>
+    <string name="acceleration_smoothing">Acceleration smoothing</string>
+    <string name="acceleration_smoothing_ratio">Smoothing ratio</string>
     <string name="avoid_crossing_walls">Avoid crossing walls</string>
     <string name="maximum_travel_detour">Maximum travel detour</string>
     <string name="reduce_infill_retraction">Reduce infill retraction</string>

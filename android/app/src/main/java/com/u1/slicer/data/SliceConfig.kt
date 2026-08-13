@@ -286,4 +286,8 @@ data class SliceConfig(
     @JvmField var enableArcFitting: Boolean = false
     @JvmField var gcodeLabelObjects: Boolean = true
     @JvmField var excludeObject: Boolean = false
+    @JvmField var initialLayerTravelSpeed: Float = 100f
+    @JvmField var initialLayerTravelSpeedPercent: Boolean = true
+    @JvmField var accelToDecelEnabled: Boolean = true
+    @JvmField var accelToDecelFactor: Float = 50f
 }

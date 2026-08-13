@@ -35,6 +35,10 @@ class SliceOptionsPersistenceTest {
                     arcFitting = true,
                     labelObjects = false,
                     excludeObjects = true,
+                    initialLayerTravelSpeed = 35f,
+                    initialLayerTravelSpeedPercent = true,
+                    accelToDecelEnabled = false,
+                    accelToDecelFactor = 27f,
                 ),
             )
 
@@ -61,6 +65,10 @@ class SliceOptionsPersistenceTest {
         assertEquals(true, native.enableArcFitting)
         assertEquals(false, native.gcodeLabelObjects)
         assertEquals(true, native.excludeObject)
+        assertEquals(35f, native.initialLayerTravelSpeed)
+        assertEquals(true, native.initialLayerTravelSpeedPercent)
+        assertEquals(false, native.accelToDecelEnabled)
+        assertEquals(27f, native.accelToDecelFactor)
     }
 
     @Test
@@ -447,6 +455,10 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             arcFitting = true,
             labelObjects = false,
             excludeObjects = true,
+            initialLayerTravelSpeed = 35f,
+            initialLayerTravelSpeedPercent = true,
+            accelToDecelEnabled = false,
+            accelToDecelFactor = 27f,
         ),
         infillFirst = true,
         infillWallOverlap = 19f,

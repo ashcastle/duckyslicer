@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 27
+SCHEMA_VERSION = 28
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -506,6 +506,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     internal_bridge_speed, internal_bridge_speed_percent = float_or_percent(
         raw.get("internal_bridge_speed"), "150%"
     )
+    initial_layer_travel_speed, initial_layer_travel_speed_percent = float_or_percent(
+        raw.get("initial_layer_travel_speed"), "100%"
+    )
     min_width_top_surface, min_width_top_surface_percent = float_or_percent(
         raw.get("min_width_top_surface"), "300%"
     )
@@ -760,6 +763,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "enableArcFitting": boolean(raw.get("enable_arc_fitting")),
         "gcodeLabelObjects": boolean(raw.get("gcode_label_objects"), True),
         "excludeObject": boolean(raw.get("exclude_object")),
+        "initialLayerTravelSpeed": initial_layer_travel_speed,
+        "initialLayerTravelSpeedPercent": initial_layer_travel_speed_percent,
+        "accelToDecelEnabled": boolean(raw.get("accel_to_decel_enable"), True),
+        "accelToDecelFactor": number(raw.get("accel_to_decel_factor"), 50),
         "spiralMode": boolean(raw.get("spiral_mode")),
         "spiralModeSmooth": boolean(raw.get("spiral_mode_smooth")),
         "spiralModeMaxXySmoothing": spiral_xy_smoothing,
@@ -815,6 +822,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
             1_000 if profile["internalBridgeSpeedPercent"] else 2_000
         )
         and 1 <= profile["travelSpeed"] <= 2_000
+        and 1 <= profile["initialLayerTravelSpeed"] <= (
+            1_000 if profile["initialLayerTravelSpeedPercent"] else 2_000
+        )
+        and 1 <= profile["accelToDecelFactor"] <= 100
         and all(
             0 <= profile[key] <= (100 if profile[f"{key}Percent"] else 2_000)
             for key in ["overhangSpeed1", "overhangSpeed2", "overhangSpeed3", "overhangSpeed4"]

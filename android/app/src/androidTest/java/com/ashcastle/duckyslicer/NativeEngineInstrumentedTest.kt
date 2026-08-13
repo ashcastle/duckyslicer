@@ -129,6 +129,87 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun inheritedMotionOutputChangesFirstLayerTravelAndKlipperLimits() {
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.U1_04.copy(gcodeFlavor = "klipper"))
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                travelSpeed = 400f,
+                defaultAcceleration = 2_000f,
+            )
+        val absolute = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.copy(
+                gcodeSettings = GcodeSettings(
+                    initialLayerTravelSpeed = 40f,
+                    initialLayerTravelSpeedPercent = false,
+                    accelToDecelEnabled = true,
+                    accelToDecelFactor = 25f,
+                ),
+            ),
+        )
+        val percentage = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.copy(
+                gcodeSettings = GcodeSettings(
+                    initialLayerTravelSpeed = 25f,
+                    initialLayerTravelSpeedPercent = true,
+                    accelToDecelEnabled = false,
+                    accelToDecelFactor = 25f,
+                ),
+            ),
+        )
+        try {
+            fun firstLayerTravelFeeds(gcode: String): Set<Float> {
+                val lines = gcode.lineSequence().toList()
+                val layerMarkers = lines.indices.filter { lines[it] == ";LAYER_CHANGE" }
+                assertTrue("A real slice needs at least two layers", layerMarkers.size >= 2)
+                return lines.subList(layerMarkers[0] + 1, layerMarkers[1])
+                    .asSequence()
+                    .filter { line ->
+                        (line.startsWith("G0 ") || line.startsWith("G1 ")) &&
+                            !line.contains(" E") &&
+                            (line.contains(" X") || line.contains(" Y"))
+                    }
+                    .mapNotNull { line ->
+                        Regex("(?:^| )F([0-9.]+)").find(line)?.groupValues?.get(1)?.toFloatOrNull()
+                    }
+                    .toSet()
+            }
+
+            val absoluteGcode = absolute.output.readText()
+            val percentageGcode = percentage.output.readText()
+            assertTrue(
+                "An absolute 40 mm/s first-layer travel must emit F2400",
+                2_400f in firstLayerTravelFeeds(absoluteGcode),
+            )
+            assertTrue(
+                "25% of a 400 mm/s travel speed must emit F6000",
+                6_000f in firstLayerTravelFeeds(percentageGcode),
+            )
+            val velocityLimits = Regex(
+                "SET_VELOCITY_LIMIT ACCEL=([0-9.]+) ACCEL_TO_DECEL=([0-9.]+)",
+            ).findAll(absoluteGcode).toList()
+            assertTrue("Enabled Klipper smoothing must emit acceleration limits", velocityLimits.isNotEmpty())
+            assertTrue(
+                "Every emitted accel-to-decel limit must retain the selected 25% factor",
+                velocityLimits.all { match ->
+                    val acceleration = match.groupValues[1].toFloat()
+                    val deceleration = match.groupValues[2].toFloat()
+                    abs(deceleration - acceleration * 0.25f) < 0.01f
+                },
+            )
+            assertFalse(percentageGcode.contains("ACCEL_TO_DECEL="))
+            assertTrue(absoluteGcode.contains("; initial_layer_travel_speed = 40"))
+            assertTrue(absoluteGcode.contains("; accel_to_decel_enable = 1"))
+            assertTrue(absoluteGcode.contains("; accel_to_decel_factor = 25%"))
+        } finally {
+            absolute.output.delete()
+            percentage.output.delete()
+        }
+    }
+
+    @Test
     fun depthPreviewPrewarmsGestureVboAndReusesItAcrossCameraFrames() {
         val framebufferSize = 256
         val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
@@ -955,6 +1036,10 @@ class NativeEngineInstrumentedTest {
                     arcFitting = true,
                     labelObjects = false,
                     excludeObjects = true,
+                    initialLayerTravelSpeed = 35f,
+                    initialLayerTravelSpeedPercent = true,
+                    accelToDecelEnabled = false,
+                    accelToDecelFactor = 27f,
                 ),
                 infillFirst = true,
                 infillWallOverlap = 18f,
@@ -1093,6 +1178,10 @@ class NativeEngineInstrumentedTest {
         assertTrue(restored.slicing.last().gcodeSettings.arcFitting)
         assertFalse(restored.slicing.last().gcodeSettings.labelObjects)
         assertTrue(restored.slicing.last().gcodeSettings.excludeObjects)
+        assertEquals(35f, restored.slicing.last().gcodeSettings.initialLayerTravelSpeed)
+        assertTrue(restored.slicing.last().gcodeSettings.initialLayerTravelSpeedPercent)
+        assertFalse(restored.slicing.last().gcodeSettings.accelToDecelEnabled)
+        assertEquals(27f, restored.slicing.last().gcodeSettings.accelToDecelFactor)
         assertEquals("nearest", restored.slicing.last().seamPosition)
         assertEquals("top", restored.slicing.last().ironingType)
         assertEquals("concentric", restored.slicing.last().ironingPattern)
@@ -1273,7 +1362,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(27, catalog.schemaVersion)
+        assertEquals(28, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1334,6 +1423,16 @@ class NativeEngineInstrumentedTest {
             "The catalog must retain both object-exclusion policies",
             catalog.slicing.any { it.gcodeSettings.excludeObjects } &&
                 catalog.slicing.any { !it.gcodeSettings.excludeObjects },
+        )
+        assertTrue(
+            "The catalog must retain absolute and percentage initial travel speeds",
+            catalog.slicing.any { it.gcodeSettings.initialLayerTravelSpeedPercent } &&
+                catalog.slicing.any { !it.gcodeSettings.initialLayerTravelSpeedPercent },
+        )
+        assertTrue(
+            "The catalog must retain both acceleration-smoothing policies",
+            catalog.slicing.any { it.gcodeSettings.accelToDecelEnabled } &&
+                catalog.slicing.any { !it.gcodeSettings.accelToDecelEnabled },
         )
         assertTrue(catalog.slicing.any { it.outerWallLineWidth != it.innerWallLineWidth })
         assertTrue(catalog.slicing.any { it.topSurfaceLineWidth != it.internalSolidInfillLineWidth })
