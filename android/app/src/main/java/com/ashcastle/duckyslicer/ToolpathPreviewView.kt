@@ -490,6 +490,7 @@ internal class ToolpathRenderer(
             ),
             viewportWidth = viewportWidth,
             viewportHeight = viewportHeight,
+            denseOverview = zoom <= DENSE_PREVIEW_RIBBON_ZOOM,
         )
         val effectiveDetail = adaptivePreviewController.detailFor(
             requestedScene.detail,
@@ -527,10 +528,16 @@ internal class ToolpathRenderer(
             adaptivePreviewController.shouldMeasure(requestedScene.detail, adaptiveWorkload)
         val measurementStartedNanos = if (measureAutomaticFrame) System.nanoTime() else 0L
         drawBed(geometry, matrix)
+        val denseOverview = shouldUseDenseOverviewLines(geometry.instanceCount, zoom)
         drawToolpaths(
             geometry,
             matrix,
-            shouldDrawToolpathLines(sourceScene.detail, interactionActive, initialPreview),
+            shouldDrawToolpathLines(
+                sourceScene.detail,
+                interactionActive,
+                initialPreview,
+                denseOverview,
+            ),
         )
         if (!glOperationSucceeded("frame_draw")) return
         if (measureAutomaticFrame) {
@@ -952,6 +959,7 @@ private data class AdaptiveToolpathWorkload(
     val scene: ToolpathScene,
     val viewportWidth: Int,
     val viewportHeight: Int,
+    val denseOverview: Boolean,
 )
 
 private data class ToolpathGpuGeometry(

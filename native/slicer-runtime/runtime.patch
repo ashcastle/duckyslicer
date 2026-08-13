@@ -2154,3 +2154,42 @@ new file mode 100644
 +    env->ReleaseStringUTFChars(output_path, path);
 +    return result ? JNI_TRUE : JNI_FALSE;
 +}
+diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil_arrange.cpp
+--- a/app/src/main/cpp/src/sapil_arrange.cpp
++++ b/app/src/main/cpp/src/sapil_arrange.cpp
+@@ -4,6 +4,7 @@
+ #include "libslic3r/ModelArrange.hpp"
+ #include "libslic3r/Orient.hpp"
+ #include "libslic3r/CutUtils.hpp"
++#include <algorithm>
+ #include <cmath>
+ #include "libslic3r/BoundingBox.hpp"
+ #include "libslic3r/TriangleMesh.hpp"
+@@ -669,6 +669,12 @@ std::optional<std::array<double, 3>> SlicerEngine::autoOrientObject(int objIdx)
+     if (!f66_objIdxValid(objIdx)) return std::nullopt;
+     auto* obj = getGlobalModel().objects[objIdx];
+     if (obj->instances.empty()) return std::nullopt;
++    auto reference = std::find_if(
++        obj->volumes.begin(), obj->volumes.end(),
++        [](const Slic3r::ModelVolume* volume) {
++            return volume != nullptr && volume->is_model_part();
++        });
++    if (reference == obj->volumes.end()) return std::nullopt;
+     try {
+         Slic3r::orientation::orient(obj);
+     } catch (...) {
+@@ -677,10 +683,10 @@ std::optional<std::array<double, 3>> SlicerEngine::autoOrientObject(int objIdx)
+         return std::nullopt;
+     }
+     obj->invalidate_bounding_box();
+-    Slic3r::Vec3d rot = obj->instances[0]->get_rotation();
+-    // F66 review-2026-05-30 P1: orient mutates per-instance rotation; if any
+-    // user later calls global setModelRotation it must re-snapshot against
+-    // the new orientation, not stack on the pre-orient base.
++    // orient(ModelObject*) rotates every model-part volume and only updates the
++    // instance's assembly transform. Reading the ordinary instance rotation
++    // returned an unchanged identity transform to Android.
++    const Slic3r::Vec3d rot = (*reference)->get_rotation();
+     resetRotationBases();
+     invalidatePreviewMeshCache();
+     return std::array<double, 3>{rot.x(), rot.y(), rot.z()};

@@ -65,7 +65,22 @@ internal fun shouldDrawToolpathLines(
     detail: PreviewDetail,
     interactionActive: Boolean,
     initialPreview: Boolean,
-): Boolean = interactionActive || initialPreview || detail.concreteOrBalanced() == PreviewDetail.PERFORMANCE
+    denseOverview: Boolean = false,
+): Boolean = interactionActive || initialPreview || denseOverview ||
+    detail.concreteOrBalanced() == PreviewDetail.PERFORMANCE
+
+/**
+ * At a bed-fit camera distance, an extrusion ribbon is approximately one screen pixel wide.
+ * Rasterizing tens of thousands of overlapping quads adds fill work without exposing more shape
+ * than a depth-tested line. Keep every retained segment in that overview, then restore shaded
+ * ribbons once zoom makes their physical width visible.
+ */
+internal fun shouldUseDenseOverviewLines(instanceCount: Int, zoom: Float): Boolean =
+    instanceCount >= DENSE_PREVIEW_OVERVIEW_SEGMENTS &&
+        zoom.isFinite() && zoom <= DENSE_PREVIEW_RIBBON_ZOOM
+
+internal const val DENSE_PREVIEW_OVERVIEW_SEGMENTS = 40_000
+internal const val DENSE_PREVIEW_RIBBON_ZOOM = 1.5f
 
 internal const val ADAPTIVE_PREVIEW_FAST_FRAME_MS = 48.0
 internal const val ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 2

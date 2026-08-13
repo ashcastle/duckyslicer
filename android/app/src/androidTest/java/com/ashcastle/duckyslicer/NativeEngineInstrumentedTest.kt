@@ -23,6 +23,8 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 @RunWith(AndroidJUnit4::class)
@@ -368,6 +370,53 @@ class NativeEngineInstrumentedTest {
 
         instrumentation.context.assets.open(modelName).use { input ->
             destination.outputStream().use(input::copyTo)
+        }
+        return destination
+    }
+
+    private fun tiltedAutoOrientModel(): File {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val destination = File(context.cacheDir, "tilted-auto-orient.stl")
+        val facets = mutableListOf<List<TestVertex>>()
+        val radians = Math.toRadians(37.0)
+        val cosAngle = cos(radians).toFloat()
+        val sinAngle = sin(radians).toFloat()
+
+        fun vertex(x: Float, y: Float, z: Float): TestVertex {
+            val rotatedY = y * cosAngle - z * sinAngle
+            val rotatedZ = y * sinAngle + z * cosAngle
+            return TestVertex(x, rotatedY, rotatedZ + 20f)
+        }
+        fun quad(a: TestVertex, b: TestVertex, c: TestVertex, d: TestVertex) {
+            facets += listOf(a, b, c)
+            facets += listOf(a, c, d)
+        }
+
+        val x0 = -30f
+        val x1 = 30f
+        val y0 = -15f
+        val y1 = 15f
+        val z0 = -5f
+        val z1 = 5f
+        quad(vertex(x0, y0, z0), vertex(x1, y0, z0), vertex(x1, y0, z1), vertex(x0, y0, z1))
+        quad(vertex(x1, y0, z0), vertex(x1, y1, z0), vertex(x1, y1, z1), vertex(x1, y0, z1))
+        quad(vertex(x1, y1, z0), vertex(x0, y1, z0), vertex(x0, y1, z1), vertex(x1, y1, z1))
+        quad(vertex(x0, y1, z0), vertex(x0, y0, z0), vertex(x0, y0, z1), vertex(x0, y1, z1))
+        quad(vertex(x0, y0, z1), vertex(x1, y0, z1), vertex(x1, y1, z1), vertex(x0, y1, z1))
+        quad(vertex(x0, y1, z0), vertex(x1, y1, z0), vertex(x1, y0, z0), vertex(x0, y0, z0))
+
+        destination.bufferedWriter().use { writer ->
+            writer.appendLine("solid tilted_auto_orient")
+            facets.forEach { triangle ->
+                writer.appendLine("facet normal 0 0 0")
+                writer.appendLine("outer loop")
+                triangle.forEach { point ->
+                    writer.appendLine("vertex ${point.x} ${point.y} ${point.z}")
+                }
+                writer.appendLine("endloop")
+                writer.appendLine("endfacet")
+            }
+            writer.appendLine("endsolid tilted_auto_orient")
         }
         return destination
     }
@@ -1303,17 +1352,18 @@ class NativeEngineInstrumentedTest {
     @Test
     fun automaticLayUsesOrcaInTheIsolatedArm64WorkerAndProducesABedPlacedModel() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        // Developers may seed this private-cache path to repeat a field-model regression;
-        // CI falls back to the deterministic fixture.
-        val source = File(context.cacheDir, "manual-auto-orient.stl")
-            .takeIf(File::isFile)
-            ?: fixtureModel()
+        val source = tiltedAutoOrientModel()
+        val sourceInspection = inspectModel(source.absolutePath)
         val output = File(context.cacheDir, "automatic-lay-${System.nanoTime()}.stl")
         try {
             val orientation = SlicerProcessClient.autoOrient(source)
             assertTrue(
                 "Orca orientation must contain finite radians",
                 orientation.rotationRadians.all { it.isFinite() },
+            )
+            assertTrue(
+                "A tilted rectangular solid must receive a visible automatic orientation",
+                orientation.rotationRadians.any { abs(it) > 0.1 },
             )
             assertTrue(
                 "Automatic orientation must run outside the application process",
@@ -1337,6 +1387,11 @@ class NativeEngineInstrumentedTest {
             assertTrue(
                 "Automatic lay must put the model on Z=0",
                 abs(inspection.minMm[2]) < 0.001,
+            )
+            assertTrue(
+                "Automatic lay must place the tilted solid on its broad stable face: " +
+                    "before=${sourceInspection.dimensions[2]} after=${inspection.dimensions[2]}",
+                inspection.dimensions[2] < sourceInspection.dimensions[2] * 0.7,
             )
         } finally {
             output.delete()

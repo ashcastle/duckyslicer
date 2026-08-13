@@ -205,8 +205,28 @@ class PreviewPerformancePolicyTest {
         assertTrue(shouldDrawToolpathLines(PreviewDetail.PERFORMANCE, false, false))
         assertTrue(shouldDrawToolpathLines(PreviewDetail.BALANCED, true, false))
         assertTrue(shouldDrawToolpathLines(PreviewDetail.DETAIL, false, true))
+        assertTrue(shouldDrawToolpathLines(PreviewDetail.DETAIL, false, false, true))
         assertFalse(shouldDrawToolpathLines(PreviewDetail.BALANCED, false, false))
         assertFalse(shouldDrawToolpathLines(PreviewDetail.DETAIL, false, false))
+    }
+
+    @Test
+    fun denseOverviewKeepsAllSegmentsAndRestoresRibbonsWhenTheirWidthIsVisible() {
+        assertFalse(shouldUseDenseOverviewLines(DENSE_PREVIEW_OVERVIEW_SEGMENTS - 1, 1f))
+        assertTrue(shouldUseDenseOverviewLines(DENSE_PREVIEW_OVERVIEW_SEGMENTS, 1f))
+        assertTrue(
+            shouldUseDenseOverviewLines(
+                GcodeLayerPreview.MAX_SEGMENTS,
+                DENSE_PREVIEW_RIBBON_ZOOM,
+            ),
+        )
+        assertFalse(
+            shouldUseDenseOverviewLines(
+                GcodeLayerPreview.MAX_SEGMENTS,
+                DENSE_PREVIEW_RIBBON_ZOOM + 0.01f,
+            ),
+        )
+        assertFalse(shouldUseDenseOverviewLines(GcodeLayerPreview.MAX_SEGMENTS, Float.NaN))
     }
 
     @Test
