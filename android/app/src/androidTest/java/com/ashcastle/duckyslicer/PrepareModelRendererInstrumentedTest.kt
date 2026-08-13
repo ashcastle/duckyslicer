@@ -16,6 +16,22 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class PrepareModelRendererInstrumentedTest {
     @Test
+    fun denseLayOnFaceCandidatesBuildOffTheUiThreadPromptly() {
+        val triangles = spatiallyScrambleTriangles(denseGridTriangles(columns = 100, rows = 60))
+        val started = SystemClock.elapsedRealtimeNanos()
+        val candidates = detectLayOnFaceCandidates(triangles)
+        val elapsedMs = (SystemClock.elapsedRealtimeNanos() - started) / 1_000_000.0
+        println(
+            "DuckyPrepare layOnFace triangles=${triangles.size / 9} " +
+                "candidates=${candidates.size} elapsedMs=$elapsedMs",
+        )
+        assertTrue(
+            "Face candidates must be produced within one second: $elapsedMs ms",
+            elapsedMs <= 1_000.0,
+        )
+    }
+
+    @Test
     fun denseDefaultPlacementStaysWithinLoadBudget() {
         val triangles = denseGridTriangles(columns = 100, rows = 60)
         val model = ModelInfo(
@@ -169,7 +185,9 @@ class PrepareModelRendererInstrumentedTest {
 
     @Test
     fun densePreparePickingStaysWithinTapBudget() {
-        val triangles = denseGridTriangles(columns = 100, rows = 60)
+        // STL facet order is arbitrary. Deliberately interleave distant grid cells so a
+        // contiguous-chunk index cannot appear fast merely because this fixture is row-major.
+        val triangles = spatiallyScrambleTriangles(denseGridTriangles(columns = 100, rows = 60))
         val model = ModelInfo(
             fileName = "dense-picking.stl",
             triangles = triangles.size / 9,
@@ -184,7 +202,9 @@ class PrepareModelRendererInstrumentedTest {
             geometry = projectObject.geometry(),
             minimumRotatedZ = projectObject.transform.minimumRotatedZ(projectObject),
         )
+        val indexStarted = SystemClock.elapsedRealtimeNanos()
         val pickingIndices = buildPreparePickingIndices(listOf(projectObject))
+        val indexBuildMs = (SystemClock.elapsedRealtimeNanos() - indexStarted) / 1_000_000.0
         val viewport = PrepareHitTestViewport(
             widthPx = 720f,
             heightPx = 1_280f,
@@ -235,8 +255,13 @@ class PrepareModelRendererInstrumentedTest {
         val facetP95Ms = sortedFacets.last() / 1_000_000.0
         println(
             "DuckyPrepare picking triangles=${triangles.size / 9} " +
+                "indexBuildMs=$indexBuildMs " +
                 "objectP50Ms=$objectP50Ms objectP95Ms=$objectP95Ms " +
                 "facetP50Ms=$facetP50Ms facetP95Ms=$facetP95Ms",
+        )
+        assertTrue(
+            "12k-triangle spatial index and support set must finish promptly: $indexBuildMs ms",
+            indexBuildMs <= 500.0,
         )
         assertTrue(
             "12k-triangle object selection must stay inside one frame: p95=$objectP95Ms ms",
@@ -501,6 +526,25 @@ class PrepareModelRendererInstrumentedTest {
                 ).copyInto(result, output)
                 output += 18
             }
+        }
+        return result
+    }
+
+    private fun spatiallyScrambleTriangles(source: FloatArray): FloatArray {
+        val triangleCount = source.size / 9
+        val result = FloatArray(source.size)
+        repeat(triangleCount) { outputTriangle ->
+            val sourceTriangle = if (outputTriangle % 2 == 0) {
+                outputTriangle / 2
+            } else {
+                triangleCount - 1 - outputTriangle / 2
+            }
+            source.copyInto(
+                result,
+                destinationOffset = outputTriangle * 9,
+                startIndex = sourceTriangle * 9,
+                endIndex = sourceTriangle * 9 + 9,
+            )
         }
         return result
     }

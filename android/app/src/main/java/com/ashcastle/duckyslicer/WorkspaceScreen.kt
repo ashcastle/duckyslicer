@@ -2998,13 +2998,20 @@ private fun BedScene(
             buildPreparePickingIndices(snapshot)
         }
     }
-    val layOnFaceCandidates = remember(layOnFaceObjectId, modelTopology) {
-        projectObjects.firstOrNull { it.id == layOnFaceObjectId }
-            ?.volumes
-            ?.associate { volume ->
-                volume.id to detectLayOnFaceCandidates(volume.model.previewTriangles)
+    var layOnFaceCandidates by remember(layOnFaceObjectId, modelTopology) {
+        mutableStateOf<Map<String, List<LayOnFaceCandidate>>>(emptyMap())
+    }
+    LaunchedEffect(layOnFaceObjectId, modelTopology) {
+        val selected = projectObjects.firstOrNull { it.id == layOnFaceObjectId }
+        layOnFaceCandidates = if (selected == null) {
+            emptyMap()
+        } else {
+            withContext(Dispatchers.Default) {
+                selected.volumes.associate { volume ->
+                    volume.id to detectLayOnFaceCandidates(volume.model.previewTriangles)
+                }
             }
-            .orEmpty()
+        }
     }
     val layOnFaceCandidateFacets = remember(layOnFaceCandidates, modelTopology) {
         projectObjects.firstOrNull { it.id == layOnFaceObjectId }

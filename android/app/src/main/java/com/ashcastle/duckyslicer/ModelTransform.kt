@@ -518,7 +518,7 @@ internal fun ModelTransform.minimumRotatedZ(projectObject: ProjectObject): Float
     projectObject.volumes.forEach { volume ->
         minimum = minOf(
             minimum,
-            calculator.minimum(volume.model.previewTriangles, centerX, centerY, centerZ),
+            calculator.minimum(volume.model.placementVertices, centerX, centerY, centerZ),
         )
     }
     return minimum.takeIf { it.isFinite() } ?: 0f
@@ -538,7 +538,7 @@ internal fun ModelTransform.minimumRotatedZ(model: ModelInfo): Float {
     )
     minimumZWithoutTilt(geometry, centerZ)?.let { return it }
     val calculator = MinimumRotatedZCalculator(this)
-    val minimum = calculator.minimum(model.previewTriangles, centerX, centerY, centerZ)
+    val minimum = calculator.minimum(model.placementVertices, centerX, centerY, centerZ)
     return minimum.takeIf { it.isFinite() } ?: 0f
 }
 

@@ -98,8 +98,8 @@ class PrepareModelPickingTest {
     }
 
     @Test
-    fun coarseIndexCullsDenseChunksWithoutChangingExactHits() {
-        val vertices = FloatArray(10 * 6 * 2 * 9)
+    fun spatialIndexCullsArbitraryFacetOrderWithoutChangingExactHits() {
+        val orderedVertices = FloatArray(10 * 6 * 2 * 9)
         var output = 0
         repeat(6) { row ->
             repeat(10) { column ->
@@ -110,9 +110,15 @@ class PrepareModelPickingTest {
                 floatArrayOf(
                     x0, y0, 0f, x1, y0, 0f, x1, y1, 0f,
                     x0, y0, 0f, x1, y1, 0f, x0, y1, 0f,
-                ).copyInto(vertices, output)
+                ).copyInto(orderedVertices, output)
                 output += 18
             }
+        }
+        val triangleCount = orderedVertices.size / 9
+        val vertices = FloatArray(orderedVertices.size)
+        repeat(triangleCount) { target ->
+            val source = if (target % 2 == 0) target / 2 else triangleCount - 1 - target / 2
+            orderedVertices.copyInto(vertices, target * 9, source * 9, source * 9 + 9)
         }
         val model = ModelInfo(
             fileName = "indexed-grid.stl",
@@ -130,7 +136,7 @@ class PrepareModelPickingTest {
         val index = indices.getValue(
             PreparePickingIndexKey(projectObject.id, projectObject.singleVolume.id),
         )
-        assertEquals(3, index.chunkCount)
+        assertTrue(index.leafCount > 1)
 
         val transform = PreparePickingTransform(
             projectObject.transform,
@@ -139,18 +145,14 @@ class PrepareModelPickingTest {
             viewport.bedSizeX,
             viewport.bedSizeY,
         )
-        val candidates = index.candidateRanges(
-            triangleCount = model.previewTriangles.size / 9,
+        val candidates = index.candidateTriangles(
             transform = transform,
             projection = PreparePickingProjection(viewport),
             screenX = 450f,
             screenY = 355f,
             touchRadiusPx = 0f,
         )
-        val candidateTriangleCount = candidates.asList().chunked(2).sumOf { range ->
-            range[1] - range[0]
-        }
-        assertTrue(candidateTriangleCount in 1 until model.triangles)
+        assertTrue(candidates.size in 1 until model.triangles)
 
         listOf(
             450f to 355f,
@@ -186,6 +188,69 @@ class PrepareModelPickingTest {
                     pickingIndices = indices,
                 )?.previewTriangleIndex,
             )
+        }
+
+        val transformedObject = projectObject.copy(
+            transform = ModelTransform(
+                offsetXmm = 4f,
+                offsetYmm = -3f,
+                rotationXdeg = 31f,
+                rotationYdeg = -19f,
+                rotationZdeg = 47f,
+                scale = 1.2f,
+                scaleY = 0.8f,
+                scaleZ = 1.4f,
+                mirrorX = true,
+            ),
+        )
+        val transformedPlacement = placements(transformedObject).getValue(transformedObject.id)
+        val selectable = BooleanArray(triangleCount) { triangle -> triangle % 3 != 0 }
+        listOf(
+            viewport.copy(yawDegrees = -42f, pitchDegrees = 52f, zoom = 1.35f),
+            viewport.copy(yawDegrees = 71f, pitchDegrees = 34f, zoom = 0.85f, panX = 18f),
+        ).forEach { transformedViewport ->
+            listOf(440f to 340f, 480f to 370f, 520f to 400f, 560f to 430f).forEach { point ->
+                assertEquals(
+                    findPrepareObjectAtScreen(
+                        listOf(transformedObject),
+                        mapOf(transformedObject.id to transformedPlacement),
+                        transformedViewport,
+                        point.first,
+                        point.second,
+                        12f,
+                    ),
+                    findPrepareObjectAtScreen(
+                        listOf(transformedObject),
+                        mapOf(transformedObject.id to transformedPlacement),
+                        transformedViewport,
+                        point.first,
+                        point.second,
+                        12f,
+                        indices,
+                    ),
+                )
+                assertEquals(
+                    findPrepareFacetAtScreen(
+                        transformedObject,
+                        transformedPlacement,
+                        transformedViewport,
+                        point.first,
+                        point.second,
+                        12f,
+                        selectableTriangles = mapOf(transformedObject.singleVolume.id to selectable),
+                    )?.previewTriangleIndex,
+                    findPrepareFacetAtScreen(
+                        transformedObject,
+                        transformedPlacement,
+                        transformedViewport,
+                        point.first,
+                        point.second,
+                        12f,
+                        selectableTriangles = mapOf(transformedObject.singleVolume.id to selectable),
+                        pickingIndices = indices,
+                    )?.previewTriangleIndex,
+                )
+            }
         }
     }
 

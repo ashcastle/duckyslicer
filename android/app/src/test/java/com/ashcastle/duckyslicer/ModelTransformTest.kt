@@ -1,5 +1,6 @@
 package com.ashcastle.duckyslicer
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -7,6 +8,28 @@ import org.junit.Test
 import org.json.JSONObject
 
 class ModelTransformTest {
+    @Test
+    fun placementVerticesRemoveOnlyExactStlDuplicates() {
+        val model = ModelInfo(
+            fileName = "shared.stl",
+            triangles = 2,
+            dimensions = listOf(1.0, 1.0, 0.0),
+            localPath = "",
+            minMm = listOf(0.0, 0.0, 0.0),
+            maxMm = listOf(1.0, 1.0, 0.0),
+            previewTriangles = floatArrayOf(
+                0f, 0f, 0f, 1f, 0f, 0f, 1f, 1f, 0f,
+                -0f, 0f, 0f, 1f, 1f, 0f, 0f, 1f, 0f,
+            ),
+        )
+
+        assertArrayEquals(
+            floatArrayOf(0f, 0f, 0f, 1f, 0f, 0f, 1f, 1f, 0f, 0f, 1f, 0f),
+            model.placementVertices,
+            0f,
+        )
+    }
+
     @Test
     fun nativeTransformJsonUsesRustOffsetZFieldName() {
         val json = JSONObject(

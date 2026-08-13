@@ -67,7 +67,7 @@ internal class ProjectStore(
             inspectModel(destination).copy(
                 fileName = displayName,
                 localPath = destination.canonicalPath,
-            )
+            ).also { it.placementVertices }
         } catch (failure: Throwable) {
             destination.delete()
             throw failure
@@ -160,7 +160,7 @@ internal class ProjectStore(
                                         model = info.copy(
                                             fileName = volume.displayName,
                                             localPath = file.canonicalPath,
-                                        ),
+                                        ).also { it.placementVertices },
                                         supportPaint = volume.supportPaint,
                                         seamPaint = volume.seamPaint,
                                         multiColorPaint = volume.multiColorPaint,
@@ -452,6 +452,7 @@ internal class ProjectStore(
             .takeIf { it.endsWith(".stl", ignoreCase = true) }
             ?: "model.stl"
         val model = inspectModel(modelFile).copy(fileName = displayName)
+            .also { it.placementVertices }
         val supportPaint = value.optJSONArray("supportPaint")
             ?.toSupportPaint(model.triangles)
             ?: SupportPaint()

@@ -27,33 +27,50 @@ internal fun detectLayOnFaceCandidates(
     require(previewTriangles.size % 9 == 0 && maximumCandidates > 0)
     val triangleCount = previewTriangles.size / 9
     if (triangleCount == 0) return emptyList()
-    val faces = ArrayList<CandidateFace?>(triangleCount)
-    val neighbors = Array(triangleCount) { linkedSetOf<Int>() }
+    val faces = arrayOfNulls<CandidateFace>(triangleCount)
+    val neighbors = IntArray(triangleCount * MAXIMUM_FACE_NEIGHBORS) { -1 }
+    val neighborCounts = ByteArray(triangleCount)
+    val overflowNeighbors = HashMap<Int, MutableList<Int>>()
     val edgeOwners = HashMap<CandidateEdge, Int>(triangleCount * 2)
+
+    fun addNeighbor(triangle: Int, neighbor: Int) {
+        val count = neighborCounts[triangle].toInt()
+        val start = triangle * MAXIMUM_FACE_NEIGHBORS
+        repeat(count) { index -> if (neighbors[start + index] == neighbor) return }
+        if (count < MAXIMUM_FACE_NEIGHBORS) {
+            neighbors[start + count] = neighbor
+            neighborCounts[triangle] = (count + 1).toByte()
+        } else {
+            val overflow = overflowNeighbors.getOrPut(triangle) { ArrayList() }
+            if (neighbor !in overflow) overflow += neighbor
+        }
+    }
+
+    fun connectEdge(first: CandidateVertex, second: CandidateVertex, triangleIndex: Int) {
+        val edge = if (first <= second) CandidateEdge(first, second) else CandidateEdge(second, first)
+        edgeOwners.putIfAbsent(edge, triangleIndex)?.let { adjacent ->
+            addNeighbor(triangleIndex, adjacent)
+            addNeighbor(adjacent, triangleIndex)
+        }
+    }
+
     repeat(triangleCount) { triangleIndex ->
         val offset = triangleIndex * 9
         val face = candidateFace(previewTriangles, offset)
-        faces += face
+        faces[triangleIndex] = face
         if (face == null) return@repeat
-        val vertices = Array(3) { vertex ->
-            val start = offset + vertex * 3
+        fun vertex(start: Int) =
             CandidateVertex(
                 previewTriangles[start].normalizedCandidateBits(),
                 previewTriangles[start + 1].normalizedCandidateBits(),
                 previewTriangles[start + 2].normalizedCandidateBits(),
             )
-        }
-        arrayOf(0 to 1, 1 to 2, 2 to 0).forEach { (start, end) ->
-            val edge = if (vertices[start] <= vertices[end]) {
-                CandidateEdge(vertices[start], vertices[end])
-            } else {
-                CandidateEdge(vertices[end], vertices[start])
-            }
-            edgeOwners.putIfAbsent(edge, triangleIndex)?.let { adjacent ->
-                neighbors[triangleIndex] += adjacent
-                neighbors[adjacent] += triangleIndex
-            }
-        }
+        val first = vertex(offset)
+        val second = vertex(offset + 3)
+        val third = vertex(offset + 6)
+        connectEdge(first, second, triangleIndex)
+        connectEdge(second, third, triangleIndex)
+        connectEdge(third, first, triangleIndex)
     }
 
     val visited = BooleanArray(triangleCount)
@@ -74,7 +91,12 @@ internal fun detectLayOnFaceCandidates(
             if (!face.normalMatches(seed)) continue
             visited[triangleIndex] = true
             grouped += triangleIndex
-            neighbors[triangleIndex].forEach { neighbor ->
+            val neighborStart = triangleIndex * MAXIMUM_FACE_NEIGHBORS
+            repeat(neighborCounts[triangleIndex].toInt()) { neighborIndex ->
+                val neighbor = neighbors[neighborStart + neighborIndex]
+                if (!visited[neighbor]) queue += neighbor
+            }
+            overflowNeighbors[triangleIndex].orEmpty().forEach { neighbor ->
                 if (!visited[neighbor]) queue += neighbor
             }
         }
@@ -104,7 +126,11 @@ private fun candidateFace(values: FloatArray, offset: Int): CandidateFace? {
     val cx = values[offset + 6]
     val cy = values[offset + 7]
     val cz = values[offset + 8]
-    if (listOf(ax, ay, az, bx, by, bz, cx, cy, cz).any { !it.isFinite() }) return null
+    if (
+        !ax.isFinite() || !ay.isFinite() || !az.isFinite() ||
+        !bx.isFinite() || !by.isFinite() || !bz.isFinite() ||
+        !cx.isFinite() || !cy.isFinite() || !cz.isFinite()
+    ) return null
     val ux = bx - ax
     val uy = by - ay
     val uz = bz - az
@@ -151,3 +177,4 @@ private operator fun CandidateVertex.compareTo(other: CandidateVertex): Int = wh
 private const val MINIMUM_CANDIDATE_AREA_MM2 = 5f
 private const val MINIMUM_CANDIDATE_SIDE_MM = 1f
 private const val NORMAL_COMPONENT_TOLERANCE = 0.001f
+private const val MAXIMUM_FACE_NEIGHBORS = 3

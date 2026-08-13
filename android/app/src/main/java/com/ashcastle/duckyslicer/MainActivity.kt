@@ -60,6 +60,15 @@ data class ModelInfo(
     val previewTriangles: FloatArray,
     val previewTriangleIndices: IntArray = IntArray(previewTriangles.size / 9) { it },
 ) {
+    /**
+     * Exact unique preview vertices used by repeated support-direction queries such as tilted
+     * bed placement. STL triangle streams duplicate shared vertices; retaining one occurrence
+     * removes redundant transform work without simplifying or changing the visible mesh.
+     */
+    internal val placementVertices: FloatArray by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        uniqueModelVertices(previewTriangles)
+    }
+
     companion object {
         fun fromNative(raw: FloatArray?, localPath: String): ModelInfo {
             checkNotNull(raw) { "model_invalid" }
@@ -114,6 +123,60 @@ data class ModelInfo(
             )
         }
 
+    }
+}
+
+private fun uniqueModelVertices(vertices: FloatArray): FloatArray {
+    require(vertices.size % 3 == 0) { "model_invalid" }
+    val seen = ModelVertexBitSet(vertices.size / 3)
+    val unique = FloatArray(vertices.size)
+    var source = 0
+    var output = 0
+    while (source + 2 < vertices.size) {
+        val x = vertices[source]
+        val y = vertices[source + 1]
+        val z = vertices[source + 2]
+        if (seen.add(
+                if (x == 0f) 0 else x.toRawBits(),
+                if (y == 0f) 0 else y.toRawBits(),
+                if (z == 0f) 0 else z.toRawBits(),
+            )
+        ) {
+            unique[output++] = x
+            unique[output++] = y
+            unique[output++] = z
+        }
+        source += 3
+    }
+    return if (output == vertices.size) vertices else unique.copyOf(output)
+}
+
+private class ModelVertexBitSet(maximumSize: Int) {
+    private val capacity = run {
+        val requested = (maximumSize.toLong() * 3L / 2L + 1L).coerceAtLeast(2L)
+        var value = 2
+        while (value.toLong() < requested) value = value shl 1
+        value
+    }
+    private val mask = capacity - 1
+    private val occupied = BooleanArray(capacity)
+    private val xs = IntArray(capacity)
+    private val ys = IntArray(capacity)
+    private val zs = IntArray(capacity)
+
+    fun add(x: Int, y: Int, z: Int): Boolean {
+        var hash = x * -0x7a143595 xor y * -0x3d4d51cb xor z * 0x165667b1
+        hash = hash xor (hash ushr 16)
+        var index = hash and mask
+        while (occupied[index]) {
+            if (xs[index] == x && ys[index] == y && zs[index] == z) return false
+            index = (index + 1) and mask
+        }
+        occupied[index] = true
+        xs[index] = x
+        ys[index] = y
+        zs[index] = z
+        return true
     }
 }
 
