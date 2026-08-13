@@ -18,6 +18,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -384,9 +385,7 @@ class NativeEngineInstrumentedTest {
     }
 
     private fun outerWallBounds(gcode: File): ToolpathBounds {
-        val preview = GcodeLayerPreview.fromNative(
-            NativeEngine.previewGcodeRange(gcode.absolutePath, 0, Int.MAX_VALUE),
-        )
+        val preview = loadGcodePreview(gcode.absolutePath, 0, Int.MAX_VALUE)
         var minX = Float.POSITIVE_INFINITY
         var minY = Float.POSITIVE_INFINITY
         var maxX = Float.NEGATIVE_INFINITY
@@ -1383,12 +1382,36 @@ class NativeEngineInstrumentedTest {
         try {
             val oversizedGcode = File(root, "oversized-line.gcode")
             oversizedGcode.writeText("G1 X${"1".repeat(65_537)}\n;LAYER_CHANGE\n;Z:0.2\n")
-            val gcodeResult = NativeEngine.previewGcodeRange(
+            val previewOutput = ByteBuffer.allocateDirect(GcodeLayerPreview.MAX_PAYLOAD_BYTES)
+                .order(ByteOrder.nativeOrder())
+            val gcodeResult = NativeEngine.previewGcodeRangeInto(
                 oversizedGcode.absolutePath,
                 0,
                 Int.MAX_VALUE,
+                previewOutput,
             )
-            assertTrue("Oversized G-code lines must be rejected", gcodeResult == null)
+            assertTrue("Oversized G-code lines must be rejected", gcodeResult < 0)
+
+            val validGcode = File(root, "valid-preview.gcode")
+            validGcode.writeText(";LAYER_CHANGE\n;Z:0.2\nG1 X0 Y0 Z0.2\nG1 X10 Y0 E1\n")
+            assertTrue(
+                "Heap buffers must be rejected at the Preview JNI boundary",
+                NativeEngine.previewGcodeRangeInto(
+                    validGcode.absolutePath,
+                    0,
+                    Int.MAX_VALUE,
+                    ByteBuffer.allocate(GcodeLayerPreview.MAX_PAYLOAD_BYTES),
+                ) < 0,
+            )
+            assertTrue(
+                "Undersized direct buffers must be rejected at the Preview JNI boundary",
+                NativeEngine.previewGcodeRangeInto(
+                    validGcode.absolutePath,
+                    0,
+                    Int.MAX_VALUE,
+                    ByteBuffer.allocateDirect(Float.SIZE_BYTES).order(ByteOrder.nativeOrder()),
+                ) < 0,
+            )
 
             val extremeStl = File(root, "extreme-coordinate.stl")
             extremeStl.writeText(
@@ -1693,9 +1716,7 @@ class NativeEngineInstrumentedTest {
             listOf(ProjectObject("baseline", model)),
             options,
         )
-        val baselinePreview = GcodeLayerPreview.fromNative(
-            NativeEngine.previewGcodeRange(baseline.output.absolutePath, 0, Int.MAX_VALUE),
-        )
+        val baselinePreview = loadGcodePreview(baseline.output.absolutePath, 0, Int.MAX_VALUE)
 
         val paintedFacets = SupportPaint()
             .paint(22, SupportPaintState.ENFORCE)
@@ -1704,9 +1725,7 @@ class NativeEngineInstrumentedTest {
             listOf(ProjectObject("painted", model, supportPaint = paintedFacets)),
             options,
         )
-        val paintedPreview = GcodeLayerPreview.fromNative(
-            NativeEngine.previewGcodeRange(painted.output.absolutePath, 0, Int.MAX_VALUE),
-        )
+        val paintedPreview = loadGcodePreview(painted.output.absolutePath, 0, Int.MAX_VALUE)
 
         assertEquals("Support-disabled baseline must not create support", 0, baselinePreview.roleSegmentCounts[5])
         assertTrue(
@@ -1740,9 +1759,7 @@ class NativeEngineInstrumentedTest {
             )
 
         val outcome = OnDeviceSlicer.slice(listOf(ProjectObject("tree-auto", model)), options)
-        val preview = GcodeLayerPreview.fromNative(
-            NativeEngine.previewGcodeRange(outcome.output.absolutePath, 0, Int.MAX_VALUE),
-        )
+        val preview = loadGcodePreview(outcome.output.absolutePath, 0, Int.MAX_VALUE)
         val gcode = outcome.output.readText()
         val baseline = OnDeviceSlicer.slice(
             listOf(ProjectObject("tree-auto-baseline", model)),
@@ -1753,9 +1770,7 @@ class NativeEngineInstrumentedTest {
                 treeSupportBranchDiameterAngle = 5f,
             ),
         )
-        val baselinePreview = GcodeLayerPreview.fromNative(
-            NativeEngine.previewGcodeRange(baseline.output.absolutePath, 0, Int.MAX_VALUE),
-        )
+        val baselinePreview = loadGcodePreview(baseline.output.absolutePath, 0, Int.MAX_VALUE)
 
         assertTrue("Automatic tree support must generate support paths", preview.roleSegmentCounts[5] > 0)
         assertTrue("Organic baseline must generate support paths", baselinePreview.roleSegmentCounts[5] > 0)
@@ -2385,14 +2400,19 @@ class NativeEngineInstrumentedTest {
         assertTrue("Unsupported bridge limit must reach Orca", gcode.contains("; max_bridge_length = 26"))
         assertTrue("Outer-wall precision must reach Orca", gcode.contains("; precise_outer_wall = 1"))
 
-        val previewPayload = checkNotNull(
-            NativeEngine.previewGcodeRange(outcome.output.absolutePath, 0, Int.MAX_VALUE),
+        val previewPayload = ByteBuffer.allocateDirect(GcodeLayerPreview.MAX_PAYLOAD_BYTES)
+            .order(ByteOrder.nativeOrder())
+        val usedFloats = NativeEngine.previewGcodeRangeInto(
+            outcome.output.absolutePath,
+            0,
+            Int.MAX_VALUE,
+            previewPayload,
         )
         assertTrue(
-            "Primitive preview payload must remain within the fixed memory budget",
-            previewPayload.size <= GcodeLayerPreview.MAX_PAYLOAD_FLOATS,
+            "Direct preview payload must remain within the fixed memory budget",
+            usedFloats in 1..GcodeLayerPreview.MAX_PAYLOAD_FLOATS,
         )
-        val preview = GcodeLayerPreview.fromNative(previewPayload)
+        val preview = GcodeLayerPreview.fromTrustedNative(previewPayload, usedFloats)
         assertTrue("Preview must report generated layers", preview.layerCount > 0)
         assertTrue("Preview must include the first layer", preview.startLayer == 0)
         assertTrue("Preview must include the final G-code layer", preview.endLayer == preview.layerCount - 1)
@@ -2522,13 +2542,7 @@ class NativeEngineInstrumentedTest {
             )
         val outcome = OnDeviceSlicer.slice(hollowTubeModel(), options)
         val middleLayer = (outcome.layers / 2).coerceAtLeast(1)
-        val preview = GcodeLayerPreview.fromNative(
-            NativeEngine.previewGcodeRange(
-                outcome.output.absolutePath,
-                middleLayer,
-                middleLayer,
-            ),
-        )
+        val preview = loadGcodePreview(outcome.output.absolutePath, middleLayer, middleLayer)
 
         val centerX = options.bedSizeX / 2f
         val centerY = options.bedSizeY / 2f

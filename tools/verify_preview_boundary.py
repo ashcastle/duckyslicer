@@ -56,12 +56,19 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         raise VerificationError(f"preview boundary sources are missing: {missing}")
 
     native = sources["NativeEngine.kt"]
-    if "previewGcodeRange(path: String, startLayer: Int, endLayer: Int): FloatArray?" not in native:
-        raise VerificationError("Android preview JNI does not return a nullable primitive float array")
+    if "external fun previewGcodeRangeInto(" not in native or "output: ByteBuffer" not in native:
+        raise VerificationError("Android preview JNI does not use bounded direct-buffer output")
     if "inspectStlPayload(path: String): FloatArray?" not in native:
         raise VerificationError("Android model inspection JNI does not return a nullable primitive float array")
     if "external fun packToolpathGeometry(" not in native or "output: ByteBuffer" not in native:
         raise VerificationError("Android Preview does not expose bounded Rust geometry packing")
+    for marker in (
+        "NativePreviewBufferPool.acquire()",
+        "NativePreviewBufferPool.release(payload)",
+        "MAX_RETAINED_BUFFERS = 2",
+    ):
+        if marker not in native:
+            raise VerificationError(f"Android Preview direct-buffer pooling is missing: {marker}")
 
     model = sources["MainActivity.kt"]
     for marker in (
@@ -97,6 +104,10 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "preview_coordinate_invalid",
         "preview_role_invalid",
         "fun fromTrustedNative(raw: FloatArray?)",
+        "raw: ByteBuffer?",
+        "usedFloats: Int",
+        "raw.isDirect && raw.order() == ByteOrder.nativeOrder()",
+        "MAX_PAYLOAD_BYTES",
         "validateCoordinates = true",
         "validateCoordinates = false",
         "cachedPathIndex",
@@ -614,7 +625,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
 
     rust = sources["lib.rs"]
     for marker in (
-        "-> jfloatArray",
+        "NativeEngine_previewGcodeRangeInto",
+        "output: JByteBuffer",
         "PREVIEW_PAYLOAD_MAGIC",
         "PREVIEW_PAYLOAD_VERSION: f32 = 2.0",
         "PREVIEW_HEADER_FLOATS: usize = 9 + ToolpathRole::COUNT",
@@ -623,14 +635,15 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "role_segment_counts[path.role as usize]",
         "MAX_PREVIEW_SEGMENTS: usize = 120_000",
         "MAX_PREVIEW_LAYERS: usize = 1_000_000",
-        "env.new_float_array",
-        "env.set_float_array_region",
-        "preview_payload(preview_gcode(",
+        "get_direct_buffer_capacity(&output)",
+        "get_direct_buffer_address(&output)",
+        "write_preview_payload(preview, output_floats)",
+        "G-code preview direct buffer is too small",
     ):
         if marker not in rust:
             raise VerificationError(f"Rust primitive preview contract is missing: {marker}")
     export = rust.split(
-        "Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRange", 1
+        "Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRangeInto", 1
     )[-1].split("#[cfg(test)]", 1)[0]
     if "guarded_json(" in export or "serde_json::to_string" in export:
         raise VerificationError("Rust G-code preview reverted to JSON serialization")
@@ -644,8 +657,14 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
             "retained application Preview does not use the trusted primitive payload"
         )
     device = sources["NativeEngineInstrumentedTest.kt"]
-    if device.count("GcodeLayerPreview.fromNative") < 3 or "gcodeResult == null" not in device:
-        raise VerificationError("ARM64 primitive preview regressions are incomplete")
+    for marker in (
+        "ByteBuffer.allocateDirect(GcodeLayerPreview.MAX_PAYLOAD_BYTES)",
+        "NativeEngine.previewGcodeRangeInto(",
+        "gcodeResult < 0",
+        "GcodeLayerPreview.fromTrustedNative(previewPayload, usedFloats)",
+    ):
+        if marker not in device:
+            raise VerificationError(f"ARM64 direct preview regression is missing: {marker}")
     for marker in (
         "depthPreviewPrewarmsGestureVboAndReusesItAcrossCameraFrames",
         "The first frame must upload one coherent low-cost geometry set",
@@ -726,6 +745,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         if (
             "preview" not in lowered
             or "floatarray" not in lowered
+            or "direct `bytebuffer`" not in lowered
             or "vbo" not in lowered
             or "automatic" not in lowered
             or "instanced" not in lowered
@@ -831,7 +851,7 @@ def main() -> None:
     except (OSError, VerificationError) as error:
         raise SystemExit(f"Preview boundary verification failed: {error}") from error
     print(
-        "Verified bounded FloatArray model/toolpath previews, responsive controls, adaptive detail, "
+        "Verified bounded FloatArray model and direct-buffer toolpath previews, responsive controls, adaptive detail, "
         "compact ribbon/line toolpaths, bounded GPU caching, and automatic compatibility fallback"
     )
 

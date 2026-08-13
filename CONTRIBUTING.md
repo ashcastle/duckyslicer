@@ -161,9 +161,12 @@ solid surfaces, support, bridges, multiple layer heights, and a dense model. The
 default depth renderer and the low-power compatibility renderer must both remain
 usable.
 The Rust-to-Kotlin G-code preview boundary must remain a versioned, bounded primitive
-`FloatArray`; do not reintroduce a JSON string or per-segment JSON objects. Payload
-format changes require Rust encoding, Kotlin validation, malformed-payload host tests,
-and the ARM64 production parser test to change together.
+payload written into an Android-owned native-order direct `ByteBuffer`; do not
+reintroduce a JSON string, per-segment objects, or a full JNI `FloatArray` copy.
+Payload format changes require Rust encoding, Kotlin validation, malformed-payload host
+tests, and the ARM64 production parser test to change together. Reuse the bounded
+direct staging pool; repeated layer-range loads must not accumulate one maximum-sized
+native allocation per request.
 Large-model inspection follows the same rule: keep its bounded vertices and source-facet
 mapping in the versioned primitive `FloatArray` payload, and keep JSON decoding out of
 the production import path.

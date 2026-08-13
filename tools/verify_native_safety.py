@@ -25,7 +25,7 @@ EXPECTED_ENTRYPOINTS = {
     "Java_com_ashcastle_duckyslicer_NativeEngine_transformStl",
     "Java_com_ashcastle_duckyslicer_NativeEngine_transformStlGroup",
     "Java_com_ashcastle_duckyslicer_NativeEngine_layOnFace",
-    "Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRange",
+    "Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRangeInto",
     "Java_com_ashcastle_duckyslicer_NativeEngine_packToolpathGeometry",
 }
 

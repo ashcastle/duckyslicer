@@ -8,16 +8,19 @@ from tools.verify_preview_boundary import VerificationError, verify_preview_boun
 def valid_sources() -> dict[str, str]:
     return {
         "NativeEngine.kt": (
-            "previewGcodeRange(path: String, startLayer: Int, endLayer: Int): FloatArray? "
+            "external fun previewGcodeRangeInto( output: ByteBuffer "
             "inspectStlPayload(path: String): FloatArray? external fun packToolpathGeometry( "
             "output: ByteBuffer internal fun loadGcodePreview( "
-            "GcodeLayerPreview.fromTrustedNative("
+            "GcodeLayerPreview.fromTrustedNative( NativePreviewBufferPool.acquire() "
+            "NativePreviewBufferPool.release(payload) MAX_RETAINED_BUFFERS = 2"
         ),
         "PreviewModels.kt": (
             "fun fromNative(raw: FloatArray?) PAYLOAD_MAGIC PAYLOAD_VERSION "
             "HEADER_FLOATS = 9 + ROLE_COUNT PATH_STRIDE = 1 "
             "MAX_SEGMENTS = 120_000 preview_coordinate_invalid "
             "MAX_PAYLOAD_FLOATS preview_role_invalid fun fromTrustedNative(raw: FloatArray?) "
+            "raw: ByteBuffer? usedFloats: Int "
+            "raw.isDirect && raw.order() == ByteOrder.nativeOrder() MAX_PAYLOAD_BYTES "
             "validateCoordinates = true validateCoordinates = false cachedPathIndex "
             "PrimitivePathBuilder(totalSegments) preview.cachedPathIndex = pathIndex "
             "RolePathIndex( val pathOrdinals: IntArray "
@@ -212,8 +215,9 @@ def valid_sources() -> dict[str, str]:
             "putFloat(SlicerProcessContract.KEY_FILAMENT_MM, outcome.filamentMm)"
         ),
         "NativeEngineInstrumentedTest.kt": (
-            "GcodeLayerPreview.fromNative GcodeLayerPreview.fromNative "
-            "GcodeLayerPreview.fromNative gcodeResult == null "
+            "ByteBuffer.allocateDirect(GcodeLayerPreview.MAX_PAYLOAD_BYTES) "
+            "NativeEngine.previewGcodeRangeInto( gcodeResult < 0 "
+            "GcodeLayerPreview.fromTrustedNative(previewPayload, usedFloats) "
             "depthPreviewPrewarmsGestureVboAndReusesItAcrossCameraFrames "
             "The first frame must upload one coherent low-cost geometry set "
             "The next idle frame must upload the requested detail geometry set "
@@ -345,13 +349,16 @@ def valid_sources() -> dict[str, str]:
             "activeSliceAndInitialPreviewLockModelEditing"
         ),
         "lib.rs": (
-            "Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRange -> jfloatArray "
+            "Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRangeInto "
+            "output: JByteBuffer "
             "PREVIEW_PAYLOAD_MAGIC PREVIEW_PAYLOAD_VERSION: f32 = 2.0 "
             "PREVIEW_HEADER_FLOATS: usize = 9 + ToolpathRole::COUNT "
             "PREVIEW_PATH_FLOATS: usize = 1 paths: Vec<PreviewPathRange> "
             "role_segment_counts[path.role as usize] "
             "MAX_PREVIEW_SEGMENTS: usize = 120_000 MAX_PREVIEW_LAYERS: usize = 1_000_000 "
-            "env.new_float_array env.set_float_array_region preview_payload(preview_gcode( "
+            "get_direct_buffer_capacity(&output) get_direct_buffer_address(&output) "
+            "write_preview_payload(preview, output_floats) "
+            '"G-code preview direct buffer is too small" '
             "MODEL_PREVIEW_PAYLOAD_MAGIC MODEL_PREVIEW_PAYLOAD_VERSION "
             "MODEL_PREVIEW_HEADER_FLOATS fn model_preview_payload( "
             "NativeEngine_inspectStlPayload get_direct_buffer_capacity(&output) "
@@ -374,7 +381,7 @@ def valid_sources() -> dict[str, str]:
             'name="connection_timeout_control"'
         ),
         "CONTRIBUTING.md": (
-            "Preview FloatArray VBO Automatic instanced 32-byte fallback "
+            "Preview FloatArray direct `ByteBuffer` VBO Automatic instanced 32-byte fallback "
             "Large-model inspection source-facet"
         ),
     }

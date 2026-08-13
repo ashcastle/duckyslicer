@@ -155,6 +155,8 @@ const PREVIEW_PAYLOAD_VERSION: f32 = 2.0;
 const PREVIEW_HEADER_FLOATS: usize = 9 + ToolpathRole::COUNT;
 const PREVIEW_PATH_FLOATS: usize = 1;
 const TOOLPATH_SEGMENT_FLOATS: usize = 6;
+const PREVIEW_MAX_PAYLOAD_FLOATS: usize =
+    PREVIEW_HEADER_FLOATS + MAX_PREVIEW_SEGMENTS * (TOOLPATH_SEGMENT_FLOATS + PREVIEW_PATH_FLOATS);
 const PACKED_TOOLPATH_FLOATS: usize = 8;
 const TOOLPATH_ROLE_COUNT: usize = 10;
 const TOOLPATH_Z_OFFSET_MM: f32 = 0.024;
@@ -1763,23 +1765,50 @@ fn transform_stl_group(
     })
 }
 
-fn parse_axis(line: &str, axis: char) -> Option<f32> {
-    line.split_ascii_whitespace()
-        .find(|token| token.starts_with(axis))
-        .and_then(|token| token.get(1..))
-        .and_then(|value| value.parse().ok())
-        .filter(|value: &f32| value.is_finite())
+#[derive(Default)]
+struct GcodeAxes {
+    x: Option<f32>,
+    y: Option<f32>,
+    e: Option<f32>,
+    i: Option<f32>,
+    j: Option<f32>,
+}
+
+fn parse_gcode_axes<'a>(tokens: impl Iterator<Item = &'a str>) -> GcodeAxes {
+    let mut axes = GcodeAxes::default();
+    let mut seen = 0u8;
+    for token in tokens {
+        let Some(axis) = token.as_bytes().first().copied() else {
+            continue;
+        };
+        let (slot, bit) = match axis {
+            b'X' => (&mut axes.x, 1 << 0),
+            b'Y' => (&mut axes.y, 1 << 1),
+            b'E' => (&mut axes.e, 1 << 2),
+            b'I' => (&mut axes.i, 1 << 3),
+            b'J' => (&mut axes.j, 1 << 4),
+            _ => continue,
+        };
+        if seen & bit != 0 {
+            continue;
+        }
+        seen |= bit;
+        *slot = token
+            .get(1..)
+            .and_then(|value| value.parse().ok())
+            .filter(|value: &f32| value.is_finite());
+    }
+    axes
 }
 
 fn positioned_axis(
-    command: &str,
-    axis: char,
+    parsed: Option<f32>,
     current: f32,
     origin: f32,
     relative: bool,
     unit_scale: f32,
 ) -> f32 {
-    parse_axis(command, axis)
+    parsed
         .map(|value| value * unit_scale)
         .map(|value| {
             if relative {
@@ -1861,7 +1890,7 @@ fn preview_gcode(
 ) -> Result<GcodeLayerPreview, EngineError> {
     let start_layer = requested_start_layer.min(requested_end_layer);
     let end_layer = requested_start_layer.max(requested_end_layer);
-    let mut reader = BufReader::new(open_regular_file(path)?);
+    let mut reader = BufReader::with_capacity(256 * 1024, open_regular_file(path)?);
     let mut current_layer: Option<usize> = None;
     let mut layer_count = 0usize;
     let mut layer_z = 0.0f32;
@@ -1894,7 +1923,7 @@ fn preview_gcode(
         }
         let line = std::str::from_utf8(&line_buffer)
             .map_err(|_| EngineError::Parse("G-code contains invalid UTF-8".to_owned()))?;
-        let trimmed = line.trim();
+        let trimmed = line.trim_ascii();
         if trimmed == ";LAYER_CHANGE" {
             preview_paths.break_path();
             let next = current_layer
@@ -1932,8 +1961,12 @@ fn preview_gcode(
             continue;
         }
 
-        let command = trimmed.split(';').next().unwrap_or("").trim();
-        let opcode = command.split_ascii_whitespace().next().unwrap_or("");
+        let command = trimmed
+            .split_once(';')
+            .map_or(trimmed, |(command, _)| command)
+            .trim_ascii();
+        let mut tokens = command.split_ascii_whitespace();
+        let opcode = tokens.next().unwrap_or("");
         if opcode == "G20" {
             unit_scale = 25.4;
             continue;
@@ -1959,16 +1992,17 @@ fn preview_gcode(
             continue;
         }
         if opcode == "G92" {
-            let has_x = parse_axis(command, 'X').is_some();
-            let has_y = parse_axis(command, 'Y').is_some();
-            let has_e = parse_axis(command, 'E').is_some();
-            if let Some(next_x) = parse_axis(command, 'X') {
+            let axes = parse_gcode_axes(tokens);
+            let has_x = axes.x.is_some();
+            let has_y = axes.y.is_some();
+            let has_e = axes.e.is_some();
+            if let Some(next_x) = axes.x {
                 x_origin = x - next_x * unit_scale;
             }
-            if let Some(next_y) = parse_axis(command, 'Y') {
+            if let Some(next_y) = axes.y {
                 y_origin = y - next_y * unit_scale;
             }
-            if let Some(next_e) = parse_axis(command, 'E') {
+            if let Some(next_e) = axes.e {
                 e = next_e * unit_scale;
             }
             if !has_x && !has_y && !has_e {
@@ -1985,17 +2019,18 @@ fn preview_gcode(
             continue;
         }
 
-        let next_x = positioned_axis(command, 'X', x, x_origin, relative_positioning, unit_scale);
-        let next_y = positioned_axis(command, 'Y', y, y_origin, relative_positioning, unit_scale);
-        let next_e = parse_axis(command, 'E').map(|value| value * unit_scale);
+        let axes = parse_gcode_axes(tokens);
+        let next_x = positioned_axis(axes.x, x, x_origin, relative_positioning, unit_scale);
+        let next_y = positioned_axis(axes.y, y, y_origin, relative_positioning, unit_scale);
+        let next_e = axes.e.map(|value| value * unit_scale);
         let relative_e = relative_positioning || relative_extrusion;
         let extruding =
             next_e.is_some_and(|value| if relative_e { value > 0.0 } else { value > e });
 
         let moved = next_x != x || next_y != y;
         let arc_center_offsets = if clockwise_arc || counter_clockwise_arc {
-            let i = parse_axis(command, 'I');
-            let j = parse_axis(command, 'J');
+            let i = axes.i;
+            let j = axes.j;
             (i.is_some() || j.is_some())
                 .then_some([i.unwrap_or(0.0) * unit_scale, j.unwrap_or(0.0) * unit_scale])
         } else {
@@ -2060,7 +2095,10 @@ fn preview_gcode(
     })
 }
 
-fn preview_payload(preview: GcodeLayerPreview) -> Result<Vec<f32>, EngineError> {
+fn write_preview_payload(
+    preview: GcodeLayerPreview,
+    output: &mut [f32],
+) -> Result<usize, EngineError> {
     if preview.layer_count > MAX_PREVIEW_LAYERS
         || preview.segments.len() > MAX_PREVIEW_SEGMENTS
         || preview.paths.len() > preview.segments.len()
@@ -2122,8 +2160,13 @@ fn preview_payload(preview: GcodeLayerPreview) -> Result<Vec<f32>, EngineError> 
         })
         .and_then(|count| count.checked_add(PREVIEW_HEADER_FLOATS))
         .ok_or_else(|| EngineError::Parse("G-code preview size overflow".to_owned()))?;
-    let mut payload = Vec::with_capacity(payload_floats);
-    payload.extend_from_slice(&[
+    if output.len() < payload_floats {
+        return Err(EngineError::Parse(
+            "G-code preview direct buffer is too small".to_owned(),
+        ));
+    }
+    let mut write_index = 0usize;
+    let header = [
         PREVIEW_PAYLOAD_MAGIC,
         PREVIEW_PAYLOAD_VERSION,
         preview.start_layer as f32,
@@ -2133,15 +2176,22 @@ fn preview_payload(preview: GcodeLayerPreview) -> Result<Vec<f32>, EngineError> 
         preview.max_z_mm,
         preview.segments.len() as f32,
         preview.paths.len() as f32,
-    ]);
-    payload.extend(role_segment_counts.map(|count| count as f32));
+    ];
+    output[write_index..write_index + header.len()].copy_from_slice(&header);
+    write_index += header.len();
+    let role_counts = role_segment_counts.map(|count| count as f32);
+    output[write_index..write_index + role_counts.len()].copy_from_slice(&role_counts);
+    write_index += role_counts.len();
     for segment in &preview.segments {
-        payload.extend_from_slice(segment);
+        output[write_index..write_index + segment.len()].copy_from_slice(segment);
+        write_index += segment.len();
     }
     for path in preview.paths {
-        payload.push(path.end_exclusive as f32);
+        output[write_index] = path.end_exclusive as f32;
+        write_index += PREVIEW_PATH_FLOATS;
     }
-    Ok(payload)
+    debug_assert_eq!(write_index, payload_floats);
+    Ok(write_index)
 }
 
 fn make_java_string(env: &JNIEnv<'_>, value: &str) -> jstring {
@@ -2304,37 +2354,53 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_layOnFace(
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRange(
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRangeInto(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
     path: JString<'_>,
     start_layer: jint,
     end_layer: jint,
-) -> jfloatArray {
-    let payload = catch_unwind(AssertUnwindSafe(|| {
+    output: JByteBuffer<'_>,
+) -> jint {
+    catch_unwind(AssertUnwindSafe(|| {
+        let output_capacity = env.get_direct_buffer_capacity(&output)?;
+        if output_capacity % std::mem::size_of::<f32>() != 0 {
+            return Err(EngineError::Parse(
+                "G-code preview direct buffer has invalid alignment".to_owned(),
+            ));
+        }
+        let output_address = env.get_direct_buffer_address(&output)?;
+        if output_address.align_offset(std::mem::align_of::<f32>()) != 0 {
+            return Err(EngineError::Parse(
+                "G-code preview direct buffer has invalid alignment".to_owned(),
+            ));
+        }
+        let float_capacity = output_capacity / std::mem::size_of::<f32>();
+        if !(PREVIEW_HEADER_FLOATS..=PREVIEW_MAX_PAYLOAD_FLOATS).contains(&float_capacity) {
+            return Err(EngineError::Parse(
+                "G-code preview direct buffer is outside its bound".to_owned(),
+            ));
+        }
+        // SAFETY: JNI keeps the direct ByteBuffer alive for this call, its byte capacity and
+        // f32 alignment are checked above, and no other Rust reference aliases this output.
+        let output_floats =
+            unsafe { std::slice::from_raw_parts_mut(output_address.cast::<f32>(), float_capacity) };
         let path = env
             .get_string(&path)
             .map(|path| path.to_string_lossy().into_owned())
             .map_err(|error| EngineError::Parse(format!("Unable to read file path: {error}")))?;
-        preview_payload(preview_gcode(
+        let preview = preview_gcode(
             &path,
             start_layer.max(0) as usize,
             end_layer.max(0) as usize,
-        )?)
-    }))
-    .ok()
-    .and_then(Result::ok);
-    let Some(payload) = payload else {
-        return std::ptr::null_mut();
-    };
-    catch_unwind(AssertUnwindSafe(|| {
-        let output = env.new_float_array(payload.len() as jint)?;
-        env.set_float_array_region(&output, 0, &payload)?;
-        Ok::<jfloatArray, jni::errors::Error>(output.into_raw())
+        )?;
+        let used = write_preview_payload(preview, output_floats)?;
+        jint::try_from(used)
+            .map_err(|_| EngineError::Parse("G-code preview size overflow".to_owned()))
     }))
     .ok()
     .and_then(Result::ok)
-    .unwrap_or(std::ptr::null_mut())
+    .unwrap_or(-1)
 }
 
 #[unsafe(no_mangle)]
@@ -2422,6 +2488,27 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_packToolpathG
 mod tests {
     use super::*;
     use std::io::Write;
+
+    fn preview_payload(preview: GcodeLayerPreview) -> Result<Vec<f32>, EngineError> {
+        let mut payload = vec![0.0; PREVIEW_MAX_PAYLOAD_FLOATS];
+        let used = write_preview_payload(preview, &mut payload)?;
+        payload.truncate(used);
+        Ok(payload)
+    }
+
+    #[test]
+    fn gcode_axes_are_parsed_once_without_accepting_duplicate_or_non_finite_values() {
+        let axes = parse_gcode_axes("X1.25 Y-2 E3e-2 I0.5 J-0.25 F9000".split_ascii_whitespace());
+        assert_eq!(axes.x, Some(1.25));
+        assert_eq!(axes.y, Some(-2.0));
+        assert_eq!(axes.e, Some(0.03));
+        assert_eq!(axes.i, Some(0.5));
+        assert_eq!(axes.j, Some(-0.25));
+
+        let duplicates = parse_gcode_axes("Xbad X7 YNaN Y8".split_ascii_whitespace());
+        assert_eq!(duplicates.x, None);
+        assert_eq!(duplicates.y, None);
+    }
 
     #[derive(Serialize)]
     struct SuccessResponse {

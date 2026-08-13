@@ -1,5 +1,8 @@
 package com.ashcastle.duckyslicer
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.FloatBuffer
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -417,6 +420,98 @@ data class GcodeLayerPreview(
             validateCoordinates = false,
         )
 
+        internal fun fromTrustedNative(
+            raw: ByteBuffer?,
+            usedFloats: Int,
+        ): GcodeLayerPreview = decodeTrustedNativeBuffer(raw, usedFloats)
+
+        private fun decodeTrustedNativeBuffer(
+            raw: ByteBuffer?,
+            usedFloats: Int,
+        ): GcodeLayerPreview {
+            checkNotNull(raw) { "preview_invalid" }
+            check(raw.isDirect && raw.order() == ByteOrder.nativeOrder()) {
+                "preview_buffer_invalid"
+            }
+            check(usedFloats in HEADER_FLOATS..MAX_PAYLOAD_FLOATS) {
+                "preview_size_invalid"
+            }
+            val usedBytes = usedFloats.toLong() * Float.SIZE_BYTES
+            check(usedBytes <= raw.capacity().toLong()) { "preview_size_invalid" }
+            val floats = raw.duplicate()
+                .order(ByteOrder.nativeOrder())
+                .apply {
+                    clear()
+                    limit(usedBytes.toInt())
+                }
+                .asFloatBuffer()
+            check(floats[0] == PAYLOAD_MAGIC && floats[1] == PAYLOAD_VERSION) {
+                "preview_format_invalid"
+            }
+            val startLayer = floats.exactInt(2, MAX_LAYER_COUNT)
+            val endLayer = floats.exactInt(3, MAX_LAYER_COUNT)
+            val layerCount = floats.exactInt(4, MAX_LAYER_COUNT)
+            check(startLayer <= endLayer) { "preview_range_invalid" }
+            check(
+                (layerCount == 0 && startLayer == 0 && endLayer == 0) ||
+                    (layerCount > 0 && endLayer < layerCount),
+            ) { "preview_layer_count_invalid" }
+            val minZMm = floats[5]
+            val maxZMm = floats[6]
+            check(minZMm.isFinite() && maxZMm.isFinite() && minZMm <= maxZMm) {
+                "preview_height_invalid"
+            }
+            val totalSegments = floats.exactInt(7, MAX_SEGMENTS)
+            val pathCount = floats.exactInt(8, MAX_SEGMENTS)
+            check(pathCount <= totalSegments) { "preview_path_count_invalid" }
+            val roleSegmentCounts = IntArray(ROLE_COUNT) { role ->
+                floats.exactInt(ROLE_COUNTS_OFFSET + role, MAX_SEGMENTS)
+            }
+            check(roleSegmentCounts.sum() == totalSegments) { "preview_role_count_invalid" }
+            val segmentEnd = HEADER_FLOATS + totalSegments * SEGMENT_STRIDE
+            val expectedPayloadFloats = segmentEnd + pathCount * PATH_STRIDE
+            check(usedFloats == expectedPayloadFloats) { "preview_size_invalid" }
+            val segments = FloatArray(totalSegments * SEGMENT_STRIDE)
+            floats.position(HEADER_FLOATS)
+            floats.get(segments)
+
+            val pathBuilder = if (pathCount == 0) null else PrimitivePathBuilder(totalSegments)
+            var previousEnd = 0
+            var pathOffset = segmentEnd
+            repeat(pathCount) {
+                val pathStart = previousEnd
+                val pathEnd = floats.exactInt(pathOffset, totalSegments)
+                check(pathStart < pathEnd) { "preview_path_range_invalid" }
+                val roleValue = segments[pathStart * SEGMENT_STRIDE + 5]
+                check(roleValue.isFinite() && roleValue % 1f == 0f) {
+                    "preview_path_role_invalid"
+                }
+                val pathRole = roleValue.toInt()
+                check(pathRole in 0 until ROLE_COUNT) { "preview_path_role_invalid" }
+                checkNotNull(pathBuilder).add(pathStart, pathEnd, pathRole)
+                previousEnd = pathEnd
+                pathOffset += PATH_STRIDE
+            }
+            check(previousEnd == totalSegments) { "preview_path_coverage_invalid" }
+            val pathIndex = pathBuilder?.finish() ?: ContinuousPathIndex.EMPTY
+            pathIndex.pathsByRole.indices.forEach { role ->
+                check(pathIndex.pathsByRole[role].segmentCount == roleSegmentCounts[role]) {
+                    "preview_path_role_count_invalid"
+                }
+            }
+            return GcodeLayerPreview(
+                startLayer = startLayer,
+                endLayer = endLayer,
+                layerCount = layerCount,
+                minZMm = minZMm,
+                maxZMm = maxZMm,
+                segments = segments,
+                roleSegmentCounts = roleSegmentCounts,
+            ).also { preview ->
+                preview.cachedPathIndex = pathIndex
+            }
+        }
+
         private fun decodeNativePayload(
             raw: FloatArray?,
             validateCoordinates: Boolean,
@@ -531,6 +626,7 @@ data class GcodeLayerPreview(
         private const val PATH_STRIDE = 1
         internal const val MAX_PAYLOAD_FLOATS = HEADER_FLOATS +
             MAX_SEGMENTS * (SEGMENT_STRIDE + PATH_STRIDE)
+        internal const val MAX_PAYLOAD_BYTES = MAX_PAYLOAD_FLOATS * Float.SIZE_BYTES
         private const val PAYLOAD_MAGIC = 17_491f
         private const val PAYLOAD_VERSION = 2f
         private const val MAX_LAYER_COUNT = 1_000_000
@@ -539,6 +635,14 @@ data class GcodeLayerPreview(
 }
 
 private fun FloatArray.exactInt(index: Int, maximum: Int): Int {
+    val value = this[index]
+    check(value.isFinite() && value % 1f == 0f && value in 0f..maximum.toFloat()) {
+        "preview_integer_invalid"
+    }
+    return value.toInt()
+}
+
+private fun FloatBuffer.exactInt(index: Int, maximum: Int): Int {
     val value = this[index]
     check(value.isFinite() && value % 1f == 0f && value in 0f..maximum.toFloat()) {
         "preview_integer_invalid"

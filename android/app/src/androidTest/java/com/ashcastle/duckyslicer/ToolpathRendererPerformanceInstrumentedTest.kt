@@ -6,6 +6,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 @RunWith(AndroidJUnit4::class)
 class ToolpathRendererPerformanceInstrumentedTest {
@@ -15,12 +17,15 @@ class ToolpathRendererPerformanceInstrumentedTest {
             segmentCount = GcodeLayerPreview.MAX_SEGMENTS,
             layerCount = 500,
         )
+        val direct = ByteBuffer.allocateDirect(raw.size * Float.SIZE_BYTES)
+            .order(ByteOrder.nativeOrder())
+        direct.asFloatBuffer().put(raw)
         val decodeDurations = ArrayList<Long>()
         val firstPlanDurations = ArrayList<Long>()
         val planSegmentCounts = ArrayList<Int>()
         repeat(3) {
             val decodeStarted = SystemClock.elapsedRealtimeNanos()
-            val preview = GcodeLayerPreview.fromTrustedNative(raw)
+            val preview = GcodeLayerPreview.fromTrustedNative(direct, raw.size)
             decodeDurations += SystemClock.elapsedRealtimeNanos() - decodeStarted
 
             val planStarted = SystemClock.elapsedRealtimeNanos()
