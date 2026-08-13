@@ -118,6 +118,14 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "R.string.tree_support_adaptive_layer_height",
         "R.string.tree_support_auto_brim",
         "R.string.tree_support_brim_width",
+        "R.string.feature_jerk",
+        "options.jerk.copy(defaultJerk",
+        "options.jerk.copy(outerWallJerk",
+        "options.jerk.copy(innerWallJerk",
+        "options.jerk.copy(topSurfaceJerk",
+        "options.jerk.copy(infillJerk",
+        "options.jerk.copy(firstLayerJerk",
+        "options.jerk.copy(travelJerk",
     ):
         if marker not in editor:
             raise VerificationError(f"advanced process controls are missing: {marker}")
@@ -273,6 +281,10 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
             'name="tree_support_adaptive_layer_height"',
             'name="tree_support_auto_brim"',
             'name="tree_support_brim_width"',
+            'name="feature_jerk"',
+            'name="jerk_value"',
+            'name="initial_layer"',
+            'name="travel"',
         ):
             if resource not in strings:
                 raise VerificationError(

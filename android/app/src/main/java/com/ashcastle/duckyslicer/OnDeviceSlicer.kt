@@ -278,6 +278,13 @@ data class QualityProfile(
     val sparseInfillAccelerationPercent: Boolean = true,
     val internalSolidInfillAcceleration: Float = 100f,
     val internalSolidInfillAccelerationPercent: Boolean = true,
+    val defaultJerk: Float = 0f,
+    val outerWallJerk: Float = 9f,
+    val innerWallJerk: Float = 9f,
+    val topSurfaceJerk: Float = 9f,
+    val infillJerk: Float = 9f,
+    val firstLayerJerk: Float = 9f,
+    val travelJerk: Float = 12f,
     val supportEnabled: Boolean = false,
     val brimType: String = "no_brim",
     val brimWidth: Float = 0f,
@@ -492,11 +499,31 @@ data class QualityProfile(
     }
 }
 
+data class JerkSettings(
+    val defaultJerk: Float = 0f,
+    val outerWallJerk: Float = 9f,
+    val innerWallJerk: Float = 9f,
+    val topSurfaceJerk: Float = 9f,
+    val infillJerk: Float = 9f,
+    val firstLayerJerk: Float = 9f,
+    val travelJerk: Float = 12f,
+)
+
+private fun QualityProfile.jerkSettings() = JerkSettings(
+    defaultJerk = defaultJerk,
+    outerWallJerk = outerWallJerk,
+    innerWallJerk = innerWallJerk,
+    topSurfaceJerk = topSurfaceJerk,
+    infillJerk = infillJerk,
+    firstLayerJerk = firstLayerJerk,
+    travelJerk = travelJerk,
+)
+
 data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 20,
+    val schemaVersion: Int = 23,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -583,6 +610,7 @@ data class SliceOptions(
     val sparseInfillAccelerationPercent: Boolean = quality.sparseInfillAccelerationPercent,
     val internalSolidInfillAcceleration: Float = quality.internalSolidInfillAcceleration,
     val internalSolidInfillAccelerationPercent: Boolean = quality.internalSolidInfillAccelerationPercent,
+    val jerk: JerkSettings = quality.jerkSettings(),
     val topSolidLayers: Int = quality.topSolidLayers,
     val bottomSolidLayers: Int = quality.bottomSolidLayers,
     val topShellThickness: Float = quality.topShellThickness,
@@ -754,6 +782,14 @@ data class SliceOptions(
     val extruderClearanceHeightToRod: Float = printerProfile.extruderClearanceHeightToRod,
     val extruderClearanceHeightToLid: Float = printerProfile.extruderClearanceHeightToLid,
 ) {
+    val defaultJerk: Float get() = jerk.defaultJerk
+    val outerWallJerk: Float get() = jerk.outerWallJerk
+    val innerWallJerk: Float get() = jerk.innerWallJerk
+    val topSurfaceJerk: Float get() = jerk.topSurfaceJerk
+    val infillJerk: Float get() = jerk.infillJerk
+    val firstLayerJerk: Float get() = jerk.firstLayerJerk
+    val travelJerk: Float get() = jerk.travelJerk
+
     fun selectPrinter(profile: PrinterProfile): SliceOptions {
         val nozzleMatches = abs(quality.nozzleDiameter - profile.nozzleDiameter) < 0.05f
         val retainedFilaments = resolvedFilamentSlots().take(profile.extruderCount.coerceAtLeast(1))
@@ -904,6 +940,7 @@ data class SliceOptions(
         sparseInfillAccelerationPercent = profile.sparseInfillAccelerationPercent,
         internalSolidInfillAcceleration = profile.internalSolidInfillAcceleration,
         internalSolidInfillAccelerationPercent = profile.internalSolidInfillAccelerationPercent,
+        jerk = profile.jerkSettings(),
         topSolidLayers = profile.topSolidLayers,
         bottomSolidLayers = profile.bottomSolidLayers,
         topShellThickness = profile.topShellThickness,
@@ -1333,6 +1370,13 @@ data class SliceOptions(
             native.treeSupportOrganicBranchDistance = treeSupportOrganicBranchDistance
             native.treeSupportOrganicBranchDiameter = treeSupportOrganicBranchDiameter
             native.treeSupportBranchDiameterAngle = treeSupportBranchDiameterAngle
+            native.defaultJerk = defaultJerk
+            native.outerWallJerk = outerWallJerk
+            native.innerWallJerk = innerWallJerk
+            native.topSurfaceJerk = topSurfaceJerk
+            native.infillJerk = infillJerk
+            native.firstLayerJerk = firstLayerJerk
+            native.travelJerk = travelJerk
         }
     }
 }

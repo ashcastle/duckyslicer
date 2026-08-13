@@ -99,6 +99,32 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual("by object", profile["printSequence"])
         self.assertEqual("as_obj_list", profile["printOrder"])
 
+    def test_preserves_per_feature_jerk_values(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Jerk tuned",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "default_jerk": "8.5",
+                "outer_wall_jerk": "7.5",
+                "inner_wall_jerk": "8",
+                "top_surface_jerk": "6.5",
+                "infill_jerk": "9.5",
+                "initial_layer_jerk": "5.5",
+                "travel_jerk": "12.5",
+            },
+            {},
+        )
+
+        self.assertEqual(8.5, profile["defaultJerk"])
+        self.assertEqual(7.5, profile["outerWallJerk"])
+        self.assertEqual(8.0, profile["innerWallJerk"])
+        self.assertEqual(6.5, profile["topSurfaceJerk"])
+        self.assertEqual(9.5, profile["infillJerk"])
+        self.assertEqual(5.5, profile["firstLayerJerk"])
+        self.assertEqual(12.5, profile["travelJerk"])
+
     def test_preserves_sequential_print_head_clearance(self) -> None:
         profile = build_printer(
             "Example",

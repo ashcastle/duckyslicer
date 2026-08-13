@@ -2335,3 +2335,74 @@ diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil
 -    return std::array<double, 3>{rot.x(), rot.y(), rot.z()};
 +    return rotation;
  }
+
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+index 68f0b3e8..5c9603bf 100644
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -122,6 +122,15 @@ struct SliceConfig {
+     float internal_solid_infill_acceleration = 100.0f;
+     bool internal_solid_infill_acceleration_percent = true;
+ 
++    // Per-feature jerk (mm/s). A zero default keeps Orca's jerk control disabled.
++    float default_jerk = 0.0f;
++    float outer_wall_jerk = 9.0f;
++    float inner_wall_jerk = 9.0f;
++    float top_surface_jerk = 9.0f;
++    float infill_jerk = 9.0f;
++    float first_layer_jerk = 9.0f;
++    float travel_jerk = 12.0f;
++
+     // Temperature
+     int nozzle_temp = 210;
+     int bed_temp = 60;
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+index c2bddce7..b8859892 100644
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -166,6 +166,13 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.sparse_infill_acceleration_percent = getBool("sparseInfillAccelerationPercent");
+     config.internal_solid_infill_acceleration = getFloat("internalSolidInfillAcceleration");
+     config.internal_solid_infill_acceleration_percent = getBool("internalSolidInfillAccelerationPercent");
++    config.default_jerk = getFloat("defaultJerk");
++    config.outer_wall_jerk = getFloat("outerWallJerk");
++    config.inner_wall_jerk = getFloat("innerWallJerk");
++    config.top_surface_jerk = getFloat("topSurfaceJerk");
++    config.infill_jerk = getFloat("infillJerk");
++    config.first_layer_jerk = getFloat("firstLayerJerk");
++    config.travel_jerk = getFloat("travelJerk");
+     config.travel_speed = getFloat("travelSpeed");
+     config.first_layer_speed = getFloat("firstLayerSpeed");
+ 
+@@ -508,6 +515,13 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setBool("sparseInfillAccelerationPercent", config.sparse_infill_acceleration_percent);
+     setFloat("internalSolidInfillAcceleration", config.internal_solid_infill_acceleration);
+     setBool("internalSolidInfillAccelerationPercent", config.internal_solid_infill_acceleration_percent);
++    setFloat("defaultJerk", config.default_jerk);
++    setFloat("outerWallJerk", config.outer_wall_jerk);
++    setFloat("innerWallJerk", config.inner_wall_jerk);
++    setFloat("topSurfaceJerk", config.top_surface_jerk);
++    setFloat("infillJerk", config.infill_jerk);
++    setFloat("firstLayerJerk", config.first_layer_jerk);
++    setFloat("travelJerk", config.travel_jerk);
+     setFloat("travelSpeed", config.travel_speed);
+     setFloat("firstLayerSpeed", config.first_layer_speed);
+     setInt("nozzleTemp", config.nozzle_temp);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+index 57431bb5..415d2590 100644
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -352,6 +352,13 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+         config.sparse_infill_acceleration, config.sparse_infill_acceleration_percent));
+     dpc.set_key_value("internal_solid_infill_acceleration", new Slic3r::ConfigOptionFloatOrPercent(
+         config.internal_solid_infill_acceleration, config.internal_solid_infill_acceleration_percent));
++    dpc.set_key_value("default_jerk",             new Slic3r::ConfigOptionFloat(config.default_jerk));
++    dpc.set_key_value("outer_wall_jerk",          new Slic3r::ConfigOptionFloat(config.outer_wall_jerk));
++    dpc.set_key_value("inner_wall_jerk",          new Slic3r::ConfigOptionFloat(config.inner_wall_jerk));
++    dpc.set_key_value("top_surface_jerk",         new Slic3r::ConfigOptionFloat(config.top_surface_jerk));
++    dpc.set_key_value("infill_jerk",              new Slic3r::ConfigOptionFloat(config.infill_jerk));
++    dpc.set_key_value("initial_layer_jerk",       new Slic3r::ConfigOptionFloat(config.first_layer_jerk));
++    dpc.set_key_value("travel_jerk",              new Slic3r::ConfigOptionFloat(config.travel_jerk));
+ 
+     // Multi-extruder setup
+     int n_ext = std::max(1, config.extruder_count);

@@ -102,6 +102,13 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         sparseInfillAccelerationPercent = sparseInfillAccelerationPercent,
         internalSolidInfillAcceleration = internalSolidInfillAcceleration,
         internalSolidInfillAccelerationPercent = internalSolidInfillAccelerationPercent,
+        defaultJerk = defaultJerk,
+        outerWallJerk = outerWallJerk,
+        innerWallJerk = innerWallJerk,
+        topSurfaceJerk = topSurfaceJerk,
+        infillJerk = infillJerk,
+        firstLayerJerk = firstLayerJerk,
+        travelJerk = travelJerk,
         nozzleDiameter = nozzleDiameter,
         supportEnabled = supportEnabled,
         brimType = brimType,
@@ -304,7 +311,7 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 21
+private const val SLICE_OPTIONS_FORMAT_VERSION = 22
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f

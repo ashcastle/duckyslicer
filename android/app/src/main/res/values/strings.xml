@@ -316,6 +316,9 @@
     <string name="small_perimeter_threshold">Small perimeter threshold</string>
     <string name="slowdown_for_curled_perimeters">Slow down for curled perimeters</string>
     <string name="feature_acceleration">Acceleration</string>
+    <string name="feature_jerk">Jerk</string>
+    <string name="initial_layer">Initial layer</string>
+    <string name="travel">Travel</string>
     <string name="default_acceleration">Normal print acceleration</string>
     <string name="outer_wall_acceleration">Outer wall acceleration</string>
     <string name="inner_wall_acceleration">Inner wall acceleration</string>
@@ -612,6 +615,7 @@
     <string name="maximum_print_acceleration">Maximum print acceleration</string>
     <string name="maximum_travel_acceleration">Maximum travel acceleration</string>
     <string name="acceleration_value">%1$.0f mm/s²</string>
+    <string name="jerk_value">%1$.1f mm/s</string>
     <string name="one_wall_threshold">One-wall top threshold</string>
     <string name="overhang_reversal">Alternate overhang direction</string>
     <string name="reverse_internal_only">Inner walls only</string>

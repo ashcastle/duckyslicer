@@ -261,4 +261,11 @@ data class SliceConfig(
     @JvmField var treeSupportOrganicBranchDistance: Float = 1f
     @JvmField var treeSupportOrganicBranchDiameter: Float = 2f
     @JvmField var treeSupportBranchDiameterAngle: Float = 5f
+    @JvmField var defaultJerk: Float = 0f
+    @JvmField var outerWallJerk: Float = 9f
+    @JvmField var innerWallJerk: Float = 9f
+    @JvmField var topSurfaceJerk: Float = 9f
+    @JvmField var infillJerk: Float = 9f
+    @JvmField var firstLayerJerk: Float = 9f
+    @JvmField var travelJerk: Float = 12f
 }

@@ -174,6 +174,14 @@ class SliceOptionsPersistenceTest {
         assertEquals(false, restored.sparseInfillAccelerationPercent)
         assertEquals(83f, restored.internalSolidInfillAcceleration)
         assertEquals(true, restored.internalSolidInfillAccelerationPercent)
+        assertEquals(8.5f, restored.defaultJerk)
+        assertEquals(7.5f, restored.outerWallJerk)
+        assertEquals(8f, restored.innerWallJerk)
+        assertEquals(6.5f, restored.topSurfaceJerk)
+        assertEquals(9.5f, restored.infillJerk)
+        assertEquals(5.5f, restored.firstLayerJerk)
+        assertEquals(12.5f, restored.travelJerk)
+        assertEquals(12.5f, restored.toNativeConfig().travelJerk)
         assertEquals("classic", restored.wallGenerator)
         assertEquals(135f, restored.wallTransitionLength)
         assertEquals(31f, restored.wallTransitionFilterDeviation)
@@ -444,6 +452,15 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         sparseInfillAccelerationPercent = false,
         internalSolidInfillAcceleration = 83f,
         internalSolidInfillAccelerationPercent = true,
+        jerk = JerkSettings(
+            defaultJerk = 8.5f,
+            outerWallJerk = 7.5f,
+            innerWallJerk = 8f,
+            topSurfaceJerk = 6.5f,
+            infillJerk = 9.5f,
+            firstLayerJerk = 5.5f,
+            travelJerk = 12.5f,
+        ),
         wallGenerator = "classic",
         wallTransitionLength = 135f,
         wallTransitionFilterDeviation = 31f,

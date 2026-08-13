@@ -57,6 +57,13 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var sparseInfillAccelerationPercent: Boolean = base.sparseInfillAccelerationPercent
     private var internalSolidInfillAcceleration: Float = base.internalSolidInfillAcceleration
     private var internalSolidInfillAccelerationPercent: Boolean = base.internalSolidInfillAccelerationPercent
+    private var defaultJerk: Float = base.defaultJerk
+    private var outerWallJerk: Float = base.outerWallJerk
+    private var innerWallJerk: Float = base.innerWallJerk
+    private var topSurfaceJerk: Float = base.topSurfaceJerk
+    private var infillJerk: Float = base.infillJerk
+    private var firstLayerJerk: Float = base.firstLayerJerk
+    private var travelJerk: Float = base.travelJerk
     private var supportEnabled: Boolean = base.supportEnabled
     private var brimType: String = base.brimType
     private var brimWidth: Float = base.brimWidth
@@ -214,6 +221,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         readGroup6(input)
         readGroup7(input)
         readGroup8(input)
+        readGroup9(input)
     }
 
     private fun readGroup0(input: DataInputStream) {
@@ -442,6 +450,16 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         compatiblePrinters = input.readCatalogStringList()
     }
 
+    private fun readGroup9(input: DataInputStream) {
+        defaultJerk = input.readFloat()
+        outerWallJerk = input.readFloat()
+        innerWallJerk = input.readFloat()
+        topSurfaceJerk = input.readFloat()
+        infillJerk = input.readFloat()
+        firstLayerJerk = input.readFloat()
+        travelJerk = input.readFloat()
+    }
+
     fun build(): QualityProfile = QualityProfile(
         id = id,
         name = name,
@@ -496,6 +514,13 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         sparseInfillAccelerationPercent = sparseInfillAccelerationPercent,
         internalSolidInfillAcceleration = internalSolidInfillAcceleration,
         internalSolidInfillAccelerationPercent = internalSolidInfillAccelerationPercent,
+        defaultJerk = defaultJerk,
+        outerWallJerk = outerWallJerk,
+        innerWallJerk = innerWallJerk,
+        topSurfaceJerk = topSurfaceJerk,
+        infillJerk = infillJerk,
+        firstLayerJerk = firstLayerJerk,
+        travelJerk = travelJerk,
         supportEnabled = supportEnabled,
         brimType = brimType,
         brimWidth = brimWidth,
@@ -846,4 +871,11 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("treeSupportAutoBrim", BINARY_BOOL),
     BinaryField("treeSupportBrimWidth", BINARY_FLOAT),
     BinaryField("compatiblePrinters", BINARY_STRING_LIST),
+    BinaryField("defaultJerk", BINARY_FLOAT),
+    BinaryField("outerWallJerk", BINARY_FLOAT),
+    BinaryField("innerWallJerk", BINARY_FLOAT),
+    BinaryField("topSurfaceJerk", BINARY_FLOAT),
+    BinaryField("infillJerk", BINARY_FLOAT),
+    BinaryField("firstLayerJerk", BINARY_FLOAT),
+    BinaryField("travelJerk", BINARY_FLOAT),
 )

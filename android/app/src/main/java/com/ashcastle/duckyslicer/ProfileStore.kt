@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 23
+internal const val USER_PROFILE_SCHEMA_VERSION = 24
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -194,6 +194,13 @@ class ProfileStore private constructor(
             sparseInfillAccelerationPercent = options.sparseInfillAccelerationPercent,
             internalSolidInfillAcceleration = options.internalSolidInfillAcceleration,
             internalSolidInfillAccelerationPercent = options.internalSolidInfillAccelerationPercent,
+            defaultJerk = options.defaultJerk,
+            outerWallJerk = options.outerWallJerk,
+            innerWallJerk = options.innerWallJerk,
+            topSurfaceJerk = options.topSurfaceJerk,
+            infillJerk = options.infillJerk,
+            firstLayerJerk = options.firstLayerJerk,
+            travelJerk = options.travelJerk,
             supportEnabled = options.supportEnabled,
             brimType = options.brimType,
             brimWidth = options.brimWidth,
@@ -512,6 +519,13 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("sparseInfillAccelerationPercent", sparseInfillAccelerationPercent)
     .put("internalSolidInfillAcceleration", internalSolidInfillAcceleration)
     .put("internalSolidInfillAccelerationPercent", internalSolidInfillAccelerationPercent)
+    .put("defaultJerk", defaultJerk)
+    .put("outerWallJerk", outerWallJerk)
+    .put("innerWallJerk", innerWallJerk)
+    .put("topSurfaceJerk", topSurfaceJerk)
+    .put("infillJerk", infillJerk)
+    .put("firstLayerJerk", firstLayerJerk)
+    .put("travelJerk", travelJerk)
     .put("supportEnabled", supportEnabled)
     .put("brimType", brimType)
     .put("brimWidth", brimWidth)
@@ -771,6 +785,13 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         sparseInfillAccelerationPercent = optBoolean("sparseInfillAccelerationPercent", true),
         internalSolidInfillAcceleration = optDouble("internalSolidInfillAcceleration", 100.0).toFloat(),
         internalSolidInfillAccelerationPercent = optBoolean("internalSolidInfillAccelerationPercent", true),
+        defaultJerk = optDouble("defaultJerk", 0.0).toFloat(),
+        outerWallJerk = optDouble("outerWallJerk", 9.0).toFloat(),
+        innerWallJerk = optDouble("innerWallJerk", 9.0).toFloat(),
+        topSurfaceJerk = optDouble("topSurfaceJerk", 9.0).toFloat(),
+        infillJerk = optDouble("infillJerk", 9.0).toFloat(),
+        firstLayerJerk = optDouble("firstLayerJerk", 9.0).toFloat(),
+        travelJerk = optDouble("travelJerk", 12.0).toFloat(),
         supportEnabled = optBoolean("supportEnabled"),
         brimType = optString("brimType", "no_brim"),
         brimWidth = optDouble("brimWidth", 0.0).toFloat(),

@@ -316,6 +316,9 @@
     <string name="small_perimeter_threshold">작은 둘레 기준 길이</string>
     <string name="slowdown_for_curled_perimeters">말려 올라간 둘레 감속</string>
     <string name="feature_acceleration">가속도</string>
+    <string name="feature_jerk">저크</string>
+    <string name="initial_layer">첫 레이어</string>
+    <string name="travel">이동</string>
     <string name="default_acceleration">일반 출력 가속도</string>
     <string name="outer_wall_acceleration">외벽 가속도</string>
     <string name="inner_wall_acceleration">내벽 가속도</string>
@@ -612,6 +615,7 @@
     <string name="maximum_print_acceleration">최대 출력 가속도</string>
     <string name="maximum_travel_acceleration">최대 이동 가속도</string>
     <string name="acceleration_value">%1$.0f mm/s²</string>
+    <string name="jerk_value">%1$.1f mm/s</string>
     <string name="one_wall_threshold">상단 한 줄 외벽 기준</string>
     <string name="overhang_reversal">오버행 방향 번갈아 출력</string>
     <string name="reverse_internal_only">내벽에만 적용</string>

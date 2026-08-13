@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -698,6 +698,13 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "treeSupportAutoBrim": boolean(raw.get("tree_support_auto_brim"), True),
         "treeSupportBrimWidth": number(raw.get("tree_support_brim_width"), 3),
         "compatiblePrinters": compatible,
+        "defaultJerk": number(raw.get("default_jerk"), 0),
+        "outerWallJerk": number(raw.get("outer_wall_jerk"), 9),
+        "innerWallJerk": number(raw.get("inner_wall_jerk"), 9),
+        "topSurfaceJerk": number(raw.get("top_surface_jerk"), 9),
+        "infillJerk": number(raw.get("infill_jerk"), 9),
+        "firstLayerJerk": number(raw.get("initial_layer_jerk"), 9),
+        "travelJerk": number(raw.get("travel_jerk"), 12),
     }
     if not (
         0 <= profile["fillDensity"] <= 1
@@ -747,6 +754,18 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and all(
             0 <= profile[key] <= (1_000 if profile[f"{key}Percent"] else 100_000)
             for key in ["bridgeAcceleration", "sparseInfillAcceleration", "internalSolidInfillAcceleration"]
+        )
+        and all(
+            0 <= profile[key] <= 2_000
+            for key in [
+                "defaultJerk",
+                "outerWallJerk",
+                "innerWallJerk",
+                "topSurfaceJerk",
+                "infillJerk",
+                "firstLayerJerk",
+                "travelJerk",
+            ]
         )
         and 10 <= profile["bridgeDensity"] <= 100
         and 10 <= profile["internalBridgeDensity"] <= 100

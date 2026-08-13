@@ -85,6 +85,50 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun inheritedPerFeatureJerkChangesActualMarlinToolpathCommands() {
+        val printer = PrinterProfile.U1_04.copy(
+            gcodeFlavor = "marlin2",
+            maxJerkX = 50f,
+            maxJerkY = 50f,
+        )
+        val options = SliceOptions()
+            .selectPrinter(printer)
+            .copy(
+                perimeters = 3,
+                fillDensity = 0.2f,
+                jerk = JerkSettings(
+                    defaultJerk = 8.5f,
+                    outerWallJerk = 7.5f,
+                    innerWallJerk = 8f,
+                    topSurfaceJerk = 6.5f,
+                    infillJerk = 9.5f,
+                    firstLayerJerk = 5.5f,
+                    travelJerk = 12.5f,
+                ),
+            )
+
+        val outcome = OnDeviceSlicer.slice(fixtureModel(), options)
+        try {
+            val gcode = outcome.output.readText()
+            for (value in listOf("5.5", "6.5", "7.5", "8", "9.5", "12.5")) {
+                assertTrue(
+                    "Orca must emit the requested feature jerk into real Marlin motion commands: $value",
+                    gcode.contains("M205 X$value Y$value"),
+                )
+            }
+            assertTrue(gcode.contains("; default_jerk = 8.5"))
+            assertTrue(gcode.contains("; outer_wall_jerk = 7.5"))
+            assertTrue(gcode.contains("; inner_wall_jerk = 8"))
+            assertTrue(gcode.contains("; top_surface_jerk = 6.5"))
+            assertTrue(gcode.contains("; infill_jerk = 9.5"))
+            assertTrue(gcode.contains("; initial_layer_jerk = 5.5"))
+            assertTrue(gcode.contains("; travel_jerk = 12.5"))
+        } finally {
+            outcome.output.delete()
+        }
+    }
+
+    @Test
     fun depthPreviewPrewarmsGestureVboAndReusesItAcrossCameraFrames() {
         val framebufferSize = 256
         val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
@@ -1186,7 +1230,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(22, catalog.schemaVersion)
+        assertEquals(23, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1263,6 +1307,8 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.infillCombination })
         assertTrue(catalog.slicing.any { it.internalBridgeSpeedPercent })
         assertTrue(catalog.slicing.any { !it.bridgeAccelerationPercent })
+        assertTrue("Inherited Orca jerk profiles must survive catalog normalization", catalog.slicing.any { it.defaultJerk > 0f })
+        assertTrue(catalog.slicing.any { it.travelJerk != 12f })
         assertTrue(catalog.slicing.any { it.elephantFootCompensation > 0f })
         assertTrue(catalog.slicing.any { it.xyHoleCompensation != 0f })
         assertTrue(catalog.slicing.any { it.gapFillTarget == "everywhere" })

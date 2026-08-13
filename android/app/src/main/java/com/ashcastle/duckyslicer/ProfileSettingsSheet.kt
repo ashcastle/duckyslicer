@@ -943,6 +943,17 @@ private fun SlicingSettingsSheet(
             options.firstLayerAcceleration,
         ).maxOrNull() ?: 20_000f
         val featureAccelerationSteps = (maximumFeatureAcceleration / 100f).roundToInt().coerceAtLeast(2) - 1
+        val maximumFeatureJerk = listOf(
+            30f,
+            options.defaultJerk,
+            options.outerWallJerk,
+            options.innerWallJerk,
+            options.topSurfaceJerk,
+            options.infillJerk,
+            options.firstLayerJerk,
+            options.travelJerk,
+        ).maxOrNull() ?: 30f
+        val featureJerkSteps = (maximumFeatureJerk / 0.5f).roundToInt().coerceAtLeast(2) - 1
         val maximumFilamentSlot = options.resolvedFilamentSlots().size.coerceIn(1, MAX_FILAMENT_SLOTS)
         if (settingsQuery.isBlank()) {
             SlicingSettingsTabs(
@@ -1996,6 +2007,93 @@ private fun SlicingSettingsSheet(
                         )
                     },
                 )
+                SettingsGroupTitle(stringResource(R.string.feature_jerk))
+                SettingSlider(
+                    label = stringResource(R.string.order_default),
+                    valueText = stringResource(R.string.jerk_value, options.defaultJerk),
+                    value = options.defaultJerk,
+                    range = 0f..maximumFeatureJerk,
+                    steps = featureJerkSteps,
+                    onValueChange = {
+                        onOptionsChanged(
+                            options.copy(jerk = options.jerk.copy(defaultJerk = (it * 2f).roundToInt() / 2f)),
+                        )
+                    },
+                )
+                if (options.defaultJerk > 0f || settingsQuery.isNotBlank()) {
+                    SettingSlider(
+                        label = stringResource(R.string.toolpath_outer_wall),
+                        valueText = stringResource(R.string.jerk_value, options.outerWallJerk),
+                        value = options.outerWallJerk,
+                        range = 0f..maximumFeatureJerk,
+                        steps = featureJerkSteps,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(jerk = options.jerk.copy(outerWallJerk = (it * 2f).roundToInt() / 2f)),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.toolpath_inner_wall),
+                        valueText = stringResource(R.string.jerk_value, options.innerWallJerk),
+                        value = options.innerWallJerk,
+                        range = 0f..maximumFeatureJerk,
+                        steps = featureJerkSteps,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(jerk = options.jerk.copy(innerWallJerk = (it * 2f).roundToInt() / 2f)),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.toolpath_top_surface),
+                        valueText = stringResource(R.string.jerk_value, options.topSurfaceJerk),
+                        value = options.topSurfaceJerk,
+                        range = 0f..maximumFeatureJerk,
+                        steps = featureJerkSteps,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(jerk = options.jerk.copy(topSurfaceJerk = (it * 2f).roundToInt() / 2f)),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.infill),
+                        valueText = stringResource(R.string.jerk_value, options.infillJerk),
+                        value = options.infillJerk,
+                        range = 0f..maximumFeatureJerk,
+                        steps = featureJerkSteps,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(jerk = options.jerk.copy(infillJerk = (it * 2f).roundToInt() / 2f)),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.initial_layer),
+                        valueText = stringResource(R.string.jerk_value, options.firstLayerJerk),
+                        value = options.firstLayerJerk,
+                        range = 0f..maximumFeatureJerk,
+                        steps = featureJerkSteps,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(jerk = options.jerk.copy(firstLayerJerk = (it * 2f).roundToInt() / 2f)),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.travel),
+                        valueText = stringResource(R.string.jerk_value, options.travelJerk),
+                        value = options.travelJerk,
+                        range = 0f..maximumFeatureJerk,
+                        steps = featureJerkSteps,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(jerk = options.jerk.copy(travelJerk = (it * 2f).roundToInt() / 2f)),
+                            )
+                        },
+                    )
+                }
             }
 
             SlicingSettingsSection.SUPPORT -> {

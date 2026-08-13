@@ -101,6 +101,15 @@ internal object ProfileValidation {
                 profile.internalSolidInfillAcceleration,
                 profile.internalSolidInfillAccelerationPercent,
             ) &&
+            listOf(
+                profile.defaultJerk,
+                profile.outerWallJerk,
+                profile.innerWallJerk,
+                profile.topSurfaceJerk,
+                profile.infillJerk,
+                profile.firstLayerJerk,
+                profile.travelJerk,
+            ).all { it in 0f..2_000f } &&
             profile.bridgeDensity in 10f..100f &&
             profile.internalBridgeDensity in 10f..100f &&
             profile.bridgeAngle in 0f..360f &&
