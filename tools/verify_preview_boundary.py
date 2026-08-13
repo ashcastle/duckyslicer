@@ -222,11 +222,13 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     prepare_picking = sources["PrepareModelPicking.kt"]
     for marker in (
         "buildPreparePickingIndices(",
-        "PREPARE_PICKING_TRIANGLES_PER_CHUNK = 48",
+        "PreparePickingIndexBuilder(",
+        "PREPARE_PICKING_TRIANGLES_PER_LEAF = 48",
         "intersectsProjectedBounds(",
-        ".candidateRangesOrAll(",
+        ".candidateTriangles(",
         "return result.copyOf(output)",
-        "?: intArrayOf(0, triangleCount)",
+        "candidateCount = candidates?.size ?: triangleCount",
+        "candidates?.get(candidatePosition) ?: candidatePosition",
     ):
         if marker not in prepare_picking:
             raise VerificationError(f"exact Prepare picking acceleration is missing: {marker}")
@@ -266,8 +268,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
 
     picking_tests = sources["PrepareModelPickingTest.kt"]
     for marker in (
-        "coarseIndexCullsDenseChunksWithoutChangingExactHits",
-        "candidateTriangleCount in 1 until model.triangles",
+        "spatialIndexCullsArbitraryFacetOrderWithoutChangingExactHits",
+        "candidates.size in 1 until model.triangles",
+        "assertTrue(index.leafCount > 1)",
         "pickingIndices = indices",
     ):
         if marker not in picking_tests:

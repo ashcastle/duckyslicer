@@ -43,15 +43,15 @@ class PrepareModelSceneBuilderTest {
         assertArrayEquals(floatArrayOf(1f, 1f, 0f), mesh.sourceCenter, 0f)
         assertArrayEquals(
             floatArrayOf(
-                0f, 0f, 0f, 0f, 0f, 1f,
-                2f, 0f, 0f, 0f, 0f, 1f,
-                0f, 2f, 0f, 0f, 0f, 1f,
+                0f, 0f, 0f,
+                2f, 0f, 0f,
+                0f, 2f, 0f,
             ),
             mesh.vertices,
             0f,
         )
         assertTrue(scene.bedFill.isNotEmpty())
         assertTrue(scene.bedGrid.isNotEmpty())
-        assertEquals(4, scene.bedOutline.size / 6)
+        assertEquals(4, scene.bedOutline.size / 3)
     }
 }

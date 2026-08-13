@@ -100,9 +100,11 @@ def valid_sources() -> dict[str, str]:
             "overlays = withContext(Dispatchers.Default)"
         ),
         "PrepareModelPicking.kt": (
-            "buildPreparePickingIndices( PREPARE_PICKING_TRIANGLES_PER_CHUNK = 48 "
-            "intersectsProjectedBounds( .candidateRangesOrAll( return result.copyOf(output) "
-            "?: intArrayOf(0, triangleCount)"
+            "buildPreparePickingIndices( PreparePickingIndexBuilder( "
+            "PREPARE_PICKING_TRIANGLES_PER_LEAF = 48 intersectsProjectedBounds( "
+            ".candidateTriangles( return result.copyOf(output) "
+            "candidateCount = candidates?.size ?: triangleCount "
+            "candidates?.get(candidatePosition) ?: candidatePosition"
         ),
         "ModelTransform.kt": (
             "internal fun ModelTransform.minimumRotatedZ(projectObject: ProjectObject) "
@@ -226,8 +228,9 @@ def valid_sources() -> dict[str, str]:
             "denseUnpaintedOverlayBuildStaysWithinLoadBudget p95Ms <= 1.0"
         ),
         "PrepareModelPickingTest.kt": (
-            "coarseIndexCullsDenseChunksWithoutChangingExactHits "
-            "candidateTriangleCount in 1 until model.triangles pickingIndices = indices"
+            "spatialIndexCullsArbitraryFacetOrderWithoutChangingExactHits "
+            "candidates.size in 1 until model.triangles assertTrue(index.leafCount > 1) "
+            "pickingIndices = indices"
         ),
         "ModelInfoTest.kt": (
             "nativePayloadDecodesBoundedGeometryAndSourceFacetMapping "
@@ -458,7 +461,8 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
     def test_rejects_prepare_index_that_has_no_exact_fallback(self) -> None:
         sources = valid_sources()
         sources["PrepareModelPicking.kt"] = sources["PrepareModelPicking.kt"].replace(
-            "?: intArrayOf(0, triangleCount)", "?: intArrayOf()"
+            "candidateCount = candidates?.size ?: triangleCount",
+            "candidateCount = candidates?.size ?: 0",
         )
         with self.assertRaisesRegex(VerificationError, "picking acceleration"):
             verify_preview_boundary(sources)

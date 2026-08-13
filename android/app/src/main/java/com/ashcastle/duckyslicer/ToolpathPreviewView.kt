@@ -1287,6 +1287,11 @@ internal object ToolpathMeshBuilder {
         } else {
             plan.segmentOffsets.indices
         }
+        val packedRoleColors = FloatArray(roleColors.size)
+        val packedRoleColorValid = BooleanArray(roleColors.size)
+        var colorZBits = 0
+        var colorZInitialized = false
+        var heightShadeMultiplier = 1f
         segmentIndices.forEach { index ->
             val offset = plan.segmentOffsets[index]
             val x1 = scene.preview.segments[offset] - scene.bedOriginX
@@ -1298,26 +1303,37 @@ internal object ToolpathMeshBuilder {
             val dx = x2 - x1
             val dy = y2 - y1
             if (dx * dx + dy * dy < 0.000001f) return@forEach
-            val normalizedHeight = ((z - scene.preview.minZMm) / zSpan).coerceIn(0f, 1f)
-            val base = roleColors[role]
-            val shade = scene.depthContrast * (1f - normalizedHeight) * 0.56f
+            val nextZBits = z.toBits()
+            if (!colorZInitialized || nextZBits != colorZBits) {
+                colorZInitialized = true
+                colorZBits = nextZBits
+                packedRoleColorValid.fill(false)
+                val normalizedHeight = ((z - scene.preview.minZMm) / zSpan).coerceIn(0f, 1f)
+                val shade = scene.depthContrast * (1f - normalizedHeight) * 0.56f
+                heightShadeMultiplier = 1f - shade
+            }
+            if (!packedRoleColorValid[role]) {
+                val base = roleColors[role]
+                packedRoleColors[role] = packedColor(
+                    base[0] * heightShadeMultiplier,
+                    base[1] * heightShadeMultiplier,
+                    base[2] * heightShadeMultiplier,
+                    scene.opacity,
+                )
+                packedRoleColorValid[role] = true
+            }
+            val color = packedRoleColors[role]
             val halfWidth = roleWidths[role] / 2f
             instanceBuilder?.segment(
                 x1, y1, z + 0.024f,
                 x2, y2, z + 0.024f,
                 halfWidth,
-                base[0] * (1f - shade),
-                base[1] * (1f - shade),
-                base[2] * (1f - shade),
-                scene.opacity,
+                color,
             )
             lineBuilder?.segment(
                 x1, y1, z + 0.024f,
                 x2, y2, z + 0.024f,
-                base[0] * (1f - shade),
-                base[1] * (1f - shade),
-                base[2] * (1f - shade),
-                scene.opacity,
+                color,
             )
         }
         val bedVertices = bedBuilder.finish()
@@ -1334,6 +1350,17 @@ internal object ToolpathMeshBuilder {
             geometryPackNanos = System.nanoTime() - packingStartedNanos,
         )
     }
+
+    private fun packedColor(red: Float, green: Float, blue: Float, alpha: Float): Float =
+        Float.fromBits(
+            colorInt(alpha) shl 24 or
+                (colorInt(blue) shl 16) or
+                (colorInt(green) shl 8) or
+                colorInt(red),
+        )
+
+    private fun colorInt(value: Float): Int =
+        (value.coerceIn(0f, 1f) * 255f).roundToInt()
 
     private fun addBed(builder: FloatBuilder, width: Float, depth: Float, bedPolygon: List<Float>) {
         val polygon = bedPolygon.takeIf { bedPolygonIsValid(it, width, depth) }
@@ -1466,27 +1493,18 @@ private class ToolpathLineBuilder(initialSegmentCapacity: Int) {
         endX: Float,
         endY: Float,
         endZ: Float,
-        red: Float,
-        green: Float,
-        blue: Float,
-        alpha: Float,
+        packedColor: Float,
     ) {
         val offset = vertexCount * FLOATS_PER_VERTEX
         ensure(offset + FLOATS_PER_SEGMENT)
-        val color = Float.fromBits(
-            colorInt(alpha) shl 24 or
-                (colorInt(blue) shl 16) or
-                (colorInt(green) shl 8) or
-                colorInt(red),
-        )
         values[offset] = startX
         values[offset + 1] = startY
         values[offset + 2] = startZ
-        values[offset + 3] = color
+        values[offset + 3] = packedColor
         values[offset + 4] = endX
         values[offset + 5] = endY
         values[offset + 6] = endZ
-        values[offset + 7] = color
+        values[offset + 7] = packedColor
         vertexCount += 2
     }
 
@@ -1501,9 +1519,6 @@ private class ToolpathLineBuilder(initialSegmentCapacity: Int) {
         if (requiredFloats <= values.size) return
         values = values.copyOf(max(values.size * 2, requiredFloats))
     }
-
-    private fun colorInt(value: Float): Int =
-        (value.coerceIn(0f, 1f) * 255f).roundToInt()
 
     private companion object {
         const val FLOATS_PER_VERTEX =
@@ -1529,10 +1544,7 @@ private class ToolpathInstanceBuilder(initialInstanceCapacity: Int) {
         endY: Float,
         endZ: Float,
         halfWidth: Float,
-        red: Float,
-        green: Float,
-        blue: Float,
-        alpha: Float,
+        packedColor: Float,
     ) {
         val offset = instanceCount * TOOLPATH_INSTANCE_FLOATS
         ensure(offset + TOOLPATH_INSTANCE_FLOATS)
@@ -1543,12 +1555,7 @@ private class ToolpathInstanceBuilder(initialInstanceCapacity: Int) {
         values[offset + 4] = endY
         values[offset + 5] = endZ
         values[offset + 6] = halfWidth
-        values[offset + 7] = Float.fromBits(
-            colorInt(alpha) shl 24 or
-                (colorInt(blue) shl 16) or
-                (colorInt(green) shl 8) or
-                colorInt(red),
-        )
+        values[offset + 7] = packedColor
         instanceCount += 1
     }
 
@@ -1563,9 +1570,6 @@ private class ToolpathInstanceBuilder(initialInstanceCapacity: Int) {
         if (requiredFloats <= values.size) return
         values = values.copyOf(max(values.size * 2, requiredFloats))
     }
-
-    private fun colorInt(value: Float): Int =
-        (value.coerceIn(0f, 1f) * 255f).roundToInt()
 
     private companion object {
         const val TOOLPATH_INSTANCE_FLOATS =
