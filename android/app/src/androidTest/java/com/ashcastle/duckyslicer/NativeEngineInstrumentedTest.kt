@@ -841,6 +841,10 @@ class NativeEngineInstrumentedTest {
                 supportBasePattern = "rectilinear-grid",
                 supportInterfacePattern = "rectilinear_interlaced",
                 supportStyle = "snug",
+                supportFilament = 1,
+                supportInterfaceFilament = 1,
+                wipeTowerEnabled = true,
+                wipeTowerWidth = 46f,
                 infillFirst = true,
                 infillWallOverlap = 18f,
                 topBottomInfillWallOverlap = 32f,
@@ -965,6 +969,10 @@ class NativeEngineInstrumentedTest {
         assertEquals("rectilinear-grid", restored.slicing.last().supportBasePattern)
         assertEquals("rectilinear_interlaced", restored.slicing.last().supportInterfacePattern)
         assertEquals("snug", restored.slicing.last().supportStyle)
+        assertEquals(1, restored.slicing.last().supportFilament)
+        assertEquals(1, restored.slicing.last().supportInterfaceFilament)
+        assertTrue(restored.slicing.last().wipeTowerEnabled)
+        assertEquals(46f, restored.slicing.last().wipeTowerWidth)
         assertEquals("nearest", restored.slicing.last().seamPosition)
         assertEquals("top", restored.slicing.last().ironingType)
         assertEquals("concentric", restored.slicing.last().ironingPattern)
@@ -1103,7 +1111,7 @@ class NativeEngineInstrumentedTest {
         assertEquals(7f, restored.printers.last().maxJerkX)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
-        assertEquals(16, JSONObject(file.readText()).getInt("schemaVersion"))
+        assertEquals(USER_PROFILE_SCHEMA_VERSION, JSONObject(file.readText()).getInt("schemaVersion"))
         assertTrue("Saved profiles must stay in app-private storage", file.canonicalPath.startsWith(context.cacheDir.canonicalPath))
         file.delete()
         directory.delete()
@@ -1135,7 +1143,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(15, catalog.schemaVersion)
+        assertEquals(16, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1163,6 +1171,10 @@ class NativeEngineInstrumentedTest {
         assertEquals(-150f, delta.bedOriginX, 0.01f)
         assertEquals(-150f, delta.bedOriginY, 0.01f)
         assertTrue(catalog.filaments.all(ProfileValidation::filament))
+        assertTrue(
+            "Prime-tower process values must survive catalog normalization",
+            catalog.slicing.any { it.wipeTowerEnabled && it.wipeTowerWidth != 60f },
+        )
         assertTrue(catalog.slicing.all(ProfileValidation::slicing))
         assertTrue(catalog.slicing.any { it.outerWallLineWidth != it.innerWallLineWidth })
         assertTrue(catalog.slicing.any { it.topSurfaceLineWidth != it.internalSolidInfillLineWidth })
@@ -1611,6 +1623,52 @@ class NativeEngineInstrumentedTest {
             "Painted enforcer facets must create real Orca support toolpaths",
             paintedPreview.roleSegmentCounts[5] > 0,
         )
+    }
+
+    @Test
+    fun supportFilamentRoutingAndPrimeTowerReachOrca() {
+        val model = inspectModel(fixtureModel().absolutePath)
+        val primary = FilamentProfile.PLA
+        val secondary = FilamentProfile.PETG
+        val options = SliceOptions()
+            .selectPrinter(PrinterProfile.U1_04)
+            .selectFilament(primary)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                filamentSlots = listOf(primary, secondary),
+                supportEnabled = true,
+                supportFilament = 1,
+                supportInterfaceFilament = 2,
+                wipeTowerEnabled = true,
+                wipeTowerWidth = 42f,
+            )
+        val outcome = OnDeviceSlicer.slice(
+            listOf(
+                ProjectObject(
+                    id = "prime-primary",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = -20f),
+                    filamentSlot = 0,
+                ),
+                ProjectObject(
+                    id = "prime-secondary",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = 20f),
+                    filamentSlot = 1,
+                ),
+            ),
+            options,
+        )
+
+        val gcode = outcome.output.readText()
+        assertTrue("Support base filament must reach Orca", gcode.contains("; support_filament = 1"))
+        assertTrue(
+            "Support interface filament must reach Orca",
+            gcode.contains("; support_interface_filament = 2"),
+        )
+        assertTrue("Prime tower must remain enabled for a two-tool plate", gcode.contains("; enable_prime_tower = 1"))
+        assertTrue("Prime-tower width must reach Orca", gcode.contains("; prime_tower_width = 42"))
+        assertTrue("The second object must produce a real tool change", gcode.lineSequence().any { it == "T1" })
     }
 
     @Test

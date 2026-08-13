@@ -908,6 +908,7 @@ private fun SlicingSettingsSheet(
             options.firstLayerAcceleration,
         ).maxOrNull() ?: 20_000f
         val featureAccelerationSteps = (maximumFeatureAcceleration / 100f).roundToInt().coerceAtLeast(2) - 1
+        val maximumFilamentSlot = options.resolvedFilamentSlots().size.coerceIn(1, MAX_FILAMENT_SLOTS)
         if (settingsQuery.isBlank()) {
             SlicingSettingsTabs(
                 selected = selectedSection,
@@ -2025,6 +2026,36 @@ private fun SlicingSettingsSheet(
                         optionLabel = { enumLabel(it) },
                         onSelected = { onOptionsChanged(options.copy(supportInterfacePattern = it)) },
                     )
+                    SettingsGroupTitle(stringResource(R.string.support_filament_routing))
+                    SettingSlider(
+                        label = stringResource(R.string.support_filament),
+                        valueText = if (options.supportFilament == 0) {
+                            stringResource(R.string.filament_default)
+                        } else {
+                            stringResource(R.string.extruder_number, options.supportFilament)
+                        },
+                        value = options.supportFilament.toFloat().coerceAtMost(maximumFilamentSlot.toFloat()),
+                        range = 0f..maximumFilamentSlot.toFloat(),
+                        steps = (maximumFilamentSlot - 1).coerceAtLeast(0),
+                        onValueChange = {
+                            onOptionsChanged(options.copy(supportFilament = it.roundToInt()))
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.support_interface_filament),
+                        valueText = if (options.supportInterfaceFilament == 0) {
+                            stringResource(R.string.filament_default)
+                        } else {
+                            stringResource(R.string.extruder_number, options.supportInterfaceFilament)
+                        },
+                        value = options.supportInterfaceFilament.toFloat()
+                            .coerceAtMost(maximumFilamentSlot.toFloat()),
+                        range = 0f..maximumFilamentSlot.toFloat(),
+                        steps = (maximumFilamentSlot - 1).coerceAtLeast(0),
+                        onValueChange = {
+                            onOptionsChanged(options.copy(supportInterfaceFilament = it.roundToInt()))
+                        },
+                    )
                     SettingSlider(
                         label = stringResource(R.string.support_threshold_angle),
                         valueText = stringResource(R.string.degrees_value, options.supportAngle),
@@ -2097,6 +2128,24 @@ private fun SlicingSettingsSheet(
             }
 
             SlicingSettingsSection.OTHERS -> {
+                SettingsGroupTitle(stringResource(R.string.prime_tower))
+                SettingsSwitch(
+                    label = stringResource(R.string.enable_prime_tower),
+                    checked = options.wipeTowerEnabled,
+                    onCheckedChange = { onOptionsChanged(options.copy(wipeTowerEnabled = it)) },
+                )
+                if (options.wipeTowerEnabled || settingsQuery.isNotBlank()) {
+                    SettingSlider(
+                        label = stringResource(R.string.prime_tower_width),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.wipeTowerWidth),
+                        value = options.wipeTowerWidth,
+                        range = 10f..max(100f, options.wipeTowerWidth),
+                        steps = (max(100f, options.wipeTowerWidth) - 10f).roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = {
+                            onOptionsChanged(options.copy(wipeTowerWidth = it.roundToInt().toFloat()))
+                        },
+                    )
+                }
                 SettingsGroupTitle(stringResource(R.string.bed_adhesion))
                 SettingSlider(
                     label = stringResource(R.string.skirt_loops),

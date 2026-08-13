@@ -108,6 +108,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var supportBasePattern: String = base.supportBasePattern
     private var supportInterfacePattern: String = base.supportInterfacePattern
     private var supportStyle: String = base.supportStyle
+    private var supportFilament: Int = base.supportFilament
+    private var supportInterfaceFilament: Int = base.supportInterfaceFilament
+    private var wipeTowerEnabled: Boolean = base.wipeTowerEnabled
+    private var wipeTowerWidth: Float = base.wipeTowerWidth
     private var skirtLoops: Int = base.skirtLoops
     private var skirtDistance: Float = base.skirtDistance
     private var skirtHeight: Int = base.skirtHeight
@@ -377,6 +381,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         elephantFootCompensationLayers = input.readInt()
         maxBridgeLength = input.readFloat()
         preciseOuterWalls = input.readCatalogBoolean()
+        supportFilament = input.readInt()
+        supportInterfaceFilament = input.readInt()
+        wipeTowerEnabled = input.readCatalogBoolean()
+        wipeTowerWidth = input.readFloat()
         compatiblePrinters = input.readCatalogStringList()
     }
 
@@ -486,6 +494,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         supportBasePattern = supportBasePattern,
         supportInterfacePattern = supportInterfacePattern,
         supportStyle = supportStyle,
+        supportFilament = supportFilament,
+        supportInterfaceFilament = supportInterfaceFilament,
+        wipeTowerEnabled = wipeTowerEnabled,
+        wipeTowerWidth = wipeTowerWidth,
         skirtLoops = skirtLoops,
         skirtDistance = skirtDistance,
         skirtHeight = skirtHeight,
@@ -721,5 +733,9 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("elephantFootCompensationLayers", BINARY_INT),
     BinaryField("maxBridgeLength", BINARY_FLOAT),
     BinaryField("preciseOuterWalls", BINARY_BOOL),
+    BinaryField("supportFilament", BINARY_INT),
+    BinaryField("supportInterfaceFilament", BINARY_INT),
+    BinaryField("wipeTowerEnabled", BINARY_BOOL),
+    BinaryField("wipeTowerWidth", BINARY_FLOAT),
     BinaryField("compatiblePrinters", BINARY_STRING_LIST),
 )

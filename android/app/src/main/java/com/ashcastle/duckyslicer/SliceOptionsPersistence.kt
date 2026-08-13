@@ -151,6 +151,10 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         supportBasePattern = supportBasePattern,
         supportInterfacePattern = supportInterfacePattern,
         supportStyle = supportStyle,
+        supportFilament = supportFilament,
+        supportInterfaceFilament = supportInterfaceFilament,
+        wipeTowerEnabled = wipeTowerEnabled,
+        wipeTowerWidth = wipeTowerWidth,
         skirtLoops = skirtLoops,
         skirtDistance = skirtDistance,
         skirtHeight = skirtHeight,
@@ -270,7 +274,7 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 14
+private const val SLICE_OPTIONS_FORMAT_VERSION = 15
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f

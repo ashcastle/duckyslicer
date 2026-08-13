@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -644,6 +644,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "elephantFootCompensationLayers": integer(raw.get("elefant_foot_compensation_layers"), 1),
         "maxBridgeLength": number(raw.get("max_bridge_length"), 10),
         "preciseOuterWalls": boolean(raw.get("precise_outer_wall"), True),
+        "supportFilament": integer(raw.get("support_filament"), 0),
+        "supportInterfaceFilament": integer(raw.get("support_interface_filament"), 0),
+        "wipeTowerEnabled": boolean(raw.get("enable_prime_tower")),
+        "wipeTowerWidth": number(raw.get("prime_tower_width"), 60),
         "compatiblePrinters": compatible,
     }
     if not (
@@ -698,6 +702,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 10 <= profile["bridgeDensity"] <= 100
         and 10 <= profile["internalBridgeDensity"] <= 100
         and 0 <= profile["bridgeAngle"] <= 360
+        and 0 <= profile["supportFilament"] <= 16
+        and 0 <= profile["supportInterfaceFilament"] <= 16
+        and 10 <= profile["wipeTowerWidth"] <= 300
         and 0 <= profile["internalBridgeAngle"] <= 360
         and 0 <= profile["infillWallOverlap"] <= 100
         and 0 <= profile["topBottomInfillWallOverlap"] <= 100

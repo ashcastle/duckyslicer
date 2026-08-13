@@ -17,7 +17,13 @@ class SliceOptionsPersistenceTest {
         val options = SliceOptions()
             .selectPrinter(PrinterProfile.U1_04)
             .selectFilament(primary)
-            .copy(filamentSlots = listOf(primary, secondary))
+            .copy(
+                filamentSlots = listOf(primary, secondary),
+                supportFilament = 1,
+                supportInterfaceFilament = 2,
+                wipeTowerEnabled = true,
+                wipeTowerWidth = 42f,
+            )
 
         val restored = requireNotNull(options.toProjectJson().toProjectSliceOptionsOrNull())
         val native = restored.toNativeConfig()
@@ -27,6 +33,10 @@ class SliceOptionsPersistenceTest {
         assertEquals(listOf("PLA", "PETG"), native.filamentTypes.toList())
         assertEquals(listOf(primary.nozzleTemp, secondary.nozzleTemp), native.extruderTemps.toList())
         assertEquals(listOf(primary.flowRatio, secondary.flowRatio), native.filamentFlowRatios.toList())
+        assertEquals(1, native.supportFilament)
+        assertEquals(2, native.supportInterfaceFilament)
+        assertEquals(true, native.wipeTowerEnabled)
+        assertEquals(42f, native.wipeTowerWidth)
     }
 
     @Test
@@ -80,6 +90,10 @@ class SliceOptionsPersistenceTest {
         assertEquals("rectilinear-grid", restored.supportBasePattern)
         assertEquals("rectilinear_interlaced", restored.supportInterfacePattern)
         assertEquals("snug", restored.supportStyle)
+        assertEquals(1, restored.supportFilament)
+        assertEquals(1, restored.supportInterfaceFilament)
+        assertEquals(true, restored.wipeTowerEnabled)
+        assertEquals(48f, restored.wipeTowerWidth)
         assertEquals(true, restored.infillFirst)
         assertEquals(19f, restored.infillWallOverlap)
         assertEquals(31f, restored.topBottomInfillWallOverlap)
@@ -321,6 +335,10 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         supportBasePattern = "rectilinear-grid",
         supportInterfacePattern = "rectilinear_interlaced",
         supportStyle = "snug",
+        supportFilament = 1,
+        supportInterfaceFilament = 1,
+        wipeTowerEnabled = true,
+        wipeTowerWidth = 48f,
         infillFirst = true,
         infillWallOverlap = 19f,
         topBottomInfillWallOverlap = 31f,

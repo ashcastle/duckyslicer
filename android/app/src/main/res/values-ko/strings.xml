@@ -637,4 +637,12 @@
     <string name="shape_torus">도넛</string>
     <string name="shape_added">%1$s 추가됨</string>
     <string name="shape_error">도형을 추가하지 못했습니다.</string>
+    <string name="support_filament_routing">서포트 필라멘트</string>
+    <string name="support_filament">서포트 본체</string>
+    <string name="support_interface_filament">서포트 인터페이스</string>
+    <string name="filament_default">기본값</string>
+    <string name="extruder_number">익스트루더 %1$d</string>
+    <string name="prime_tower">프라임 타워</string>
+    <string name="enable_prime_tower">프라임 타워 사용</string>
+    <string name="prime_tower_width">타워 너비</string>
 </resources>

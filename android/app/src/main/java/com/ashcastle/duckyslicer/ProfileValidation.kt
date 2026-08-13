@@ -167,6 +167,9 @@ internal object ProfileValidation {
             profile.supportBasePattern in SUPPORT_BASE_PATTERNS &&
             profile.supportInterfacePattern in SUPPORT_INTERFACE_PATTERNS &&
             profile.supportStyle in SUPPORT_STYLES &&
+            profile.supportFilament in 0..MAX_FILAMENT_SLOTS &&
+            profile.supportInterfaceFilament in 0..MAX_FILAMENT_SLOTS &&
+            profile.wipeTowerWidth in 10f..300f &&
             profile.brimType in setOf(
                 "auto_brim", "brim_ears", "outer_only", "inner_only", "outer_and_inner", "no_brim",
             ) &&

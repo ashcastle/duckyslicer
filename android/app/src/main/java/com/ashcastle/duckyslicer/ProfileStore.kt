@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 16
+internal const val USER_PROFILE_SCHEMA_VERSION = 17
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -242,6 +242,10 @@ class ProfileStore private constructor(
             supportBasePattern = options.supportBasePattern,
             supportInterfacePattern = options.supportInterfacePattern,
             supportStyle = options.supportStyle,
+            supportFilament = options.supportFilament,
+            supportInterfaceFilament = options.supportInterfaceFilament,
+            wipeTowerEnabled = options.wipeTowerEnabled,
+            wipeTowerWidth = options.wipeTowerWidth,
             skirtLoops = options.skirtLoops,
             skirtDistance = options.skirtDistance,
             skirtHeight = options.skirtHeight,
@@ -523,6 +527,10 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("supportBasePattern", supportBasePattern)
     .put("supportInterfacePattern", supportInterfacePattern)
     .put("supportStyle", supportStyle)
+    .put("supportFilament", supportFilament)
+    .put("supportInterfaceFilament", supportInterfaceFilament)
+    .put("wipeTowerEnabled", wipeTowerEnabled)
+    .put("wipeTowerWidth", wipeTowerWidth)
     .put("skirtHeight", skirtHeight)
     .put("skirtSpeed", skirtSpeed)
     .put("minimumSkirtLength", minimumSkirtLength)
@@ -752,6 +760,10 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         supportBasePattern = optString("supportBasePattern", "default"),
         supportInterfacePattern = optString("supportInterfacePattern", "auto"),
         supportStyle = optString("supportStyle", "default"),
+        supportFilament = optInt("supportFilament", 0),
+        supportInterfaceFilament = optInt("supportInterfaceFilament", 0),
+        wipeTowerEnabled = optBoolean("wipeTowerEnabled"),
+        wipeTowerWidth = optDouble("wipeTowerWidth", 60.0).toFloat(),
         skirtLoops = optInt("skirtLoops", 0),
         skirtDistance = optDouble("skirtDistance", 6.0).toFloat(),
         skirtHeight = optInt("skirtHeight", 1),

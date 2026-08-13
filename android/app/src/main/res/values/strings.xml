@@ -637,4 +637,12 @@
     <string name="shape_torus">Torus</string>
     <string name="shape_added">%1$s added</string>
     <string name="shape_error">The shape could not be added.</string>
+    <string name="support_filament_routing">Support filament</string>
+    <string name="support_filament">Support base</string>
+    <string name="support_interface_filament">Support interface</string>
+    <string name="filament_default">Default</string>
+    <string name="extruder_number">Extruder %1$d</string>
+    <string name="prime_tower">Prime tower</string>
+    <string name="enable_prime_tower">Enable prime tower</string>
+    <string name="prime_tower_width">Tower width</string>
 </resources>
