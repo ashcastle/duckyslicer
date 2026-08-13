@@ -55,11 +55,13 @@ def valid_sources() -> dict[str, str]:
             "ToolpathGeometryUploadState(capacity = GPU_GEOMETRY_CACHE_SIZE) "
             "const val GPU_GEOMETRY_CACHE_SIZE = 2 "
             "pendingPrewarmScene requestPrewarmFrame() uploadState.markUsed(scene) "
-            "releaseStaleGeometry(setOf(sourceScene, interactionScene)) "
+            "releaseStaleGeometry(setOf(sourceGpuScene, interactionGpuScene)) "
             "uploadState.remove(staleScene) "
             "GLES30.glGenBuffers GLES30.glDeleteBuffers "
             "GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER GLES30.glBufferData( "
             "GLES30.GL_STATIC_DRAW GLES30.glDrawArraysInstanced( "
+            "private fun drawToolpathLines( GLES30.glDrawArrays(GLES30.GL_LINES "
+            "renderAsLines = true lineVertices = lineBuilder?.finish() "
             "GLES30.GL_TRIANGLE_STRIP const val TOOLPATH_VERTICES_PER_INSTANCE = 4 "
             "GLES30.glVertexAttribDivisor( GLES30.GL_UNSIGNED_BYTE "
             "geometryUploadCountForTest cachedGeometryCountForTest "
@@ -70,7 +72,7 @@ def valid_sources() -> dict[str, str]:
             "releaseGpuGeometryForMemoryPressure() "
             "ToolpathUploadPayload INSTANCE_STRIDE_BYTES = 32 "
             "INSTANCE_START_OFFSET_BYTES INSTANCE_COLOR_OFFSET_BYTES "
-            "toolpathInstances = instanceBuilder.finish() "
+            "toolpathInstances = instanceBuilder?.finish() "
             "EARLY_Z_OPACITY_THRESHOLD = 0.85f plan.segmentOffsets.indices.reversed() "
             ".allocateDirect(capacity * Float.SIZE_BYTES) "
             "ByteBuffer.allocateDirect(usedFloats * Float.SIZE_BYTES) "
@@ -467,6 +469,14 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "GLES30.glDrawArraysInstanced(", "drawExpandedToolpaths("
         )
         with self.assertRaisesRegex(VerificationError, "glDrawArraysInstanced"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_missing_non_instanced_interaction_line_draw(self) -> None:
+        sources = valid_sources()
+        sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
+            "GLES30.glDrawArrays(GLES30.GL_LINES", "drawInstancedInteractionLines("
+        )
+        with self.assertRaisesRegex(VerificationError, "glDrawArrays"):
             verify_preview_boundary(sources)
 
     def test_rejects_expanded_per_segment_ribbon_vertices(self) -> None:

@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.roundToInt
@@ -182,6 +183,15 @@ class ToolpathMeshBuilderTest {
     }
 
     @Test
+    fun repeatedLodRequestsReuseTheImmutableRenderPlan() {
+        val preview = twoLayerPreview()
+        val first = preview.buildRenderPlan(segmentBudget = 1, visibleRoles = setOf(0, 1))
+        val second = preview.buildRenderPlan(segmentBudget = 1, visibleRoles = setOf(1, 0))
+
+        assertSame(first, second)
+    }
+
+    @Test
     fun toolpathsBecomeCompactOutlinedRibbonInstancesInsteadOfExpandedBoxes() {
         val preview = GcodeLayerPreview(
             startLayer = 0,
@@ -229,6 +239,31 @@ class ToolpathMeshBuilderTest {
         )
         assertTrue("GPU bed staging must use direct native memory", payload.bedVertices.isDirect)
         assertTrue("GPU instance staging must use direct native memory", payload.toolpathInstances.isDirect)
+    }
+
+    @Test
+    fun overviewLinesUseOneExplicitCompactVertexStream() {
+        val preview = twoLayerPreview()
+        val payload = ToolpathMeshBuilder.build(
+            ToolpathScene(
+                preview = preview,
+                bedSizeX = 100f,
+                bedSizeY = 100f,
+                opacity = 1f,
+                depthContrast = 0.8f,
+                detail = PreviewDetail.PERFORMANCE,
+                renderAsLines = true,
+            ),
+        )
+
+        assertEquals(0, payload.instanceCount)
+        assertEquals(0, payload.toolpathInstances.remaining())
+        assertEquals(4, payload.lineVertexCount)
+        assertEquals(
+            payload.lineVertexCount * ToolpathMeshBuilder.LINE_VERTEX_STRIDE_BYTES,
+            payload.lineVertices.remaining(),
+        )
+        assertTrue(payload.lineVertices.isDirect)
     }
 
     @Test

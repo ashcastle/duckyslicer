@@ -54,6 +54,7 @@ class ToolpathRendererPerformanceInstrumentedTest {
             depthContrast = 0.78f,
             detail = PreviewDetail.DETAIL,
             segmentBudgetOverride = depthPreviewInteractionSegmentBudget(PreviewDetail.DETAIL),
+            renderAsLines = true,
         )
         val indexStarted = SystemClock.elapsedRealtimeNanos()
         preview.prepareRenderIndex()
@@ -69,7 +70,7 @@ class ToolpathRendererPerformanceInstrumentedTest {
             planDurations += SystemClock.elapsedRealtimeNanos() - planStarted
             assertTrue(plan.segmentOffsets.isNotEmpty())
             val started = SystemClock.elapsedRealtimeNanos()
-            instances = ToolpathMeshBuilder.build(scene).instanceCount
+            instances = ToolpathMeshBuilder.build(scene).lineVertexCount / 2
             durations += SystemClock.elapsedRealtimeNanos() - started
         }
         val sortedPlans = planDurations.drop(2).sorted()

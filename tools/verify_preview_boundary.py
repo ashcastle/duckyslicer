@@ -139,7 +139,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "pendingPrewarmScene",
         "requestPrewarmFrame()",
         "uploadState.markUsed(scene)",
-        "releaseStaleGeometry(setOf(sourceScene, interactionScene))",
+        "releaseStaleGeometry(setOf(sourceGpuScene, interactionGpuScene))",
         "uploadState.remove(staleScene)",
         "GLES30.glGenBuffers",
         "GLES30.glDeleteBuffers",
@@ -148,6 +148,10 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "GLES30.GL_STATIC_DRAW",
         "GLES30.glDrawArraysInstanced(",
         "GLES30.GL_TRIANGLE_STRIP",
+        "private fun drawToolpathLines(",
+        "GLES30.glDrawArrays(GLES30.GL_LINES",
+        "renderAsLines = true",
+        "lineVertices = lineBuilder?.finish()",
         "const val TOOLPATH_VERTICES_PER_INSTANCE = 4",
         "GLES30.glVertexAttribDivisor(",
         "GLES30.GL_UNSIGNED_BYTE",
@@ -162,7 +166,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "INSTANCE_STRIDE_BYTES = 32",
         "INSTANCE_START_OFFSET_BYTES",
         "INSTANCE_COLOR_OFFSET_BYTES",
-        "toolpathInstances = instanceBuilder.finish()",
+        "toolpathInstances = instanceBuilder?.finish()",
         "EARLY_Z_OPACITY_THRESHOLD = 0.85f",
         "plan.segmentOffsets.indices.reversed()",
         ".allocateDirect(capacity * Float.SIZE_BYTES)",
@@ -763,7 +767,7 @@ def main() -> None:
         raise SystemExit(f"Preview boundary verification failed: {error}") from error
     print(
         "Verified bounded FloatArray model/toolpath previews, responsive controls, adaptive detail, "
-        "compact instanced toolpaths, bounded GPU caching, and automatic compatibility fallback"
+        "compact ribbon/line toolpaths, bounded GPU caching, and automatic compatibility fallback"
     )
 
 

@@ -19,6 +19,11 @@ data class GcodeLayerPreview(
 ) {
     @Volatile
     private var cachedContinuousPaths: List<SegmentPath>? = null
+    private val cachedRenderPlans = LinkedHashMap<RenderPlanKey, PreviewRenderPlan>(
+        MAX_RENDER_PLAN_CACHE_ENTRIES,
+        0.75f,
+        true,
+    )
 
     internal fun prepareRenderIndex(): GcodeLayerPreview {
         buildContinuousPaths()
@@ -33,12 +38,16 @@ data class GcodeLayerPreview(
         if (totalSegments == 0) return PreviewRenderPlan(IntArray(0), BooleanArray(0))
 
         val safeBudget = segmentBudget.coerceAtLeast(1)
+        val cacheKey = RenderPlanKey(safeBudget, visibleRoleMask(visibleRoles))
+        synchronized(cachedRenderPlans) {
+            cachedRenderPlans[cacheKey]?.let { return it }
+        }
         val paths = buildContinuousPaths().filter { path ->
             visibleRoles == null || path.role in visibleRoles
         }
         val visibleSegmentCount = paths.sumOf(SegmentPath::size)
         if (visibleSegmentCount == 0) return PreviewRenderPlan(IntArray(0), BooleanArray(0))
-        if (visibleSegmentCount <= safeBudget) return planForPaths(paths)
+        if (visibleSegmentCount <= safeBudget) return cacheRenderPlan(cacheKey, planForPaths(paths))
 
         val presentRoles = ROLE_PRIORITY.filter { role -> paths.any { it.role == role } }
         val selected = ArrayList<SegmentPath>()
@@ -60,7 +69,28 @@ data class GcodeLayerPreview(
             chosen.forEach { selectedStarts += it.start }
             remaining = (remaining - chosen.sumOf(SegmentPath::size)).coerceAtLeast(0)
         }
-        return planForPaths(selected.sortedBy(SegmentPath::start))
+        return cacheRenderPlan(cacheKey, planForPaths(selected.sortedBy(SegmentPath::start)))
+    }
+
+    private fun cacheRenderPlan(key: RenderPlanKey, plan: PreviewRenderPlan): PreviewRenderPlan =
+        synchronized(cachedRenderPlans) {
+            cachedRenderPlans[key]?.let { return@synchronized it }
+            cachedRenderPlans[key] = plan
+            while (cachedRenderPlans.size > MAX_RENDER_PLAN_CACHE_ENTRIES) {
+                val eldest = cachedRenderPlans.entries.iterator()
+                if (eldest.hasNext()) {
+                    eldest.next()
+                    eldest.remove()
+                }
+            }
+            plan
+        }
+
+    private fun visibleRoleMask(visibleRoles: Set<Int>?): Int {
+        if (visibleRoles == null) return ALL_ROLES_MASK
+        return visibleRoles.fold(0) { mask, role ->
+            if (role in 0 until ROLE_COUNT) mask or (1 shl role) else mask
+        }
     }
 
     private fun buildContinuousPaths(): List<SegmentPath> {
@@ -159,9 +189,14 @@ data class GcodeLayerPreview(
         val size: Int get() = endExclusive - start
     }
 
+    private data class RenderPlanKey(val segmentBudget: Int, val visibleRoleMask: Int)
+
     companion object {
         const val SEGMENT_STRIDE = 6
+        internal const val ROLE_COUNT = 10
         private const val Z_EPSILON = 0.001f
+        private const val MAX_RENDER_PLAN_CACHE_ENTRIES = 6
+        private const val ALL_ROLES_MASK = (1 shl ROLE_COUNT) - 1
         private val ROLE_PRIORITY = intArrayOf(0, 3, 9, 1, 4, 6, 7, 5, 2, 8)
 
         fun fromNative(raw: FloatArray?): GcodeLayerPreview {
@@ -238,7 +273,6 @@ data class GcodeLayerPreview(
             ).also { preview -> preview.cachedContinuousPaths = continuousPaths }
         }
 
-        internal const val ROLE_COUNT = 10
         internal const val MAX_SEGMENTS = 120_000
         internal const val MAX_PAYLOAD_FLOATS = 7 + MAX_SEGMENTS * SEGMENT_STRIDE
         private const val HEADER_FLOATS = 7

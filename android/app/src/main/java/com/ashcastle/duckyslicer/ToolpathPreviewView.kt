@@ -330,6 +330,7 @@ internal data class ToolpathScene(
     val bedOriginX: Float = 0f,
     val bedOriginY: Float = 0f,
     val segmentBudgetOverride: Int? = null,
+    val renderAsLines: Boolean = false,
 ) {
     /**
      * Preview payloads are immutable renderer inputs. Cache identity must therefore follow the
@@ -348,7 +349,8 @@ internal data class ToolpathScene(
             bedPolygon == other.bedPolygon &&
             bedOriginX.toBits() == other.bedOriginX.toBits() &&
             bedOriginY.toBits() == other.bedOriginY.toBits() &&
-            segmentBudgetOverride == other.segmentBudgetOverride
+            segmentBudgetOverride == other.segmentBudgetOverride &&
+            renderAsLines == other.renderAsLines
     }
 
     override fun hashCode(): Int {
@@ -363,6 +365,7 @@ internal data class ToolpathScene(
         result = 31 * result + bedOriginX.hashCode()
         result = 31 * result + bedOriginY.hashCode()
         result = 31 * result + (segmentBudgetOverride ?: 0)
+        result = 31 * result + renderAsLines.hashCode()
         return result
     }
 }
@@ -392,7 +395,10 @@ internal class ToolpathRenderer(
     private var toolpathHalfWidthLocation = 0
     private var toolpathColorLocation = 0
     private var toolpathMatrixLocation = 0
-    private var toolpathLineModeLocation = 0
+    private var lineProgram = 0
+    private var linePositionLocation = 0
+    private var lineColorLocation = 0
+    private var lineMatrixLocation = 0
     private var viewportWidth = 1
     private var viewportHeight = 1
     private var yawDegrees = -45f
@@ -458,6 +464,7 @@ internal class ToolpathRenderer(
         reportRendererStarting()
         bedProgram = 0
         toolpathProgram = 0
+        lineProgram = 0
         geometryUploadCount = 0
         pendingPrewarmScene = null
         refinementRequestedForScene = null
@@ -471,7 +478,8 @@ internal class ToolpathRenderer(
         GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
         bedProgram = createProgramSafely(BED_VERTEX_SHADER, FRAGMENT_SHADER)
         toolpathProgram = createProgramSafely(TOOLPATH_VERTEX_SHADER, FRAGMENT_SHADER)
-        if (bedProgram == 0 || toolpathProgram == 0) {
+        lineProgram = createProgramSafely(LINE_VERTEX_SHADER, FRAGMENT_SHADER)
+        if (bedProgram == 0 || toolpathProgram == 0 || lineProgram == 0) {
             failRenderer("program_creation")
             return
         }
@@ -484,7 +492,9 @@ internal class ToolpathRenderer(
         toolpathHalfWidthLocation = GLES30.glGetAttribLocation(toolpathProgram, "aHalfWidth")
         toolpathColorLocation = GLES30.glGetAttribLocation(toolpathProgram, "aColor")
         toolpathMatrixLocation = GLES30.glGetUniformLocation(toolpathProgram, "uMvp")
-        toolpathLineModeLocation = GLES30.glGetUniformLocation(toolpathProgram, "uLineMode")
+        linePositionLocation = GLES30.glGetAttribLocation(lineProgram, "aPosition")
+        lineColorLocation = GLES30.glGetAttribLocation(lineProgram, "aColor")
+        lineMatrixLocation = GLES30.glGetUniformLocation(lineProgram, "uMvp")
         val requiredLocations = intArrayOf(
             bedPositionLocation,
             bedColorLocation,
@@ -495,7 +505,9 @@ internal class ToolpathRenderer(
             toolpathHalfWidthLocation,
             toolpathColorLocation,
             toolpathMatrixLocation,
-            toolpathLineModeLocation,
+            linePositionLocation,
+            lineColorLocation,
+            lineMatrixLocation,
         )
         if (requiredLocations.any { it < 0 } || !glOperationSucceeded("program_locations")) {
             failRenderer("program_locations")
@@ -513,7 +525,7 @@ internal class ToolpathRenderer(
     override fun onDrawFrame(unused: GL10?) {
         if (rendererUnavailable) return
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
-        if (bedProgram == 0 || toolpathProgram == 0) {
+        if (bedProgram == 0 || toolpathProgram == 0 || lineProgram == 0) {
             failRenderer("missing_program")
             return
         }
@@ -570,29 +582,28 @@ internal class ToolpathRenderer(
                 segmentBudgetOverride = depthPreviewInteractionSegmentBudget(sourceScene.detail),
             )
         }
-        releaseStaleGeometry(setOf(sourceScene, interactionScene))
+        val sourceDrawsLines = shouldDrawToolpathLines(
+            sourceScene.detail,
+            interactionActive = false,
+            initialPreview = false,
+            denseOverview = overview,
+        )
+        val sourceGpuScene = sourceScene.copy(renderAsLines = sourceDrawsLines)
+        val interactionGpuScene = interactionScene.copy(renderAsLines = true)
+        releaseStaleGeometry(setOf(sourceGpuScene, interactionGpuScene))
         // A dense preview should become recognizable immediately. Draw the same coherent,
         // whole-path LOD used for gestures first, then replace it with requested detail on
         // the following dirty frame. This avoids blocking the first visible frame on tens of
         // thousands of software-rasterized extrusion ribbons without turning paths into dots.
         val initialPreview = !interactionActive && refinementRequestedForScene != sourceScene
-        val scene = if (interactionActive || initialPreview) interactionScene else sourceScene
+        val scene = if (interactionActive || initialPreview) interactionGpuScene else sourceGpuScene
         val geometry = geometryFor(scene) ?: return
         val matrix = cameraMatrix(scene)
         val measureAutomaticFrame = !interactionActive && !initialPreview &&
             adaptivePreviewController.shouldMeasure(requestedScene.detail, adaptiveWorkload)
         val measurementStartedNanos = if (measureAutomaticFrame) System.nanoTime() else 0L
         drawBed(geometry, matrix)
-        drawToolpaths(
-            geometry,
-            matrix,
-            shouldDrawToolpathLines(
-                sourceScene.detail,
-                interactionActive,
-                initialPreview,
-                overview,
-            ),
-        )
+        drawToolpaths(geometry, matrix, scene.renderAsLines)
         if (!glOperationSucceeded("frame_draw")) return
         if (measureAutomaticFrame) {
             // Calibration is limited to two settled frames per tier. glFinish gives a
@@ -623,12 +634,12 @@ internal class ToolpathRenderer(
             return
         }
 
-        if (!interactionActive && interactionScene != sourceScene) {
-            if (uploadState.needsUpload(interactionScene)) {
-                if (prewarmAtFrameStart == interactionScene) {
-                    uploadGeometry(interactionScene)
+        if (!interactionActive && interactionGpuScene != sourceGpuScene) {
+            if (uploadState.needsUpload(interactionGpuScene)) {
+                if (prewarmAtFrameStart == interactionGpuScene) {
+                    uploadGeometry(interactionGpuScene)
                 } else {
-                    pendingPrewarmScene = interactionScene
+                    pendingPrewarmScene = interactionGpuScene
                     requestPrewarmFrame()
                 }
             }
@@ -678,11 +689,17 @@ internal class ToolpathRenderer(
         matrix: FloatArray,
         drawInteractionLines: Boolean,
     ) {
-        if (geometry.instanceCount == 0) return
+        if (
+            (drawInteractionLines && geometry.lineVertexCount == 0) ||
+            (!drawInteractionLines && geometry.instanceCount == 0)
+        ) return
         traced("DuckyPreview.drawToolpaths") {
+            if (drawInteractionLines) {
+                drawToolpathLines(geometry, matrix)
+                return@traced
+            }
             GLES30.glUseProgram(toolpathProgram)
             GLES30.glUniformMatrix4fv(toolpathMatrixLocation, 1, false, matrix, 0)
-            GLES30.glUniform1i(toolpathLineModeLocation, if (drawInteractionLines) 1 else 0)
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.instanceBufferId)
             setInstanceAttribute(
                 toolpathStartLocation,
@@ -712,13 +729,12 @@ internal class ToolpathRenderer(
                 true,
                 ToolpathMeshBuilder.INSTANCE_COLOR_OFFSET_BYTES,
             )
-            val drawMode = if (drawInteractionLines) GLES30.GL_LINES else GLES30.GL_TRIANGLE_STRIP
-            val vertexCount = if (drawInteractionLines) {
-                TOOLPATH_INTERACTION_VERTICES_PER_INSTANCE
-            } else {
-                TOOLPATH_VERTICES_PER_INSTANCE
-            }
-            GLES30.glDrawArraysInstanced(drawMode, 0, vertexCount, geometry.instanceCount)
+            GLES30.glDrawArraysInstanced(
+                GLES30.GL_TRIANGLE_STRIP,
+                0,
+                TOOLPATH_VERTICES_PER_INSTANCE,
+                geometry.instanceCount,
+            )
             val instanceLocations = intArrayOf(
                 toolpathStartLocation,
                 toolpathEndLocation,
@@ -730,6 +746,40 @@ internal class ToolpathRenderer(
             }
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
         }
+    }
+
+    /**
+     * Software GLES drivers pay a large per-instance cost even for two-vertex lines. The
+     * interaction/overview path therefore uses one compact explicit vertex stream and one
+     * non-instanced draw. Ribbons keep the smaller instanced representation for settled detail.
+     */
+    private fun drawToolpathLines(geometry: ToolpathGpuGeometry, matrix: FloatArray) {
+        if (geometry.lineVertexCount == 0) return
+        GLES30.glUseProgram(lineProgram)
+        GLES30.glUniformMatrix4fv(lineMatrixLocation, 1, false, matrix, 0)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.lineBufferId)
+        GLES30.glVertexAttribPointer(
+            linePositionLocation,
+            3,
+            GLES30.GL_FLOAT,
+            false,
+            ToolpathMeshBuilder.LINE_VERTEX_STRIDE_BYTES,
+            ToolpathMeshBuilder.LINE_POSITION_OFFSET_BYTES,
+        )
+        GLES30.glEnableVertexAttribArray(linePositionLocation)
+        GLES30.glVertexAttribDivisor(linePositionLocation, 0)
+        GLES30.glVertexAttribPointer(
+            lineColorLocation,
+            4,
+            GLES30.GL_UNSIGNED_BYTE,
+            true,
+            ToolpathMeshBuilder.LINE_VERTEX_STRIDE_BYTES,
+            ToolpathMeshBuilder.LINE_COLOR_OFFSET_BYTES,
+        )
+        GLES30.glEnableVertexAttribArray(lineColorLocation)
+        GLES30.glVertexAttribDivisor(lineColorLocation, 0)
+        GLES30.glDrawArrays(GLES30.GL_LINES, 0, geometry.lineVertexCount)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
     }
 
     private fun setInstanceAttribute(
@@ -773,7 +823,7 @@ internal class ToolpathRenderer(
             failRenderer("geometry_build", failure)
             return null
         }
-        val buffers = IntArray(2)
+        val buffers = IntArray(3)
         GLES30.glGenBuffers(buffers.size, buffers, 0)
         if (buffers.any { it == 0 } || GLES30.glGetError() != GLES30.GL_NO_ERROR) {
             GLES30.glDeleteBuffers(buffers.size, buffers, 0)
@@ -785,6 +835,8 @@ internal class ToolpathRenderer(
             bedVertexCount = payload.bedVertices.remaining() / BED_FLOATS_PER_VERTEX,
             instanceBufferId = buffers[1],
             instanceCount = payload.instanceCount,
+            lineBufferId = buffers[2],
+            lineVertexCount = payload.lineVertexCount,
         )
         traced("DuckyPreview.uploadGeometry") {
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.bedBufferId)
@@ -799,6 +851,13 @@ internal class ToolpathRenderer(
                 GLES30.GL_ARRAY_BUFFER,
                 payload.toolpathInstances.remaining(),
                 payload.toolpathInstances,
+                GLES30.GL_STATIC_DRAW,
+            )
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.lineBufferId)
+            GLES30.glBufferData(
+                GLES30.GL_ARRAY_BUFFER,
+                payload.lineVertices.remaining(),
+                payload.lineVertices,
                 GLES30.GL_STATIC_DRAW,
             )
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
@@ -818,8 +877,8 @@ internal class ToolpathRenderer(
 
     private fun deleteGeometry(geometry: ToolpathGpuGeometry) {
         GLES30.glDeleteBuffers(
-            2,
-            intArrayOf(geometry.bedBufferId, geometry.instanceBufferId),
+            3,
+            intArrayOf(geometry.bedBufferId, geometry.instanceBufferId, geometry.lineBufferId),
             0,
         )
     }
@@ -930,8 +989,10 @@ internal class ToolpathRenderer(
         refinementRequestedForScene = null
         if (bedProgram != 0) GLES30.glDeleteProgram(bedProgram)
         if (toolpathProgram != 0) GLES30.glDeleteProgram(toolpathProgram)
+        if (lineProgram != 0) GLES30.glDeleteProgram(lineProgram)
         bedProgram = 0
         toolpathProgram = 0
+        lineProgram = 0
         reportUnavailable()
     }
 
@@ -944,7 +1005,6 @@ internal class ToolpathRenderer(
         const val BED_COLOR_OFFSET_BYTES = 3 * Float.SIZE_BYTES
         const val BED_ACROSS_OFFSET_BYTES = 7 * Float.SIZE_BYTES
         const val TOOLPATH_VERTICES_PER_INSTANCE = 4
-        const val TOOLPATH_INTERACTION_VERTICES_PER_INSTANCE = 2
         const val BED_VERTEX_SHADER = """#version 300 es
             uniform mat4 uMvp;
             in vec3 aPosition;
@@ -960,7 +1020,6 @@ internal class ToolpathRenderer(
         """
         const val TOOLPATH_VERTEX_SHADER = """#version 300 es
             uniform mat4 uMvp;
-            uniform int uLineMode;
             in vec3 aStart;
             in vec3 aEnd;
             in float aHalfWidth;
@@ -974,13 +1033,6 @@ internal class ToolpathRenderer(
                 vec2(1.0, 1.0)
             );
             void main() {
-                if (uLineMode != 0) {
-                    vec3 position = gl_VertexID == 0 ? aStart : aEnd;
-                    gl_Position = uMvp * vec4(position, 1.0);
-                    vColor = aColor;
-                    vAcross = 0.0;
-                    return;
-                }
                 vec2 delta = aEnd.xy - aStart.xy;
                 vec2 tangent = delta / max(length(delta), 0.0001);
                 vec2 normal = vec2(-tangent.y, tangent.x);
@@ -992,6 +1044,18 @@ internal class ToolpathRenderer(
                 gl_Position = uMvp * vec4(position, 1.0);
                 vColor = aColor;
                 vAcross = corner.y;
+            }
+        """
+        const val LINE_VERTEX_SHADER = """#version 300 es
+            uniform mat4 uMvp;
+            in vec3 aPosition;
+            in vec4 aColor;
+            out vec4 vColor;
+            out float vAcross;
+            void main() {
+                gl_Position = uMvp * vec4(aPosition, 1.0);
+                vColor = aColor;
+                vAcross = 0.0;
             }
         """
         const val FRAGMENT_SHADER = """#version 300 es
@@ -1021,6 +1085,8 @@ private data class ToolpathGpuGeometry(
     val bedVertexCount: Int,
     val instanceBufferId: Int,
     val instanceCount: Int,
+    val lineBufferId: Int,
+    val lineVertexCount: Int,
 )
 
 internal class ToolpathGeometryUploadState(private val capacity: Int = 2) {
@@ -1072,13 +1138,19 @@ internal object ToolpathMeshBuilder {
     internal const val INSTANCE_END_OFFSET_BYTES = 3 * Float.SIZE_BYTES
     internal const val INSTANCE_HALF_WIDTH_OFFSET_BYTES = 6 * Float.SIZE_BYTES
     internal const val INSTANCE_COLOR_OFFSET_BYTES = 7 * Float.SIZE_BYTES
+    internal const val LINE_VERTEX_STRIDE_BYTES = 4 * Float.SIZE_BYTES
+    internal const val LINE_POSITION_OFFSET_BYTES = 0
+    internal const val LINE_COLOR_OFFSET_BYTES = 3 * Float.SIZE_BYTES
     internal const val EARLY_Z_OPACITY_THRESHOLD = 0.85f
 
     fun build(scene: ToolpathScene): ToolpathUploadPayload {
         val budget = scene.segmentBudgetOverride ?: depthPreviewSegmentBudget(scene.detail)
         val plan = scene.preview.buildRenderPlan(budget, scene.visibleRoles)
         val bedBuilder = FloatBuilder(2_400)
-        val instanceBuilder = ToolpathInstanceBuilder(plan.segmentOffsets.size)
+        val instanceBuilder = if (scene.renderAsLines) null else {
+            ToolpathInstanceBuilder(plan.segmentOffsets.size)
+        }
+        val lineBuilder = if (scene.renderAsLines) ToolpathLineBuilder(plan.segmentOffsets.size) else null
         addBed(bedBuilder, scene.bedSizeX, scene.bedSizeY, scene.bedPolygon)
         val zSpan = (scene.preview.maxZMm - scene.preview.minZMm).coerceAtLeast(0.001f)
         // Preview G-code is layer ordered. For the normal near-opaque view, upload high
@@ -1104,14 +1176,18 @@ internal object ToolpathMeshBuilder {
             val base = roleColors[role]
             val shade = scene.depthContrast * (1f - normalizedHeight) * 0.56f
             val halfWidth = roleWidths[role] / 2f
-            instanceBuilder.segment(
-                x1,
-                y1,
-                z + 0.024f,
-                x2,
-                y2,
-                z + 0.024f,
+            instanceBuilder?.segment(
+                x1, y1, z + 0.024f,
+                x2, y2, z + 0.024f,
                 halfWidth,
+                base[0] * (1f - shade),
+                base[1] * (1f - shade),
+                base[2] * (1f - shade),
+                scene.opacity,
+            )
+            lineBuilder?.segment(
+                x1, y1, z + 0.024f,
+                x2, y2, z + 0.024f,
                 base[0] * (1f - shade),
                 base[1] * (1f - shade),
                 base[2] * (1f - shade),
@@ -1120,8 +1196,10 @@ internal object ToolpathMeshBuilder {
         }
         return ToolpathUploadPayload(
             bedVertices = bedBuilder.finish(),
-            toolpathInstances = instanceBuilder.finish(),
-            instanceCount = instanceBuilder.instanceCount,
+            toolpathInstances = instanceBuilder?.finish() ?: ByteBuffer.allocateDirect(0),
+            instanceCount = instanceBuilder?.instanceCount ?: 0,
+            lineVertices = lineBuilder?.finish() ?: ByteBuffer.allocateDirect(0),
+            lineVertexCount = lineBuilder?.vertexCount ?: 0,
         )
     }
 
@@ -1231,9 +1309,72 @@ internal data class ToolpathUploadPayload(
     val bedVertices: FloatBuffer,
     val toolpathInstances: ByteBuffer,
     val instanceCount: Int,
+    val lineVertices: ByteBuffer,
+    val lineVertexCount: Int,
 ) {
     val stagingByteCount: Int
-        get() = bedVertices.remaining() * Float.SIZE_BYTES + toolpathInstances.remaining()
+        get() = bedVertices.remaining() * Float.SIZE_BYTES +
+            toolpathInstances.remaining() + lineVertices.remaining()
+}
+
+private class ToolpathLineBuilder(initialSegmentCapacity: Int) {
+    private var values = FloatArray(
+        (initialSegmentCapacity * FLOATS_PER_SEGMENT).coerceAtLeast(FLOATS_PER_SEGMENT),
+    )
+    var vertexCount: Int = 0
+        private set
+
+    fun segment(
+        startX: Float,
+        startY: Float,
+        startZ: Float,
+        endX: Float,
+        endY: Float,
+        endZ: Float,
+        red: Float,
+        green: Float,
+        blue: Float,
+        alpha: Float,
+    ) {
+        val offset = vertexCount * FLOATS_PER_VERTEX
+        ensure(offset + FLOATS_PER_SEGMENT)
+        val color = Float.fromBits(
+            colorInt(alpha) shl 24 or
+                (colorInt(blue) shl 16) or
+                (colorInt(green) shl 8) or
+                colorInt(red),
+        )
+        values[offset] = startX
+        values[offset + 1] = startY
+        values[offset + 2] = startZ
+        values[offset + 3] = color
+        values[offset + 4] = endX
+        values[offset + 5] = endY
+        values[offset + 6] = endZ
+        values[offset + 7] = color
+        vertexCount += 2
+    }
+
+    fun finish(): ByteBuffer {
+        val usedFloats = vertexCount * FLOATS_PER_VERTEX
+        return ByteBuffer.allocateDirect(usedFloats * Float.SIZE_BYTES)
+            .order(ByteOrder.nativeOrder())
+            .also { buffer -> buffer.asFloatBuffer().put(values, 0, usedFloats) }
+    }
+
+    private fun ensure(requiredFloats: Int) {
+        if (requiredFloats <= values.size) return
+        values = values.copyOf(max(values.size * 2, requiredFloats))
+    }
+
+    private fun colorInt(value: Float): Int =
+        (value.coerceIn(0f, 1f) * 255f).roundToInt()
+
+    private companion object {
+        const val FLOATS_PER_VERTEX =
+            ToolpathMeshBuilder.LINE_VERTEX_STRIDE_BYTES / Float.SIZE_BYTES
+        const val FLOATS_PER_SEGMENT = 2 * FLOATS_PER_VERTEX
+    }
 }
 
 private class ToolpathInstanceBuilder(initialInstanceCapacity: Int) {
