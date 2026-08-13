@@ -1174,7 +1174,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(18, catalog.schemaVersion)
+        assertEquals(19, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1227,6 +1227,11 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.supportExpansion != 0f })
         assertTrue(catalog.slicing.any { it.supportInterfaceLoopPattern })
         assertTrue(catalog.slicing.any { !it.independentSupportLayerHeight })
+        assertTrue(catalog.slicing.any { it.supportType == "tree(auto)" })
+        assertTrue(catalog.slicing.any { it.treeSupportBranchAngle != 40f })
+        assertTrue(catalog.slicing.any { it.treeSupportBranchDistance != 5f })
+        assertTrue(catalog.slicing.any { it.treeSupportBranchDiameter != 5f })
+        assertTrue(catalog.slicing.any { it.treeSupportWallCount != 0 })
         assertTrue(catalog.slicing.any { it.infillFirst })
         assertTrue(catalog.slicing.any { it.wallSequence == "outer-inner" })
         assertTrue(catalog.slicing.any { it.infillCombination })
@@ -1684,6 +1689,34 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun automaticTreeSupportRetainsItsModeAndCreatesSupportToolpaths() {
+        val model = inspectModel(supportPaintOverhangModel().absolutePath)
+        val options = SliceOptions()
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                supportEnabled = true,
+                supportType = "tree(auto)",
+                treeSupportBranchAngle = 47f,
+                treeSupportBranchDistance = 6.2f,
+                treeSupportBranchDiameter = 2.4f,
+                treeSupportWallCount = 2,
+            )
+
+        val outcome = OnDeviceSlicer.slice(listOf(ProjectObject("tree-auto", model)), options)
+        val preview = GcodeLayerPreview.fromNative(
+            NativeEngine.previewGcodeRange(outcome.output.absolutePath, 0, Int.MAX_VALUE),
+        )
+        val gcode = outcome.output.readText()
+
+        assertTrue("Automatic tree support must generate support paths", preview.roleSegmentCounts[5] > 0)
+        assertTrue(gcode.contains("; support_type = tree(auto)"))
+        assertTrue(gcode.contains("; tree_support_branch_angle = 47"))
+        assertTrue(gcode.contains("; tree_support_branch_distance = 6.2"))
+        assertTrue(gcode.contains("; tree_support_branch_diameter = 2.4"))
+        assertTrue(gcode.contains("; tree_support_wall_count = 2"))
+    }
+
+    @Test
     fun supportFilamentRoutingAndPrimeTowerReachOrca() {
         val model = inspectModel(fixtureModel().absolutePath)
         val primary = FilamentProfile.PLA
@@ -2010,6 +2043,11 @@ class NativeEngineInstrumentedTest {
                 supportExpansion = -0.4f,
                 supportInterfaceLoopPattern = true,
                 independentSupportLayerHeight = false,
+                supportType = "tree(auto)",
+                treeSupportBranchAngle = 47f,
+                treeSupportBranchDistance = 6.2f,
+                treeSupportBranchDiameter = 2.4f,
+                treeSupportWallCount = 2,
                 infillFirst = true,
                 infillWallOverlap = 19f,
                 topBottomInfillWallOverlap = 31f,
@@ -2184,6 +2222,11 @@ class NativeEngineInstrumentedTest {
         assertTrue("Support expansion must reach Orca", gcode.contains("; support_expansion = -0.4"))
         assertTrue("Support interface loops must reach Orca", gcode.contains("; support_interface_loop_pattern = 1"))
         assertTrue("Independent support layers must reach Orca", gcode.contains("; independent_support_layer_height = 0"))
+        assertTrue("Automatic tree support mode must reach Orca", gcode.contains("; support_type = tree(auto)"))
+        assertTrue("Tree branch angle must reach Orca", gcode.contains("; tree_support_branch_angle = 47"))
+        assertTrue("Tree branch distance must reach Orca", gcode.contains("; tree_support_branch_distance = 6.2"))
+        assertTrue("Tree branch diameter must reach Orca", gcode.contains("; tree_support_branch_diameter = 2.4"))
+        assertTrue("Tree support wall loops must reach Orca", gcode.contains("; tree_support_wall_count = 2"))
         assertTrue("Seam position must reach Orca", gcode.contains("; seam_position = nearest"))
         assertTrue("Ironing type must reach Orca", gcode.contains("; ironing_type = top"))
         assertTrue("Ironing pattern must reach Orca", gcode.contains("; ironing_pattern = concentric"))

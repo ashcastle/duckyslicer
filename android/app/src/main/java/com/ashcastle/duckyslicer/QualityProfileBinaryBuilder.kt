@@ -185,6 +185,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var supportExpansion: Float = base.supportExpansion
     private var supportInterfaceLoopPattern: Boolean = base.supportInterfaceLoopPattern
     private var independentSupportLayerHeight: Boolean = base.independentSupportLayerHeight
+    private var treeSupportBranchAngle: Float = base.treeSupportBranchAngle
+    private var treeSupportBranchDistance: Float = base.treeSupportBranchDistance
+    private var treeSupportBranchDiameter: Float = base.treeSupportBranchDiameter
+    private var treeSupportWallCount: Int = base.treeSupportWallCount
     private var brand: String? = base.brand
     private var compatiblePrinters: List<String> = base.compatiblePrinters
 
@@ -407,6 +411,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         supportExpansion = input.readFloat()
         supportInterfaceLoopPattern = input.readCatalogBoolean()
         independentSupportLayerHeight = input.readCatalogBoolean()
+        treeSupportBranchAngle = input.readFloat()
+        treeSupportBranchDistance = input.readFloat()
+        treeSupportBranchDiameter = input.readFloat()
+        treeSupportWallCount = input.readInt()
         compatiblePrinters = input.readCatalogStringList()
     }
 
@@ -593,6 +601,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         supportExpansion = supportExpansion,
         supportInterfaceLoopPattern = supportInterfaceLoopPattern,
         independentSupportLayerHeight = independentSupportLayerHeight,
+        treeSupportBranchAngle = treeSupportBranchAngle,
+        treeSupportBranchDistance = treeSupportBranchDistance,
+        treeSupportBranchDiameter = treeSupportBranchDiameter,
+        treeSupportWallCount = treeSupportWallCount,
         brand = brand,
         compatiblePrinters = compatiblePrinters,
     )
@@ -781,5 +793,9 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("supportExpansion", BINARY_FLOAT),
     BinaryField("supportInterfaceLoopPattern", BINARY_BOOL),
     BinaryField("independentSupportLayerHeight", BINARY_BOOL),
+    BinaryField("treeSupportBranchAngle", BINARY_FLOAT),
+    BinaryField("treeSupportBranchDistance", BINARY_FLOAT),
+    BinaryField("treeSupportBranchDiameter", BINARY_FLOAT),
+    BinaryField("treeSupportWallCount", BINARY_INT),
     BinaryField("compatiblePrinters", BINARY_STRING_LIST),
 )

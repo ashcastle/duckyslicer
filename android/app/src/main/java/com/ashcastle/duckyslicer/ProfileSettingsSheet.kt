@@ -1998,14 +1998,71 @@ private fun SlicingSettingsSheet(
                     )
                     SettingChoices(
                         settingLabel = stringResource(R.string.support_type),
-                        entries = listOf("normal", "tree"),
-                        selected = options.supportType,
+                        entries = listOf("normal(auto)", "tree(auto)", "normal(manual)", "tree(manual)"),
+                        selected = normalizedSupportType(options.supportType),
                         optionLabel = {
-                            if (it == "tree") stringResource(R.string.tree_support)
-                            else stringResource(R.string.normal_support)
+                            when (it) {
+                                "tree(auto)" -> stringResource(R.string.tree_support_auto)
+                                "normal(manual)" -> stringResource(R.string.normal_support_manual)
+                                "tree(manual)" -> stringResource(R.string.tree_support_manual)
+                                else -> stringResource(R.string.normal_support_auto)
+                            }
                         },
                         onSelected = { onOptionsChanged(options.copy(supportType = it)) },
                     )
+                    if (options.supportType.isTreeSupportType() || settingsQuery.isNotBlank()) {
+                        SettingsGroupTitle(stringResource(R.string.tree_support))
+                        SettingSlider(
+                            label = stringResource(R.string.tree_support_branch_angle),
+                            valueText = stringResource(R.string.degrees_value, options.treeSupportBranchAngle),
+                            value = options.treeSupportBranchAngle,
+                            range = 0f..60f,
+                            steps = 59,
+                            onValueChange = {
+                                onOptionsChanged(options.copy(treeSupportBranchAngle = it.roundToInt().toFloat()))
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.tree_support_branch_distance),
+                            valueText = stringResource(
+                                R.string.millimeters_value_precise,
+                                options.treeSupportBranchDistance,
+                            ),
+                            value = options.treeSupportBranchDistance,
+                            range = 1f..10f,
+                            steps = 89,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(treeSupportBranchDistance = (it * 10f).roundToInt() / 10f),
+                                )
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.tree_support_branch_diameter),
+                            valueText = stringResource(
+                                R.string.millimeters_value_precise,
+                                options.treeSupportBranchDiameter,
+                            ),
+                            value = options.treeSupportBranchDiameter,
+                            range = 1f..10f,
+                            steps = 89,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(treeSupportBranchDiameter = (it * 10f).roundToInt() / 10f),
+                                )
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.tree_support_wall_count),
+                            valueText = options.treeSupportWallCount.toString(),
+                            value = options.treeSupportWallCount.toFloat(),
+                            range = 0f..2f,
+                            steps = 1,
+                            onValueChange = {
+                                onOptionsChanged(options.copy(treeSupportWallCount = it.roundToInt()))
+                            },
+                        )
+                    }
                     SettingChoices(
                         settingLabel = stringResource(R.string.support_style),
                         entries = listOf("default", "grid", "snug", "organic", "tree_hybrid", "tree_slim"),

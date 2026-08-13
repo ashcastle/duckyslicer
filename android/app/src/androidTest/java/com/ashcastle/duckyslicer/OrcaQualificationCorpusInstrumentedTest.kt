@@ -104,7 +104,7 @@ class OrcaQualificationCorpusInstrumentedTest {
                 }
                 val options = baseOptions.copy(
                     supportEnabled = case.optBoolean("supportEnabled", false),
-                    supportType = "normal",
+                    supportType = "normal(auto)",
                 )
                 val soakCycles = JSONArray()
                 var finalMetrics: JSONObject? = null

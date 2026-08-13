@@ -90,9 +90,17 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "R.string.support_expansion",
         "R.string.support_interface_loop_pattern",
         "R.string.independent_support_layer_height",
+        "R.string.normal_support_auto",
+        "R.string.tree_support_auto",
+        "R.string.normal_support_manual",
+        "R.string.tree_support_manual",
+        "R.string.tree_support_branch_angle",
+        "R.string.tree_support_branch_distance",
+        "R.string.tree_support_branch_diameter",
+        "R.string.tree_support_wall_count",
     ):
         if marker not in editor:
-            raise VerificationError(f"spiral-vase process controls are missing: {marker}")
+            raise VerificationError(f"advanced process controls are missing: {marker}")
 
     for marker in (
         "recentIds: List<String>",
@@ -217,6 +225,14 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
             'name="support_expansion"',
             'name="support_interface_loop_pattern"',
             'name="independent_support_layer_height"',
+            'name="normal_support_auto"',
+            'name="tree_support_auto"',
+            'name="normal_support_manual"',
+            'name="tree_support_manual"',
+            'name="tree_support_branch_angle"',
+            'name="tree_support_branch_distance"',
+            'name="tree_support_branch_diameter"',
+            'name="tree_support_wall_count"',
         ):
             if resource not in strings:
                 raise VerificationError(

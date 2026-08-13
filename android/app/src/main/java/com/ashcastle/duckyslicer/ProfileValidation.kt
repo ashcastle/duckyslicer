@@ -155,7 +155,9 @@ internal object ProfileValidation {
             profile.infillAnchorMax in 0f..1_000f &&
             profile.gapFillTarget in setOf("everywhere", "topbottom", "nowhere") &&
             profile.filterOutGapFill in 0f..1_000_000f &&
-            profile.supportType in setOf("normal", "tree") &&
+            profile.supportType in setOf(
+                "normal(auto)", "tree(auto)", "normal(manual)", "tree(manual)",
+            ) &&
             profile.supportAngle in 0f..90f &&
             profile.supportInterfaceTopLayers in 0..20 &&
             profile.supportInterfaceBottomLayers in -1..20 &&
@@ -169,6 +171,10 @@ internal object ProfileValidation {
             profile.supportStyle in SUPPORT_STYLES &&
             profile.supportBasePatternSpacing in 0f..100f &&
             profile.supportExpansion in -100f..100f &&
+            profile.treeSupportBranchAngle in 0f..60f &&
+            profile.treeSupportBranchDistance in 1f..10f &&
+            profile.treeSupportBranchDiameter in 1f..10f &&
+            profile.treeSupportWallCount in 0..2 &&
             profile.supportFilament in 0..MAX_FILAMENT_SLOTS &&
             profile.supportInterfaceFilament in 0..MAX_FILAMENT_SLOTS &&
             profile.wipeTowerWidth in 10f..300f &&

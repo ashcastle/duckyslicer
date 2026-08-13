@@ -28,6 +28,18 @@ internal fun SliceOutcome.isRestorableFrom(filesRoot: File): Boolean = runCatchi
         filamentGrams.isFinite() && filamentGrams >= 0f
 }.getOrDefault(false)
 
+internal fun normalizedSupportType(value: String): String = when (val candidate = value.trim().lowercase()) {
+    "normal(auto)", "normal" -> "normal(auto)"
+    "tree(auto)", "tree", "hybrid(auto)" -> "tree(auto)"
+    "normal(manual)" -> "normal(manual)"
+    "tree(manual)" -> "tree(manual)"
+    else -> candidate
+}
+
+internal fun String.isTreeSupportType(): Boolean = normalizedSupportType(this).let { normalized ->
+    normalized == "tree(auto)" || normalized == "tree(manual)"
+}
+
 data class PrinterProfile(
     val id: String,
     val name: String,
@@ -303,7 +315,7 @@ data class QualityProfile(
     val reduceInfillRetraction: Boolean = false,
     val travelSpeed: Float = 500f,
     val firstLayerSpeed: Float = 50f,
-    val supportType: String = "normal",
+    val supportType: String = "normal(auto)",
     val supportAngle: Float = 45f,
     val supportInterfaceTopLayers: Int = 3,
     val supportInterfaceBottomLayers: Int = 0,
@@ -320,6 +332,10 @@ data class QualityProfile(
     val supportExpansion: Float = 0f,
     val supportInterfaceLoopPattern: Boolean = false,
     val independentSupportLayerHeight: Boolean = true,
+    val treeSupportBranchAngle: Float = 40f,
+    val treeSupportBranchDistance: Float = 5f,
+    val treeSupportBranchDiameter: Float = 5f,
+    val treeSupportWallCount: Int = 0,
     val supportFilament: Int = 0,
     val supportInterfaceFilament: Int = 0,
     val wipeTowerEnabled: Boolean = false,
@@ -465,7 +481,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 18,
+    val schemaVersion: Int = 19,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -600,6 +616,10 @@ data class SliceOptions(
     val supportExpansion: Float = quality.supportExpansion,
     val supportInterfaceLoopPattern: Boolean = quality.supportInterfaceLoopPattern,
     val independentSupportLayerHeight: Boolean = quality.independentSupportLayerHeight,
+    val treeSupportBranchAngle: Float = quality.treeSupportBranchAngle,
+    val treeSupportBranchDistance: Float = quality.treeSupportBranchDistance,
+    val treeSupportBranchDiameter: Float = quality.treeSupportBranchDiameter,
+    val treeSupportWallCount: Int = quality.treeSupportWallCount,
     val supportFilament: Int = quality.supportFilament,
     val supportInterfaceFilament: Int = quality.supportInterfaceFilament,
     val wipeTowerEnabled: Boolean = quality.wipeTowerEnabled,
@@ -882,7 +902,7 @@ data class SliceOptions(
         travelSpeed = profile.travelSpeed,
         firstLayerSpeed = profile.firstLayerSpeed,
         supportEnabled = profile.supportEnabled,
-        supportType = profile.supportType,
+        supportType = normalizedSupportType(profile.supportType),
         supportAngle = profile.supportAngle,
         supportInterfaceTopLayers = profile.supportInterfaceTopLayers,
         supportInterfaceBottomLayers = profile.supportInterfaceBottomLayers,
@@ -899,6 +919,10 @@ data class SliceOptions(
         supportExpansion = profile.supportExpansion,
         supportInterfaceLoopPattern = profile.supportInterfaceLoopPattern,
         independentSupportLayerHeight = profile.independentSupportLayerHeight,
+        treeSupportBranchAngle = profile.treeSupportBranchAngle,
+        treeSupportBranchDistance = profile.treeSupportBranchDistance,
+        treeSupportBranchDiameter = profile.treeSupportBranchDiameter,
+        treeSupportWallCount = profile.treeSupportWallCount,
         supportFilament = profile.supportFilament.coerceIn(0, resolvedFilamentSlots().size),
         supportInterfaceFilament = profile.supportInterfaceFilament.coerceIn(0, resolvedFilamentSlots().size),
         wipeTowerEnabled = profile.wipeTowerEnabled,
@@ -1098,7 +1122,7 @@ data class SliceOptions(
             retractLength = retractLength,
             retractSpeed = retractSpeed,
             supportEnabled = supportEnabled,
-            supportType = supportType,
+            supportType = normalizedSupportType(supportType),
             supportAngle = supportAngle,
             supportInterfaceTopLayers = supportInterfaceTopLayers,
             supportInterfaceBottomLayers = supportInterfaceBottomLayers,
@@ -1115,6 +1139,10 @@ data class SliceOptions(
             supportExpansion = supportExpansion,
             supportInterfaceLoopPattern = supportInterfaceLoopPattern,
             independentSupportLayerHeight = independentSupportLayerHeight,
+            treeSupportBranchAngle = treeSupportBranchAngle,
+            treeSupportBranchDistance = treeSupportBranchDistance,
+            treeSupportBranchDiameter = treeSupportBranchDiameter,
+            treeSupportWallCount = treeSupportWallCount,
             supportFilament = supportFilament.coerceIn(0, nativeFilaments.size),
             supportInterfaceFilament = supportInterfaceFilament.coerceIn(0, nativeFilaments.size),
             skirtLoops = skirtLoops,

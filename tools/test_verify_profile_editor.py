@@ -41,6 +41,10 @@ def valid_sources() -> dict[str, str]:
             " R.string.support_on_build_plate_only R.string.support_base_pattern_spacing"
             " R.string.support_expansion R.string.support_interface_loop_pattern"
             " R.string.independent_support_layer_height"
+            " R.string.normal_support_auto R.string.tree_support_auto"
+            " R.string.normal_support_manual R.string.tree_support_manual"
+            " R.string.tree_support_branch_angle R.string.tree_support_branch_distance"
+            " R.string.tree_support_branch_diameter R.string.tree_support_wall_count"
         ),
         "DeviceSheet.kt": (
             "profiles.forEach .selectable( role = Role.RadioButton "
@@ -85,6 +89,10 @@ def valid_sources() -> dict[str, str]:
             ' name="support_on_build_plate_only" name="support_base_pattern_spacing"'
             ' name="support_expansion" name="support_interface_loop_pattern"'
             ' name="independent_support_layer_height"'
+            ' name="normal_support_auto" name="tree_support_auto"'
+            ' name="normal_support_manual" name="tree_support_manual"'
+            ' name="tree_support_branch_angle" name="tree_support_branch_distance"'
+            ' name="tree_support_branch_diameter" name="tree_support_wall_count"'
         ),
         "strings-ko.xml": (
             'name="quality" name="strength" name="speed" name="supports" name="others" '
@@ -96,6 +104,10 @@ def valid_sources() -> dict[str, str]:
             ' name="support_on_build_plate_only" name="support_base_pattern_spacing"'
             ' name="support_expansion" name="support_interface_loop_pattern"'
             ' name="independent_support_layer_height"'
+            ' name="normal_support_auto" name="tree_support_auto"'
+            ' name="normal_support_manual" name="tree_support_manual"'
+            ' name="tree_support_branch_angle" name="tree_support_branch_distance"'
+            ' name="tree_support_branch_diameter" name="tree_support_wall_count"'
         ),
         "CONTRIBUTING.md": "Quality Strength Speed Support Others",
     }

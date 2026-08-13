@@ -375,6 +375,14 @@
     <string name="enable_supports">Enable supports</string>
     <string name="normal_support">Normal</string>
     <string name="tree_support">Tree</string>
+    <string name="normal_support_auto">Normal (auto)</string>
+    <string name="tree_support_auto">Tree (auto)</string>
+    <string name="normal_support_manual">Normal (manual)</string>
+    <string name="tree_support_manual">Tree (manual)</string>
+    <string name="tree_support_branch_angle">Tree support branch angle</string>
+    <string name="tree_support_branch_distance">Tree support branch distance</string>
+    <string name="tree_support_branch_diameter">Tree support branch diameter</string>
+    <string name="tree_support_wall_count">Support wall loops</string>
     <string name="support_threshold_angle">Threshold angle</string>
     <string name="support_top_interface_layers">Top interface layers</string>
     <string name="support_bottom_interface_layers">Bottom interface layers</string>

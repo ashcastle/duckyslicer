@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -270,6 +270,19 @@ def enum_value(value: Any, allowed: set[str], default: str) -> str:
     return candidate if candidate in allowed else default
 
 
+def support_type(value: Any) -> str:
+    candidate = str(scalar(value, "normal(auto)")).strip().lower()
+    return {
+        "normal": "normal(auto)",
+        "tree": "tree(auto)",
+        "hybrid(auto)": "tree(auto)",
+        "normal(auto)": "normal(auto)",
+        "tree(auto)": "tree(auto)",
+        "normal(manual)": "normal(manual)",
+        "tree(manual)": "tree(manual)",
+    }.get(candidate, "normal(auto)")
+
+
 def wall_sequence(value: Any) -> str:
     return {
         "inner wall/outer wall": "inner-outer",
@@ -357,7 +370,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     first_layer = number(raw.get("initial_layer_print_height"), layer_height)
     if not (0.02 <= layer_height <= nozzle * 0.9 and 0.02 <= first_layer <= 1.0):
         raise ValueError("unsafe layer height")
-    support_type = str(raw.get("support_type", "normal")).lower()
+    normalized_support_type = support_type(raw.get("support_type"))
     density_source = str(scalar(raw.get("sparse_infill_density"), "15%"))
     density_value = number(density_source, 15)
     density = density_value / 100 if density_source.endswith("%") or density_value > 1 else density_value
@@ -548,7 +561,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "reduceInfillRetraction": boolean(raw.get("reduce_infill_retraction")),
         "travelSpeed": number(raw.get("travel_speed"), 300),
         "firstLayerSpeed": first_layer_speed,
-        "supportType": "tree" if "tree" in support_type else "normal",
+        "supportType": normalized_support_type,
         "supportAngle": number(raw.get("support_threshold_angle"), 45),
         "supportInterfaceTopLayers": integer(raw.get("support_interface_top_layers"), 3),
         "supportInterfaceBottomLayers": integer(raw.get("support_interface_bottom_layers"), 0),
@@ -662,6 +675,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "supportExpansion": number(raw.get("support_expansion"), 0),
         "supportInterfaceLoopPattern": boolean(raw.get("support_interface_loop_pattern")),
         "independentSupportLayerHeight": boolean(raw.get("independent_support_layer_height"), True),
+        "treeSupportBranchAngle": number(raw.get("tree_support_branch_angle"), 40),
+        "treeSupportBranchDistance": number(raw.get("tree_support_branch_distance"), 5),
+        "treeSupportBranchDiameter": number(raw.get("tree_support_branch_diameter"), 5),
+        "treeSupportWallCount": integer(raw.get("tree_support_wall_count"), 0),
         "compatiblePrinters": compatible,
     }
     if not (
@@ -755,6 +772,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0 <= profile["spiralFinishingFlowRatio"] <= 1
         and 0 <= profile["supportBasePatternSpacing"] <= 100
         and -100 <= profile["supportExpansion"] <= 100
+        and 0 <= profile["treeSupportBranchAngle"] <= 60
+        and 1 <= profile["treeSupportBranchDistance"] <= 10
+        and 1 <= profile["treeSupportBranchDiameter"] <= 10
+        and 0 <= profile["treeSupportWallCount"] <= 2
         and all(
             0.1 <= profile[key] <= 3
             for key in [

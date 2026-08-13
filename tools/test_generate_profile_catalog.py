@@ -3,10 +3,15 @@ from __future__ import annotations
 import math
 import unittest
 
-from tools.generate_profile_catalog import build_process, printable_geometry
+from tools.generate_profile_catalog import build_process, printable_geometry, support_type
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_legacy_support_modes_remain_automatic(self) -> None:
+        self.assertEqual("normal(auto)", support_type("normal"))
+        self.assertEqual("tree(auto)", support_type("tree"))
+        self.assertEqual("tree(auto)", support_type("hybrid(auto)"))
+
     def test_preserves_and_normalizes_orca_printable_polygon(self) -> None:
         area = [
             "0x-100",
@@ -99,6 +104,28 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(-0.4, profile["supportExpansion"])
         self.assertTrue(profile["supportInterfaceLoopPattern"])
         self.assertFalse(profile["independentSupportLayerHeight"])
+
+    def test_preserves_tree_support_mode_and_geometry(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Automatic tree support",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "support_type": "tree(auto)",
+                "tree_support_branch_angle": "47",
+                "tree_support_branch_distance": "6.2",
+                "tree_support_branch_diameter": "2.4",
+                "tree_support_wall_count": "2",
+            },
+            {},
+        )
+
+        self.assertEqual("tree(auto)", profile["supportType"])
+        self.assertEqual(47, profile["treeSupportBranchAngle"])
+        self.assertEqual(6.2, profile["treeSupportBranchDistance"])
+        self.assertEqual(2.4, profile["treeSupportBranchDiameter"])
+        self.assertEqual(2, profile["treeSupportWallCount"])
 
 
 if __name__ == "__main__":

@@ -2475,7 +2475,7 @@ class SlicerProcessService : Service() {
                 this.maximumGcodeBytes = maximumGcodeBytes
                 if (supportPaintFiles.any { it?.hasEnforcer == true }) {
                     this.supportEnabled = true
-                    this.supportType = if (options.supportType == "tree") {
+                    this.supportType = if (options.supportType.isTreeSupportType()) {
                         "tree(manual)"
                     } else {
                         "normal(manual)"

@@ -87,6 +87,7 @@ class SliceOptionsPersistenceTest {
         assertEquals(13f, restored.ironingFlow)
         assertEquals(0.17f, restored.ironingSpacing)
         assertEquals(27f, restored.ironingSpeed)
+        assertEquals("tree(auto)", restored.supportType)
         assertEquals("rectilinear-grid", restored.supportBasePattern)
         assertEquals("rectilinear_interlaced", restored.supportInterfacePattern)
         assertEquals("snug", restored.supportStyle)
@@ -95,6 +96,10 @@ class SliceOptionsPersistenceTest {
         assertEquals(-0.4f, restored.supportExpansion)
         assertEquals(true, restored.supportInterfaceLoopPattern)
         assertEquals(false, restored.independentSupportLayerHeight)
+        assertEquals(47f, restored.treeSupportBranchAngle)
+        assertEquals(6.2f, restored.treeSupportBranchDistance)
+        assertEquals(2.4f, restored.treeSupportBranchDiameter)
+        assertEquals(2, restored.treeSupportWallCount)
         assertEquals(1, restored.supportFilament)
         assertEquals(1, restored.supportInterfaceFilament)
         assertEquals(true, restored.wipeTowerEnabled)
@@ -279,7 +284,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         travelSpeed = 410f,
         firstLayerSpeed = 32f,
         supportEnabled = true,
-        supportType = "tree",
+        supportType = "tree(auto)",
         supportAngle = 38f,
         skirtLoops = 2,
         skirtDistance = 8f,
@@ -351,6 +356,10 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         supportExpansion = -0.4f,
         supportInterfaceLoopPattern = true,
         independentSupportLayerHeight = false,
+        treeSupportBranchAngle = 47f,
+        treeSupportBranchDistance = 6.2f,
+        treeSupportBranchDiameter = 2.4f,
+        treeSupportWallCount = 2,
         supportFilament = 1,
         supportInterfaceFilament = 1,
         wipeTowerEnabled = true,

@@ -347,7 +347,7 @@ def valid_sources() -> dict[str, str]:
         ),
         "PROFILE_BUNDLE_FORMAT.md": (
             "`.duckyprofiles` application/vnd.duckyslicer.profiles+json "
-            '"bundleVersion": 1 "profileSchemaVersion": 19 '
+            '"bundleVersion": 1 "profileSchemaVersion": 20 '
             "exact profile duplicates are skipped additive and atomic 24 MiB 4,096 "
             "does not contain projects remote printer addresses `content://` "
             "Web, `file://`, unrelated JSON, and unrelated binary"

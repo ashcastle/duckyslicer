@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 19
+internal const val USER_PROFILE_SCHEMA_VERSION = 20
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -230,7 +230,7 @@ class ProfileStore private constructor(
             reduceInfillRetraction = options.reduceInfillRetraction,
             travelSpeed = options.travelSpeed,
             firstLayerSpeed = options.firstLayerSpeed,
-            supportType = options.supportType,
+            supportType = normalizedSupportType(options.supportType),
             supportAngle = options.supportAngle,
             supportInterfaceTopLayers = options.supportInterfaceTopLayers,
             supportInterfaceBottomLayers = options.supportInterfaceBottomLayers,
@@ -247,6 +247,10 @@ class ProfileStore private constructor(
             supportExpansion = options.supportExpansion,
             supportInterfaceLoopPattern = options.supportInterfaceLoopPattern,
             independentSupportLayerHeight = options.independentSupportLayerHeight,
+            treeSupportBranchAngle = options.treeSupportBranchAngle,
+            treeSupportBranchDistance = options.treeSupportBranchDistance,
+            treeSupportBranchDiameter = options.treeSupportBranchDiameter,
+            treeSupportWallCount = options.treeSupportWallCount,
             supportFilament = options.supportFilament,
             supportInterfaceFilament = options.supportInterfaceFilament,
             wipeTowerEnabled = options.wipeTowerEnabled,
@@ -526,7 +530,7 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("maxTravelDetourDistancePercent", maxTravelDetourDistancePercent)
     .put("reduceInfillRetraction", reduceInfillRetraction)
     .put("travelSpeed", travelSpeed)
-    .put("firstLayerSpeed", firstLayerSpeed).put("supportType", supportType)
+    .put("firstLayerSpeed", firstLayerSpeed).put("supportType", normalizedSupportType(supportType))
     .put("supportAngle", supportAngle).put("skirtLoops", skirtLoops)
     .put("supportInterfaceTopLayers", supportInterfaceTopLayers)
     .put("supportInterfaceBottomLayers", supportInterfaceBottomLayers)
@@ -543,6 +547,10 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("supportExpansion", supportExpansion)
     .put("supportInterfaceLoopPattern", supportInterfaceLoopPattern)
     .put("independentSupportLayerHeight", independentSupportLayerHeight)
+    .put("treeSupportBranchAngle", treeSupportBranchAngle)
+    .put("treeSupportBranchDistance", treeSupportBranchDistance)
+    .put("treeSupportBranchDiameter", treeSupportBranchDiameter)
+    .put("treeSupportWallCount", treeSupportWallCount)
     .put("supportFilament", supportFilament)
     .put("supportInterfaceFilament", supportInterfaceFilament)
     .put("wipeTowerEnabled", wipeTowerEnabled)
@@ -770,7 +778,7 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         reduceInfillRetraction = optBoolean("reduceInfillRetraction"),
         travelSpeed = optDouble("travelSpeed", 500.0).toFloat(),
         firstLayerSpeed = optDouble("firstLayerSpeed", 50.0).toFloat(),
-        supportType = optString("supportType", "normal"),
+        supportType = normalizedSupportType(optString("supportType", "normal(auto)")),
         supportAngle = optDouble("supportAngle", 45.0).toFloat(),
         supportInterfaceTopLayers = optInt("supportInterfaceTopLayers", 3),
         supportInterfaceBottomLayers = optInt("supportInterfaceBottomLayers", 0),
@@ -787,6 +795,10 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         supportExpansion = optDouble("supportExpansion", 0.0).toFloat(),
         supportInterfaceLoopPattern = optBoolean("supportInterfaceLoopPattern"),
         independentSupportLayerHeight = optBoolean("independentSupportLayerHeight", true),
+        treeSupportBranchAngle = optDouble("treeSupportBranchAngle", 40.0).toFloat(),
+        treeSupportBranchDistance = optDouble("treeSupportBranchDistance", 5.0).toFloat(),
+        treeSupportBranchDiameter = optDouble("treeSupportBranchDiameter", 5.0).toFloat(),
+        treeSupportWallCount = optInt("treeSupportWallCount", 0),
         supportFilament = optInt("supportFilament", 0),
         supportInterfaceFilament = optInt("supportInterfaceFilament", 0),
         wipeTowerEnabled = optBoolean("wipeTowerEnabled"),
