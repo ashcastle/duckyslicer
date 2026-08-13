@@ -1174,7 +1174,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(17, catalog.schemaVersion)
+        assertEquals(18, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1222,6 +1222,11 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.seamPosition == "nearest" })
         assertTrue(catalog.slicing.any { it.ironingType == "top" })
         assertTrue(catalog.slicing.any { it.supportBasePattern == "rectilinear-grid" })
+        assertTrue(catalog.slicing.any { it.supportOnBuildPlateOnly })
+        assertTrue(catalog.slicing.any { it.supportBasePatternSpacing != 2.5f })
+        assertTrue(catalog.slicing.any { it.supportExpansion != 0f })
+        assertTrue(catalog.slicing.any { it.supportInterfaceLoopPattern })
+        assertTrue(catalog.slicing.any { !it.independentSupportLayerHeight })
         assertTrue(catalog.slicing.any { it.infillFirst })
         assertTrue(catalog.slicing.any { it.wallSequence == "outer-inner" })
         assertTrue(catalog.slicing.any { it.infillCombination })
@@ -2000,6 +2005,11 @@ class NativeEngineInstrumentedTest {
                 supportBasePattern = "rectilinear-grid",
                 supportInterfacePattern = "rectilinear_interlaced",
                 supportStyle = "snug",
+                supportOnBuildPlateOnly = true,
+                supportBasePatternSpacing = 3.2f,
+                supportExpansion = -0.4f,
+                supportInterfaceLoopPattern = true,
+                independentSupportLayerHeight = false,
                 infillFirst = true,
                 infillWallOverlap = 19f,
                 topBottomInfillWallOverlap = 31f,
@@ -2169,6 +2179,11 @@ class NativeEngineInstrumentedTest {
         assertTrue("Support base pattern must reach Orca", gcode.contains("; support_base_pattern = rectilinear-grid"))
         assertTrue("Support interface pattern must reach Orca", gcode.contains("; support_interface_pattern = rectilinear_interlaced"))
         assertTrue("Support style must reach Orca", gcode.contains("; support_style = snug"))
+        assertTrue("Build-plate-only support must reach Orca", gcode.contains("; support_on_build_plate_only = 1"))
+        assertTrue("Support base spacing must reach Orca", gcode.contains("; support_base_pattern_spacing = 3.2"))
+        assertTrue("Support expansion must reach Orca", gcode.contains("; support_expansion = -0.4"))
+        assertTrue("Support interface loops must reach Orca", gcode.contains("; support_interface_loop_pattern = 1"))
+        assertTrue("Independent support layers must reach Orca", gcode.contains("; independent_support_layer_height = 0"))
         assertTrue("Seam position must reach Orca", gcode.contains("; seam_position = nearest"))
         assertTrue("Ironing type must reach Orca", gcode.contains("; ironing_type = top"))
         assertTrue("Ironing pattern must reach Orca", gcode.contains("; ironing_pattern = concentric"))

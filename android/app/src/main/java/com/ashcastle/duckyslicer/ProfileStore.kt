@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 18
+internal const val USER_PROFILE_SCHEMA_VERSION = 19
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -242,6 +242,11 @@ class ProfileStore private constructor(
             supportBasePattern = options.supportBasePattern,
             supportInterfacePattern = options.supportInterfacePattern,
             supportStyle = options.supportStyle,
+            supportOnBuildPlateOnly = options.supportOnBuildPlateOnly,
+            supportBasePatternSpacing = options.supportBasePatternSpacing,
+            supportExpansion = options.supportExpansion,
+            supportInterfaceLoopPattern = options.supportInterfaceLoopPattern,
+            independentSupportLayerHeight = options.independentSupportLayerHeight,
             supportFilament = options.supportFilament,
             supportInterfaceFilament = options.supportInterfaceFilament,
             wipeTowerEnabled = options.wipeTowerEnabled,
@@ -533,6 +538,11 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("supportBasePattern", supportBasePattern)
     .put("supportInterfacePattern", supportInterfacePattern)
     .put("supportStyle", supportStyle)
+    .put("supportOnBuildPlateOnly", supportOnBuildPlateOnly)
+    .put("supportBasePatternSpacing", supportBasePatternSpacing)
+    .put("supportExpansion", supportExpansion)
+    .put("supportInterfaceLoopPattern", supportInterfaceLoopPattern)
+    .put("independentSupportLayerHeight", independentSupportLayerHeight)
     .put("supportFilament", supportFilament)
     .put("supportInterfaceFilament", supportInterfaceFilament)
     .put("wipeTowerEnabled", wipeTowerEnabled)
@@ -772,6 +782,11 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         supportBasePattern = optString("supportBasePattern", "default"),
         supportInterfacePattern = optString("supportInterfacePattern", "auto"),
         supportStyle = optString("supportStyle", "default"),
+        supportOnBuildPlateOnly = optBoolean("supportOnBuildPlateOnly"),
+        supportBasePatternSpacing = optDouble("supportBasePatternSpacing", 2.5).toFloat(),
+        supportExpansion = optDouble("supportExpansion", 0.0).toFloat(),
+        supportInterfaceLoopPattern = optBoolean("supportInterfaceLoopPattern"),
+        independentSupportLayerHeight = optBoolean("independentSupportLayerHeight", true),
         supportFilament = optInt("supportFilament", 0),
         supportInterfaceFilament = optInt("supportInterfaceFilament", 0),
         wipeTowerEnabled = optBoolean("wipeTowerEnabled"),

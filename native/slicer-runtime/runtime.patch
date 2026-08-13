@@ -165,7 +165,7 @@ index 116a4a85..b870c593 100644
      // Temperature
      int nozzle_temp = 210;
      int bed_temp = 60;
-@@ -60,17 +134,106 @@ struct SliceConfig {
+@@ -60,17 +134,111 @@ struct SliceConfig {
      bool support_enabled = false;
      std::string support_type = "normal"; // "normal", "tree"
      float support_angle = 45.0f;
@@ -179,6 +179,11 @@ index 116a4a85..b870c593 100644
 +    std::string support_base_pattern = "default";
 +    std::string support_interface_pattern = "auto";
 +    std::string support_style = "default";
++    bool support_on_build_plate_only = false;
++    float support_base_pattern_spacing = 2.5f;
++    float support_expansion = 0.0f;
++    bool support_interface_loop_pattern = false;
++    bool independent_support_layer_height = true;
      int support_filament = 0;            // 1-based Orca filament index; 0 = default
      int support_interface_filament = 0;  // 1-based Orca filament index; 0 = default
  
@@ -502,7 +507,7 @@ index d93efb7d..276bb039 100644
      config.travel_speed = getFloat("travelSpeed");
      config.first_layer_speed = getFloat("firstLayerSpeed");
  
-@@ -108,15 +178,101 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -108,15 +178,106 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.support_enabled = getBool("supportEnabled");
      config.support_type = getString("supportType");
      config.support_angle = getFloat("supportAngle");
@@ -516,6 +521,11 @@ index d93efb7d..276bb039 100644
 +    config.support_base_pattern = getString("supportBasePattern");
 +    config.support_interface_pattern = getString("supportInterfacePattern");
 +    config.support_style = getString("supportStyle");
++    config.support_on_build_plate_only = getBool("supportOnBuildPlateOnly");
++    config.support_base_pattern_spacing = getFloat("supportBasePatternSpacing");
++    config.support_expansion = getFloat("supportExpansion");
++    config.support_interface_loop_pattern = getBool("supportInterfaceLoopPattern");
++    config.independent_support_layer_height = getBool("independentSupportLayerHeight");
      config.support_filament = getInt("supportFilament");
      config.support_interface_filament = getInt("supportInterfaceFilament");
  
@@ -718,7 +728,7 @@ index d93efb7d..276bb039 100644
      setFloat("travelSpeed", config.travel_speed);
      setFloat("firstLayerSpeed", config.first_layer_speed);
      setInt("nozzleTemp", config.nozzle_temp);
-@@ -247,13 +487,99 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -247,13 +487,104 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setBool("supportEnabled", config.support_enabled);
      setString("supportType", config.support_type);
      setFloat("supportAngle", config.support_angle);
@@ -732,6 +742,11 @@ index d93efb7d..276bb039 100644
 +    setString("supportBasePattern", config.support_base_pattern);
 +    setString("supportInterfacePattern", config.support_interface_pattern);
 +    setString("supportStyle", config.support_style);
++    setBool("supportOnBuildPlateOnly", config.support_on_build_plate_only);
++    setFloat("supportBasePatternSpacing", config.support_base_pattern_spacing);
++    setFloat("supportExpansion", config.support_expansion);
++    setBool("supportInterfaceLoopPattern", config.support_interface_loop_pattern);
++    setBool("independentSupportLayerHeight", config.independent_support_layer_height);
      setInt("supportFilament", config.support_filament);
      setInt("supportInterfaceFilament", config.support_interface_filament);
      setInt("skirtLoops", config.skirt_loops);
@@ -1235,7 +1250,7 @@ index 8d61c9cf..aaaa9bc9 100644
      // F91 (2026-05-25) — SliceConfig user overrides for the per-filament tuning keys
      // that applyConfigToPrusa doesn't otherwise touch. When the user sets a value via the
      // Filament Library, populate dpc here so the slicer picks it up. When unset, the
-@@ -568,19 +712,27 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -568,19 +712,32 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          dpc.set_key_value("filament_cost", new Slic3r::ConfigOptionFloats(std::move(v)));
      }
  
@@ -1265,6 +1280,11 @@ index 8d61c9cf..aaaa9bc9 100644
 +    dpc.set_deserialize_strict("support_base_pattern", config.support_base_pattern);
 +    dpc.set_deserialize_strict("support_interface_pattern", config.support_interface_pattern);
 +    dpc.set_deserialize_strict("support_style", config.support_style);
++    dpc.set_key_value("support_on_build_plate_only", new Slic3r::ConfigOptionBool(config.support_on_build_plate_only));
++    dpc.set_key_value("support_base_pattern_spacing", new Slic3r::ConfigOptionFloat(config.support_base_pattern_spacing));
++    dpc.set_key_value("support_expansion", new Slic3r::ConfigOptionFloat(config.support_expansion));
++    dpc.set_key_value("support_interface_loop_pattern", new Slic3r::ConfigOptionBool(config.support_interface_loop_pattern));
++    dpc.set_key_value("independent_support_layer_height", new Slic3r::ConfigOptionBool(config.independent_support_layer_height));
 +
 +    // Orca profiles intentionally mix absolute mm/s and percentages of outer-wall
 +    // speed. Preserve both the numeric value and its unit semantics per stage.

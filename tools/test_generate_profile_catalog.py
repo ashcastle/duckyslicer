@@ -78,6 +78,28 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(0.35, profile["spiralStartingFlowRatio"])
         self.assertEqual(0.2, profile["spiralFinishingFlowRatio"])
 
+    def test_preserves_advanced_support_generation_values(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Advanced support",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "support_on_build_plate_only": "1",
+                "support_base_pattern_spacing": "3.2",
+                "support_expansion": "-0.4",
+                "support_interface_loop_pattern": "1",
+                "independent_support_layer_height": "0",
+            },
+            {},
+        )
+
+        self.assertTrue(profile["supportOnBuildPlateOnly"])
+        self.assertEqual(3.2, profile["supportBasePatternSpacing"])
+        self.assertEqual(-0.4, profile["supportExpansion"])
+        self.assertTrue(profile["supportInterfaceLoopPattern"])
+        self.assertFalse(profile["independentSupportLayerHeight"])
+
 
 if __name__ == "__main__":
     unittest.main()

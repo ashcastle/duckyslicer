@@ -364,6 +364,11 @@
     <string name="ironing_spacing">아이러닝 간격</string>
     <string name="ironing_speed">아이러닝 속도</string>
     <string name="support_style">서포트 형태</string>
+    <string name="support_on_build_plate_only">빌드 플레이트에만 생성</string>
+    <string name="support_base_pattern_spacing">베이스 패턴 간격</string>
+    <string name="support_expansion">일반 서포트 확장</string>
+    <string name="support_interface_loop_pattern">인터페이스 루프 패턴</string>
+    <string name="independent_support_layer_height">독립 서포트 레이어 높이</string>
     <string name="support_type">서포트 유형</string>
     <string name="support_base_pattern">서포트 기본 패턴</string>
     <string name="support_interface_pattern">서포트 인터페이스 패턴</string>

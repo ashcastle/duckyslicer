@@ -38,6 +38,9 @@ def valid_sources() -> dict[str, str]:
             " options.withSpiralMode(enabled) R.string.spiral_vase R.string.smooth_spiral"
             " R.string.max_xy_smoothing R.string.spiral_starting_flow"
             " R.string.spiral_finishing_flow"
+            " R.string.support_on_build_plate_only R.string.support_base_pattern_spacing"
+            " R.string.support_expansion R.string.support_interface_loop_pattern"
+            " R.string.independent_support_layer_height"
         ),
         "DeviceSheet.kt": (
             "profiles.forEach .selectable( role = Role.RadioButton "
@@ -79,6 +82,9 @@ def valid_sources() -> dict[str, str]:
             ' name="expanded_state" name="collapsed_state"'
             ' name="spiral_vase" name="spiral_vase_summary" name="smooth_spiral"'
             ' name="max_xy_smoothing" name="spiral_starting_flow" name="spiral_finishing_flow"'
+            ' name="support_on_build_plate_only" name="support_base_pattern_spacing"'
+            ' name="support_expansion" name="support_interface_loop_pattern"'
+            ' name="independent_support_layer_height"'
         ),
         "strings-ko.xml": (
             'name="quality" name="strength" name="speed" name="supports" name="others" '
@@ -87,6 +93,9 @@ def valid_sources() -> dict[str, str]:
             ' name="expanded_state" name="collapsed_state"'
             ' name="spiral_vase" name="spiral_vase_summary" name="smooth_spiral"'
             ' name="max_xy_smoothing" name="spiral_starting_flow" name="spiral_finishing_flow"'
+            ' name="support_on_build_plate_only" name="support_base_pattern_spacing"'
+            ' name="support_expansion" name="support_interface_loop_pattern"'
+            ' name="independent_support_layer_height"'
         ),
         "CONTRIBUTING.md": "Quality Strength Speed Support Others",
     }

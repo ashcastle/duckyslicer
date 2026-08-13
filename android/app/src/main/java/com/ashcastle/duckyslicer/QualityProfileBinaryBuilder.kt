@@ -180,6 +180,11 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var spiralModeMaxXySmoothingPercent: Boolean = base.spiralModeMaxXySmoothingPercent
     private var spiralStartingFlowRatio: Float = base.spiralStartingFlowRatio
     private var spiralFinishingFlowRatio: Float = base.spiralFinishingFlowRatio
+    private var supportOnBuildPlateOnly: Boolean = base.supportOnBuildPlateOnly
+    private var supportBasePatternSpacing: Float = base.supportBasePatternSpacing
+    private var supportExpansion: Float = base.supportExpansion
+    private var supportInterfaceLoopPattern: Boolean = base.supportInterfaceLoopPattern
+    private var independentSupportLayerHeight: Boolean = base.independentSupportLayerHeight
     private var brand: String? = base.brand
     private var compatiblePrinters: List<String> = base.compatiblePrinters
 
@@ -397,6 +402,11 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         spiralModeMaxXySmoothingPercent = input.readCatalogBoolean()
         spiralStartingFlowRatio = input.readFloat()
         spiralFinishingFlowRatio = input.readFloat()
+        supportOnBuildPlateOnly = input.readCatalogBoolean()
+        supportBasePatternSpacing = input.readFloat()
+        supportExpansion = input.readFloat()
+        supportInterfaceLoopPattern = input.readCatalogBoolean()
+        independentSupportLayerHeight = input.readCatalogBoolean()
         compatiblePrinters = input.readCatalogStringList()
     }
 
@@ -578,6 +588,11 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         spiralModeMaxXySmoothingPercent = spiralModeMaxXySmoothingPercent,
         spiralStartingFlowRatio = spiralStartingFlowRatio,
         spiralFinishingFlowRatio = spiralFinishingFlowRatio,
+        supportOnBuildPlateOnly = supportOnBuildPlateOnly,
+        supportBasePatternSpacing = supportBasePatternSpacing,
+        supportExpansion = supportExpansion,
+        supportInterfaceLoopPattern = supportInterfaceLoopPattern,
+        independentSupportLayerHeight = independentSupportLayerHeight,
         brand = brand,
         compatiblePrinters = compatiblePrinters,
     )
@@ -761,5 +776,10 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("spiralModeMaxXySmoothingPercent", BINARY_BOOL),
     BinaryField("spiralStartingFlowRatio", BINARY_FLOAT),
     BinaryField("spiralFinishingFlowRatio", BINARY_FLOAT),
+    BinaryField("supportOnBuildPlateOnly", BINARY_BOOL),
+    BinaryField("supportBasePatternSpacing", BINARY_FLOAT),
+    BinaryField("supportExpansion", BINARY_FLOAT),
+    BinaryField("supportInterfaceLoopPattern", BINARY_BOOL),
+    BinaryField("independentSupportLayerHeight", BINARY_BOOL),
     BinaryField("compatiblePrinters", BINARY_STRING_LIST),
 )

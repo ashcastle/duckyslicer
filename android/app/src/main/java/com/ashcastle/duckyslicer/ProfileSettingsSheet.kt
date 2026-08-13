@@ -60,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 import java.util.Locale
 
@@ -2012,6 +2013,20 @@ private fun SlicingSettingsSheet(
                         optionLabel = { enumLabel(it) },
                         onSelected = { onOptionsChanged(options.copy(supportStyle = it)) },
                     )
+                    SettingsSwitch(
+                        label = stringResource(R.string.support_on_build_plate_only),
+                        checked = options.supportOnBuildPlateOnly,
+                        onCheckedChange = {
+                            onOptionsChanged(options.copy(supportOnBuildPlateOnly = it))
+                        },
+                    )
+                    SettingsSwitch(
+                        label = stringResource(R.string.independent_support_layer_height),
+                        checked = options.independentSupportLayerHeight,
+                        onCheckedChange = {
+                            onOptionsChanged(options.copy(independentSupportLayerHeight = it))
+                        },
+                    )
                     SettingChoices(
                         settingLabel = stringResource(R.string.support_base_pattern),
                         entries = listOf("default", "rectilinear", "rectilinear-grid", "lightning", "hollow"),
@@ -2019,12 +2034,52 @@ private fun SlicingSettingsSheet(
                         optionLabel = { enumLabel(it) },
                         onSelected = { onOptionsChanged(options.copy(supportBasePattern = it)) },
                     )
+                    SettingSlider(
+                        label = stringResource(R.string.support_base_pattern_spacing),
+                        valueText = stringResource(
+                            R.string.millimeters_value_precise,
+                            options.supportBasePatternSpacing,
+                        ),
+                        value = options.supportBasePatternSpacing,
+                        range = 0f..max(20f, options.supportBasePatternSpacing),
+                        steps = (max(20f, options.supportBasePatternSpacing) / 0.1f)
+                            .roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(supportBasePatternSpacing = (it * 10f).roundToInt() / 10f),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.support_expansion),
+                        valueText = stringResource(
+                            R.string.millimeters_value_precise,
+                            options.supportExpansion,
+                        ),
+                        value = options.supportExpansion,
+                        range = min(-10f, options.supportExpansion)..max(10f, options.supportExpansion),
+                        steps = (
+                            (max(10f, options.supportExpansion) - min(-10f, options.supportExpansion)) * 10f
+                        ).roundToInt() - 1,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(supportExpansion = (it * 10f).roundToInt() / 10f),
+                            )
+                        },
+                    )
                     SettingChoices(
                         settingLabel = stringResource(R.string.support_interface_pattern),
                         entries = listOf("auto", "rectilinear", "rectilinear_interlaced", "concentric", "grid"),
                         selected = options.supportInterfacePattern,
                         optionLabel = { enumLabel(it) },
                         onSelected = { onOptionsChanged(options.copy(supportInterfacePattern = it)) },
+                    )
+                    SettingsSwitch(
+                        label = stringResource(R.string.support_interface_loop_pattern),
+                        checked = options.supportInterfaceLoopPattern,
+                        onCheckedChange = {
+                            onOptionsChanged(options.copy(supportInterfaceLoopPattern = it))
+                        },
                     )
                     SettingsGroupTitle(stringResource(R.string.support_filament_routing))
                     SettingSlider(

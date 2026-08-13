@@ -364,6 +364,11 @@
     <string name="ironing_spacing">Ironing spacing</string>
     <string name="ironing_speed">Ironing speed</string>
     <string name="support_style">Support style</string>
+    <string name="support_on_build_plate_only">On build plate only</string>
+    <string name="support_base_pattern_spacing">Base pattern spacing</string>
+    <string name="support_expansion">Normal Support expansion</string>
+    <string name="support_interface_loop_pattern">Interface use loop pattern</string>
+    <string name="independent_support_layer_height">Independent support layer height</string>
     <string name="support_type">Support type</string>
     <string name="support_base_pattern">Support base pattern</string>
     <string name="support_interface_pattern">Support interface pattern</string>

@@ -85,6 +85,11 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "R.string.max_xy_smoothing",
         "R.string.spiral_starting_flow",
         "R.string.spiral_finishing_flow",
+        "R.string.support_on_build_plate_only",
+        "R.string.support_base_pattern_spacing",
+        "R.string.support_expansion",
+        "R.string.support_interface_loop_pattern",
+        "R.string.independent_support_layer_height",
     ):
         if marker not in editor:
             raise VerificationError(f"spiral-vase process controls are missing: {marker}")
@@ -207,6 +212,11 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
             'name="max_xy_smoothing"',
             'name="spiral_starting_flow"',
             'name="spiral_finishing_flow"',
+            'name="support_on_build_plate_only"',
+            'name="support_base_pattern_spacing"',
+            'name="support_expansion"',
+            'name="support_interface_loop_pattern"',
+            'name="independent_support_layer_height"',
         ):
             if resource not in strings:
                 raise VerificationError(

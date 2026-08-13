@@ -90,6 +90,11 @@ class SliceOptionsPersistenceTest {
         assertEquals("rectilinear-grid", restored.supportBasePattern)
         assertEquals("rectilinear_interlaced", restored.supportInterfacePattern)
         assertEquals("snug", restored.supportStyle)
+        assertEquals(true, restored.supportOnBuildPlateOnly)
+        assertEquals(3.2f, restored.supportBasePatternSpacing)
+        assertEquals(-0.4f, restored.supportExpansion)
+        assertEquals(true, restored.supportInterfaceLoopPattern)
+        assertEquals(false, restored.independentSupportLayerHeight)
         assertEquals(1, restored.supportFilament)
         assertEquals(1, restored.supportInterfaceFilament)
         assertEquals(true, restored.wipeTowerEnabled)
@@ -341,6 +346,11 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         supportBasePattern = "rectilinear-grid",
         supportInterfacePattern = "rectilinear_interlaced",
         supportStyle = "snug",
+        supportOnBuildPlateOnly = true,
+        supportBasePatternSpacing = 3.2f,
+        supportExpansion = -0.4f,
+        supportInterfaceLoopPattern = true,
+        independentSupportLayerHeight = false,
         supportFilament = 1,
         supportInterfaceFilament = 1,
         wipeTowerEnabled = true,

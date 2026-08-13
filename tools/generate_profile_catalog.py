@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -657,6 +657,11 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "spiralModeMaxXySmoothingPercent": spiral_xy_smoothing_percent,
         "spiralStartingFlowRatio": number(raw.get("spiral_starting_flow_ratio"), 0),
         "spiralFinishingFlowRatio": number(raw.get("spiral_finishing_flow_ratio"), 0),
+        "supportOnBuildPlateOnly": boolean(raw.get("support_on_build_plate_only")),
+        "supportBasePatternSpacing": number(raw.get("support_base_pattern_spacing"), 2.5),
+        "supportExpansion": number(raw.get("support_expansion"), 0),
+        "supportInterfaceLoopPattern": boolean(raw.get("support_interface_loop_pattern")),
+        "independentSupportLayerHeight": boolean(raw.get("independent_support_layer_height"), True),
         "compatiblePrinters": compatible,
     }
     if not (
@@ -748,6 +753,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         )
         and 0 <= profile["spiralStartingFlowRatio"] <= 1
         and 0 <= profile["spiralFinishingFlowRatio"] <= 1
+        and 0 <= profile["supportBasePatternSpacing"] <= 100
+        and -100 <= profile["supportExpansion"] <= 100
         and all(
             0.1 <= profile[key] <= 3
             for key in [
