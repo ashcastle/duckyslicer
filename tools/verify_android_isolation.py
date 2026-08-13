@@ -163,7 +163,7 @@ def verify_sources(sources: dict[str, str], device_test: str) -> int:
         "private-path validation": "Model is outside private storage",
         "bounded settings payload": "MAX_OPTIONS_BYTES",
         "debug worker termination": "MESSAGE_TERMINATE_FOR_TEST",
-        "dedicated Orca thread": "HandlerThread(\"DuckySlicer Orca work\")",
+        "dedicated native worker thread": "HandlerThread(\"DuckySlicer native work\")",
         "request-scoped cancellation": "MESSAGE_CANCEL",
         "retained-session cancellation":
             "fun cancelUserSliceAsync(session: ForegroundSliceSession)",

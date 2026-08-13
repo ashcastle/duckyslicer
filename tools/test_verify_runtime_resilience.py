@@ -284,9 +284,11 @@ def valid_sources() -> dict[str, str]:
             "onStop must replace the pending 350 ms write with an immediate one"
         ),
         "ProjectArchiveIntentInstrumentedTest.kt": (
-            "automaticLayKeepsOneRetainedOperationAcrossActivityRecreation "
+            "automaticLayButtonKeepsOneRetainedOperationAcrossActivityRecreation "
             "clearingRetainedOwnerFlushesProjectBeforeDebounce "
-            "assertSame( ProjectEditKind.AUTO_LAY waitForPersistedTransform"
+            "assertSame( ProjectEditKind.AUTO_LAY R.string.auto_lay "
+            "layFlat.performAction(AccessibilityNodeInfo.ACTION_CLICK) "
+            "waitForPersistedTransform"
         ),
         "ProjectEditCancellationInstrumentedTest.kt": (
             "retainedOwnerCancelsOnlyItsNativeEditAndKeepsTheProjectUnchanged "

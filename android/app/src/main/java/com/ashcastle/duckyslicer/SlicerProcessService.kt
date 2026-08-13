@@ -133,13 +133,16 @@ internal object SlicerProcessClient {
         )
     }
 
-    /** Uses OrcaSlicer's inherited orientation::orient implementation in the isolated worker. */
+    /** Runs automatic orientation in the isolated native worker. */
     fun autoOrient(
-        model: File,
+        models: List<File>,
         requestId: String = UUID.randomUUID().toString(),
     ): OrcaOrientation {
         check(Looper.myLooper() != Looper.getMainLooper()) {
             "Automatic orientation must run outside the application main thread"
+        }
+        require(models.size in 1..MAX_PROJECT_VOLUMES_PER_OBJECT) {
+            "Automatic orientation requires at least one model volume"
         }
         requireValidRequestId(requestId)
         throwIfProjectRequestCanceled(requestId)
@@ -153,7 +156,10 @@ internal object SlicerProcessClient {
                     what = SlicerProcessContract.MESSAGE_AUTO_ORIENT,
                     data = Bundle().apply {
                         putString(SlicerProcessContract.KEY_REQUEST_ID, requestId)
-                        putString(SlicerProcessContract.KEY_MODEL_PATH, model.absolutePath)
+                        putStringArrayList(
+                            SlicerProcessContract.KEY_MODEL_PATHS,
+                            ArrayList(models.map(File::getAbsolutePath)),
+                        )
                     },
                     timeoutSeconds = ORIENTATION_TIMEOUT_SECONDS,
                 )
@@ -161,12 +167,12 @@ internal object SlicerProcessClient {
             throwIfProjectRequestCanceled(requestId)
             check(response.getBoolean(SlicerProcessContract.KEY_OK)) {
                 response.getString(SlicerProcessContract.KEY_ERROR)
-                    ?: "OrcaSlicer could not orient the model"
+                    ?: "Slicer could not orient the model"
             }
             latestWorkerPid = response.getInt(SlicerProcessContract.KEY_PID)
             OrcaOrientation(
                 requireNotNull(response.getDoubleArray(SlicerProcessContract.KEY_ROTATION_RADIANS)) {
-                    "OrcaSlicer returned no orientation"
+                    "Slicer returned no orientation"
                 },
             )
         } catch (failure: Exception) {
@@ -180,7 +186,12 @@ internal object SlicerProcessClient {
         }
     }
 
-    /** Loads STL, 3MF, or OBJ through Orca and exports bounded project-owned STL objects. */
+    fun autoOrient(
+        model: File,
+        requestId: String = UUID.randomUUID().toString(),
+    ): OrcaOrientation = autoOrient(listOf(model), requestId)
+
+    /** Loads STL, 3MF, or OBJ through the native slicer and exports bounded project-owned STL objects. */
     fun normalizeModel(
         model: File,
         stagingDirectory: File,
@@ -190,11 +201,11 @@ internal object SlicerProcessClient {
             message = SlicerProcessContract.MESSAGE_NORMALIZE_MODEL,
             model = model,
             stagingDirectory = stagingDirectory,
-            fallbackError = "OrcaSlicer could not import the model",
+            fallbackError = "Slicer could not import the model",
             requestId = requestId,
         )
 
-    /** Uses Orca's inherited ModelObject::split and exports each resulting object. */
+    /** Splits a model object in the native worker and exports each result. */
     fun splitModel(
         model: File,
         stagingDirectory: File,
@@ -204,11 +215,11 @@ internal object SlicerProcessClient {
             message = SlicerProcessContract.MESSAGE_SPLIT_MODEL,
             model = model,
             stagingDirectory = stagingDirectory,
-            fallbackError = "OrcaSlicer could not split the model",
+            fallbackError = "Slicer could not split the model",
             requestId = requestId,
         )
 
-    /** Splits one selected model-part volume inside a reconstructed Orca ModelObject. */
+    /** Splits one selected model-part volume inside a reconstructed native model object. */
     fun splitModelVolume(
         models: List<File>,
         sourceVolumeIndex: Int,
@@ -227,7 +238,7 @@ internal object SlicerProcessClient {
             message = SlicerProcessContract.MESSAGE_SPLIT_MODEL_VOLUME,
             model = null,
             stagingDirectory = stagingDirectory,
-            fallbackError = "OrcaSlicer could not split the part",
+            fallbackError = "Slicer could not split the part",
             requestId = requestId,
         ) {
             putStringArrayList(
@@ -238,7 +249,7 @@ internal object SlicerProcessClient {
         }
     }
 
-    /** Uses Orca's inherited planar Cut and exports the two resulting solids. */
+    /** Runs a planar cut in the native worker and exports the two resulting solids. */
     fun cutModel(
         model: File,
         stagingDirectory: File,
@@ -249,14 +260,14 @@ internal object SlicerProcessClient {
         message = SlicerProcessContract.MESSAGE_CUT_MODEL,
         model = model,
         stagingDirectory = stagingDirectory,
-        fallbackError = "OrcaSlicer could not cut the model",
+        fallbackError = "Slicer could not cut the model",
         requestId = requestId,
     ) {
         putFloat(SlicerProcessContract.KEY_CUT_HEIGHT_RATIO, heightRatio)
         putBoolean(SlicerProcessContract.KEY_PLACE_ON_CUT, placeOnCut)
     }
 
-    /** Uses Orca's inherited quadric edge-collapse simplifier in the isolated worker. */
+    /** Runs the native mesh simplifier in the isolated worker. */
     fun simplifyModel(
         model: File,
         stagingDirectory: File,
@@ -270,14 +281,14 @@ internal object SlicerProcessClient {
             message = SlicerProcessContract.MESSAGE_SIMPLIFY_MODEL,
             model = model,
             stagingDirectory = stagingDirectory,
-            fallbackError = "OrcaSlicer could not simplify the model",
+            fallbackError = "Slicer could not simplify the model",
             requestId = requestId,
         ) {
             putInt(SlicerProcessContract.KEY_TARGET_TRIANGLES, targetTriangles)
         }.single()
     }
 
-    /** Creates a bounded STL with OrcaSlicer's inherited primitive mesh generators. */
+    /** Creates a bounded STL with the native primitive mesh generators. */
     fun createPrimitive(
         primitive: OrcaPrimitive,
         sizeMm: Float,
@@ -291,7 +302,7 @@ internal object SlicerProcessClient {
             message = SlicerProcessContract.MESSAGE_CREATE_PRIMITIVE,
             model = null,
             stagingDirectory = stagingDirectory,
-            fallbackError = "OrcaSlicer could not create the shape",
+            fallbackError = "Slicer could not create the shape",
             requestId = requestId,
         ) {
             putInt(SlicerProcessContract.KEY_PRIMITIVE_TYPE, primitive.nativeId)
@@ -347,19 +358,19 @@ internal object SlicerProcessClient {
             latestWorkerPid = response.getInt(SlicerProcessContract.KEY_PID)
             val records = requireNotNull(
                 response.getStringArrayList(SlicerProcessContract.KEY_NORMALIZED_MODELS),
-            ) { "OrcaSlicer returned no model objects" }
+            ) { "Slicer returned no model objects" }
             val canonicalStaging = stagingDirectory.canonicalFile
             val seen = HashSet<File>()
             records.map { record ->
                 val values = record.split('\t', limit = 4)
-                require(values.size == 4) { "OrcaSlicer returned invalid model metadata" }
+                require(values.size == 4) { "Slicer returned invalid model metadata" }
                 val output = File(values[0]).canonicalFile
                 val name = values[1].trim().takeIf { it.length in 1..200 } ?: "model.stl"
                 val centerX = requireNotNull(values[2].toFloatOrNull()) {
-                    "OrcaSlicer returned invalid model placement"
+                    "Slicer returned invalid model placement"
                 }
                 val centerY = requireNotNull(values[3].toFloatOrNull()) {
-                    "OrcaSlicer returned invalid model placement"
+                    "Slicer returned invalid model placement"
                 }
                 require(
                     output.parentFile == canonicalStaging && seen.add(output) &&
@@ -367,11 +378,11 @@ internal object SlicerProcessClient {
                         centerX.isFinite() && centerY.isFinite() &&
                         kotlin.math.abs(centerX) <= MAX_MODEL_COORDINATE_MM &&
                         kotlin.math.abs(centerY) <= MAX_MODEL_COORDINATE_MM
-                ) { "OrcaSlicer returned an unsafe model object" }
+                ) { "Slicer returned an unsafe model object" }
                 OrcaImportedObject(output, name, centerX, centerY)
             }.also { imported ->
                 require(imported.size in 1..SlicerProcessService.MAX_OBJECTS) {
-                    "OrcaSlicer returned an invalid model count"
+                    "Slicer returned an invalid model count"
                 }
             }
         } catch (failure: Exception) {
@@ -385,7 +396,7 @@ internal object SlicerProcessClient {
         }
     }
 
-    /** Uses OrcaSlicer's silhouette-aware arrangement engine in the isolated worker. */
+    /** Uses the silhouette-aware arrangement engine in the isolated worker. */
     fun autoArrange(
         transformedModels: List<File>,
         bedSizeX: Float,
@@ -446,13 +457,13 @@ internal object SlicerProcessClient {
             OrcaArrangement(
                 lowerLeftMm = requireNotNull(
                     response.getFloatArray(SlicerProcessContract.KEY_ARRANGED_LOWER_LEFT),
-                ) { "OrcaSlicer returned no arrangement" },
+                ) { "Slicer returned no arrangement" },
                 sizesMm = requireNotNull(
                     response.getFloatArray(SlicerProcessContract.KEY_OBJECT_SIZES),
-                ) { "OrcaSlicer returned no object sizes" },
+                ) { "Slicer returned no object sizes" },
                 centersMm = requireNotNull(
                     response.getFloatArray(SlicerProcessContract.KEY_OBJECT_CENTERS),
-                ) { "OrcaSlicer returned no object centers" },
+                ) { "Slicer returned no object centers" },
             )
         } catch (failure: Exception) {
             if (projectRequestCancellationRequested(requestId)) {
@@ -1161,7 +1172,7 @@ class SlicerProcessService : Service() {
     @Volatile
     private var foregroundProgress = 0
     private val sliceThreadDelegate = lazy {
-        HandlerThread("DuckySlicer Orca work").apply { start() }
+        HandlerThread("DuckySlicer native work").apply { start() }
     }
     private val sliceThread by sliceThreadDelegate
     private val sliceHandler by lazy { Handler(sliceThread.looper) }
@@ -1857,18 +1868,23 @@ class SlicerProcessService : Service() {
     }
 
     private fun runAutoOrient(extras: Bundle): Bundle = try {
-        val path = requireNotNull(extras.getString(SlicerProcessContract.KEY_MODEL_PATH)) {
-            "Model path is unavailable"
+        val paths = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_MODEL_PATHS),
+        ) {
+            "Model paths are unavailable"
         }
-        val model = validateModel(path)
+        require(paths.size in 1..MAX_PROJECT_VOLUMES_PER_OBJECT) {
+            "Automatic orientation requires at least one model volume"
+        }
+        val models = paths.map(::validateModel)
         val runtime = createNativeRuntime()
         try {
-            check(runtime.loadModel(model.absolutePath)) { "Model could not be prepared" }
+            loadNativeObjects(runtime, models, intArrayOf(models.size))
             val rotation = requireNotNull(runtime.nativeAutoOrientObject(0)) {
-                "OrcaSlicer could not orient the model"
+                "Slicer could not orient the model"
             }
             require(rotation.size == 3 && rotation.all { it.isFinite() }) {
-                "OrcaSlicer returned an invalid orientation"
+                "Slicer returned an invalid orientation"
             }
             Bundle().apply {
                 putBoolean(SlicerProcessContract.KEY_OK, true)
@@ -1880,7 +1896,7 @@ class SlicerProcessService : Service() {
         }
     } catch (error: Exception) {
         if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Automatic orientation failed", error)
-        failure(error.message ?: "OrcaSlicer could not orient the model")
+        failure(error.message ?: "Slicer could not orient the model")
     }
 
     private fun runNormalizeModel(extras: Bundle): Bundle = try {
@@ -1912,7 +1928,7 @@ class SlicerProcessService : Service() {
         }
     } catch (error: Exception) {
         if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Model normalization failed", error)
-        failure(error.message ?: "OrcaSlicer could not import the model")
+        failure(error.message ?: "Slicer could not import the model")
     }
 
     private fun runSplitModel(extras: Bundle): Bundle = try {
@@ -1955,7 +1971,7 @@ class SlicerProcessService : Service() {
         }
     } catch (error: Exception) {
         if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Model split failed", error)
-        failure(error.message ?: "OrcaSlicer could not split the model")
+        failure(error.message ?: "Slicer could not split the model")
     }
 
     private fun runSplitModelVolume(extras: Bundle): Bundle = try {
@@ -2010,7 +2026,7 @@ class SlicerProcessService : Service() {
         }
     } catch (error: Exception) {
         if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Model part split failed", error)
-        failure(error.message ?: "OrcaSlicer could not split the part")
+        failure(error.message ?: "Slicer could not split the part")
     }
 
     private fun runCutModel(extras: Bundle): Bundle = try {
@@ -2056,7 +2072,7 @@ class SlicerProcessService : Service() {
         }
     } catch (error: Exception) {
         if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Model cut failed", error)
-        failure(error.message ?: "OrcaSlicer could not cut the model")
+        failure(error.message ?: "Slicer could not cut the model")
     }
 
     private fun runSimplifyModel(extras: Bundle): Bundle = try {
@@ -2096,7 +2112,7 @@ class SlicerProcessService : Service() {
         }
     } catch (error: Exception) {
         if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Model simplification failed", error)
-        failure(error.message ?: "OrcaSlicer could not simplify the model")
+        failure(error.message ?: "Slicer could not simplify the model")
     }
 
     private fun runCreatePrimitive(extras: Bundle): Bundle = try {
@@ -2132,7 +2148,7 @@ class SlicerProcessService : Service() {
         }
     } catch (error: Exception) {
         if (BuildConfig.DEBUG) Log.e(LOG_TAG, "Shape creation failed", error)
-        failure(error.message ?: "OrcaSlicer could not create the shape")
+        failure(error.message ?: "Slicer could not create the shape")
     }
 
     private fun runAutoArrange(extras: Bundle): Bundle = try {
@@ -2177,14 +2193,14 @@ class SlicerProcessService : Service() {
                 sizes.size == objectVolumeCounts.size * 3 &&
                     sizes.all { it.isFinite() && it > 0f },
             ) {
-                "OrcaSlicer returned invalid object sizes"
+                "Slicer returned invalid object sizes"
             }
             val originalLowerLeft = runtime.nativeGetObjectWorldAABBMins()
             require(
                 originalLowerLeft.size == objectVolumeCounts.size * 2 &&
                     originalLowerLeft.all(Float::isFinite),
             ) {
-                "OrcaSlicer returned invalid source positions"
+                "Slicer returned invalid source positions"
             }
             val machinePolygon = machineBedPolygon(bedPolygon, bedOriginX, bedOriginY)
             val machineLowerLeft = requireNotNull(
@@ -2194,7 +2210,7 @@ class SlicerProcessService : Service() {
                 machineLowerLeft.size == objectVolumeCounts.size * 2 &&
                     machineLowerLeft.all { it.isFinite() },
             ) {
-                "OrcaSlicer returned an invalid arrangement"
+                "Slicer returned an invalid arrangement"
             }
             repeat(objectVolumeCounts.size) { index ->
                 val x = machineLowerLeft[index * 2]
@@ -2206,7 +2222,7 @@ class SlicerProcessService : Service() {
                         y >= bedOriginY - ARRANGE_TOLERANCE_MM &&
                         x + width <= bedOriginX + bedSizeX + ARRANGE_TOLERANCE_MM &&
                         y + depth <= bedOriginY + bedSizeY + ARRANGE_TOLERANCE_MM,
-                ) { "OrcaSlicer placed an object outside the bed" }
+                ) { "Slicer placed an object outside the bed" }
             }
             val lowerLeft = FloatArray(machineLowerLeft.size) { index ->
                 machineLowerLeft[index] - if (index % 2 == 0) bedOriginX else bedOriginY

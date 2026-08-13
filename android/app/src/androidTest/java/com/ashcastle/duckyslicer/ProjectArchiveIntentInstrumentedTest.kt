@@ -64,7 +64,7 @@ class ProjectArchiveIntentInstrumentedTest {
     }
 
     @Test
-    fun automaticLayKeepsOneRetainedOperationAcrossActivityRecreation() {
+    fun automaticLayButtonKeepsOneRetainedOperationAcrossActivityRecreation() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
         projectRoot.deleteRecursively()
@@ -89,14 +89,15 @@ class ProjectArchiveIntentInstrumentedTest {
                     ),
                 )
                 val startingRevision = retainedModel.state.value.sessionRevision
-                scenario.onActivity {
-                    assertTrue(retainedModel.autoLaySelectedModel())
-                    assertTrue(retainedModel.state.value.busy)
-                    assertEquals(
-                        ProjectEditKind.AUTO_LAY,
-                        retainedModel.state.value.activeEdit?.kind,
-                    )
+                val layFlatLabel = context.getString(R.string.auto_lay)
+                val layFlat = waitForNode(layFlatLabel) { node ->
+                    node.isClickable && node.isEnabled
                 }
+                assertTrue(
+                    "The visible Lay flat action must accept the user's click",
+                    layFlat.performAction(AccessibilityNodeInfo.ACTION_CLICK),
+                )
+                waitForActiveEdit(retainedModel, ProjectEditKind.AUTO_LAY)
 
                 scenario.recreate()
                 scenario.onActivity { recreated ->
@@ -410,6 +411,24 @@ class ProjectArchiveIntentInstrumentedTest {
             "Timed out waiting for retained project edit completion: " +
                 "expectedRevision=$expectedRevision actualRevision=${latest.sessionRevision} " +
                 "active=${latest.activeEdit} completion=${latest.editCompletion}",
+        )
+    }
+
+    private fun waitForActiveEdit(
+        model: ProjectTransferViewModel,
+        expectedKind: ProjectEditKind,
+    ) {
+        val deadline = SystemClock.elapsedRealtime() + WAIT_TIMEOUT_MILLIS
+        var latest = model.state.value
+        while (SystemClock.elapsedRealtime() < deadline) {
+            latest = model.state.value
+            if (latest.busy && latest.activeEdit?.kind == expectedKind) return
+            SystemClock.sleep(WAIT_POLL_MILLIS)
+        }
+        throw AssertionError(
+            "Timed out waiting for project edit to start: " +
+                "expected=$expectedKind active=${latest.activeEdit} " +
+                "completion=${latest.editCompletion}",
         )
     }
 

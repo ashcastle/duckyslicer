@@ -7,6 +7,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.roundToInt
 
 class ToolpathMeshBuilderTest {
     @Test
@@ -108,6 +109,49 @@ class ToolpathMeshBuilderTest {
     }
 
     @Test
+    fun performancePreviewRepresentsEveryLayerInTheMaximumDensePayload() {
+        val layerCount = 500
+        val segmentsPerLayer = GcodeLayerPreview.MAX_SEGMENTS / layerCount
+        val outerWallSegments = 10
+        val segments = FloatArray(GcodeLayerPreview.MAX_SEGMENTS * GcodeLayerPreview.SEGMENT_STRIDE)
+        val roleCounts = IntArray(GcodeLayerPreview.ROLE_COUNT)
+        repeat(layerCount) { layer ->
+            repeat(segmentsPerLayer) { line ->
+                val segment = layer * segmentsPerLayer + line
+                val offset = segment * GcodeLayerPreview.SEGMENT_STRIDE
+                val role = if (line < outerWallSegments) 0 else 2
+                val pathLine = if (role == 0) line else line - outerWallSegments
+                segments[offset] = pathLine.toFloat()
+                segments[offset + 1] = layer.toFloat()
+                segments[offset + 2] = pathLine + 1f
+                segments[offset + 3] = layer.toFloat()
+                segments[offset + 4] = (layer + 1) * 0.2f
+                segments[offset + 5] = role.toFloat()
+                roleCounts[role] += 1
+            }
+        }
+        val preview = GcodeLayerPreview(
+            startLayer = 0,
+            endLayer = layerCount - 1,
+            layerCount = layerCount,
+            minZMm = 0.2f,
+            maxZMm = layerCount * 0.2f,
+            segments = segments,
+            roleSegmentCounts = roleCounts,
+        )
+
+        val plan = preview.buildRenderPlan(depthPreviewSegmentBudget(PreviewDetail.PERFORMANCE))
+        val representedLayers = plan.segmentOffsets
+            .map { offset -> (segments[offset + 4] / 0.2f).roundToInt() }
+            .toSet()
+
+        assertEquals(layerCount, representedLayers.size)
+        assertEquals(1, representedLayers.minOrNull())
+        assertEquals(layerCount, representedLayers.maxOrNull())
+        assertTrue(plan.segmentOffsets.size <= depthPreviewSegmentBudget(PreviewDetail.PERFORMANCE))
+    }
+
+    @Test
     fun oneContinuousExtrusionPathIsNeverSampledIntoParticles() {
         val segmentCount = 30
         val segments = FloatArray(segmentCount * GcodeLayerPreview.SEGMENT_STRIDE)
@@ -184,6 +228,19 @@ class ToolpathMeshBuilderTest {
         )
         assertTrue("GPU bed staging must use direct native memory", payload.bedVertices.isDirect)
         assertTrue("GPU instance staging must use direct native memory", payload.toolpathInstances.isDirect)
+    }
+
+    @Test
+    fun nearOpaquePreviewUploadsHighLayersFirstForEarlyDepthRejection() {
+        val preview = twoLayerPreview()
+
+        val opaqueZ = uploadedStartZ(preview, opacity = 0.92f)
+        val translucentZ = uploadedStartZ(preview, opacity = 0.5f)
+
+        assertTrue("Near-opaque paths must start at the high layer", opaqueZ[0] > opaqueZ[1])
+        assertTrue("Translucent paths must retain source order", translucentZ[0] < translucentZ[1])
+        assertTrue(ToolpathMeshBuilder.EARLY_Z_OPACITY_THRESHOLD > 0.5f)
+        assertTrue(ToolpathMeshBuilder.EARLY_Z_OPACITY_THRESHOLD <= 0.92f)
     }
 
     @Test
@@ -339,5 +396,30 @@ class ToolpathMeshBuilderTest {
         assertFalse("The replacement VBO must be cached", state.needsUpload(changed))
         state.remove(changed)
         assertTrue("Removing stale geometry must release its cache entry", state.needsUpload(changed))
+    }
+
+    private fun twoLayerPreview(): GcodeLayerPreview = GcodeLayerPreview(
+        startLayer = 0,
+        endLayer = 1,
+        layerCount = 2,
+        minZMm = 0.2f,
+        maxZMm = 0.4f,
+        segments = floatArrayOf(
+            10f, 10f, 20f, 10f, 0.2f, 0f,
+            10f, 12f, 20f, 12f, 0.4f, 0f,
+        ),
+        roleSegmentCounts = intArrayOf(2, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    )
+
+    private fun uploadedStartZ(preview: GcodeLayerPreview, opacity: Float): List<Float> {
+        val payload = ToolpathMeshBuilder.build(
+            ToolpathScene(preview, 100f, 100f, opacity, 0.8f, PreviewDetail.BALANCED),
+        )
+        val instances = payload.toolpathInstances.duplicate().order(payload.toolpathInstances.order())
+        return List(payload.instanceCount) { index ->
+            instances.getFloat(
+                index * ToolpathMeshBuilder.INSTANCE_STRIDE_BYTES + 2 * Float.SIZE_BYTES,
+            )
+        }
     }
 }

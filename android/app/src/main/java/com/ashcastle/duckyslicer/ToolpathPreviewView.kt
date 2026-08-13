@@ -7,6 +7,7 @@ import android.content.res.Configuration
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
+import android.os.Trace
 import android.util.Log
 import android.view.MotionEvent
 import android.view.SurfaceHolder
@@ -26,6 +27,15 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sin
+
+private inline fun <T> traced(name: String, block: () -> T): T {
+    Trace.beginSection(name)
+    return try {
+        block()
+    } finally {
+        Trace.endSection()
+    }
+}
 
 @Composable
 internal fun DepthTestedToolpathScene(
@@ -319,6 +329,7 @@ internal data class ToolpathScene(
     val bedPolygon: List<Float> = rectangularBedPolygon(bedSizeX, bedSizeY),
     val bedOriginX: Float = 0f,
     val bedOriginY: Float = 0f,
+    val segmentBudgetOverride: Int? = null,
 )
 
 internal class ToolpathRenderer(
@@ -332,7 +343,9 @@ internal class ToolpathRenderer(
     private var latestScene: ToolpathScene? = null
     private val uploadState = ToolpathGeometryUploadState(capacity = GPU_GEOMETRY_CACHE_SIZE)
     private val gpuGeometry = HashMap<ToolpathScene, ToolpathGpuGeometry>()
+    private val adaptivePreviewController = AdaptivePreviewDetailController()
     private var pendingPrewarmScene: ToolpathScene? = null
+    private var refinementRequestedForScene: ToolpathScene? = null
     private var bedProgram = 0
     private var bedPositionLocation = 0
     private var bedColorLocation = 0
@@ -344,6 +357,7 @@ internal class ToolpathRenderer(
     private var toolpathHalfWidthLocation = 0
     private var toolpathColorLocation = 0
     private var toolpathMatrixLocation = 0
+    private var toolpathLineModeLocation = 0
     private var viewportWidth = 1
     private var viewportHeight = 1
     private var yawDegrees = -45f
@@ -353,6 +367,7 @@ internal class ToolpathRenderer(
     private var panY = 0f
     private var geometryUploadCount = 0
     private var rendererUnavailable = false
+    private var lastEffectiveDetail: PreviewDetail? = null
     @Volatile
     private var frameReadyReported = false
     @Volatile
@@ -361,6 +376,11 @@ internal class ToolpathRenderer(
     internal fun geometryUploadCountForTest(): Int = geometryUploadCount
 
     internal fun cachedGeometryCountForTest(): Int = gpuGeometry.size
+
+    internal fun effectiveDetailForTest(): PreviewDetail? = lastEffectiveDetail
+
+    internal fun automaticCalibrationSettledForTest(): Boolean =
+        adaptivePreviewController.isSettledForTest()
 
     internal fun expectFirstFrame() {
         frameReadyReported = false
@@ -371,6 +391,7 @@ internal class ToolpathRenderer(
         gpuGeometry.clear()
         uploadState.invalidate()
         pendingPrewarmScene = null
+        refinementRequestedForScene = null
     }
 
     fun submit(scene: ToolpathScene) {
@@ -404,6 +425,7 @@ internal class ToolpathRenderer(
         toolpathProgram = 0
         geometryUploadCount = 0
         pendingPrewarmScene = null
+        refinementRequestedForScene = null
         gpuGeometry.clear()
         uploadState.invalidate()
         if (rendererUnavailable) return
@@ -427,6 +449,7 @@ internal class ToolpathRenderer(
         toolpathHalfWidthLocation = GLES30.glGetAttribLocation(toolpathProgram, "aHalfWidth")
         toolpathColorLocation = GLES30.glGetAttribLocation(toolpathProgram, "aColor")
         toolpathMatrixLocation = GLES30.glGetUniformLocation(toolpathProgram, "uMvp")
+        toolpathLineModeLocation = GLES30.glGetUniformLocation(toolpathProgram, "uLineMode")
         val requiredLocations = intArrayOf(
             bedPositionLocation,
             bedColorLocation,
@@ -437,6 +460,7 @@ internal class ToolpathRenderer(
             toolpathHalfWidthLocation,
             toolpathColorLocation,
             toolpathMatrixLocation,
+            toolpathLineModeLocation,
         )
         if (requiredLocations.any { it < 0 } || !glOperationSucceeded("program_locations")) {
             failRenderer("program_locations")
@@ -458,30 +482,84 @@ internal class ToolpathRenderer(
             failRenderer("missing_program")
             return
         }
-        val sourceScene = latestScene ?: return
+        val requestedScene = latestScene ?: return
+        val adaptiveWorkload = AdaptiveToolpathWorkload(
+            scene = requestedScene.copy(
+                detail = PreviewDetail.AUTOMATIC,
+                segmentBudgetOverride = null,
+            ),
+            viewportWidth = viewportWidth,
+            viewportHeight = viewportHeight,
+        )
+        val effectiveDetail = adaptivePreviewController.detailFor(
+            requestedScene.detail,
+            adaptiveWorkload,
+        )
+        val sourceScene = if (requestedScene.detail == PreviewDetail.AUTOMATIC) {
+            requestedScene.copy(detail = effectiveDetail)
+        } else {
+            requestedScene
+        }
+        lastEffectiveDetail = sourceScene.detail
         val prewarmAtFrameStart = pendingPrewarmScene
         pendingPrewarmScene = null
         val prewarmDetail = previewDetailForInteraction(sourceScene.detail, interactionActive = true)
         val interactionScene = if (prewarmDetail == sourceScene.detail) {
-            sourceScene
+            sourceScene.copy(
+                segmentBudgetOverride = depthPreviewInteractionSegmentBudget(sourceScene.detail),
+            )
         } else {
-            sourceScene.copy(detail = prewarmDetail)
+            sourceScene.copy(
+                detail = prewarmDetail,
+                segmentBudgetOverride = depthPreviewInteractionSegmentBudget(sourceScene.detail),
+            )
         }
         releaseStaleGeometry(setOf(sourceScene, interactionScene))
-        val renderDetail = previewDetailForInteraction(sourceScene.detail, interactionActive)
-        val scene = if (renderDetail == sourceScene.detail) {
-            sourceScene
-        } else {
-            sourceScene.copy(detail = renderDetail)
-        }
+        // A dense preview should become recognizable immediately. Draw the same coherent,
+        // whole-path LOD used for gestures first, then replace it with requested detail on
+        // the following dirty frame. This avoids blocking the first visible frame on tens of
+        // thousands of software-rasterized extrusion ribbons without turning paths into dots.
+        val initialPreview = !interactionActive && refinementRequestedForScene != sourceScene
+        val scene = if (interactionActive || initialPreview) interactionScene else sourceScene
         val geometry = geometryFor(scene) ?: return
         val matrix = cameraMatrix(scene)
+        val measureAutomaticFrame = !interactionActive && !initialPreview &&
+            adaptivePreviewController.shouldMeasure(requestedScene.detail, adaptiveWorkload)
+        val measurementStartedNanos = if (measureAutomaticFrame) System.nanoTime() else 0L
         drawBed(geometry, matrix)
-        drawToolpaths(geometry, matrix)
+        drawToolpaths(
+            geometry,
+            matrix,
+            shouldDrawToolpathLines(sourceScene.detail, interactionActive, initialPreview),
+        )
         if (!glOperationSucceeded("frame_draw")) return
+        if (measureAutomaticFrame) {
+            // Calibration is limited to two settled frames per tier. glFinish gives a
+            // portable GLES3 completion measurement that includes fragment work instead
+            // of the tiny CPU submission time; explicit quality modes never pay this cost.
+            GLES30.glFinish()
+            if (!glOperationSucceeded("adaptive_gpu_completion")) return
+            val completionMs = (System.nanoTime() - measurementStartedNanos) / 1_000_000.0
+            if (
+                adaptivePreviewController.recordCompletedFrame(
+                    requested = requestedScene.detail,
+                    workload = adaptiveWorkload,
+                    measuredDetail = sourceScene.detail,
+                    completionMs = completionMs,
+                )
+            ) {
+                requestPrewarmFrame()
+            }
+        }
         if (!frameReadyReported) {
             frameReadyReported = true
             reportFrameReady()
+        }
+
+        if (initialPreview) {
+            refinementRequestedForScene = sourceScene
+            requestPrewarmFrame()
+            return
         }
 
         if (!interactionActive && interactionScene != sourceScene) {
@@ -534,55 +612,63 @@ internal class ToolpathRenderer(
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
     }
 
-    private fun drawToolpaths(geometry: ToolpathGpuGeometry, matrix: FloatArray) {
+    private fun drawToolpaths(
+        geometry: ToolpathGpuGeometry,
+        matrix: FloatArray,
+        drawInteractionLines: Boolean,
+    ) {
         if (geometry.instanceCount == 0) return
-        GLES30.glUseProgram(toolpathProgram)
-        GLES30.glUniformMatrix4fv(toolpathMatrixLocation, 1, false, matrix, 0)
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.instanceBufferId)
-        setInstanceAttribute(
-            toolpathStartLocation,
-            3,
-            GLES30.GL_FLOAT,
-            false,
-            ToolpathMeshBuilder.INSTANCE_START_OFFSET_BYTES,
-        )
-        setInstanceAttribute(
-            toolpathEndLocation,
-            3,
-            GLES30.GL_FLOAT,
-            false,
-            ToolpathMeshBuilder.INSTANCE_END_OFFSET_BYTES,
-        )
-        setInstanceAttribute(
-            toolpathHalfWidthLocation,
-            1,
-            GLES30.GL_FLOAT,
-            false,
-            ToolpathMeshBuilder.INSTANCE_HALF_WIDTH_OFFSET_BYTES,
-        )
-        setInstanceAttribute(
-            toolpathColorLocation,
-            4,
-            GLES30.GL_UNSIGNED_BYTE,
-            true,
-            ToolpathMeshBuilder.INSTANCE_COLOR_OFFSET_BYTES,
-        )
-        GLES30.glDrawArraysInstanced(
-            GLES30.GL_TRIANGLES,
-            0,
-            TOOLPATH_VERTICES_PER_INSTANCE,
-            geometry.instanceCount,
-        )
-        val instanceLocations = intArrayOf(
-            toolpathStartLocation,
-            toolpathEndLocation,
-            toolpathHalfWidthLocation,
-            toolpathColorLocation,
-        )
-        for (location in instanceLocations) {
-            GLES30.glVertexAttribDivisor(location, 0)
+        traced("DuckyPreview.drawToolpaths") {
+            GLES30.glUseProgram(toolpathProgram)
+            GLES30.glUniformMatrix4fv(toolpathMatrixLocation, 1, false, matrix, 0)
+            GLES30.glUniform1i(toolpathLineModeLocation, if (drawInteractionLines) 1 else 0)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.instanceBufferId)
+            setInstanceAttribute(
+                toolpathStartLocation,
+                3,
+                GLES30.GL_FLOAT,
+                false,
+                ToolpathMeshBuilder.INSTANCE_START_OFFSET_BYTES,
+            )
+            setInstanceAttribute(
+                toolpathEndLocation,
+                3,
+                GLES30.GL_FLOAT,
+                false,
+                ToolpathMeshBuilder.INSTANCE_END_OFFSET_BYTES,
+            )
+            setInstanceAttribute(
+                toolpathHalfWidthLocation,
+                1,
+                GLES30.GL_FLOAT,
+                false,
+                ToolpathMeshBuilder.INSTANCE_HALF_WIDTH_OFFSET_BYTES,
+            )
+            setInstanceAttribute(
+                toolpathColorLocation,
+                4,
+                GLES30.GL_UNSIGNED_BYTE,
+                true,
+                ToolpathMeshBuilder.INSTANCE_COLOR_OFFSET_BYTES,
+            )
+            val drawMode = if (drawInteractionLines) GLES30.GL_LINES else GLES30.GL_TRIANGLE_STRIP
+            val vertexCount = if (drawInteractionLines) {
+                TOOLPATH_INTERACTION_VERTICES_PER_INSTANCE
+            } else {
+                TOOLPATH_VERTICES_PER_INSTANCE
+            }
+            GLES30.glDrawArraysInstanced(drawMode, 0, vertexCount, geometry.instanceCount)
+            val instanceLocations = intArrayOf(
+                toolpathStartLocation,
+                toolpathEndLocation,
+                toolpathHalfWidthLocation,
+                toolpathColorLocation,
+            )
+            for (location in instanceLocations) {
+                GLES30.glVertexAttribDivisor(location, 0)
+            }
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
         }
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
     }
 
     private fun setInstanceAttribute(
@@ -621,7 +707,7 @@ internal class ToolpathRenderer(
 
     private fun uploadGeometry(scene: ToolpathScene): ToolpathGpuGeometry? {
         val payload = try {
-            ToolpathMeshBuilder.build(scene)
+            traced("DuckyPreview.buildGeometry") { ToolpathMeshBuilder.build(scene) }
         } catch (failure: RuntimeException) {
             failRenderer("geometry_build", failure)
             return null
@@ -639,21 +725,23 @@ internal class ToolpathRenderer(
             instanceBufferId = buffers[1],
             instanceCount = payload.instanceCount,
         )
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.bedBufferId)
-        GLES30.glBufferData(
-            GLES30.GL_ARRAY_BUFFER,
-            payload.bedVertices.remaining() * Float.SIZE_BYTES,
-            payload.bedVertices,
-            GLES30.GL_STATIC_DRAW,
-        )
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.instanceBufferId)
-        GLES30.glBufferData(
-            GLES30.GL_ARRAY_BUFFER,
-            payload.toolpathInstances.remaining(),
-            payload.toolpathInstances,
-            GLES30.GL_STATIC_DRAW,
-        )
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+        traced("DuckyPreview.uploadGeometry") {
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.bedBufferId)
+            GLES30.glBufferData(
+                GLES30.GL_ARRAY_BUFFER,
+                payload.bedVertices.remaining() * Float.SIZE_BYTES,
+                payload.bedVertices,
+                GLES30.GL_STATIC_DRAW,
+            )
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, geometry.instanceBufferId)
+            GLES30.glBufferData(
+                GLES30.GL_ARRAY_BUFFER,
+                payload.toolpathInstances.remaining(),
+                payload.toolpathInstances,
+                GLES30.GL_STATIC_DRAW,
+            )
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+        }
         if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
             deleteGeometry(geometry)
             failRenderer("buffer_upload")
@@ -778,6 +866,7 @@ internal class ToolpathRenderer(
         gpuGeometry.clear()
         uploadState.invalidate()
         pendingPrewarmScene = null
+        refinementRequestedForScene = null
         if (bedProgram != 0) GLES30.glDeleteProgram(bedProgram)
         if (toolpathProgram != 0) GLES30.glDeleteProgram(toolpathProgram)
         bedProgram = 0
@@ -793,7 +882,8 @@ internal class ToolpathRenderer(
         const val BED_POSITION_OFFSET_BYTES = 0
         const val BED_COLOR_OFFSET_BYTES = 3 * Float.SIZE_BYTES
         const val BED_ACROSS_OFFSET_BYTES = 7 * Float.SIZE_BYTES
-        const val TOOLPATH_VERTICES_PER_INSTANCE = 6
+        const val TOOLPATH_VERTICES_PER_INSTANCE = 4
+        const val TOOLPATH_INTERACTION_VERTICES_PER_INSTANCE = 2
         const val BED_VERTEX_SHADER = """#version 300 es
             uniform mat4 uMvp;
             in vec3 aPosition;
@@ -809,21 +899,27 @@ internal class ToolpathRenderer(
         """
         const val TOOLPATH_VERTEX_SHADER = """#version 300 es
             uniform mat4 uMvp;
+            uniform int uLineMode;
             in vec3 aStart;
             in vec3 aEnd;
             in float aHalfWidth;
             in vec4 aColor;
             out vec4 vColor;
             out float vAcross;
-            const vec2 CORNERS[6] = vec2[6](
+            const vec2 CORNERS[4] = vec2[4](
                 vec2(0.0, -1.0),
                 vec2(1.0, -1.0),
-                vec2(1.0, 1.0),
-                vec2(0.0, -1.0),
-                vec2(1.0, 1.0),
-                vec2(0.0, 1.0)
+                vec2(0.0, 1.0),
+                vec2(1.0, 1.0)
             );
             void main() {
+                if (uLineMode != 0) {
+                    vec3 position = gl_VertexID == 0 ? aStart : aEnd;
+                    gl_Position = uMvp * vec4(position, 1.0);
+                    vColor = aColor;
+                    vAcross = 0.0;
+                    return;
+                }
                 vec2 delta = aEnd.xy - aStart.xy;
                 vec2 tangent = delta / max(length(delta), 0.0001);
                 vec2 normal = vec2(-tangent.y, tangent.x);
@@ -851,6 +947,12 @@ internal class ToolpathRenderer(
         """
     }
 }
+
+private data class AdaptiveToolpathWorkload(
+    val scene: ToolpathScene,
+    val viewportWidth: Int,
+    val viewportHeight: Int,
+)
 
 private data class ToolpathGpuGeometry(
     val bedBufferId: Int,
@@ -908,15 +1010,25 @@ internal object ToolpathMeshBuilder {
     internal const val INSTANCE_END_OFFSET_BYTES = 3 * Float.SIZE_BYTES
     internal const val INSTANCE_HALF_WIDTH_OFFSET_BYTES = 6 * Float.SIZE_BYTES
     internal const val INSTANCE_COLOR_OFFSET_BYTES = 7 * Float.SIZE_BYTES
+    internal const val EARLY_Z_OPACITY_THRESHOLD = 0.85f
 
     fun build(scene: ToolpathScene): ToolpathUploadPayload {
-        val budget = depthPreviewSegmentBudget(scene.detail)
+        val budget = scene.segmentBudgetOverride ?: depthPreviewSegmentBudget(scene.detail)
         val plan = scene.preview.buildRenderPlan(budget, scene.visibleRoles)
         val bedBuilder = FloatBuilder(2_400)
         val instanceBuilder = ToolpathInstanceBuilder(plan.segmentOffsets.size)
         addBed(bedBuilder, scene.bedSizeX, scene.bedSizeY, scene.bedPolygon)
         val zSpan = (scene.preview.maxZMm - scene.preview.minZMm).coerceAtLeast(0.001f)
-        plan.segmentOffsets.forEach { offset ->
+        // Preview G-code is layer ordered. For the normal near-opaque view, upload high
+        // layers first so depth testing rejects covered internal fragments before shading.
+        // A deliberately translucent view keeps source order so inner paths remain visible.
+        val segmentIndices = if (scene.opacity >= EARLY_Z_OPACITY_THRESHOLD) {
+            plan.segmentOffsets.indices.reversed()
+        } else {
+            plan.segmentOffsets.indices
+        }
+        segmentIndices.forEach { index ->
+            val offset = plan.segmentOffsets[index]
             val x1 = scene.preview.segments[offset] - scene.bedOriginX
             val y1 = scene.preview.segments[offset + 1] - scene.bedOriginY
             val x2 = scene.preview.segments[offset + 2] - scene.bedOriginX

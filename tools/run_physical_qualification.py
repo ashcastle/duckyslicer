@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Run the pinned Orca corpus on one explicitly selected physical ARM64 device."""
+"""Run the pinned qualification corpus on one explicitly selected physical ARM64 device."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import subprocess
 import sys
@@ -75,6 +76,29 @@ class ThermalReading:
     status: int
 
 
+QUALIFICATION_APPLICATION_ID = f"{APPLICATION_ID}.qualification"
+QUALIFICATION_TEST_APPLICATION_ID = f"{QUALIFICATION_APPLICATION_ID}.test"
+QUALIFICATION_APPLICATION_ID_SUFFIX = ".qualification"
+QUALIFICATION_VERSION_CODE = 5
+QUALIFICATION_VERSION_NAME = "0.2.0-rc.1"
+DEBUG_OUTPUT_METADATA = DEBUG_APK.parent / "output-metadata.json"
+TEST_OUTPUT_METADATA = TEST_APK.parent / "output-metadata.json"
+MAX_AUTOMATIC_FIRST_FRAME_MS = 2_000.0
+MAX_AUTOMATIC_SETTLED_P95_MS = 50.0
+MAX_AUTOMATIC_INTERACTION_P95_MS = 50.0
+MAX_PREVIEW_GEOMETRY_UPLOADS = 4
+MAX_PEAK_TOTAL_PSS_KB = 1_572_864
+MAX_PEAK_TOTAL_PSS_FRACTION = 0.35
+MAX_START_THERMAL_STATUS = 1
+MAX_END_THERMAL_STATUS = 2
+PHYSICAL_DENSE_SOAK_CYCLES = 3
+MAX_SOAK_UI_PSS_GROWTH_KB = 65_536
+MAX_SOAK_UI_PSS_GROWTH_FRACTION = 0.15
+MAX_SOAK_TIMING_REGRESSION_RATIO = 1.5
+MAX_SOAK_FRAME_REGRESSION_ALLOWANCE_MS = 8.0
+MAX_SOAK_SLICE_REGRESSION_ALLOWANCE_MS = 1_000.0
+
+
 def best_effort(command: Sequence[str], *, timeout: int = 20) -> str:
     try:
         result = subprocess.run(
@@ -88,6 +112,30 @@ def best_effort(command: Sequence[str], *, timeout: int = 20) -> str:
     except (OSError, subprocess.TimeoutExpired):
         return ""
     return result.stdout if result.returncode == 0 else ""
+
+
+def output_application_id(path: Path) -> str:
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RunnerError(f"Could not read Android build metadata {path}: {error}") from error
+    application_id = document.get("applicationId") if isinstance(document, dict) else None
+    if not isinstance(application_id, str) or not application_id:
+        raise RunnerError(f"Android build metadata does not identify its application: {path}")
+    return application_id
+
+
+def validate_qualification_artifacts() -> None:
+    actual = {
+        output_application_id(DEBUG_OUTPUT_METADATA),
+        output_application_id(TEST_OUTPUT_METADATA),
+    }
+    expected = {QUALIFICATION_APPLICATION_ID, QUALIFICATION_TEST_APPLICATION_ID}
+    if actual != expected:
+        raise RunnerError(
+            "Physical qualification APKs are not isolated from the installed release: "
+            f"expected={sorted(expected)} actual={sorted(actual)}",
+        )
 
 
 def parse_memory_total_kb(output: str) -> int | None:
@@ -182,13 +230,29 @@ def physical_rejection(identity: DeviceIdentity) -> str | None:
         return f"{identity.serial} is not ARM64 (reported {identity.abi!r})"
     if identity.api < 30:
         return f"{identity.serial} is API {identity.api}; physical qualification requires API 30+ exit diagnostics"
+    if identity.memory_total_kb is None or identity.memory_total_kb <= 0:
+        return f"{identity.serial} did not report a positive physical-memory total"
     return None
 
 
-def validate_dense_render(case_payload: dict[str, object]) -> None:
-    render = case_payload.get("previewRender")
+def foreground_rejection(power_output: str, window_output: str) -> str | None:
+    wakefulness = re.search(r"(?m)^\s*mWakefulness=(\w+)\s*$", power_output)
+    if wakefulness is None:
+        return "could not verify the device wakefulness"
+    if wakefulness.group(1) != "Awake":
+        return f"device wakefulness is {wakefulness.group(1)!r}"
+    if re.search(r"(?m)^\s*mInputRestricted=true\s*$", window_output):
+        return "device input is restricted by the lock screen"
+    if re.search(r"mDreamingLockscreen=true", window_output):
+        return "device lock screen is active"
+    return None
+
+
+def validate_preview_render(render: object) -> None:
     if not isinstance(render, dict):
         raise RunnerError("Dense Preview did not return the required GPU frame measurement")
+    if render.get("measurementSurface") != "foreground-glsurfaceview":
+        raise RunnerError("Dense Preview was not measured on the visible foreground surface")
     measurement_shape = (
         render.get("framebufferWidth"),
         render.get("framebufferHeight"),
@@ -198,6 +262,219 @@ def validate_dense_render(case_payload: dict[str, object]) -> None:
         raise RunnerError(
             "Dense Preview used a reduced measurement shape instead of 720x1280 with 30 frames per phase",
         )
+    automatic_detail = render.get("automaticDetail")
+    tiers = render.get("tiers")
+    if automatic_detail not in {"PERFORMANCE", "BALANCED", "DETAIL"} or not isinstance(tiers, dict):
+        raise RunnerError("Dense Preview did not report its automatic rendering tier")
+    if set(tiers) != {"PERFORMANCE", "BALANCED", "DETAIL"}:
+        raise RunnerError("Dense Preview did not measure every rendering tier")
+    required_metrics = {
+        "firstFrameMs",
+        "settledFrameP50Ms",
+        "settledFrameP95Ms",
+        "interactionFrameP50Ms",
+        "interactionFrameP95Ms",
+        "geometryUploads",
+    }
+    for detail, metrics in tiers.items():
+        if not isinstance(metrics, dict) or not required_metrics.issubset(metrics):
+            raise RunnerError(f"Dense Preview returned incomplete {detail} rendering metrics")
+        for metric in required_metrics - {"geometryUploads"}:
+            value = metrics.get(metric)
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+                raise RunnerError(f"Dense Preview returned invalid {detail} {metric}: {value!r}")
+            if value < 0:
+                raise RunnerError(f"Dense Preview returned negative {detail} {metric}: {value!r}")
+        uploads = metrics.get("geometryUploads")
+        if (
+            not isinstance(uploads, int)
+            or isinstance(uploads, bool)
+            or uploads < 1
+            or uploads > MAX_PREVIEW_GEOMETRY_UPLOADS
+        ):
+            raise RunnerError(
+                f"Dense Preview {detail} geometry uploads exceed the bounded cache policy: {uploads!r}",
+            )
+    selected = tiers[automatic_detail]
+    if render.get("detail") != automatic_detail:
+        raise RunnerError("Dense Preview reported a different detail tier than Automatic selected")
+    budgets = {
+        "firstFrameMs": MAX_AUTOMATIC_FIRST_FRAME_MS,
+        "settledFrameP95Ms": MAX_AUTOMATIC_SETTLED_P95_MS,
+        "interactionFrameP95Ms": MAX_AUTOMATIC_INTERACTION_P95_MS,
+    }
+    for metric, maximum in budgets.items():
+        value = selected[metric]
+        if value > maximum:
+            raise RunnerError(
+                f"Dense Preview Automatic {automatic_detail} exceeds {metric} budget: "
+                f"actual={value:.3f}ms maximum={maximum:.3f}ms",
+            )
+
+
+def validate_dense_render(
+    case_payload: dict[str, object],
+    *,
+    required_soak_cycles: int = 1,
+) -> None:
+    validate_preview_render(case_payload.get("previewRender"))
+    if required_soak_cycles <= 1:
+        return
+    soak_cycles = case_payload.get("soakCycles")
+    if not isinstance(soak_cycles, list) or len(soak_cycles) != required_soak_cycles:
+        raise RunnerError(
+            f"Dense Preview did not return exactly {required_soak_cycles} same-session soak cycles",
+        )
+    worker_pids: list[int] = []
+    ui_pss: list[int] = []
+    validated: list[dict[str, object]] = []
+    for index, cycle in enumerate(soak_cycles, start=1):
+        if not isinstance(cycle, dict) or cycle.get("cycle") != index:
+            raise RunnerError(f"Dense Preview returned an invalid soak cycle {index}")
+        worker_pid = cycle.get("workerPid")
+        cycle_pss = cycle.get("uiPssKb")
+        if not isinstance(worker_pid, int) or isinstance(worker_pid, bool) or worker_pid <= 0:
+            raise RunnerError(f"Dense Preview soak cycle {index} has no stable worker PID")
+        if not isinstance(cycle_pss, int) or isinstance(cycle_pss, bool) or cycle_pss <= 0:
+            raise RunnerError(f"Dense Preview soak cycle {index} has invalid UI PSS")
+        validate_preview_render(cycle.get("previewRender"))
+        worker_pids.append(worker_pid)
+        ui_pss.append(cycle_pss)
+        validated.append(cycle)
+    if len(set(worker_pids)) != 1:
+        raise RunnerError("Dense Preview soak restarted the isolated slicer worker between cycles")
+
+    reference_pss = ui_pss[-2]
+    allowed_growth = max(
+        MAX_SOAK_UI_PSS_GROWTH_KB,
+        int(reference_pss * MAX_SOAK_UI_PSS_GROWTH_FRACTION),
+    )
+    if ui_pss[-1] - reference_pss > allowed_growth:
+        raise RunnerError(
+            "Dense Preview soak UI PSS continued growing after warm-up: "
+            f"reference={reference_pss}kB final={ui_pss[-1]}kB maximumGrowth={allowed_growth}kB",
+        )
+
+    reference = validated[-2]
+    final = validated[-1]
+    for metric, allowance in (
+        ("sliceElapsedMs", MAX_SOAK_SLICE_REGRESSION_ALLOWANCE_MS),
+        ("previewParseElapsedMs", MAX_SOAK_FRAME_REGRESSION_ALLOWANCE_MS),
+    ):
+        validate_soak_timing(reference, final, metric, allowance)
+    reference_render = selected_automatic_metrics(reference)
+    final_render = selected_automatic_metrics(final)
+    for metric in ("settledFrameP95Ms", "interactionFrameP95Ms"):
+        validate_soak_timing(
+            reference_render,
+            final_render,
+            metric,
+            MAX_SOAK_FRAME_REGRESSION_ALLOWANCE_MS,
+        )
+
+
+def selected_automatic_metrics(cycle: dict[str, object]) -> dict[str, object]:
+    render = cycle.get("previewRender")
+    if not isinstance(render, dict):
+        raise RunnerError("Dense Preview soak cycle has no rendering metrics")
+    detail = render.get("automaticDetail")
+    tiers = render.get("tiers")
+    selected = tiers.get(detail) if isinstance(tiers, dict) else None
+    if not isinstance(selected, dict):
+        raise RunnerError("Dense Preview soak cycle has no selected Automatic metrics")
+    return selected
+
+
+def validate_soak_timing(
+    reference: dict[str, object],
+    final: dict[str, object],
+    metric: str,
+    allowance_ms: float,
+) -> None:
+    reference_value = reference.get(metric)
+    final_value = final.get(metric)
+    if (
+        not isinstance(reference_value, (int, float))
+        or isinstance(reference_value, bool)
+        or not math.isfinite(reference_value)
+        or reference_value < 0
+        or not isinstance(final_value, (int, float))
+        or isinstance(final_value, bool)
+        or not math.isfinite(final_value)
+        or final_value < 0
+    ):
+        raise RunnerError(f"Dense Preview soak returned invalid {metric} timing")
+    maximum = reference_value * MAX_SOAK_TIMING_REGRESSION_RATIO + allowance_ms
+    if final_value > maximum:
+        raise RunnerError(
+            f"Dense Preview soak regressed {metric}: "
+            f"reference={reference_value:.3f} final={final_value:.3f} maximum={maximum:.3f}",
+        )
+
+
+def validate_resource_budget(
+    host_metrics: dict[str, object],
+    identity: DeviceIdentity,
+    identifier: str,
+) -> None:
+    peak_pss = host_metrics.get("peakTotalPssKb")
+    if not isinstance(peak_pss, int) or isinstance(peak_pss, bool) or peak_pss <= 0:
+        raise RunnerError(f"Physical qualification case {identifier} returned invalid peak PSS")
+    memory_total = identity.memory_total_kb
+    if memory_total is None or memory_total <= 0:
+        raise RunnerError("Physical qualification target has no usable physical-memory total")
+    pss_limit = min(
+        MAX_PEAK_TOTAL_PSS_KB,
+        int(memory_total * MAX_PEAK_TOTAL_PSS_FRACTION),
+    )
+    if peak_pss > pss_limit:
+        raise RunnerError(
+            f"Physical qualification case {identifier} exceeds peak PSS budget: "
+            f"actual={peak_pss}kB maximum={pss_limit}kB",
+        )
+
+    for label, maximum in (
+        ("thermalBefore", MAX_START_THERMAL_STATUS),
+        ("thermalAfter", MAX_END_THERMAL_STATUS),
+    ):
+        snapshot = host_metrics.get(label)
+        if not isinstance(snapshot, dict):
+            raise RunnerError(f"Physical qualification case {identifier} has no {label} snapshot")
+        status = snapshot.get("status")
+        if not isinstance(status, int) or isinstance(status, bool) or status < 0:
+            raise RunnerError(f"Physical qualification case {identifier} has invalid {label} status")
+        if status > maximum:
+            raise RunnerError(
+                f"Physical qualification case {identifier} exceeds {label} severity: "
+                f"actual={status} maximum={maximum}",
+            )
+        readings = snapshot.get("readings")
+        if not isinstance(readings, list):
+            raise RunnerError(f"Physical qualification case {identifier} has invalid {label} readings")
+        for reading in readings:
+            if not isinstance(reading, dict):
+                raise RunnerError(
+                    f"Physical qualification case {identifier} has an invalid {label} sensor",
+                )
+            sensor_status = reading.get("status")
+            if (
+                not isinstance(sensor_status, int)
+                or isinstance(sensor_status, bool)
+                or sensor_status < 0
+            ):
+                raise RunnerError(
+                    f"Physical qualification case {identifier} has an invalid {label} sensor status",
+                )
+        severe_sensors = [
+            reading.get("name", "unknown")
+            for reading in readings
+            if reading["status"] > maximum
+        ]
+        if severe_sensors:
+            raise RunnerError(
+                f"Physical qualification case {identifier} has severe {label} sensors: "
+                + ", ".join(str(name) for name in severe_sensors),
+            )
 
 
 def query_identity(serial: str) -> DeviceIdentity:
@@ -237,18 +514,24 @@ def thermal_snapshot(serial: str) -> dict[str, object]:
     }
 
 
-def sample_pss_kb(serial: str) -> int | None:
+def sample_pss_kb(serial: str, package: str = QUALIFICATION_APPLICATION_ID) -> int | None:
     output = best_effort(
-        adb(serial, "shell", "dumpsys", "meminfo", APPLICATION_ID),
+        adb(serial, "shell", "dumpsys", "meminfo", package),
         timeout=15,
     )
     return parse_total_pss_kb(output)
 
 
-def run_instrumented_case(serial: str, identifier: str, *, timeout_seconds: int = 1_800) -> dict[str, object]:
+def run_instrumented_case(
+    serial: str,
+    identifier: str,
+    *,
+    qualification_cycles: int = 1,
+    timeout_seconds: int = 1_800,
+) -> dict[str, object]:
     best_effort(adb(serial, "logcat", "-c"))
     exit_history_before = best_effort(
-        adb(serial, "shell", "dumpsys", "activity", "exit-info", APPLICATION_ID),
+        adb(serial, "shell", "dumpsys", "activity", "exit-info", QUALIFICATION_APPLICATION_ID),
         timeout=30,
     )
     thermal_before = thermal_snapshot(serial)
@@ -268,7 +551,10 @@ def run_instrumented_case(serial: str, identifier: str, *, timeout_seconds: int 
         "-e",
         "measurePhysical",
         "true",
-        f"{TEST_APPLICATION_ID}/{RUNNER}",
+        "-e",
+        "qualificationCycles",
+        str(qualification_cycles),
+        f"{QUALIFICATION_TEST_APPLICATION_ID}/{RUNNER}",
     )
     started = time.monotonic()
     try:
@@ -290,15 +576,15 @@ def run_instrumented_case(serial: str, identifier: str, *, timeout_seconds: int 
         if time.monotonic() - started > timeout_seconds:
             timed_out = True
             process.kill()
-            best_effort(adb(serial, "shell", "am", "force-stop", APPLICATION_ID))
+            best_effort(adb(serial, "shell", "am", "force-stop", QUALIFICATION_APPLICATION_ID))
             break
         time.sleep(0.5)
     stdout, stderr = process.communicate()
     elapsed_ms = (time.monotonic() - started) * 1_000.0
     logcat = best_effort(adb(serial, "logcat", "-d", "-v", "threadtime"), timeout=60)
-    failures = crash_anr_evidence(logcat)
+    failures = crash_anr_evidence(logcat, QUALIFICATION_APPLICATION_ID)
     exit_history_after = best_effort(
-        adb(serial, "shell", "dumpsys", "activity", "exit-info", APPLICATION_ID),
+        adb(serial, "shell", "dumpsys", "activity", "exit-info", QUALIFICATION_APPLICATION_ID),
         timeout=30,
     )
     exit_failures = exit_failure_evidence(exit_history_before, exit_history_after)
@@ -345,59 +631,103 @@ def run(
         raise RunnerError(
             "Physical qualification refuses emulators and non-representative targets: " + rejection,
         )
+    if case_ids is None or "dense-preview" in case_ids:
+        foreground_issue = foreground_rejection(
+            best_effort(adb(serial, "shell", "dumpsys", "power"), timeout=30),
+            best_effort(adb(serial, "shell", "dumpsys", "window"), timeout=30),
+        )
+        if foreground_issue:
+            raise RunnerError(
+                "Physical qualification requires an awake, unlocked device for visible Preview "
+                f"measurement: {foreground_issue}",
+            )
     if not skip_build:
-        print("[physical] building debug application and test APK locally")
-        build()
+        print(
+            f"[physical] building isolated {QUALIFICATION_VERSION_NAME} application and test APK locally",
+        )
+        build(
+            application_id_suffix=QUALIFICATION_APPLICATION_ID_SUFFIX,
+            version_code=QUALIFICATION_VERSION_CODE,
+            version_name=QUALIFICATION_VERSION_NAME,
+        )
     for artifact in (DEBUG_APK, TEST_APK):
         if not artifact.is_file():
             raise RunnerError(f"Expected Android artifact is missing: {artifact}")
+    validate_qualification_artifacts()
     print(
         f"[physical] target {serial}: {identity.manufacturer} {identity.model}, "
         f"API {identity.api}, {identity.abi}, {identity.page_size_bytes}-byte pages",
     )
-    captured(adb(serial, "install", "-r", "-t", str(DEBUG_APK)), timeout=180)
-    captured(adb(serial, "install", "-r", "-t", str(TEST_APK)), timeout=180)
-    selected_cases = [
-        case for case in manifest["cases"]
-        if case_ids is None or case["id"] in case_ids
-    ]
-    selected_ids = {case["id"] for case in selected_cases}
-    if case_ids is not None and selected_ids != case_ids:
-        raise RunnerError("Unknown qualification case: " + ", ".join(sorted(case_ids - selected_ids)))
-    case_results: list[dict[str, object]] = []
-    first_report: dict[str, object] | None = None
-    for case in selected_cases:
-        identifier = case["id"]
-        print(f"[physical] running {identifier}")
-        host_metrics = run_instrumented_case(serial, identifier)
-        payload = captured(
-            adb(serial, "exec-out", "run-as", APPLICATION_ID, "cat", REPORT_PATH),
-            timeout=30,
-        )
-        partial = validate_report(payload, manifest, {identifier})
-        if partial.get("physicalMeasurementRequested") is not True:
-            raise RunnerError(f"Physical qualification case {identifier} did not enable measurements")
-        case_payload = partial["cases"][0]
-        if not isinstance(case_payload, dict):
-            raise RunnerError(f"Physical qualification case {identifier} returned invalid metrics")
-        if identifier == "dense-preview":
-            validate_dense_render(case_payload)
-        case_payload["host"] = host_metrics
-        case_results.append(case_payload)
+    best_effort(adb(serial, "uninstall", QUALIFICATION_TEST_APPLICATION_ID), timeout=60)
+    best_effort(adb(serial, "uninstall", QUALIFICATION_APPLICATION_ID), timeout=60)
+    try:
+        captured(adb(serial, "install", "-r", "-t", str(DEBUG_APK)), timeout=180)
+        captured(adb(serial, "install", "-r", "-t", str(TEST_APK)), timeout=180)
+        selected_cases = [
+            case for case in manifest["cases"]
+            if case_ids is None or case["id"] in case_ids
+        ]
+        selected_ids = {case["id"] for case in selected_cases}
+        if case_ids is not None and selected_ids != case_ids:
+            raise RunnerError("Unknown qualification case: " + ", ".join(sorted(case_ids - selected_ids)))
+        case_results: list[dict[str, object]] = []
+        first_report: dict[str, object] | None = None
+        for case in selected_cases:
+            identifier = case["id"]
+            print(f"[physical] running {identifier}")
+            qualification_cycles = PHYSICAL_DENSE_SOAK_CYCLES if identifier == "dense-preview" else 1
+            host_metrics = run_instrumented_case(
+                serial,
+                identifier,
+                qualification_cycles=qualification_cycles,
+            )
+            payload = captured(
+                adb(
+                    serial,
+                    "exec-out",
+                    "run-as",
+                    QUALIFICATION_APPLICATION_ID,
+                    "cat",
+                    REPORT_PATH,
+                ),
+                timeout=30,
+            )
+            partial = validate_report(payload, manifest, {identifier})
+            if partial.get("physicalMeasurementRequested") is not True:
+                raise RunnerError(f"Physical qualification case {identifier} did not enable measurements")
+            case_payload = partial["cases"][0]
+            if not isinstance(case_payload, dict):
+                raise RunnerError(f"Physical qualification case {identifier} returned invalid metrics")
+            if identifier == "dense-preview":
+                validate_dense_render(
+                    case_payload,
+                    required_soak_cycles=qualification_cycles,
+                )
+            validate_resource_budget(host_metrics, identity, identifier)
+            case_payload["host"] = host_metrics
+            case_results.append(case_payload)
+            if first_report is None:
+                first_report = dict(partial)
         if first_report is None:
-            first_report = dict(partial)
-    if first_report is None:
-        raise RunnerError("Physical qualification selected no corpus cases")
-    report = first_report
-    report["source"] = "physical-android"
-    report["generatedAtUtc"] = datetime.now(timezone.utc).isoformat()
-    report["device"] = asdict(identity)
-    report["cases"] = case_results
-    report = validate_report(json.dumps(report), manifest, selected_ids)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"[physical] passed {len(case_results)} cases; report: {output}")
-    return report
+            raise RunnerError("Physical qualification selected no corpus cases")
+        report = first_report
+        report["source"] = "physical-android"
+        report["generatedAtUtc"] = datetime.now(timezone.utc).isoformat()
+        report["device"] = asdict(identity)
+        report["qualificationPackage"] = {
+            "applicationId": QUALIFICATION_APPLICATION_ID,
+            "versionCode": QUALIFICATION_VERSION_CODE,
+            "versionName": QUALIFICATION_VERSION_NAME,
+        }
+        report["cases"] = case_results
+        report = validate_report(json.dumps(report), manifest, selected_ids)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"[physical] passed {len(case_results)} cases; report: {output}")
+        return report
+    finally:
+        best_effort(adb(serial, "uninstall", QUALIFICATION_TEST_APPLICATION_ID), timeout=60)
+        best_effort(adb(serial, "uninstall", QUALIFICATION_APPLICATION_ID), timeout=60)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -2017,6 +2017,62 @@ mod tests {
         ok: bool,
     }
 
+    fn deterministic_mutation(seed: &[u8], case: usize) -> Vec<u8> {
+        let mut state = (case as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let mut mutated = seed.to_vec();
+        match case % 5 {
+            0 => mutated.truncate((next() as usize) % (mutated.len() + 1)),
+            1 => {
+                if !mutated.is_empty() {
+                    let index = (next() as usize) % mutated.len();
+                    mutated[index] ^= (next() as u8) | 1;
+                }
+            }
+            2 => {
+                let index = (next() as usize) % (mutated.len() + 1);
+                let count = (next() as usize % 16) + 1;
+                let inserted = (0..count).map(|_| next() as u8);
+                mutated.splice(index..index, inserted);
+            }
+            3 => {
+                if !mutated.is_empty() {
+                    let start = (next() as usize) % mutated.len();
+                    let count = ((next() as usize % 16) + 1).min(mutated.len() - start);
+                    for byte in &mut mutated[start..start + count] {
+                        *byte = next() as u8;
+                    }
+                }
+            }
+            4 => {
+                let count = (next() as usize % 32) + 1;
+                mutated.extend((0..count).map(|_| next() as u8));
+            }
+            _ => unreachable!(),
+        }
+        mutated
+    }
+
+    fn binary_triangle_stl() -> Vec<u8> {
+        let mut bytes = vec![0u8; 80];
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        for value in [
+            0.0f32, 0.0, 1.0, // normal
+            0.0, 0.0, 0.0, // vertex 1
+            1.0, 0.0, 0.0, // vertex 2
+            0.0, 1.0, 0.0, // vertex 3
+        ] {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        bytes.extend_from_slice(&0u16.to_le_bytes());
+        bytes
+    }
+
     #[test]
     fn host_vulkan_probe_never_enables_android_acceleration() {
         let capabilities = probe_vulkan();
@@ -2211,6 +2267,47 @@ mod tests {
         std::fs::remove_file(path).expect("remove fixture");
 
         assert!(matches!(result, Err(EngineError::Parse(_))));
+    }
+
+    #[test]
+    fn mutated_stl_corpus_never_panics_or_returns_unbounded_geometry() {
+        const CASES_PER_SEED: usize = 192;
+        let path = std::env::temp_dir().join(format!(
+            "duckyslicer-mutated-stl-{}.stl",
+            std::process::id(),
+        ));
+        let ascii = b"solid seed\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid seed\n".to_vec();
+        let seeds = [ascii, binary_triangle_stl()];
+
+        for (seed_index, seed) in seeds.iter().enumerate() {
+            for case in 0..CASES_PER_SEED {
+                std::fs::write(&path, deterministic_mutation(seed, case))
+                    .expect("write mutated STL");
+                let outcome = catch_unwind(AssertUnwindSafe(|| {
+                    inspect_stl(path.to_str().expect("utf8 mutation path"))
+                }));
+                let parsed = outcome.unwrap_or_else(|_| {
+                    panic!("STL parser panicked for seed {seed_index}, mutation {case}")
+                });
+                if let Ok(inspection) = parsed {
+                    assert!(inspection.preview_triangles.len() <= PREVIEW_TRIANGLE_LIMIT);
+                    assert_eq!(
+                        inspection.preview_triangles.len(),
+                        inspection.preview_triangle_indices.len(),
+                    );
+                    assert!(
+                        inspection
+                            .dimensions_mm
+                            .iter()
+                            .all(|value| value.is_finite())
+                    );
+                    assert!(inspection.preview_triangles.iter().flatten().all(|value| {
+                        value.is_finite() && value.abs() <= MAX_STL_COORDINATE_ABS_MM
+                    }));
+                }
+            }
+        }
+        std::fs::remove_file(path).expect("remove mutated STL fixture");
     }
 
     #[test]
@@ -2541,6 +2638,40 @@ mod tests {
         assert!(
             matches!(result, Err(EngineError::Parse(message)) if message.contains("out of range"))
         );
+    }
+
+    #[test]
+    fn mutated_gcode_corpus_never_panics_or_exceeds_preview_limits() {
+        const CASES: usize = 384;
+        let path = std::env::temp_dir().join(format!(
+            "duckyslicer-mutated-preview-{}.gcode",
+            std::process::id(),
+        ));
+        let seed = b"G90\nM83\n;LAYER_CHANGE\n;Z:0.2\n;TYPE:Outer wall\nG1 X0 Y0\nG1 X20 Y0 E1\nG2 X20 Y20 I0 J10 E1\nG1 X0 Y20 E1\n";
+
+        for case in 0..CASES {
+            std::fs::write(&path, deterministic_mutation(seed, case))
+                .expect("write mutated G-code");
+            let outcome = catch_unwind(AssertUnwindSafe(|| {
+                preview_gcode(path.to_str().expect("utf8 mutation path"), 0, usize::MAX)
+            }));
+            let parsed =
+                outcome.unwrap_or_else(|_| panic!("G-code parser panicked for mutation {case}"));
+            if let Ok(preview) = parsed {
+                assert!(preview.layer_count <= MAX_PREVIEW_LAYERS);
+                assert!(preview.segments.len() <= MAX_PREVIEW_SEGMENTS);
+                assert!(preview.min_z_mm.is_finite() && preview.max_z_mm.is_finite());
+                assert!(preview.min_z_mm <= preview.max_z_mm);
+                assert!(
+                    preview
+                        .segments
+                        .iter()
+                        .flatten()
+                        .all(|value| value.is_finite())
+                );
+            }
+        }
+        std::fs::remove_file(path).expect("remove mutated G-code fixture");
     }
 
     #[test]

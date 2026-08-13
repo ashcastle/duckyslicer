@@ -149,12 +149,25 @@ def validate_report(
     return report
 
 
-def build() -> None:
+def build(
+    *,
+    application_id_suffix: str | None = None,
+    version_code: int | None = None,
+    version_name: str | None = None,
+) -> None:
     gradlew = "gradlew.bat" if os.name == "nt" else "./gradlew"
+    properties: list[str] = []
+    if application_id_suffix is not None:
+        properties.append(f"-Pduckyslicer.debugApplicationIdSuffix={application_id_suffix}")
+    if version_code is not None:
+        properties.append(f"-Pduckyslicer.versionCode={version_code}")
+    if version_name is not None:
+        properties.append(f"-Pduckyslicer.versionName={version_name}")
     captured(
         (
             gradlew,
             "--dependency-verification=strict",
+            *properties,
             ":app:assembleDebug",
             ":app:assembleDebugAndroidTest",
         ),

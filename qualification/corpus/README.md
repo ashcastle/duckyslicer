@@ -38,8 +38,21 @@ frame pacing, peak PSS, thermal state, and crash/ANR evidence in an ignored loca
 python3 tools/run_physical_qualification.py --serial <physical-adb-serial>
 ```
 
-The first representative-device run establishes the performance baseline; the runner does not
-invent pass thresholds from emulator measurements.
+The physical runner builds `0.2.0-rc.1` with a temporary `.qualification` application id,
+verifies both APK identities before installation, and removes only those isolated packages when
+the run ends. An installed release and its app data are not downgraded, replaced, or deleted.
+
+The gate applies product acceptance budgets to the dense 720 x 1280 Preview workload: Automatic
+must show its first coherent frame within 2,000 ms, keep settled and interaction p95 frame time at
+or below 50 ms, and use no more than four geometry uploads per measured tier. Peak process PSS must
+remain at or below the smaller of 1.5 GiB and 35% of device RAM. The run must start at Android
+thermal status `LIGHT` or lower and finish at `MODERATE` or lower, including reported sensors.
+The dense workload runs three times inside one instrumentation session. All cycles must retain the
+same isolated slicer PID. After the warm-up cycle, UI PSS may grow by no more than the larger of
+64 MiB and 15%, while slicing, parsing, and Automatic p95 frame times may not regress by more than
+the bounded ratio and allowance enforced by `tools/run_physical_qualification.py`.
+Emulator and software-renderer measurements are diagnostic evidence only and never satisfy this
+release gate.
 
 Use `python3 tools/qualification_corpus.py --check` after editing a fixture. Reports and
 G-code are local build evidence and are intentionally not committed.

@@ -16,6 +16,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
@@ -42,6 +43,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -119,6 +121,7 @@ internal fun ProfileSettings(
     onSaveSlicing: (String, SliceOptions) -> Unit,
 ) {
     var editor by remember { mutableStateOf<ProfileEditorState?>(null) }
+    var expanded by rememberSaveable { mutableStateOf(true) }
 
     fun open(kind: ProfileSettingsKind) {
         editor = ProfileEditorState(kind, ProfileEditSession(options))
@@ -139,55 +142,78 @@ internal fun ProfileSettings(
         }
     }
 
-    Text(
-        stringResource(R.string.profiles),
-        modifier = Modifier.semantics { heading() },
-        fontWeight = FontWeight.Bold,
+    val profileState = stringResource(
+        if (expanded) R.string.expanded_state else R.string.collapsed_state,
     )
-    ProfileRow(
-        title = stringResource(R.string.printer_profile),
-        summary = stringResource(
-            R.string.printer_profile_summary,
-            profileLabel(options.printerProfile),
-            options.bedSizeX.roundToInt(),
-            options.bedSizeY.roundToInt(),
-            options.nozzleDiameter,
-        ),
-        enabled = enabled,
-        onClick = { open(ProfileSettingsKind.PRINTER) },
-    )
-    HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
-    ProfileRow(
-        title = stringResource(R.string.filament_profile),
-        summary = if (options.resolvedFilamentSlots().size == 1) {
-            stringResource(
-                R.string.filament_profile_summary,
-                profileLabel(options.filamentProfile),
-                options.nozzleTemp,
-                options.bedTemp,
+    Surface(
+        onClick = { expanded = !expanded },
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { stateDescription = profileState },
+        color = Color.Transparent,
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 42.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(R.string.profiles),
+                modifier = Modifier.weight(1f).semantics { heading() },
+                fontWeight = FontWeight.Bold,
             )
-        } else {
-            stringResource(
-                R.string.filament_slots_summary,
-                options.resolvedFilamentSlots().size,
-                options.printerProfile.extruderCount,
+            Icon(
+                if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = null,
             )
-        },
-        enabled = enabled,
-        onClick = { open(ProfileSettingsKind.FILAMENT) },
-    )
-    HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
-    ProfileRow(
-        title = stringResource(R.string.slicing_profile),
-        summary = stringResource(
-            R.string.slicing_profile_summary,
-            profileLabel(options.quality),
-            options.layerHeight,
-            (options.fillDensity * 100f).roundToInt(),
-        ),
-        enabled = enabled,
-        onClick = { open(ProfileSettingsKind.SLICING) },
-    )
+        }
+    }
+    if (expanded) {
+        ProfileRow(
+            title = stringResource(R.string.printer_profile),
+            summary = stringResource(
+                R.string.printer_profile_summary,
+                profileLabel(options.printerProfile),
+                options.bedSizeX.roundToInt(),
+                options.bedSizeY.roundToInt(),
+                options.nozzleDiameter,
+            ),
+            enabled = enabled,
+            onClick = { open(ProfileSettingsKind.PRINTER) },
+        )
+        HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+        ProfileRow(
+            title = stringResource(R.string.filament_profile),
+            summary = if (options.resolvedFilamentSlots().size == 1) {
+                stringResource(
+                    R.string.filament_profile_summary,
+                    profileLabel(options.filamentProfile),
+                    options.nozzleTemp,
+                    options.bedTemp,
+                )
+            } else {
+                stringResource(
+                    R.string.filament_slots_summary,
+                    options.resolvedFilamentSlots().size,
+                    options.printerProfile.extruderCount,
+                )
+            },
+            enabled = enabled,
+            onClick = { open(ProfileSettingsKind.FILAMENT) },
+        )
+        HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+        ProfileRow(
+            title = stringResource(R.string.slicing_profile),
+            summary = stringResource(
+                R.string.slicing_profile_summary,
+                profileLabel(options.quality),
+                options.layerHeight,
+                (options.fillDensity * 100f).roundToInt(),
+            ),
+            enabled = enabled,
+            onClick = { open(ProfileSettingsKind.SLICING) },
+        )
+    }
 
     val activeEditor = editor
     when (activeEditor?.kind) {
@@ -468,6 +494,7 @@ private fun PrinterSettingsSheet(
             selected = options.printerProfile,
             recentIds = recentIds,
             id = { it.id },
+            name = { it.name },
             label = { profileLabel(it) },
             brand = { it.brand },
             builtIn = { it.builtIn },
@@ -790,6 +817,7 @@ private fun FilamentSettingsSheet(
             selected = activeProfile,
             recentIds = recentIds,
             id = { it.id },
+            name = { it.name },
             label = { profileLabel(it) },
             brand = { it.brand },
             builtIn = { it.builtIn },
@@ -2209,6 +2237,7 @@ private fun SlicingSettingsSheet(
             selected = options.quality,
             recentIds = recentIds,
             id = { it.id },
+            name = { it.name },
             label = { profileLabel(it) },
             brand = { it.brand },
             builtIn = { it.builtIn },
@@ -2486,6 +2515,7 @@ private fun <T> ProfileChooserSheet(
     selected: T,
     recentIds: List<String>,
     id: (T) -> String,
+    name: (T) -> String,
     label: @Composable (T) -> String,
     brand: (T) -> String?,
     builtIn: (T) -> Boolean,
@@ -2518,6 +2548,7 @@ private fun <T> ProfileChooserSheet(
                 selected = selected,
                 recentIds = recentIds,
                 id = id,
+                name = name,
                 label = label,
                 brand = brand,
                 builtIn = builtIn,
@@ -2645,12 +2676,40 @@ private data class ProfileChoiceGroup<T>(
 internal fun List<String>.matchesPrinter(printer: PrinterProfile): Boolean =
     isEmpty() || printer.name in this
 
+internal fun <T> deduplicateProfileChoices(
+    entries: List<T>,
+    selected: T,
+    id: (T) -> String,
+    name: (T) -> String,
+    brand: (T) -> String?,
+    builtIn: (T) -> Boolean,
+): List<T> {
+    val choices = LinkedHashMap<String, T>(entries.size)
+    entries.forEach { entry ->
+        val key = if (builtIn(entry)) {
+            "built-in:${brand(entry).orEmpty().trim().lowercase(Locale.ROOT)}:" +
+                name(entry).trim().lowercase(Locale.ROOT)
+        } else {
+            "user:${id(entry)}"
+        }
+        val existing = choices[key]
+        choices[key] = when {
+            existing == null -> entry
+            existing == selected -> existing
+            entry == selected -> entry
+            else -> entry // Generated catalog entries follow the small fallback catalog.
+        }
+    }
+    return choices.values.toList()
+}
+
 @Composable
 internal fun <T> SearchableGroupedProfileChoices(
     entries: List<T>,
     selected: T,
     recentIds: List<String>,
     id: (T) -> String,
+    name: (T) -> String,
     label: @Composable (T) -> String,
     brand: (T) -> String?,
     builtIn: (T) -> Boolean,
@@ -2662,20 +2721,23 @@ internal fun <T> SearchableGroupedProfileChoices(
     val recentProfiles = stringResource(R.string.recent_profiles)
     val myProfilesKey = "user-profiles"
     val recentProfilesKey = "recent-profiles"
+    val uniqueEntries = remember(entries, selected) {
+        deduplicateProfileChoices(entries, selected, id, name, brand, builtIn)
+    }
     var query by remember { mutableStateOf("") }
     val selectedGroupKey = if (builtIn(selected)) {
         "brand:${brand(selected).orEmpty()}"
     } else {
         myProfilesKey
     }
-    var expandedGroups by remember(entries, recentIds) {
+    var expandedGroups by remember(uniqueEntries, recentIds) {
         mutableStateOf(setOf(recentProfilesKey, selectedGroupKey))
     }
     val normalizedQuery = query.trim().lowercase(Locale.ROOT)
     val matchingEntries = if (normalizedQuery.isBlank()) {
-        entries
+        uniqueEntries
     } else {
-        entries.filter { entry ->
+        uniqueEntries.filter { entry ->
             searchTerms(entry).any { value -> value.lowercase(Locale.ROOT).contains(normalizedQuery) }
         }
     }

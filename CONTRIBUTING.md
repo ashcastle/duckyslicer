@@ -15,7 +15,9 @@ avoid introducing an account or cloud requirement.
   regression test.
 - Treat imported STL and G-code as untrusted. Avoid unbounded line reads or unchecked
   coordinate arithmetic, preserve atomic outputs, and add both host corpus coverage
-  and a JNI recovery assertion for new parser failure modes.
+  and a JNI recovery assertion for new parser failure modes. Extend the deterministic
+  ASCII/binary STL and G-code mutation corpus when fixing a malformed-input defect;
+  do not replace its fixed seeds with flaky environmental randomness.
 - Treat app-private JSON and LAN-printer responses as untrusted too. Preserve the
   last-known-good generation, never replace unreadable/future-schema data, keep
   response size and nesting bounded, and do not enable credential-bearing redirects.
@@ -36,7 +38,7 @@ avoid introducing an account or cloud requirement.
   command by disconnecting only its request-bound connection.
   Final retained-owner clearance must stop that exact active connection.
   Stale cancellation must never stop a later refresh, upload, or printer command.
-- Keep Orca work off every Android main thread. New long-running operations must
+- Keep native slicer work off every Android main thread. New long-running operations must
   retain request-scoped cancellation, terminate only the isolated worker, and prove
   a clean follow-up operation on ARM64. Foreground-slice cancellation must carry its
   retained session request ID; an idle or stale slice owner must never cancel a later
@@ -117,7 +119,7 @@ The checked-in `rust-toolchain.toml` pins the compiler, formatter, linter, and A
 target used by local and CI builds; do not replace it with an unversioned `stable`.
 
 English is the default Android resource and Korean is the complete hand-maintained
-translation. The other supported Orca languages are generated at build time only from
+translation. The other supported upstream languages are generated at build time only from
 exact, non-fuzzy matches in the pinned PO catalogs; unmatched mobile copy falls back to
 English. Do not edit generated resources or add languages outside that catalog set.
 Run `python3 tools/verify_localization.py` after changing app copy or translations.
@@ -145,6 +147,9 @@ not a complete functional gate. API 35+ ARM64 16 KB devices remain valid for nor
 development checks. The local GitHub APK and Play AAB preparation commands raise that
 requirement to an Android 16/API 36 ARM64 16 KB runtime and refuse to create a release
 candidate without it.
+Run `python3 tools/prepare_release_avd.py --create` to install or verify the pinned
+local ARM64 16 KB system image and AVD. The command prints the headless emulator launch
+and exact API 36 gate commands; hosted CI is not a substitute for this runtime check.
 The host portion also regenerates the CycloneDX SBOM at
 `android/app/build/outputs/duckyslicer-debug.cdx.json`
 from the resolved Debug dependency inventory and verifies that its licenses match the
@@ -165,12 +170,23 @@ Toolpaths use one 32-byte instance per retained segment and OpenGL ES 3 instance
 do not expand every line into six duplicated CPU vertices. Bed triangles remain a small
 separate VBO. Camera gestures must reuse the existing GPU buffers; do not return to
 client-side vertex arrays or per-frame geometry uploads.
-Automatic preview quality must resolve to a concrete tier before mesh generation.
-Low-RAM or 192 MiB-and-smaller app heaps use the bounded performance tier, explicit
-user choices remain authoritative, and active gestures may downgrade at most one tier
-until the view settles. The requested and gesture tiers may retain at most two geometry
-sets (bed plus toolpath-instance VBOs). Prewarm the gesture tier after the first visible
-frame instead of rebuilding or uploading geometry on touch-down or touch-up.
+Automatic preview quality starts from the bounded performance tier before mesh
+generation. Once the first coherent frame is visible, the GLES renderer measures a
+bounded number of completed GPU frames and may promote one tier at a time to Balanced
+and Detail. A slow candidate falls back to the last proven tier and remains there for
+that workload; do not use RAM capacity as a proxy for GPU throughput or oscillate tiers
+during inspection. Explicit user choices remain authoritative, and active gestures may
+downgrade at most one tier until the view settles. The requested and gesture tiers may
+retain at most two geometry sets (bed plus toolpath-instance VBOs). Prewarm the gesture
+tier after the first visible frame instead of rebuilding or uploading geometry on
+touch-down or touch-up.
+The physical qualification runner is the release acceptance check for this policy. Its
+dense workload enforces the Automatic first-frame and p95 budgets, bounded geometry
+uploads, peak-PSS budget, and Android thermal severity. Emulator throttling and
+software-renderer traces are useful for locating regressions but do not replace this
+physical-device gate. The dense workload also repeats three times in one instrumentation
+session so process restarts, continuing UI-PSS growth, and warmed-up slicing/Preview
+regressions fail instead of being hidden by a fresh process.
 Reconstructable VBOs must be released when Android
 reports that the UI is hidden or the process is in the background, then rebuilt lazily on
 the first visible frame. Keep this policy pure and host-tested alongside the real ARM64
@@ -180,7 +196,7 @@ must use the bounded compatibility fallback for the current session instead of
 leaving a blank surface. Keep the user's renderer preference unchanged so an explicit
 mode toggle or a later app session can retry the depth path.
 
-The mobile slicing-profile editor keeps the Orca mental model in five horizontally
+The mobile slicing-profile editor keeps the familiar desktop-slicer model in five horizontally
 scrollable sections: Quality, Strength, Speed, Support, and Others. Keep profile
 selection above those settings, preserve that order, localize every title, and place
 new process controls in the narrowest matching section instead of restoring one long form.
@@ -191,7 +207,7 @@ printer-upload stream. The isolated native writer's `RLIMIT_FSIZE` ceiling and b
 compatibility preview cache are part of that contract; do not replace either with a
 periodic-only check or a full-file read. Run the host storage regressions and both ARM64
 hard-limit recovery and cross-process lease regressions when changing retention or file access.
-Orca writes beside its transformed input, so the persistent project-model directory must
+The native slicer writes beside its transformed input, so the persistent project-model directory must
 remain an explicit monitored transient root. The ARM64 persistent-project regression must
 finish with G-code in bounded slice storage and no `output.gcode` beside the model.
 

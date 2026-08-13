@@ -21,9 +21,13 @@ def valid_sources() -> dict[str, str]:
         ),
         "AppSettings.kt": (
             "PreviewDetail.AUTOMATIC val previewDetail: PreviewDetail = PreviewDetail.AUTOMATIC "
-            "PreviewDeviceCapabilities manager?.isLowRamDevice capabilities.appMemoryClassMb <= 192 "
+            "PreviewDeviceCapabilities manager?.isLowRamDevice "
+            "PreviewDetail.AUTOMATIC -> PreviewDetail.PERFORMANCE "
             "resolvePreviewDetail( previewDetailForInteraction( depthPreviewSegmentBudget( "
-            "compatibilityPreviewSegmentBudget("
+            "shouldDrawToolpathLines( compatibilityPreviewSegmentBudget( AdaptivePreviewDetailController( "
+            "ADAPTIVE_PREVIEW_FAST_FRAME_MS = 48.0 "
+            "ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 2 recordCompletedFrame( "
+            "currentDetail = lastProvenDetail"
         ),
         "AppSettingsSheet.kt": (
             "FlowRow( PreviewRenderingMode.entries.forEach "
@@ -49,6 +53,7 @@ def valid_sources() -> dict[str, str]:
             "GLES30.glGenBuffers GLES30.glDeleteBuffers "
             "GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER GLES30.glBufferData( "
             "GLES30.GL_STATIC_DRAW GLES30.glDrawArraysInstanced( "
+            "GLES30.GL_TRIANGLE_STRIP const val TOOLPATH_VERTICES_PER_INSTANCE = 4 "
             "GLES30.glVertexAttribDivisor( GLES30.GL_UNSIGNED_BYTE "
             "geometryUploadCountForTest cachedGeometryCountForTest "
             "ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN "
@@ -59,18 +64,43 @@ def valid_sources() -> dict[str, str]:
             "ToolpathUploadPayload INSTANCE_STRIDE_BYTES = 32 "
             "INSTANCE_START_OFFSET_BYTES INSTANCE_COLOR_OFFSET_BYTES "
             "toolpathInstances = instanceBuilder.finish() "
+            "EARLY_Z_OPACITY_THRESHOLD = 0.85f plan.segmentOffsets.indices.reversed() "
             ".allocateDirect(capacity * Float.SIZE_BYTES) .allocateDirect(capacity) "
             "setInteractionActive(true) postDelayed(restoreDetail, DETAIL_RESTORE_DELAY_MS) "
-            "previewDetailForInteraction(sourceScene.detail, interactionActive) "
+            "previewDetailForInteraction(sourceScene.detail, interactionActive = true) "
             "depthPreviewSegmentBudget(scene.detail) "
+            "shouldDrawToolpathLines(sourceScene.detail, interactionActive, initialPreview) "
+            "adaptivePreviewController.shouldMeasure( "
+            "GLES30.glFinish() glOperationSucceeded(\"adaptive_gpu_completion\") "
+            "adaptivePreviewController.recordCompletedFrame( "
             "reportFrameReady reportRendererStarting reportUnavailable "
             "override fun surfaceDestroyed(holder: SurfaceHolder) "
             "RENDERER_STARTUP_TIMEOUT_MS = 5_000L "
             "GLES30.glGetError() failRenderer(\"program_creation\")"
         ),
+        "PrepareModelPreviewView.kt": (
+            "PrepareModelTopologyKey( filamentSlot = volume.filamentSlot "
+            "withContext(Dispatchers.Default) PrepareModelSceneBuilder.build(projectObjects "
+            "PrepareModelSceneBuilder.build(\n                    emptyList() "
+            "overlays.takeIf { sceneLoad.complete }.orEmpty()"
+        ),
+        "ModelTransform.kt": (
+            "internal fun ModelTransform.minimumRotatedZ(projectObject: ProjectObject) "
+            "MinimumRotatedZCalculator(this) "
+            "val afterXz = scaledY * sinX + scaledZ * cosX "
+            "result = minOf(result, -scaledX * sinY + afterXz * cosY) "
+            "internal fun ModelTransform.minimumRotatedZ(model: ModelInfo) "
+            "internal fun ModelTransform.placeVertex("
+        ),
+        "PreviewPerformanceHarnessActivity.kt": (
+            "detail = PreviewDetail.AUTOMATIC "
+            "renderer.automaticCalibrationSettledForTest() "
+            "automaticDetail = checkNotNull(renderer.effectiveDetailForTest()) "
+            "MAXIMUM_AUTOMATIC_CALIBRATION_FRAMES = 12"
+        ),
         "WorkspaceScreen.kt": (
             "previewDeviceCapabilities(context) resolvePreviewDetail(previewDetail, previewCapabilities) "
-            "detail = effectivePreviewDetail "
+            "detail = previewDetail "
             "compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = false) "
             "compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = true) "
             "if (selectedTab == WorkspaceTab.PREVIEW) PreviewExportSplitButton( "
@@ -80,6 +110,8 @@ def valid_sources() -> dict[str, str]:
             "summary.filamentGrams summary.filamentMeters"
             " shouldUseDepthTestedPreview( depthPreviewRuntimeAvailable "
             "onUnavailable = { depthPreviewRuntimeAvailable = false }"
+            " placements = modelPlacements currentModelPlacements[activeObject.id] "
+            "val placement = checkNotNull(modelPlacements[projectObject.id])"
             " private fun TransformSlider( modifier = Modifier.semantics "
             "contentDescription = label stateDescription = valueText @Composable"
             " private fun PreviewExportSplitButton( .width(48.dp) .height(50.dp) "
@@ -128,8 +160,8 @@ def valid_sources() -> dict[str, str]:
             "GcodeLayerPreview.fromNative GcodeLayerPreview.fromNative "
             "GcodeLayerPreview.fromNative gcodeResult == null "
             "depthPreviewPrewarmsGestureVboAndReusesItAcrossCameraFrames "
-            "The first frame must upload one geometry set "
-            "The next idle frame must prewarm one lower-detail geometry set "
+            "The first frame must upload one coherent low-cost geometry set "
+            "The next idle frame must upload the requested detail geometry set "
             "Camera-only frames must reuse the uploaded GPU buffers "
             "A geometry change must replace the GPU buffers exactly once "
             "Old-scene GPU buffers must be released before the new gesture tier is prewarmed "
@@ -139,7 +171,7 @@ def valid_sources() -> dict[str, str]:
             "Settling after a gesture must reuse the requested geometry "
             "The GPU cache must remain bounded to two geometry sets "
             "UI memory pressure must release every reconstructable preview buffer "
-            "The first frame after memory pressure must rebuild the requested geometry once "
+            "The first frame after memory pressure must rebuild the low-cost geometry once "
             "Instanced toolpath must change the rendered framebuffer "
             "ARM64 GPU bed staging must use direct memory "
             "ARM64 GPU instance staging must use direct memory "
@@ -148,6 +180,17 @@ def valid_sources() -> dict[str, str]:
             "Slice outcome must retain Orca's filament-length estimate "
             "Slice outcome must retain Orca's filament-mass estimate"
             " A failed depth renderer must request compatibility fallback exactly once"
+            " A trivial Preview workload must promote Automatic through measured tiers"
+            " Automatic calibration must settle after bounded completed-frame samples"
+        ),
+        "PrepareModelRendererInstrumentedTest.kt": (
+            "densePrepareSceneBuildStaysWithinLoadBudget "
+            "denseMinimumRotatedZStaysWithinTransformBudget "
+            "densePrepareCameraFramesReuseOneUploadedMesh "
+            "densePreparePickingStaysWithinTapBudget "
+            "p95Ms <= 50.0 renderer.geometryUploadCountForTest() == 1 "
+            "p95Ms <= 100.0"
+            " p95Ms <= 16.0"
         ),
         "AccessibilityInstrumentedTest.kt": (
             "appSettingsExposeNamedSlidersWholeRowSwitchesAndHeadings "
@@ -175,12 +218,16 @@ def valid_sources() -> dict[str, str]:
             "invalidStatisticsCannotReenterPreviewState"
         ),
         "PreviewPerformancePolicyTest.kt": (
-            "automaticDefaultsToSmoothOnMemoryConstrainedDevices "
-            "automaticUsesBalancedQualityWhenTheDeviceHasHeadroom "
+            "automaticDefaultsToMeasuredPerformanceTier "
+            "automaticDoesNotMistakeRamCapacityForGpuHeadroom "
             "explicitQualityAlwaysWinsOverAutomaticDeviceSelection "
             "gesturesTemporarilyUseOneLowerGeometryTier "
             "segmentBudgetsStayBoundedForBothRenderers "
-            "depthRendererFailureFallsBackWithoutOverwritingTheUserPreference"
+            "depthRendererFailureFallsBackWithoutOverwritingTheUserPreference "
+            "automaticPromotesOnlyAfterTwoCompletedFastFramesPerTier "
+            "slowCandidateFallsBackToLastProvenTierWithoutOscillation "
+            "automaticCalibrationResetsForAChangedPreviewWorkload "
+            "explicitQualityNeverRunsAutomaticCalibration"
         ),
         "ToolpathMeshBuilderTest.kt": (
             "balancedModeCapsDensePreviewGeometry "
@@ -192,7 +239,10 @@ def valid_sources() -> dict[str, str]:
             "Camera-only frames must reuse the GPU buffer "
             "The least recently used gesture VBO must be evicted "
             "Context recreation must re-upload retained scene data"
-            " gpuPreviewMemoryIsReleasedOnlyAfterTheUiBecomesHidden"
+            " gpuPreviewMemoryIsReleasedOnlyAfterTheUiBecomesHidden "
+            "nearOpaquePreviewUploadsHighLayersFirstForEarlyDepthRejection "
+            "Near-opaque paths must start at the high layer "
+            "Translucent paths must retain source order"
         ),
         "WorkspaceLayoutPolicyTest.kt": (
             "landscapePhoneKeepsBottomNavigation "
@@ -278,6 +328,39 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "glBufferData"):
             verify_preview_boundary(sources)
 
+    def test_rejects_prepare_mesh_construction_on_the_main_thread(self) -> None:
+        sources = valid_sources()
+        sources["PrepareModelPreviewView.kt"] = sources["PrepareModelPreviewView.kt"].replace(
+            "withContext(Dispatchers.Default)", "run"
+        )
+        with self.assertRaisesRegex(VerificationError, "Prepare model loading"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_prepare_cache_that_ignores_filament_color(self) -> None:
+        sources = valid_sources()
+        sources["PrepareModelPreviewView.kt"] = sources["PrepareModelPreviewView.kt"].replace(
+            "filamentSlot = volume.filamentSlot", "filamentSlot = 0"
+        )
+        with self.assertRaisesRegex(VerificationError, "Prepare model loading"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_prepare_placement_that_allocates_per_vertex(self) -> None:
+        sources = valid_sources()
+        sources["ModelTransform.kt"] = sources["ModelTransform.kt"].replace(
+            "MinimumRotatedZCalculator(this)", "transformLocal(floatArrayOf(0f, 0f, 0f))"
+        )
+        with self.assertRaisesRegex(VerificationError, "allocation-free|per-vertex"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_prepare_renderer_that_recalculates_placement_each_frame(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            "val placement = checkNotNull(modelPlacements[projectObject.id])",
+            "val placement = recalculatePlacement(projectObject)",
+        )
+        with self.assertRaisesRegex(VerificationError, "modelPlacements"):
+            verify_preview_boundary(sources)
+
     def test_rejects_missing_instanced_toolpath_draw(self) -> None:
         sources = valid_sources()
         sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
@@ -314,10 +397,34 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "isLowRamDevice"):
             verify_preview_boundary(sources)
 
+    def test_rejects_automatic_preview_without_completed_gpu_measurement(self) -> None:
+        sources = valid_sources()
+        sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
+            "GLES30.glFinish()", ""
+        )
+        with self.assertRaisesRegex(VerificationError, "GLES30.glFinish"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_automatic_preview_without_slow_tier_fallback(self) -> None:
+        sources = valid_sources()
+        sources["AppSettings.kt"] = sources["AppSettings.kt"].replace(
+            "currentDetail = lastProvenDetail", "settled = true"
+        )
+        with self.assertRaisesRegex(VerificationError, "lastProvenDetail"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_foreground_benchmark_that_does_not_measure_automatic_tier(self) -> None:
+        sources = valid_sources()
+        sources["PreviewPerformanceHarnessActivity.kt"] = sources[
+            "PreviewPerformanceHarnessActivity.kt"
+        ].replace("detail = PreviewDetail.AUTOMATIC", "detail = PreviewDetail.PERFORMANCE")
+        with self.assertRaisesRegex(VerificationError, "foreground adaptive Preview benchmark"):
+            verify_preview_boundary(sources)
+
     def test_rejects_missing_interaction_lod_transition(self) -> None:
         sources = valid_sources()
         sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
-            "previewDetailForInteraction(sourceScene.detail, interactionActive)",
+            "previewDetailForInteraction(sourceScene.detail, interactionActive = true)",
             "sourceScene.detail",
         )
         with self.assertRaisesRegex(VerificationError, "previewDetailForInteraction"):
@@ -403,6 +510,24 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
         sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
             "const val GPU_GEOMETRY_CACHE_SIZE = 2",
             "const val GPU_GEOMETRY_CACHE_SIZE = 3",
+        )
+        with self.assertRaisesRegex(VerificationError, "GPU preview upload contract"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_six_vertex_toolpath_ribbons(self) -> None:
+        sources = valid_sources()
+        sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
+            "GLES30.GL_TRIANGLE_STRIP const val TOOLPATH_VERTICES_PER_INSTANCE = 4",
+            "GLES30.GL_TRIANGLES const val TOOLPATH_VERTICES_PER_INSTANCE = 6",
+        )
+        with self.assertRaisesRegex(VerificationError, "GPU preview upload contract"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_loss_of_early_depth_ordering(self) -> None:
+        sources = valid_sources()
+        sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
+            "EARLY_Z_OPACITY_THRESHOLD = 0.85f plan.segmentOffsets.indices.reversed()",
+            "plan.segmentOffsets.indices",
         )
         with self.assertRaisesRegex(VerificationError, "GPU preview upload contract"):
             verify_preview_boundary(sources)

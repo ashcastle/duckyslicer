@@ -357,12 +357,11 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     @Synchronized
     fun autoLaySelectedModel(): Boolean {
         val target = mutableState.value.history.current.selectedObject ?: return false
-        val targetVolume = target.singleVolumeOrNull ?: return false
         val baseline = startEditLocked(ProjectEditKind.AUTO_LAY) ?: return false
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val orientation = SlicerProcessClient.autoOrient(
-                    File(targetVolume.model.localPath),
+                    target.volumes.map { volume -> File(volume.model.localPath) },
                     baseline.operation.requestId,
                 )
                 val nextHistory = baseline.history.updateTransform(

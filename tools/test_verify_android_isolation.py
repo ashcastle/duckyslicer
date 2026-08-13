@@ -31,7 +31,7 @@ class SlicerProcessService {
   val path = "Model is outside private storage"
   val max = MAX_OPTIONS_BYTES
   val terminate = MESSAGE_TERMINATE_FOR_TEST
-  val worker = HandlerThread("DuckySlicer Orca work")
+  val worker = HandlerThread("DuckySlicer native work")
   val cancel = MESSAGE_CANCEL
   fun cancelUserSliceAsync(session: ForegroundSliceSession) {
     val requestId = session.requestId

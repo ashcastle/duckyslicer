@@ -39,11 +39,37 @@ data class ModelTransform(
         .toString()
 
     internal fun withOrcaOrientation(orientation: OrcaOrientation): ModelTransform = copy(
+        offsetZmm = 0f,
         rotationXdeg = orientation.rotationRadians[0].toCanonicalDegreeFloat(),
         rotationYdeg = orientation.rotationRadians[1].toCanonicalDegreeFloat(),
         rotationZdeg = orientation.rotationRadians[2].toCanonicalDegreeFloat(),
     )
 }
+
+internal data class ModelPlacementOrientation(
+    val rotationXdeg: Float,
+    val rotationYdeg: Float,
+    val rotationZdeg: Float,
+    val scaleX: Float,
+    val scaleY: Float,
+    val scaleZ: Float,
+    val mirrorX: Boolean,
+    val mirrorY: Boolean,
+    val mirrorZ: Boolean,
+)
+
+internal fun ModelTransform.placementOrientation(): ModelPlacementOrientation =
+    ModelPlacementOrientation(
+        rotationXdeg = rotationXdeg,
+        rotationYdeg = rotationYdeg,
+        rotationZdeg = rotationZdeg,
+        scaleX = scale,
+        scaleY = scaleY,
+        scaleZ = scaleZ,
+        mirrorX = mirrorX,
+        mirrorY = mirrorY,
+        mirrorZ = mirrorZ,
+    )
 
 private fun Double.toCanonicalDegreeFloat(): Float =
     Math.toDegrees(this).toFloat().let { degrees -> if (degrees == 0f) 0f else degrees }
@@ -475,43 +501,57 @@ internal fun ProjectObject.geometry(): ProjectObjectGeometry = ProjectObjectGeom
 )
 
 internal fun ModelTransform.minimumRotatedZ(projectObject: ProjectObject): Float {
-    val center = projectObject.geometry().center
+    val geometry = projectObject.geometry()
+    val centerX = (geometry.minX + geometry.maxX) / 2f
+    val centerY = (geometry.minY + geometry.maxY) / 2f
+    val centerZ = (geometry.minZ + geometry.maxZ) / 2f
+    val calculator = MinimumRotatedZCalculator(this)
     var minimum = Float.POSITIVE_INFINITY
     projectObject.volumes.forEach { volume ->
-        var index = 0
-        while (index + 2 < volume.model.previewTriangles.size) {
-            val rotated = transformLocal(
-                floatArrayOf(
-                    volume.model.previewTriangles[index] - center[0],
-                    volume.model.previewTriangles[index + 1] - center[1],
-                    volume.model.previewTriangles[index + 2] - center[2],
-                ),
-            )
-            minimum = minOf(minimum, rotated[2])
-            index += 3
-        }
+        minimum = minOf(
+            minimum,
+            calculator.minimum(volume.model.previewTriangles, centerX, centerY, centerZ),
+        )
     }
     return minimum.takeIf { it.isFinite() } ?: 0f
 }
 
 internal fun ModelTransform.minimumRotatedZ(model: ModelInfo): Float {
-    val center = FloatArray(3) { axis ->
-        ((model.minMm[axis] + model.maxMm[axis]) / 2.0).toFloat()
-    }
-    var minimum = Float.POSITIVE_INFINITY
-    var index = 0
-    while (index + 2 < model.previewTriangles.size) {
-        val rotated = transformLocal(
-            floatArrayOf(
-                model.previewTriangles[index] - center[0],
-                model.previewTriangles[index + 1] - center[1],
-                model.previewTriangles[index + 2] - center[2],
-            ),
-        )
-        minimum = minOf(minimum, rotated[2])
-        index += 3
-    }
+    val centerX = ((model.minMm[0] + model.maxMm[0]) / 2.0).toFloat()
+    val centerY = ((model.minMm[1] + model.maxMm[1]) / 2.0).toFloat()
+    val centerZ = ((model.minMm[2] + model.maxMm[2]) / 2.0).toFloat()
+    val calculator = MinimumRotatedZCalculator(this)
+    val minimum = calculator.minimum(model.previewTriangles, centerX, centerY, centerZ)
     return minimum.takeIf { it.isFinite() } ?: 0f
+}
+
+/**
+ * Computes only the transformed Z component needed for bed placement. Z-axis rotation cannot
+ * change that component, so this avoids the temporary arrays created by the general 3D transform
+ * while preserving the exact X-then-Y rotation order used by [transformLocal].
+ */
+private class MinimumRotatedZCalculator(transform: ModelTransform) {
+    private val scaleX = transform.scale * if (transform.mirrorX) -1f else 1f
+    private val scaleY = transform.scaleY * if (transform.mirrorY) -1f else 1f
+    private val scaleZ = transform.scaleZ * if (transform.mirrorZ) -1f else 1f
+    private val sinX = sin(Math.toRadians(transform.rotationXdeg.toDouble()).toFloat())
+    private val cosX = cos(Math.toRadians(transform.rotationXdeg.toDouble()).toFloat())
+    private val sinY = sin(Math.toRadians(transform.rotationYdeg.toDouble()).toFloat())
+    private val cosY = cos(Math.toRadians(transform.rotationYdeg.toDouble()).toFloat())
+
+    fun minimum(vertices: FloatArray, centerX: Float, centerY: Float, centerZ: Float): Float {
+        var result = Float.POSITIVE_INFINITY
+        var index = 0
+        while (index + 2 < vertices.size) {
+            val scaledX = (vertices[index] - centerX) * scaleX
+            val scaledY = (vertices[index + 1] - centerY) * scaleY
+            val scaledZ = (vertices[index + 2] - centerZ) * scaleZ
+            val afterXz = scaledY * sinX + scaledZ * cosX
+            result = minOf(result, -scaledX * sinY + afterXz * cosY)
+            index += 3
+        }
+        return result
+    }
 }
 
 internal fun ModelTransform.placeVertex(

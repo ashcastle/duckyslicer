@@ -21,9 +21,12 @@ def valid_manifest(*, debug: bool = False) -> str:
         A: android:name(0x01010003)="com.ashcastle.duckyslicer.AccessibilityHarnessActivity" (Raw: "com.ashcastle.duckyslicer.AccessibilityHarnessActivity")
         A: android:exported(0x01010010)=(type 0x12)0x0
       E: activity (line=32)
+        A: android:name(0x01010003)="com.ashcastle.duckyslicer.PreviewPerformanceHarnessActivity" (Raw: "com.ashcastle.duckyslicer.PreviewPerformanceHarnessActivity")
+        A: android:exported(0x01010010)=(type 0x12)0x0
+      E: activity (line=33)
         A: android:name(0x01010003)="androidx.compose.ui.tooling.PreviewActivity" (Raw: "androidx.compose.ui.tooling.PreviewActivity")
         A: android:exported(0x01010010)=(type 0x12)0xffffffff
-      E: activity (line=33)
+      E: activity (line=34)
         A: android:name(0x01010003)="androidx.activity.ComponentActivity" (Raw: "androidx.activity.ComponentActivity")
         A: android:exported(0x01010010)=(type 0x12)0xffffffff
       E: provider (line=34)
@@ -191,6 +194,18 @@ class VerifyArtifactManifestTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(VerificationError, "component allowlist"):
             verify_aapt_output(source, "release")
+
+    def test_rejects_exported_debug_performance_harness(self) -> None:
+        source = valid_manifest(debug=True).replace(
+            'A: android:name(0x01010003)="com.ashcastle.duckyslicer.PreviewPerformanceHarnessActivity" '
+            '(Raw: "com.ashcastle.duckyslicer.PreviewPerformanceHarnessActivity")\n'
+            '        A: android:exported(0x01010010)=(type 0x12)0x0',
+            'A: android:name(0x01010003)="com.ashcastle.duckyslicer.PreviewPerformanceHarnessActivity" '
+            '(Raw: "com.ashcastle.duckyslicer.PreviewPerformanceHarnessActivity")\n'
+            '        A: android:exported(0x01010010)=(type 0x12)0xffffffff',
+        )
+        with self.assertRaisesRegex(VerificationError, "component allowlist"):
+            verify_aapt_output(source, "debug")
 
     def test_rejects_file_scheme_import(self) -> None:
         source = valid_manifest().replace(

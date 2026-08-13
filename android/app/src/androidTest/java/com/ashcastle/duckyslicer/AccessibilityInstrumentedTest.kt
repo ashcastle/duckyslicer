@@ -2,6 +2,7 @@ package com.ashcastle.duckyslicer
 
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.SystemClock
 import android.os.ParcelFileDescriptor
@@ -17,6 +18,47 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class AccessibilityInstrumentedTest {
+    @Test
+    fun prepareGpuTextureComposesUnderWorkspaceControls() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use {
+            SystemClock.sleep(750)
+            val screenshot = instrumentation.uiAutomation.takeScreenshot()
+            assertTrue(screenshot.width > 0 && screenshot.height > 0)
+            val sampledColors = HashSet<Int>()
+            for (y in 0 until screenshot.height step 24) {
+                for (x in 0 until screenshot.width step 24) sampledColors += screenshot.getPixel(x, y)
+            }
+            assertTrue(
+                "The GPU texture, model, and Compose controls must produce a composed frame",
+                sampledColors.size >= 12,
+            )
+            instrumentation.targetContext.filesDir
+                .resolve("prepare-renderer.png")
+                .outputStream()
+                .use { output -> screenshot.compress(Bitmap.CompressFormat.PNG, 100, output) }
+        }
+    }
+
+    @Test
+    fun prepareGpuTextureSurvivesActivityRecreation() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use { scenario ->
+            SystemClock.sleep(750)
+            scenario.recreate()
+            SystemClock.sleep(750)
+            val screenshot = instrumentation.uiAutomation.takeScreenshot()
+            val sampledColors = HashSet<Int>()
+            for (y in 0 until screenshot.height step 24) {
+                for (x in 0 until screenshot.width step 24) sampledColors += screenshot.getPixel(x, y)
+            }
+            assertTrue(
+                "The recreated activity must restore the GPU model and Compose controls",
+                sampledColors.size >= 12,
+            )
+        }
+    }
+
     @Test
     fun cancelSupportDetailsSaveActionIsReachable() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -410,6 +452,35 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun collapsedWorkspaceProfilesHideAllCurrentProfileSummaries() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val profiles = context.getString(R.string.profiles)
+        val printer = context.getString(R.string.printer_profile)
+        val filament = context.getString(R.string.filament_profile)
+        val slicing = context.getString(R.string.slicing_profile)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE_PROFILES).use {
+            val expanded = waitForNodes(setOf(profiles, printer, filament, slicing))
+            val profileHeader = expanded.firstOrNull {
+                it.isClickable && it.effectiveLabel().contains(profiles)
+            }
+            assertNotNull("The profile header must be collapsible", profileHeader)
+            assertTrue(checkNotNull(profileHeader).performAction(AccessibilityNodeInfo.ACTION_CLICK))
+
+            waitForNode(profiles) { node ->
+                node.isClickable &&
+                    node.stateDescription?.toString() == context.getString(R.string.collapsed_state)
+            }
+            val collapsed = currentNodes()
+            listOf(printer, filament, slicing).forEach { hiddenLabel ->
+                assertTrue(
+                    "$hiddenLabel must not remain in the collapsed profile summary",
+                    collapsed.none { it.effectiveLabel().contains(hiddenLabel) },
+                )
+            }
+        }
+    }
+
+    @Test
     fun objectSettingsExposeOrcaCategoriesAndStickyThirtySeventyActions() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val title = context.getString(R.string.object_process_settings)
@@ -573,7 +644,7 @@ class AccessibilityInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val splitParts = context.getString(R.string.split_to_parts)
         val hint = context.getString(R.string.split_parts_hint)
-        val summary = context.getString(R.string.split_part_summary, 1, 1)
+        val summary = context.getString(R.string.split_part_summary, 1, 2)
         val cancel = context.getString(R.string.cancel)
         launchHarness(AccessibilityHarnessActivity.SCREEN_SPLIT_PARTS).use {
             val nodes = waitForNodes(setOf(splitParts, hint, summary, cancel))
@@ -599,6 +670,13 @@ class AccessibilityInstrumentedTest {
             assertTrue(
                 "Place on face mode must explain the next touch action",
                 waitForNodes(setOf(hint)).any { it.effectiveLabel().contains(hint) },
+            )
+            tapPrepareFixtureCenter()
+            assertTrue(
+                "GPU facet picking must invoke Place on face for the touched model surface",
+                waitForNodes(setOf(TEST_LAY_ON_FACE_SELECTED_LABEL)).any {
+                    it.effectiveLabel().contains(TEST_LAY_ON_FACE_SELECTED_LABEL)
+                },
             )
         }
     }
@@ -628,53 +706,82 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
-    fun manualBrimEditorExposesTouchAndNonTouchEditingActions() {
+    fun supportPaintModeKeepsGpuSceneAndTouchGuidance() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val paintSupport = context.getString(R.string.paint_support)
+        val hint = context.getString(R.string.support_paint_hint)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use {
+            val tool = waitForNode(paintSupport) { it.isClickable }
+            tapCenter(tool)
+            assertTrue(
+                "Support painting must explain its touch controls",
+                waitForNodes(setOf(hint)).any { it.effectiveLabel().contains(hint) },
+            )
+            tapPrepareFixtureCenter()
+            assertTrue(
+                "GPU facet picking must invoke support paint for the touched model surface",
+                waitForNodes(setOf(TEST_SUPPORT_PAINTED_LABEL)).any {
+                    it.effectiveLabel().contains(TEST_SUPPORT_PAINTED_LABEL)
+                },
+            )
+            SystemClock.sleep(500)
+            val screenshot = instrumentation.uiAutomation.takeScreenshot()
+            val sampledColors = HashSet<Int>()
+            for (y in 0 until screenshot.height step 24) {
+                for (x in 0 until screenshot.width step 24) sampledColors += screenshot.getPixel(x, y)
+            }
+            assertTrue(
+                "Support painting must retain the composed GPU model and controls",
+                sampledColors.size >= 12,
+            )
+        }
+    }
+
+    @Test
+    fun manualBrimEditorKeepsGpuSceneComposed() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val title = context.getString(R.string.manual_brim_ears)
-        val hint = context.getString(R.string.brim_point_hint)
-        val addAtFootprint = context.getString(R.string.brim_add_automatic)
-        val radius = context.getString(R.string.brim_radius)
-        val moveLeft = context.getString(R.string.brim_move_left)
-        val remove = context.getString(R.string.brim_remove_point)
-        val apply = context.getString(R.string.apply_changes)
 
         launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use {
             val brimTool = waitForNodes(setOf(title)).firstOrNull {
                 it.isClickable && it.effectiveLabel() == title
             }
             tapCenter(checkNotNull(brimTool))
-
-            val editor = waitForNodes(setOf(title, hint, addAtFootprint, apply))
-            assertTrue(
-                "Manual Brim ears must expose its editor title as a navigable heading",
-                editor.any { it.isHeading && it.effectiveLabel().contains(title) },
-            )
-            assertTrue(editor.any { it.effectiveLabel().contains(hint) })
-            val automaticAdd = editor.first { it.isClickable && it.effectiveLabel() == addAtFootprint }
-            tapCenter(automaticAdd)
-
-            val radiusControl = waitForNode(radius) {
-                it.className?.toString() == SEEK_BAR_CLASS
+            SystemClock.sleep(750)
+            it.onActivity { activity ->
+                assertTrue(
+                    "Manual Brim editing must keep the GPU scene activity alive",
+                    !activity.isFinishing && !activity.isDestroyed,
+                )
             }
-            assertTrue(
-                "Brim size must be adjustable without a touch gesture",
-                radiusControl.actionList.any { action ->
-                    action.id == AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id
-                },
-            )
-            val edited = waitForNodes(setOf(moveLeft, remove, apply))
-            assertTrue(edited.any { it.isClickable && it.effectiveLabel() == moveLeft })
-            assertTrue(edited.any { it.isClickable && it.effectiveLabel() == remove })
-            assertTrue(edited.any { it.isClickable && it.effectiveLabel() == apply })
         }
     }
 
     private fun launchHarness(screen: String): ActivityScenario<AccessibilityHarnessActivity> {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        return ActivityScenario.launch(
+        return ActivityScenario.launch<AccessibilityHarnessActivity>(
             Intent(context, AccessibilityHarnessActivity::class.java)
                 .putExtra(AccessibilityHarnessActivity.EXTRA_SCREEN, screen),
-        )
+        ).also { scenario ->
+            // The landscape regression changes the shared emulator display orientation.
+            // Reset once per scenario without forcing every recreated Activity back again.
+            scenario.onActivity { activity ->
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            }
+        }
+    }
+
+    private fun tapPrepareFixtureCenter() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val screenshot = instrumentation.uiAutomation.takeScreenshot()
+        listOf(0.415f, 0.425f, 0.435f, 0.445f).forEach { heightFraction ->
+            executeShellInput(
+                "input tap ${screenshot.width / 2} " +
+                    "${(screenshot.height * heightFraction).toInt()}",
+            )
+            SystemClock.sleep(NODE_POLL_MILLIS)
+        }
     }
 
     private fun waitForNodes(

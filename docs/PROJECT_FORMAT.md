@@ -21,7 +21,7 @@ owns its stable identity, selected object, objects, and resolved printer, filame
 slicing settings. Each object owns a stable, bounded `volumes` list. The object owns its
 transform (including independent X, Y, and Z scale), variable layer-height ranges, and
 object-specific process overrides. It also owns up to 256 validated manual Brim-ear points
-in Orca-compatible local coordinates and radius units. Each volume owns its stable identity,
+in model-local coordinates and millimetre radius units. Each volume owns its stable identity,
 display name, model-entry reference, filament assignment, support and seam painting, and
 multi-color painting. Objects or volumes that share one source model also share one model entry.
 

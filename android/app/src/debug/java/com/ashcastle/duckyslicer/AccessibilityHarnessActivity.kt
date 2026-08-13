@@ -4,10 +4,12 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -16,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -96,6 +99,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                                 WorkspaceAccessibilityHarness()
                             }
                         }
+                        SCREEN_WORKSPACE_PROFILES -> ProfileSettingsAccessibilityHarness()
                         else -> PreviewAccessibilityHarness()
                     }
                 }
@@ -114,6 +118,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_PROJECT = "project"
         const val SCREEN_PLATES = "plates"
         const val SCREEN_WORKSPACE = "workspace"
+        const val SCREEN_WORKSPACE_PROFILES = "workspace-profiles"
         const val SCREEN_OBJECT_SETTINGS = "object-settings"
         const val SCREEN_SHAPES = "shapes"
         const val SCREEN_SIMPLIFY = "simplify"
@@ -124,6 +129,23 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_PROJECT_IMPORT = "project-import"
         const val SCREEN_PROFILE_IMPORT = "profile-import"
         const val SCREEN_PROFILE_EXPORT = "profile-export"
+    }
+}
+
+@Composable
+private fun ProfileSettingsAccessibilityHarness() {
+    var options by remember { mutableStateOf(SliceOptions()) }
+    Column(Modifier.padding(16.dp)) {
+        ProfileSettings(
+            options = options,
+            catalog = ProfileCatalog(),
+            recents = ProfileRecents(),
+            enabled = true,
+            onOptionsChanged = { options = it },
+            onSavePrinter = { _, _ -> },
+            onSaveFilament = { _, _, _ -> },
+            onSaveSlicing = { _, _ -> },
+        )
     }
 }
 
@@ -249,6 +271,7 @@ private fun WorkspaceAccessibilityHarness(
     profileTransferCancellationRequested: Boolean = false,
     plateCount: Int = 1,
 ) {
+    var harnessNotice by remember { mutableStateOf<String?>(null) }
     var projectPlates by remember(plateCount) {
         mutableStateOf(
             List(plateCount) { index ->
@@ -264,6 +287,7 @@ private fun WorkspaceAccessibilityHarness(
         mutableStateOf(projectPlates.first().id)
     }
     val activePlate = projectPlates.first { it.id == selectedPlateId }
+    Box {
     WorkspaceScreen(
         selectedTab = selectedTab,
         projectPlates = projectPlates,
@@ -310,7 +334,7 @@ private fun WorkspaceAccessibilityHarness(
         exportingGcode = exportingGcode,
         gcodeExportCancellationRequested = false,
         error = null,
-        notice = null,
+        notice = harnessNotice,
         canUndo = false,
         canRedo = false,
         onTabSelected = {},
@@ -346,7 +370,7 @@ private fun WorkspaceAccessibilityHarness(
         onDuplicate = {},
         onArrange = {},
         onAutoLay = {},
-        onLayOnFace = { _, _ -> },
+        onLayOnFace = { _, _ -> harnessNotice = TEST_LAY_ON_FACE_SELECTED_LABEL },
         onSplit = {},
         onSplitParts = {},
         onCut = { _, _ -> },
@@ -354,7 +378,9 @@ private fun WorkspaceAccessibilityHarness(
         onCancelProjectEdit = {},
         onCancelProjectImport = {},
         onCancelProjectExport = {},
-        onSupportPaintPreview = { _, _, _, _ -> },
+        onSupportPaintPreview = { _, _, _, _ ->
+            harnessNotice = TEST_SUPPORT_PAINTED_LABEL
+        },
         onSupportPaintCommitted = { _, _, _ -> },
         onSeamPaintPreview = { _, _, _, _ -> },
         onSeamPaintCommitted = { _, _, _ -> },
@@ -387,21 +413,36 @@ private fun WorkspaceAccessibilityHarness(
         onRemoteResume = {},
         onRemoteCancel = {},
     )
+        harnessNotice?.let { message ->
+            Text(
+                text = message,
+                modifier = Modifier.align(Alignment.TopEnd).padding(2.dp),
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
 }
 
 private fun accessibilityProjectObject() = ProjectObject(
     id = "accessibility-project-object",
     model = ModelInfo(
         fileName = "accessibility.stl",
-        triangles = 1,
-        dimensions = listOf(1.0, 1.0, 1.0),
+        triangles = 2,
+        dimensions = listOf(40.0, 40.0, 0.0),
         localPath = "",
         minMm = listOf(0.0, 0.0, 0.0),
-        maxMm = listOf(1.0, 1.0, 1.0),
-        previewTriangles = floatArrayOf(0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f),
+        maxMm = listOf(40.0, 40.0, 0.0),
+        previewTriangles = floatArrayOf(
+            0f, 0f, 0f, 40f, 0f, 0f, 40f, 40f, 0f,
+            0f, 0f, 0f, 40f, 40f, 0f, 0f, 40f, 0f,
+        ),
     ),
+    supportPaint = SupportPaint(mapOf(0 to SupportPaintState.ENFORCE)),
+    multiColorPaint = MultiColorPaint(mapOf(1 to 2)),
 )
 
 internal const val TEST_SETTING_LABEL = "Accessibility setting"
 internal const val TEST_SWITCH_LABEL = "Accessibility switch"
 internal const val TEST_DEVICE_LABEL = "Accessibility test printer"
+internal const val TEST_LAY_ON_FACE_SELECTED_LABEL = "Accessibility face selected"
+internal const val TEST_SUPPORT_PAINTED_LABEL = "Accessibility support painted"

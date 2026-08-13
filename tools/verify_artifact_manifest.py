@@ -233,6 +233,7 @@ def _expected_components(variant: str) -> set[tuple[str, str, bool, str | None]]
                     "android.permission.DUMP",
                 ),
                 ("activity", f"{PACKAGE_NAME}.AccessibilityHarnessActivity", False, None),
+                ("activity", f"{PACKAGE_NAME}.PreviewPerformanceHarnessActivity", False, None),
                 ("activity", "androidx.compose.ui.tooling.PreviewActivity", True, None),
                 ("activity", "androidx.activity.ComponentActivity", True, None),
                 ("provider", "androidx.core.content.FileProvider", False, None),

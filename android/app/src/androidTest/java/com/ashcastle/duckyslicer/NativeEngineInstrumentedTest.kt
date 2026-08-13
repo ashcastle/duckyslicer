@@ -44,9 +44,10 @@ class NativeEngineInstrumentedTest {
         val resolved = resolvePreviewDetail(PreviewDetail.AUTOMATIC, capabilities)
 
         assertTrue("Android must report a positive app memory class", capabilities.appMemoryClassMb > 0)
-        assertTrue(
-            "Automatic preview must resolve before building GPU geometry",
-            resolved == PreviewDetail.PERFORMANCE || resolved == PreviewDetail.BALANCED,
+        assertEquals(
+            "Automatic preview must use the measured smooth tier before building GPU geometry",
+            PreviewDetail.PERFORMANCE,
+            resolved,
         )
     }
 
@@ -161,7 +162,7 @@ class NativeEngineInstrumentedTest {
             renderer.onDrawFrame(null)
 
             assertEquals(
-                "The first frame must upload one geometry set",
+                "The first frame must upload one coherent low-cost geometry set",
                 1,
                 renderer.geometryUploadCountForTest(),
             )
@@ -169,7 +170,7 @@ class NativeEngineInstrumentedTest {
 
             renderer.onDrawFrame(null)
             assertEquals(
-                "The next idle frame must prewarm one lower-detail geometry set",
+                "The next idle frame must upload the requested detail geometry set",
                 2,
                 renderer.geometryUploadCountForTest(),
             )
@@ -248,7 +249,7 @@ class NativeEngineInstrumentedTest {
             assertEquals("Releasing preview VBOs must be valid", GLES30.GL_NO_ERROR, GLES30.glGetError())
             renderer.onDrawFrame(null)
             assertEquals(
-                "The first frame after memory pressure must rebuild the requested geometry once",
+                "The first frame after memory pressure must rebuild the low-cost geometry once",
                 uploadsBeforeTrim + 1,
                 renderer.geometryUploadCountForTest(),
             )
@@ -268,6 +269,31 @@ class NativeEngineInstrumentedTest {
                 GLES30.GL_NO_ERROR,
                 GLES30.glGetError(),
             )
+
+            val adaptiveRenderer = ToolpathRenderer()
+            adaptiveRenderer.submit(scene.copy(detail = PreviewDetail.AUTOMATIC))
+            adaptiveRenderer.onSurfaceCreated(null, null)
+            adaptiveRenderer.onSurfaceChanged(null, framebufferSize, framebufferSize)
+            repeat(9) { adaptiveRenderer.onDrawFrame(null) }
+            assertEquals(
+                "A trivial Preview workload must promote Automatic through measured tiers",
+                PreviewDetail.DETAIL,
+                adaptiveRenderer.effectiveDetailForTest(),
+            )
+            assertTrue(
+                "Automatic calibration must settle after bounded completed-frame samples",
+                adaptiveRenderer.automaticCalibrationSettledForTest(),
+            )
+            assertTrue(
+                "Automatic promotion must retain at most settled and gesture VBOs",
+                adaptiveRenderer.cachedGeometryCountForTest() <= 2,
+            )
+            assertEquals(
+                "Automatic GPU completion calibration must leave GLES valid",
+                GLES30.GL_NO_ERROR,
+                GLES30.glGetError(),
+            )
+            adaptiveRenderer.releaseGpuGeometryForMemoryPressure()
 
             var rendererFailures = 0
             val failingRenderer = ToolpathRenderer(
@@ -1053,7 +1079,7 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
-    fun bundledOrcaCatalogIsVersionedValidatedAndBroad() {
+    fun bundledProfileCatalogIsVersionedValidatedAndBroad() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val loadStartedAt = SystemClock.elapsedRealtimeNanos()
         val catalog = OrcaProfileCatalog(context).load()
@@ -1064,11 +1090,24 @@ class NativeEngineInstrumentedTest {
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
-        assertTrue("The catalog must include Orca filament presets", catalog.filaments.size > 3_000)
-        assertTrue("The catalog must include Orca slicing presets", catalog.slicing.size > 2_000)
+        assertTrue("The catalog must include upstream filament presets", catalog.filaments.size > 3_000)
+        assertTrue("The catalog must include upstream slicing presets", catalog.slicing.size > 2_000)
+        val representativeBrands = setOf(
+            "Prusa", "Creality", "Anycubic", "Elegoo", "Snapmaker", "Sovol", "Qidi",
+        )
+        representativeBrands.forEach { brand ->
+            val printers = catalog.printers.filter { it.brand == brand }
+            assertTrue("$brand printer profiles must be present", printers.isNotEmpty())
+            assertTrue("$brand filament profiles must be present", catalog.filaments.any { it.brand == brand })
+            assertTrue("$brand slicing profiles must be present", catalog.slicing.any { it.brand == brand })
+            assertTrue(
+                "$brand must cover common mobile-selectable nozzle sizes",
+                printers.map { it.nozzleDiameter }.toSet().containsAll(setOf(0.2f, 0.4f, 0.6f, 0.8f)),
+            )
+        }
         assertTrue(catalog.printers.all(ProfileValidation::printer))
         assertTrue(
-            "The catalog must retain Orca non-rectangular build plates",
+            "The catalog must retain non-rectangular build plates",
             catalog.printers.any { it.bedPolygon.size > 8 },
         )
         val delta = catalog.printers.single { it.name == "FLSun V400 0.4 nozzle" }
@@ -1307,6 +1346,23 @@ class NativeEngineInstrumentedTest {
         } finally {
             output.delete()
         }
+    }
+
+    @Test
+    fun automaticLayAcceptsEveryVolumeOfOneProjectObject() {
+        val source = fixtureModel()
+
+        val orientation = SlicerProcessClient.autoOrient(listOf(source, source))
+
+        assertTrue(
+            "Multi-volume automatic orientation must return finite radians",
+            orientation.rotationRadians.all { it.isFinite() },
+        )
+        assertTrue(
+            "Multi-volume automatic orientation must run outside the application process",
+            SlicerProcessClient.lastWorkerPid() > 0 &&
+                SlicerProcessClient.lastWorkerPid() != android.os.Process.myPid(),
+        )
     }
 
     @Test
@@ -2465,6 +2521,95 @@ class NativeEngineInstrumentedTest {
                 )
             } else {
                 assertTrue("Marlin must use M204 acceleration", gcode.lineSequence().any { it.startsWith("M204 ") })
+            }
+        }
+    }
+
+    @Test
+    fun representativeNozzleAndMaterialProfilesProduceRealGcode() {
+        val model = fixtureModel()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val catalog = OrcaProfileCatalog(context).load()
+        data class Contract(
+            val printerName: String,
+            val processName: String,
+            val filamentName: String,
+            val nozzleDiameter: Float,
+            val material: String,
+            val flavor: String,
+        )
+        val contracts = listOf(
+            Contract(
+                printerName = "Creality Ender-3 0.2 nozzle",
+                processName = "0.12mm Fine @Creality Ender3 0.2",
+                filamentName = "Creality Generic PLA",
+                nozzleDiameter = 0.2f,
+                material = "PLA",
+                flavor = "marlin",
+            ),
+            Contract(
+                printerName = "Elegoo Centauri 0.6 nozzle",
+                processName = "0.18mm Fine @Elegoo C 0.6 nozzle",
+                filamentName = "Elegoo PETG PRO @EC",
+                nozzleDiameter = 0.6f,
+                material = "PETG",
+                flavor = "klipper",
+            ),
+            Contract(
+                printerName = "Qidi Q1 Pro 0.8 nozzle",
+                processName = "0.24mm Standard @Qidi Q1 Pro 0.8 nozzle",
+                filamentName = "Generic ABS @System",
+                nozzleDiameter = 0.8f,
+                material = "ABS",
+                flavor = "klipper",
+            ),
+        )
+
+        contracts.forEach { contract ->
+            val printer = catalog.printers.single {
+                it.name == contract.printerName && it.id.startsWith("orca-printer-")
+            }
+            val process = catalog.slicing.single {
+                it.name == contract.processName && it.id.startsWith("orca-process-")
+            }
+            val filament = catalog.filaments.single {
+                it.name == contract.filamentName && it.id.startsWith("orca-filament-")
+            }
+            assertEquals(contract.nozzleDiameter, printer.nozzleDiameter, 0.001f)
+            assertEquals(contract.nozzleDiameter, process.nozzleDiameter, 0.001f)
+            assertTrue(process.compatiblePrinters.matchesPrinter(printer))
+            assertTrue(filament.compatiblePrinters.matchesPrinter(printer))
+            assertEquals(contract.material, filament.nativeName)
+
+            val outcome = OnDeviceSlicer.slice(
+                model,
+                SliceOptions()
+                    .selectPrinter(printer)
+                    .selectFilament(filament)
+                    .selectQuality(process),
+            )
+            try {
+                assertTrue("${contract.printerName} must produce layers", outcome.layers > 0)
+                assertTrue("${contract.printerName} must produce non-trivial G-code", outcome.output.length() > 1_000L)
+                val gcode = outcome.output.readText()
+                val settings = gcode.lineSequence()
+                    .filter { it.startsWith("; ") && it.contains(" = ") }
+                    .associate { line ->
+                        line.removePrefix("; ").split(" = ", limit = 2).let { it[0] to it[1] }
+                    }
+                assertEquals(contract.flavor, settings["gcode_flavor"])
+                assertEquals(contract.material, settings["filament_type"])
+                assertEquals(contract.nozzleDiameter, settings.getValue("nozzle_diameter").toFloat(), 0.001f)
+                assertEquals(process.layerHeightMm, settings.getValue("layer_height").toFloat(), 0.001f)
+                assertEquals(filament.flowRatio, settings.getValue("filament_flow_ratio").toFloat(), 0.001f)
+                assertEquals(
+                    filament.maxVolumetricSpeed,
+                    settings.getValue("filament_max_volumetric_speed").toFloat(),
+                    0.001f,
+                )
+                assertTrue("${contract.printerName} must contain outer-wall extrusion", gcode.contains(";TYPE:Outer wall"))
+            } finally {
+                outcome.output.delete()
             }
         }
     }

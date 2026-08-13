@@ -22,7 +22,7 @@ class ModelTransformTest {
     }
 
     @Test
-    fun orcaOrientationPreservesPositionAndScaleWhileReplacingRotation() {
+    fun orcaOrientationPreservesPlanarPositionAndScaleAndPlacesModelOnBed() {
         val transform = ModelTransform(
             offsetXmm = 12f,
             offsetYmm = -8f,
@@ -41,7 +41,7 @@ class ModelTransformTest {
             ModelTransform(
                 offsetXmm = 12f,
                 offsetYmm = -8f,
-                offsetZmm = 7f,
+                offsetZmm = 0f,
                 rotationXdeg = 90f,
                 rotationYdeg = -30f,
                 rotationZdeg = 90f,
@@ -164,6 +164,72 @@ class ModelTransformTest {
         assertEquals(ModelTransform(scale = 1f, scaleY = 3f, scaleZ = 4f), unlocked)
         assertFalse(current.hasUniformScale())
         assertTrue(ModelTransform(scale = 1.5f).hasUniformScale())
+    }
+
+    @Test
+    fun placementOrientationIgnoresTranslationOnlyChanges() {
+        val original = ModelTransform(
+            offsetXmm = 4f,
+            offsetYmm = 5f,
+            offsetZmm = 6f,
+            rotationXdeg = 12f,
+            scaleY = 2f,
+            mirrorZ = true,
+        )
+        val moved = original.copy(offsetXmm = 40f, offsetYmm = -20f, offsetZmm = 1f)
+
+        assertEquals(original.placementOrientation(), moved.placementOrientation())
+        assertFalse(
+            original.placementOrientation() ==
+                original.copy(rotationXdeg = 13f).placementOrientation(),
+        )
+    }
+
+    @Test
+    fun minimumRotatedZMatchesGeneralTransformWithoutPerVertexAllocations() {
+        val model = ModelInfo(
+            fileName = "rotated.stl",
+            triangles = 2,
+            dimensions = listOf(10.0, 20.0, 30.0),
+            localPath = "/tmp/rotated.stl",
+            minMm = listOf(-4.0, -9.0, -14.0),
+            maxMm = listOf(6.0, 11.0, 16.0),
+            previewTriangles = floatArrayOf(
+                -4f, -9f, -14f,
+                6f, -9f, 16f,
+                -4f, 11f, 16f,
+                6f, -9f, -14f,
+                6f, 11f, -14f,
+                -4f, 11f, 16f,
+            ),
+        )
+        val transform = ModelTransform(
+            rotationXdeg = 37f,
+            rotationYdeg = -23f,
+            rotationZdeg = 81f,
+            scale = 1.7f,
+            scaleY = 0.65f,
+            scaleZ = 2.1f,
+            mirrorX = true,
+            mirrorZ = true,
+        )
+        val center = floatArrayOf(1f, 1f, 1f)
+        val expected = model.previewTriangles.asList().chunked(3).minOf { point ->
+            transform.transformLocal(
+                floatArrayOf(
+                    point[0] - center[0],
+                    point[1] - center[1],
+                    point[2] - center[2],
+                ),
+            )[2]
+        }
+
+        assertEquals(expected, transform.minimumRotatedZ(model), 0.0001f)
+        assertEquals(
+            expected,
+            transform.minimumRotatedZ(ProjectObject(id = "rotated", model = model)),
+            0.0001f,
+        )
     }
 
     @Test

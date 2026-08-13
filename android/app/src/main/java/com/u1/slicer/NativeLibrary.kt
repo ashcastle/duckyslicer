@@ -5,8 +5,8 @@ import com.u1.slicer.data.SliceConfig
 import com.u1.slicer.data.SliceResult
 
 /**
- * Compatibility seam for the inherited Android slicer runtime used during the MVP bootstrap.
- * Keep this package and method surface stable until the runtime is rebuilt behind the Rust ABI.
+ * Stable interoperability seam for the source-built native slicing runtime.
+ * Keep this package and method surface stable while ownership moves behind the Rust ABI.
  */
 class NativeLibrary(
     private val progressListener: (Int) -> Unit = {},

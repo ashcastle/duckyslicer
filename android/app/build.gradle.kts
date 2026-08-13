@@ -306,6 +306,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            providers.gradleProperty("duckyslicer.debugApplicationIdSuffix").orNull
+                ?.takeIf { it.isNotBlank() }
+                ?.let { applicationIdSuffix = it }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

@@ -124,7 +124,7 @@ The exported launcher activity enforces its declared intent filters. External pr
 opening accepts only the reviewed `content://` project types, while notification
 launches use the matching launcher action and category.
 
-Long-running Orca work never runs on the isolated service's main thread. Each slice
+Long-running native slicer work never runs on the isolated service's main thread. Each slice
 has an unpredictable request identifier and only its matching cancellation request
 may terminate the worker. Cancellation or UI disposal kills only the private
 `:slicer` process; the application remains alive and a later request starts a fresh
@@ -137,6 +137,10 @@ or transformation code. That boundary accepts regular files, applies the same
 non-finite or extreme coordinates, and writes transformed STL through a temporary
 file before an atomic replacement. The host corpus and ARM64 device suite exercise
 these rejection paths and verify that JNI remains usable after an invalid input.
+Every Rust debug and release test run also applies 384 deterministic truncation,
+bit-flip, insertion, overwrite, and append mutations to ASCII/binary STL seeds and
+384 equivalent mutations to G-code. Accepted mutations must retain finite values and
+the production triangle, layer, and segment bounds; no mutation may unwind the parser.
 Every exported Rust JNI operation also contains any unwind-capable Rust panic
 before it can cross the FFI boundary and converts it to a generic failure response.
 This containment does not recover allocation failure, native signals, undefined
@@ -150,7 +154,7 @@ accept only bounded settings and canonical files inside app-private storage, and
 successful G-code is synchronized before being atomically retained under a unique
 name. A retained slice may contain at most 1 GiB of G-code, retained outputs share a
 1 GiB budget, and slicing starts only with at least 512 MiB of free app-storage space.
-Before Orca exports, the worker applies a 1 GiB `RLIMIT_FSIZE` soft limit; a write that
+Before the native slicer exports, the worker applies a 1 GiB `RLIMIT_FSIZE` soft limit; a write that
 reaches it fails or terminates only the isolated worker, and the next request restores
 the production limit. The inherited compatibility preview cache reads at most 256 KiB
 instead of duplicating the complete output in memory. As a secondary defence, the worker
@@ -163,7 +167,7 @@ files are recovered on the next worker start. This is crash/address-space isolat
 not a permission sandbox: both processes run under the same Android UID and share the
 app's private storage.
 The persistent project-model directory is an explicit monitored transient root because
-Orca writes beside its transformed input; completed output is moved into bounded slice
+The native slicer writes beside its transformed input; completed output is moved into bounded slice
 storage before it is returned, and stale adjacent output is removed on worker recovery.
 
 The ARM64 suite additionally forces a small native file-size limit, verifies that disk

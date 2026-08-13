@@ -6,7 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -155,6 +155,8 @@ private const val PreviewDepthBands = 12
 private const val TabletShortestSideDp = 600f
 private const val CompactNavigationLabelFontScale = 1.5f
 private const val WorkspaceTopOverlayClearanceDp = 142f
+private const val ModelFaceDepthBands = 32
+private const val ModelFaceShadeBands = 8
 // Keep broad curves smooth in the mobile preview while retaining structural creases.
 private const val ModelSharpEdgeCosine = 0.422618f
 
@@ -173,6 +175,56 @@ internal fun workspaceEditingBusy(
     slicing: Boolean,
     previewLoading: Boolean,
 ): Boolean = autoLaying || arranging || slicing || previewLoading
+
+internal data class WorkspaceCameraGesture(
+    val pan: Offset,
+    val zoom: Float,
+)
+
+internal fun anchoredWorkspacePanZoom(
+    pan: Offset,
+    zoom: Float,
+    viewportAnchor: Offset,
+    previousCentroid: Offset,
+    currentCentroid: Offset,
+    zoomChange: Float,
+    zoomRange: ClosedFloatingPointRange<Float> = 0.45f..4.5f,
+): WorkspaceCameraGesture {
+    if (
+        !pan.x.isFinite() || !pan.y.isFinite() || !zoom.isFinite() || zoom <= 0f ||
+        !previousCentroid.x.isFinite() || !previousCentroid.y.isFinite() ||
+        !currentCentroid.x.isFinite() || !currentCentroid.y.isFinite() ||
+        !zoomChange.isFinite() || zoomChange <= 0f
+    ) {
+        return WorkspaceCameraGesture(pan, zoom)
+    }
+    val nextZoom = (zoom * zoomChange.coerceIn(0.75f, 1.3333f)).coerceIn(zoomRange)
+    val appliedScale = nextZoom / zoom
+    val previousSceneCenter = viewportAnchor + pan
+    val nextSceneCenter = currentCentroid -
+        (previousCentroid - previousSceneCenter) * appliedScale
+    return WorkspaceCameraGesture(
+        pan = nextSceneCenter - viewportAnchor,
+        zoom = nextZoom,
+    )
+}
+
+internal fun workspaceOrbitDelta(
+    pointerDelta: Offset,
+    viewportWidth: Float,
+    viewportHeight: Float,
+): Offset {
+    if (
+        !pointerDelta.x.isFinite() || !pointerDelta.y.isFinite() ||
+        viewportWidth <= 0f || viewportHeight <= 0f
+    ) {
+        return Offset.Zero
+    }
+    return Offset(
+        x = pointerDelta.x / viewportWidth * 150f,
+        y = pointerDelta.y / viewportHeight * 110f,
+    )
+}
 
 internal fun shouldUseDepthTestedPreview(
     renderingMode: PreviewRenderingMode,
@@ -206,6 +258,12 @@ internal data class ModelScreenTriangle(
     val surfaceShade: Float = 1f,
     val volumeId: String = "",
     val filamentSlot: Int = 0,
+)
+
+private data class ModelFaceBucket(
+    val depthBand: Int,
+    val filamentSlot: Int,
+    val shadeBand: Int,
 )
 
 internal data class ModelMeshEdge(
@@ -688,7 +746,7 @@ internal fun WorkspaceScreen(
                     onRedo = onRedo,
                     onDuplicate = onDuplicate,
                     onAutoLay = onAutoLay,
-                    canAutoLay = selectedSingleVolume != null,
+                    canAutoLay = true,
                     onLayOnFace = {
                         measuring = false
                         measurementPoints = emptyList()
@@ -1007,6 +1065,7 @@ internal fun WorkspaceScreen(
             cutting = cutting,
             simplifying = simplifying,
             triangleCount = selectedObject.volumes.sumOf { it.model.triangles },
+            canAutoLay = true,
             canEditSingleVolumeModel = selectedSingleVolume != null,
             onAutoLay = onAutoLay,
             onLayOnFace = {
@@ -1487,6 +1546,7 @@ private fun ModelTransformSheet(
     cutting: Boolean,
     simplifying: Boolean,
     triangleCount: Int,
+    canAutoLay: Boolean,
     canEditSingleVolumeModel: Boolean,
     onAutoLay: () -> Unit,
     onLayOnFace: () -> Unit,
@@ -1753,7 +1813,7 @@ private fun ModelTransformSheet(
             }
             Button(
                 onClick = onAutoLay,
-                enabled = canEditSingleVolumeModel && !modelEditBusy,
+                enabled = canAutoLay && !modelEditBusy,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = WorkspaceYellow,
@@ -2290,6 +2350,7 @@ private fun FilamentAssignmentSheet(
                 selected = selected,
                 recentIds = recentIds,
                 id = FilamentProfile::id,
+                name = FilamentProfile::name,
                 label = { profileLabel(it) },
                 brand = FilamentProfile::brand,
                 builtIn = FilamentProfile::builtIn,
@@ -2849,6 +2910,7 @@ private fun BedScene(
     val context = LocalContext.current
     val depthPreviewSupported = remember(context) { supportsDepthTestedPreview(context) }
     var depthPreviewRuntimeAvailable by remember(previewRenderingMode) { mutableStateOf(true) }
+    var prepareRendererRuntimeAvailable by remember { mutableStateOf(true) }
     val previewCapabilities = remember(context) { previewDeviceCapabilities(context) }
     val effectivePreviewDetail = remember(previewDetail, previewCapabilities) {
         resolvePreviewDetail(previewDetail, previewCapabilities)
@@ -2869,7 +2931,9 @@ private fun BedScene(
             opacity = toolpathOpacity,
             depthContrast = toolpathDepthContrast,
             visibleRoles = visibleToolpathRoles,
-            detail = effectivePreviewDetail,
+            // Keep the Automatic request intact so the GLES renderer can promote its
+            // settled geometry from Performance to Balanced/Detail using measured work.
+            detail = previewDetail,
             onUnavailable = { depthPreviewRuntimeAvailable = false },
             modifier = modifier,
         )
@@ -2881,16 +2945,56 @@ private fun BedScene(
     var pan by remember { mutableStateOf(Offset.Zero) }
     var interactionActive by remember { mutableStateOf(false) }
     var refinedPreview by remember { mutableStateOf(true) }
+    val useDepthTestedPrepare = preview == null && projectObjects.isNotEmpty() &&
+        depthPreviewSupported && prepareRendererRuntimeAvailable
     val objectIds = projectObjects.map(ProjectObject::id)
     val modelTopology = projectObjects.flatMap { projectObject ->
         projectObject.volumes.map { volume -> (projectObject.id to volume.id) to volume.model }
     }
-    val modelMeshEdges = remember(modelTopology) {
-        projectObjects.flatMap { projectObject ->
-            projectObject.volumes.map { volume ->
-                (projectObject.id to volume.id) to buildModelMeshEdges(volume.model.previewTriangles)
+    val modelMeshEdges = remember(modelTopology, useDepthTestedPrepare) {
+        if (useDepthTestedPrepare) {
+            emptyMap()
+        } else {
+            projectObjects.flatMap { projectObject ->
+                projectObject.volumes.map { volume ->
+                    (projectObject.id to volume.id) to
+                        buildModelMeshEdges(volume.model.previewTriangles)
+                }
+            }.toMap()
+        }
+    }
+    val modelPlacementOrientations = projectObjects.map { projectObject ->
+        projectObject.id to projectObject.transform.placementOrientation()
+    }
+    val modelPlacements = remember(modelTopology, modelPlacementOrientations) {
+        projectObjects.associate { projectObject ->
+            projectObject.id to PrepareObjectPlacement(
+                geometry = projectObject.geometry(),
+                minimumRotatedZ = projectObject.transform.minimumRotatedZ(projectObject),
+            )
+        }
+    }
+    val layOnFaceCandidates = remember(layOnFaceObjectId, modelTopology) {
+        projectObjects.firstOrNull { it.id == layOnFaceObjectId }
+            ?.volumes
+            ?.associate { volume ->
+                volume.id to detectLayOnFaceCandidates(volume.model.previewTriangles)
             }
-        }.toMap()
+            .orEmpty()
+    }
+    val layOnFaceCandidateFacets = remember(layOnFaceCandidates, modelTopology) {
+        projectObjects.firstOrNull { it.id == layOnFaceObjectId }
+            ?.volumes
+            ?.associate { volume ->
+                val selectable = BooleanArray(volume.model.previewTriangles.size / 9)
+                layOnFaceCandidates[volume.id].orEmpty().forEach { candidate ->
+                    candidate.previewTriangleIndices.forEach { triangleIndex ->
+                        selectable[triangleIndex] = true
+                    }
+                }
+                volume.id to selectable
+            }
+            .orEmpty()
     }
     var modelScreenBounds by remember(objectIds) { mutableStateOf<Map<String, Rect>>(emptyMap()) }
     var modelScreenTriangles by remember(objectIds) {
@@ -2900,6 +3004,7 @@ private fun BedScene(
         mutableStateOf<Map<Int, Offset>>(emptyMap())
     }
     val currentObjects by rememberUpdatedState(projectObjects)
+    val currentModelPlacements by rememberUpdatedState(modelPlacements)
     val currentSelectionCallback by rememberUpdatedState(onObjectSelected)
     val currentTransformCallback by rememberUpdatedState(onModelTransformPreview)
     val currentTransformCommitCallback by rememberUpdatedState(onModelTransformCommitted)
@@ -2955,8 +3060,51 @@ private fun BedScene(
         }
     }
 
-    Canvas(
-        modifier.pointerInput(
+    fun orbitBy(delta: Offset, viewportWidth: Int, viewportHeight: Int) {
+        val orbit = workspaceOrbitDelta(
+            pointerDelta = delta,
+            viewportWidth = viewportWidth.toFloat(),
+            viewportHeight = viewportHeight.toFloat(),
+        )
+        yaw += orbit.x
+        pitch = (pitch - orbit.y).coerceIn(18f, 86f)
+    }
+
+    fun panAndZoomBy(event: PointerEvent, viewportWidth: Int, viewportHeight: Int) {
+        val gesture = anchoredWorkspacePanZoom(
+            pan = pan,
+            zoom = zoom,
+            viewportAnchor = Offset(viewportWidth / 2f, viewportHeight * 0.48f),
+            previousCentroid = event.calculateCentroid(useCurrent = false),
+            currentCentroid = event.calculateCentroid(useCurrent = true),
+            zoomChange = event.calculateZoom(),
+        )
+        pan = gesture.pan
+        zoom = gesture.zoom
+    }
+
+    Box(modifier) {
+        if (useDepthTestedPrepare) {
+            DepthTestedPrepareModelScene(
+                projectObjects = projectObjects,
+                placements = modelPlacements,
+                selectedObjectId = selectedObjectId,
+                bedSizeX = bedSizeX,
+                bedSizeY = bedSizeY,
+                bedPolygon = effectiveBedPolygon,
+                yawDegrees = yaw,
+                pitchDegrees = pitch,
+                zoom = zoom,
+                panX = pan.x,
+                panY = pan.y,
+                layOnFaceObjectId = layOnFaceObjectId,
+                layOnFaceCandidateFacets = layOnFaceCandidateFacets,
+                onUnavailable = { prepareRendererRuntimeAvailable = false },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        Canvas(
+            Modifier.fillMaxSize().pointerInput(
             objectIds,
             preview,
             objectManipulationEnabled,
@@ -2970,6 +3118,7 @@ private fun BedScene(
             multiColorPaintSlot,
             brimEditObjectId,
             brimAddMode,
+            useDepthTestedPrepare,
         ) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
@@ -3057,13 +3206,11 @@ private fun BedScene(
                                         currentBrimPointInvalidCallback()
                                     }
                                 } else {
-                                    yaw += delta.x * 0.32f
-                                    pitch = (pitch - delta.y * 0.26f).coerceIn(22f, 88f)
+                                    orbitBy(delta, size.width, size.height)
                                 }
                             } else if (pressed.size >= 2) {
                                 usedMultiplePointers = true
-                                pan += event.calculatePan()
-                                zoom = (zoom * event.calculateZoom()).coerceIn(0.45f, 4.5f)
+                                panAndZoomBy(event, size.width, size.height)
                             }
                             event.changes.forEach { change ->
                                 if (change.positionChanged()) change.consume()
@@ -3102,12 +3249,10 @@ private fun BedScene(
                                 val change = pressed.first()
                                 val delta = change.position - change.previousPosition
                                 movement += abs(delta.x) + abs(delta.y)
-                                yaw += delta.x * 0.32f
-                                pitch = (pitch - delta.y * 0.26f).coerceIn(22f, 88f)
+                                orbitBy(delta, size.width, size.height)
                             } else if (pressed.size >= 2) {
                                 usedMultiplePointers = true
-                                pan += event.calculatePan()
-                                zoom = (zoom * event.calculateZoom()).coerceIn(0.45f, 4.5f)
+                                panAndZoomBy(event, size.width, size.height)
                             }
                             event.changes.forEach { change ->
                                 if (change.positionChanged()) change.consume()
@@ -3118,11 +3263,44 @@ private fun BedScene(
                     }
                     if (movement < 12f && !usedMultiplePointers) {
                         val activeObject = layOnFaceObject ?: checkNotNull(measuringObject)
-                        val hit = closestModelTriangle(
-                            modelScreenTriangles[activeObject.id].orEmpty(),
-                            down.position,
-                            18.dp.toPx(),
-                        )
+                        val hit = if (useDepthTestedPrepare) {
+                            currentModelPlacements[activeObject.id]?.let { placement ->
+                                findPrepareFacetAtScreen(
+                                    projectObject = activeObject,
+                                    placement = placement,
+                                    viewport = PrepareHitTestViewport(
+                                        widthPx = size.width.toFloat(),
+                                        heightPx = size.height.toFloat(),
+                                        bedSizeX = bedSizeX,
+                                        bedSizeY = bedSizeY,
+                                        yawDegrees = yaw,
+                                        pitchDegrees = pitch,
+                                        zoom = zoom,
+                                        panX = pan.x,
+                                        panY = pan.y,
+                                    ),
+                                    screenX = down.position.x,
+                                    screenY = down.position.y,
+                                    touchRadiusPx = 18.dp.toPx(),
+                                    selectableTriangles = layOnFaceCandidateFacets
+                                        .takeIf { layOnFaceObject != null },
+                                )
+                            }
+                        } else {
+                            val selectableTriangles = if (layOnFaceObject != null) {
+                                modelScreenTriangles[activeObject.id].orEmpty().filter { triangle ->
+                                    layOnFaceCandidateFacets[triangle.volumeId]
+                                        ?.getOrNull(triangle.previewTriangleIndex) == true
+                                }
+                            } else {
+                                modelScreenTriangles[activeObject.id].orEmpty()
+                            }
+                            closestModelTriangle(
+                                selectableTriangles,
+                                down.position,
+                                18.dp.toPx(),
+                            )
+                        }
                         if (hit != null) {
                             val activeVolume = activeObject.volumes.firstOrNull {
                                 it.id == hit.volumeId
@@ -3138,8 +3316,11 @@ private fun BedScene(
                                     )
                                 } else {
                                     val transform = activeObject.transform
-                                    val geometry = activeObject.geometry()
-                                    val minimumRotatedZ = transform.minimumRotatedZ(activeObject)
+                                    val placement = checkNotNull(
+                                        currentModelPlacements[activeObject.id],
+                                    )
+                                    val geometry = placement.geometry
+                                    val minimumRotatedZ = placement.minimumRotatedZ
                                     val worldA = transform.placeVertex(
                                         model.previewTriangles[start],
                                         model.previewTriangles[start + 1],
@@ -3176,9 +3357,34 @@ private fun BedScene(
                     return@awaitEachGesture
                 }
                 val hitObjectId = if (objectManipulationEnabled && paintingObject == null) {
-                    modelScreenBounds.entries.toList().asReversed().firstOrNull { (_, bounds) ->
-                        bounds.inflate(14.dp.toPx()).contains(down.position)
-                    }?.key
+                    val touchRadius = 14.dp.toPx()
+                    val candidates = modelScreenBounds.filterValues { bounds ->
+                        bounds.inflate(touchRadius).contains(down.position)
+                    }.keys
+                    if (useDepthTestedPrepare && candidates.isNotEmpty()) {
+                        findPrepareObjectAtScreen(
+                            projectObjects = currentObjects.filter { it.id in candidates },
+                            placements = currentModelPlacements,
+                            viewport = PrepareHitTestViewport(
+                                widthPx = size.width.toFloat(),
+                                heightPx = size.height.toFloat(),
+                                bedSizeX = bedSizeX,
+                                bedSizeY = bedSizeY,
+                                yawDegrees = yaw,
+                                pitchDegrees = pitch,
+                                zoom = zoom,
+                                panX = pan.x,
+                                panY = pan.y,
+                            ),
+                            screenX = down.position.x,
+                            screenY = down.position.y,
+                            touchRadiusPx = touchRadius,
+                        )
+                    } else {
+                        modelScreenBounds.entries.toList().asReversed().firstOrNull { (_, bounds) ->
+                            bounds.inflate(touchRadius).contains(down.position)
+                        }?.key
+                    }
                 } else {
                     null
                 }
@@ -3192,11 +3398,34 @@ private fun BedScene(
                 val paintedFacets = HashSet<Pair<String, Int>>()
                 fun paintAt(position: Offset) {
                     val objectId = paintingObject?.id ?: return
-                    val hit = closestModelTriangle(
-                        modelScreenTriangles[objectId].orEmpty(),
-                        position,
-                        18.dp.toPx(),
-                    ) ?: return
+                    val hit = if (useDepthTestedPrepare) {
+                        currentModelPlacements[objectId]?.let { placement ->
+                            findPrepareFacetAtScreen(
+                                projectObject = paintingObject,
+                                placement = placement,
+                                viewport = PrepareHitTestViewport(
+                                    widthPx = size.width.toFloat(),
+                                    heightPx = size.height.toFloat(),
+                                    bedSizeX = bedSizeX,
+                                    bedSizeY = bedSizeY,
+                                    yawDegrees = yaw,
+                                    pitchDegrees = pitch,
+                                    zoom = zoom,
+                                    panX = pan.x,
+                                    panY = pan.y,
+                                ),
+                                screenX = position.x,
+                                screenY = position.y,
+                                touchRadiusPx = 18.dp.toPx(),
+                            )
+                        }
+                    } else {
+                        closestModelTriangle(
+                            modelScreenTriangles[objectId].orEmpty(),
+                            position,
+                            18.dp.toPx(),
+                        )
+                    } ?: return
                     if (paintedVolumeId == null) {
                         val volume = paintingObject.volumes.firstOrNull { it.id == hit.volumeId }
                             ?: return
@@ -3279,14 +3508,12 @@ private fun BedScene(
                                         ),
                                     )
                                 } else {
-                                    yaw += delta.x * 0.32f
-                                    pitch = (pitch - delta.y * 0.26f).coerceIn(22f, 88f)
+                                    orbitBy(delta, size.width, size.height)
                                 }
                             }
 
                             pressed.size >= 2 -> {
-                                pan += event.calculatePan()
-                                zoom = (zoom * event.calculateZoom()).coerceIn(0.45f, 4.5f)
+                                panAndZoomBy(event, size.width, size.height)
                             }
                         }
                         event.changes.forEach { change ->
@@ -3329,8 +3556,8 @@ private fun BedScene(
                     }
                 }
             }
-        },
-    ) {
+            },
+        ) {
         val yawRadians = yaw / 180f * PI.toFloat()
         val pitchRadians = pitch / 180f * PI.toFloat()
         val sceneScale = min(size.width * 0.64f, size.height * 0.72f) / max(bedSizeX, bedSizeY) * zoom
@@ -3353,6 +3580,113 @@ private fun BedScene(
             val dy = y - bedSizeY / 2f
             val rotatedY = dx * sin(yawRadians) + dy * cos(yawRadians)
             return rotatedY * cos(pitchRadians) + z * sin(pitchRadians)
+        }
+
+        if (useDepthTestedPrepare) {
+            val nextBounds = mutableMapOf<String, Rect>()
+            projectObjects.forEach { projectObject ->
+                val placement = checkNotNull(modelPlacements[projectObject.id])
+                val geometry = placement.geometry
+                val minimumRotatedZ = placement.minimumRotatedZ
+                var left = Float.POSITIVE_INFINITY
+                var top = Float.POSITIVE_INFINITY
+                var right = Float.NEGATIVE_INFINITY
+                var bottom = Float.NEGATIVE_INFINITY
+                floatArrayOf(geometry.minX, geometry.maxX).forEach { x ->
+                    floatArrayOf(geometry.minY, geometry.maxY).forEach { y ->
+                        floatArrayOf(geometry.minZ, geometry.maxZ).forEach { z ->
+                            val world = projectObject.transform.placeVertex(
+                                x, y, z, geometry, bedSizeX, bedSizeY, minimumRotatedZ,
+                            )
+                            val point = project(world[0], world[1], world[2])
+                            left = min(left, point.x)
+                            top = min(top, point.y)
+                            right = max(right, point.x)
+                            bottom = max(bottom, point.y)
+                        }
+                    }
+                }
+                if (left.isFinite() && top.isFinite() && right.isFinite() && bottom.isFinite()) {
+                    val bounds = Rect(left, top, right, bottom)
+                    nextBounds[projectObject.id] = bounds
+                    if (projectObject.id == selectedObjectId) {
+                        val color = WorkspaceYellow.copy(alpha = 0.82f)
+                        val width = 1.5.dp.toPx()
+                        drawLine(color, bounds.topLeft, bounds.topRight, width)
+                        drawLine(color, bounds.topRight, bounds.bottomRight, width)
+                        drawLine(color, bounds.bottomRight, bounds.bottomLeft, width)
+                        drawLine(color, bounds.bottomLeft, bounds.topLeft, width)
+                    }
+                }
+            }
+            if (modelScreenBounds != nextBounds) modelScreenBounds = nextBounds
+            if (modelScreenTriangles.isNotEmpty()) modelScreenTriangles = emptyMap()
+            if (brimPointScreenPositions.isNotEmpty()) brimPointScreenPositions = emptyMap()
+            if (brimEditObjectId != null) {
+                projectObjects.firstOrNull { it.id == brimEditObjectId }?.let { projectObject ->
+                    val nextBrimPositions = mutableMapOf<Int, Offset>()
+                    brimPoints.points.forEachIndexed { index, brimPoint ->
+                        val world = projectObject.transform.placeBrimPoint(
+                            brimPoint,
+                            projectObject,
+                            bedSizeX,
+                            bedSizeY,
+                        )
+                        val center = project(world[0], world[1], world[2])
+                        nextBrimPositions[index] = center
+                        val selected = index == selectedBrimPointIndex
+                        val radius = max(7.dp.toPx(), brimPoint.radiusMm * sceneScale)
+                        drawCircle(
+                            color = WorkspaceYellow.copy(alpha = if (selected) 0.28f else 0.16f),
+                            radius = radius,
+                            center = center,
+                        )
+                        drawCircle(
+                            color = if (selected) WorkspaceYellow else Color(0xFFF4F4EE),
+                            radius = radius,
+                            center = center,
+                            style = Stroke(if (selected) 2.dp.toPx() else 1.dp.toPx()),
+                        )
+                        drawCircle(Color.Black.copy(alpha = 0.9f), 6.dp.toPx(), center)
+                        drawCircle(
+                            if (world[2] <= 0.05f) WorkspaceYellow else Color(0xFFFF6B6B),
+                            3.5.dp.toPx(),
+                            center,
+                        )
+                    }
+                    if (brimPointScreenPositions != nextBrimPositions) {
+                        brimPointScreenPositions = nextBrimPositions
+                    }
+                }
+            }
+            if (measureObjectId != null && measurementPoints.isNotEmpty()) {
+                val projectedPoints = measurementPoints.take(2).map { point ->
+                    project(point.x, point.y, point.z)
+                }
+                if (projectedPoints.size == 2) {
+                    drawLine(
+                        color = Color.Black.copy(alpha = 0.86f),
+                        start = projectedPoints[0],
+                        end = projectedPoints[1],
+                        strokeWidth = 4.5.dp.toPx(),
+                    )
+                    drawLine(
+                        color = WorkspaceYellow,
+                        start = projectedPoints[0],
+                        end = projectedPoints[1],
+                        strokeWidth = 2.dp.toPx(),
+                    )
+                }
+                projectedPoints.forEachIndexed { index, point ->
+                    drawCircle(Color.Black.copy(alpha = 0.88f), 7.dp.toPx(), point)
+                    drawCircle(
+                        if (index == 0) WorkspaceYellow else Color(0xFFF4F4EE),
+                        4.dp.toPx(),
+                        point,
+                    )
+                }
+            }
+            return@Canvas
         }
 
         val bed = Path().apply {
@@ -3462,8 +3796,9 @@ private fun BedScene(
             projectObjects.forEach { projectObject ->
                 val modelTransform = projectObject.transform
                 val objectSelected = projectObject.id == selectedObjectId
-                val objectGeometry = projectObject.geometry()
-                val minimumRotatedZ = modelTransform.minimumRotatedZ(projectObject)
+                val placement = checkNotNull(modelPlacements[projectObject.id])
+                val objectGeometry = placement.geometry
+                val minimumRotatedZ = placement.minimumRotatedZ
                 val enforcePaintPath = Path()
                 val blockPaintPath = Path()
                 val seamEnforcePaintPath = Path()
@@ -3477,6 +3812,8 @@ private fun BedScene(
                 var minimumScreenY = Float.POSITIVE_INFINITY
                 var maximumScreenX = Float.NEGATIVE_INFINITY
                 var maximumScreenY = Float.NEGATIVE_INFINITY
+                var minimumModelDepth = Float.POSITIVE_INFINITY
+                var maximumModelDepth = Float.NEGATIVE_INFINITY
                 projectObject.volumes.forEach { volume ->
                     val model = volume.model
                     val volumeScreenTriangles = ArrayList<ModelScreenTriangle>(
@@ -3533,12 +3870,12 @@ private fun BedScene(
                     )
                     screenTriangles += screenTriangle
                     volumeScreenTriangles += screenTriangle
-                    listOf(a, b, c).forEach { point ->
-                        minimumScreenX = min(minimumScreenX, point.x)
-                        minimumScreenY = min(minimumScreenY, point.y)
-                        maximumScreenX = max(maximumScreenX, point.x)
-                        maximumScreenY = max(maximumScreenY, point.y)
-                    }
+                    minimumModelDepth = min(minimumModelDepth, screenTriangle.depth)
+                    maximumModelDepth = max(maximumModelDepth, screenTriangle.depth)
+                    minimumScreenX = min(minimumScreenX, min(a.x, min(b.x, c.x)))
+                    minimumScreenY = min(minimumScreenY, min(a.y, min(b.y, c.y)))
+                    maximumScreenX = max(maximumScreenX, max(a.x, max(b.x, c.x)))
+                    maximumScreenY = max(maximumScreenY, max(a.y, max(b.y, c.y)))
                     when (volume.supportPaint.facets[sourceFacetIndex]) {
                         SupportPaintState.ENFORCE -> enforcePaintPath.addTriangle(a, b, c)
                         SupportPaintState.BLOCK -> blockPaintPath.addTriangle(a, b, c)
@@ -3565,24 +3902,67 @@ private fun BedScene(
                     )
                 }
                 nextScreenTriangles[projectObject.id] = screenTriangles
-                val facePath = Path()
-                screenTriangles.sortedBy(ModelScreenTriangle::depth).forEach { triangle ->
-                    facePath.reset()
-                    facePath.addTriangle(triangle.a, triangle.b, triangle.c)
+                val minimumDepth = minimumModelDepth.takeIf(Float::isFinite) ?: 0f
+                val maximumDepth = maximumModelDepth.takeIf(Float::isFinite) ?: 0f
+                val depthSpan = (maximumDepth - minimumDepth).coerceAtLeast(0.0001f)
+                val facePaths = HashMap<ModelFaceBucket, Path>()
+                screenTriangles.forEach { triangle ->
+                    val depthBand = (
+                        (triangle.depth - minimumDepth) / depthSpan * (ModelFaceDepthBands - 1)
+                        ).roundToInt().coerceIn(0, ModelFaceDepthBands - 1)
+                    val shadeBand = (
+                        triangle.surfaceShade * (ModelFaceShadeBands - 1)
+                        ).roundToInt().coerceIn(0, ModelFaceShadeBands - 1)
+                    val bucket = ModelFaceBucket(depthBand, triangle.filamentSlot, shadeBand)
+                    facePaths.getOrPut(bucket, ::Path).addTriangle(
+                        triangle.a,
+                        triangle.b,
+                        triangle.c,
+                    )
+                }
+                facePaths.entries
+                    .sortedWith(
+                        compareBy<Map.Entry<ModelFaceBucket, Path>>(
+                            { it.key.depthBand },
+                            { it.key.filamentSlot },
+                            { it.key.shadeBand },
+                        ),
+                    )
+                    .forEach { (bucket, path) ->
+                    val surfaceShade = bucket.shadeBand.toFloat() / (ModelFaceShadeBands - 1)
                     val light = if (objectSelected) {
-                        0.78f + triangle.surfaceShade * 0.16f
+                        0.78f + surfaceShade * 0.16f
                     } else {
-                        0.70f + triangle.surfaceShade * 0.18f
+                        0.70f + surfaceShade * 0.18f
                     }
                     drawPath(
-                        facePath,
+                        path,
                         lerp(
                             Color(0xFF11130F),
-                            filamentSlotColor(triangle.filamentSlot),
+                            filamentSlotColor(bucket.filamentSlot),
                             light.coerceIn(0f, 1f),
                         )
                             .copy(alpha = 0.98f),
                     )
+                    }
+                if (projectObject.id == layOnFaceObjectId) {
+                    projectObject.volumes.forEach { volume ->
+                        val volumeTriangles = screenTrianglesByVolume[volume.id].orEmpty()
+                        layOnFaceCandidates[volume.id].orEmpty().forEach { candidate ->
+                            val candidatePath = Path()
+                            candidate.previewTriangleIndices.forEach { triangleIndex ->
+                                volumeTriangles.getOrNull(triangleIndex)?.let { triangle ->
+                                    candidatePath.addTriangle(triangle.a, triangle.b, triangle.c)
+                                }
+                            }
+                            drawPath(candidatePath, WorkspaceYellow.copy(alpha = 0.16f))
+                            drawPath(
+                                candidatePath,
+                                WorkspaceYellow.copy(alpha = 0.86f),
+                                style = Stroke(1.1.dp.toPx()),
+                            )
+                        }
+                    }
                 }
                 val featureEdgePath = Path()
                 projectObject.volumes.forEach { volume ->
@@ -3701,6 +4081,7 @@ private fun BedScene(
             if (brimPointScreenPositions != nextBrimPositions) {
                 brimPointScreenPositions = nextBrimPositions
             }
+        }
         }
     }
 }
@@ -4482,6 +4863,12 @@ private fun ObjectToolRail(
             IconButton(onClick = onDuplicate, enabled = !editingBusy) {
                 Icon(Icons.Default.ContentCopy, stringResource(R.string.duplicate_object))
             }
+            IconButton(onClick = onMore, enabled = !editingBusy) {
+                Icon(Icons.Default.Tune, stringResource(R.string.more_settings))
+            }
+            IconButton(onClick = onSupportPaint, enabled = !editingBusy) {
+                Icon(Icons.Default.Brush, stringResource(R.string.paint_support))
+            }
             IconButton(onClick = onAutoLay, enabled = canAutoLay && !editingBusy) {
                 if (autoLaying) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -4498,17 +4885,11 @@ private fun ObjectToolRail(
             IconButton(onClick = onBrimEars, enabled = !editingBusy) {
                 Icon(Icons.Default.AddBox, stringResource(R.string.manual_brim_ears))
             }
-            IconButton(onClick = onMore, enabled = !editingBusy) {
-                Icon(Icons.Default.Tune, stringResource(R.string.more_settings))
-            }
             IconButton(
                 onClick = onMultiColorPaint,
                 enabled = canPaintColor && !editingBusy,
             ) {
                 Icon(Icons.Default.Palette, stringResource(R.string.paint_color))
-            }
-            IconButton(onClick = onSupportPaint, enabled = !editingBusy) {
-                Icon(Icons.Default.Brush, stringResource(R.string.paint_support))
             }
             IconButton(onClick = onRemove, enabled = !editingBusy) {
                 Icon(Icons.Default.DeleteOutline, stringResource(R.string.remove_model), tint = Color(0xFFFF8A80))

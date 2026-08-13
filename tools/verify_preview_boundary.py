@@ -21,12 +21,16 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "AppSettings.kt",
         "AppSettingsSheet.kt",
         "ToolpathPreviewView.kt",
+        "ModelTransform.kt",
+        "PrepareModelPreviewView.kt",
+        "PreviewPerformanceHarnessActivity.kt",
         "WorkspaceScreen.kt",
         "MainActivity.kt",
         "SliceOperationViewModel.kt",
         "OnDeviceSlicer.kt",
         "SlicerProcessService.kt",
         "NativeEngineInstrumentedTest.kt",
+        "PrepareModelRendererInstrumentedTest.kt",
         "AccessibilityInstrumentedTest.kt",
         "PreviewModelsTest.kt",
         "PreviewSummaryTest.kt",
@@ -69,11 +73,17 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "val previewDetail: PreviewDetail = PreviewDetail.AUTOMATIC",
         "PreviewDeviceCapabilities",
         "manager?.isLowRamDevice",
-        "capabilities.appMemoryClassMb <= 192",
+        "PreviewDetail.AUTOMATIC -> PreviewDetail.PERFORMANCE",
         "resolvePreviewDetail(",
         "previewDetailForInteraction(",
         "depthPreviewSegmentBudget(",
+        "shouldDrawToolpathLines(",
         "compatibilityPreviewSegmentBudget(",
+        "AdaptivePreviewDetailController(",
+        "ADAPTIVE_PREVIEW_FAST_FRAME_MS = 48.0",
+        "ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 2",
+        "recordCompletedFrame(",
+        "currentDetail = lastProvenDetail",
     ):
         if marker not in settings:
             raise VerificationError(f"adaptive preview policy is missing: {marker}")
@@ -96,6 +106,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "GLES30.glBufferData(",
         "GLES30.GL_STATIC_DRAW",
         "GLES30.glDrawArraysInstanced(",
+        "GLES30.GL_TRIANGLE_STRIP",
+        "const val TOOLPATH_VERTICES_PER_INSTANCE = 4",
         "GLES30.glVertexAttribDivisor(",
         "GLES30.GL_UNSIGNED_BYTE",
         "geometryUploadCountForTest",
@@ -110,12 +122,19 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "INSTANCE_START_OFFSET_BYTES",
         "INSTANCE_COLOR_OFFSET_BYTES",
         "toolpathInstances = instanceBuilder.finish()",
+        "EARLY_Z_OPACITY_THRESHOLD = 0.85f",
+        "plan.segmentOffsets.indices.reversed()",
         ".allocateDirect(capacity * Float.SIZE_BYTES)",
         ".allocateDirect(capacity)",
         "setInteractionActive(true)",
         "postDelayed(restoreDetail, DETAIL_RESTORE_DELAY_MS)",
-        "previewDetailForInteraction(sourceScene.detail, interactionActive)",
+        "previewDetailForInteraction(sourceScene.detail, interactionActive = true)",
         "depthPreviewSegmentBudget(scene.detail)",
+        "shouldDrawToolpathLines(sourceScene.detail, interactionActive, initialPreview)",
+        "adaptivePreviewController.shouldMeasure(",
+        "GLES30.glFinish()",
+        'glOperationSucceeded("adaptive_gpu_completion")',
+        "adaptivePreviewController.recordCompletedFrame(",
         "reportFrameReady",
         "reportRendererStarting",
         "reportUnavailable",
@@ -135,11 +154,61 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     if "plan.segmentOffsets.size * 6 * 8" in renderer:
         raise VerificationError("GPU preview reverted to expanded per-segment ribbon vertices")
 
+    prepare_renderer = sources["PrepareModelPreviewView.kt"]
+    for marker in (
+        "PrepareModelTopologyKey(",
+        "filamentSlot = volume.filamentSlot",
+        "withContext(Dispatchers.Default)",
+        "PrepareModelSceneBuilder.build(projectObjects",
+        "PrepareModelSceneBuilder.build(\n                    emptyList()",
+        "overlays.takeIf { sceneLoad.complete }.orEmpty()",
+    ):
+        if marker not in prepare_renderer:
+            raise VerificationError(f"Prepare model loading contract is missing: {marker}")
+
+    transform = sources["ModelTransform.kt"]
+    for marker in (
+        "MinimumRotatedZCalculator(this)",
+        "val afterXz = scaledY * sinX + scaledZ * cosX",
+        "result = minOf(result, -scaledX * sinY + afterXz * cosY)",
+    ):
+        if marker not in transform:
+            raise VerificationError(f"allocation-free Prepare placement is missing: {marker}")
+    minimum_z_section = transform.split(
+        "internal fun ModelTransform.minimumRotatedZ(projectObject: ProjectObject)", 1
+    )[-1].split("internal fun ModelTransform.placeVertex(", 1)[0]
+    if "transformLocal(" in minimum_z_section or "floatArrayOf(" in minimum_z_section:
+        raise VerificationError("Prepare placement reverted to per-vertex array allocation")
+
+    prepare_tests = sources["PrepareModelRendererInstrumentedTest.kt"]
+    for marker in (
+        "densePrepareSceneBuildStaysWithinLoadBudget",
+        "denseMinimumRotatedZStaysWithinTransformBudget",
+        "densePrepareCameraFramesReuseOneUploadedMesh",
+        "densePreparePickingStaysWithinTapBudget",
+        "p95Ms <= 50.0",
+        "renderer.geometryUploadCountForTest() == 1",
+        "p95Ms <= 100.0",
+        "p95Ms <= 16.0",
+    ):
+        if marker not in prepare_tests:
+            raise VerificationError(f"Prepare performance regression is missing: {marker}")
+
+    benchmark = sources["PreviewPerformanceHarnessActivity.kt"]
+    for marker in (
+        "detail = PreviewDetail.AUTOMATIC",
+        "renderer.automaticCalibrationSettledForTest()",
+        "automaticDetail = checkNotNull(renderer.effectiveDetailForTest())",
+        "MAXIMUM_AUTOMATIC_CALIBRATION_FRAMES = 12",
+    ):
+        if marker not in benchmark:
+            raise VerificationError(f"foreground adaptive Preview benchmark is missing: {marker}")
+
     workspace = sources["WorkspaceScreen.kt"]
     for marker in (
         "previewDeviceCapabilities(context)",
         "resolvePreviewDetail(previewDetail, previewCapabilities)",
-        "detail = effectivePreviewDetail",
+        "detail = previewDetail",
         "compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = false)",
         "compatibilityPreviewSegmentBudget(effectivePreviewDetail, refined = true)",
         "if (selectedTab == WorkspaceTab.PREVIEW)",
@@ -156,6 +225,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "shouldUseDepthTestedPreview(",
         "depthPreviewRuntimeAvailable",
         "onUnavailable = { depthPreviewRuntimeAvailable = false }",
+        "placements = modelPlacements",
+        "currentModelPlacements[activeObject.id]",
+        "val placement = checkNotNull(modelPlacements[projectObject.id])",
     ):
         if marker not in workspace:
             raise VerificationError(f"preview device policy is not connected to the UI: {marker}")
@@ -389,8 +461,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         raise VerificationError("ARM64 primitive preview regressions are incomplete")
     for marker in (
         "depthPreviewPrewarmsGestureVboAndReusesItAcrossCameraFrames",
-        "The first frame must upload one geometry set",
-        "The next idle frame must prewarm one lower-detail geometry set",
+        "The first frame must upload one coherent low-cost geometry set",
+        "The next idle frame must upload the requested detail geometry set",
         "Camera-only frames must reuse the uploaded GPU buffers",
         "A geometry change must replace the GPU buffers exactly once",
         "Old-scene GPU buffers must be released before the new gesture tier is prewarmed",
@@ -400,7 +472,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "Settling after a gesture must reuse the requested geometry",
         "The GPU cache must remain bounded to two geometry sets",
         "UI memory pressure must release every reconstructable preview buffer",
-        "The first frame after memory pressure must rebuild the requested geometry once",
+        "The first frame after memory pressure must rebuild the low-cost geometry once",
         "Instanced toolpath must change the rendered framebuffer",
         "ARM64 GPU bed staging must use direct memory",
         "ARM64 GPU instance staging must use direct memory",
@@ -409,6 +481,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "Slice outcome must retain Orca's filament-length estimate",
         "Slice outcome must retain Orca's filament-mass estimate",
         "A failed depth renderer must request compatibility fallback exactly once",
+        "A trivial Preview workload must promote Automatic through measured tiers",
+        "Automatic calibration must settle after bounded completed-frame samples",
     ):
         if marker not in device:
             raise VerificationError(f"ARM64 GPU preview regression is missing: {marker}")
@@ -433,17 +507,24 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "The least recently used gesture VBO must be evicted",
         "Context recreation must re-upload retained scene data",
         "gpuPreviewMemoryIsReleasedOnlyAfterTheUiBecomesHidden",
+        "nearOpaquePreviewUploadsHighLayersFirstForEarlyDepthRejection",
+        "Near-opaque paths must start at the high layer",
+        "Translucent paths must retain source order",
     ):
         if marker not in mesh_tests:
             raise VerificationError(f"GPU preview performance regression is missing: {marker}")
     policy_tests = sources["PreviewPerformancePolicyTest.kt"]
     for marker in (
-        "automaticDefaultsToSmoothOnMemoryConstrainedDevices",
-        "automaticUsesBalancedQualityWhenTheDeviceHasHeadroom",
+        "automaticDefaultsToMeasuredPerformanceTier",
+        "automaticDoesNotMistakeRamCapacityForGpuHeadroom",
         "explicitQualityAlwaysWinsOverAutomaticDeviceSelection",
         "gesturesTemporarilyUseOneLowerGeometryTier",
         "segmentBudgetsStayBoundedForBothRenderers",
         "depthRendererFailureFallsBackWithoutOverwritingTheUserPreference",
+        "automaticPromotesOnlyAfterTwoCompletedFastFramesPerTier",
+        "slowCandidateFallsBackToLastProvenTierWithoutOscillation",
+        "automaticCalibrationResetsForAChangedPreviewWorkload",
+        "explicitQualityNeverRunsAutomaticCalibration",
     ):
         if marker not in policy_tests:
             raise VerificationError(f"adaptive preview host regression is missing: {marker}")
@@ -464,6 +545,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
 
 def read_sources() -> dict[str, str]:
     main = ROOT / "android/app/src/main/java/com/ashcastle/duckyslicer"
+    debug = ROOT / "android/app/src/debug/java/com/ashcastle/duckyslicer"
     tests = ROOT / "android/app/src/test/java/com/ashcastle/duckyslicer"
     device = ROOT / "android/app/src/androidTest/java/com/ashcastle/duckyslicer"
     return {
@@ -477,6 +559,13 @@ def read_sources() -> dict[str, str]:
         "ToolpathPreviewView.kt": (main / "ToolpathPreviewView.kt").read_text(
             encoding="utf-8"
         ),
+        "PrepareModelPreviewView.kt": (main / "PrepareModelPreviewView.kt").read_text(
+            encoding="utf-8"
+        ),
+        "ModelTransform.kt": (main / "ModelTransform.kt").read_text(encoding="utf-8"),
+        "PreviewPerformanceHarnessActivity.kt": (
+            debug / "PreviewPerformanceHarnessActivity.kt"
+        ).read_text(encoding="utf-8"),
         "WorkspaceScreen.kt": (main / "WorkspaceScreen.kt").read_text(encoding="utf-8"),
         "MainActivity.kt": (main / "MainActivity.kt").read_text(encoding="utf-8"),
         "SliceOperationViewModel.kt": (main / "SliceOperationViewModel.kt").read_text(
@@ -488,6 +577,9 @@ def read_sources() -> dict[str, str]:
         ),
         "NativeEngineInstrumentedTest.kt": (
             device / "NativeEngineInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "PrepareModelRendererInstrumentedTest.kt": (
+            device / "PrepareModelRendererInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "AccessibilityInstrumentedTest.kt": (
             device / "AccessibilityInstrumentedTest.kt"

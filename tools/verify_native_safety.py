@@ -69,17 +69,41 @@ def verify_source(source: str) -> int:
     return len(exports)
 
 
+def verify_mutation_regressions(source: str) -> None:
+    markers = {
+        "deterministic byte mutator": "fn deterministic_mutation(",
+        "ASCII and binary STL seeds": "let seeds = [ascii, binary_triangle_stl()]",
+        "STL mutation corpus": "fn mutated_stl_corpus_never_panics_or_returns_unbounded_geometry()",
+        "STL mutation count": "const CASES_PER_SEED: usize = 192",
+        "STL panic containment": 'panic!("STL parser panicked for seed {seed_index}, mutation {case}")',
+        "STL preview bound": "inspection.preview_triangles.len() <= PREVIEW_TRIANGLE_LIMIT",
+        "STL coordinate bound": "value.abs() <= MAX_STL_COORDINATE_ABS_MM",
+        "G-code mutation corpus": "fn mutated_gcode_corpus_never_panics_or_exceeds_preview_limits()",
+        "G-code mutation count": "const CASES: usize = 384",
+        "G-code panic containment": 'panic!("G-code parser panicked for mutation {case}")',
+        "G-code layer bound": "preview.layer_count <= MAX_PREVIEW_LAYERS",
+        "G-code segment bound": "preview.segments.len() <= MAX_PREVIEW_SEGMENTS",
+    }
+    missing = [description for description, marker in markers.items() if marker not in source]
+    if missing:
+        raise VerificationError(
+            "deterministic malformed-input regressions are incomplete: " + ", ".join(missing)
+        )
+
+
 def main() -> None:
     try:
         manifest = tomllib.loads(MANIFEST.read_text(encoding="utf-8"))
         source = SOURCE.read_text(encoding="utf-8")
         verify_manifest(manifest)
         entrypoint_count = verify_source(source)
+        verify_mutation_regressions(source)
     except (OSError, tomllib.TOMLDecodeError, VerificationError) as error:
         raise SystemExit(f"Native safety verification failed: {error}") from error
     print(
         f"Verified Rust/JNI safety: panic=unwind, {entrypoint_count} allowlisted "
-        "entrypoints contained, no panic-prone production shortcuts"
+        "entrypoints contained, no panic-prone production shortcuts, deterministic "
+        "STL/G-code mutation regressions present"
     )
 
 
