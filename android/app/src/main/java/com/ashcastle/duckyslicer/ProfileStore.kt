@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 26
+internal const val USER_PROFILE_SCHEMA_VERSION = 27
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -294,6 +294,7 @@ class ProfileStore private constructor(
             wipeTowerEnabled = options.wipeTowerEnabled,
             wipeTowerWidth = options.wipeTowerWidth,
             multiMaterial = options.multiMaterial,
+            gcodeSettings = options.gcodeSettings,
             skirtLoops = options.skirtLoops,
             skirtDistance = options.skirtDistance,
             skirtHeight = options.skirtHeight,
@@ -638,6 +639,7 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("oozePrevention", multiMaterial.oozePrevention)
     .put("standbyTemperatureDelta", multiMaterial.standbyTemperatureDelta)
     .put("interfaceShells", multiMaterial.interfaceShells)
+    .put("enableArcFitting", gcodeSettings.arcFitting)
     .put("skirtHeight", skirtHeight)
     .put("skirtSpeed", skirtSpeed)
     .put("minimumSkirtLength", minimumSkirtLength)
@@ -935,6 +937,9 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
             oozePrevention = optBoolean("oozePrevention"),
             standbyTemperatureDelta = optInt("standbyTemperatureDelta", -5),
             interfaceShells = optBoolean("interfaceShells"),
+        ),
+        gcodeSettings = GcodeSettings(
+            arcFitting = optBoolean("enableArcFitting"),
         ),
         skirtLoops = optInt("skirtLoops", 0),
         skirtDistance = optDouble("skirtDistance", 6.0).toFloat(),

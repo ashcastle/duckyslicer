@@ -951,6 +951,7 @@ class NativeEngineInstrumentedTest {
                     standbyTemperatureDelta = -42,
                     interfaceShells = true,
                 ),
+                gcodeSettings = GcodeSettings(arcFitting = true),
                 infillFirst = true,
                 infillWallOverlap = 18f,
                 topBottomInfillWallOverlap = 32f,
@@ -1085,6 +1086,7 @@ class NativeEngineInstrumentedTest {
         assertTrue(restored.slicing.last().multiMaterial.oozePrevention)
         assertEquals(-42, restored.slicing.last().multiMaterial.standbyTemperatureDelta)
         assertTrue(restored.slicing.last().multiMaterial.interfaceShells)
+        assertTrue(restored.slicing.last().gcodeSettings.arcFitting)
         assertEquals("nearest", restored.slicing.last().seamPosition)
         assertEquals("top", restored.slicing.last().ironingType)
         assertEquals("concentric", restored.slicing.last().ironingPattern)
@@ -1265,7 +1267,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(25, catalog.schemaVersion)
+        assertEquals(26, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1312,6 +1314,11 @@ class NativeEngineInstrumentedTest {
             },
         )
         assertTrue(catalog.slicing.all(ProfileValidation::slicing))
+        assertTrue(
+            "The catalog must retain both arc-fitting policies",
+            catalog.slicing.any { it.gcodeSettings.arcFitting } &&
+                catalog.slicing.any { !it.gcodeSettings.arcFitting },
+        )
         assertTrue(catalog.slicing.any { it.outerWallLineWidth != it.innerWallLineWidth })
         assertTrue(catalog.slicing.any { it.topSurfaceLineWidth != it.internalSolidInfillLineWidth })
         assertTrue(catalog.slicing.any { it.printSpeed != it.innerWallSpeed })

@@ -381,6 +381,7 @@
     <string name="role_based_wipe_speed">Use toolpath speed for wiping</string>
     <string name="wipe_speed">Wipe speed</string>
     <string name="path_resolution">Toolpath resolution</string>
+    <string name="arc_fitting">Arc fitting</string>
     <string name="overhang_speed">Slow down overhangs</string>
     <string name="overhang_speed_1">Slight overhang</string>
     <string name="overhang_speed_2">Moderate overhang</string>

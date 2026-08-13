@@ -125,6 +125,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var oozePrevention: Boolean = base.multiMaterial.oozePrevention
     private var standbyTemperatureDelta: Int = base.multiMaterial.standbyTemperatureDelta
     private var interfaceShells: Boolean = base.multiMaterial.interfaceShells
+    private var enableArcFitting: Boolean = base.gcodeSettings.arcFitting
     private var skirtLoops: Int = base.skirtLoops
     private var skirtDistance: Float = base.skirtDistance
     private var skirtHeight: Int = base.skirtHeight
@@ -434,6 +435,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         oozePrevention = input.readCatalogBoolean()
         standbyTemperatureDelta = input.readInt()
         interfaceShells = input.readCatalogBoolean()
+        enableArcFitting = input.readCatalogBoolean()
         spiralMode = input.readCatalogBoolean()
         spiralModeSmooth = input.readCatalogBoolean()
         spiralModeMaxXySmoothing = input.readFloat()
@@ -596,6 +598,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             oozePrevention = oozePrevention,
             standbyTemperatureDelta = standbyTemperatureDelta,
             interfaceShells = interfaceShells,
+        ),
+        gcodeSettings = GcodeSettings(
+            arcFitting = enableArcFitting,
         ),
         skirtLoops = skirtLoops,
         skirtDistance = skirtDistance,
@@ -871,6 +876,7 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("oozePrevention", BINARY_BOOL),
     BinaryField("standbyTemperatureDelta", BINARY_INT),
     BinaryField("interfaceShells", BINARY_BOOL),
+    BinaryField("enableArcFitting", BINARY_BOOL),
     BinaryField("spiralMode", BINARY_BOOL),
     BinaryField("spiralModeSmooth", BINARY_BOOL),
     BinaryField("spiralModeMaxXySmoothing", BINARY_FLOAT),

@@ -1551,6 +1551,17 @@ private fun SlicingSettingsSheet(
                     steps = ((max(0.1f, options.resolution) - 0.001f) / 0.001f).roundToInt().coerceAtLeast(2) - 1,
                     onValueChange = { onOptionsChanged(options.copy(resolution = (it * 1_000f).roundToInt() / 1_000f)) },
                 )
+                SettingsSwitch(
+                    label = stringResource(R.string.arc_fitting),
+                    checked = options.gcodeSettings.arcFitting,
+                    onCheckedChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                gcodeSettings = options.gcodeSettings.copy(arcFitting = it),
+                            ),
+                        )
+                    },
+                )
                 SettingChoices(
                     settingLabel = stringResource(R.string.ensure_vertical_shell_thickness),
                     entries = listOf("none", "ensure_critical_only", "ensure_moderate", "ensure_all"),

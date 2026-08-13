@@ -84,6 +84,38 @@ class OrcaPrimitiveInstrumentedTest {
                         assertTrue("axis layers=${axisSliced.layers}", axisSliced.layers in 190..210)
                         assertTrue(axisSliced.output.length() > 10_000L)
                     }
+                    if (primitive == OrcaPrimitive.CYLINDER) {
+                        val installed = store.installImportedModel(
+                            generated.file,
+                            "cylinder.stl",
+                        )
+                        val baseOptions = SliceOptions().copy(
+                            layerHeight = 0.2f,
+                            firstLayerHeight = 0.2f,
+                            bedSizeX = 100f,
+                            bedSizeY = 100f,
+                            bedPolygon = rectangularBedPolygon(100f, 100f),
+                            resolution = 0.01f,
+                        )
+                        val linearGcode = OnDeviceSlicer.slice(
+                            File(installed.localPath),
+                            baseOptions.copy(gcodeSettings = GcodeSettings(arcFitting = false)),
+                        ).output.readText()
+                        val arcGcode = OnDeviceSlicer.slice(
+                            File(installed.localPath),
+                            baseOptions.copy(gcodeSettings = GcodeSettings(arcFitting = true)),
+                        ).output.readText()
+                        fun String.extrusionArcCount() = lineSequence().count { line ->
+                            (line.startsWith("G2 ") || line.startsWith("G3 ")) &&
+                                line.split(' ').any { it.startsWith("E") }
+                        }
+                        assertEquals(0, linearGcode.extrusionArcCount())
+                        assertTrue(
+                            "A curved inherited primitive must emit extrusion arcs when enabled",
+                            arcGcode.extrusionArcCount() > 0,
+                        )
+                        assertTrue(arcGcode.contains("; enable_arc_fitting = 1"))
+                    }
                 } finally {
                     staging.deleteRecursively()
                 }

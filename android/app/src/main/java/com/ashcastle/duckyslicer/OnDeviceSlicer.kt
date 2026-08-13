@@ -270,6 +270,10 @@ data class MultiMaterialSettings(
     val interfaceShells: Boolean = false,
 )
 
+data class GcodeSettings(
+    val arcFitting: Boolean = false,
+)
+
 internal fun FilamentProfile.resolveRetraction(printer: PrinterProfile) = RetractionSettings(
     length = retractLength ?: printer.retractLength,
     speed = retractSpeed ?: printer.retractSpeed,
@@ -421,6 +425,7 @@ data class QualityProfile(
     val wipeTowerEnabled: Boolean = false,
     val wipeTowerWidth: Float = 60f,
     val multiMaterial: MultiMaterialSettings = MultiMaterialSettings(),
+    val gcodeSettings: GcodeSettings = GcodeSettings(),
     val skirtLoops: Int = 0,
     val skirtDistance: Float = 6f,
     val skirtHeight: Int = 1,
@@ -584,7 +589,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 25,
+    val schemaVersion: Int = 26,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -737,6 +742,7 @@ data class SliceOptions(
     val wipeTowerEnabled: Boolean = quality.wipeTowerEnabled,
     val wipeTowerWidth: Float = quality.wipeTowerWidth,
     val multiMaterial: MultiMaterialSettings = quality.multiMaterial,
+    val gcodeSettings: GcodeSettings = quality.gcodeSettings,
     val skirtLoops: Int = quality.skirtLoops,
     val skirtDistance: Float = quality.skirtDistance,
     val skirtHeight: Int = quality.skirtHeight,
@@ -1083,6 +1089,7 @@ data class SliceOptions(
         wipeTowerEnabled = profile.wipeTowerEnabled,
         wipeTowerWidth = profile.wipeTowerWidth,
         multiMaterial = profile.multiMaterial,
+        gcodeSettings = profile.gcodeSettings,
         skirtLoops = profile.skirtLoops,
         skirtDistance = profile.skirtDistance,
         skirtHeight = profile.skirtHeight,
@@ -1485,6 +1492,7 @@ data class SliceOptions(
             native.oozePrevention = multiMaterial.oozePrevention
             native.standbyTemperatureDelta = multiMaterial.standbyTemperatureDelta
             native.interfaceShells = multiMaterial.interfaceShells
+            native.enableArcFitting = gcodeSettings.arcFitting
         }
     }
 }

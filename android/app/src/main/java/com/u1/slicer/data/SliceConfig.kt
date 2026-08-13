@@ -283,4 +283,5 @@ data class SliceConfig(
     @JvmField var oozePrevention: Boolean = false
     @JvmField var standbyTemperatureDelta: Int = -5
     @JvmField var interfaceShells: Boolean = false
+    @JvmField var enableArcFitting: Boolean = false
 }
