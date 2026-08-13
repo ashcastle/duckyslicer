@@ -23,6 +23,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "ToolpathPreviewView.kt",
         "ModelTransform.kt",
         "PrepareModelPreviewView.kt",
+        "PrepareModelPicking.kt",
         "PreviewPerformanceHarnessActivity.kt",
         "WorkspaceScreen.kt",
         "MainActivity.kt",
@@ -31,6 +32,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "SlicerProcessService.kt",
         "NativeEngineInstrumentedTest.kt",
         "PrepareModelRendererInstrumentedTest.kt",
+        "PrepareModelPickingTest.kt",
         "AccessibilityInstrumentedTest.kt",
         "PreviewModelsTest.kt",
         "PreviewSummaryTest.kt",
@@ -166,6 +168,18 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         if marker not in prepare_renderer:
             raise VerificationError(f"Prepare model loading contract is missing: {marker}")
 
+    prepare_picking = sources["PrepareModelPicking.kt"]
+    for marker in (
+        "buildPreparePickingIndices(",
+        "PREPARE_PICKING_TRIANGLES_PER_CHUNK = 48",
+        "intersectsProjectedBounds(",
+        ".candidateRangesOrAll(",
+        "return result.copyOf(output)",
+        "?: intArrayOf(0, triangleCount)",
+    ):
+        if marker not in prepare_picking:
+            raise VerificationError(f"exact Prepare picking acceleration is missing: {marker}")
+
     transform = sources["ModelTransform.kt"]
     for marker in (
         "MinimumRotatedZCalculator(this)",
@@ -188,11 +202,21 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "densePreparePickingStaysWithinTapBudget",
         "p95Ms <= 50.0",
         "renderer.geometryUploadCountForTest() == 1",
-        "p95Ms <= 100.0",
         "p95Ms <= 16.0",
+        "objectP95Ms <= 16.0",
+        "facetP95Ms <= 16.0",
     ):
         if marker not in prepare_tests:
             raise VerificationError(f"Prepare performance regression is missing: {marker}")
+
+    picking_tests = sources["PrepareModelPickingTest.kt"]
+    for marker in (
+        "coarseIndexCullsDenseChunksWithoutChangingExactHits",
+        "candidateTriangleCount in 1 until model.triangles",
+        "pickingIndices = indices",
+    ):
+        if marker not in picking_tests:
+            raise VerificationError(f"exact Prepare picking regression is missing: {marker}")
 
     benchmark = sources["PreviewPerformanceHarnessActivity.kt"]
     for marker in (
@@ -228,9 +252,12 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "placements = modelPlacements",
         "currentModelPlacements[activeObject.id]",
         "val placement = checkNotNull(modelPlacements[projectObject.id])",
+        "modelPickingIndices = withContext(Dispatchers.Default)",
     ):
         if marker not in workspace:
             raise VerificationError(f"preview device policy is not connected to the UI: {marker}")
+    if workspace.count("pickingIndices = currentModelPickingIndices") < 3:
+        raise VerificationError("all GPU Prepare touch paths must use the immutable picking index")
 
     export_controls = workspace.split("private fun PreviewExportSplitButton(", 1)[-1].split(
         "@Composable", 1
@@ -562,6 +589,9 @@ def read_sources() -> dict[str, str]:
         "PrepareModelPreviewView.kt": (main / "PrepareModelPreviewView.kt").read_text(
             encoding="utf-8"
         ),
+        "PrepareModelPicking.kt": (main / "PrepareModelPicking.kt").read_text(
+            encoding="utf-8"
+        ),
         "ModelTransform.kt": (main / "ModelTransform.kt").read_text(encoding="utf-8"),
         "PreviewPerformanceHarnessActivity.kt": (
             debug / "PreviewPerformanceHarnessActivity.kt"
@@ -581,6 +611,9 @@ def read_sources() -> dict[str, str]:
         "PrepareModelRendererInstrumentedTest.kt": (
             device / "PrepareModelRendererInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
+        "PrepareModelPickingTest.kt": (tests / "PrepareModelPickingTest.kt").read_text(
+            encoding="utf-8"
+        ),
         "AccessibilityInstrumentedTest.kt": (
             device / "AccessibilityInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),

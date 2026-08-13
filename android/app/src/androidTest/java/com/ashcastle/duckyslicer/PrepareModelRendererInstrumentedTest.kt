@@ -114,6 +114,7 @@ class PrepareModelRendererInstrumentedTest {
             geometry = projectObject.geometry(),
             minimumRotatedZ = projectObject.transform.minimumRotatedZ(projectObject),
         )
+        val pickingIndices = buildPreparePickingIndices(listOf(projectObject))
         val viewport = PrepareHitTestViewport(
             widthPx = 720f,
             heightPx = 1_280f,
@@ -125,7 +126,8 @@ class PrepareModelRendererInstrumentedTest {
             panX = 0f,
             panY = 0f,
         )
-        val durations = ArrayList<Long>()
+        val objectDurations = ArrayList<Long>()
+        val facetDurations = ArrayList<Long>()
         repeat(12) {
             val started = SystemClock.elapsedRealtimeNanos()
             assertEquals(
@@ -137,18 +139,43 @@ class PrepareModelRendererInstrumentedTest {
                     screenX = 360f,
                     screenY = 614.4f,
                     touchRadiusPx = 14f,
+                    pickingIndices = pickingIndices,
                 ),
             )
-            durations += SystemClock.elapsedRealtimeNanos() - started
+            objectDurations += SystemClock.elapsedRealtimeNanos() - started
+            val facetStarted = SystemClock.elapsedRealtimeNanos()
+            assertTrue(
+                findPrepareFacetAtScreen(
+                    projectObject = projectObject,
+                    placement = placement,
+                    viewport = viewport,
+                    screenX = 360f,
+                    screenY = 614.4f,
+                    touchRadiusPx = 14f,
+                    pickingIndices = pickingIndices,
+                ) != null,
+            )
+            facetDurations += SystemClock.elapsedRealtimeNanos() - facetStarted
         }
-        val sorted = durations.drop(2).sorted()
-        val p50Ms = sorted[sorted.size / 2] / 1_000_000.0
-        val p95Ms = sorted.last() / 1_000_000.0
+        val sortedObjects = objectDurations.drop(2).sorted()
+        val sortedFacets = facetDurations.drop(2).sorted()
+        val objectP50Ms = sortedObjects[sortedObjects.size / 2] / 1_000_000.0
+        val objectP95Ms = sortedObjects.last() / 1_000_000.0
+        val facetP50Ms = sortedFacets[sortedFacets.size / 2] / 1_000_000.0
+        val facetP95Ms = sortedFacets.last() / 1_000_000.0
         println(
             "DuckyPrepare picking triangles=${triangles.size / 9} " +
-                "p50Ms=$p50Ms p95Ms=$p95Ms",
+                "objectP50Ms=$objectP50Ms objectP95Ms=$objectP95Ms " +
+                "facetP50Ms=$facetP50Ms facetP95Ms=$facetP95Ms",
         )
-        assertTrue("12k-triangle selection must remain responsive: p95=$p95Ms ms", p95Ms <= 100.0)
+        assertTrue(
+            "12k-triangle object selection must stay inside one frame: p95=$objectP95Ms ms",
+            objectP95Ms <= 16.0,
+        )
+        assertTrue(
+            "12k-triangle facet selection must stay inside one frame: p95=$facetP95Ms ms",
+            facetP95Ms <= 16.0,
+        )
     }
 
     @Test

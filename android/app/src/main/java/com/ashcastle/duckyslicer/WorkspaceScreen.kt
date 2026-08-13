@@ -136,7 +136,9 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 private val WorkspaceYellow = Color(0xFFF6C945)
 private val WorkspaceBlack = Color(0xFF202124)
@@ -2974,6 +2976,15 @@ private fun BedScene(
             )
         }
     }
+    var modelPickingIndices by remember(modelTopology) {
+        mutableStateOf<Map<PreparePickingIndexKey, PrepareVolumePickingIndex>>(emptyMap())
+    }
+    LaunchedEffect(modelTopology) {
+        val snapshot = projectObjects
+        modelPickingIndices = withContext(Dispatchers.Default) {
+            buildPreparePickingIndices(snapshot)
+        }
+    }
     val layOnFaceCandidates = remember(layOnFaceObjectId, modelTopology) {
         projectObjects.firstOrNull { it.id == layOnFaceObjectId }
             ?.volumes
@@ -3005,6 +3016,7 @@ private fun BedScene(
     }
     val currentObjects by rememberUpdatedState(projectObjects)
     val currentModelPlacements by rememberUpdatedState(modelPlacements)
+    val currentModelPickingIndices by rememberUpdatedState(modelPickingIndices)
     val currentSelectionCallback by rememberUpdatedState(onObjectSelected)
     val currentTransformCallback by rememberUpdatedState(onModelTransformPreview)
     val currentTransformCommitCallback by rememberUpdatedState(onModelTransformCommitted)
@@ -3284,6 +3296,7 @@ private fun BedScene(
                                     touchRadiusPx = 18.dp.toPx(),
                                     selectableTriangles = layOnFaceCandidateFacets
                                         .takeIf { layOnFaceObject != null },
+                                    pickingIndices = currentModelPickingIndices,
                                 )
                             }
                         } else {
@@ -3379,6 +3392,7 @@ private fun BedScene(
                             screenX = down.position.x,
                             screenY = down.position.y,
                             touchRadiusPx = touchRadius,
+                            pickingIndices = currentModelPickingIndices,
                         )
                     } else {
                         modelScreenBounds.entries.toList().asReversed().firstOrNull { (_, bounds) ->
@@ -3417,6 +3431,7 @@ private fun BedScene(
                                 screenX = position.x,
                                 screenY = position.y,
                                 touchRadiusPx = 18.dp.toPx(),
+                                pickingIndices = currentModelPickingIndices,
                             )
                         }
                     } else {

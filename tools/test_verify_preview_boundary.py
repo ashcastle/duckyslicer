@@ -84,6 +84,11 @@ def valid_sources() -> dict[str, str]:
             "PrepareModelSceneBuilder.build(\n                    emptyList() "
             "overlays.takeIf { sceneLoad.complete }.orEmpty()"
         ),
+        "PrepareModelPicking.kt": (
+            "buildPreparePickingIndices( PREPARE_PICKING_TRIANGLES_PER_CHUNK = 48 "
+            "intersectsProjectedBounds( .candidateRangesOrAll( return result.copyOf(output) "
+            "?: intArrayOf(0, triangleCount)"
+        ),
         "ModelTransform.kt": (
             "internal fun ModelTransform.minimumRotatedZ(projectObject: ProjectObject) "
             "MinimumRotatedZCalculator(this) "
@@ -112,6 +117,10 @@ def valid_sources() -> dict[str, str]:
             "onUnavailable = { depthPreviewRuntimeAvailable = false }"
             " placements = modelPlacements currentModelPlacements[activeObject.id] "
             "val placement = checkNotNull(modelPlacements[projectObject.id])"
+            " modelPickingIndices = withContext(Dispatchers.Default)"
+            " pickingIndices = currentModelPickingIndices"
+            " pickingIndices = currentModelPickingIndices"
+            " pickingIndices = currentModelPickingIndices"
             " private fun TransformSlider( modifier = Modifier.semantics "
             "contentDescription = label stateDescription = valueText @Composable"
             " private fun PreviewExportSplitButton( .width(48.dp) .height(50.dp) "
@@ -189,8 +198,11 @@ def valid_sources() -> dict[str, str]:
             "densePrepareCameraFramesReuseOneUploadedMesh "
             "densePreparePickingStaysWithinTapBudget "
             "p95Ms <= 50.0 renderer.geometryUploadCountForTest() == 1 "
-            "p95Ms <= 100.0"
-            " p95Ms <= 16.0"
+            "p95Ms <= 16.0 objectP95Ms <= 16.0 facetP95Ms <= 16.0"
+        ),
+        "PrepareModelPickingTest.kt": (
+            "coarseIndexCullsDenseChunksWithoutChangingExactHits "
+            "candidateTriangleCount in 1 until model.triangles pickingIndices = indices"
         ),
         "AccessibilityInstrumentedTest.kt": (
             "appSettingsExposeNamedSlidersWholeRowSwitchesAndHeadings "
@@ -359,6 +371,22 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "val placement = recalculatePlacement(projectObject)",
         )
         with self.assertRaisesRegex(VerificationError, "modelPlacements"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_prepare_touch_paths_without_the_coarse_index(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            "pickingIndices = currentModelPickingIndices", "pickingIndices = emptyMap()", 1
+        )
+        with self.assertRaisesRegex(VerificationError, "touch paths"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_prepare_index_that_has_no_exact_fallback(self) -> None:
+        sources = valid_sources()
+        sources["PrepareModelPicking.kt"] = sources["PrepareModelPicking.kt"].replace(
+            "?: intArrayOf(0, triangleCount)", "?: intArrayOf()"
+        )
+        with self.assertRaisesRegex(VerificationError, "picking acceleration"):
             verify_preview_boundary(sources)
 
     def test_rejects_missing_instanced_toolpath_draw(self) -> None:

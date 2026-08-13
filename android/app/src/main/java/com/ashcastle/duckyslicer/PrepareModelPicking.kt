@@ -14,6 +14,114 @@ internal data class PrepareObjectPlacement(
     val minimumRotatedZ: Float,
 )
 
+internal data class PreparePickingIndexKey(
+    val objectId: String,
+    val volumeId: String,
+)
+
+/**
+ * Immutable coarse bounds over contiguous source triangles. Projecting a few exact AABB corners
+ * per chunk lets touch picking reject most of a dense mesh before doing triangle-level work. The
+ * index never changes or merges geometry, so final object/facet selection remains exact.
+ */
+internal class PrepareVolumePickingIndex private constructor(
+    private val triangleStarts: IntArray,
+    private val bounds: FloatArray,
+) {
+    val chunkCount: Int get() = triangleStarts.size
+
+    internal fun candidateRanges(
+        triangleCount: Int,
+        transform: PreparePickingTransform,
+        projection: PreparePickingProjection,
+        screenX: Float,
+        screenY: Float,
+        touchRadiusPx: Float,
+    ): IntArray {
+        val result = IntArray(chunkCount * 2)
+        val projected = FloatArray(3)
+        var output = 0
+        triangleStarts.forEachIndexed { chunkIndex, startTriangle ->
+            if (
+                transform.intersectsProjectedBounds(
+                    bounds = bounds,
+                    offset = chunkIndex * PREPARE_PICKING_BOUNDS_FLOATS,
+                    projection = projection,
+                    screenX = screenX,
+                    screenY = screenY,
+                    touchRadiusPx = touchRadiusPx,
+                    projected = projected,
+                )
+            ) {
+                result[output++] = startTriangle
+                result[output++] = min(
+                    startTriangle + PREPARE_PICKING_TRIANGLES_PER_CHUNK,
+                    triangleCount,
+                )
+            }
+        }
+        return result.copyOf(output)
+    }
+
+    companion object {
+        fun build(vertices: FloatArray): PrepareVolumePickingIndex {
+            require(vertices.size % 9 == 0) { "Prepare picking vertices are malformed" }
+            val triangleCount = vertices.size / 9
+            val chunkCount = (
+                triangleCount + PREPARE_PICKING_TRIANGLES_PER_CHUNK - 1
+                ) / PREPARE_PICKING_TRIANGLES_PER_CHUNK
+            val starts = IntArray(chunkCount)
+            val bounds = FloatArray(chunkCount * PREPARE_PICKING_BOUNDS_FLOATS)
+            repeat(chunkCount) { chunkIndex ->
+                val startTriangle = chunkIndex * PREPARE_PICKING_TRIANGLES_PER_CHUNK
+                val endTriangle = min(
+                    startTriangle + PREPARE_PICKING_TRIANGLES_PER_CHUNK,
+                    triangleCount,
+                )
+                starts[chunkIndex] = startTriangle
+                var minX = Float.POSITIVE_INFINITY
+                var minY = Float.POSITIVE_INFINITY
+                var minZ = Float.POSITIVE_INFINITY
+                var maxX = Float.NEGATIVE_INFINITY
+                var maxY = Float.NEGATIVE_INFINITY
+                var maxZ = Float.NEGATIVE_INFINITY
+                var vertex = startTriangle * 9
+                val vertexEnd = endTriangle * 9
+                while (vertex + 2 < vertexEnd) {
+                    minX = min(minX, vertices[vertex])
+                    minY = min(minY, vertices[vertex + 1])
+                    minZ = min(minZ, vertices[vertex + 2])
+                    maxX = max(maxX, vertices[vertex])
+                    maxY = max(maxY, vertices[vertex + 1])
+                    maxZ = max(maxZ, vertices[vertex + 2])
+                    vertex += 3
+                }
+                val output = chunkIndex * PREPARE_PICKING_BOUNDS_FLOATS
+                bounds[output] = minX
+                bounds[output + 1] = minY
+                bounds[output + 2] = minZ
+                bounds[output + 3] = maxX
+                bounds[output + 4] = maxY
+                bounds[output + 5] = maxZ
+            }
+            return PrepareVolumePickingIndex(starts, bounds)
+        }
+    }
+}
+
+internal fun buildPreparePickingIndices(
+    projectObjects: List<ProjectObject>,
+): Map<PreparePickingIndexKey, PrepareVolumePickingIndex> = buildMap {
+    projectObjects.forEach { projectObject ->
+        projectObject.volumes.forEach { volume ->
+            put(
+                PreparePickingIndexKey(projectObject.id, volume.id),
+                PrepareVolumePickingIndex.build(volume.model.previewTriangles),
+            )
+        }
+    }
+}
+
 internal data class PrepareHitTestViewport(
     val widthPx: Float,
     val heightPx: Float,
@@ -38,6 +146,7 @@ internal fun findPrepareObjectAtScreen(
     screenX: Float,
     screenY: Float,
     touchRadiusPx: Float,
+    pickingIndices: Map<PreparePickingIndexKey, PrepareVolumePickingIndex> = emptyMap(),
 ): String? {
     if (
         viewport.widthPx <= 0f || viewport.heightPx <= 0f || viewport.bedSizeX <= 0f ||
@@ -62,34 +171,51 @@ internal fun findPrepareObjectAtScreen(
         val projected = FloatArray(9)
         projectObject.volumes.forEach { volume ->
             val vertices = volume.model.previewTriangles
-            var index = 0
-            while (index + 8 < vertices.size) {
-                transform.project(vertices, index, projection, projected, 0)
-                transform.project(vertices, index + 3, projection, projected, 3)
-                transform.project(vertices, index + 6, projection, projected, 6)
-                val surfaceDepth = triangleDepthAtPoint(screenX, screenY, projected)
-                val depth = surfaceDepth ?: (projected[2] + projected[5] + projected[8]) / 3f
-                if (surfaceDepth != null) {
-                    if (singleCandidate) return projectObject.id
-                    if (bestInside == null || depth > checkNotNull(bestInside).depth) {
-                        bestInside = PrepareObjectHit(projectObject.id, 0f, depth)
+            val triangleCount = vertices.size / 9
+            val ranges = pickingIndices[
+                PreparePickingIndexKey(projectObject.id, volume.id)
+            ].candidateRangesOrAll(
+                triangleCount = triangleCount,
+                transform = transform,
+                projection = projection,
+                screenX = screenX,
+                screenY = screenY,
+                touchRadiusPx = touchRadiusPx,
+            )
+            var rangeIndex = 0
+            while (rangeIndex + 1 < ranges.size) {
+                var index = ranges[rangeIndex] * 9
+                val end = ranges[rangeIndex + 1] * 9
+                while (index + 8 < end) {
+                    transform.project(vertices, index, projection, projected, 0)
+                    transform.project(vertices, index + 3, projection, projected, 3)
+                    transform.project(vertices, index + 6, projection, projected, 6)
+                    val surfaceDepth = triangleDepthAtPoint(screenX, screenY, projected)
+                    val depth = surfaceDepth ?: (projected[2] + projected[5] + projected[8]) / 3f
+                    if (surfaceDepth != null) {
+                        if (singleCandidate) return projectObject.id
+                        if (bestInside == null || depth > checkNotNull(bestInside).depth) {
+                            bestInside = PrepareObjectHit(projectObject.id, 0f, depth)
+                        }
+                    } else if (bestInside == null && touchRadiusPx > 0f) {
+                        val distance = minOf(
+                            pointToSegmentDistance(screenX, screenY, projected, 0, 3),
+                            pointToSegmentDistance(screenX, screenY, projected, 3, 6),
+                            pointToSegmentDistance(screenX, screenY, projected, 6, 0),
+                        )
+                        val current = bestNearby
+                        if (
+                            distance <= touchRadiusPx &&
+                            (current == null || distance < current.distance - 0.001f ||
+                                (abs(distance - current.distance) <= 0.001f &&
+                                    depth > current.depth))
+                        ) {
+                            bestNearby = PrepareObjectHit(projectObject.id, distance, depth)
+                        }
                     }
-                } else if (bestInside == null && touchRadiusPx > 0f) {
-                    val distance = minOf(
-                        pointToSegmentDistance(screenX, screenY, projected, 0, 3),
-                        pointToSegmentDistance(screenX, screenY, projected, 3, 6),
-                        pointToSegmentDistance(screenX, screenY, projected, 6, 0),
-                    )
-                    val current = bestNearby
-                    if (
-                        distance <= touchRadiusPx &&
-                        (current == null || distance < current.distance - 0.001f ||
-                            (abs(distance - current.distance) <= 0.001f && depth > current.depth))
-                    ) {
-                        bestNearby = PrepareObjectHit(projectObject.id, distance, depth)
-                    }
+                    index += 9
                 }
-                index += 9
+                rangeIndex += 2
             }
         }
     }
@@ -104,6 +230,7 @@ internal fun findPrepareFacetAtScreen(
     screenY: Float,
     touchRadiusPx: Float,
     selectableTriangles: Map<String, BooleanArray>? = null,
+    pickingIndices: Map<PreparePickingIndexKey, PrepareVolumePickingIndex> = emptyMap(),
 ): ModelScreenTriangle? {
     if (
         viewport.widthPx <= 0f || viewport.heightPx <= 0f || viewport.bedSizeX <= 0f ||
@@ -132,50 +259,66 @@ internal fun findPrepareFacetAtScreen(
 
     projectObject.volumes.forEach { volume ->
         val vertices = volume.model.previewTriangles
-        var previewTriangleIndex = 0
-        var index = 0
-        while (index + 8 < vertices.size) {
-            val selectable = selectableTriangles?.get(volume.id)
-            if (
-                selectableTriangles == null ||
-                selectable?.getOrNull(previewTriangleIndex) == true
-            ) {
-                transform.project(vertices, index, projection, projected, 0)
-                transform.project(vertices, index + 3, projection, projected, 3)
-                transform.project(vertices, index + 6, projection, projected, 6)
-                val surfaceDepth = triangleDepthAtPoint(screenX, screenY, projected)
-                val averageDepth = (projected[2] + projected[5] + projected[8]) / 3f
-                val nearbyDistance = if (surfaceDepth == null && touchRadiusPx > 0f) {
-                    minOf(
-                        pointToSegmentDistance(screenX, screenY, projected, 0, 3),
-                        pointToSegmentDistance(screenX, screenY, projected, 3, 6),
-                        pointToSegmentDistance(screenX, screenY, projected, 6, 0),
-                    )
-                } else {
-                    Float.POSITIVE_INFINITY
+        val triangleCount = vertices.size / 9
+        val ranges = pickingIndices[
+            PreparePickingIndexKey(projectObject.id, volume.id)
+        ].candidateRangesOrAll(
+            triangleCount = triangleCount,
+            transform = transform,
+            projection = projection,
+            screenX = screenX,
+            screenY = screenY,
+            touchRadiusPx = touchRadiusPx,
+        )
+        var rangeIndex = 0
+        while (rangeIndex + 1 < ranges.size) {
+            var previewTriangleIndex = ranges[rangeIndex]
+            val endTriangle = ranges[rangeIndex + 1]
+            var index = previewTriangleIndex * 9
+            while (previewTriangleIndex < endTriangle) {
+                val selectable = selectableTriangles?.get(volume.id)
+                if (
+                    selectableTriangles == null ||
+                    selectable?.getOrNull(previewTriangleIndex) == true
+                ) {
+                    transform.project(vertices, index, projection, projected, 0)
+                    transform.project(vertices, index + 3, projection, projected, 3)
+                    transform.project(vertices, index + 6, projection, projected, 6)
+                    val surfaceDepth = triangleDepthAtPoint(screenX, screenY, projected)
+                    val averageDepth = (projected[2] + projected[5] + projected[8]) / 3f
+                    val nearbyDistance = if (surfaceDepth == null && touchRadiusPx > 0f) {
+                        minOf(
+                            pointToSegmentDistance(screenX, screenY, projected, 0, 3),
+                            pointToSegmentDistance(screenX, screenY, projected, 3, 6),
+                            pointToSegmentDistance(screenX, screenY, projected, 6, 0),
+                        )
+                    } else {
+                        Float.POSITIVE_INFINITY
+                    }
+                    val replace = if (surfaceDepth != null) {
+                        !hasInside || surfaceDepth > bestInsideDepth
+                    } else {
+                        !hasInside && nearbyDistance <= touchRadiusPx &&
+                            (nearbyDistance < bestNearbyDistance - 0.001f ||
+                                (abs(nearbyDistance - bestNearbyDistance) <= 0.001f &&
+                                    averageDepth > bestNearbyDepth))
+                    }
+                    if (replace) {
+                        hasInside = surfaceDepth != null
+                        if (surfaceDepth != null) bestInsideDepth = surfaceDepth
+                        bestNearbyDistance = nearbyDistance
+                        bestNearbyDepth = averageDepth
+                        bestVolumeId = volume.id
+                        bestPreviewTriangleIndex = previewTriangleIndex
+                        bestSourceFacetIndex = volume.model.previewTriangleIndices
+                            .getOrElse(previewTriangleIndex) { previewTriangleIndex }
+                        projected.copyInto(bestProjected)
+                    }
                 }
-                val replace = if (surfaceDepth != null) {
-                    !hasInside || surfaceDepth > bestInsideDepth
-                } else {
-                    !hasInside && nearbyDistance <= touchRadiusPx &&
-                        (nearbyDistance < bestNearbyDistance - 0.001f ||
-                            (abs(nearbyDistance - bestNearbyDistance) <= 0.001f &&
-                                averageDepth > bestNearbyDepth))
-                }
-                if (replace) {
-                    hasInside = surfaceDepth != null
-                    if (surfaceDepth != null) bestInsideDepth = surfaceDepth
-                    bestNearbyDistance = nearbyDistance
-                    bestNearbyDepth = averageDepth
-                    bestVolumeId = volume.id
-                    bestPreviewTriangleIndex = previewTriangleIndex
-                    bestSourceFacetIndex = volume.model.previewTriangleIndices
-                        .getOrElse(previewTriangleIndex) { previewTriangleIndex }
-                    projected.copyInto(bestProjected)
-                }
+                previewTriangleIndex += 1
+                index += 9
             }
-            previewTriangleIndex += 1
-            index += 9
+            rangeIndex += 2
         }
     }
     val volumeId = bestVolumeId ?: return null
@@ -196,7 +339,7 @@ private data class PrepareObjectHit(
     val depth: Float,
 )
 
-private class PreparePickingProjection(viewport: PrepareHitTestViewport) {
+internal class PreparePickingProjection(viewport: PrepareHitTestViewport) {
     private val yaw = viewport.yawDegrees / 180f * PI.toFloat()
     private val pitch = viewport.pitchDegrees / 180f * PI.toFloat()
     private val yawSin = sin(yaw)
@@ -221,7 +364,7 @@ private class PreparePickingProjection(viewport: PrepareHitTestViewport) {
     }
 }
 
-private class PreparePickingTransform(
+internal class PreparePickingTransform(
     transform: ModelTransform,
     geometry: ProjectObjectGeometry,
     minimumRotatedZ: Float,
@@ -254,9 +397,58 @@ private class PreparePickingTransform(
         output: FloatArray,
         offset: Int,
     ) {
-        val x = (vertices[index] - centerX) * signedScaleX
-        val y = (vertices[index + 1] - centerY) * signedScaleY
-        val z = (vertices[index + 2] - centerZ) * signedScaleZ
+        projectSource(
+            vertices[index],
+            vertices[index + 1],
+            vertices[index + 2],
+            projection,
+            output,
+            offset,
+        )
+    }
+
+    fun intersectsProjectedBounds(
+        bounds: FloatArray,
+        offset: Int,
+        projection: PreparePickingProjection,
+        screenX: Float,
+        screenY: Float,
+        touchRadiusPx: Float,
+        projected: FloatArray,
+    ): Boolean {
+        var left = Float.POSITIVE_INFINITY
+        var top = Float.POSITIVE_INFINITY
+        var right = Float.NEGATIVE_INFINITY
+        var bottom = Float.NEGATIVE_INFINITY
+        repeat(8) { corner ->
+            projectSource(
+                if (corner and 1 == 0) bounds[offset] else bounds[offset + 3],
+                if (corner and 2 == 0) bounds[offset + 1] else bounds[offset + 4],
+                if (corner and 4 == 0) bounds[offset + 2] else bounds[offset + 5],
+                projection,
+                projected,
+                0,
+            )
+            left = min(left, projected[0])
+            top = min(top, projected[1])
+            right = max(right, projected[0])
+            bottom = max(bottom, projected[1])
+        }
+        return screenX >= left - touchRadiusPx && screenX <= right + touchRadiusPx &&
+            screenY >= top - touchRadiusPx && screenY <= bottom + touchRadiusPx
+    }
+
+    private fun projectSource(
+        sourceX: Float,
+        sourceY: Float,
+        sourceZ: Float,
+        projection: PreparePickingProjection,
+        output: FloatArray,
+        offset: Int,
+    ) {
+        val x = (sourceX - centerX) * signedScaleX
+        val y = (sourceY - centerY) * signedScaleY
+        val z = (sourceZ - centerZ) * signedScaleZ
         val afterXy = y * cosX - z * sinX
         val afterXz = y * sinX + z * cosX
         val afterYx = x * cosY + afterXz * sinY
@@ -270,6 +462,25 @@ private class PreparePickingTransform(
         )
     }
 }
+
+private fun PrepareVolumePickingIndex?.candidateRangesOrAll(
+    triangleCount: Int,
+    transform: PreparePickingTransform,
+    projection: PreparePickingProjection,
+    screenX: Float,
+    screenY: Float,
+    touchRadiusPx: Float,
+): IntArray = this?.candidateRanges(
+    triangleCount,
+    transform,
+    projection,
+    screenX,
+    screenY,
+    touchRadiusPx,
+) ?: intArrayOf(0, triangleCount)
+
+private const val PREPARE_PICKING_TRIANGLES_PER_CHUNK = 48
+private const val PREPARE_PICKING_BOUNDS_FLOATS = 6
 
 private fun triangleDepthAtPoint(
     x: Float,
