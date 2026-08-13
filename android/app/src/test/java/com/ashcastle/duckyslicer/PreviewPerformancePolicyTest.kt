@@ -211,7 +211,7 @@ class PreviewPerformancePolicyTest {
     }
 
     @Test
-    fun denseOverviewKeepsAllSegmentsAndRestoresRibbonsWhenTheirWidthIsVisible() {
+    fun denseOverviewUsesScreenSpaceBudgetAndRestoresFullDetailWhenZoomed() {
         assertFalse(shouldUseDenseOverviewLines(DENSE_PREVIEW_OVERVIEW_SEGMENTS - 1, 1f))
         assertTrue(shouldUseDenseOverviewLines(DENSE_PREVIEW_OVERVIEW_SEGMENTS, 1f))
         assertTrue(
@@ -227,6 +227,32 @@ class PreviewPerformancePolicyTest {
             ),
         )
         assertFalse(shouldUseDenseOverviewLines(GcodeLayerPreview.MAX_SEGMENTS, Float.NaN))
+
+        assertEquals(
+            DENSE_PREVIEW_MIN_SEGMENTS,
+            depthPreviewOverviewSegmentBudget(PreviewDetail.DETAIL, 360, 640, 1f),
+        )
+        assertEquals(
+            19_200,
+            depthPreviewOverviewSegmentBudget(PreviewDetail.DETAIL, 720, 1_280, 1f),
+        )
+        assertEquals(
+            DENSE_PREVIEW_MAX_SEGMENTS,
+            depthPreviewOverviewSegmentBudget(PreviewDetail.DETAIL, 1_440, 3_200, 1f),
+        )
+        assertEquals(
+            GcodeLayerPreview.MAX_SEGMENTS,
+            depthPreviewOverviewSegmentBudget(
+                PreviewDetail.DETAIL,
+                360,
+                640,
+                DENSE_PREVIEW_RIBBON_ZOOM + 0.01f,
+            ),
+        )
+        assertEquals(
+            depthPreviewSegmentBudget(PreviewDetail.PERFORMANCE),
+            depthPreviewOverviewSegmentBudget(PreviewDetail.PERFORMANCE, 1_440, 3_200, 1f),
+        )
     }
 
     @Test

@@ -5,6 +5,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.roundToInt
@@ -369,6 +370,38 @@ class ToolpathMeshBuilderTest {
 
         state.invalidate()
         assertTrue("Context recreation must re-upload retained scene data", state.needsUpload(changed))
+    }
+
+    @Test
+    fun sceneCacheUsesImmutablePreviewIdentityWithoutHashingItsCoordinates() {
+        val preview = GcodeLayerPreview(
+            startLayer = 0,
+            endLayer = 0,
+            layerCount = 1,
+            minZMm = 0.2f,
+            maxZMm = 0.2f,
+            segments = floatArrayOf(10f, 10f, 20f, 10f, 0.2f, 0f),
+            roleSegmentCounts = intArrayOf(1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+        )
+        val scene = ToolpathScene(preview, 100f, 100f, 1f, 0.8f, PreviewDetail.BALANCED)
+        val copied = scene.copy()
+        val separatePayload = scene.copy(preview = preview.copy())
+
+        assertEquals(scene, copied)
+        assertEquals(scene.hashCode(), copied.hashCode())
+        assertNotEquals(
+            "Separate immutable payloads must never alias one cached GPU buffer",
+            scene,
+            separatePayload,
+        )
+
+        val hashBeforeCoordinateChange = scene.hashCode()
+        preview.segments[0] = 11f
+        assertEquals(
+            "Scene hashing must not rescan the large coordinate array on camera frames",
+            hashBeforeCoordinateChange,
+            scene.hashCode(),
+        )
     }
 
     @Test

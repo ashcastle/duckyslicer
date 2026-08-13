@@ -330,7 +330,42 @@ internal data class ToolpathScene(
     val bedOriginX: Float = 0f,
     val bedOriginY: Float = 0f,
     val segmentBudgetOverride: Int? = null,
-)
+) {
+    /**
+     * Preview payloads are immutable renderer inputs. Cache identity must therefore follow the
+     * payload object, not hash every coordinate in its large FloatArray on every camera frame.
+     */
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is ToolpathScene) return false
+        return preview === other.preview &&
+            bedSizeX.toBits() == other.bedSizeX.toBits() &&
+            bedSizeY.toBits() == other.bedSizeY.toBits() &&
+            opacity.toBits() == other.opacity.toBits() &&
+            depthContrast.toBits() == other.depthContrast.toBits() &&
+            detail == other.detail &&
+            visibleRoles == other.visibleRoles &&
+            bedPolygon == other.bedPolygon &&
+            bedOriginX.toBits() == other.bedOriginX.toBits() &&
+            bedOriginY.toBits() == other.bedOriginY.toBits() &&
+            segmentBudgetOverride == other.segmentBudgetOverride
+    }
+
+    override fun hashCode(): Int {
+        var result = System.identityHashCode(preview)
+        result = 31 * result + bedSizeX.hashCode()
+        result = 31 * result + bedSizeY.hashCode()
+        result = 31 * result + opacity.hashCode()
+        result = 31 * result + depthContrast.hashCode()
+        result = 31 * result + detail.hashCode()
+        result = 31 * result + visibleRoles.hashCode()
+        result = 31 * result + bedPolygon.hashCode()
+        result = 31 * result + bedOriginX.hashCode()
+        result = 31 * result + bedOriginY.hashCode()
+        result = 31 * result + (segmentBudgetOverride ?: 0)
+        return result
+    }
+}
 
 internal class ToolpathRenderer(
     private val requestPrewarmFrame: () -> Unit = {},
@@ -496,10 +531,30 @@ internal class ToolpathRenderer(
             requestedScene.detail,
             adaptiveWorkload,
         )
-        val sourceScene = if (requestedScene.detail == PreviewDetail.AUTOMATIC) {
+        val resolvedScene = if (requestedScene.detail == PreviewDetail.AUTOMATIC) {
             requestedScene.copy(detail = effectiveDetail)
         } else {
             requestedScene
+        }
+        val sourceSegmentCount =
+            requestedScene.preview.segments.size / GcodeLayerPreview.SEGMENT_STRIDE
+        val overview = shouldUseDenseOverviewLines(sourceSegmentCount, zoom)
+        val overviewBudget = depthPreviewOverviewSegmentBudget(
+            resolvedScene.detail,
+            viewportWidth,
+            viewportHeight,
+            zoom,
+        )
+        val sourceScene = if (overview) {
+            resolvedScene.copy(
+                segmentBudgetOverride = minOf(
+                    resolvedScene.segmentBudgetOverride
+                        ?: depthPreviewSegmentBudget(resolvedScene.detail),
+                    overviewBudget,
+                ),
+            )
+        } else {
+            resolvedScene
         }
         lastEffectiveDetail = sourceScene.detail
         val prewarmAtFrameStart = pendingPrewarmScene
@@ -528,7 +583,6 @@ internal class ToolpathRenderer(
             adaptivePreviewController.shouldMeasure(requestedScene.detail, adaptiveWorkload)
         val measurementStartedNanos = if (measureAutomaticFrame) System.nanoTime() else 0L
         drawBed(geometry, matrix)
-        val denseOverview = shouldUseDenseOverviewLines(geometry.instanceCount, zoom)
         drawToolpaths(
             geometry,
             matrix,
@@ -536,7 +590,7 @@ internal class ToolpathRenderer(
                 sourceScene.detail,
                 interactionActive,
                 initialPreview,
-                denseOverview,
+                overview,
             ),
         )
         if (!glOperationSucceeded("frame_draw")) return

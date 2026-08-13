@@ -72,15 +72,38 @@ internal fun shouldDrawToolpathLines(
 /**
  * At a bed-fit camera distance, an extrusion ribbon is approximately one screen pixel wide.
  * Rasterizing tens of thousands of overlapping quads adds fill work without exposing more shape
- * than a depth-tested line. Keep every retained segment in that overview, then restore shaded
- * ribbons once zoom makes their physical width visible.
+ * than a depth-tested line. Keep coherent layer and role coverage in that overview, then restore
+ * shaded ribbons once zoom makes their physical width visible.
  */
-internal fun shouldUseDenseOverviewLines(instanceCount: Int, zoom: Float): Boolean =
-    instanceCount >= DENSE_PREVIEW_OVERVIEW_SEGMENTS &&
+internal fun shouldUseDenseOverviewLines(sourceSegmentCount: Int, zoom: Float): Boolean =
+    sourceSegmentCount >= DENSE_PREVIEW_OVERVIEW_SEGMENTS &&
         zoom.isFinite() && zoom <= DENSE_PREVIEW_RIBBON_ZOOM
+
+/**
+ * At bed-fit zoom, paths hidden behind the visible shell cannot contribute independent screen
+ * detail. Keep coherent exterior-first paths up to a screen-space budget and restore the full
+ * requested tier as soon as the user zooms close enough to inspect extrusion widths.
+ */
+internal fun depthPreviewOverviewSegmentBudget(
+    detail: PreviewDetail,
+    viewportWidth: Int,
+    viewportHeight: Int,
+    zoom: Float,
+): Int {
+    val requested = depthPreviewSegmentBudget(detail)
+    if (!zoom.isFinite() || zoom > DENSE_PREVIEW_RIBBON_ZOOM) return requested
+    val pixelCount = viewportWidth.coerceAtLeast(1).toLong() * viewportHeight.coerceAtLeast(1)
+    val screenSpaceBudget = (pixelCount / DENSE_PREVIEW_PIXELS_PER_SEGMENT)
+        .coerceIn(DENSE_PREVIEW_MIN_SEGMENTS.toLong(), DENSE_PREVIEW_MAX_SEGMENTS.toLong())
+        .toInt()
+    return minOf(requested, screenSpaceBudget)
+}
 
 internal const val DENSE_PREVIEW_OVERVIEW_SEGMENTS = 40_000
 internal const val DENSE_PREVIEW_RIBBON_ZOOM = 1.5f
+internal const val DENSE_PREVIEW_MIN_SEGMENTS = 10_000
+internal const val DENSE_PREVIEW_MAX_SEGMENTS = 32_000
+private const val DENSE_PREVIEW_PIXELS_PER_SEGMENT = 48L
 
 internal const val ADAPTIVE_PREVIEW_FAST_FRAME_MS = 48.0
 internal const val ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 2

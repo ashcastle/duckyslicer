@@ -10,6 +10,40 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ToolpathRendererPerformanceInstrumentedTest {
     @Test
+    fun maximumPreviewCacheLookupNeverRehashesCoordinates() {
+        val preview = densePreview(segmentCount = GcodeLayerPreview.MAX_SEGMENTS, layerCount = 300)
+        val scene = ToolpathScene(
+            preview = preview,
+            bedSizeX = 220f,
+            bedSizeY = 220f,
+            opacity = 0.92f,
+            depthContrast = 0.78f,
+            detail = PreviewDetail.DETAIL,
+        )
+        val state = ToolpathGeometryUploadState(capacity = 2)
+        state.markUploaded(scene)
+        val durations = ArrayList<Long>()
+        repeat(30) {
+            val started = SystemClock.elapsedRealtimeNanos()
+            assertTrue(!state.needsUpload(scene.copy()))
+            state.markUsed(scene.copy())
+            durations += SystemClock.elapsedRealtimeNanos() - started
+        }
+        val sorted = durations.drop(5).sorted()
+        val cacheP50Ms = sorted[sorted.size / 2] / 1_000_000.0
+        val cacheP95Ms = sorted[(sorted.size * 0.95).toInt().coerceAtMost(sorted.lastIndex)] /
+            1_000_000.0
+        println(
+            "DuckyPreview cache sourceSegments=${GcodeLayerPreview.MAX_SEGMENTS} " +
+                "cacheP50Ms=$cacheP50Ms cacheP95Ms=$cacheP95Ms",
+        )
+        assertTrue(
+            "Camera-frame cache lookup must not hash Preview coordinates: p95=$cacheP95Ms ms",
+            cacheP95Ms <= 4.0,
+        )
+    }
+
+    @Test
     fun maximumLayerRangeBuildsResponsiveInteractionGeometry() {
         val preview = densePreview(segmentCount = GcodeLayerPreview.MAX_SEGMENTS, layerCount = 300)
         val scene = ToolpathScene(

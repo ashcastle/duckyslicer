@@ -27,7 +27,9 @@ def valid_sources() -> dict[str, str]:
             "PreviewDetail.AUTOMATIC -> PreviewDetail.PERFORMANCE "
             "resolvePreviewDetail( previewDetailForInteraction( depthPreviewSegmentBudget( "
             "shouldDrawToolpathLines( shouldUseDenseOverviewLines( "
+            "depthPreviewOverviewSegmentBudget( "
             "DENSE_PREVIEW_OVERVIEW_SEGMENTS = 40_000 DENSE_PREVIEW_RIBBON_ZOOM = 1.5f "
+            "DENSE_PREVIEW_MIN_SEGMENTS = 10_000 DENSE_PREVIEW_MAX_SEGMENTS = 32_000 "
             "compatibilityPreviewSegmentBudget( AdaptivePreviewDetailController( "
             "ADAPTIVE_PREVIEW_FAST_FRAME_MS = 48.0 "
             "ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 2 recordCompletedFrame( "
@@ -48,6 +50,7 @@ def valid_sources() -> dict[str, str]:
         ),
         "ToolpathPreviewView.kt": (
             "renderMode = RENDERMODE_WHEN_DIRTY ToolpathGeometryUploadState "
+            "System.identityHashCode(preview) "
             "uploadState.needsUpload(scene) "
             "ToolpathGeometryUploadState(capacity = GPU_GEOMETRY_CACHE_SIZE) "
             "const val GPU_GEOMETRY_CACHE_SIZE = 2 "
@@ -76,8 +79,9 @@ def valid_sources() -> dict[str, str]:
             "setInteractionActive(true) postDelayed(restoreDetail, DETAIL_RESTORE_DELAY_MS) "
             "previewDetailForInteraction(sourceScene.detail, interactionActive = true) "
             "depthPreviewSegmentBudget(scene.detail) "
-            "val denseOverview = shouldUseDenseOverviewLines(geometry.instanceCount, zoom) "
-            "shouldDrawToolpathLines( denseOverview, "
+            "val overview = shouldUseDenseOverviewLines(sourceSegmentCount, zoom) "
+            "val overviewBudget = depthPreviewOverviewSegmentBudget( "
+            "shouldDrawToolpathLines( overview, "
             "adaptivePreviewController.shouldMeasure( "
             "GLES30.glFinish() glOperationSucceeded(\"adaptive_gpu_completion\") "
             "adaptivePreviewController.recordCompletedFrame( "
@@ -238,8 +242,9 @@ def valid_sources() -> dict[str, str]:
         ),
         "ToolpathRendererPerformanceInstrumentedTest.kt": (
             "maximumLayerRangeBuildsResponsiveInteractionGeometry "
+            "maximumPreviewCacheLookupNeverRehashesCoordinates "
             "segmentCount = GcodeLayerPreview.MAX_SEGMENTS preview.prepareRenderIndex() "
-            "planP95Ms <= 25.0 p50Ms <= 80.0 p95Ms <= 150.0"
+            "planP95Ms <= 25.0 p50Ms <= 80.0 p95Ms <= 150.0 cacheP95Ms <= 4.0"
         ),
         "AccessibilityInstrumentedTest.kt": (
             "appSettingsExposeNamedSlidersWholeRowSwitchesAndHeadings "
@@ -277,6 +282,7 @@ def valid_sources() -> dict[str, str]:
             "slowCandidateFallsBackToLastProvenTierWithoutOscillation "
             "automaticCalibrationResetsForAChangedPreviewWorkload "
             "explicitQualityNeverRunsAutomaticCalibration"
+            " denseOverviewUsesScreenSpaceBudgetAndRestoresFullDetailWhenZoomed"
         ),
         "ToolpathMeshBuilderTest.kt": (
             "balancedModeCapsDensePreviewGeometry "
@@ -284,6 +290,7 @@ def valid_sources() -> dict[str, str]:
             "GPU instance staging must use direct native memory "
             "maximum 120,000-segment instance payload must stay below 4 MiB "
             "unchangedSceneUploadsOnceUntilGeometryOrContextChanges "
+            "sceneCacheUsesImmutablePreviewIdentityWithoutHashingItsCoordinates "
             "twoSlotGeometryCacheEvictsTheLeastRecentlyUsedDetail "
             "Camera-only frames must reuse the GPU buffer "
             "The least recently used gesture VBO must be evicted "
