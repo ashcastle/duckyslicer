@@ -2556,3 +2556,81 @@ diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_p
                  pad_floats("retract_length_toolchange");
  
                  // Extruder offsets
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -299,6 +299,12 @@ struct SliceConfig {
+     float wipe_tower_x = 170.0f;
+     float wipe_tower_y = 140.0f;
+     float wipe_tower_width = 60.0f;
++    float prime_volume = 45.0f;
++    float prime_tower_brim_width = 3.0f;
++    bool wipe_tower_no_sparse_layers = false;
++    bool ooze_prevention = false;
++    int standby_temperature_delta = -5;
++    bool interface_shells = false;
+ 
+     // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
+     // Empty = use OrcaSlicer's built-in default. OrcaSlicer resolves {variable}
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -331,6 +331,12 @@ static SliceConfig readConfig(JNIEnv* env, jobject configObj) {
+     config.wipe_tower_x = getFloat("wipeTowerX");
+     config.wipe_tower_y = getFloat("wipeTowerY");
+     config.wipe_tower_width = getFloat("wipeTowerWidth");
++    config.prime_volume = getFloat("primeVolume");
++    config.prime_tower_brim_width = getFloat("primeTowerBrimWidth");
++    config.wipe_tower_no_sparse_layers = getBool("wipeTowerNoSparseLayers");
++    config.ooze_prevention = getBool("oozePrevention");
++    config.standby_temperature_delta = getInt("standbyTemperatureDelta");
++    config.interface_shells = getBool("interfaceShells");
+ 
+     // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
+     config.machine_start_gcode = getString("machineStartGcode");
+@@ -683,6 +689,12 @@ static void writeConfig(JNIEnv* env, jobject configObj, const SliceConfig& config
+     setFloat("wipeTowerX", config.wipe_tower_x);
+     setFloat("wipeTowerY", config.wipe_tower_y);
+     setFloat("wipeTowerWidth", config.wipe_tower_width);
++    setFloat("primeVolume", config.prime_volume);
++    setFloat("primeTowerBrimWidth", config.prime_tower_brim_width);
++    setBool("wipeTowerNoSparseLayers", config.wipe_tower_no_sparse_layers);
++    setBool("oozePrevention", config.ooze_prevention);
++    setInt("standbyTemperatureDelta", config.standby_temperature_delta);
++    setBool("interfaceShells", config.interface_shells);
+     setString("machineStartGcode", config.machine_start_gcode);
+     setString("machineEndGcode", config.machine_end_gcode);
+     setString("gcodeFlavor", config.gcode_flavor);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -808,14 +808,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+-    // Idle extruder standby temperature — prevents idle nozzles from staying at full print temp.
+-    // Snapmaker profiles embed ooze_prevention=0 and standby_temperature_delta=-5, which leaves
+-    // parked extruders at full print temperature for the entire job.  Always override for
+-    // multi-extruder prints with a -100°C standby delta (applied after profile_keys[] load,
+-    // so it wins regardless of what the profile says).
+-    // This gives ~120°C standby for PLA and ~135°C for PETG — above glass transition,
+-    // well below print temp, preventing ooze and thermal degradation on idle extruders.
++    // Preserve the selected Orca process semantics instead of silently substituting a
++    // machine-specific standby policy. A zero idle temperature delegates to the delta.
++    dpc.set_key_value("ooze_prevention", new Slic3r::ConfigOptionBool(config.ooze_prevention));
++    dpc.set_key_value("standby_temperature_delta", new Slic3r::ConfigOptionInt(config.standby_temperature_delta));
++    dpc.set_key_value("interface_shells", new Slic3r::ConfigOptionBool(config.interface_shells));
+     if (n_ext > 1) {
+-        dpc.set_key_value("ooze_prevention", new Slic3r::ConfigOptionBool(true));
+-        dpc.set_key_value("standby_temperature_delta", new Slic3r::ConfigOptionInt(-100));
+-        // idle_temperature of 0 means "use standby_temperature_delta" (per OrcaSlicer GCode.cpp)
+         dpc.set_key_value("idle_temperature", new Slic3r::ConfigOptionInts(std::vector<int>(n_ext, 0)));
+     }
+ 
+@@ -885,6 +882,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+ 
+     // Prime tower / wipe tower (OrcaSlicer keys)
+     // wipe_tower_x/y are coFloats (arrays) in OrcaSlicer, one value per extruder
++    dpc.set_key_value("prime_volume", new Slic3r::ConfigOptionFloat(config.prime_volume));
++    dpc.set_key_value("prime_tower_brim_width", new Slic3r::ConfigOptionFloat(config.prime_tower_brim_width));
++    dpc.set_key_value("wipe_tower_no_sparse_layers", new Slic3r::ConfigOptionBool(config.wipe_tower_no_sparse_layers));
+     if (n_ext > 1 && config.wipe_tower_enabled) {
+         dpc.set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(true));
+         dpc.set_key_value("wipe_tower_x", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, config.wipe_tower_x)));

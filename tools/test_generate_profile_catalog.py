@@ -51,6 +51,12 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "support_interface_filament": "2",
                 "enable_prime_tower": "1",
                 "prime_tower_width": "42",
+                "prime_volume": "61.5",
+                "prime_tower_brim_width": "4.5",
+                "wipe_tower_no_sparse_layers": "1",
+                "ooze_prevention": "1",
+                "standby_temperature_delta": "-35",
+                "interface_shells": "1",
             },
             {},
         )
@@ -59,6 +65,12 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(2, profile["supportInterfaceFilament"])
         self.assertTrue(profile["wipeTowerEnabled"])
         self.assertEqual(42.0, profile["wipeTowerWidth"])
+        self.assertEqual(61.5, profile["primeVolume"])
+        self.assertEqual(4.5, profile["primeTowerBrimWidth"])
+        self.assertTrue(profile["wipeTowerNoSparseLayers"])
+        self.assertTrue(profile["oozePrevention"])
+        self.assertEqual(-35, profile["standbyTemperatureDelta"])
+        self.assertTrue(profile["interfaceShells"])
 
     def test_preserves_spiral_vase_process_values(self) -> None:
         profile = build_process(

@@ -704,4 +704,11 @@
     <string name="prime_tower">Prime tower</string>
     <string name="enable_prime_tower">Enable prime tower</string>
     <string name="prime_tower_width">Tower width</string>
+    <string name="prime_volume">Prime volume</string>
+    <string name="cubic_millimeters_value">%1$.1f mm³</string>
+    <string name="prime_tower_brim_width">Tower brim width</string>
+    <string name="wipe_tower_no_sparse_layers">No sparse tower layers</string>
+    <string name="ooze_prevention">Ooze prevention</string>
+    <string name="standby_temperature_delta">Standby temperature difference</string>
+    <string name="interface_shells">Interface shells</string>
 </resources>

@@ -2904,7 +2904,104 @@ private fun SlicingSettingsSheet(
                             onOptionsChanged(options.copy(wipeTowerWidth = it.roundToInt().toFloat()))
                         },
                     )
+                    SettingSlider(
+                        label = stringResource(R.string.prime_volume),
+                        valueText = stringResource(
+                            R.string.cubic_millimeters_value,
+                            options.multiMaterial.primeVolume,
+                        ),
+                        value = options.multiMaterial.primeVolume,
+                        range = 1f..max(200f, options.multiMaterial.primeVolume),
+                        steps = (max(200f, options.multiMaterial.primeVolume) - 1f).roundToInt() - 1,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        primeVolume = it.roundToInt().toFloat(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.prime_tower_brim_width),
+                        valueText = stringResource(
+                            R.string.millimeters_value_precise,
+                            options.multiMaterial.primeTowerBrimWidth,
+                        ),
+                        value = options.multiMaterial.primeTowerBrimWidth,
+                        range = 0f..max(20f, options.multiMaterial.primeTowerBrimWidth),
+                        steps = (max(20f, options.multiMaterial.primeTowerBrimWidth) * 2f)
+                            .roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        primeTowerBrimWidth = (it * 2f).roundToInt() / 2f,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingsSwitch(
+                        label = stringResource(R.string.wipe_tower_no_sparse_layers),
+                        checked = options.multiMaterial.wipeTowerNoSparseLayers,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        wipeTowerNoSparseLayers = it,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
                 }
+                SettingsGroupTitle(stringResource(R.string.ooze_prevention))
+                SettingsSwitch(
+                    label = stringResource(R.string.ooze_prevention),
+                    checked = options.multiMaterial.oozePrevention,
+                    onCheckedChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                multiMaterial = options.multiMaterial.copy(oozePrevention = it),
+                            ),
+                        )
+                    },
+                )
+                if (options.multiMaterial.oozePrevention || settingsQuery.isNotBlank()) {
+                    val temperatureDeltaLimit = max(100, kotlin.math.abs(options.multiMaterial.standbyTemperatureDelta))
+                    SettingSlider(
+                        label = stringResource(R.string.standby_temperature_delta),
+                        valueText = stringResource(
+                            R.string.celsius_value,
+                            options.multiMaterial.standbyTemperatureDelta,
+                        ),
+                        value = options.multiMaterial.standbyTemperatureDelta.toFloat(),
+                        range = -temperatureDeltaLimit.toFloat()..temperatureDeltaLimit.toFloat(),
+                        steps = temperatureDeltaLimit * 2 - 1,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        standbyTemperatureDelta = it.roundToInt(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                }
+                SettingsSwitch(
+                    label = stringResource(R.string.interface_shells),
+                    checked = options.multiMaterial.interfaceShells,
+                    onCheckedChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                multiMaterial = options.multiMaterial.copy(interfaceShells = it),
+                            ),
+                        )
+                    },
+                )
                 SettingsGroupTitle(stringResource(R.string.bed_adhesion))
                 SettingSlider(
                     label = stringResource(R.string.skirt_loops),

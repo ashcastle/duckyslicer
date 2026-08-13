@@ -23,6 +23,14 @@ class SliceOptionsPersistenceTest {
                 supportInterfaceFilament = 2,
                 wipeTowerEnabled = true,
                 wipeTowerWidth = 42f,
+                multiMaterial = MultiMaterialSettings(
+                    primeVolume = 61.5f,
+                    primeTowerBrimWidth = 4.5f,
+                    wipeTowerNoSparseLayers = true,
+                    oozePrevention = true,
+                    standbyTemperatureDelta = -35,
+                    interfaceShells = true,
+                ),
             )
 
         val restored = requireNotNull(options.toProjectJson().toProjectSliceOptionsOrNull())
@@ -39,6 +47,12 @@ class SliceOptionsPersistenceTest {
         assertEquals(2, native.supportInterfaceFilament)
         assertEquals(true, native.wipeTowerEnabled)
         assertEquals(42f, native.wipeTowerWidth)
+        assertEquals(61.5f, native.primeVolume)
+        assertEquals(4.5f, native.primeTowerBrimWidth)
+        assertEquals(true, native.wipeTowerNoSparseLayers)
+        assertEquals(true, native.oozePrevention)
+        assertEquals(-35, native.standbyTemperatureDelta)
+        assertEquals(true, native.interfaceShells)
     }
 
     @Test
@@ -121,6 +135,7 @@ class SliceOptionsPersistenceTest {
         assertEquals(1, restored.supportInterfaceFilament)
         assertEquals(true, restored.wipeTowerEnabled)
         assertEquals(48f, restored.wipeTowerWidth)
+        assertEquals(options.multiMaterial, restored.multiMaterial)
         assertEquals(true, restored.infillFirst)
         assertEquals(19f, restored.infillWallOverlap)
         assertEquals(31f, restored.topBottomInfillWallOverlap)
@@ -411,6 +426,14 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         supportInterfaceFilament = 1,
         wipeTowerEnabled = true,
         wipeTowerWidth = 48f,
+        multiMaterial = MultiMaterialSettings(
+            primeVolume = 58f,
+            primeTowerBrimWidth = 5.5f,
+            wipeTowerNoSparseLayers = true,
+            oozePrevention = true,
+            standbyTemperatureDelta = -42,
+            interfaceShells = true,
+        ),
         infillFirst = true,
         infillWallOverlap = 19f,
         topBottomInfillWallOverlap = 31f,

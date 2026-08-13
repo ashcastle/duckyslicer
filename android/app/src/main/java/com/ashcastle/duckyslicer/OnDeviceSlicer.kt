@@ -261,6 +261,15 @@ data class RetractionSettings(
     val zHopType: String,
 )
 
+data class MultiMaterialSettings(
+    val primeVolume: Float = 45f,
+    val primeTowerBrimWidth: Float = 3f,
+    val wipeTowerNoSparseLayers: Boolean = false,
+    val oozePrevention: Boolean = false,
+    val standbyTemperatureDelta: Int = -5,
+    val interfaceShells: Boolean = false,
+)
+
 internal fun FilamentProfile.resolveRetraction(printer: PrinterProfile) = RetractionSettings(
     length = retractLength ?: printer.retractLength,
     speed = retractSpeed ?: printer.retractSpeed,
@@ -411,6 +420,7 @@ data class QualityProfile(
     val supportInterfaceFilament: Int = 0,
     val wipeTowerEnabled: Boolean = false,
     val wipeTowerWidth: Float = 60f,
+    val multiMaterial: MultiMaterialSettings = MultiMaterialSettings(),
     val skirtLoops: Int = 0,
     val skirtDistance: Float = 6f,
     val skirtHeight: Int = 1,
@@ -574,7 +584,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 24,
+    val schemaVersion: Int = 25,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -726,6 +736,7 @@ data class SliceOptions(
     val supportInterfaceFilament: Int = quality.supportInterfaceFilament,
     val wipeTowerEnabled: Boolean = quality.wipeTowerEnabled,
     val wipeTowerWidth: Float = quality.wipeTowerWidth,
+    val multiMaterial: MultiMaterialSettings = quality.multiMaterial,
     val skirtLoops: Int = quality.skirtLoops,
     val skirtDistance: Float = quality.skirtDistance,
     val skirtHeight: Int = quality.skirtHeight,
@@ -1071,6 +1082,7 @@ data class SliceOptions(
         supportInterfaceFilament = profile.supportInterfaceFilament.coerceIn(0, resolvedFilamentSlots().size),
         wipeTowerEnabled = profile.wipeTowerEnabled,
         wipeTowerWidth = profile.wipeTowerWidth,
+        multiMaterial = profile.multiMaterial,
         skirtLoops = profile.skirtLoops,
         skirtDistance = profile.skirtDistance,
         skirtHeight = profile.skirtHeight,
@@ -1467,6 +1479,12 @@ data class SliceOptions(
                 .map(RetractionSettings::restartExtra).toFloatArray()
             native.extruderZHop = nativeRetractions.map(RetractionSettings::zHop).toFloatArray()
             native.extruderZHopType = nativeRetractions.map(RetractionSettings::zHopType).toTypedArray()
+            native.primeVolume = multiMaterial.primeVolume
+            native.primeTowerBrimWidth = multiMaterial.primeTowerBrimWidth
+            native.wipeTowerNoSparseLayers = multiMaterial.wipeTowerNoSparseLayers
+            native.oozePrevention = multiMaterial.oozePrevention
+            native.standbyTemperatureDelta = multiMaterial.standbyTemperatureDelta
+            native.interfaceShells = multiMaterial.interfaceShells
         }
     }
 }

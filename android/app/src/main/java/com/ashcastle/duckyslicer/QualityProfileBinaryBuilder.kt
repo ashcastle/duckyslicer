@@ -119,6 +119,12 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var supportInterfaceFilament: Int = base.supportInterfaceFilament
     private var wipeTowerEnabled: Boolean = base.wipeTowerEnabled
     private var wipeTowerWidth: Float = base.wipeTowerWidth
+    private var primeVolume: Float = base.multiMaterial.primeVolume
+    private var primeTowerBrimWidth: Float = base.multiMaterial.primeTowerBrimWidth
+    private var wipeTowerNoSparseLayers: Boolean = base.multiMaterial.wipeTowerNoSparseLayers
+    private var oozePrevention: Boolean = base.multiMaterial.oozePrevention
+    private var standbyTemperatureDelta: Int = base.multiMaterial.standbyTemperatureDelta
+    private var interfaceShells: Boolean = base.multiMaterial.interfaceShells
     private var skirtLoops: Int = base.skirtLoops
     private var skirtDistance: Float = base.skirtDistance
     private var skirtHeight: Int = base.skirtHeight
@@ -422,6 +428,12 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         supportInterfaceFilament = input.readInt()
         wipeTowerEnabled = input.readCatalogBoolean()
         wipeTowerWidth = input.readFloat()
+        primeVolume = input.readFloat()
+        primeTowerBrimWidth = input.readFloat()
+        wipeTowerNoSparseLayers = input.readCatalogBoolean()
+        oozePrevention = input.readCatalogBoolean()
+        standbyTemperatureDelta = input.readInt()
+        interfaceShells = input.readCatalogBoolean()
         spiralMode = input.readCatalogBoolean()
         spiralModeSmooth = input.readCatalogBoolean()
         spiralModeMaxXySmoothing = input.readFloat()
@@ -577,6 +589,14 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         supportInterfaceFilament = supportInterfaceFilament,
         wipeTowerEnabled = wipeTowerEnabled,
         wipeTowerWidth = wipeTowerWidth,
+        multiMaterial = MultiMaterialSettings(
+            primeVolume = primeVolume,
+            primeTowerBrimWidth = primeTowerBrimWidth,
+            wipeTowerNoSparseLayers = wipeTowerNoSparseLayers,
+            oozePrevention = oozePrevention,
+            standbyTemperatureDelta = standbyTemperatureDelta,
+            interfaceShells = interfaceShells,
+        ),
         skirtLoops = skirtLoops,
         skirtDistance = skirtDistance,
         skirtHeight = skirtHeight,
@@ -845,6 +865,12 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("supportInterfaceFilament", BINARY_INT),
     BinaryField("wipeTowerEnabled", BINARY_BOOL),
     BinaryField("wipeTowerWidth", BINARY_FLOAT),
+    BinaryField("primeVolume", BINARY_FLOAT),
+    BinaryField("primeTowerBrimWidth", BINARY_FLOAT),
+    BinaryField("wipeTowerNoSparseLayers", BINARY_BOOL),
+    BinaryField("oozePrevention", BINARY_BOOL),
+    BinaryField("standbyTemperatureDelta", BINARY_INT),
+    BinaryField("interfaceShells", BINARY_BOOL),
     BinaryField("spiralMode", BINARY_BOOL),
     BinaryField("spiralModeSmooth", BINARY_BOOL),
     BinaryField("spiralModeMaxXySmoothing", BINARY_FLOAT),

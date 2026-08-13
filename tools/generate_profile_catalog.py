@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -751,6 +751,12 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "supportInterfaceFilament": integer(raw.get("support_interface_filament"), 0),
         "wipeTowerEnabled": boolean(raw.get("enable_prime_tower")),
         "wipeTowerWidth": number(raw.get("prime_tower_width"), 60),
+        "primeVolume": number(raw.get("prime_volume"), 45),
+        "primeTowerBrimWidth": number(raw.get("prime_tower_brim_width"), 3),
+        "wipeTowerNoSparseLayers": boolean(raw.get("wipe_tower_no_sparse_layers")),
+        "oozePrevention": boolean(raw.get("ooze_prevention")),
+        "standbyTemperatureDelta": integer(raw.get("standby_temperature_delta"), -5),
+        "interfaceShells": boolean(raw.get("interface_shells")),
         "spiralMode": boolean(raw.get("spiral_mode")),
         "spiralModeSmooth": boolean(raw.get("spiral_mode_smooth")),
         "spiralModeMaxXySmoothing": spiral_xy_smoothing,
@@ -852,6 +858,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0 <= profile["supportFilament"] <= 16
         and 0 <= profile["supportInterfaceFilament"] <= 16
         and 10 <= profile["wipeTowerWidth"] <= 300
+        and 1 <= profile["primeVolume"] <= 1_000
+        and 0 <= profile["primeTowerBrimWidth"] <= 100
+        and -500 <= profile["standbyTemperatureDelta"] <= 500
         and 0 <= profile["internalBridgeAngle"] <= 360
         and 0 <= profile["infillWallOverlap"] <= 100
         and 0 <= profile["topBottomInfillWallOverlap"] <= 100

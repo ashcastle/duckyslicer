@@ -943,6 +943,14 @@ class NativeEngineInstrumentedTest {
                 supportInterfaceFilament = 1,
                 wipeTowerEnabled = true,
                 wipeTowerWidth = 46f,
+                multiMaterial = MultiMaterialSettings(
+                    primeVolume = 58f,
+                    primeTowerBrimWidth = 5.5f,
+                    wipeTowerNoSparseLayers = true,
+                    oozePrevention = true,
+                    standbyTemperatureDelta = -42,
+                    interfaceShells = true,
+                ),
                 infillFirst = true,
                 infillWallOverlap = 18f,
                 topBottomInfillWallOverlap = 32f,
@@ -1071,6 +1079,12 @@ class NativeEngineInstrumentedTest {
         assertEquals(1, restored.slicing.last().supportInterfaceFilament)
         assertTrue(restored.slicing.last().wipeTowerEnabled)
         assertEquals(46f, restored.slicing.last().wipeTowerWidth)
+        assertEquals(58f, restored.slicing.last().multiMaterial.primeVolume)
+        assertEquals(5.5f, restored.slicing.last().multiMaterial.primeTowerBrimWidth)
+        assertTrue(restored.slicing.last().multiMaterial.wipeTowerNoSparseLayers)
+        assertTrue(restored.slicing.last().multiMaterial.oozePrevention)
+        assertEquals(-42, restored.slicing.last().multiMaterial.standbyTemperatureDelta)
+        assertTrue(restored.slicing.last().multiMaterial.interfaceShells)
         assertEquals("nearest", restored.slicing.last().seamPosition)
         assertEquals("top", restored.slicing.last().ironingType)
         assertEquals("concentric", restored.slicing.last().ironingPattern)
@@ -1251,7 +1265,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(24, catalog.schemaVersion)
+        assertEquals(25, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1286,6 +1300,16 @@ class NativeEngineInstrumentedTest {
         assertTrue(
             "Prime-tower process values must survive catalog normalization",
             catalog.slicing.any { it.wipeTowerEnabled && it.wipeTowerWidth != 60f },
+        )
+        assertTrue(
+            "Inherited multi-material process values must survive catalog normalization",
+            catalog.slicing.any {
+                it.multiMaterial.primeVolume != 45f ||
+                    it.multiMaterial.primeTowerBrimWidth != 3f ||
+                    it.multiMaterial.wipeTowerNoSparseLayers ||
+                    it.multiMaterial.oozePrevention ||
+                    it.multiMaterial.interfaceShells
+            },
         )
         assertTrue(catalog.slicing.all(ProfileValidation::slicing))
         assertTrue(catalog.slicing.any { it.outerWallLineWidth != it.innerWallLineWidth })
@@ -1878,6 +1902,14 @@ class NativeEngineInstrumentedTest {
                 supportInterfaceFilament = 2,
                 wipeTowerEnabled = true,
                 wipeTowerWidth = 42f,
+                multiMaterial = MultiMaterialSettings(
+                    primeVolume = 61.5f,
+                    primeTowerBrimWidth = 4.5f,
+                    wipeTowerNoSparseLayers = true,
+                    oozePrevention = true,
+                    standbyTemperatureDelta = -35,
+                    interfaceShells = true,
+                ),
             )
         val outcome = OnDeviceSlicer.slice(
             listOf(
@@ -1905,7 +1937,38 @@ class NativeEngineInstrumentedTest {
         )
         assertTrue("Prime tower must remain enabled for a two-tool plate", gcode.contains("; enable_prime_tower = 1"))
         assertTrue("Prime-tower width must reach Orca", gcode.contains("; prime_tower_width = 42"))
+        assertTrue("Prime volume must reach Orca", gcode.contains("; prime_volume = 61.5"))
+        assertTrue("Tower brim width must reach Orca", gcode.contains("; prime_tower_brim_width = 4.5"))
+        assertTrue("Sparse tower layers must remain disabled", gcode.contains("; wipe_tower_no_sparse_layers = 1"))
+        assertTrue("Ooze prevention must reach Orca", gcode.contains("; ooze_prevention = 1"))
+        assertTrue("Standby temperature delta must reach Orca", gcode.contains("; standby_temperature_delta = -35"))
+        assertTrue("Interface shells must reach Orca", gcode.contains("; interface_shells = 1"))
         assertTrue("The second object must produce a real tool change", gcode.lineSequence().any { it == "T1" })
+
+        val defaultsOutcome = OnDeviceSlicer.slice(
+            listOf(
+                ProjectObject(
+                    id = "defaults-primary",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = -20f),
+                    filamentSlot = 0,
+                ),
+                ProjectObject(
+                    id = "defaults-secondary",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = 20f),
+                    filamentSlot = 1,
+                ),
+            ),
+            options.copy(
+                wipeTowerEnabled = false,
+                multiMaterial = MultiMaterialSettings(),
+            ),
+        )
+        val defaultsGcode = defaultsOutcome.output.readText()
+        assertTrue("Ooze prevention must not be forced on", defaultsGcode.contains("; ooze_prevention = 0"))
+        assertTrue("The inherited standby delta must remain intact", defaultsGcode.contains("; standby_temperature_delta = -5"))
+        assertTrue("Interface shells must not be forced on", defaultsGcode.contains("; interface_shells = 0"))
     }
 
     @Test

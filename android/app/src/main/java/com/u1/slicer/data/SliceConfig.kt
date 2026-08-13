@@ -277,4 +277,10 @@ data class SliceConfig(
     @JvmField var extruderRetractRestartExtra: FloatArray = floatArrayOf()
     @JvmField var extruderZHop: FloatArray = floatArrayOf()
     @JvmField var extruderZHopType: Array<String> = arrayOf()
+    @JvmField var primeVolume: Float = 45f
+    @JvmField var primeTowerBrimWidth: Float = 3f
+    @JvmField var wipeTowerNoSparseLayers: Boolean = false
+    @JvmField var oozePrevention: Boolean = false
+    @JvmField var standbyTemperatureDelta: Int = -5
+    @JvmField var interfaceShells: Boolean = false
 }

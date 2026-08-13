@@ -215,6 +215,9 @@ internal object ProfileValidation {
             profile.supportFilament in 0..MAX_FILAMENT_SLOTS &&
             profile.supportInterfaceFilament in 0..MAX_FILAMENT_SLOTS &&
             profile.wipeTowerWidth in 10f..300f &&
+            profile.multiMaterial.primeVolume in 1f..1_000f &&
+            profile.multiMaterial.primeTowerBrimWidth in 0f..100f &&
+            profile.multiMaterial.standbyTemperatureDelta in -500..500 &&
             profile.brimType in setOf(
                 "auto_brim", "brim_ears", "outer_only", "inner_only", "outer_and_inner", "no_brim",
             ) &&
