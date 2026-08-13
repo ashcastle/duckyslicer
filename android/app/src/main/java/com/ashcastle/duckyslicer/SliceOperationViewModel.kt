@@ -258,15 +258,14 @@ internal class SliceOperationViewModel : ViewModel() {
         outcome: SliceOutcome,
         startLayer: Int,
         endLayer: Int,
-    ): GcodeLayerPreview = GcodeLayerPreview.fromNative(
+    ): GcodeLayerPreview =
         SliceArtifactLease.acquire(outcome.output).use {
-            NativeEngine.previewGcodeRange(
+            loadGcodePreview(
                 outcome.output.absolutePath,
                 startLayer,
                 endLayer,
             )
-        },
-    )
+        }
 
     private fun cancellationRequested(session: ForegroundSliceSession): Boolean =
         operationCancellation.get() || session.cancellationRequested()

@@ -10,6 +10,42 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ToolpathRendererPerformanceInstrumentedTest {
     @Test
+    fun maximumNativePayloadDecodesAndBuildsTheFirstPlanWithinBounds() {
+        val raw = denseNativePayload(
+            segmentCount = GcodeLayerPreview.MAX_SEGMENTS,
+            layerCount = 500,
+        )
+        val decodeDurations = ArrayList<Long>()
+        val firstPlanDurations = ArrayList<Long>()
+        val planSegmentCounts = ArrayList<Int>()
+        repeat(3) {
+            val decodeStarted = SystemClock.elapsedRealtimeNanos()
+            val preview = GcodeLayerPreview.fromTrustedNative(raw)
+            decodeDurations += SystemClock.elapsedRealtimeNanos() - decodeStarted
+
+            val planStarted = SystemClock.elapsedRealtimeNanos()
+            val plan = preview.buildRenderPlan(depthPreviewSegmentBudget(PreviewDetail.PERFORMANCE))
+            firstPlanDurations += SystemClock.elapsedRealtimeNanos() - planStarted
+            planSegmentCounts += plan.segmentCount
+            assertTrue(
+                "First plan must remain non-empty and bounded: ${plan.segmentCount}",
+                plan.segmentCount in 1..(
+                    depthPreviewSegmentBudget(PreviewDetail.PERFORMANCE) +
+                        GcodeLayerPreview.MAX_SEGMENTS / 500
+                    ),
+            )
+        }
+        val decodeMs = decodeDurations.map { it / 1_000_000.0 }
+        val planMs = firstPlanDurations.map { it / 1_000_000.0 }
+        println(
+            "DuckyPreview decode sourceSegments=${GcodeLayerPreview.MAX_SEGMENTS} " +
+                "decodeMs=$decodeMs firstPlanMs=$planMs planSegments=$planSegmentCounts",
+        )
+        assertTrue("Maximum Preview decode must stay responsive: $decodeMs", decodeMs.max() <= 150.0)
+        assertTrue("First Preview plan must stay responsive: $planMs", planMs.max() <= 50.0)
+    }
+
+    @Test
     fun maximumPreviewCacheLookupNeverRehashesCoordinates() {
         val preview = densePreview(segmentCount = GcodeLayerPreview.MAX_SEGMENTS, layerCount = 300)
         val scene = ToolpathScene(
@@ -130,5 +166,32 @@ class ToolpathRendererPerformanceInstrumentedTest {
             segments = segments,
             roleSegmentCounts = roleCounts,
         )
+    }
+
+    private fun denseNativePayload(segmentCount: Int, layerCount: Int): FloatArray {
+        val preview = densePreview(segmentCount, layerCount)
+        val headerFloats = 19
+        val pathStride = 1
+        return FloatArray(headerFloats + preview.segments.size + layerCount * pathStride).also { raw ->
+            raw[0] = 17_491f
+            raw[1] = 2f
+            raw[2] = preview.startLayer.toFloat()
+            raw[3] = preview.endLayer.toFloat()
+            raw[4] = preview.layerCount.toFloat()
+            raw[5] = preview.minZMm
+            raw[6] = preview.maxZMm
+            raw[7] = segmentCount.toFloat()
+            raw[8] = layerCount.toFloat()
+            preview.roleSegmentCounts.forEachIndexed { role, count ->
+                raw[9 + role] = count.toFloat()
+            }
+            preview.segments.copyInto(raw, destinationOffset = headerFloats)
+            val segmentsPerLayer = segmentCount / layerCount
+            var pathOffset = headerFloats + preview.segments.size
+            repeat(layerCount) { layer ->
+                raw[pathOffset] = ((layer + 1) * segmentsPerLayer).toFloat()
+                pathOffset += pathStride
+            }
+        }
     }
 }

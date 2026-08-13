@@ -151,8 +151,9 @@ const MAX_PREVIEW_SEGMENTS: usize = 120_000;
 const PREVIEW_COMPACTION_THRESHOLD: usize = MAX_PREVIEW_SEGMENTS * 2;
 const MAX_PREVIEW_LAYERS: usize = 1_000_000;
 const PREVIEW_PAYLOAD_MAGIC: f32 = 17_491.0;
-const PREVIEW_PAYLOAD_VERSION: f32 = 1.0;
-const PREVIEW_HEADER_FLOATS: usize = 7;
+const PREVIEW_PAYLOAD_VERSION: f32 = 2.0;
+const PREVIEW_HEADER_FLOATS: usize = 9 + ToolpathRole::COUNT;
+const PREVIEW_PATH_FLOATS: usize = 1;
 const TOOLPATH_SEGMENT_FLOATS: usize = 6;
 const PACKED_TOOLPATH_FLOATS: usize = 8;
 const TOOLPATH_ROLE_COUNT: usize = 10;
@@ -469,6 +470,18 @@ struct GcodeLayerPreview {
     min_z_mm: f32,
     max_z_mm: f32,
     segments: Vec<[f32; 6]>,
+    paths: Vec<PreviewPathRange>,
+}
+
+struct PreviewPathRange {
+    start: usize,
+    end_exclusive: usize,
+    role: ToolpathRole,
+}
+
+struct FlattenedPreviewPaths {
+    segments: Vec<[f32; 6]>,
+    paths: Vec<PreviewPathRange>,
 }
 
 #[derive(Debug)]
@@ -518,16 +531,24 @@ impl PreviewPathAccumulator {
         self.finish_current();
     }
 
-    fn finish(mut self) -> Vec<[f32; 6]> {
+    fn finish(mut self) -> FlattenedPreviewPaths {
         self.finish_current();
         if self.retained_segments > MAX_PREVIEW_SEGMENTS {
             self.compact();
         }
         self.paths.sort_by_key(|path| path.order);
-        self.paths
-            .into_iter()
-            .flat_map(|path| path.segments)
-            .collect()
+        let mut segments = Vec::with_capacity(self.retained_segments);
+        let mut paths = Vec::with_capacity(self.paths.len());
+        for path in self.paths {
+            let start = segments.len();
+            segments.extend(path.segments);
+            paths.push(PreviewPathRange {
+                start,
+                end_exclusive: segments.len(),
+                role: path.role,
+            });
+        }
+        FlattenedPreviewPaths { segments, paths }
     }
 
     fn finish_current(&mut self) {
@@ -2027,26 +2048,78 @@ fn preview_gcode(
     }
 
     let last_layer = layer_count.saturating_sub(1);
+    let completed_paths = preview_paths.finish();
     Ok(GcodeLayerPreview {
         start_layer: start_layer.min(last_layer),
         end_layer: end_layer.min(last_layer),
         layer_count,
         min_z_mm: min_requested_z.unwrap_or(0.0),
         max_z_mm: max_requested_z.unwrap_or(0.0),
-        segments: preview_paths.finish(),
+        segments: completed_paths.segments,
+        paths: completed_paths.paths,
     })
 }
 
 fn preview_payload(preview: GcodeLayerPreview) -> Result<Vec<f32>, EngineError> {
-    if preview.layer_count > MAX_PREVIEW_LAYERS || preview.segments.len() > MAX_PREVIEW_SEGMENTS {
+    if preview.layer_count > MAX_PREVIEW_LAYERS
+        || preview.segments.len() > MAX_PREVIEW_SEGMENTS
+        || preview.paths.len() > preview.segments.len()
+    {
         return Err(EngineError::Parse(
             "G-code preview exceeds the supported limit".to_owned(),
+        ));
+    }
+    if !preview.min_z_mm.is_finite()
+        || !preview.max_z_mm.is_finite()
+        || preview.min_z_mm > preview.max_z_mm
+        || preview.min_z_mm.abs() > MAX_GCODE_COORDINATE_ABS_MM
+        || preview.max_z_mm.abs() > MAX_GCODE_COORDINATE_ABS_MM
+    {
+        return Err(EngineError::Parse(
+            "G-code preview has invalid height metadata".to_owned(),
+        ));
+    }
+    let mut role_segment_counts = [0usize; ToolpathRole::COUNT];
+    let mut previous_end = 0usize;
+    for path in &preview.paths {
+        if path.start != previous_end
+            || path.start >= path.end_exclusive
+            || path.end_exclusive > preview.segments.len()
+        {
+            return Err(EngineError::Parse(
+                "G-code preview has invalid path ranges".to_owned(),
+            ));
+        }
+        for segment in &preview.segments[path.start..path.end_exclusive] {
+            if segment[..5]
+                .iter()
+                .any(|value| !value.is_finite() || value.abs() > MAX_GCODE_COORDINATE_ABS_MM)
+                || segment[5] != path.role.code()
+            {
+                return Err(EngineError::Parse(
+                    "G-code preview has invalid path geometry".to_owned(),
+                ));
+            }
+        }
+        role_segment_counts[path.role as usize] += path.end_exclusive - path.start;
+        previous_end = path.end_exclusive;
+    }
+    if previous_end != preview.segments.len() {
+        return Err(EngineError::Parse(
+            "G-code preview paths do not cover every segment".to_owned(),
         ));
     }
     let payload_floats = preview
         .segments
         .len()
         .checked_mul(6)
+        .and_then(|count| {
+            preview
+                .paths
+                .len()
+                .checked_mul(PREVIEW_PATH_FLOATS)
+                .and_then(|path_floats| count.checked_add(path_floats))
+        })
         .and_then(|count| count.checked_add(PREVIEW_HEADER_FLOATS))
         .ok_or_else(|| EngineError::Parse("G-code preview size overflow".to_owned()))?;
     let mut payload = Vec::with_capacity(payload_floats);
@@ -2058,9 +2131,15 @@ fn preview_payload(preview: GcodeLayerPreview) -> Result<Vec<f32>, EngineError> 
         preview.layer_count as f32,
         preview.min_z_mm,
         preview.max_z_mm,
+        preview.segments.len() as f32,
+        preview.paths.len() as f32,
     ]);
-    for segment in preview.segments {
-        payload.extend_from_slice(&segment);
+    payload.extend(role_segment_counts.map(|count| count as f32));
+    for segment in &preview.segments {
+        payload.extend_from_slice(segment);
+    }
+    for path in preview.paths {
+        payload.push(path.end_exclusive as f32);
     }
     Ok(payload)
 }
@@ -2840,12 +2919,44 @@ mod tests {
         assert_eq!(clamped.end_layer, 1);
 
         let payload = preview_payload(preview).expect("encode binary preview payload");
-        assert_eq!(payload.len(), PREVIEW_HEADER_FLOATS + 4 * 6);
+        assert_eq!(
+            payload.len(),
+            PREVIEW_HEADER_FLOATS + 4 * 6 + 4 * PREVIEW_PATH_FLOATS
+        );
         assert_eq!(payload[0], PREVIEW_PAYLOAD_MAGIC);
         assert_eq!(payload[1], PREVIEW_PAYLOAD_VERSION);
         assert_eq!(&payload[2..7], &[0.0, 1.0, 2.0, 0.2, 0.4]);
-        assert_eq!(payload[7 + 5], ToolpathRole::OuterWall.code());
-        assert_eq!(payload[7 + 6 + 5], ToolpathRole::BottomSurface.code());
+        assert_eq!(&payload[7..9], &[4.0, 4.0]);
+        assert_eq!(payload[9], 1.0);
+        assert_eq!(payload[9 + ToolpathRole::BottomSurface as usize], 1.0);
+        assert_eq!(
+            payload[PREVIEW_HEADER_FLOATS + 5],
+            ToolpathRole::OuterWall.code()
+        );
+        assert_eq!(
+            payload[PREVIEW_HEADER_FLOATS + 6 + 5],
+            ToolpathRole::BottomSurface.code()
+        );
+        assert_eq!(&payload[payload.len() - 4..], &[1.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn gcode_preview_payload_rejects_inconsistent_path_metadata() {
+        let preview = GcodeLayerPreview {
+            start_layer: 0,
+            end_layer: 0,
+            layer_count: 1,
+            min_z_mm: 0.2,
+            max_z_mm: 0.2,
+            segments: vec![[0.0, 0.0, 1.0, 0.0, 0.2, ToolpathRole::OuterWall.code()]],
+            paths: vec![PreviewPathRange {
+                start: 0,
+                end_exclusive: 2,
+                role: ToolpathRole::OuterWall,
+            }],
+        };
+
+        assert!(preview_payload(preview).is_err());
     }
 
     #[test]

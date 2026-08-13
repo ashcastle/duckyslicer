@@ -10,14 +10,19 @@ def valid_sources() -> dict[str, str]:
         "NativeEngine.kt": (
             "previewGcodeRange(path: String, startLayer: Int, endLayer: Int): FloatArray? "
             "inspectStlPayload(path: String): FloatArray? external fun packToolpathGeometry( "
-            "output: ByteBuffer"
+            "output: ByteBuffer internal fun loadGcodePreview( "
+            "GcodeLayerPreview.fromTrustedNative("
         ),
         "PreviewModels.kt": (
             "fun fromNative(raw: FloatArray?) PAYLOAD_MAGIC PAYLOAD_VERSION "
-            "HEADER_FLOATS = 7 MAX_SEGMENTS = 120_000 preview_coordinate_invalid "
-            "MAX_PAYLOAD_FLOATS preview_role_invalid cachedContinuousPaths "
-            "continuousPaths += SegmentPath preview.cachedContinuousPaths = continuousPaths "
-            "RolePathIndex( selectedPathCounts = IntArray(ROLE_COUNT) "
+            "HEADER_FLOATS = 9 + ROLE_COUNT PATH_STRIDE = 1 "
+            "MAX_SEGMENTS = 120_000 preview_coordinate_invalid "
+            "MAX_PAYLOAD_FLOATS preview_role_invalid fun fromTrustedNative(raw: FloatArray?) "
+            "validateCoordinates = true validateCoordinates = false cachedPathIndex "
+            "PrimitivePathBuilder(totalSegments) preview.cachedPathIndex = pathIndex "
+            "RolePathIndex( val pathOrdinals: IntArray "
+            "selectedPaths = BooleanArray(allPaths.pathCount) "
+            "selectedPathCounts = IntArray(ROLE_COUNT) "
             "internal val pathStarts: IntArray internal val pathEndsExclusive: IntArray "
             "internal val segmentCount: Int val segmentOffsets: IntArray by lazy "
             "selectedPathCount = selectedPathCounts.sum()"
@@ -194,7 +199,7 @@ def valid_sources() -> dict[str, str]:
         ),
         "ProjectStore.kt": "inspectModel(",
         "OrcaModelCut.kt": "inspectModel(",
-        "SliceOperationViewModel.kt": "GcodeLayerPreview.fromNative",
+        "SliceOperationViewModel.kt": "loadGcodePreview(",
         "OnDeviceSlicer.kt": (
             "inspectModel( val filamentMm: Float ) : Serializable "
             "fun SliceOutcome.isRestorableFrom(filesRoot: File) "
@@ -341,7 +346,10 @@ def valid_sources() -> dict[str, str]:
         ),
         "lib.rs": (
             "Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRange -> jfloatArray "
-            "PREVIEW_PAYLOAD_MAGIC PREVIEW_PAYLOAD_VERSION PREVIEW_HEADER_FLOATS "
+            "PREVIEW_PAYLOAD_MAGIC PREVIEW_PAYLOAD_VERSION: f32 = 2.0 "
+            "PREVIEW_HEADER_FLOATS: usize = 9 + ToolpathRole::COUNT "
+            "PREVIEW_PATH_FLOATS: usize = 1 paths: Vec<PreviewPathRange> "
+            "role_segment_counts[path.role as usize] "
             "MAX_PREVIEW_SEGMENTS: usize = 120_000 MAX_PREVIEW_LAYERS: usize = 1_000_000 "
             "env.new_float_array env.set_float_array_region preview_payload(preview_gcode( "
             "MODEL_PREVIEW_PAYLOAD_MAGIC MODEL_PREVIEW_PAYLOAD_VERSION "
@@ -405,6 +413,20 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
         sources = valid_sources()
         sources["PreviewModels.kt"] += " JSONObject fun fromJson"
         with self.assertRaisesRegex(VerificationError, "JSON decoding"):
+            verify_preview_boundary(sources)
+
+    def test_requires_native_path_metadata_for_bounded_preview_decode(self) -> None:
+        sources = valid_sources()
+        sources["lib.rs"] = sources["lib.rs"].replace(
+            "PREVIEW_PATH_FLOATS: usize = 1", ""
+        )
+        with self.assertRaisesRegex(VerificationError, "primitive preview contract"):
+            verify_preview_boundary(sources)
+
+    def test_requires_the_trusted_native_preview_path_in_production(self) -> None:
+        sources = valid_sources()
+        sources["SliceOperationViewModel.kt"] = "GcodeLayerPreview.fromNative("
+        with self.assertRaisesRegex(VerificationError, "trusted primitive payload"):
             verify_preview_boundary(sources)
 
     def test_rejects_boxed_dense_path_sorting(self) -> None:

@@ -41,3 +41,8 @@ internal fun inspectModel(path: String): ModelInfo = ModelInfo.fromNative(
     NativeEngine.inspectStlPayload(path),
     path,
 )
+
+internal fun loadGcodePreview(path: String, startLayer: Int, endLayer: Int): GcodeLayerPreview =
+    GcodeLayerPreview.fromTrustedNative(
+        NativeEngine.previewGcodeRange(path, startLayer, endLayer),
+    )

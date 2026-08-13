@@ -185,9 +185,7 @@ class OrcaQualificationCorpusInstrumentedTest {
                 check(staging.renameTo(retained)) { "Could not retain qualification G-code" }
             }
             val previewStarted = SystemClock.elapsedRealtimeNanos()
-            val preview = GcodeLayerPreview.fromNative(
-                NativeEngine.previewGcodeRange(outcome.output.absolutePath, 0, Int.MAX_VALUE),
-            )
+            val preview = loadGcodePreview(outcome.output.absolutePath, 0, Int.MAX_VALUE)
             val previewParseElapsedMs = elapsedMillis(previewStarted)
             val renderMetrics = if (measurePhysical && identifier == "dense-preview") {
                 benchmarkDensePreview(

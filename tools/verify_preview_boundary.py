@@ -90,15 +90,21 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "fun fromNative(raw: FloatArray?)",
         "PAYLOAD_MAGIC",
         "PAYLOAD_VERSION",
-        "HEADER_FLOATS = 7",
+        "HEADER_FLOATS = 9 + ROLE_COUNT",
+        "PATH_STRIDE = 1",
         "MAX_SEGMENTS = 120_000",
         "MAX_PAYLOAD_FLOATS",
         "preview_coordinate_invalid",
         "preview_role_invalid",
-        "cachedContinuousPaths",
-        "continuousPaths += SegmentPath",
-        "preview.cachedContinuousPaths = continuousPaths",
+        "fun fromTrustedNative(raw: FloatArray?)",
+        "validateCoordinates = true",
+        "validateCoordinates = false",
+        "cachedPathIndex",
+        "PrimitivePathBuilder(totalSegments)",
+        "preview.cachedPathIndex = pathIndex",
         "RolePathIndex(",
+        "val pathOrdinals: IntArray",
+        "selectedPaths = BooleanArray(allPaths.pathCount)",
         "selectedPathCounts = IntArray(ROLE_COUNT)",
         "internal val pathStarts: IntArray",
         "internal val pathEndsExclusive: IntArray",
@@ -610,8 +616,11 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     for marker in (
         "-> jfloatArray",
         "PREVIEW_PAYLOAD_MAGIC",
-        "PREVIEW_PAYLOAD_VERSION",
-        "PREVIEW_HEADER_FLOATS",
+        "PREVIEW_PAYLOAD_VERSION: f32 = 2.0",
+        "PREVIEW_HEADER_FLOATS: usize = 9 + ToolpathRole::COUNT",
+        "PREVIEW_PATH_FLOATS: usize = 1",
+        "paths: Vec<PreviewPathRange>",
+        "role_segment_counts[path.role as usize]",
         "MAX_PREVIEW_SEGMENTS: usize = 120_000",
         "MAX_PREVIEW_LAYERS: usize = 1_000_000",
         "env.new_float_array",
@@ -626,8 +635,14 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     if "guarded_json(" in export or "serde_json::to_string" in export:
         raise VerificationError("Rust G-code preview reverted to JSON serialization")
 
-    if "GcodeLayerPreview.fromNative" not in sources["SliceOperationViewModel.kt"]:
-        raise VerificationError("retained application Preview does not use the primitive payload")
+    if (
+        "internal fun loadGcodePreview(" not in native
+        or "GcodeLayerPreview.fromTrustedNative(" not in native
+        or "loadGcodePreview(" not in sources["SliceOperationViewModel.kt"]
+    ):
+        raise VerificationError(
+            "retained application Preview does not use the trusted primitive payload"
+        )
     device = sources["NativeEngineInstrumentedTest.kt"]
     if device.count("GcodeLayerPreview.fromNative") < 3 or "gcodeResult == null" not in device:
         raise VerificationError("ARM64 primitive preview regressions are incomplete")
