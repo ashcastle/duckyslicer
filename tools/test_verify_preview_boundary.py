@@ -15,7 +15,9 @@ def valid_sources() -> dict[str, str]:
             "fun fromNative(raw: FloatArray?) PAYLOAD_MAGIC PAYLOAD_VERSION "
             "HEADER_FLOATS = 7 MAX_SEGMENTS = 120_000 preview_coordinate_invalid "
             "MAX_PAYLOAD_FLOATS preview_role_invalid cachedContinuousPaths "
-            "continuousPaths += SegmentPath preview.cachedContinuousPaths = continuousPaths"
+            "continuousPaths += SegmentPath preview.cachedContinuousPaths = continuousPaths "
+            "RolePathIndex( selectedPathCounts = IntArray(ROLE_COUNT) "
+            "planForSelectedPaths(allPaths, selectedStarts, used)"
         ),
         "PreviewSummary.kt": (
             "fun SliceOutcome.previewSummary() estimatedSeconds / SECONDS_PER_MINUTE "
@@ -377,6 +379,12 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
         sources = valid_sources()
         sources["PreviewModels.kt"] += " JSONObject fun fromJson"
         with self.assertRaisesRegex(VerificationError, "JSON decoding"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_boxed_dense_path_sorting(self) -> None:
+        sources = valid_sources()
+        sources["PreviewModels.kt"] += " selected.sortedBy(SegmentPath::start)"
+        with self.assertRaisesRegex(VerificationError, "boxed path sorting"):
             verify_preview_boundary(sources)
 
     def test_rejects_model_import_that_reverts_to_json(self) -> None:

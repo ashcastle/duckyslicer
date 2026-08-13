@@ -95,11 +95,16 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "cachedContinuousPaths",
         "continuousPaths += SegmentPath",
         "preview.cachedContinuousPaths = continuousPaths",
+        "RolePathIndex(",
+        "selectedPathCounts = IntArray(ROLE_COUNT)",
+        "planForSelectedPaths(allPaths, selectedStarts, used)",
     ):
         if marker not in preview:
             raise VerificationError(f"Android preview payload validation is missing: {marker}")
     if "JSONObject" in preview or "fun fromJson" in preview:
         raise VerificationError("G-code preview reverted to object-heavy JSON decoding")
+    if "selected.sortedBy(SegmentPath::start)" in preview:
+        raise VerificationError("dense Preview planning reverted to boxed path sorting")
 
     settings = sources["AppSettings.kt"]
     for marker in (

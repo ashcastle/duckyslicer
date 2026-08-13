@@ -183,6 +183,48 @@ class ToolpathMeshBuilderTest {
     }
 
     @Test
+    fun fragmentedLodKeepsSelectedPathsWholeAndInGcodeOrder() {
+        val pathCount = 12
+        val segmentsPerPath = 2
+        val segments = FloatArray(
+            pathCount * segmentsPerPath * GcodeLayerPreview.SEGMENT_STRIDE,
+        )
+        repeat(pathCount) { path ->
+            repeat(segmentsPerPath) { withinPath ->
+                val segment = path * segmentsPerPath + withinPath
+                val offset = segment * GcodeLayerPreview.SEGMENT_STRIDE
+                segments[offset] = withinPath.toFloat()
+                segments[offset + 1] = path.toFloat()
+                segments[offset + 2] = withinPath + 1f
+                segments[offset + 3] = path.toFloat()
+                segments[offset + 4] = (path + 1) * 0.2f
+                segments[offset + 5] = 0f
+            }
+        }
+        val preview = GcodeLayerPreview(
+            0,
+            pathCount - 1,
+            pathCount,
+            0.2f,
+            pathCount * 0.2f,
+            segments,
+            intArrayOf(pathCount * segmentsPerPath, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+        )
+
+        val plan = preview.buildRenderPlan(segmentBudget = 4)
+
+        assertArrayEquals(plan.segmentOffsets.sortedArray(), plan.segmentOffsets)
+        assertEquals(4, plan.segmentOffsets.size)
+        assertArrayEquals(
+            booleanArrayOf(false, true, false, true),
+            plan.connectsToPrevious,
+        )
+        plan.segmentOffsets.asList().chunked(2).forEach { pathOffsets ->
+            assertEquals(GcodeLayerPreview.SEGMENT_STRIDE, pathOffsets[1] - pathOffsets[0])
+        }
+    }
+
+    @Test
     fun repeatedLodRequestsReuseTheImmutableRenderPlan() {
         val preview = twoLayerPreview()
         val first = preview.buildRenderPlan(segmentBudget = 1, visibleRoles = setOf(0, 1))

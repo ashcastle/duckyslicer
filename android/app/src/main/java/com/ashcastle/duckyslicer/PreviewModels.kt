@@ -20,7 +20,7 @@ data class GcodeLayerPreview(
     @Volatile
     private var cachedContinuousPaths: List<SegmentPath>? = null
     @Volatile
-    private var cachedPathsByRole: Array<List<SegmentPath>>? = null
+    private var cachedPathsByRole: Array<RolePathIndex>? = null
     private val cachedRenderPlans = LinkedHashMap<RenderPlanKey, PreviewRenderPlan>(
         MAX_RENDER_PLAN_CACHE_ENTRIES,
         0.75f,
@@ -48,11 +48,9 @@ data class GcodeLayerPreview(
         val allPaths = buildContinuousPaths()
         val pathsByRole = buildPathsByRole(allPaths)
         val presentRoles = ROLE_PRIORITY.filter { role ->
-            (visibleRoles == null || role in visibleRoles) && pathsByRole[role].isNotEmpty()
+            (visibleRoles == null || role in visibleRoles) && pathsByRole[role].paths.isNotEmpty()
         }
-        val visibleSegmentCount = presentRoles.sumOf { role ->
-            pathsByRole[role].sumOf(SegmentPath::size)
-        }
+        val visibleSegmentCount = presentRoles.sumOf { role -> pathsByRole[role].segmentCount }
         if (visibleSegmentCount == 0) return PreviewRenderPlan(IntArray(0), BooleanArray(0))
         if (visibleSegmentCount <= safeBudget) {
             val visiblePaths = if (visibleRoles == null) {
@@ -63,34 +61,43 @@ data class GcodeLayerPreview(
             return cacheRenderPlan(cacheKey, planForPaths(visiblePaths))
         }
 
-        val selected = ArrayList<SegmentPath>()
         // Path starts are segment indices in a bounded 120k-segment payload. A primitive
-        // bitmap avoids boxing tens of thousands of integers while the first Preview frame
-        // reserves and fills each role's coherent paths.
+        // bitmap avoids boxing and sorting tens of thousands of paths while the first Preview
+        // frame reserves and fills each role's coherent paths.
         val selectedStarts = BooleanArray(totalSegments)
+        val selectedPathCounts = IntArray(ROLE_COUNT)
+        val selectedSegmentCounts = IntArray(ROLE_COUNT)
         val reservedPerRole = (safeBudget / (presentRoles.size * 4)).coerceAtLeast(1)
         var used = 0
         presentRoles.forEach { role ->
-            used += chooseWholePathsInto(
-                paths = pathsByRole[role],
+            val selection = chooseWholePaths(
+                index = pathsByRole[role],
                 budget = reservedPerRole,
                 selectedStarts = selectedStarts,
-                output = selected,
+                selectedPathCount = selectedPathCounts[role],
+                selectedSegmentCount = selectedSegmentCounts[role],
             )
+            selectedPathCounts[role] += selection.pathCount
+            selectedSegmentCounts[role] += selection.segmentCount
+            used += selection.segmentCount
         }
 
         var remaining = (safeBudget - used).coerceAtLeast(0)
         presentRoles.forEach { role ->
             if (remaining <= 0) return@forEach
-            val chosenSize = chooseWholePathsInto(
-                paths = pathsByRole[role],
+            val selection = chooseWholePaths(
+                index = pathsByRole[role],
                 budget = remaining,
                 selectedStarts = selectedStarts,
-                output = selected,
+                selectedPathCount = selectedPathCounts[role],
+                selectedSegmentCount = selectedSegmentCounts[role],
             )
-            remaining = (remaining - chosenSize).coerceAtLeast(0)
+            selectedPathCounts[role] += selection.pathCount
+            selectedSegmentCounts[role] += selection.segmentCount
+            used += selection.segmentCount
+            remaining = (remaining - selection.segmentCount).coerceAtLeast(0)
         }
-        return cacheRenderPlan(cacheKey, planForPaths(selected.sortedBy(SegmentPath::start)))
+        return cacheRenderPlan(cacheKey, planForSelectedPaths(allPaths, selectedStarts, used))
     }
 
     private fun cacheRenderPlan(key: RenderPlanKey, plan: PreviewRenderPlan): PreviewRenderPlan =
@@ -122,13 +129,19 @@ data class GcodeLayerPreview(
         }
     }
 
-    private fun buildPathsByRole(paths: List<SegmentPath>): Array<List<SegmentPath>> {
+    private fun buildPathsByRole(paths: List<SegmentPath>): Array<RolePathIndex> {
         cachedPathsByRole?.let { return it }
         val mutable = Array(ROLE_COUNT) { ArrayList<SegmentPath>() }
+        val segmentCounts = IntArray(ROLE_COUNT)
         paths.forEach { path ->
-            if (path.role in 0 until ROLE_COUNT) mutable[path.role] += path
+            if (path.role in 0 until ROLE_COUNT) {
+                mutable[path.role] += path
+                segmentCounts[path.role] += path.size
+            }
         }
-        val built = Array<List<SegmentPath>>(ROLE_COUNT) { role -> mutable[role] }
+        val built = Array(ROLE_COUNT) { role ->
+            RolePathIndex(paths = mutable[role], segmentCount = segmentCounts[role])
+        }
         return synchronized(this) {
             cachedPathsByRole ?: built.also { cachedPathsByRole = it }
         }
@@ -153,29 +166,25 @@ data class GcodeLayerPreview(
         return paths
     }
 
-    private fun chooseWholePathsInto(
-        paths: List<SegmentPath>,
+    private fun chooseWholePaths(
+        index: RolePathIndex,
         budget: Int,
         selectedStarts: BooleanArray,
-        output: MutableList<SegmentPath>,
-    ): Int {
-        var eligibleCount = 0
-        var totalSize = 0
-        paths.forEach { path ->
-            if (!selectedStarts[path.start]) {
-                eligibleCount += 1
-                totalSize += path.size
-            }
-        }
-        if (eligibleCount == 0) return 0
+        selectedPathCount: Int,
+        selectedSegmentCount: Int,
+    ): PathSelection {
+        val eligibleCount = index.paths.size - selectedPathCount
+        val totalSize = index.segmentCount - selectedSegmentCount
+        if (eligibleCount == 0) return PathSelection.NONE
         if (totalSize <= budget) {
-            paths.forEach { path ->
+            var chosen = 0
+            index.paths.forEach { path ->
                 if (!selectedStarts[path.start]) {
-                    output += path
                     selectedStarts[path.start] = true
+                    chosen += 1
                 }
             }
-            return totalSize
+            return PathSelection(totalSize, chosen)
         }
 
         val averageSize = totalSize.toFloat() / eligibleCount
@@ -192,16 +201,14 @@ data class GcodeLayerPreview(
                 targetOrdinals[uniqueTargets++] = ordinal
             }
         }
-
         var used = 0
         var chosen = 0
         var eligibleOrdinal = 0
         var targetIndex = 0
-        paths.forEach { path ->
+        index.paths.forEach { path ->
             if (selectedStarts[path.start]) return@forEach
             if (targetIndex < uniqueTargets && eligibleOrdinal == targetOrdinals[targetIndex]) {
                 if (chosen == 0 || used + path.size <= budget) {
-                    output += path
                     selectedStarts[path.start] = true
                     used += path.size
                     chosen += 1
@@ -210,39 +217,46 @@ data class GcodeLayerPreview(
             }
             eligibleOrdinal += 1
         }
-        paths.forEach { path ->
+        index.paths.forEach { path ->
             if (!selectedStarts[path.start] && used + path.size <= budget) {
-                output += path
                 selectedStarts[path.start] = true
                 used += path.size
+                chosen += 1
             }
         }
-        return used
+        return PathSelection(used, chosen)
     }
 
     private fun planForPaths(paths: List<SegmentPath>): PreviewRenderPlan {
         val offsets = IntArray(paths.sumOf(SegmentPath::size))
+        val connections = BooleanArray(offsets.size)
         var writeIndex = 0
         paths.forEach { path ->
             for (segmentIndex in path.start until path.endExclusive) {
                 offsets[writeIndex++] = segmentIndex * SEGMENT_STRIDE
+                connections[writeIndex - 1] = segmentIndex > path.start
             }
         }
-        return planForOffsets(offsets)
+        return PreviewRenderPlan(offsets, connections)
     }
 
-    private fun planForOffsets(offsets: IntArray): PreviewRenderPlan {
-        val connections = BooleanArray(offsets.size)
-        for (index in 1 until offsets.size) {
-            val previous = offsets[index - 1]
-            val current = offsets[index]
-            if (current != previous + SEGMENT_STRIDE) continue
-            connections[index] = segmentsConnect(previous, current)
+    private fun planForSelectedPaths(
+        paths: List<SegmentPath>,
+        selectedStarts: BooleanArray,
+        selectedSegmentCount: Int,
+    ): PreviewRenderPlan {
+        val offsets = IntArray(selectedSegmentCount)
+        val connections = BooleanArray(selectedSegmentCount)
+        var writeIndex = 0
+        paths.forEach { path ->
+            if (!selectedStarts[path.start]) return@forEach
+            for (segmentIndex in path.start until path.endExclusive) {
+                offsets[writeIndex++] = segmentIndex * SEGMENT_STRIDE
+                connections[writeIndex - 1] = segmentIndex > path.start
+            }
         }
-        return PreviewRenderPlan(
-            segmentOffsets = offsets,
-            connectsToPrevious = connections,
-        )
+        check(writeIndex == selectedSegmentCount) { "Preview path selection size changed" }
+        return PreviewRenderPlan(offsets, connections)
     }
 
     private fun segmentsConnect(previous: Int, current: Int): Boolean =
@@ -257,6 +271,17 @@ data class GcodeLayerPreview(
         val role: Int,
     ) {
         val size: Int get() = endExclusive - start
+    }
+
+    private data class RolePathIndex(
+        val paths: List<SegmentPath>,
+        val segmentCount: Int,
+    )
+
+    private data class PathSelection(val segmentCount: Int, val pathCount: Int) {
+        companion object {
+            val NONE = PathSelection(0, 0)
+        }
     }
 
     private data class RenderPlanKey(val segmentBudget: Int, val visibleRoleMask: Int)
@@ -347,7 +372,12 @@ data class GcodeLayerPreview(
                 roleSegmentCounts = roleSegmentCounts,
             ).also { preview ->
                 preview.cachedContinuousPaths = continuousPaths
-                preview.cachedPathsByRole = Array(ROLE_COUNT) { role -> pathsByRole[role] }
+                preview.cachedPathsByRole = Array(ROLE_COUNT) { role ->
+                    RolePathIndex(
+                        paths = pathsByRole[role],
+                        segmentCount = roleSegmentCounts[role],
+                    )
+                }
             }
         }
 
