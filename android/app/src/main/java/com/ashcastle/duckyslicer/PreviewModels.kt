@@ -3,10 +3,46 @@ package com.ashcastle.duckyslicer
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-internal data class PreviewRenderPlan(
-    val segmentOffsets: IntArray,
-    val connectsToPrevious: BooleanArray,
-)
+internal class PreviewRenderPlan(
+    internal val pathStarts: IntArray,
+    internal val pathEndsExclusive: IntArray,
+    internal val segmentCount: Int,
+) {
+    init {
+        require(pathStarts.size == pathEndsExclusive.size)
+    }
+
+    // GLES consumes the compact path ranges directly. The Canvas fallback and diagnostics
+    // retain the former segment view, but only pay to materialize it when they actually use it.
+    val segmentOffsets: IntArray by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        IntArray(segmentCount).also { offsets ->
+            var writeIndex = 0
+            pathStarts.indices.forEach { pathIndex ->
+                for (segmentIndex in pathStarts[pathIndex] until pathEndsExclusive[pathIndex]) {
+                    offsets[writeIndex++] = segmentIndex * GcodeLayerPreview.SEGMENT_STRIDE
+                }
+            }
+            check(writeIndex == segmentCount) { "Preview path range size changed" }
+        }
+    }
+
+    val connectsToPrevious: BooleanArray by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        BooleanArray(segmentCount).also { connections ->
+            var writeIndex = 0
+            pathStarts.indices.forEach { pathIndex ->
+                val pathSize = pathEndsExclusive[pathIndex] - pathStarts[pathIndex]
+                repeat(pathSize) { offsetInPath ->
+                    connections[writeIndex++] = offsetInPath > 0
+                }
+            }
+            check(writeIndex == segmentCount) { "Preview connection range size changed" }
+        }
+    }
+
+    companion object {
+        val NONE = PreviewRenderPlan(IntArray(0), IntArray(0), 0)
+    }
+}
 
 data class GcodeLayerPreview(
     val startLayer: Int,
@@ -38,7 +74,7 @@ data class GcodeLayerPreview(
         visibleRoles: Set<Int>? = null,
     ): PreviewRenderPlan {
         val totalSegments = segments.size / SEGMENT_STRIDE
-        if (totalSegments == 0) return PreviewRenderPlan(IntArray(0), BooleanArray(0))
+        if (totalSegments == 0) return PreviewRenderPlan.NONE
 
         val safeBudget = segmentBudget.coerceAtLeast(1)
         val cacheKey = RenderPlanKey(safeBudget, visibleRoleMask(visibleRoles))
@@ -51,7 +87,7 @@ data class GcodeLayerPreview(
             (visibleRoles == null || role in visibleRoles) && pathsByRole[role].paths.isNotEmpty()
         }
         val visibleSegmentCount = presentRoles.sumOf { role -> pathsByRole[role].segmentCount }
-        if (visibleSegmentCount == 0) return PreviewRenderPlan(IntArray(0), BooleanArray(0))
+        if (visibleSegmentCount == 0) return PreviewRenderPlan.NONE
         if (visibleSegmentCount <= safeBudget) {
             val visiblePaths = if (visibleRoles == null) {
                 allPaths
@@ -97,7 +133,15 @@ data class GcodeLayerPreview(
             used += selection.segmentCount
             remaining = (remaining - selection.segmentCount).coerceAtLeast(0)
         }
-        return cacheRenderPlan(cacheKey, planForSelectedPaths(allPaths, selectedStarts, used))
+        return cacheRenderPlan(
+            cacheKey,
+            planForSelectedPaths(
+                paths = allPaths,
+                selectedStarts = selectedStarts,
+                selectedSegmentCount = used,
+                selectedPathCount = selectedPathCounts.sum(),
+            ),
+        )
     }
 
     private fun cacheRenderPlan(key: RenderPlanKey, plan: PreviewRenderPlan): PreviewRenderPlan =
@@ -228,35 +272,37 @@ data class GcodeLayerPreview(
     }
 
     private fun planForPaths(paths: List<SegmentPath>): PreviewRenderPlan {
-        val offsets = IntArray(paths.sumOf(SegmentPath::size))
-        val connections = BooleanArray(offsets.size)
-        var writeIndex = 0
-        paths.forEach { path ->
-            for (segmentIndex in path.start until path.endExclusive) {
-                offsets[writeIndex++] = segmentIndex * SEGMENT_STRIDE
-                connections[writeIndex - 1] = segmentIndex > path.start
-            }
+        val starts = IntArray(paths.size)
+        val ends = IntArray(paths.size)
+        var segmentCount = 0
+        paths.forEachIndexed { index, path ->
+            starts[index] = path.start
+            ends[index] = path.endExclusive
+            segmentCount += path.size
         }
-        return PreviewRenderPlan(offsets, connections)
+        return PreviewRenderPlan(starts, ends, segmentCount)
     }
 
     private fun planForSelectedPaths(
         paths: List<SegmentPath>,
         selectedStarts: BooleanArray,
         selectedSegmentCount: Int,
+        selectedPathCount: Int,
     ): PreviewRenderPlan {
-        val offsets = IntArray(selectedSegmentCount)
-        val connections = BooleanArray(selectedSegmentCount)
+        val starts = IntArray(selectedPathCount)
+        val ends = IntArray(selectedPathCount)
         var writeIndex = 0
         paths.forEach { path ->
             if (!selectedStarts[path.start]) return@forEach
-            for (segmentIndex in path.start until path.endExclusive) {
-                offsets[writeIndex++] = segmentIndex * SEGMENT_STRIDE
-                connections[writeIndex - 1] = segmentIndex > path.start
-            }
+            starts[writeIndex] = path.start
+            ends[writeIndex] = path.endExclusive
+            writeIndex += 1
         }
-        check(writeIndex == selectedSegmentCount) { "Preview path selection size changed" }
-        return PreviewRenderPlan(offsets, connections)
+        check(writeIndex == selectedPathCount) { "Preview path selection count changed" }
+        check(
+            starts.indices.sumOf { index -> ends[index] - starts[index] } == selectedSegmentCount,
+        ) { "Preview path selection size changed" }
+        return PreviewRenderPlan(starts, ends, selectedSegmentCount)
     }
 
     private fun segmentsConnect(previous: Int, current: Int): Boolean =

@@ -1314,67 +1314,78 @@ internal object ToolpathMeshBuilder {
         val packingStartedNanos = System.nanoTime()
         val bedBuilder = FloatBuilder(2_400)
         val instanceBuilder = if (scene.renderAsLines) null else {
-            ToolpathInstanceBuilder(plan.segmentOffsets.size)
+            ToolpathInstanceBuilder(plan.segmentCount)
         }
-        val lineBuilder = if (scene.renderAsLines) ToolpathLineBuilder(plan.segmentOffsets.size) else null
+        val lineBuilder = if (scene.renderAsLines) ToolpathLineBuilder(plan.segmentCount) else null
         addBed(bedBuilder, scene.bedSizeX, scene.bedSizeY, scene.bedPolygon)
         val zSpan = (scene.preview.maxZMm - scene.preview.minZMm).coerceAtLeast(0.001f)
         // Preview G-code is layer ordered. For the normal near-opaque view, upload high
         // layers first so depth testing rejects covered internal fragments before shading.
         // A deliberately translucent view keeps source order so inner paths remain visible.
-        val segmentIndices = if (scene.opacity >= EARLY_Z_OPACITY_THRESHOLD) {
-            plan.segmentOffsets.indices.reversed()
-        } else {
-            plan.segmentOffsets.indices
-        }
+        val reverseForEarlyZ = scene.opacity >= EARLY_Z_OPACITY_THRESHOLD
         val packedRoleColors = FloatArray(roleColors.size)
         val packedRoleColorValid = BooleanArray(roleColors.size)
         var colorZBits = 0
         var colorZInitialized = false
         var heightShadeMultiplier = 1f
-        segmentIndices.forEach { index ->
-            val offset = plan.segmentOffsets[index]
-            val x1 = scene.preview.segments[offset] - scene.bedOriginX
-            val y1 = scene.preview.segments[offset + 1] - scene.bedOriginY
-            val x2 = scene.preview.segments[offset + 2] - scene.bedOriginX
-            val y2 = scene.preview.segments[offset + 3] - scene.bedOriginY
-            val z = scene.preview.segments[offset + 4]
-            val role = scene.preview.segments[offset + 5].toInt().coerceIn(0, roleColors.lastIndex)
-            val dx = x2 - x1
-            val dy = y2 - y1
-            if (dx * dx + dy * dy < 0.000001f) return@forEach
-            val nextZBits = z.toBits()
-            if (!colorZInitialized || nextZBits != colorZBits) {
-                colorZInitialized = true
-                colorZBits = nextZBits
-                packedRoleColorValid.fill(false)
-                val normalizedHeight = ((z - scene.preview.minZMm) / zSpan).coerceIn(0f, 1f)
-                val shade = scene.depthContrast * (1f - normalizedHeight) * 0.56f
-                heightShadeMultiplier = 1f - shade
+        val pathStep = if (reverseForEarlyZ) -1 else 1
+        var pathIndex = if (reverseForEarlyZ) plan.pathStarts.lastIndex else 0
+        while (pathIndex in plan.pathStarts.indices) {
+            val pathStart = plan.pathStarts[pathIndex]
+            val pathEndExclusive = plan.pathEndsExclusive[pathIndex]
+            var segmentIndex = if (reverseForEarlyZ) pathEndExclusive - 1 else pathStart
+            while (
+                if (reverseForEarlyZ) segmentIndex >= pathStart else segmentIndex < pathEndExclusive
+            ) {
+                val offset = segmentIndex * GcodeLayerPreview.SEGMENT_STRIDE
+                val x1 = scene.preview.segments[offset] - scene.bedOriginX
+                val y1 = scene.preview.segments[offset + 1] - scene.bedOriginY
+                val x2 = scene.preview.segments[offset + 2] - scene.bedOriginX
+                val y2 = scene.preview.segments[offset + 3] - scene.bedOriginY
+                val z = scene.preview.segments[offset + 4]
+                val role = scene.preview.segments[offset + 5]
+                    .toInt()
+                    .coerceIn(0, roleColors.lastIndex)
+                val dx = x2 - x1
+                val dy = y2 - y1
+                if (dx * dx + dy * dy >= 0.000001f) {
+                    val nextZBits = z.toBits()
+                    if (!colorZInitialized || nextZBits != colorZBits) {
+                        colorZInitialized = true
+                        colorZBits = nextZBits
+                        packedRoleColorValid.fill(false)
+                        val normalizedHeight =
+                            ((z - scene.preview.minZMm) / zSpan).coerceIn(0f, 1f)
+                        val shade = scene.depthContrast * (1f - normalizedHeight) * 0.56f
+                        heightShadeMultiplier = 1f - shade
+                    }
+                    if (!packedRoleColorValid[role]) {
+                        val base = roleColors[role]
+                        packedRoleColors[role] = packedColor(
+                            base[0] * heightShadeMultiplier,
+                            base[1] * heightShadeMultiplier,
+                            base[2] * heightShadeMultiplier,
+                            scene.opacity,
+                        )
+                        packedRoleColorValid[role] = true
+                    }
+                    val color = packedRoleColors[role]
+                    val halfWidth = roleWidths[role] / 2f
+                    instanceBuilder?.segment(
+                        x1, y1, z + 0.024f,
+                        x2, y2, z + 0.024f,
+                        halfWidth,
+                        color,
+                    )
+                    lineBuilder?.segment(
+                        x1, y1, z + 0.024f,
+                        x2, y2, z + 0.024f,
+                        color,
+                    )
+                }
+                segmentIndex += pathStep
             }
-            if (!packedRoleColorValid[role]) {
-                val base = roleColors[role]
-                packedRoleColors[role] = packedColor(
-                    base[0] * heightShadeMultiplier,
-                    base[1] * heightShadeMultiplier,
-                    base[2] * heightShadeMultiplier,
-                    scene.opacity,
-                )
-                packedRoleColorValid[role] = true
-            }
-            val color = packedRoleColors[role]
-            val halfWidth = roleWidths[role] / 2f
-            instanceBuilder?.segment(
-                x1, y1, z + 0.024f,
-                x2, y2, z + 0.024f,
-                halfWidth,
-                color,
-            )
-            lineBuilder?.segment(
-                x1, y1, z + 0.024f,
-                x2, y2, z + 0.024f,
-                color,
-            )
+            pathIndex += pathStep
         }
         val bedVertices = bedBuilder.finish()
         val toolpathInstances = instanceBuilder?.finish() ?: ByteBuffer.allocateDirect(0)

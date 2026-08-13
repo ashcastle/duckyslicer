@@ -171,6 +171,11 @@ class ToolpathMeshBuilderTest {
         )
 
         val plan = preview.buildRenderPlan(depthPreviewSegmentBudget(PreviewDetail.PERFORMANCE))
+        assertTrue(
+            "The GLES plan must retain compact whole-path ranges instead of one offset per segment",
+            plan.pathStarts.size * 4 < plan.segmentCount,
+        )
+        assertEquals(plan.pathStarts.size, plan.pathEndsExclusive.size)
         val representedLayers = plan.segmentOffsets
             .map { offset -> (segments[offset + 4] / 0.2f).roundToInt() }
             .toSet()
@@ -178,6 +183,7 @@ class ToolpathMeshBuilderTest {
         assertEquals(layerCount, representedLayers.size)
         assertEquals(1, representedLayers.minOrNull())
         assertEquals(layerCount, representedLayers.maxOrNull())
+        assertEquals(plan.segmentCount, plan.segmentOffsets.size)
         assertTrue(plan.segmentOffsets.size <= depthPreviewSegmentBudget(PreviewDetail.PERFORMANCE))
     }
 

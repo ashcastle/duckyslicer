@@ -17,7 +17,9 @@ def valid_sources() -> dict[str, str]:
             "MAX_PAYLOAD_FLOATS preview_role_invalid cachedContinuousPaths "
             "continuousPaths += SegmentPath preview.cachedContinuousPaths = continuousPaths "
             "RolePathIndex( selectedPathCounts = IntArray(ROLE_COUNT) "
-            "planForSelectedPaths(allPaths, selectedStarts, used)"
+            "internal val pathStarts: IntArray internal val pathEndsExclusive: IntArray "
+            "internal val segmentCount: Int val segmentOffsets: IntArray by lazy "
+            "selectedPathCount = selectedPathCounts.sum()"
         ),
         "PreviewSummary.kt": (
             "fun SliceOutcome.previewSummary() estimatedSeconds / SECONDS_PER_MINUTE "
@@ -76,7 +78,9 @@ def valid_sources() -> dict[str, str]:
             "ToolpathUploadPayload INSTANCE_STRIDE_BYTES = 32 "
             "INSTANCE_START_OFFSET_BYTES INSTANCE_COLOR_OFFSET_BYTES "
             "toolpathInstances = instanceBuilder?.finish() "
-            "EARLY_Z_OPACITY_THRESHOLD = 0.85f plan.segmentOffsets.indices.reversed() "
+            "EARLY_Z_OPACITY_THRESHOLD = 0.85f "
+            "val reverseForEarlyZ = scene.opacity >= EARLY_Z_OPACITY_THRESHOLD "
+            "plan.pathStarts[pathIndex] plan.pathEndsExclusive[pathIndex] "
             ".allocateDirect(capacity * Float.SIZE_BYTES) "
             "ByteBuffer.allocateDirect(usedFloats * Float.SIZE_BYTES) "
             ".also { buffer -> buffer.asFloatBuffer().put(values, 0, usedFloats) } "
@@ -501,6 +505,12 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "expanded per-segment"):
             verify_preview_boundary(sources)
 
+    def test_rejects_materialized_segment_offsets_in_gpu_packing(self) -> None:
+        sources = valid_sources()
+        sources["ToolpathPreviewView.kt"] += " plan.segmentOffsets"
+        with self.assertRaisesRegex(VerificationError, "materialized per-segment"):
+            verify_preview_boundary(sources)
+
     def test_rejects_missing_gpu_memory_pressure_release(self) -> None:
         sources = valid_sources()
         sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
@@ -652,8 +662,8 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
     def test_rejects_loss_of_early_depth_ordering(self) -> None:
         sources = valid_sources()
         sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
-            "EARLY_Z_OPACITY_THRESHOLD = 0.85f plan.segmentOffsets.indices.reversed()",
-            "plan.segmentOffsets.indices",
+            "val reverseForEarlyZ = scene.opacity >= EARLY_Z_OPACITY_THRESHOLD",
+            "val reverseForEarlyZ = false",
         )
         with self.assertRaisesRegex(VerificationError, "GPU preview upload contract"):
             verify_preview_boundary(sources)

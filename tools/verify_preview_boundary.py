@@ -97,7 +97,11 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "preview.cachedContinuousPaths = continuousPaths",
         "RolePathIndex(",
         "selectedPathCounts = IntArray(ROLE_COUNT)",
-        "planForSelectedPaths(allPaths, selectedStarts, used)",
+        "internal val pathStarts: IntArray",
+        "internal val pathEndsExclusive: IntArray",
+        "internal val segmentCount: Int",
+        "val segmentOffsets: IntArray by lazy",
+        "selectedPathCount = selectedPathCounts.sum()",
     ):
         if marker not in preview:
             raise VerificationError(f"Android preview payload validation is missing: {marker}")
@@ -175,7 +179,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "INSTANCE_COLOR_OFFSET_BYTES",
         "toolpathInstances = instanceBuilder?.finish()",
         "EARLY_Z_OPACITY_THRESHOLD = 0.85f",
-        "plan.segmentOffsets.indices.reversed()",
+        "val reverseForEarlyZ = scene.opacity >= EARLY_Z_OPACITY_THRESHOLD",
+        "plan.pathStarts[pathIndex]",
+        "plan.pathEndsExclusive[pathIndex]",
         ".allocateDirect(capacity * Float.SIZE_BYTES)",
         "ByteBuffer.allocateDirect(usedFloats * Float.SIZE_BYTES)",
         ".also { buffer -> buffer.asFloatBuffer().put(values, 0, usedFloats) }",
@@ -211,6 +217,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         raise VerificationError("GPU preview reverted to duplicated client-side vertex storage")
     if "plan.segmentOffsets.size * 6 * 8" in renderer:
         raise VerificationError("GPU preview reverted to expanded per-segment ribbon vertices")
+    if "plan.segmentOffsets" in renderer:
+        raise VerificationError("GPU preview reverted to materialized per-segment offsets")
 
     prepare_renderer = sources["PrepareModelPreviewView.kt"]
     for marker in (
