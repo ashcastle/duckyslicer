@@ -144,7 +144,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "pendingPrewarmScene",
         "requestPrewarmFrame()",
         "uploadState.markUsed(scene)",
-        "releaseStaleGeometry(setOf(sourceGpuScene, interactionGpuScene))",
+        "releaseStaleGeometry(buildSet",
+        "candidate.canReuseGeometryWhileBuilding(scene)",
+        "fallbackFrameCount += 1",
         "uploadState.remove(staleScene)",
         "GLES30.glGenBuffers",
         "GLES30.glDeleteBuffers",
@@ -619,6 +621,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "A failed depth renderer must request compatibility fallback exactly once",
         "A trivial Preview workload must promote Automatic through measured tiers",
         "Automatic calibration must settle after bounded completed-frame samples",
+        "The last compatible GPU frame must remain visible during refinement",
+        "Background refinement must not clear the visible Preview",
     ):
         if marker not in device:
             raise VerificationError(f"ARM64 GPU preview regression is missing: {marker}")
@@ -647,6 +651,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "nearOpaquePreviewUploadsHighLayersFirstForEarlyDepthRejection",
         "Near-opaque paths must start at the high layer",
         "Translucent paths must retain source order",
+        "pendingLodCanReuseOnlyGeometryFromTheSameVisualScene",
     ):
         if marker not in mesh_tests:
             raise VerificationError(f"GPU preview performance regression is missing: {marker}")

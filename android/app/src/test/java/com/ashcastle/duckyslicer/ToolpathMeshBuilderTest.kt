@@ -13,6 +13,34 @@ import kotlin.math.roundToInt
 
 class ToolpathMeshBuilderTest {
     @Test
+    fun pendingLodCanReuseOnlyGeometryFromTheSameVisualScene() {
+        val preview = twoLayerPreview()
+        val current = ToolpathScene(
+            preview = preview,
+            bedSizeX = 100f,
+            bedSizeY = 100f,
+            opacity = 0.92f,
+            depthContrast = 0.8f,
+            detail = PreviewDetail.PERFORMANCE,
+            segmentBudgetOverride = 4,
+            renderAsLines = true,
+        )
+
+        assertTrue(
+            current.canReuseGeometryWhileBuilding(
+                current.copy(
+                    detail = PreviewDetail.DETAIL,
+                    segmentBudgetOverride = 120_000,
+                    renderAsLines = false,
+                ),
+            ),
+        )
+        assertFalse(current.canReuseGeometryWhileBuilding(current.copy(opacity = 0.5f)))
+        assertFalse(current.canReuseGeometryWhileBuilding(current.copy(preview = twoLayerPreview())))
+        assertFalse(current.canReuseGeometryWhileBuilding(current.copy(visibleRoles = setOf(0))))
+    }
+
+    @Test
     fun gpuPreviewMemoryIsReleasedOnlyAfterTheUiBecomesHidden() {
         assertFalse(
             shouldReleaseToolpathGpuMemory(ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN - 1),

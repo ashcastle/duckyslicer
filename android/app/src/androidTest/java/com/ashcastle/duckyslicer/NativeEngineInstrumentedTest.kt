@@ -321,6 +321,19 @@ class NativeEngineInstrumentedTest {
                 1,
                 asynchronousRenderer.geometryUploadCountForTest(),
             )
+            requestedGeometry = null
+            val retainedFrame = framebufferRgba(framebufferSize, framebufferSize)
+            asynchronousRenderer.onDrawFrame(null)
+            assertTrue("Refined geometry must be requested in the background", requestedGeometry != null)
+            assertEquals(
+                "The last compatible GPU frame must remain visible during refinement",
+                1,
+                asynchronousRenderer.fallbackFrameCountForTest(),
+            )
+            assertTrue(
+                "Background refinement must not clear the visible Preview",
+                retainedFrame.contentEquals(framebufferRgba(framebufferSize, framebufferSize)),
+            )
             assertEquals(
                 "Asynchronous geometry upload must leave GLES valid",
                 GLES30.GL_NO_ERROR,

@@ -424,6 +424,17 @@ internal data class ToolpathScene(
     }
 }
 
+internal fun ToolpathScene.canReuseGeometryWhileBuilding(requested: ToolpathScene): Boolean =
+    preview === requested.preview &&
+        bedSizeX.toBits() == requested.bedSizeX.toBits() &&
+        bedSizeY.toBits() == requested.bedSizeY.toBits() &&
+        opacity.toBits() == requested.opacity.toBits() &&
+        depthContrast.toBits() == requested.depthContrast.toBits() &&
+        visibleRoles == requested.visibleRoles &&
+        bedPolygon == requested.bedPolygon &&
+        bedOriginX.toBits() == requested.bedOriginX.toBits() &&
+        bedOriginY.toBits() == requested.bedOriginY.toBits()
+
 internal data class ToolpathRendererTelemetry(
     val geometryBuildMs: Double,
     val renderPlanMs: Double,
@@ -478,6 +489,8 @@ internal class ToolpathRenderer(
     private var lastDrawSubmitNanos = 0L
     private var rendererUnavailable = false
     private var lastEffectiveDetail: PreviewDetail? = null
+    private var lastDrawnScene: ToolpathScene? = null
+    private var fallbackFrameCount = 0
     @Volatile
     private var frameReadyReported = false
     @Volatile
@@ -495,6 +508,8 @@ internal class ToolpathRenderer(
 
     internal fun cachedGeometryCountForTest(): Int = gpuGeometry.size
 
+    internal fun fallbackFrameCountForTest(): Int = fallbackFrameCount
+
     internal fun effectiveDetailForTest(): PreviewDetail? = lastEffectiveDetail
 
     internal fun automaticCalibrationSettledForTest(): Boolean =
@@ -511,6 +526,7 @@ internal class ToolpathRenderer(
         preparedGeometry.clear()
         pendingPrewarmScene = null
         refinementRequestedForScene = null
+        lastDrawnScene = null
     }
 
     internal fun submitPreparedGeometry(scene: ToolpathScene, payload: ToolpathUploadPayload) {
@@ -564,8 +580,10 @@ internal class ToolpathRenderer(
         geometryPackNanos = 0L
         geometryUploadNanos = 0L
         lastDrawSubmitNanos = 0L
+        fallbackFrameCount = 0
         pendingPrewarmScene = null
         refinementRequestedForScene = null
+        lastDrawnScene = null
         gpuGeometry.clear()
         preparedGeometry.clear()
         uploadState.invalidate()
@@ -689,23 +707,44 @@ internal class ToolpathRenderer(
         )
         val sourceGpuScene = sourceScene.copy(renderAsLines = sourceDrawsLines)
         val interactionGpuScene = interactionScene.copy(renderAsLines = true)
-        releaseStaleGeometry(setOf(sourceGpuScene, interactionGpuScene))
         // A dense preview should become recognizable immediately. Draw the same coherent,
         // whole-path LOD used for gestures first, then replace it with requested detail on
         // the following dirty frame. This avoids blocking the first visible frame on tens of
         // thousands of software-rasterized extrusion ribbons without turning paths into dots.
         val initialPreview = !interactionActive && refinementRequestedForScene != sourceScene
         val scene = if (interactionActive || initialPreview) interactionGpuScene else sourceGpuScene
-        val geometry = geometryFor(scene) ?: return
-        val matrix = cameraMatrix(scene)
+        val fallbackScene = lastDrawnScene?.takeIf { candidate ->
+            candidate.canReuseGeometryWhileBuilding(scene) && gpuGeometry.containsKey(candidate)
+        }
+        releaseStaleGeometry(buildSet {
+            add(sourceGpuScene)
+            add(interactionGpuScene)
+            fallbackScene?.let(::add)
+        })
+        val requestedGeometry = geometryFor(scene)
+        val drawScene: ToolpathScene
+        val geometry: ToolpathGpuGeometry
+        if (requestedGeometry != null) {
+            drawScene = scene
+            geometry = requestedGeometry
+        } else if (fallbackScene != null) {
+            drawScene = fallbackScene
+            geometry = checkNotNull(geometryFor(fallbackScene))
+            fallbackFrameCount += 1
+        } else {
+            return
+        }
+        val matrix = cameraMatrix(drawScene)
         val measureAutomaticFrame = !interactionActive && !initialPreview &&
+            drawScene == scene &&
             adaptivePreviewController.shouldMeasure(requestedScene.detail, adaptiveWorkload)
         val measurementStartedNanos = if (measureAutomaticFrame) System.nanoTime() else 0L
         val drawStartedNanos = System.nanoTime()
         drawBed(geometry, matrix)
-        drawToolpaths(geometry, matrix, scene.renderAsLines)
+        drawToolpaths(geometry, matrix, drawScene.renderAsLines)
         lastDrawSubmitNanos = System.nanoTime() - drawStartedNanos
         if (!glOperationSucceeded("frame_draw")) return
+        lastDrawnScene = drawScene
         if (measureAutomaticFrame) {
             // Calibration is limited to two settled frames per tier. glFinish gives a
             // portable GLES3 completion measurement that includes fragment work instead
@@ -730,7 +769,7 @@ internal class ToolpathRenderer(
         }
 
         if (initialPreview) {
-            refinementRequestedForScene = sourceScene
+            if (drawScene == scene) refinementRequestedForScene = sourceScene
             requestPrewarmFrame()
             return
         }
@@ -1108,6 +1147,7 @@ internal class ToolpathRenderer(
         uploadState.invalidate()
         pendingPrewarmScene = null
         refinementRequestedForScene = null
+        lastDrawnScene = null
         if (bedProgram != 0) GLES30.glDeleteProgram(bedProgram)
         if (toolpathProgram != 0) GLES30.glDeleteProgram(toolpathProgram)
         if (lineProgram != 0) GLES30.glDeleteProgram(lineProgram)

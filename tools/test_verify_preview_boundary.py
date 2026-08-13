@@ -57,7 +57,8 @@ def valid_sources() -> dict[str, str]:
             "ToolpathGeometryUploadState(capacity = GPU_GEOMETRY_CACHE_SIZE) "
             "const val GPU_GEOMETRY_CACHE_SIZE = 2 "
             "pendingPrewarmScene requestPrewarmFrame() uploadState.markUsed(scene) "
-            "releaseStaleGeometry(setOf(sourceGpuScene, interactionGpuScene)) "
+            "releaseStaleGeometry(buildSet candidate.canReuseGeometryWhileBuilding(scene) "
+            "fallbackFrameCount += 1 "
             "uploadState.remove(staleScene) "
             "GLES30.glGenBuffers GLES30.glDeleteBuffers "
             "GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER GLES30.glBufferData( "
@@ -218,6 +219,8 @@ def valid_sources() -> dict[str, str]:
             " A failed depth renderer must request compatibility fallback exactly once"
             " A trivial Preview workload must promote Automatic through measured tiers"
             " Automatic calibration must settle after bounded completed-frame samples"
+            " The last compatible GPU frame must remain visible during refinement"
+            " Background refinement must not clear the visible Preview"
         ),
         "PrepareModelRendererInstrumentedTest.kt": (
             "densePrepareSceneBuildStaysWithinLoadBudget "
@@ -305,7 +308,8 @@ def valid_sources() -> dict[str, str]:
             " gpuPreviewMemoryIsReleasedOnlyAfterTheUiBecomesHidden "
             "nearOpaquePreviewUploadsHighLayersFirstForEarlyDepthRejection "
             "Near-opaque paths must start at the high layer "
-            "Translucent paths must retain source order"
+            "Translucent paths must retain source order "
+            "pendingLodCanReuseOnlyGeometryFromTheSameVisualScene"
         ),
         "WorkspaceLayoutPolicyTest.kt": (
             "landscapePhoneKeepsBottomNavigation "
