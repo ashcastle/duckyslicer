@@ -1035,11 +1035,9 @@ internal object ToolpathMeshBuilder {
             val y2 = scene.preview.segments[offset + 3] - scene.bedOriginY
             val z = scene.preview.segments[offset + 4]
             val role = scene.preview.segments[offset + 5].toInt().coerceIn(0, roleColors.lastIndex)
-            if (role !in scene.visibleRoles) return@forEach
             val dx = x2 - x1
             val dy = y2 - y1
-            val length = hypot(dx, dy)
-            if (length < 0.001f) return@forEach
+            if (dx * dx + dy * dy < 0.000001f) return@forEach
             val normalizedHeight = ((z - scene.preview.minZMm) / zSpan).coerceIn(0f, 1f)
             val base = roleColors[role]
             val shade = scene.depthContrast * (1f - normalizedHeight) * 0.56f
@@ -1177,9 +1175,10 @@ internal data class ToolpathUploadPayload(
 }
 
 private class ToolpathInstanceBuilder(initialInstanceCapacity: Int) {
-    private var values = allocate(
-        (initialInstanceCapacity * ToolpathMeshBuilder.INSTANCE_STRIDE_BYTES)
-            .coerceAtLeast(ToolpathMeshBuilder.INSTANCE_STRIDE_BYTES),
+    private var values = FloatArray(
+        (initialInstanceCapacity * TOOLPATH_INSTANCE_FLOATS).coerceAtLeast(
+            TOOLPATH_INSTANCE_FLOATS,
+        ),
     )
     var instanceCount: Int = 0
         private set
@@ -1197,37 +1196,43 @@ private class ToolpathInstanceBuilder(initialInstanceCapacity: Int) {
         blue: Float,
         alpha: Float,
     ) {
-        ensure(ToolpathMeshBuilder.INSTANCE_STRIDE_BYTES)
-        values.putFloat(startX)
-        values.putFloat(startY)
-        values.putFloat(startZ)
-        values.putFloat(endX)
-        values.putFloat(endY)
-        values.putFloat(endZ)
-        values.putFloat(halfWidth)
-        values.put(colorByte(red))
-        values.put(colorByte(green))
-        values.put(colorByte(blue))
-        values.put(colorByte(alpha))
+        val offset = instanceCount * TOOLPATH_INSTANCE_FLOATS
+        ensure(offset + TOOLPATH_INSTANCE_FLOATS)
+        values[offset] = startX
+        values[offset + 1] = startY
+        values[offset + 2] = startZ
+        values[offset + 3] = endX
+        values[offset + 4] = endY
+        values[offset + 5] = endZ
+        values[offset + 6] = halfWidth
+        values[offset + 7] = Float.fromBits(
+            colorInt(alpha) shl 24 or
+                (colorInt(blue) shl 16) or
+                (colorInt(green) shl 8) or
+                colorInt(red),
+        )
         instanceCount += 1
     }
 
-    fun finish(): ByteBuffer = values.apply { flip() }
-
-    private fun ensure(additionalBytes: Int) {
-        if (values.remaining() >= additionalBytes) return
-        val next = allocate(max(values.capacity() * 2, values.position() + additionalBytes))
-        values.flip()
-        next.put(values)
-        values = next
+    fun finish(): ByteBuffer {
+        val usedFloats = instanceCount * TOOLPATH_INSTANCE_FLOATS
+        return ByteBuffer.allocateDirect(usedFloats * Float.SIZE_BYTES)
+            .order(ByteOrder.nativeOrder())
+            .also { buffer -> buffer.asFloatBuffer().put(values, 0, usedFloats) }
     }
 
-    private fun colorByte(value: Float): Byte =
-        (value.coerceIn(0f, 1f) * 255f).roundToInt().toByte()
+    private fun ensure(requiredFloats: Int) {
+        if (requiredFloats <= values.size) return
+        values = values.copyOf(max(values.size * 2, requiredFloats))
+    }
 
-    private fun allocate(capacity: Int): ByteBuffer = ByteBuffer
-        .allocateDirect(capacity)
-        .order(ByteOrder.nativeOrder())
+    private fun colorInt(value: Float): Int =
+        (value.coerceIn(0f, 1f) * 255f).roundToInt()
+
+    private companion object {
+        const val TOOLPATH_INSTANCE_FLOATS =
+            ToolpathMeshBuilder.INSTANCE_STRIDE_BYTES / Float.SIZE_BYTES
+    }
 }
 
 private class FloatBuilder(initialCapacity: Int) {

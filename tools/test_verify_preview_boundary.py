@@ -14,7 +14,8 @@ def valid_sources() -> dict[str, str]:
         "PreviewModels.kt": (
             "fun fromNative(raw: FloatArray?) PAYLOAD_MAGIC PAYLOAD_VERSION "
             "HEADER_FLOATS = 7 MAX_SEGMENTS = 120_000 preview_coordinate_invalid "
-            "MAX_PAYLOAD_FLOATS preview_role_invalid"
+            "MAX_PAYLOAD_FLOATS preview_role_invalid cachedContinuousPaths "
+            "continuousPaths += SegmentPath preview.cachedContinuousPaths = continuousPaths"
         ),
         "PreviewSummary.kt": (
             "fun SliceOutcome.previewSummary() estimatedSeconds / SECONDS_PER_MINUTE "
@@ -66,7 +67,10 @@ def valid_sources() -> dict[str, str]:
             "INSTANCE_START_OFFSET_BYTES INSTANCE_COLOR_OFFSET_BYTES "
             "toolpathInstances = instanceBuilder.finish() "
             "EARLY_Z_OPACITY_THRESHOLD = 0.85f plan.segmentOffsets.indices.reversed() "
-            ".allocateDirect(capacity * Float.SIZE_BYTES) .allocateDirect(capacity) "
+            ".allocateDirect(capacity * Float.SIZE_BYTES) "
+            "ByteBuffer.allocateDirect(usedFloats * Float.SIZE_BYTES) "
+            ".also { buffer -> buffer.asFloatBuffer().put(values, 0, usedFloats) } "
+            "TOOLPATH_INSTANCE_FLOATS Float.fromBits( "
             "setInteractionActive(true) postDelayed(restoreDetail, DETAIL_RESTORE_DELAY_MS) "
             "previewDetailForInteraction(sourceScene.detail, interactionActive = true) "
             "depthPreviewSegmentBudget(scene.detail) "
@@ -83,7 +87,8 @@ def valid_sources() -> dict[str, str]:
             "PrepareModelTopologyKey( filamentSlot = volume.filamentSlot "
             "withContext(Dispatchers.Default) PrepareModelSceneBuilder.build(projectObjects "
             "PrepareModelSceneBuilder.build(\n                    emptyList() "
-            "overlays.takeIf { sceneLoad.complete }.orEmpty()"
+            "overlays.takeIf { sceneLoad.complete }.orEmpty() PrepareModelOverlayKey( "
+            "overlays = withContext(Dispatchers.Default)"
         ),
         "PrepareModelPicking.kt": (
             "buildPreparePickingIndices( PREPARE_PICKING_TRIANGLES_PER_CHUNK = 48 "
@@ -95,6 +100,7 @@ def valid_sources() -> dict[str, str]:
             "MinimumRotatedZCalculator(this) "
             "val afterXz = scaledY * sinX + scaledZ * cosX "
             "result = minOf(result, -scaledX * sinY + afterXz * cosY) "
+            "minimumZWithoutTilt(geometry, centerZ) "
             "internal fun ModelTransform.minimumRotatedZ(model: ModelInfo) "
             "internal fun ModelTransform.placeVertex("
         ),
@@ -206,7 +212,9 @@ def valid_sources() -> dict[str, str]:
             "densePrepareCameraFramesReuseOneUploadedMesh "
             "densePreparePickingStaysWithinTapBudget "
             "p95Ms <= 50.0 renderer.geometryUploadCountForTest() == 1 "
-            "p95Ms <= 16.0 objectP95Ms <= 16.0 facetP95Ms <= 16.0"
+            "p95Ms <= 16.0 objectP95Ms <= 16.0 facetP95Ms <= 16.0 "
+            "denseDefaultPlacementStaysWithinLoadBudget "
+            "denseUnpaintedOverlayBuildStaysWithinLoadBudget p95Ms <= 1.0"
         ),
         "PrepareModelPickingTest.kt": (
             "coarseIndexCullsDenseChunksWithoutChangingExactHits "
@@ -224,6 +232,11 @@ def valid_sources() -> dict[str, str]:
             "native.last() / 1_000_000.0 <= 250.0 "
             "decode.last() / 1_000_000.0 <= 100.0 "
             "(native.last() + decode.last()) / 1_000_000.0 <= 300.0"
+        ),
+        "ToolpathRendererPerformanceInstrumentedTest.kt": (
+            "maximumLayerRangeBuildsResponsiveInteractionGeometry "
+            "segmentCount = GcodeLayerPreview.MAX_SEGMENTS preview.prepareRenderIndex() "
+            "planP95Ms <= 25.0 p50Ms <= 80.0 p95Ms <= 150.0"
         ),
         "AccessibilityInstrumentedTest.kt": (
             "appSettingsExposeNamedSlidersWholeRowSwitchesAndHeadings "

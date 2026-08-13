@@ -37,6 +37,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "PrepareModelPickingTest.kt",
         "ModelInfoTest.kt",
         "ModelImportPerformanceInstrumentedTest.kt",
+        "ToolpathRendererPerformanceInstrumentedTest.kt",
         "AccessibilityInstrumentedTest.kt",
         "PreviewModelsTest.kt",
         "PreviewSummaryTest.kt",
@@ -91,6 +92,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "MAX_PAYLOAD_FLOATS",
         "preview_coordinate_invalid",
         "preview_role_invalid",
+        "cachedContinuousPaths",
+        "continuousPaths += SegmentPath",
+        "preview.cachedContinuousPaths = continuousPaths",
     ):
         if marker not in preview:
             raise VerificationError(f"Android preview payload validation is missing: {marker}")
@@ -155,7 +159,10 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "EARLY_Z_OPACITY_THRESHOLD = 0.85f",
         "plan.segmentOffsets.indices.reversed()",
         ".allocateDirect(capacity * Float.SIZE_BYTES)",
-        ".allocateDirect(capacity)",
+        "ByteBuffer.allocateDirect(usedFloats * Float.SIZE_BYTES)",
+        ".also { buffer -> buffer.asFloatBuffer().put(values, 0, usedFloats) }",
+        "TOOLPATH_INSTANCE_FLOATS",
+        "Float.fromBits(",
         "setInteractionActive(true)",
         "postDelayed(restoreDetail, DETAIL_RESTORE_DELAY_MS)",
         "previewDetailForInteraction(sourceScene.detail, interactionActive = true)",
@@ -192,6 +199,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "PrepareModelSceneBuilder.build(projectObjects",
         "PrepareModelSceneBuilder.build(\n                    emptyList()",
         "overlays.takeIf { sceneLoad.complete }.orEmpty()",
+        "PrepareModelOverlayKey(",
+        "overlays = withContext(Dispatchers.Default)",
     ):
         if marker not in prepare_renderer:
             raise VerificationError(f"Prepare model loading contract is missing: {marker}")
@@ -213,6 +222,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "MinimumRotatedZCalculator(this)",
         "val afterXz = scaledY * sinX + scaledZ * cosX",
         "result = minOf(result, -scaledX * sinY + afterXz * cosY)",
+        "minimumZWithoutTilt(geometry, centerZ)",
     ):
         if marker not in transform:
             raise VerificationError(f"allocation-free Prepare placement is missing: {marker}")
@@ -233,6 +243,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "p95Ms <= 16.0",
         "objectP95Ms <= 16.0",
         "facetP95Ms <= 16.0",
+        "denseDefaultPlacementStaysWithinLoadBudget",
+        "denseUnpaintedOverlayBuildStaysWithinLoadBudget",
+        "p95Ms <= 1.0",
     ):
         if marker not in prepare_tests:
             raise VerificationError(f"Prepare performance regression is missing: {marker}")
@@ -266,6 +279,18 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     ):
         if marker not in model_performance:
             raise VerificationError(f"model import performance regression is missing: {marker}")
+
+    toolpath_performance = sources["ToolpathRendererPerformanceInstrumentedTest.kt"]
+    for marker in (
+        "maximumLayerRangeBuildsResponsiveInteractionGeometry",
+        "segmentCount = GcodeLayerPreview.MAX_SEGMENTS",
+        "preview.prepareRenderIndex()",
+        "planP95Ms <= 25.0",
+        "p50Ms <= 80.0",
+        "p95Ms <= 150.0",
+    ):
+        if marker not in toolpath_performance:
+            raise VerificationError(f"toolpath performance regression is missing: {marker}")
 
     rust = sources["lib.rs"]
     for marker in (
@@ -681,6 +706,9 @@ def read_sources() -> dict[str, str]:
         "ModelInfoTest.kt": (tests / "ModelInfoTest.kt").read_text(encoding="utf-8"),
         "ModelImportPerformanceInstrumentedTest.kt": (
             device / "ModelImportPerformanceInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "ToolpathRendererPerformanceInstrumentedTest.kt": (
+            device / "ToolpathRendererPerformanceInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "AccessibilityInstrumentedTest.kt": (
             device / "AccessibilityInstrumentedTest.kt"

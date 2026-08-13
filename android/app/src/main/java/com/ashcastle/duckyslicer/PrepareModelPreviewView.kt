@@ -93,12 +93,30 @@ internal fun DepthTestedPrepareModelScene(
             )
         }
     }
-    val overlays = remember(projectObjects, layOnFaceObjectId, layOnFaceCandidateFacets) {
-        PrepareModelOverlayBuilder.build(
-            projectObjects = projectObjects,
-            layOnFaceObjectId = layOnFaceObjectId,
-            layOnFaceCandidateFacets = layOnFaceCandidateFacets,
-        )
+    val overlayTopology = projectObjects.flatMap { projectObject ->
+        projectObject.volumes.map { volume ->
+            PrepareModelOverlayKey(
+                objectId = projectObject.id,
+                volumeId = volume.id,
+                model = volume.model,
+                supportPaint = volume.supportPaint,
+                seamPaint = volume.seamPaint,
+                multiColorPaint = volume.multiColorPaint,
+            )
+        }
+    }
+    var overlays by remember(overlayTopology, layOnFaceObjectId, layOnFaceCandidateFacets) {
+        mutableStateOf<List<PrepareModelOverlayData>>(emptyList())
+    }
+    LaunchedEffect(overlayTopology, layOnFaceObjectId, layOnFaceCandidateFacets) {
+        val snapshot = projectObjects
+        overlays = withContext(Dispatchers.Default) {
+            PrepareModelOverlayBuilder.build(
+                projectObjects = snapshot,
+                layOnFaceObjectId = layOnFaceObjectId,
+                layOnFaceCandidateFacets = layOnFaceCandidateFacets,
+            )
+        }
     }
     val currentOnUnavailable = rememberUpdatedState(onUnavailable)
     AndroidView(
@@ -129,6 +147,15 @@ private data class PrepareModelTopologyKey(
     val volumeId: String,
     val filamentSlot: Int,
     val model: ModelInfo,
+)
+
+private data class PrepareModelOverlayKey(
+    val objectId: String,
+    val volumeId: String,
+    val model: ModelInfo,
+    val supportPaint: SupportPaint,
+    val seamPaint: SeamPaint,
+    val multiColorPaint: MultiColorPaint,
 )
 
 private data class PrepareModelSceneLoad(

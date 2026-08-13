@@ -16,6 +16,76 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class PrepareModelRendererInstrumentedTest {
     @Test
+    fun denseDefaultPlacementStaysWithinLoadBudget() {
+        val triangles = denseGridTriangles(columns = 100, rows = 60)
+        val model = ModelInfo(
+            fileName = "dense-default-placement.stl",
+            triangles = triangles.size / 9,
+            dimensions = listOf(200.0, 180.0, 20.0),
+            localPath = "",
+            minMm = listOf(0.0, 0.0, 0.0),
+            maxMm = listOf(200.0, 180.0, 20.0),
+            previewTriangles = triangles,
+        )
+        val projectObject = ProjectObject(id = "dense", model = model)
+        val durations = ArrayList<Long>()
+        repeat(14) {
+            val started = SystemClock.elapsedRealtimeNanos()
+            assertTrue(projectObject.transform.minimumRotatedZ(projectObject) in -10.1f..-9.9f)
+            durations += SystemClock.elapsedRealtimeNanos() - started
+        }
+        val sorted = durations.drop(4).sorted()
+        val p50Ms = sorted[sorted.size / 2] / 1_000_000.0
+        val p95Ms = sorted.last() / 1_000_000.0
+        println(
+            "DuckyPrepare defaultPlacement vertices=${triangles.size / 3} " +
+                "p50Ms=$p50Ms p95Ms=$p95Ms",
+        )
+        assertTrue(
+            "Default placement must leave headroom in a frame: p95=$p95Ms ms",
+            p95Ms <= 1.0,
+        )
+    }
+
+    @Test
+    fun denseUnpaintedOverlayBuildStaysWithinLoadBudget() {
+        val triangles = denseGridTriangles(columns = 100, rows = 60)
+        val model = ModelInfo(
+            fileName = "dense-unpainted-overlay.stl",
+            triangles = triangles.size / 9,
+            dimensions = listOf(200.0, 180.0, 20.0),
+            localPath = "",
+            minMm = listOf(0.0, 0.0, 0.0),
+            maxMm = listOf(200.0, 180.0, 20.0),
+            previewTriangles = triangles,
+        )
+        val projectObject = ProjectObject(id = "dense", model = model)
+        val durations = ArrayList<Long>()
+        repeat(14) {
+            val started = SystemClock.elapsedRealtimeNanos()
+            assertTrue(
+                PrepareModelOverlayBuilder.build(
+                    projectObjects = listOf(projectObject),
+                    layOnFaceObjectId = null,
+                    layOnFaceCandidateFacets = emptyMap(),
+                ).isEmpty(),
+            )
+            durations += SystemClock.elapsedRealtimeNanos() - started
+        }
+        val sorted = durations.drop(4).sorted()
+        val p50Ms = sorted[sorted.size / 2] / 1_000_000.0
+        val p95Ms = sorted.last() / 1_000_000.0
+        println(
+            "DuckyPrepare unpaintedOverlay triangles=${triangles.size / 9} " +
+                "p50Ms=$p50Ms p95Ms=$p95Ms",
+        )
+        assertTrue(
+            "Unpainted overlay detection must leave headroom in a frame: p95=$p95Ms ms",
+            p95Ms <= 1.0,
+        )
+    }
+
+    @Test
     fun denseMinimumRotatedZStaysWithinTransformBudget() {
         val triangles = denseGridTriangles(columns = 100, rows = 60)
         val model = ModelInfo(

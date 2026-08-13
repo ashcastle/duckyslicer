@@ -17,6 +17,14 @@ data class GcodeLayerPreview(
     val segments: FloatArray,
     val roleSegmentCounts: IntArray,
 ) {
+    @Volatile
+    private var cachedContinuousPaths: List<SegmentPath>? = null
+
+    internal fun prepareRenderIndex(): GcodeLayerPreview {
+        buildContinuousPaths()
+        return this
+    }
+
     internal fun buildRenderPlan(
         segmentBudget: Int,
         visibleRoles: Set<Int>? = null,
@@ -56,7 +64,16 @@ data class GcodeLayerPreview(
     }
 
     private fun buildContinuousPaths(): List<SegmentPath> {
+        cachedContinuousPaths?.let { return it }
+        val built = computeContinuousPaths()
+        return synchronized(this) {
+            cachedContinuousPaths ?: built.also { cachedContinuousPaths = it }
+        }
+    }
+
+    private fun computeContinuousPaths(): List<SegmentPath> {
         val totalSegments = segments.size / SEGMENT_STRIDE
+        if (totalSegments == 0) return emptyList()
         val paths = ArrayList<SegmentPath>()
         var pathStart = 0
         var pathRole = segments[5].toInt()
@@ -173,6 +190,9 @@ data class GcodeLayerPreview(
             }
             val segments = raw.copyOfRange(HEADER_FLOATS, raw.size)
             val roleSegmentCounts = IntArray(ROLE_COUNT)
+            val continuousPaths = ArrayList<SegmentPath>()
+            var pathStart = 0
+            var pathRole = 0
             segments.indices.step(SEGMENT_STRIDE).forEach { offset ->
                 repeat(5) { axis ->
                     check(
@@ -187,6 +207,25 @@ data class GcodeLayerPreview(
                 val role = roleValue.toInt()
                 check(role in 0 until ROLE_COUNT) { "preview_role_invalid" }
                 roleSegmentCounts[role] += 1
+                val segmentIndex = offset / SEGMENT_STRIDE
+                if (segmentIndex == 0) {
+                    pathRole = role
+                } else {
+                    val previous = offset - SEGMENT_STRIDE
+                    val connects = segments[previous + 5].toInt() == role &&
+                        abs(segments[previous + 2] - segments[offset]) < Z_EPSILON &&
+                        abs(segments[previous + 3] - segments[offset + 1]) < Z_EPSILON &&
+                        abs(segments[previous + 4] - segments[offset + 4]) < Z_EPSILON
+                    if (!connects) {
+                        continuousPaths += SegmentPath(pathStart, segmentIndex, pathRole)
+                        pathStart = segmentIndex
+                        pathRole = role
+                    }
+                }
+            }
+            val totalSegments = segments.size / SEGMENT_STRIDE
+            if (totalSegments > 0) {
+                continuousPaths += SegmentPath(pathStart, totalSegments, pathRole)
             }
             return GcodeLayerPreview(
                 startLayer = startLayer,
@@ -196,7 +235,7 @@ data class GcodeLayerPreview(
                 maxZMm = maxZMm,
                 segments = segments,
                 roleSegmentCounts = roleSegmentCounts,
-            )
+            ).also { preview -> preview.cachedContinuousPaths = continuousPaths }
         }
 
         internal const val ROLE_COUNT = 10

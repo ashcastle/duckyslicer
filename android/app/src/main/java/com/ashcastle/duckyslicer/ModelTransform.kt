@@ -49,7 +49,6 @@ data class ModelTransform(
 internal data class ModelPlacementOrientation(
     val rotationXdeg: Float,
     val rotationYdeg: Float,
-    val rotationZdeg: Float,
     val scaleX: Float,
     val scaleY: Float,
     val scaleZ: Float,
@@ -62,7 +61,6 @@ internal fun ModelTransform.placementOrientation(): ModelPlacementOrientation =
     ModelPlacementOrientation(
         rotationXdeg = rotationXdeg,
         rotationYdeg = rotationYdeg,
-        rotationZdeg = rotationZdeg,
         scaleX = scale,
         scaleY = scaleY,
         scaleZ = scaleZ,
@@ -505,6 +503,7 @@ internal fun ModelTransform.minimumRotatedZ(projectObject: ProjectObject): Float
     val centerX = (geometry.minX + geometry.maxX) / 2f
     val centerY = (geometry.minY + geometry.maxY) / 2f
     val centerZ = (geometry.minZ + geometry.maxZ) / 2f
+    minimumZWithoutTilt(geometry, centerZ)?.let { return it }
     val calculator = MinimumRotatedZCalculator(this)
     var minimum = Float.POSITIVE_INFINITY
     projectObject.volumes.forEach { volume ->
@@ -520,9 +519,32 @@ internal fun ModelTransform.minimumRotatedZ(model: ModelInfo): Float {
     val centerX = ((model.minMm[0] + model.maxMm[0]) / 2.0).toFloat()
     val centerY = ((model.minMm[1] + model.maxMm[1]) / 2.0).toFloat()
     val centerZ = ((model.minMm[2] + model.maxMm[2]) / 2.0).toFloat()
+    val geometry = ProjectObjectGeometry(
+        minX = model.minMm[0].toFloat(),
+        minY = model.minMm[1].toFloat(),
+        minZ = model.minMm[2].toFloat(),
+        maxX = model.maxMm[0].toFloat(),
+        maxY = model.maxMm[1].toFloat(),
+        maxZ = model.maxMm[2].toFloat(),
+    )
+    minimumZWithoutTilt(geometry, centerZ)?.let { return it }
     val calculator = MinimumRotatedZCalculator(this)
     val minimum = calculator.minimum(model.previewTriangles, centerX, centerY, centerZ)
     return minimum.takeIf { it.isFinite() } ?: 0f
+}
+
+/**
+ * Z-axis rotation cannot change bed height. With no X/Y tilt, the exact minimum comes from the
+ * model bounds, so dense meshes do not need a vertex scan during import, translation, or Z rotate.
+ */
+private fun ModelTransform.minimumZWithoutTilt(
+    geometry: ProjectObjectGeometry,
+    centerZ: Float,
+): Float? {
+    if (rotationXdeg != 0f || rotationYdeg != 0f) return null
+    val signedScaleZ = scaleZ * if (mirrorZ) -1f else 1f
+    val extremumZ = if (signedScaleZ >= 0f) geometry.minZ else geometry.maxZ
+    return ((extremumZ - centerZ) * signedScaleZ).takeIf(Float::isFinite)
 }
 
 /**

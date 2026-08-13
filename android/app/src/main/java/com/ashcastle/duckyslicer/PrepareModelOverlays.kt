@@ -21,6 +21,17 @@ internal object PrepareModelOverlayBuilder {
         layOnFaceObjectId: String?,
         layOnFaceCandidateFacets: Map<String, BooleanArray>,
     ): List<PrepareModelOverlayData> {
+        if (
+            layOnFaceObjectId == null && projectObjects.none { projectObject ->
+                projectObject.volumes.any { volume ->
+                    volume.multiColorPaint.facets.isNotEmpty() ||
+                        volume.supportPaint.facets.isNotEmpty() ||
+                        volume.seamPaint.facets.isNotEmpty()
+                }
+            }
+        ) {
+            return emptyList()
+        }
         val overlays = ArrayList<PrepareModelOverlayData>()
         var meshIndex = 0
         projectObjects.forEach { projectObject ->
