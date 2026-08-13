@@ -384,6 +384,10 @@
     <string name="tree_support_branch_diameter">Tree support branch diameter</string>
     <string name="tree_support_wall_count">Support wall loops</string>
     <string name="tree_support_tip_diameter">Tip Diameter</string>
+    <string name="tree_support_organic_branch_angle">Organic Branch Angle</string>
+    <string name="tree_support_organic_branch_distance">Organic Branch Distance</string>
+    <string name="tree_support_organic_branch_diameter">Organic Branch Diameter</string>
+    <string name="tree_support_branch_diameter_angle">Branch Diameter Angle</string>
     <string name="tree_support_preferred_branch_angle">Preferred Branch Angle</string>
     <string name="tree_support_branch_density">Branch Density</string>
     <string name="tree_support_adaptive_layer_height">Adaptive layer height</string>

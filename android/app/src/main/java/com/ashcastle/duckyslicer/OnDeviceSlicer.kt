@@ -339,6 +339,10 @@ data class QualityProfile(
     val treeSupportTipDiameter: Float = 0.8f,
     val treeSupportPreferredBranchAngle: Float = 25f,
     val treeSupportBranchDensity: Float = 30f,
+    val treeSupportOrganicBranchAngle: Float = 40f,
+    val treeSupportOrganicBranchDistance: Float = 1f,
+    val treeSupportOrganicBranchDiameter: Float = 2f,
+    val treeSupportBranchDiameterAngle: Float = 5f,
     val treeSupportAdaptiveLayerHeight: Boolean = true,
     val treeSupportAutoBrim: Boolean = true,
     val treeSupportBrimWidth: Float = 3f,
@@ -629,6 +633,10 @@ data class SliceOptions(
     val treeSupportTipDiameter: Float = quality.treeSupportTipDiameter,
     val treeSupportPreferredBranchAngle: Float = quality.treeSupportPreferredBranchAngle,
     val treeSupportBranchDensity: Float = quality.treeSupportBranchDensity,
+    val treeSupportOrganicBranchAngle: Float = quality.treeSupportOrganicBranchAngle,
+    val treeSupportOrganicBranchDistance: Float = quality.treeSupportOrganicBranchDistance,
+    val treeSupportOrganicBranchDiameter: Float = quality.treeSupportOrganicBranchDiameter,
+    val treeSupportBranchDiameterAngle: Float = quality.treeSupportBranchDiameterAngle,
     val treeSupportAdaptiveLayerHeight: Boolean = quality.treeSupportAdaptiveLayerHeight,
     val treeSupportAutoBrim: Boolean = quality.treeSupportAutoBrim,
     val treeSupportBrimWidth: Float = quality.treeSupportBrimWidth,
@@ -938,6 +946,10 @@ data class SliceOptions(
         treeSupportTipDiameter = profile.treeSupportTipDiameter,
         treeSupportPreferredBranchAngle = profile.treeSupportPreferredBranchAngle,
         treeSupportBranchDensity = profile.treeSupportBranchDensity,
+        treeSupportOrganicBranchAngle = profile.treeSupportOrganicBranchAngle,
+        treeSupportOrganicBranchDistance = profile.treeSupportOrganicBranchDistance,
+        treeSupportOrganicBranchDiameter = profile.treeSupportOrganicBranchDiameter,
+        treeSupportBranchDiameterAngle = profile.treeSupportBranchDiameterAngle,
         treeSupportAdaptiveLayerHeight = profile.treeSupportAdaptiveLayerHeight,
         treeSupportAutoBrim = profile.treeSupportAutoBrim,
         treeSupportBrimWidth = profile.treeSupportBrimWidth,
@@ -1296,7 +1308,12 @@ data class SliceOptions(
             filamentPressureAdvances = nativeFilaments.map(FilamentProfile::pressureAdvance).toFloatArray(),
             filamentNozzleTempInitialLayers = nativeFilaments.map(FilamentProfile::firstLayerNozzleTemp).toIntArray(),
             filamentBedTempInitialLayers = nativeFilaments.map(FilamentProfile::firstLayerBedTemp).toIntArray(),
-        )
+        ).also { native ->
+            native.treeSupportOrganicBranchAngle = treeSupportOrganicBranchAngle
+            native.treeSupportOrganicBranchDistance = treeSupportOrganicBranchDistance
+            native.treeSupportOrganicBranchDiameter = treeSupportOrganicBranchDiameter
+            native.treeSupportBranchDiameterAngle = treeSupportBranchDiameterAngle
+        }
     }
 }
 

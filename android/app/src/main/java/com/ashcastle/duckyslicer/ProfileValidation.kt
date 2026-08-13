@@ -178,6 +178,11 @@ internal object ProfileValidation {
             profile.treeSupportTipDiameter in 0.1f..100f &&
             profile.treeSupportPreferredBranchAngle in 10f..85f &&
             profile.treeSupportBranchDensity in 5f..100f &&
+            profile.treeSupportOrganicBranchAngle in 0f..60f &&
+            profile.treeSupportOrganicBranchDistance in 1f..10f &&
+            profile.treeSupportOrganicBranchDiameter in 1f..10f &&
+            profile.treeSupportOrganicBranchDiameter >= profile.treeSupportTipDiameter &&
+            profile.treeSupportBranchDiameterAngle in 0f..15f &&
             profile.treeSupportBrimWidth in 0f..100f &&
             profile.supportFilament in 0..MAX_FILAMENT_SLOTS &&
             profile.supportInterfaceFilament in 0..MAX_FILAMENT_SLOTS &&

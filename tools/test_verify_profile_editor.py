@@ -46,6 +46,8 @@ def valid_sources() -> dict[str, str]:
             " R.string.tree_support_branch_angle R.string.tree_support_branch_distance"
             " R.string.tree_support_branch_diameter R.string.tree_support_wall_count"
             " R.string.tree_support_tip_diameter R.string.tree_support_preferred_branch_angle"
+            " R.string.tree_support_organic_branch_angle R.string.tree_support_organic_branch_distance"
+            " R.string.tree_support_organic_branch_diameter R.string.tree_support_branch_diameter_angle"
             " R.string.tree_support_branch_density R.string.tree_support_adaptive_layer_height"
             " R.string.tree_support_auto_brim R.string.tree_support_brim_width"
         ),
@@ -97,6 +99,8 @@ def valid_sources() -> dict[str, str]:
             ' name="tree_support_branch_angle" name="tree_support_branch_distance"'
             ' name="tree_support_branch_diameter" name="tree_support_wall_count"'
             ' name="tree_support_tip_diameter" name="tree_support_preferred_branch_angle"'
+            ' name="tree_support_organic_branch_angle" name="tree_support_organic_branch_distance"'
+            ' name="tree_support_organic_branch_diameter" name="tree_support_branch_diameter_angle"'
             ' name="tree_support_branch_density" name="tree_support_adaptive_layer_height"'
             ' name="tree_support_auto_brim" name="tree_support_brim_width"'
         ),
@@ -115,6 +119,8 @@ def valid_sources() -> dict[str, str]:
             ' name="tree_support_branch_angle" name="tree_support_branch_distance"'
             ' name="tree_support_branch_diameter" name="tree_support_wall_count"'
             ' name="tree_support_tip_diameter" name="tree_support_preferred_branch_angle"'
+            ' name="tree_support_organic_branch_angle" name="tree_support_organic_branch_distance"'
+            ' name="tree_support_organic_branch_diameter" name="tree_support_branch_diameter_angle"'
             ' name="tree_support_branch_density" name="tree_support_adaptive_layer_height"'
             ' name="tree_support_auto_brim" name="tree_support_brim_width"'
         ),

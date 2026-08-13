@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -682,6 +682,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "treeSupportTipDiameter": number(raw.get("tree_support_tip_diameter"), 0.8),
         "treeSupportPreferredBranchAngle": number(raw.get("tree_support_angle_slow"), 25),
         "treeSupportBranchDensity": number(raw.get("tree_support_top_rate"), 30),
+        "treeSupportOrganicBranchAngle": number(raw.get("tree_support_branch_angle_organic"), 40),
+        "treeSupportOrganicBranchDistance": number(raw.get("tree_support_branch_distance_organic"), 1),
+        "treeSupportOrganicBranchDiameter": number(raw.get("tree_support_branch_diameter_organic"), 2),
+        "treeSupportBranchDiameterAngle": number(raw.get("tree_support_branch_diameter_angle"), 5),
         "treeSupportAdaptiveLayerHeight": boolean(raw.get("tree_support_adaptive_layer_height"), True),
         "treeSupportAutoBrim": boolean(raw.get("tree_support_auto_brim"), True),
         "treeSupportBrimWidth": number(raw.get("tree_support_brim_width"), 3),
@@ -785,6 +789,11 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0.1 <= profile["treeSupportTipDiameter"] <= 100
         and 10 <= profile["treeSupportPreferredBranchAngle"] <= 85
         and 5 <= profile["treeSupportBranchDensity"] <= 100
+        and 0 <= profile["treeSupportOrganicBranchAngle"] <= 60
+        and 1 <= profile["treeSupportOrganicBranchDistance"] <= 10
+        and 1 <= profile["treeSupportOrganicBranchDiameter"] <= 10
+        and profile["treeSupportOrganicBranchDiameter"] >= profile["treeSupportTipDiameter"]
+        and 0 <= profile["treeSupportBranchDiameterAngle"] <= 15
         and 0 <= profile["treeSupportBrimWidth"] <= 100
         and all(
             0.1 <= profile[key] <= 3

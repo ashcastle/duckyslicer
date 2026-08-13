@@ -103,6 +103,10 @@ class SliceOptionsPersistenceTest {
         assertEquals(1.3f, restored.treeSupportTipDiameter)
         assertEquals(31f, restored.treeSupportPreferredBranchAngle)
         assertEquals(37f, restored.treeSupportBranchDensity)
+        assertEquals(45f, restored.treeSupportOrganicBranchAngle)
+        assertEquals(2.2f, restored.treeSupportOrganicBranchDistance)
+        assertEquals(3.1f, restored.treeSupportOrganicBranchDiameter)
+        assertEquals(10f, restored.treeSupportBranchDiameterAngle)
         assertEquals(false, restored.treeSupportAdaptiveLayerHeight)
         assertEquals(false, restored.treeSupportAutoBrim)
         assertEquals(4.6f, restored.treeSupportBrimWidth)
@@ -369,6 +373,10 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         treeSupportTipDiameter = 1.3f,
         treeSupportPreferredBranchAngle = 31f,
         treeSupportBranchDensity = 37f,
+        treeSupportOrganicBranchAngle = 45f,
+        treeSupportOrganicBranchDistance = 2.2f,
+        treeSupportOrganicBranchDiameter = 3.1f,
+        treeSupportBranchDiameterAngle = 10f,
         treeSupportAdaptiveLayerHeight = false,
         treeSupportAutoBrim = false,
         treeSupportBrimWidth = 4.6f,

@@ -250,4 +250,10 @@ data class SliceConfig(
     @JvmField var mixedFilamentDefinitions: String = "",
     /** Process-local safety ceiling applied before Orca writes G-code. */
     @JvmField var maximumGcodeBytes: Int = 1_073_741_824,
-)
+) {
+    // Keep newly added JNI fields out of the already large generated constructor signature.
+    @JvmField var treeSupportOrganicBranchAngle: Float = 40f
+    @JvmField var treeSupportOrganicBranchDistance: Float = 1f
+    @JvmField var treeSupportOrganicBranchDiameter: Float = 2f
+    @JvmField var treeSupportBranchDiameterAngle: Float = 5f
+}

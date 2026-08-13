@@ -2073,8 +2073,82 @@ private fun SlicingSettingsSheet(
                             steps = ((max(10f, options.treeSupportTipDiameter) - 0.1f) * 10f)
                                 .roundToInt() - 1,
                             onValueChange = {
+                                val tipDiameter = (it * 10f).roundToInt() / 10f
                                 onOptionsChanged(
-                                    options.copy(treeSupportTipDiameter = (it * 10f).roundToInt() / 10f),
+                                    options.copy(
+                                        treeSupportTipDiameter = tipDiameter,
+                                        treeSupportOrganicBranchDiameter = max(
+                                            options.treeSupportOrganicBranchDiameter,
+                                            tipDiameter,
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.tree_support_organic_branch_angle),
+                            valueText = stringResource(
+                                R.string.degrees_value,
+                                options.treeSupportOrganicBranchAngle,
+                            ),
+                            value = options.treeSupportOrganicBranchAngle,
+                            range = 0f..60f,
+                            steps = 59,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(treeSupportOrganicBranchAngle = it.roundToInt().toFloat()),
+                                )
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.tree_support_organic_branch_distance),
+                            valueText = stringResource(
+                                R.string.millimeters_value_precise,
+                                options.treeSupportOrganicBranchDistance,
+                            ),
+                            value = options.treeSupportOrganicBranchDistance,
+                            range = 1f..10f,
+                            steps = 89,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        treeSupportOrganicBranchDistance = (it * 10f).roundToInt() / 10f,
+                                    ),
+                                )
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.tree_support_organic_branch_diameter),
+                            valueText = stringResource(
+                                R.string.millimeters_value_precise,
+                                options.treeSupportOrganicBranchDiameter,
+                            ),
+                            value = options.treeSupportOrganicBranchDiameter,
+                            range = options.treeSupportTipDiameter.coerceIn(1f, 10f)..10f,
+                            steps = (
+                                ((10f - options.treeSupportTipDiameter.coerceIn(1f, 10f)) * 10f)
+                                    .roundToInt() - 1
+                                ).coerceAtLeast(0),
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        treeSupportOrganicBranchDiameter = (it * 10f).roundToInt() / 10f,
+                                    ),
+                                )
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.tree_support_branch_diameter_angle),
+                            valueText = stringResource(
+                                R.string.degrees_value,
+                                options.treeSupportBranchDiameterAngle,
+                            ),
+                            value = options.treeSupportBranchDiameterAngle,
+                            range = 0f..15f,
+                            steps = 14,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(treeSupportBranchDiameterAngle = it.roundToInt().toFloat()),
                                 )
                             },
                         )

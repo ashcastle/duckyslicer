@@ -192,6 +192,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var treeSupportTipDiameter: Float = base.treeSupportTipDiameter
     private var treeSupportPreferredBranchAngle: Float = base.treeSupportPreferredBranchAngle
     private var treeSupportBranchDensity: Float = base.treeSupportBranchDensity
+    private var treeSupportOrganicBranchAngle: Float = base.treeSupportOrganicBranchAngle
+    private var treeSupportOrganicBranchDistance: Float = base.treeSupportOrganicBranchDistance
+    private var treeSupportOrganicBranchDiameter: Float = base.treeSupportOrganicBranchDiameter
+    private var treeSupportBranchDiameterAngle: Float = base.treeSupportBranchDiameterAngle
     private var treeSupportAdaptiveLayerHeight: Boolean = base.treeSupportAdaptiveLayerHeight
     private var treeSupportAutoBrim: Boolean = base.treeSupportAutoBrim
     private var treeSupportBrimWidth: Float = base.treeSupportBrimWidth
@@ -424,6 +428,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         treeSupportTipDiameter = input.readFloat()
         treeSupportPreferredBranchAngle = input.readFloat()
         treeSupportBranchDensity = input.readFloat()
+        treeSupportOrganicBranchAngle = input.readFloat()
+        treeSupportOrganicBranchDistance = input.readFloat()
+        treeSupportOrganicBranchDiameter = input.readFloat()
+        treeSupportBranchDiameterAngle = input.readFloat()
         treeSupportAdaptiveLayerHeight = input.readCatalogBoolean()
         treeSupportAutoBrim = input.readCatalogBoolean()
         treeSupportBrimWidth = input.readFloat()
@@ -620,6 +628,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         treeSupportTipDiameter = treeSupportTipDiameter,
         treeSupportPreferredBranchAngle = treeSupportPreferredBranchAngle,
         treeSupportBranchDensity = treeSupportBranchDensity,
+        treeSupportOrganicBranchAngle = treeSupportOrganicBranchAngle,
+        treeSupportOrganicBranchDistance = treeSupportOrganicBranchDistance,
+        treeSupportOrganicBranchDiameter = treeSupportOrganicBranchDiameter,
+        treeSupportBranchDiameterAngle = treeSupportBranchDiameterAngle,
         treeSupportAdaptiveLayerHeight = treeSupportAdaptiveLayerHeight,
         treeSupportAutoBrim = treeSupportAutoBrim,
         treeSupportBrimWidth = treeSupportBrimWidth,
@@ -818,6 +830,10 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("treeSupportTipDiameter", BINARY_FLOAT),
     BinaryField("treeSupportPreferredBranchAngle", BINARY_FLOAT),
     BinaryField("treeSupportBranchDensity", BINARY_FLOAT),
+    BinaryField("treeSupportOrganicBranchAngle", BINARY_FLOAT),
+    BinaryField("treeSupportOrganicBranchDistance", BINARY_FLOAT),
+    BinaryField("treeSupportOrganicBranchDiameter", BINARY_FLOAT),
+    BinaryField("treeSupportBranchDiameterAngle", BINARY_FLOAT),
     BinaryField("treeSupportAdaptiveLayerHeight", BINARY_BOOL),
     BinaryField("treeSupportAutoBrim", BINARY_BOOL),
     BinaryField("treeSupportBrimWidth", BINARY_FLOAT),
