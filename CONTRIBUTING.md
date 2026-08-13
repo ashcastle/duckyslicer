@@ -167,8 +167,11 @@ and the ARM64 production parser test to change together.
 Large-model inspection follows the same rule: keep its bounded vertices and source-facet
 mapping in the versioned primitive `FloatArray` payload, and keep JSON decoding out of
 the production import path.
-Depth-tested preview geometry must be built directly in native-order direct memory and
-uploaded only when the layer range, role visibility, quality, or visual style changes.
+Depth-tested toolpath geometry is packed by the bounded Rust JNI path, validated again
+by Kotlin, copied once into native-order direct VBO staging memory, and uploaded only
+when the layer range, role visibility, quality, or visual style changes. Keep the
+managed packer as a safe fallback and require byte-exact ARM64 parity tests for both
+instance and line layouts whenever either implementation changes.
 Toolpaths use one 32-byte instance per retained segment and OpenGL ES 3 instanced draws;
 do not expand every line into six duplicated CPU vertices. Bed triangles remain a small
 separate VBO. Camera gestures must reuse the existing GPU buffers; do not return to

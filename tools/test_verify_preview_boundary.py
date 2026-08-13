@@ -9,7 +9,7 @@ def valid_sources() -> dict[str, str]:
     return {
         "NativeEngine.kt": (
             "previewGcodeRange(path: String, startLayer: Int, endLayer: Int): FloatArray? "
-            "inspectStlPayload(path: String): FloatArray?"
+            "inspectStlPayload(path: String): FloatArray? external fun packToolpathGeometry("
         ),
         "PreviewModels.kt": (
             "fun fromNative(raw: FloatArray?) PAYLOAD_MAGIC PAYLOAD_VERSION "
@@ -66,7 +66,8 @@ def valid_sources() -> dict[str, str]:
             "GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER GLES30.glBufferData( "
             "GLES30.GL_STATIC_DRAW GLES30.glDrawArraysInstanced( "
             "private fun drawToolpathLines( GLES30.glDrawArrays(GLES30.GL_LINES "
-            "renderAsLines = true lineVertices = lineBuilder?.finish() "
+            "renderAsLines = true val lineVertices = when { "
+            "lineBuilder?.finish() ?: ByteBuffer.allocateDirect(0) "
             "GLES30.GL_TRIANGLE_STRIP const val TOOLPATH_VERTICES_PER_INSTANCE = 4 "
             "GLES30.glVertexAttribDivisor( GLES30.GL_UNSIGNED_BYTE "
             "geometryUploadCountForTest cachedGeometryCountForTest "
@@ -77,7 +78,8 @@ def valid_sources() -> dict[str, str]:
             "releaseGpuGeometryForMemoryPressure() "
             "ToolpathUploadPayload INSTANCE_STRIDE_BYTES = 32 "
             "INSTANCE_START_OFFSET_BYTES INSTANCE_COLOR_OFFSET_BYTES "
-            "toolpathInstances = instanceBuilder?.finish() "
+            "val toolpathInstances = when { "
+            "instanceBuilder?.finish() ?: ByteBuffer.allocateDirect(0) "
             "EARLY_Z_OPACITY_THRESHOLD = 0.85f "
             "val reverseForEarlyZ = scene.opacity >= EARLY_Z_OPACITY_THRESHOLD "
             "plan.pathStarts[pathIndex] plan.pathEndsExclusive[pathIndex] "
@@ -97,7 +99,10 @@ def valid_sources() -> dict[str, str]:
             "reportFrameReady reportRendererStarting reportUnavailable "
             "override fun surfaceDestroyed(holder: SurfaceHolder) "
             "RENDERER_STARTUP_TIMEOUT_MS = 5_000L "
-            "GLES30.glGetError() failRenderer(\"program_creation\")"
+            "GLES30.glGetError() failRenderer(\"program_creation\") "
+            "NativeToolpathPacker.pack(scene, plan, reverseForEarlyZ) "
+            "values.size <= plan.segmentCount * PACKED_TOOLPATH_FLOATS "
+            "nativePackingUsed = nativePacked != null"
         ),
         "PrepareModelPreviewView.kt": (
             "PrepareModelTopologyKey( filamentSlot = volume.filamentSlot "
@@ -259,6 +264,13 @@ def valid_sources() -> dict[str, str]:
             "maximumPreviewCacheLookupNeverRehashesCoordinates "
             "segmentCount = GcodeLayerPreview.MAX_SEGMENTS preview.prepareRenderIndex() "
             "planP95Ms <= 25.0 p50Ms <= 80.0 p95Ms <= 150.0 cacheP95Ms <= 4.0"
+        ),
+        "ToolpathNativePackingInstrumentedTest.kt": (
+            "rustPackingIsByteExactWithTheManagedFallback "
+            "ToolpathMeshBuilder.build(scene, useNativePacking = true) "
+            "ToolpathMeshBuilder.build(scene, useNativePacking = false) "
+            "assertArrayEquals(managed.toolpathInstances.bytes(), native.toolpathInstances.bytes()) "
+            "assertArrayEquals(managed.lineVertices.bytes(), native.lineVertices.bytes())"
         ),
         "AccessibilityInstrumentedTest.kt": (
             "appSettingsExposeNamedSlidersWholeRowSwitchesAndHeadings "
@@ -509,6 +521,22 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
         sources = valid_sources()
         sources["ToolpathPreviewView.kt"] += " plan.segmentOffsets"
         with self.assertRaisesRegex(VerificationError, "materialized per-segment"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_unbounded_native_toolpath_output(self) -> None:
+        sources = valid_sources()
+        sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
+            "values.size <= plan.segmentCount * PACKED_TOOLPATH_FLOATS", "true"
+        )
+        with self.assertRaisesRegex(VerificationError, "GPU preview upload contract"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_native_packing_without_managed_parity(self) -> None:
+        sources = valid_sources()
+        sources["ToolpathNativePackingInstrumentedTest.kt"] = sources[
+            "ToolpathNativePackingInstrumentedTest.kt"
+        ].replace("ToolpathMeshBuilder.build(scene, useNativePacking = false)", "native")
+        with self.assertRaisesRegex(VerificationError, "native Preview packing regression"):
             verify_preview_boundary(sources)
 
     def test_rejects_missing_gpu_memory_pressure_release(self) -> None:

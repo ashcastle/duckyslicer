@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use jni::JNIEnv;
-use jni::objects::{JClass, JString};
-use jni::sys::{jfloatArray, jint, jstring};
+use jni::objects::{JClass, JFloatArray, JIntArray, JString};
+use jni::sys::{jboolean, jfloat, jfloatArray, jint, jstring};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -153,6 +153,24 @@ const MAX_PREVIEW_LAYERS: usize = 1_000_000;
 const PREVIEW_PAYLOAD_MAGIC: f32 = 17_491.0;
 const PREVIEW_PAYLOAD_VERSION: f32 = 1.0;
 const PREVIEW_HEADER_FLOATS: usize = 7;
+const TOOLPATH_SEGMENT_FLOATS: usize = 6;
+const PACKED_TOOLPATH_FLOATS: usize = 8;
+const TOOLPATH_ROLE_COUNT: usize = 10;
+const TOOLPATH_Z_OFFSET_MM: f32 = 0.024;
+const TOOLPATH_ROLE_COLORS: [[f32; 3]; TOOLPATH_ROLE_COUNT] = [
+    [1.0, 0.812, 0.251],
+    [0.267, 0.843, 1.0],
+    [0.4, 0.545, 1.0],
+    [1.0, 0.384, 0.816],
+    [0.655, 0.545, 0.98],
+    [0.369, 0.902, 0.659],
+    [1.0, 0.42, 0.42],
+    [1.0, 0.624, 0.263],
+    [0.906, 0.906, 0.886],
+    [0.0, 0.843, 0.741],
+];
+const TOOLPATH_ROLE_WIDTHS_MM: [f32; TOOLPATH_ROLE_COUNT] =
+    [0.52, 0.46, 0.40, 0.46, 0.42, 0.42, 0.52, 0.48, 0.36, 0.46];
 const INTERNAL_ERROR_JSON: &str =
     "{\"ok\":false,\"error\":\"The file could not be processed safely\"}";
 static TEMP_OUTPUT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -161,10 +179,195 @@ static TEMP_OUTPUT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 enum EngineError {
     #[error("Unable to open file: {0}")]
     Open(#[from] std::io::Error),
+    #[error("Unable to access Android data: {0}")]
+    Jni(#[from] jni::errors::Error),
     #[error("Unable to parse STL mesh: {0}")]
     Parse(String),
     #[error("STL contains no vertices")]
     Empty,
+}
+
+struct ToolpathPackingRequest<'a> {
+    segments: &'a [f32],
+    path_starts: &'a [i32],
+    path_ends_exclusive: &'a [i32],
+    bed_origin_x: f32,
+    bed_origin_y: f32,
+    min_z_mm: f32,
+    max_z_mm: f32,
+    opacity: f32,
+    depth_contrast: f32,
+    reverse_for_early_z: bool,
+    render_as_lines: bool,
+}
+
+fn packed_toolpath_color(red: f32, green: f32, blue: f32, alpha: f32) -> f32 {
+    let channel = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u32;
+    f32::from_bits(channel(alpha) << 24 | channel(blue) << 16 | channel(green) << 8 | channel(red))
+}
+
+fn pack_toolpath_geometry(request: ToolpathPackingRequest<'_>) -> Result<Vec<f32>, EngineError> {
+    if !request
+        .segments
+        .len()
+        .is_multiple_of(TOOLPATH_SEGMENT_FLOATS)
+    {
+        return Err(EngineError::Parse(
+            "Toolpath segment payload is not aligned".to_owned(),
+        ));
+    }
+    let source_segment_count = request.segments.len() / TOOLPATH_SEGMENT_FLOATS;
+    if source_segment_count > MAX_PREVIEW_SEGMENTS
+        || request.path_starts.len() != request.path_ends_exclusive.len()
+        || request.path_starts.len() > MAX_PREVIEW_SEGMENTS
+    {
+        return Err(EngineError::Parse(
+            "Toolpath packing request exceeds its bound".to_owned(),
+        ));
+    }
+    let scalar_values = [
+        request.bed_origin_x,
+        request.bed_origin_y,
+        request.min_z_mm,
+        request.max_z_mm,
+        request.opacity,
+        request.depth_contrast,
+    ];
+    if scalar_values
+        .iter()
+        .any(|value| !value.is_finite() || value.abs() > MAX_GCODE_COORDINATE_ABS_MM)
+        || request.min_z_mm > request.max_z_mm
+        || !(0.0..=1.0).contains(&request.opacity)
+        || !(0.0..=1.0).contains(&request.depth_contrast)
+    {
+        return Err(EngineError::Parse(
+            "Toolpath packing parameters are invalid".to_owned(),
+        ));
+    }
+
+    let mut selected_segment_count = 0usize;
+    let mut previous_end = 0usize;
+    for (&start, &end) in request
+        .path_starts
+        .iter()
+        .zip(request.path_ends_exclusive.iter())
+    {
+        let start = usize::try_from(start)
+            .map_err(|_| EngineError::Parse("Toolpath path range is invalid".to_owned()))?;
+        let end = usize::try_from(end)
+            .map_err(|_| EngineError::Parse("Toolpath path range is invalid".to_owned()))?;
+        if start < previous_end || start >= end || end > source_segment_count {
+            return Err(EngineError::Parse(
+                "Toolpath path range is invalid".to_owned(),
+            ));
+        }
+        selected_segment_count = selected_segment_count
+            .checked_add(end - start)
+            .ok_or_else(|| EngineError::Parse("Toolpath packing size overflow".to_owned()))?;
+        previous_end = end;
+    }
+    if selected_segment_count > MAX_PREVIEW_SEGMENTS {
+        return Err(EngineError::Parse(
+            "Toolpath packing selection exceeds its bound".to_owned(),
+        ));
+    }
+    let output_capacity = selected_segment_count
+        .checked_mul(PACKED_TOOLPATH_FLOATS)
+        .ok_or_else(|| EngineError::Parse("Toolpath packing size overflow".to_owned()))?;
+    let mut output = Vec::with_capacity(output_capacity);
+    let z_span = (request.max_z_mm - request.min_z_mm).max(0.001);
+    let mut color_z_bits: Option<u32> = None;
+    let mut height_shade_multiplier = 1.0f32;
+    let mut packed_role_colors = [0.0f32; TOOLPATH_ROLE_COUNT];
+    let mut packed_role_color_valid = [false; TOOLPATH_ROLE_COUNT];
+
+    let mut pack_segment = |segment_index: usize| -> Result<(), EngineError> {
+        let offset = segment_index * TOOLPATH_SEGMENT_FLOATS;
+        let source = &request.segments[offset..offset + TOOLPATH_SEGMENT_FLOATS];
+        if source[..5]
+            .iter()
+            .any(|value| !value.is_finite() || value.abs() > MAX_GCODE_COORDINATE_ABS_MM)
+        {
+            return Err(EngineError::Parse(
+                "Toolpath packing coordinate is invalid".to_owned(),
+            ));
+        }
+        let role_value = source[5];
+        if !role_value.is_finite() || role_value.fract() != 0.0 {
+            return Err(EngineError::Parse(
+                "Toolpath packing role is invalid".to_owned(),
+            ));
+        }
+        let role = role_value as usize;
+        if role >= TOOLPATH_ROLE_COUNT {
+            return Err(EngineError::Parse(
+                "Toolpath packing role is invalid".to_owned(),
+            ));
+        }
+        let x1 = source[0] - request.bed_origin_x;
+        let y1 = source[1] - request.bed_origin_y;
+        let x2 = source[2] - request.bed_origin_x;
+        let y2 = source[3] - request.bed_origin_y;
+        let z = source[4];
+        let dx = x2 - x1;
+        let dy = y2 - y1;
+        if dx * dx + dy * dy < 0.000_001 {
+            return Ok(());
+        }
+        if color_z_bits != Some(z.to_bits()) {
+            color_z_bits = Some(z.to_bits());
+            packed_role_color_valid.fill(false);
+            let normalized_height = ((z - request.min_z_mm) / z_span).clamp(0.0, 1.0);
+            let shade = request.depth_contrast * (1.0 - normalized_height) * 0.56;
+            height_shade_multiplier = 1.0 - shade;
+        }
+        if !packed_role_color_valid[role] {
+            let base = TOOLPATH_ROLE_COLORS[role];
+            packed_role_colors[role] = packed_toolpath_color(
+                base[0] * height_shade_multiplier,
+                base[1] * height_shade_multiplier,
+                base[2] * height_shade_multiplier,
+                request.opacity,
+            );
+            packed_role_color_valid[role] = true;
+        }
+        let color = packed_role_colors[role];
+        let render_z = z + TOOLPATH_Z_OFFSET_MM;
+        if request.render_as_lines {
+            output.extend_from_slice(&[x1, y1, render_z, color, x2, y2, render_z, color]);
+        } else {
+            output.extend_from_slice(&[
+                x1,
+                y1,
+                render_z,
+                x2,
+                y2,
+                render_z,
+                TOOLPATH_ROLE_WIDTHS_MM[role] / 2.0,
+                color,
+            ]);
+        }
+        Ok(())
+    };
+
+    if request.reverse_for_early_z {
+        for path_index in (0..request.path_starts.len()).rev() {
+            let start = request.path_starts[path_index] as usize;
+            let end = request.path_ends_exclusive[path_index] as usize;
+            for segment_index in (start..end).rev() {
+                pack_segment(segment_index)?;
+            }
+        }
+    } else {
+        for path_index in 0..request.path_starts.len() {
+            let start = request.path_starts[path_index] as usize;
+            let end = request.path_ends_exclusive[path_index] as usize;
+            for segment_index in start..end {
+                pack_segment(segment_index)?;
+            }
+        }
+    }
+    Ok(output)
 }
 
 struct StlInspection {
@@ -2055,6 +2258,72 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeR
     .unwrap_or(std::ptr::null_mut())
 }
 
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_packToolpathGeometry(
+    env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    segments: JFloatArray<'_>,
+    path_starts: JIntArray<'_>,
+    path_ends_exclusive: JIntArray<'_>,
+    bed_origin_x: jfloat,
+    bed_origin_y: jfloat,
+    min_z_mm: jfloat,
+    max_z_mm: jfloat,
+    opacity: jfloat,
+    depth_contrast: jfloat,
+    reverse_for_early_z: jboolean,
+    render_as_lines: jboolean,
+) -> jfloatArray {
+    let payload = catch_unwind(AssertUnwindSafe(|| {
+        let segment_float_count = usize::try_from(env.get_array_length(&segments)?)
+            .map_err(|_| EngineError::Parse("Toolpath segment array is invalid".to_owned()))?;
+        let path_count = usize::try_from(env.get_array_length(&path_starts)?)
+            .map_err(|_| EngineError::Parse("Toolpath path array is invalid".to_owned()))?;
+        let path_end_count = usize::try_from(env.get_array_length(&path_ends_exclusive)?)
+            .map_err(|_| EngineError::Parse("Toolpath path array is invalid".to_owned()))?;
+        if segment_float_count > MAX_PREVIEW_SEGMENTS * TOOLPATH_SEGMENT_FLOATS
+            || path_count > MAX_PREVIEW_SEGMENTS
+            || path_end_count != path_count
+        {
+            return Err(EngineError::Parse(
+                "Toolpath JNI payload exceeds its bound".to_owned(),
+            ));
+        }
+        let mut segment_values = vec![0.0f32; segment_float_count];
+        let mut path_start_values = vec![0i32; path_count];
+        let mut path_end_values = vec![0i32; path_count];
+        env.get_float_array_region(&segments, 0, &mut segment_values)?;
+        env.get_int_array_region(&path_starts, 0, &mut path_start_values)?;
+        env.get_int_array_region(&path_ends_exclusive, 0, &mut path_end_values)?;
+        pack_toolpath_geometry(ToolpathPackingRequest {
+            segments: &segment_values,
+            path_starts: &path_start_values,
+            path_ends_exclusive: &path_end_values,
+            bed_origin_x,
+            bed_origin_y,
+            min_z_mm,
+            max_z_mm,
+            opacity,
+            depth_contrast,
+            reverse_for_early_z: reverse_for_early_z != 0,
+            render_as_lines: render_as_lines != 0,
+        })
+    }))
+    .ok()
+    .and_then(Result::ok);
+    let Some(payload) = payload else {
+        return std::ptr::null_mut();
+    };
+    catch_unwind(AssertUnwindSafe(|| {
+        let output = env.new_float_array(payload.len() as jint)?;
+        env.set_float_array_region(&output, 0, &payload)?;
+        Ok::<jfloatArray, jni::errors::Error>(output.into_raw())
+    }))
+    .ok()
+    .and_then(Result::ok)
+    .unwrap_or(std::ptr::null_mut())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2176,6 +2445,88 @@ mod tests {
     fn json_boundary_converts_unexpected_panics_to_a_safe_error() {
         let response = guarded_json::<SuccessResponse, _>(|| panic!("simulated parser defect"));
         assert_eq!(response, INTERNAL_ERROR_JSON);
+    }
+
+    #[test]
+    fn toolpath_packing_preserves_ranges_layout_and_reverse_order() {
+        let segments = [
+            10.0, 20.0, 30.0, 20.0, 0.2, 0.0, // outer wall
+            30.0, 20.0, 30.0, 40.0, 0.4, 1.0, // inner wall
+        ];
+        let path_starts = [0, 1];
+        let path_ends = [1, 2];
+        let pack = |reverse_for_early_z, render_as_lines| {
+            pack_toolpath_geometry(ToolpathPackingRequest {
+                segments: &segments,
+                path_starts: &path_starts,
+                path_ends_exclusive: &path_ends,
+                bed_origin_x: 10.0,
+                bed_origin_y: 20.0,
+                min_z_mm: 0.2,
+                max_z_mm: 0.4,
+                opacity: 0.92,
+                depth_contrast: 0.0,
+                reverse_for_early_z,
+                render_as_lines,
+            })
+            .expect("pack bounded toolpaths")
+        };
+
+        let instances = pack(false, false);
+        assert_eq!(instances.len(), 2 * PACKED_TOOLPATH_FLOATS);
+        assert_eq!(&instances[..7], &[0.0, 0.0, 0.224, 20.0, 0.0, 0.224, 0.26]);
+        assert_eq!(
+            instances[7].to_bits(),
+            packed_toolpath_color(1.0, 0.812, 0.251, 0.92).to_bits(),
+        );
+
+        let lines = pack(true, true);
+        assert_eq!(&lines[..3], &[20.0, 0.0, 0.424]);
+        assert_eq!(&lines[4..7], &[20.0, 20.0, 0.424]);
+        assert_eq!(lines[3].to_bits(), lines[7].to_bits());
+        assert_eq!(&lines[8..11], &[0.0, 0.0, 0.224]);
+    }
+
+    #[test]
+    fn toolpath_packing_rejects_overlapping_or_out_of_bounds_ranges() {
+        let segments = [0.0, 0.0, 1.0, 0.0, 0.2, 0.0];
+        for (starts, ends) in [(vec![0, 0], vec![1, 1]), (vec![0], vec![2])] {
+            let result = pack_toolpath_geometry(ToolpathPackingRequest {
+                segments: &segments,
+                path_starts: &starts,
+                path_ends_exclusive: &ends,
+                bed_origin_x: 0.0,
+                bed_origin_y: 0.0,
+                min_z_mm: 0.2,
+                max_z_mm: 0.2,
+                opacity: 1.0,
+                depth_contrast: 0.0,
+                reverse_for_early_z: false,
+                render_as_lines: false,
+            });
+            assert!(matches!(result, Err(EngineError::Parse(_))));
+        }
+    }
+
+    #[test]
+    fn toolpath_packing_rejects_invalid_visual_parameters() {
+        let segments = [0.0, 0.0, 1.0, 0.0, 0.2, 0.0];
+        for (opacity, depth_contrast) in [(f32::NAN, 0.5), (1.1, 0.5), (0.5, -0.1)] {
+            let result = pack_toolpath_geometry(ToolpathPackingRequest {
+                segments: &segments,
+                path_starts: &[0],
+                path_ends_exclusive: &[1],
+                bed_origin_x: 0.0,
+                bed_origin_y: 0.0,
+                min_z_mm: 0.2,
+                max_z_mm: 0.2,
+                opacity,
+                depth_contrast,
+                reverse_for_early_z: false,
+                render_as_lines: false,
+            });
+            assert!(matches!(result, Err(EngineError::Parse(_))));
+        }
     }
 
     #[test]

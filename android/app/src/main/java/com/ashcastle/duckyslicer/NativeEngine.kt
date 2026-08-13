@@ -18,6 +18,20 @@ internal object NativeEngine {
     external fun layOnFace(requestJson: String): String
 
     external fun previewGcodeRange(path: String, startLayer: Int, endLayer: Int): FloatArray?
+
+    external fun packToolpathGeometry(
+        segments: FloatArray,
+        pathStarts: IntArray,
+        pathEndsExclusive: IntArray,
+        bedOriginX: Float,
+        bedOriginY: Float,
+        minZMm: Float,
+        maxZMm: Float,
+        opacity: Float,
+        depthContrast: Float,
+        reverseForEarlyZ: Boolean,
+        renderAsLines: Boolean,
+    ): FloatArray?
 }
 
 internal fun inspectModel(path: String): ModelInfo = ModelInfo.fromNative(

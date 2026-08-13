@@ -38,6 +38,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "ModelInfoTest.kt",
         "ModelImportPerformanceInstrumentedTest.kt",
         "ToolpathRendererPerformanceInstrumentedTest.kt",
+        "ToolpathNativePackingInstrumentedTest.kt",
         "AccessibilityInstrumentedTest.kt",
         "PreviewModelsTest.kt",
         "PreviewSummaryTest.kt",
@@ -59,6 +60,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         raise VerificationError("Android preview JNI does not return a nullable primitive float array")
     if "inspectStlPayload(path: String): FloatArray?" not in native:
         raise VerificationError("Android model inspection JNI does not return a nullable primitive float array")
+    if "external fun packToolpathGeometry(" not in native:
+        raise VerificationError("Android Preview does not expose bounded Rust geometry packing")
 
     model = sources["MainActivity.kt"]
     for marker in (
@@ -162,7 +165,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "private fun drawToolpathLines(",
         "GLES30.glDrawArrays(GLES30.GL_LINES",
         "renderAsLines = true",
-        "lineVertices = lineBuilder?.finish()",
+        "val lineVertices = when {",
+        "lineBuilder?.finish() ?: ByteBuffer.allocateDirect(0)",
         "const val TOOLPATH_VERTICES_PER_INSTANCE = 4",
         "GLES30.glVertexAttribDivisor(",
         "GLES30.GL_UNSIGNED_BYTE",
@@ -177,7 +181,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "INSTANCE_STRIDE_BYTES = 32",
         "INSTANCE_START_OFFSET_BYTES",
         "INSTANCE_COLOR_OFFSET_BYTES",
-        "toolpathInstances = instanceBuilder?.finish()",
+        "val toolpathInstances = when {",
+        "instanceBuilder?.finish() ?: ByteBuffer.allocateDirect(0)",
         "EARLY_Z_OPACITY_THRESHOLD = 0.85f",
         "val reverseForEarlyZ = scene.opacity >= EARLY_Z_OPACITY_THRESHOLD",
         "plan.pathStarts[pathIndex]",
@@ -206,6 +211,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "RENDERER_STARTUP_TIMEOUT_MS = 5_000L",
         "GLES30.glGetError()",
         'failRenderer("program_creation")',
+        "NativeToolpathPacker.pack(scene, plan, reverseForEarlyZ)",
+        "values.size <= plan.segmentCount * PACKED_TOOLPATH_FLOATS",
+        "nativePackingUsed = nativePacked != null",
     ):
         if marker not in renderer:
             raise VerificationError(f"GPU preview upload contract is missing: {marker}")
@@ -219,6 +227,17 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         raise VerificationError("GPU preview reverted to expanded per-segment ribbon vertices")
     if "plan.segmentOffsets" in renderer:
         raise VerificationError("GPU preview reverted to materialized per-segment offsets")
+
+    native_packing_test = sources["ToolpathNativePackingInstrumentedTest.kt"]
+    for marker in (
+        "rustPackingIsByteExactWithTheManagedFallback",
+        "ToolpathMeshBuilder.build(scene, useNativePacking = true)",
+        "ToolpathMeshBuilder.build(scene, useNativePacking = false)",
+        "assertArrayEquals(managed.toolpathInstances.bytes(), native.toolpathInstances.bytes())",
+        "assertArrayEquals(managed.lineVertices.bytes(), native.lineVertices.bytes())",
+    ):
+        if marker not in native_packing_test:
+            raise VerificationError(f"native Preview packing regression is missing: {marker}")
 
     prepare_renderer = sources["PrepareModelPreviewView.kt"]
     for marker in (
@@ -748,6 +767,9 @@ def read_sources() -> dict[str, str]:
         ).read_text(encoding="utf-8"),
         "ToolpathRendererPerformanceInstrumentedTest.kt": (
             device / "ToolpathRendererPerformanceInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "ToolpathNativePackingInstrumentedTest.kt": (
+            device / "ToolpathNativePackingInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "AccessibilityInstrumentedTest.kt": (
             device / "AccessibilityInstrumentedTest.kt"

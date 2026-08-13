@@ -1304,8 +1304,12 @@ internal object ToolpathMeshBuilder {
     internal const val LINE_POSITION_OFFSET_BYTES = 0
     internal const val LINE_COLOR_OFFSET_BYTES = 3 * Float.SIZE_BYTES
     internal const val EARLY_Z_OPACITY_THRESHOLD = 0.85f
+    private const val PACKED_TOOLPATH_FLOATS = 8
 
-    fun build(scene: ToolpathScene): ToolpathUploadPayload {
+    fun build(
+        scene: ToolpathScene,
+        useNativePacking: Boolean = true,
+    ): ToolpathUploadPayload {
         val buildStartedNanos = System.nanoTime()
         val budget = scene.segmentBudgetOverride ?: depthPreviewSegmentBudget(scene.detail)
         val planStartedNanos = System.nanoTime()
@@ -1313,93 +1317,162 @@ internal object ToolpathMeshBuilder {
         val renderPlanNanos = System.nanoTime() - planStartedNanos
         val packingStartedNanos = System.nanoTime()
         val bedBuilder = FloatBuilder(2_400)
-        val instanceBuilder = if (scene.renderAsLines) null else {
-            ToolpathInstanceBuilder(plan.segmentCount)
+        val reverseForEarlyZ = scene.opacity >= EARLY_Z_OPACITY_THRESHOLD
+        val nativePacked = if (useNativePacking) {
+            NativeToolpathPacker.pack(scene, plan, reverseForEarlyZ)
+        } else {
+            null
         }
-        val lineBuilder = if (scene.renderAsLines) ToolpathLineBuilder(plan.segmentCount) else null
+        val instanceBuilder = if (nativePacked == null && !scene.renderAsLines) {
+            ToolpathInstanceBuilder(plan.segmentCount)
+        } else {
+            null
+        }
+        val lineBuilder = if (nativePacked == null && scene.renderAsLines) {
+            ToolpathLineBuilder(plan.segmentCount)
+        } else {
+            null
+        }
         addBed(bedBuilder, scene.bedSizeX, scene.bedSizeY, scene.bedPolygon)
         val zSpan = (scene.preview.maxZMm - scene.preview.minZMm).coerceAtLeast(0.001f)
         // Preview G-code is layer ordered. For the normal near-opaque view, upload high
         // layers first so depth testing rejects covered internal fragments before shading.
         // A deliberately translucent view keeps source order so inner paths remain visible.
-        val reverseForEarlyZ = scene.opacity >= EARLY_Z_OPACITY_THRESHOLD
         val packedRoleColors = FloatArray(roleColors.size)
         val packedRoleColorValid = BooleanArray(roleColors.size)
         var colorZBits = 0
         var colorZInitialized = false
         var heightShadeMultiplier = 1f
-        val pathStep = if (reverseForEarlyZ) -1 else 1
-        var pathIndex = if (reverseForEarlyZ) plan.pathStarts.lastIndex else 0
-        while (pathIndex in plan.pathStarts.indices) {
-            val pathStart = plan.pathStarts[pathIndex]
-            val pathEndExclusive = plan.pathEndsExclusive[pathIndex]
-            var segmentIndex = if (reverseForEarlyZ) pathEndExclusive - 1 else pathStart
-            while (
-                if (reverseForEarlyZ) segmentIndex >= pathStart else segmentIndex < pathEndExclusive
-            ) {
-                val offset = segmentIndex * GcodeLayerPreview.SEGMENT_STRIDE
-                val x1 = scene.preview.segments[offset] - scene.bedOriginX
-                val y1 = scene.preview.segments[offset + 1] - scene.bedOriginY
-                val x2 = scene.preview.segments[offset + 2] - scene.bedOriginX
-                val y2 = scene.preview.segments[offset + 3] - scene.bedOriginY
-                val z = scene.preview.segments[offset + 4]
-                val role = scene.preview.segments[offset + 5]
-                    .toInt()
-                    .coerceIn(0, roleColors.lastIndex)
-                val dx = x2 - x1
-                val dy = y2 - y1
-                if (dx * dx + dy * dy >= 0.000001f) {
-                    val nextZBits = z.toBits()
-                    if (!colorZInitialized || nextZBits != colorZBits) {
-                        colorZInitialized = true
-                        colorZBits = nextZBits
-                        packedRoleColorValid.fill(false)
-                        val normalizedHeight =
-                            ((z - scene.preview.minZMm) / zSpan).coerceIn(0f, 1f)
-                        val shade = scene.depthContrast * (1f - normalizedHeight) * 0.56f
-                        heightShadeMultiplier = 1f - shade
+        if (nativePacked == null) {
+            val pathStep = if (reverseForEarlyZ) -1 else 1
+            var pathIndex = if (reverseForEarlyZ) plan.pathStarts.lastIndex else 0
+            while (pathIndex in plan.pathStarts.indices) {
+                val pathStart = plan.pathStarts[pathIndex]
+                val pathEndExclusive = plan.pathEndsExclusive[pathIndex]
+                var segmentIndex = if (reverseForEarlyZ) pathEndExclusive - 1 else pathStart
+                while (
+                    if (reverseForEarlyZ) {
+                        segmentIndex >= pathStart
+                    } else {
+                        segmentIndex < pathEndExclusive
                     }
-                    if (!packedRoleColorValid[role]) {
-                        val base = roleColors[role]
-                        packedRoleColors[role] = packedColor(
-                            base[0] * heightShadeMultiplier,
-                            base[1] * heightShadeMultiplier,
-                            base[2] * heightShadeMultiplier,
-                            scene.opacity,
+                ) {
+                    val offset = segmentIndex * GcodeLayerPreview.SEGMENT_STRIDE
+                    val x1 = scene.preview.segments[offset] - scene.bedOriginX
+                    val y1 = scene.preview.segments[offset + 1] - scene.bedOriginY
+                    val x2 = scene.preview.segments[offset + 2] - scene.bedOriginX
+                    val y2 = scene.preview.segments[offset + 3] - scene.bedOriginY
+                    val z = scene.preview.segments[offset + 4]
+                    val role = scene.preview.segments[offset + 5]
+                        .toInt()
+                        .coerceIn(0, roleColors.lastIndex)
+                    val dx = x2 - x1
+                    val dy = y2 - y1
+                    if (dx * dx + dy * dy >= 0.000001f) {
+                        val nextZBits = z.toBits()
+                        if (!colorZInitialized || nextZBits != colorZBits) {
+                            colorZInitialized = true
+                            colorZBits = nextZBits
+                            packedRoleColorValid.fill(false)
+                            val normalizedHeight =
+                                ((z - scene.preview.minZMm) / zSpan).coerceIn(0f, 1f)
+                            val shade = scene.depthContrast * (1f - normalizedHeight) * 0.56f
+                            heightShadeMultiplier = 1f - shade
+                        }
+                        if (!packedRoleColorValid[role]) {
+                            val base = roleColors[role]
+                            packedRoleColors[role] = packedColor(
+                                base[0] * heightShadeMultiplier,
+                                base[1] * heightShadeMultiplier,
+                                base[2] * heightShadeMultiplier,
+                                scene.opacity,
+                            )
+                            packedRoleColorValid[role] = true
+                        }
+                        val color = packedRoleColors[role]
+                        val halfWidth = roleWidths[role] / 2f
+                        instanceBuilder?.segment(
+                            x1, y1, z + 0.024f,
+                            x2, y2, z + 0.024f,
+                            halfWidth,
+                            color,
                         )
-                        packedRoleColorValid[role] = true
+                        lineBuilder?.segment(
+                            x1, y1, z + 0.024f,
+                            x2, y2, z + 0.024f,
+                            color,
+                        )
                     }
-                    val color = packedRoleColors[role]
-                    val halfWidth = roleWidths[role] / 2f
-                    instanceBuilder?.segment(
-                        x1, y1, z + 0.024f,
-                        x2, y2, z + 0.024f,
-                        halfWidth,
-                        color,
-                    )
-                    lineBuilder?.segment(
-                        x1, y1, z + 0.024f,
-                        x2, y2, z + 0.024f,
-                        color,
-                    )
+                    segmentIndex += pathStep
                 }
-                segmentIndex += pathStep
+                pathIndex += pathStep
             }
-            pathIndex += pathStep
         }
         val bedVertices = bedBuilder.finish()
-        val toolpathInstances = instanceBuilder?.finish() ?: ByteBuffer.allocateDirect(0)
-        val lineVertices = lineBuilder?.finish() ?: ByteBuffer.allocateDirect(0)
+        val nativeBuffer = nativePacked?.toDirectByteBuffer()
+        val toolpathInstances = when {
+            nativeBuffer != null && !scene.renderAsLines -> nativeBuffer
+            else -> instanceBuilder?.finish() ?: ByteBuffer.allocateDirect(0)
+        }
+        val lineVertices = when {
+            nativeBuffer != null && scene.renderAsLines -> nativeBuffer
+            else -> lineBuilder?.finish() ?: ByteBuffer.allocateDirect(0)
+        }
+        val nativeSegmentCount = nativePacked?.size?.div(PACKED_TOOLPATH_FLOATS)
         return ToolpathUploadPayload(
             bedVertices = bedVertices,
             toolpathInstances = toolpathInstances,
-            instanceCount = instanceBuilder?.instanceCount ?: 0,
+            instanceCount = if (scene.renderAsLines) {
+                0
+            } else {
+                nativeSegmentCount ?: instanceBuilder?.instanceCount ?: 0
+            },
             lineVertices = lineVertices,
-            lineVertexCount = lineBuilder?.vertexCount ?: 0,
+            lineVertexCount = if (scene.renderAsLines) {
+                nativeSegmentCount?.times(2) ?: lineBuilder?.vertexCount ?: 0
+            } else {
+                0
+            },
             geometryBuildNanos = System.nanoTime() - buildStartedNanos,
             renderPlanNanos = renderPlanNanos,
             geometryPackNanos = System.nanoTime() - packingStartedNanos,
+            nativePackingUsed = nativePacked != null,
         )
+    }
+
+    private object NativeToolpathPacker {
+        @Volatile
+        private var linkageAvailable = true
+
+        fun pack(
+            scene: ToolpathScene,
+            plan: PreviewRenderPlan,
+            reverseForEarlyZ: Boolean,
+        ): FloatArray? {
+            if (!linkageAvailable) return null
+            val packed = try {
+                NativeEngine.packToolpathGeometry(
+                    segments = scene.preview.segments,
+                    pathStarts = plan.pathStarts,
+                    pathEndsExclusive = plan.pathEndsExclusive,
+                    bedOriginX = scene.bedOriginX,
+                    bedOriginY = scene.bedOriginY,
+                    minZMm = scene.preview.minZMm,
+                    maxZMm = scene.preview.maxZMm,
+                    opacity = scene.opacity,
+                    depthContrast = scene.depthContrast,
+                    reverseForEarlyZ = reverseForEarlyZ,
+                    renderAsLines = scene.renderAsLines,
+                )
+            } catch (_: LinkageError) {
+                linkageAvailable = false
+                null
+            }
+            return packed?.takeIf { values ->
+                values.size % PACKED_TOOLPATH_FLOATS == 0 &&
+                    values.size <= plan.segmentCount * PACKED_TOOLPATH_FLOATS
+            }
+        }
     }
 
     private fun packedColor(red: Float, green: Float, blue: Float, alpha: Float): Float =
@@ -1524,11 +1597,17 @@ internal data class ToolpathUploadPayload(
     val geometryBuildNanos: Long = 0L,
     val renderPlanNanos: Long = 0L,
     val geometryPackNanos: Long = 0L,
+    val nativePackingUsed: Boolean = false,
 ) {
     val stagingByteCount: Int
         get() = bedVertices.remaining() * Float.SIZE_BYTES +
             toolpathInstances.remaining() + lineVertices.remaining()
 }
+
+private fun FloatArray.toDirectByteBuffer(): ByteBuffer = ByteBuffer
+    .allocateDirect(size * Float.SIZE_BYTES)
+    .order(ByteOrder.nativeOrder())
+    .also { buffer -> buffer.asFloatBuffer().put(this) }
 
 private class ToolpathLineBuilder(initialSegmentCapacity: Int) {
     private var values = FloatArray(

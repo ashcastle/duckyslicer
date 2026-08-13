@@ -70,7 +70,9 @@ class ToolpathRendererPerformanceInstrumentedTest {
             planDurations += SystemClock.elapsedRealtimeNanos() - planStarted
             assertTrue(plan.segmentOffsets.isNotEmpty())
             val started = SystemClock.elapsedRealtimeNanos()
-            instances = ToolpathMeshBuilder.build(scene).lineVertexCount / 2
+            val payload = ToolpathMeshBuilder.build(scene)
+            assertTrue("Android geometry must use bounded Rust packing", payload.nativePackingUsed)
+            instances = payload.lineVertexCount / 2
             durations += SystemClock.elapsedRealtimeNanos() - started
         }
         val sortedPlans = planDurations.drop(2).sorted()
