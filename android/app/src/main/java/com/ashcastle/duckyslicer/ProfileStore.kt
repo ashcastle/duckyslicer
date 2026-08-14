@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 29
+internal const val USER_PROFILE_SCHEMA_VERSION = 30
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -317,6 +317,7 @@ class ProfileStore private constructor(
             staggeredInnerSeams = options.staggeredInnerSeams,
             seamGap = options.seamGap,
             seamGapPercent = options.seamGapPercent,
+            scarfSeam = options.scarfSeam,
             wipeBeforeExternalLoop = options.wipeBeforeExternalLoop,
             wipeOnLoops = options.wipeOnLoops,
             roleBasedWipeSpeed = options.roleBasedWipeSpeed,
@@ -667,6 +668,19 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("staggeredInnerSeams", staggeredInnerSeams)
     .put("seamGap", seamGap)
     .put("seamGapPercent", seamGapPercent)
+    .put("scarfSeamType", scarfSeam.type)
+    .put("scarfSeamConditional", scarfSeam.conditional)
+    .put("scarfAngleThreshold", scarfSeam.angleThreshold)
+    .put("scarfOverhangThreshold", scarfSeam.overhangThreshold)
+    .put("scarfJointSpeed", scarfSeam.speed)
+    .put("scarfJointSpeedPercent", scarfSeam.speedPercent)
+    .put("scarfJointFlowRatio", scarfSeam.flowRatio)
+    .put("scarfStartHeight", scarfSeam.startHeight)
+    .put("scarfStartHeightPercent", scarfSeam.startHeightPercent)
+    .put("scarfEntireLoop", scarfSeam.entireLoop)
+    .put("scarfLength", scarfSeam.length)
+    .put("scarfSteps", scarfSeam.steps)
+    .put("scarfInnerWalls", scarfSeam.innerWalls)
     .put("wipeBeforeExternalLoop", wipeBeforeExternalLoop)
     .put("wipeOnLoops", wipeOnLoops)
     .put("roleBasedWipeSpeed", roleBasedWipeSpeed)
@@ -975,6 +989,21 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         staggeredInnerSeams = optBoolean("staggeredInnerSeams"),
         seamGap = optDouble("seamGap", 10.0).toFloat(),
         seamGapPercent = optBoolean("seamGapPercent", true),
+        scarfSeam = ScarfSeamSettings(
+            type = optString("scarfSeamType", "none"),
+            conditional = optBoolean("scarfSeamConditional"),
+            angleThreshold = optInt("scarfAngleThreshold", 155),
+            overhangThreshold = optDouble("scarfOverhangThreshold", 40.0).toFloat(),
+            speed = optDouble("scarfJointSpeed", 100.0).toFloat(),
+            speedPercent = optBoolean("scarfJointSpeedPercent", true),
+            flowRatio = optDouble("scarfJointFlowRatio", 1.0).toFloat(),
+            startHeight = optDouble("scarfStartHeight", 0.0).toFloat(),
+            startHeightPercent = optBoolean("scarfStartHeightPercent"),
+            entireLoop = optBoolean("scarfEntireLoop"),
+            length = optDouble("scarfLength", 20.0).toFloat(),
+            steps = optInt("scarfSteps", 10),
+            innerWalls = optBoolean("scarfInnerWalls"),
+        ),
         wipeBeforeExternalLoop = optBoolean("wipeBeforeExternalLoop"),
         wipeOnLoops = optBoolean("wipeOnLoops"),
         roleBasedWipeSpeed = optBoolean("roleBasedWipeSpeed", true),

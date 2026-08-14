@@ -290,4 +290,17 @@ data class SliceConfig(
     @JvmField var initialLayerTravelSpeedPercent: Boolean = true
     @JvmField var accelToDecelEnabled: Boolean = true
     @JvmField var accelToDecelFactor: Float = 50f
+    @JvmField var scarfSeamType: String = "none"
+    @JvmField var scarfSeamConditional: Boolean = false
+    @JvmField var scarfAngleThreshold: Int = 155
+    @JvmField var scarfOverhangThreshold: Float = 40f
+    @JvmField var scarfJointSpeed: Float = 100f
+    @JvmField var scarfJointSpeedPercent: Boolean = true
+    @JvmField var scarfJointFlowRatio: Float = 1f
+    @JvmField var scarfStartHeight: Float = 0f
+    @JvmField var scarfStartHeightPercent: Boolean = false
+    @JvmField var scarfEntireLoop: Boolean = false
+    @JvmField var scarfLength: Float = 20f
+    @JvmField var scarfSteps: Int = 10
+    @JvmField var scarfInnerWalls: Boolean = false
 }

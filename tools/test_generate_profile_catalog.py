@@ -63,6 +63,17 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "initial_layer_travel_speed": "35%",
                 "accel_to_decel_enable": "0",
                 "accel_to_decel_factor": "27%",
+                "seam_slope_type": "all",
+                "seam_slope_conditional": "1",
+                "scarf_angle_threshold": "142",
+                "scarf_overhang_threshold": "37%",
+                "scarf_joint_speed": "63%",
+                "scarf_joint_flow_ratio": "0.92",
+                "seam_slope_start_height": "18%",
+                "seam_slope_entire_loop": "1",
+                "seam_slope_min_length": "24.5",
+                "seam_slope_steps": "13",
+                "seam_slope_inner_walls": "1",
             },
             {},
         )
@@ -84,6 +95,19 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(profile["initialLayerTravelSpeedPercent"])
         self.assertFalse(profile["accelToDecelEnabled"])
         self.assertEqual(27.0, profile["accelToDecelFactor"])
+        self.assertEqual("all", profile["scarfSeamType"])
+        self.assertTrue(profile["scarfSeamConditional"])
+        self.assertEqual(142, profile["scarfAngleThreshold"])
+        self.assertEqual(37.0, profile["scarfOverhangThreshold"])
+        self.assertEqual(63.0, profile["scarfJointSpeed"])
+        self.assertTrue(profile["scarfJointSpeedPercent"])
+        self.assertEqual(0.92, profile["scarfJointFlowRatio"])
+        self.assertEqual(18.0, profile["scarfStartHeight"])
+        self.assertTrue(profile["scarfStartHeightPercent"])
+        self.assertTrue(profile["scarfEntireLoop"])
+        self.assertEqual(24.5, profile["scarfLength"])
+        self.assertEqual(13, profile["scarfSteps"])
+        self.assertTrue(profile["scarfInnerWalls"])
 
     def test_preserves_spiral_vase_process_values(self) -> None:
         profile = build_process(

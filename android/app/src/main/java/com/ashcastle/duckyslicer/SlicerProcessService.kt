@@ -2877,7 +2877,11 @@ class SlicerProcessService : Service() {
         const val MAXIMUM_SIMPLIFIED_TRIANGLES = 10_000_000
         const val MAX_ERROR_LENGTH = 500
         const val MAX_REQUEST_ID_LENGTH = 128
-        const val CANCEL_PROCESS_DELAY_MILLIS = 50L
+        // Give both the active request and cancellation bindings time to consume their
+        // replies and unbind before terminating native work. Killing while a binding is
+        // still registered makes Android classify the intentional stop as a crash and
+        // defer the next worker connection behind its 30-second restart backoff.
+        const val CANCEL_PROCESS_DELAY_MILLIS = 1_000L
         const val TEST_PROBE_DURATION_MILLIS = 30_000L
         const val STORAGE_GUARD_INTERVAL_MILLIS = 500L
         const val FOREGROUND_COMPLETION_GRACE_MILLIS = 10L * 60L * 1_000L

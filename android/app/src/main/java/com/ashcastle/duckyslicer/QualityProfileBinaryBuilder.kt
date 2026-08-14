@@ -154,6 +154,19 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var staggeredInnerSeams: Boolean = base.staggeredInnerSeams
     private var seamGap: Float = base.seamGap
     private var seamGapPercent: Boolean = base.seamGapPercent
+    private var scarfSeamType: String = base.scarfSeam.type
+    private var scarfSeamConditional: Boolean = base.scarfSeam.conditional
+    private var scarfAngleThreshold: Int = base.scarfSeam.angleThreshold
+    private var scarfOverhangThreshold: Float = base.scarfSeam.overhangThreshold
+    private var scarfJointSpeed: Float = base.scarfSeam.speed
+    private var scarfJointSpeedPercent: Boolean = base.scarfSeam.speedPercent
+    private var scarfJointFlowRatio: Float = base.scarfSeam.flowRatio
+    private var scarfStartHeight: Float = base.scarfSeam.startHeight
+    private var scarfStartHeightPercent: Boolean = base.scarfSeam.startHeightPercent
+    private var scarfEntireLoop: Boolean = base.scarfSeam.entireLoop
+    private var scarfLength: Float = base.scarfSeam.length
+    private var scarfSteps: Int = base.scarfSeam.steps
+    private var scarfInnerWalls: Boolean = base.scarfSeam.innerWalls
     private var wipeBeforeExternalLoop: Boolean = base.wipeBeforeExternalLoop
     private var wipeOnLoops: Boolean = base.wipeOnLoops
     private var roleBasedWipeSpeed: Boolean = base.roleBasedWipeSpeed
@@ -383,6 +396,19 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         staggeredInnerSeams = input.readCatalogBoolean()
         seamGap = input.readFloat()
         seamGapPercent = input.readCatalogBoolean()
+        scarfSeamType = input.readCatalogString()
+        scarfSeamConditional = input.readCatalogBoolean()
+        scarfAngleThreshold = input.readInt()
+        scarfOverhangThreshold = input.readFloat()
+        scarfJointSpeed = input.readFloat()
+        scarfJointSpeedPercent = input.readCatalogBoolean()
+        scarfJointFlowRatio = input.readFloat()
+        scarfStartHeight = input.readFloat()
+        scarfStartHeightPercent = input.readCatalogBoolean()
+        scarfEntireLoop = input.readCatalogBoolean()
+        scarfLength = input.readFloat()
+        scarfSteps = input.readInt()
+        scarfInnerWalls = input.readCatalogBoolean()
         wipeBeforeExternalLoop = input.readCatalogBoolean()
         wipeOnLoops = input.readCatalogBoolean()
         roleBasedWipeSpeed = input.readCatalogBoolean()
@@ -642,6 +668,21 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         staggeredInnerSeams = staggeredInnerSeams,
         seamGap = seamGap,
         seamGapPercent = seamGapPercent,
+        scarfSeam = ScarfSeamSettings(
+            type = scarfSeamType,
+            conditional = scarfSeamConditional,
+            angleThreshold = scarfAngleThreshold,
+            overhangThreshold = scarfOverhangThreshold,
+            speed = scarfJointSpeed,
+            speedPercent = scarfJointSpeedPercent,
+            flowRatio = scarfJointFlowRatio,
+            startHeight = scarfStartHeight,
+            startHeightPercent = scarfStartHeightPercent,
+            entireLoop = scarfEntireLoop,
+            length = scarfLength,
+            steps = scarfSteps,
+            innerWalls = scarfInnerWalls,
+        ),
         wipeBeforeExternalLoop = wipeBeforeExternalLoop,
         wipeOnLoops = wipeOnLoops,
         roleBasedWipeSpeed = roleBasedWipeSpeed,
@@ -842,6 +883,19 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("staggeredInnerSeams", BINARY_BOOL),
     BinaryField("seamGap", BINARY_FLOAT),
     BinaryField("seamGapPercent", BINARY_BOOL),
+    BinaryField("scarfSeamType", BINARY_STRING),
+    BinaryField("scarfSeamConditional", BINARY_BOOL),
+    BinaryField("scarfAngleThreshold", BINARY_INT),
+    BinaryField("scarfOverhangThreshold", BINARY_FLOAT),
+    BinaryField("scarfJointSpeed", BINARY_FLOAT),
+    BinaryField("scarfJointSpeedPercent", BINARY_BOOL),
+    BinaryField("scarfJointFlowRatio", BINARY_FLOAT),
+    BinaryField("scarfStartHeight", BINARY_FLOAT),
+    BinaryField("scarfStartHeightPercent", BINARY_BOOL),
+    BinaryField("scarfEntireLoop", BINARY_BOOL),
+    BinaryField("scarfLength", BINARY_FLOAT),
+    BinaryField("scarfSteps", BINARY_INT),
+    BinaryField("scarfInnerWalls", BINARY_BOOL),
     BinaryField("wipeBeforeExternalLoop", BINARY_BOOL),
     BinaryField("wipeOnLoops", BINARY_BOOL),
     BinaryField("roleBasedWipeSpeed", BINARY_BOOL),

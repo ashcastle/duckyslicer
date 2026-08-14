@@ -119,6 +119,21 @@ class ProfileStoreMigrationTest {
                     firstLayerJerk = 5.5f,
                     travelJerk = 12.5f,
                 ),
+                scarfSeam = ScarfSeamSettings(
+                    type = "external",
+                    conditional = true,
+                    angleThreshold = 145,
+                    overhangThreshold = 35f,
+                    speed = 62f,
+                    speedPercent = true,
+                    flowRatio = 0.93f,
+                    startHeight = 12f,
+                    startHeightPercent = true,
+                    entireLoop = false,
+                    length = 18f,
+                    steps = 11,
+                    innerWalls = true,
+                ),
             )
 
             val saved = ProfileStore(file).saveSlicing("Jerk tuned", options)
@@ -131,6 +146,7 @@ class ProfileStoreMigrationTest {
             assertEquals(9.5f, restored.infillJerk)
             assertEquals(5.5f, restored.firstLayerJerk)
             assertEquals(12.5f, restored.travelJerk)
+            assertEquals(options.scarfSeam, restored.scarfSeam)
         } finally {
             directory.deleteRecursively()
         }

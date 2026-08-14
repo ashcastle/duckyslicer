@@ -233,6 +233,18 @@ internal object ProfileValidation {
             profile.raftFirstLayerDensity in 10f..100f &&
             profile.raftFirstLayerExpansion in 0f..1_000f &&
             profile.seamPosition in SEAM_POSITIONS &&
+            profile.scarfSeam.type in SCARF_TYPES &&
+            profile.scarfSeam.angleThreshold in 0..180 &&
+            profile.scarfSeam.overhangThreshold in 0f..100f &&
+            profile.scarfSeam.speed in 1f..(
+                if (profile.scarfSeam.speedPercent) 1_000f else 2_000f
+            ) &&
+            profile.scarfSeam.flowRatio in 0f..2f &&
+            profile.scarfSeam.startHeight in 0f..(
+                if (profile.scarfSeam.startHeightPercent) 1_000f else 10f
+            ) &&
+            profile.scarfSeam.length in 0f..1_000_000f &&
+            profile.scarfSeam.steps in 1..1_000 &&
             profile.ironingType in IRONING_TYPES &&
             profile.ironingPattern in INFILL_PATTERNS &&
             profile.ironingFlow in 0f..100f &&
@@ -305,6 +317,7 @@ internal object ProfileValidation {
         "default", "grid", "snug", "organic", "tree_hybrid", "tree_slim",
     )
     private val SEAM_POSITIONS = setOf("aligned", "nearest", "back", "random")
+    private val SCARF_TYPES = setOf("none", "external", "all")
     private val IRONING_TYPES = setOf("no ironing", "top", "topmost", "solid")
     private val Z_HOP_TYPES = setOf("auto", "normal", "slope", "spiral")
 

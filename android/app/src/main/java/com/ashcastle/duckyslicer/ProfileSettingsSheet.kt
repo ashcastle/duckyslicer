@@ -1418,6 +1418,186 @@ private fun SlicingSettingsSheet(
                         onOptionsChanged(options.copy(seamGap = adjustedValue, seamGapPercent = selectedPercent))
                     },
                 )
+                SettingChoices(
+                    settingLabel = stringResource(R.string.scarf_joint_seam),
+                    entries = listOf("none", "external", "all"),
+                    selected = options.scarfSeam.type,
+                    optionLabel = {
+                        stringResource(
+                            when (it) {
+                                "external" -> R.string.scarf_contour
+                                "all" -> R.string.scarf_contour_and_hole
+                                else -> R.string.scarf_none
+                            },
+                        )
+                    },
+                    onSelected = {
+                        onOptionsChanged(options.copy(scarfSeam = options.scarfSeam.copy(type = it)))
+                    },
+                )
+                if (options.scarfSeam.type != "none" || settingsQuery.isNotBlank()) {
+                    SettingsSwitch(
+                        label = stringResource(R.string.conditional_scarf_joint),
+                        checked = options.scarfSeam.conditional,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(scarfSeam = options.scarfSeam.copy(conditional = it)),
+                            )
+                        },
+                    )
+                    if (options.scarfSeam.conditional || settingsQuery.isNotBlank()) {
+                        SettingSlider(
+                            label = stringResource(R.string.scarf_angle_threshold),
+                            valueText = stringResource(
+                                R.string.degrees_value,
+                                options.scarfSeam.angleThreshold.toFloat(),
+                            ),
+                            value = options.scarfSeam.angleThreshold.toFloat(),
+                            range = 0f..180f,
+                            steps = 179,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        scarfSeam = options.scarfSeam.copy(
+                                            angleThreshold = it.roundToInt(),
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.scarf_overhang_threshold),
+                            valueText = stringResource(
+                                R.string.percent_value,
+                                options.scarfSeam.overhangThreshold.roundToInt(),
+                            ),
+                            value = options.scarfSeam.overhangThreshold,
+                            range = 0f..100f,
+                            steps = 99,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        scarfSeam = options.scarfSeam.copy(
+                                            overhangThreshold = it.roundToInt().toFloat(),
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                    }
+                    OverhangSpeedSetting(
+                        label = stringResource(R.string.scarf_joint_speed),
+                        value = options.scarfSeam.speed,
+                        percent = options.scarfSeam.speedPercent,
+                        maximumAbsolute = 700f,
+                        maximumPercent = 300f,
+                        onValueChange = {
+                            onOptionsChanged(options.copy(scarfSeam = options.scarfSeam.copy(speed = it)))
+                        },
+                        onPercentChange = { selectedPercent, adjustedValue ->
+                            onOptionsChanged(
+                                options.copy(
+                                    scarfSeam = options.scarfSeam.copy(
+                                        speed = adjustedValue,
+                                        speedPercent = selectedPercent,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.scarf_joint_flow_ratio),
+                        valueText = String.format(Locale.ROOT, "%.2f", options.scarfSeam.flowRatio),
+                        value = options.scarfSeam.flowRatio,
+                        range = 0f..2f,
+                        steps = 199,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    scarfSeam = options.scarfSeam.copy(
+                                        flowRatio = (it * 100f).roundToInt() / 100f,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    LengthOrPercentSetting(
+                        label = stringResource(R.string.scarf_start_height),
+                        value = options.scarfSeam.startHeight,
+                        percent = options.scarfSeam.startHeightPercent,
+                        maximumAbsolute = 10f,
+                        maximumPercent = 100f,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(scarfSeam = options.scarfSeam.copy(startHeight = it)),
+                            )
+                        },
+                        onPercentChange = { selectedPercent, adjustedValue ->
+                            onOptionsChanged(
+                                options.copy(
+                                    scarfSeam = options.scarfSeam.copy(
+                                        startHeight = adjustedValue,
+                                        startHeightPercent = selectedPercent,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingsSwitch(
+                        label = stringResource(R.string.scarf_entire_wall),
+                        checked = options.scarfSeam.entireLoop,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(scarfSeam = options.scarfSeam.copy(entireLoop = it)),
+                            )
+                        },
+                    )
+                    if (!options.scarfSeam.entireLoop || settingsQuery.isNotBlank()) {
+                        SettingSlider(
+                            label = stringResource(R.string.scarf_length),
+                            valueText = stringResource(
+                                R.string.millimeters_value_precise,
+                                options.scarfSeam.length,
+                            ),
+                            value = options.scarfSeam.length,
+                            range = 0f..max(100f, options.scarfSeam.length),
+                            steps = (max(100f, options.scarfSeam.length) * 2f)
+                                .roundToInt().coerceAtLeast(2) - 1,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        scarfSeam = options.scarfSeam.copy(
+                                            length = (it * 2f).roundToInt() / 2f,
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                    }
+                    SettingSlider(
+                        label = stringResource(R.string.scarf_steps),
+                        valueText = options.scarfSeam.steps.toString(),
+                        value = options.scarfSeam.steps.toFloat(),
+                        range = 1f..max(100f, options.scarfSeam.steps.toFloat()),
+                        steps = max(100, options.scarfSeam.steps) - 2,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    scarfSeam = options.scarfSeam.copy(steps = it.roundToInt()),
+                                ),
+                            )
+                        },
+                    )
+                    SettingsSwitch(
+                        label = stringResource(R.string.scarf_inner_walls),
+                        checked = options.scarfSeam.innerWalls,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(scarfSeam = options.scarfSeam.copy(innerWalls = it)),
+                            )
+                        },
+                    )
+                }
                 SettingsSwitch(
                     label = stringResource(R.string.wipe_before_external_loop),
                     checked = options.wipeBeforeExternalLoop,

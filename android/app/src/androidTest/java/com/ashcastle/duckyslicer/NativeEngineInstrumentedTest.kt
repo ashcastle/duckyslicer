@@ -647,6 +647,44 @@ class NativeEngineInstrumentedTest {
         return destination
     }
 
+    private fun cylinderModel(): File {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val destination = File(context.cacheDir, "scarf-seam-cylinder.stl")
+        val facets = mutableListOf<List<TestVertex>>()
+        val segments = 64
+        val radius = 15f
+        val height = 20f
+        val bottomCenter = TestVertex(0f, 0f, 0f)
+        val topCenter = TestVertex(0f, 0f, height)
+        val bottom = Array(segments) { index ->
+            val angle = 2.0 * Math.PI * index / segments
+            TestVertex((cos(angle) * radius).toFloat(), (sin(angle) * radius).toFloat(), 0f)
+        }
+        val top = Array(segments) { index -> bottom[index].copy(z = height) }
+
+        repeat(segments) { index ->
+            val next = (index + 1) % segments
+            facets += listOf(bottom[index], bottom[next], top[next])
+            facets += listOf(bottom[index], top[next], top[index])
+            facets += listOf(bottomCenter, bottom[next], bottom[index])
+            facets += listOf(topCenter, top[index], top[next])
+        }
+        destination.bufferedWriter().use { writer ->
+            writer.appendLine("solid scarf_seam_cylinder")
+            facets.forEach { triangle ->
+                writer.appendLine("facet normal 0 0 0")
+                writer.appendLine("outer loop")
+                triangle.forEach { point ->
+                    writer.appendLine("vertex ${point.x} ${point.y} ${point.z}")
+                }
+                writer.appendLine("endloop")
+                writer.appendLine("endfacet")
+            }
+            writer.appendLine("endsolid scarf_seam_cylinder")
+        }
+        return destination
+    }
+
     private fun supportPaintOverhangModel(): File {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val destination = File(context.cacheDir, "support-paint-overhang.stl")
@@ -1362,7 +1400,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(28, catalog.schemaVersion)
+        assertEquals(29, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1490,6 +1528,9 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.maxTravelDetourDistancePercent })
         assertTrue(catalog.slicing.any { !it.smallPerimeterSpeedPercent })
         assertTrue(catalog.slicing.any { it.seamGapPercent && it.seamGap != 10f })
+        assertTrue("Scarf seam presets must survive catalog normalization", catalog.slicing.any { it.scarfSeam.type != "none" })
+        assertTrue(catalog.slicing.any { it.scarfSeam.conditional })
+        assertTrue(catalog.slicing.any { it.scarfSeam.speedPercent })
         assertTrue(catalog.slicing.any { it.wipeOnLoops })
         assertTrue(catalog.slicing.any { !it.roleBasedWipeSpeed })
         assertTrue(catalog.slicing.any { it.resolution == 0.012f })
@@ -2764,6 +2805,59 @@ class NativeEngineInstrumentedTest {
         assertTrue("Classic must generate outer walls", gcode.contains(";TYPE:Outer wall"))
         assertTrue("Classic must generate inner walls", gcode.contains(";TYPE:Inner wall"))
         assertTrue("Classic G-code must contain extrusion", gcode.lineSequence().any { it.startsWith("G1 ") && it.contains(" E") })
+    }
+
+    @Test
+    fun scarfJointSeamProducesSlopedExtrusionOnCylinder() {
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.CUSTOM_CARTESIAN)
+            .selectFilament(FilamentProfile.GENERIC_PLA)
+            .selectQuality(QualityProfile.STANDARD)
+            .copy(
+                wallGenerator = "classic",
+                perimeters = 2,
+                fillDensity = 0.10f,
+                scarfSeam = ScarfSeamSettings(
+                    type = "external",
+                    conditional = false,
+                    speed = 65f,
+                    speedPercent = true,
+                    flowRatio = 0.92f,
+                    startHeight = 15f,
+                    startHeightPercent = true,
+                    entireLoop = false,
+                    length = 12f,
+                    steps = 12,
+                    innerWalls = false,
+                ),
+            )
+        val enabled = OnDeviceSlicer.slice(cylinderModel(), base).output.readText()
+        val disabled = OnDeviceSlicer.slice(
+            cylinderModel(),
+            base.copy(scarfSeam = base.scarfSeam.copy(type = "none")),
+        ).output.readText()
+
+        fun extrusionZValues(gcode: String): List<Float> = gcode.lineSequence()
+            .filter { line ->
+                line.startsWith("G1 ") && line.contains(" E") && line.contains(" Z") &&
+                    (line.contains(" X") || line.contains(" Y"))
+            }
+            .mapNotNull { line ->
+                Regex("(?:^| )Z(-?[0-9.]+)").find(line)?.groupValues?.get(1)?.toFloatOrNull()
+            }
+            .distinct()
+            .toList()
+
+        assertTrue("Scarf seam mode must reach Orca", enabled.contains("; seam_slope_type = external"))
+        assertTrue("Scarf speed must preserve percent units", enabled.contains("; scarf_joint_speed = 65%"))
+        assertTrue("Scarf flow ratio must reach Orca", enabled.contains("; scarf_joint_flow_ratio = 0.92"))
+        assertTrue("Scarf start height must preserve percent units", enabled.contains("; seam_slope_start_height = 15%"))
+        assertTrue("Scarf step count must reach Orca", enabled.contains("; seam_slope_steps = 12"))
+        assertTrue("Disabled control must remain disabled", disabled.contains("; seam_slope_type = none"))
+        assertTrue(
+            "A real cylindrical scarf joint must add multiple within-wall extrusion heights",
+            extrusionZValues(enabled).size >= extrusionZValues(disabled).size + 4,
+        )
     }
 
     @Test

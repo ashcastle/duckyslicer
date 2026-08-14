@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 28
+SCHEMA_VERSION = 29
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -540,6 +540,12 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         raw.get("small_perimeter_speed"), "50%"
     )
     seam_gap, seam_gap_percent = float_or_percent(raw.get("seam_gap"), "10%")
+    scarf_joint_speed, scarf_joint_speed_percent = float_or_percent(
+        raw.get("scarf_joint_speed"), "100%"
+    )
+    scarf_start_height, scarf_start_height_percent = float_or_percent(
+        raw.get("seam_slope_start_height"), 0
+    )
     wipe_speed, wipe_speed_percent = float_or_percent(raw.get("wipe_speed"), "80%")
     spiral_xy_smoothing, spiral_xy_smoothing_percent = float_or_percent(
         raw.get("spiral_mode_max_xy_smoothing"), "200%"
@@ -702,6 +708,21 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "staggeredInnerSeams": boolean(raw.get("staggered_inner_seams")),
         "seamGap": seam_gap,
         "seamGapPercent": seam_gap_percent,
+        "scarfSeamType": enum_value(
+            raw.get("seam_slope_type"), {"none", "external", "all"}, "none"
+        ),
+        "scarfSeamConditional": boolean(raw.get("seam_slope_conditional")),
+        "scarfAngleThreshold": integer(raw.get("scarf_angle_threshold"), 155),
+        "scarfOverhangThreshold": number(raw.get("scarf_overhang_threshold"), 40),
+        "scarfJointSpeed": scarf_joint_speed,
+        "scarfJointSpeedPercent": scarf_joint_speed_percent,
+        "scarfJointFlowRatio": number(raw.get("scarf_joint_flow_ratio"), 1),
+        "scarfStartHeight": scarf_start_height,
+        "scarfStartHeightPercent": scarf_start_height_percent,
+        "scarfEntireLoop": boolean(raw.get("seam_slope_entire_loop")),
+        "scarfLength": number(raw.get("seam_slope_min_length"), 20),
+        "scarfSteps": integer(raw.get("seam_slope_steps"), 10),
+        "scarfInnerWalls": boolean(raw.get("seam_slope_inner_walls")),
         "wipeBeforeExternalLoop": boolean(raw.get("wipe_before_external_loop")),
         "wipeOnLoops": boolean(raw.get("wipe_on_loops")),
         "roleBasedWipeSpeed": boolean(raw.get("role_based_wipe_speed"), True),
@@ -891,6 +912,18 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0 <= profile["smallPerimeterThreshold"] <= 1_000_000
         and 0.001 <= profile["resolution"] <= 100
         and 0 <= profile["seamGap"] <= 1_000
+        and profile["scarfSeamType"] in {"none", "external", "all"}
+        and 0 <= profile["scarfAngleThreshold"] <= 180
+        and 0 <= profile["scarfOverhangThreshold"] <= 100
+        and 1 <= profile["scarfJointSpeed"] <= (
+            1_000 if profile["scarfJointSpeedPercent"] else 2_000
+        )
+        and 0 <= profile["scarfJointFlowRatio"] <= 2
+        and 0 <= profile["scarfStartHeight"] <= (
+            1_000 if profile["scarfStartHeightPercent"] else 10
+        )
+        and 0 <= profile["scarfLength"] <= 1_000_000
+        and 1 <= profile["scarfSteps"] <= 1_000
         and 0 <= profile["minWidthTopSurface"] <= 1_500
         and 0 <= profile["overhangReverseThreshold"] <= 2_000
         and 0 <= profile["wipeSpeed"] <= (

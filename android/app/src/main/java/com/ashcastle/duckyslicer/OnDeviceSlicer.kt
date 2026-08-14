@@ -280,6 +280,22 @@ data class GcodeSettings(
     val accelToDecelFactor: Float = 50f,
 )
 
+data class ScarfSeamSettings(
+    val type: String = "none",
+    val conditional: Boolean = false,
+    val angleThreshold: Int = 155,
+    val overhangThreshold: Float = 40f,
+    val speed: Float = 100f,
+    val speedPercent: Boolean = true,
+    val flowRatio: Float = 1f,
+    val startHeight: Float = 0f,
+    val startHeightPercent: Boolean = false,
+    val entireLoop: Boolean = false,
+    val length: Float = 20f,
+    val steps: Int = 10,
+    val innerWalls: Boolean = false,
+)
+
 internal fun FilamentProfile.resolveRetraction(printer: PrinterProfile) = RetractionSettings(
     length = retractLength ?: printer.retractLength,
     speed = retractSpeed ?: printer.retractSpeed,
@@ -454,6 +470,7 @@ data class QualityProfile(
     val staggeredInnerSeams: Boolean = false,
     val seamGap: Float = 10f,
     val seamGapPercent: Boolean = true,
+    val scarfSeam: ScarfSeamSettings = ScarfSeamSettings(),
     val wipeBeforeExternalLoop: Boolean = false,
     val wipeOnLoops: Boolean = false,
     val roleBasedWipeSpeed: Boolean = true,
@@ -595,7 +612,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 28,
+    val schemaVersion: Int = 29,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -786,6 +803,7 @@ data class SliceOptions(
     val staggeredInnerSeams: Boolean = quality.staggeredInnerSeams,
     val seamGap: Float = quality.seamGap,
     val seamGapPercent: Boolean = quality.seamGapPercent,
+    val scarfSeam: ScarfSeamSettings = quality.scarfSeam,
     val wipeBeforeExternalLoop: Boolean = quality.wipeBeforeExternalLoop,
     val wipeOnLoops: Boolean = quality.wipeOnLoops,
     val roleBasedWipeSpeed: Boolean = quality.roleBasedWipeSpeed,
@@ -1505,6 +1523,19 @@ data class SliceOptions(
             native.initialLayerTravelSpeedPercent = gcodeSettings.initialLayerTravelSpeedPercent
             native.accelToDecelEnabled = gcodeSettings.accelToDecelEnabled
             native.accelToDecelFactor = gcodeSettings.accelToDecelFactor
+            native.scarfSeamType = scarfSeam.type
+            native.scarfSeamConditional = scarfSeam.conditional
+            native.scarfAngleThreshold = scarfSeam.angleThreshold
+            native.scarfOverhangThreshold = scarfSeam.overhangThreshold
+            native.scarfJointSpeed = scarfSeam.speed
+            native.scarfJointSpeedPercent = scarfSeam.speedPercent
+            native.scarfJointFlowRatio = scarfSeam.flowRatio
+            native.scarfStartHeight = scarfSeam.startHeight
+            native.scarfStartHeightPercent = scarfSeam.startHeightPercent
+            native.scarfEntireLoop = scarfSeam.entireLoop
+            native.scarfLength = scarfSeam.length
+            native.scarfSteps = scarfSeam.steps
+            native.scarfInnerWalls = scarfSeam.innerWalls
         }
     }
 }

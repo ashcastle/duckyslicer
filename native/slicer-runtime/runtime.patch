@@ -1,5 +1,5 @@
 diff --git a/app/src/main/cpp/CMakeLists.txt b/app/src/main/cpp/CMakeLists.txt
-index 963808df..e2c066c6 100644
+index 963808df..1173b0ae 100644
 --- a/app/src/main/cpp/CMakeLists.txt
 +++ b/app/src/main/cpp/CMakeLists.txt
 @@ -371,6 +371,9 @@ if(SLICER_BACKEND STREQUAL "orca")
@@ -73,10 +73,10 @@ index 963808df..e2c066c6 100644
      src/sapil_bambu_plate.cpp
      src/sapil_bambu_objects.cpp
 diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
-index 116a4a85..b870c593 100644
+index 116a4a85..6b3048bc 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -40,14 +40,88 @@ struct SliceConfig {
+@@ -40,14 +40,97 @@ struct SliceConfig {
      int perimeters = 2;
      int top_solid_layers = 5;
      int bottom_solid_layers = 4;
@@ -162,10 +162,21 @@ index 116a4a85..b870c593 100644
 +    float internal_solid_infill_acceleration = 100.0f;
 +    bool internal_solid_infill_acceleration_percent = true;
 +
++    // Per-feature jerk (mm/s). A zero default keeps Orca's jerk control disabled.
++    float default_jerk = 0.0f;
++    float outer_wall_jerk = 9.0f;
++    float inner_wall_jerk = 9.0f;
++    float top_surface_jerk = 9.0f;
++    float infill_jerk = 9.0f;
++    float first_layer_jerk = 9.0f;
++    float travel_jerk = 12.0f;
++
      // Temperature
      int nozzle_temp = 210;
      int bed_temp = 60;
-@@ -60,17 +134,130 @@ struct SliceConfig {
+@@ -58,19 +141,132 @@ struct SliceConfig {
+ 
+     // Support
      bool support_enabled = false;
 -    std::string support_type = "normal"; // "normal", "tree"
 +    std::string support_type = "normal(auto)"; // normal/tree, automatic/manual
@@ -299,7 +310,54 @@ index 116a4a85..b870c593 100644
      float max_print_height = 270.0f;
  
      // Nozzle
-@@ -98,6 +257,22 @@ struct SliceConfig {
+@@ -86,18 +282,69 @@ struct SliceConfig {
+     std::vector<int> extruder_temps;           // per-extruder nozzle temps
+     std::vector<float> extruder_retract_length; // per-extruder retraction
+     std::vector<float> extruder_retract_speed;  // per-extruder retraction speed
++    std::vector<float> extruder_deretract_speed;
++    std::vector<float> extruder_retraction_minimum_travel;
++    std::vector<int> extruder_retract_when_changing_layer;
++    std::vector<int> extruder_wipe_while_retracting;
++    std::vector<float> extruder_wipe_distance;
++    std::vector<float> extruder_retract_before_wipe;
++    std::vector<float> extruder_retract_restart_extra;
++    std::vector<float> extruder_z_hop;
++    std::vector<std::string> extruder_z_hop_type;
+ 
+     // Wipe tower (for multi-extruder)
+     bool wipe_tower_enabled = false;
+     float wipe_tower_x = 170.0f;
+     float wipe_tower_y = 140.0f;
+     float wipe_tower_width = 60.0f;
++    float prime_volume = 45.0f;
++    float prime_tower_brim_width = 3.0f;
++    bool wipe_tower_no_sparse_layers = false;
++    bool ooze_prevention = false;
++    int standby_temperature_delta = -5;
++    bool interface_shells = false;
++    bool enable_arc_fitting = false;
++    bool gcode_label_objects = true;
++    bool exclude_object = false;
++    float initial_layer_travel_speed = 100.0f;
++    bool initial_layer_travel_speed_percent = true;
++    bool accel_to_decel_enabled = true;
++    float accel_to_decel_factor = 50.0f;
++    std::string scarf_seam_type = "none";
++    bool scarf_seam_conditional = false;
++    int scarf_angle_threshold = 155;
++    float scarf_overhang_threshold = 40.0f;
++    float scarf_joint_speed = 100.0f;
++    bool scarf_joint_speed_percent = true;
++    float scarf_joint_flow_ratio = 1.0f;
++    float scarf_start_height = 0.0f;
++    bool scarf_start_height_percent = false;
++    bool scarf_entire_loop = false;
++    float scarf_length = 20.0f;
++    int scarf_steps = 10;
++    bool scarf_inner_walls = false;
+ 
+     // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
+     // Empty = use OrcaSlicer's built-in default. OrcaSlicer resolves {variable}
      // template expressions at G-code generation time.
      std::string machine_start_gcode;
      std::string machine_end_gcode;
@@ -322,7 +380,7 @@ index 116a4a85..b870c593 100644
  
      // F91 (2026-05-25): per-extruder filament tuning sourced from the user's filament
      // library on the Kotlin side at slice time. Empty vector = "user has not set this
-@@ -124,6 +299,9 @@ struct SliceConfig {
+@@ -124,6 +371,9 @@ struct SliceConfig {
  
      // Full-spectrum mixed-filament recipe (stage 2; serialized MixedFilamentManager output)
      std::string mixed_filament_definitions = "";
@@ -332,7 +390,7 @@ index 116a4a85..b870c593 100644
  };
  
  // ---- Model Info ----
-@@ -259,6 +437,12 @@ public:
+@@ -259,6 +509,12 @@ public:
      // positions.size() / 2 must equal g_model.objects.size().
      bool setObjectPositions(const std::vector<std::pair<float, float>>& positions);
  
@@ -345,6 +403,19 @@ index 116a4a85..b870c593 100644
      // F66 — returns flat [minX0, minY0, minX1, minY1, ...] world-space AABB
      // min for each object, computed from instance[0]'s full transform applied
      // to each model-part volume's mesh bounding box. The values are exactly
+@@ -285,6 +541,12 @@ public:
+     struct SplitResult { int removedIdx; int addedCount; };
+     std::optional<SplitResult> splitObject(int objIdx);
+ 
++    // Cut one object with a horizontal plane positioned at `heightRatio`
++    // through its current world-space bounding box. Both solids are kept as
++    // separate objects. `placeOnCut` asks Orca to place both new cut faces on
++    // the bed. Returns the same replacement shape as splitObject.
++    std::optional<SplitResult> cutObject(int objIdx, float heightRatio, bool placeOnCut);
++
+     // Split one volume's mesh into multiple volumes within the same object.
+     // Returns the new volume count for the object on success, -1 on failure.
+     int splitVolume(int objIdx, int volIdx);
 diff --git a/app/src/main/cpp/src/orca_stubs.cpp b/app/src/main/cpp/src/orca_stubs.cpp
 index 51a2f8fb..f5cdd410 100644
 --- a/app/src/main/cpp/src/orca_stubs.cpp
@@ -375,19 +446,21 @@ index 51a2f8fb..f5cdd410 100644
  } } // namespace Feature::FuzzySkin
  
 diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil_arrange.cpp
-index 44041ca3..574b380d 100644
+index 44041ca3..1e322634 100644
 --- a/app/src/main/cpp/src/sapil_arrange.cpp
 +++ b/app/src/main/cpp/src/sapil_arrange.cpp
-@@ -1,6 +1,8 @@
+@@ -1,7 +1,10 @@
  #include "../include/sapil.h"
  #include "sapil_internal.h"
  #include "libslic3r/Model.hpp"
 +#include "libslic3r/ModelArrange.hpp"
  #include "libslic3r/Orient.hpp"
++#include "libslic3r/CutUtils.hpp"
 +#include <algorithm>
  #include <cmath>
  #include "libslic3r/BoundingBox.hpp"
-@@ -549,6 +550,54 @@ bool SlicerEngine::setObjectPositions(const std::vector<std::pair<float, float>>
+ #include "libslic3r/TriangleMesh.hpp"
+@@ -549,6 +552,54 @@ bool SlicerEngine::setObjectPositions(const std::vector<std::pair<float, float>>
      return true;
  }
  
@@ -442,11 +515,144 @@ index 44041ca3..574b380d 100644
  // =============================================================================
  // F66 — Split + Auto-Orient + per-object pose
  // =============================================================================
+@@ -568,7 +619,11 @@ static bool f66_volIdxValid(int objIdx, int volIdx) {
+ bool SlicerEngine::isObjectSplittable(int objIdx) const {
+     if (!f66_objIdxValid(objIdx)) return false;
+     auto* obj = getGlobalModel().objects[objIdx];
+-    return obj->parts_count() > 1;
++    // Match OrcaSlicer's ObjectList::is_splittable(to_objects=true): a
++    // multi-volume object can be separated by volume, while a single-volume
++    // object is splittable when its mesh contains disconnected islands.
++    return obj->volumes.size() > 1 ||
++           (obj->volumes.size() == 1 && obj->volumes[0]->is_splittable());
+ }
+ 
+ bool SlicerEngine::isVolumeSplittable(int objIdx, int volIdx) const {
+@@ -631,6 +686,75 @@ std::optional<SlicerEngine::SplitResult> SlicerEngine::splitObject(int objIdx) {
+     return SplitResult{objIdx, (int)added};
+ }
+ 
++std::optional<SlicerEngine::SplitResult> SlicerEngine::cutObject(
++        int objIdx, float heightRatio, bool placeOnCut) {
++    if (!f66_objIdxValid(objIdx) || !std::isfinite(heightRatio) ||
++        heightRatio <= 0.0f || heightRatio >= 1.0f) {
++        return std::nullopt;
++    }
++    Slic3r::Model& model = getGlobalModel();
++    Slic3r::ModelObject* source = model.objects[objIdx];
++    if (source == nullptr || source->instances.empty()) return std::nullopt;
++
++    const Slic3r::BoundingBoxf3 bounds = source->instance_bounding_box(0);
++    if (!bounds.defined || !std::isfinite(bounds.min.z()) ||
++        !std::isfinite(bounds.max.z()) || bounds.size().z() <= 0.0) {
++        return std::nullopt;
++    }
++    const double cut_z = bounds.min.z() + bounds.size().z() * heightRatio;
++    Slic3r::Transform3d cut_matrix = Slic3r::Transform3d::Identity();
++    cut_matrix.translation() = Slic3r::Vec3d(0.0, 0.0, cut_z);
++    const Slic3r::ModelObjectCutAttributes attributes = placeOnCut ?
++        Slic3r::ModelObjectCutAttribute::KeepUpper |
++            Slic3r::ModelObjectCutAttribute::KeepLower |
++            Slic3r::ModelObjectCutAttribute::InvalidateCutInfo |
++            Slic3r::ModelObjectCutAttribute::PlaceOnCutUpper |
++            Slic3r::ModelObjectCutAttribute::PlaceOnCutLower :
++        Slic3r::ModelObjectCutAttribute::KeepUpper |
++            Slic3r::ModelObjectCutAttribute::KeepLower |
++            Slic3r::ModelObjectCutAttribute::InvalidateCutInfo;
++
++    Slic3r::Cut cut(source, 0, cut_matrix, attributes);
++    const Slic3r::ModelObjectPtrs& parts = cut.perform_with_plane();
++    if (parts.size() != 2 || parts[0] == nullptr || parts[1] == nullptr ||
++        parts[0]->volumes.empty() || parts[1]->volumes.empty()) {
++        return std::nullopt;
++    }
++
++    const size_t before_size = model.objects.size();
++    std::vector<Slic3r::ModelObject*> replacements;
++    replacements.reserve(parts.size());
++    for (const Slic3r::ModelObject* part : parts) {
++        Slic3r::ModelObject* replacement = model.add_object(*part);
++        if (replacement == nullptr) {
++            while (model.objects.size() > before_size) {
++                model.delete_object(model.objects.size() - 1);
++            }
++            return std::nullopt;
++        }
++        replacements.push_back(replacement);
++    }
++    model.objects.erase(model.objects.begin() + before_size, model.objects.end());
++    model.delete_object(static_cast<size_t>(objIdx));
++    model.objects.insert(
++        model.objects.begin() + objIdx,
++        replacements.begin(),
++        replacements.end());
++
++    const int new_vol_count = replacements.empty() ? 0 :
++        static_cast<int>(replacements.front()->volumes.size());
++    onSplitObjectReshape(objIdx, static_cast<int>(replacements.size()), new_vol_count);
++    resetLoadTimeScaleFactors();
++    resetRotationBases();
++    invalidatePreviewMeshCache();
++    SAPIL_LOGI(
++        "cutObject: cut %d at %.3f into %d objects",
++        objIdx,
++        heightRatio,
++        static_cast<int>(replacements.size()));
++    return SplitResult{objIdx, static_cast<int>(replacements.size())};
++}
++
+ std::optional<int> SlicerEngine::duplicateObject(int objIdx) {
+     if (!f66_objIdxValid(objIdx)) return std::nullopt;
+     Slic3r::Model& model = getGlobalModel();
+@@ -670,20 +794,37 @@ std::optional<std::array<double, 3>> SlicerEngine::autoOrientObject(int objIdx)
+     if (!f66_objIdxValid(objIdx)) return std::nullopt;
+     auto* obj = getGlobalModel().objects[objIdx];
+     if (obj->instances.empty()) return std::nullopt;
++    std::array<double, 3> rotation{};
+     try {
+-        Slic3r::orientation::orient(obj);
++        Slic3r::orientation::OrientMeshs selected(1);
++        selected.front().name = obj->name;
++        selected.front().mesh = obj->mesh();
++        Slic3r::orientation::OrientParams params;
++        // Match Orca's default OrientJob mode. The convenience overload uses
++        // the older minimum-area scoring path and can legitimately return an
++        // identity transform for models the desktop job rotates.
++        params.min_volume = true;
++        params.parallel = false;
++        params.progressind = [](unsigned, std::string) {};
++        params.stopcondition = []() { return false; };
++        Slic3r::orientation::orient(selected, {}, params);
++        const Slic3r::Matrix3d& matrix = selected.front().rotation_matrix;
++        const double y = std::asin(std::clamp(-matrix(2, 0), -1.0, 1.0));
++        const double cosine_y = std::cos(y);
++        const double x = std::abs(cosine_y) > 1e-8 ?
++            std::atan2(matrix(2, 1), matrix(2, 2)) :
++            std::atan2(-matrix(1, 2), matrix(1, 1));
++        const double z = std::abs(cosine_y) > 1e-8 ?
++            std::atan2(matrix(1, 0), matrix(0, 0)) : 0.0;
++        rotation = {x, y, z};
+     } catch (...) {
+         SAPIL_LOGE("autoOrientObject: orient threw on object %d", objIdx);
+         return std::nullopt;
+     }
+     obj->invalidate_bounding_box();
+-    Slic3r::Vec3d rot = obj->instances[0]->get_rotation();
+-    // F66 review-2026-05-30 P1: orient mutates per-instance rotation; if any
+-    // user later calls global setModelRotation it must re-snapshot against
+-    // the new orientation, not stack on the pre-orient base.
+     resetRotationBases();
+     invalidatePreviewMeshCache();
+-    return std::array<double, 3>{rot.x(), rot.y(), rot.z()};
++    return rotation;
+ }
+ 
+ int SlicerEngine::autoOrientAll() {
 diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
-index d93efb7d..276bb039 100644
+index d93efb7d..fdf9a877 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -92,10 +92,80 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -92,10 +92,87 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.perimeters = getInt("perimeters");
      config.top_solid_layers = getInt("topSolidLayers");
      config.bottom_solid_layers = getInt("bottomSolidLayers");
@@ -524,10 +730,17 @@ index d93efb7d..276bb039 100644
 +    config.sparse_infill_acceleration_percent = getBool("sparseInfillAccelerationPercent");
 +    config.internal_solid_infill_acceleration = getFloat("internalSolidInfillAcceleration");
 +    config.internal_solid_infill_acceleration_percent = getBool("internalSolidInfillAccelerationPercent");
++    config.default_jerk = getFloat("defaultJerk");
++    config.outer_wall_jerk = getFloat("outerWallJerk");
++    config.inner_wall_jerk = getFloat("innerWallJerk");
++    config.top_surface_jerk = getFloat("topSurfaceJerk");
++    config.infill_jerk = getFloat("infillJerk");
++    config.first_layer_jerk = getFloat("firstLayerJerk");
++    config.travel_jerk = getFloat("travelJerk");
      config.travel_speed = getFloat("travelSpeed");
      config.first_layer_speed = getFloat("firstLayerSpeed");
  
-@@ -108,15 +178,125 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -108,15 +185,125 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.support_enabled = getBool("supportEnabled");
      config.support_type = getString("supportType");
      config.support_angle = getFloat("supportAngle");
@@ -653,7 +866,50 @@ index d93efb7d..276bb039 100644
      config.max_print_height = getFloat("maxPrintHeight");
  
      config.nozzle_diameter = getFloat("nozzleDiameter");
-@@ -137,6 +289,22 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -129,14 +316,65 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.extruder_temps = getIntArray("extruderTemps");
+     config.extruder_retract_length = getFloatArray("extruderRetractLength");
+     config.extruder_retract_speed = getFloatArray("extruderRetractSpeed");
++    config.extruder_deretract_speed = getFloatArray("extruderDeretractSpeed");
++    config.extruder_retraction_minimum_travel = getFloatArray("extruderRetractionMinimumTravel");
++    config.extruder_retract_when_changing_layer = getIntArray("extruderRetractWhenChangingLayer");
++    config.extruder_wipe_while_retracting = getIntArray("extruderWipeWhileRetracting");
++    config.extruder_wipe_distance = getFloatArray("extruderWipeDistance");
++    config.extruder_retract_before_wipe = getFloatArray("extruderRetractBeforeWipe");
++    config.extruder_retract_restart_extra = getFloatArray("extruderRetractRestartExtra");
++    config.extruder_z_hop = getFloatArray("extruderZHop");
++    config.extruder_z_hop_type = getStringArray("extruderZHopType");
+     config.wipe_tower_enabled = getBool("wipeTowerEnabled");
+     config.wipe_tower_x = getFloat("wipeTowerX");
+     config.wipe_tower_y = getFloat("wipeTowerY");
+     config.wipe_tower_width = getFloat("wipeTowerWidth");
++    config.prime_volume = getFloat("primeVolume");
++    config.prime_tower_brim_width = getFloat("primeTowerBrimWidth");
++    config.wipe_tower_no_sparse_layers = getBool("wipeTowerNoSparseLayers");
++    config.ooze_prevention = getBool("oozePrevention");
++    config.standby_temperature_delta = getInt("standbyTemperatureDelta");
++    config.interface_shells = getBool("interfaceShells");
++    config.enable_arc_fitting = getBool("enableArcFitting");
++    config.gcode_label_objects = getBool("gcodeLabelObjects");
++    config.exclude_object = getBool("excludeObject");
++    config.initial_layer_travel_speed = getFloat("initialLayerTravelSpeed");
++    config.initial_layer_travel_speed_percent = getBool("initialLayerTravelSpeedPercent");
++    config.accel_to_decel_enabled = getBool("accelToDecelEnabled");
++    config.accel_to_decel_factor = getFloat("accelToDecelFactor");
++    config.scarf_seam_type = getString("scarfSeamType");
++    config.scarf_seam_conditional = getBool("scarfSeamConditional");
++    config.scarf_angle_threshold = getInt("scarfAngleThreshold");
++    config.scarf_overhang_threshold = getFloat("scarfOverhangThreshold");
++    config.scarf_joint_speed = getFloat("scarfJointSpeed");
++    config.scarf_joint_speed_percent = getBool("scarfJointSpeedPercent");
++    config.scarf_joint_flow_ratio = getFloat("scarfJointFlowRatio");
++    config.scarf_start_height = getFloat("scarfStartHeight");
++    config.scarf_start_height_percent = getBool("scarfStartHeightPercent");
++    config.scarf_entire_loop = getBool("scarfEntireLoop");
++    config.scarf_length = getFloat("scarfLength");
++    config.scarf_steps = getInt("scarfSteps");
++    config.scarf_inner_walls = getBool("scarfInnerWalls");
+ 
      // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
      config.machine_start_gcode = getString("machineStartGcode");
      config.machine_end_gcode = getString("machineEndGcode");
@@ -676,7 +932,7 @@ index d93efb7d..276bb039 100644
  
      // F91: per-extruder filament tuning from the user's filament library.
      config.filament_flow_ratios = getFloatArray("filamentFlowRatios");
-@@ -156,6 +324,10 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -156,6 +394,10 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.filament_bed_temp_initial_layers = getIntArray("filamentBedTempInitialLayers");
      config.filament_costs = getFloatArray("filamentCosts");
      config.mixed_filament_definitions = getString("mixedFilamentDefinitions");
@@ -687,7 +943,7 @@ index d93efb7d..276bb039 100644
  
      env->DeleteLocalRef(cls);
      return config;
-@@ -235,9 +407,79 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -235,9 +477,86 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setInt("perimeters", config.perimeters);
      setInt("topSolidLayers", config.top_solid_layers);
      setInt("bottomSolidLayers", config.bottom_solid_layers);
@@ -764,10 +1020,17 @@ index d93efb7d..276bb039 100644
 +    setBool("sparseInfillAccelerationPercent", config.sparse_infill_acceleration_percent);
 +    setFloat("internalSolidInfillAcceleration", config.internal_solid_infill_acceleration);
 +    setBool("internalSolidInfillAccelerationPercent", config.internal_solid_infill_acceleration_percent);
++    setFloat("defaultJerk", config.default_jerk);
++    setFloat("outerWallJerk", config.outer_wall_jerk);
++    setFloat("innerWallJerk", config.inner_wall_jerk);
++    setFloat("topSurfaceJerk", config.top_surface_jerk);
++    setFloat("infillJerk", config.infill_jerk);
++    setFloat("firstLayerJerk", config.first_layer_jerk);
++    setFloat("travelJerk", config.travel_jerk);
      setFloat("travelSpeed", config.travel_speed);
      setFloat("firstLayerSpeed", config.first_layer_speed);
      setInt("nozzleTemp", config.nozzle_temp);
-@@ -247,13 +489,123 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -247,13 +566,123 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setBool("supportEnabled", config.support_enabled);
      setString("supportType", config.support_type);
      setFloat("supportAngle", config.support_angle);
@@ -891,8 +1154,49 @@ index d93efb7d..276bb039 100644
      setFloat("maxPrintHeight", config.max_print_height);
      setFloat("nozzleDiameter", config.nozzle_diameter);
      setFloat("filamentDiameter", config.filament_diameter);
-@@ -271,6 +595,23 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -265,12 +694,64 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setIntArray("extruderTemps", config.extruder_temps);
+     setFloatArray("extruderRetractLength", config.extruder_retract_length);
+     setFloatArray("extruderRetractSpeed", config.extruder_retract_speed);
++    setFloatArray("extruderDeretractSpeed", config.extruder_deretract_speed);
++    setFloatArray("extruderRetractionMinimumTravel", config.extruder_retraction_minimum_travel);
++    setIntArray("extruderRetractWhenChangingLayer", config.extruder_retract_when_changing_layer);
++    setIntArray("extruderWipeWhileRetracting", config.extruder_wipe_while_retracting);
++    setFloatArray("extruderWipeDistance", config.extruder_wipe_distance);
++    setFloatArray("extruderRetractBeforeWipe", config.extruder_retract_before_wipe);
++    setFloatArray("extruderRetractRestartExtra", config.extruder_retract_restart_extra);
++    setFloatArray("extruderZHop", config.extruder_z_hop);
++    setStringArray("extruderZHopType", config.extruder_z_hop_type);
+     setBool("wipeTowerEnabled", config.wipe_tower_enabled);
+     setFloat("wipeTowerX", config.wipe_tower_x);
+     setFloat("wipeTowerY", config.wipe_tower_y);
      setFloat("wipeTowerWidth", config.wipe_tower_width);
++    setFloat("primeVolume", config.prime_volume);
++    setFloat("primeTowerBrimWidth", config.prime_tower_brim_width);
++    setBool("wipeTowerNoSparseLayers", config.wipe_tower_no_sparse_layers);
++    setBool("oozePrevention", config.ooze_prevention);
++    setInt("standbyTemperatureDelta", config.standby_temperature_delta);
++    setBool("interfaceShells", config.interface_shells);
++    setBool("enableArcFitting", config.enable_arc_fitting);
++    setBool("gcodeLabelObjects", config.gcode_label_objects);
++    setBool("excludeObject", config.exclude_object);
++    setFloat("initialLayerTravelSpeed", config.initial_layer_travel_speed);
++    setBool("initialLayerTravelSpeedPercent", config.initial_layer_travel_speed_percent);
++    setBool("accelToDecelEnabled", config.accel_to_decel_enabled);
++    setFloat("accelToDecelFactor", config.accel_to_decel_factor);
++    setString("scarfSeamType", config.scarf_seam_type);
++    setBool("scarfSeamConditional", config.scarf_seam_conditional);
++    setInt("scarfAngleThreshold", config.scarf_angle_threshold);
++    setFloat("scarfOverhangThreshold", config.scarf_overhang_threshold);
++    setFloat("scarfJointSpeed", config.scarf_joint_speed);
++    setBool("scarfJointSpeedPercent", config.scarf_joint_speed_percent);
++    setFloat("scarfJointFlowRatio", config.scarf_joint_flow_ratio);
++    setFloat("scarfStartHeight", config.scarf_start_height);
++    setBool("scarfStartHeightPercent", config.scarf_start_height_percent);
++    setBool("scarfEntireLoop", config.scarf_entire_loop);
++    setFloat("scarfLength", config.scarf_length);
++    setInt("scarfSteps", config.scarf_steps);
++    setBool("scarfInnerWalls", config.scarf_inner_walls);
      setString("machineStartGcode", config.machine_start_gcode);
      setString("machineEndGcode", config.machine_end_gcode);
 +    setString("gcodeFlavor", config.gcode_flavor);
@@ -916,7 +1220,7 @@ index d93efb7d..276bb039 100644
      env->DeleteLocalRef(cls);
      return obj;
 diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
-index 8d61c9cf..aaaa9bc9 100644
+index 8d61c9cf..f285d044 100644
 --- a/app/src/main/cpp/src/sapil_print.cpp
 +++ b/app/src/main/cpp/src/sapil_print.cpp
 @@ -6,6 +6,8 @@
@@ -936,7 +1240,7 @@ index 8d61c9cf..aaaa9bc9 100644
  #include "libslic3r/clipper.hpp"
  
  // =============================================================================
-@@ -183,84 +186,172 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -183,84 +186,179 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
      dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
      dpc.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(config.bottom_solid_layers));
@@ -1172,10 +1476,72 @@ index 8d61c9cf..aaaa9bc9 100644
 +        config.sparse_infill_acceleration, config.sparse_infill_acceleration_percent));
 +    dpc.set_key_value("internal_solid_infill_acceleration", new Slic3r::ConfigOptionFloatOrPercent(
 +        config.internal_solid_infill_acceleration, config.internal_solid_infill_acceleration_percent));
++    dpc.set_key_value("default_jerk",             new Slic3r::ConfigOptionFloat(config.default_jerk));
++    dpc.set_key_value("outer_wall_jerk",          new Slic3r::ConfigOptionFloat(config.outer_wall_jerk));
++    dpc.set_key_value("inner_wall_jerk",          new Slic3r::ConfigOptionFloat(config.inner_wall_jerk));
++    dpc.set_key_value("top_surface_jerk",         new Slic3r::ConfigOptionFloat(config.top_surface_jerk));
++    dpc.set_key_value("infill_jerk",              new Slic3r::ConfigOptionFloat(config.infill_jerk));
++    dpc.set_key_value("initial_layer_jerk",       new Slic3r::ConfigOptionFloat(config.first_layer_jerk));
++    dpc.set_key_value("travel_jerk",              new Slic3r::ConfigOptionFloat(config.travel_jerk));
  
      // Multi-extruder setup
      int n_ext = std::max(1, config.extruder_count);
-@@ -461,11 +552,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -274,6 +372,33 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     std::vector<int> bed_temps(n_ext, config.bed_temp);
+     std::vector<double> retract_len(n_ext, config.retract_length);
+     std::vector<double> retract_spd(n_ext, config.retract_speed);
++    auto per_ext_floats = [n_ext](const std::vector<float>& values, double fallback) {
++        std::vector<double> result(n_ext, fallback);
++        for (int i = 0; i < n_ext && i < static_cast<int>(values.size()); ++i)
++            result[i] = values[i];
++        return result;
++    };
++    auto per_ext_bools = [n_ext](const std::vector<int>& values, bool fallback) {
++        std::vector<unsigned char> result(n_ext, fallback ? 1 : 0);
++        for (int i = 0; i < n_ext && i < static_cast<int>(values.size()); ++i)
++            result[i] = values[i] != 0 ? 1 : 0;
++        return result;
++    };
++    const auto deretract_spd = per_ext_floats(config.extruder_deretract_speed, 0.0);
++    const auto retract_minimum_travel = per_ext_floats(config.extruder_retraction_minimum_travel, 2.0);
++    const auto retract_layer_change = per_ext_bools(config.extruder_retract_when_changing_layer, false);
++    const auto wipe = per_ext_bools(config.extruder_wipe_while_retracting, false);
++    const auto wipe_distance = per_ext_floats(config.extruder_wipe_distance, 1.0);
++    const auto retract_before_wipe = per_ext_floats(config.extruder_retract_before_wipe, 100.0);
++    const auto retract_restart_extra = per_ext_floats(config.extruder_retract_restart_extra, 0.0);
++    const auto z_hop = per_ext_floats(config.extruder_z_hop, 0.4);
++    std::vector<int> z_hop_types(n_ext, Slic3r::ZHopType::zhtSlope);
++    for (int i = 0; i < n_ext && i < static_cast<int>(config.extruder_z_hop_type.size()); ++i) {
++        const auto& value = config.extruder_z_hop_type[i];
++        z_hop_types[i] = value == "auto" ? Slic3r::ZHopType::zhtAuto :
++            value == "normal" ? Slic3r::ZHopType::zhtNormal :
++            value == "spiral" ? Slic3r::ZHopType::zhtSpiral : Slic3r::ZHopType::zhtSlope;
++    }
+ 
+     // Override with per-extruder values if provided.
+     // When the array covers all extruders, use ALL values (including 0 for unused slots)
+@@ -333,6 +458,20 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     // ship 10mm bowden defaults that cause heat-creep clogs.
+     dpc.set_key_value("retraction_length", new Slic3r::ConfigOptionFloats(retract_len));
+     dpc.set_key_value("retraction_speed", new Slic3r::ConfigOptionFloats(retract_spd));
++    dpc.set_key_value("deretraction_speed", new Slic3r::ConfigOptionFloats(deretract_spd));
++    dpc.set_key_value("retraction_minimum_travel", new Slic3r::ConfigOptionFloats(retract_minimum_travel));
++    dpc.set_key_value("retract_when_changing_layer", new Slic3r::ConfigOptionBools(retract_layer_change));
++    dpc.set_key_value("wipe", new Slic3r::ConfigOptionBools(wipe));
++    dpc.set_key_value("wipe_distance", new Slic3r::ConfigOptionFloats(wipe_distance));
++    dpc.set_key_value("retract_before_wipe", new Slic3r::ConfigOptionPercents(retract_before_wipe));
++    dpc.set_key_value("retract_restart_extra", new Slic3r::ConfigOptionFloats(retract_restart_extra));
++    dpc.set_key_value("z_hop", new Slic3r::ConfigOptionFloats(z_hop));
++    auto* z_hop_type_option = dpc.option<Slic3r::ConfigOptionEnumsGeneric>("z_hop_types");
++    if (z_hop_type_option != nullptr) {
++        // Keep Orca's enum key map: replacing this option with a raw value-only
++        // instance makes G-code config serialization dereference a null map.
++        z_hop_type_option->values = std::move(z_hop_types);
++    }
+     // Toolchange retraction — OrcaSlicer defaults to 10mm (bowden).  For the Snapmaker U1's
+     // direct-drive extruders this pulls filament past the heat break, causing heat-creep clogs
+     // during the standby period between tool changes.  Use the same length as normal retraction.
+@@ -461,18 +600,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      applyPerExtFloats("slow_down_layer_time",    config.filament_slow_down_layer_times, 4.0);
      applyPerExtFloats("slow_down_min_speed",     config.filament_slow_down_min_speeds, 20.0);
  
@@ -1184,13 +1550,20 @@ index 8d61c9cf..aaaa9bc9 100644
 -    // For raw STL files (no embedded profile), the Marlin default is correct.
 -    // When the Snapmaker profile IS embedded, gcode_flavor=klipper is applied from the
 -    // profile_keys[] whitelist in the is_snapmaker_profile block above.
+-
+-    // Deretraction speed — OrcaSlicer defaults to 0 (= same as retraction speed).
+-    // Snapmaker profile uses 35 mm/s for smoother prime-after-retract.
+-    // Hardware-tuned (direct-drive vs bowden); always write the JNI value,
+-    // never let an embed override it.
+-    dpc.set_key_value("deretraction_speed", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, 35.0)));
+-    dpc.set_key_value("retraction_minimum_travel", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, 1.0)));
 +    // G-code flavor is set from the active printer profile above. A Klipper
 +    // profile must provide a compatible start template because Orca delegates
 +    // part of temperature setup to that template for this flavor.
  
-     // Deretraction speed — OrcaSlicer defaults to 0 (= same as retraction speed).
-     // Snapmaker profile uses 35 mm/s for smoother prime-after-retract.
-@@ -480,32 +569,98 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     // Line widths — must be set explicitly.
+     // When left at 0 (absolute), MultiMaterialSegmentation calls
+@@ -480,32 +610,98 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      // the literal 0, not the auto-resolved value, causing Flow::rounded_rectangle_extrusion_spacing()
      // to throw FlowErrorNegativeSpacing on multi-color models.
      double nd = config.nozzle_diameter;
@@ -1313,7 +1686,7 @@ index 8d61c9cf..aaaa9bc9 100644
      // F91 (2026-05-25) — SliceConfig user overrides for the per-filament tuning keys
      // that applyConfigToPrusa doesn't otherwise touch. When the user sets a value via the
      // Filament Library, populate dpc here so the slicer picks it up. When unset, the
-@@ -568,19 +714,46 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -568,31 +764,73 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          dpc.set_key_value("filament_cost", new Slic3r::ConfigOptionFloats(std::move(v)));
      }
  
@@ -1330,6 +1703,14 @@ index 8d61c9cf..aaaa9bc9 100644
 -    dpc.set_key_value("overhang_2_4_speed", new Slic3r::ConfigOptionFloatOrPercent(30, false));
 -    dpc.set_key_value("overhang_3_4_speed", new Slic3r::ConfigOptionFloatOrPercent(10, false));
 -    dpc.set_key_value("overhang_4_4_speed", new Slic3r::ConfigOptionFloatOrPercent(10, false));
+-
+-    // Idle extruder standby temperature — prevents idle nozzles from staying at full print temp.
+-    // Snapmaker profiles embed ooze_prevention=0 and standby_temperature_delta=-5, which leaves
+-    // parked extruders at full print temperature for the entire job.  Always override for
+-    // multi-extruder prints with a -100°C standby delta (applied after profile_keys[] load,
+-    // so it wins regardless of what the profile says).
+-    // This gives ~120°C standby for PLA and ~135°C for PETG — above glass transition,
+-    // well below print temp, preventing ooze and thermal degradation on idle extruders.
 +    // Preserve the active process profile's support speed.
 +    dpc.set_key_value("support_speed", new Slic3r::ConfigOptionFloat(config.support_speed));
 +    dpc.set_key_value("support_interface_speed", new Slic3r::ConfigOptionFloat(config.support_interface_speed));
@@ -1370,10 +1751,40 @@ index 8d61c9cf..aaaa9bc9 100644
 +    dpc.set_key_value("overhang_2_4_speed", new Slic3r::ConfigOptionFloatOrPercent(config.overhang_speed_2, config.overhang_speed_2_percent));
 +    dpc.set_key_value("overhang_3_4_speed", new Slic3r::ConfigOptionFloatOrPercent(config.overhang_speed_3, config.overhang_speed_3_percent));
 +    dpc.set_key_value("overhang_4_4_speed", new Slic3r::ConfigOptionFloatOrPercent(config.overhang_speed_4, config.overhang_speed_4_percent));
++
++    // Preserve the selected Orca process semantics instead of silently substituting a
++    // machine-specific standby policy. A zero idle temperature delegates to the delta.
++    dpc.set_key_value("ooze_prevention", new Slic3r::ConfigOptionBool(config.ooze_prevention));
++    dpc.set_key_value("standby_temperature_delta", new Slic3r::ConfigOptionInt(config.standby_temperature_delta));
++    dpc.set_key_value("interface_shells", new Slic3r::ConfigOptionBool(config.interface_shells));
++    dpc.set_key_value("enable_arc_fitting", new Slic3r::ConfigOptionBool(config.enable_arc_fitting));
++    dpc.set_key_value("gcode_label_objects", new Slic3r::ConfigOptionBool(config.gcode_label_objects));
++    dpc.set_key_value("exclude_object", new Slic3r::ConfigOptionBool(config.exclude_object));
++    dpc.set_key_value("initial_layer_travel_speed", new Slic3r::ConfigOptionFloatOrPercent(
++        config.initial_layer_travel_speed, config.initial_layer_travel_speed_percent));
++    dpc.set_key_value("accel_to_decel_enable", new Slic3r::ConfigOptionBool(config.accel_to_decel_enabled));
++    dpc.set_key_value("accel_to_decel_factor", new Slic3r::ConfigOptionPercent(config.accel_to_decel_factor));
++    dpc.set_deserialize_strict("seam_slope_type", config.scarf_seam_type);
++    dpc.set_key_value("seam_slope_conditional", new Slic3r::ConfigOptionBool(config.scarf_seam_conditional));
++    dpc.set_key_value("scarf_angle_threshold", new Slic3r::ConfigOptionInt(config.scarf_angle_threshold));
++    dpc.set_key_value("scarf_overhang_threshold", new Slic3r::ConfigOptionPercent(config.scarf_overhang_threshold));
++    dpc.set_key_value("scarf_joint_speed", new Slic3r::ConfigOptionFloatOrPercent(
++        config.scarf_joint_speed, config.scarf_joint_speed_percent));
++    dpc.set_key_value("scarf_joint_flow_ratio", new Slic3r::ConfigOptionFloat(config.scarf_joint_flow_ratio));
++    dpc.set_key_value("seam_slope_start_height", new Slic3r::ConfigOptionFloatOrPercent(
++        config.scarf_start_height, config.scarf_start_height_percent));
++    dpc.set_key_value("seam_slope_entire_loop", new Slic3r::ConfigOptionBool(config.scarf_entire_loop));
++    dpc.set_key_value("seam_slope_min_length", new Slic3r::ConfigOptionFloat(config.scarf_length));
++    dpc.set_key_value("seam_slope_steps", new Slic3r::ConfigOptionInt(config.scarf_steps));
++    dpc.set_key_value("seam_slope_inner_walls", new Slic3r::ConfigOptionBool(config.scarf_inner_walls));
+     if (n_ext > 1) {
+-        dpc.set_key_value("ooze_prevention", new Slic3r::ConfigOptionBool(true));
+-        dpc.set_key_value("standby_temperature_delta", new Slic3r::ConfigOptionInt(-100));
+-        // idle_temperature of 0 means "use standby_temperature_delta" (per OrcaSlicer GCode.cpp)
+         dpc.set_key_value("idle_temperature", new Slic3r::ConfigOptionInts(std::vector<int>(n_ext, 0)));
+     }
  
-     // Idle extruder standby temperature — prevents idle nozzles from staying at full print temp.
-     // Snapmaker profiles embed ooze_prevention=0 and standby_temperature_delta=-5, which leaves
-@@ -646,13 +800,18 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -646,16 +884,24 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      // Skirt/Brim (same key names)
      dpc.set_key_value("skirt_loops", new Slic3r::ConfigOptionInt(config.skirt_loops));
      dpc.set_key_value("skirt_distance", new Slic3r::ConfigOptionFloat(config.skirt_distance));
@@ -1398,7 +1809,25 @@ index 8d61c9cf..aaaa9bc9 100644
  
      // Prime tower / wipe tower (OrcaSlicer keys)
      // wipe_tower_x/y are coFloats (arrays) in OrcaSlicer, one value per extruder
-@@ -905,6 +1064,12 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
++    dpc.set_key_value("prime_volume", new Slic3r::ConfigOptionFloat(config.prime_volume));
++    dpc.set_key_value("prime_tower_brim_width", new Slic3r::ConfigOptionFloat(config.prime_tower_brim_width));
++    dpc.set_key_value("wipe_tower_no_sparse_layers", new Slic3r::ConfigOptionBool(config.wipe_tower_no_sparse_layers));
+     if (n_ext > 1 && config.wipe_tower_enabled) {
+         dpc.set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(true));
+         dpc.set_key_value("wipe_tower_x", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, config.wipe_tower_x)));
+@@ -680,11 +926,6 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+         }
+     }
+ 
+-    // Exclude object / cancel object support — enables EXCLUDE_OBJECT_DEFINE / EXCLUDE_OBJECT_START /
+-    // EXCLUDE_OBJECT_END G-code markers so firmware can cancel individual objects mid-print.
+-    // OrcaSlicer defaults to false; enable unconditionally for all U1 prints.
+-    dpc.set_key_value("exclude_object", new Slic3r::ConfigOptionBool(true));
+-
+     // Full-spectrum mixed-filament (stage 2): when the caller passed a
+     // recipe via SliceConfig.mixed_filament_definitions, write it into
+     // the engine's config key. Empty (default) is a no-op — engine
+@@ -905,6 +1146,12 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
                      "sparse_infill_pattern",
                      // Wall generator type (classic vs arachne variable-width)
                      "wall_generator",
@@ -1411,7 +1840,27 @@ index 8d61c9cf..aaaa9bc9 100644
                      // Retraction reduction for infill moves
                      "reduce_infill_retraction",
                      // Line widths (from embedded profile)
-@@ -1191,7 +1356,7 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -1124,8 +1371,17 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+                 pad_floats("filament_toolchange_delay");
+ 
+                 // Retraction arrays (set by applyConfigToPrusa from JNI config)
+-                pad_floats("retract_length");
+-                pad_floats("retract_speed");
++                pad_floats("retraction_length");
++                pad_floats("retraction_speed");
++                pad_floats("deretraction_speed");
++                pad_floats("retraction_minimum_travel");
++                pad_bools("retract_when_changing_layer");
++                pad_bools("wipe");
++                pad_floats("wipe_distance");
++                pad_floats("retract_before_wipe");
++                pad_floats("retract_restart_extra");
++                pad_floats("z_hop");
++                pad_ints("z_hop_types");
+                 pad_floats("retract_length_toolchange");
+ 
+                 // Extruder offsets
+@@ -1191,7 +1447,7 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
              obj->ensure_on_bed();
          }
  
@@ -1420,7 +1869,7 @@ index 8d61c9cf..aaaa9bc9 100644
          // This is a safety net for cases where setModelInstances was not called
          // (e.g. direct native API use, integration tests).  The ViewModel always
          // calls setModelInstances before slicing, so for normal app use this is
-@@ -1205,7 +1370,10 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -1205,7 +1461,10 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
          // 2 mm absorbs that without losing the safety property: a model
          // that is genuinely off-bed will be off by tens of millimetres.
          {
@@ -1432,7 +1881,7 @@ index 8d61c9cf..aaaa9bc9 100644
              const double EDGE_TOL = 2.0;
              Slic3r::BoundingBoxf3 worldBB;
              for (auto* obj : model.objects) {
-@@ -1214,12 +1382,14 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -1214,12 +1473,14 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
              if (worldBB.defined) {
                  double xMin = worldBB.min.x(), xMax = worldBB.max.x();
                  double yMin = worldBB.min.y(), yMax = worldBB.max.y();
@@ -1451,7 +1900,7 @@ index 8d61c9cf..aaaa9bc9 100644
                      for (auto* obj : model.objects) {
                          for (auto* inst : obj->instances) {
                              auto offset = inst->get_offset();
-@@ -1308,6 +1506,12 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -1308,6 +1569,12 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
              auto validation = print.validate();
              if (!validation.string.empty()) {
                  SAPIL_LOGW("Print validation: %s", validation.string.c_str());
@@ -1464,7 +1913,7 @@ index 8d61c9cf..aaaa9bc9 100644
              } else {
                  SAPIL_LOGI("Print validation: OK");
              }
-@@ -1375,6 +1545,28 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -1375,6 +1642,28 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
          // Generate G-code — use the same directory as the loaded model
          extern std::string getFilesDir();
          std::string output_path = getFilesDir() + "/output.gcode";
@@ -1493,7 +1942,7 @@ index 8d61c9cf..aaaa9bc9 100644
          // OrcaSlicer dereferences result without null check, so provide a real object
          Slic3r::GCodeProcessorResult gcode_result;
          g_active_print.store(&print, std::memory_order_release);
-@@ -1383,12 +1575,15 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -1383,12 +1672,15 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
  
          if (progress) progress(95, "Reading results");
  
@@ -1513,137 +1962,61 @@ index 8d61c9cf..aaaa9bc9 100644
              pImpl->last_gcode_path = output_path;
          }
  
-diff --git a/app/src/main/cpp/src/sapil_support_paint.cpp b/app/src/main/cpp/src/sapil_support_paint.cpp
-new file mode 100644
-index 00000000..bebc6734
---- /dev/null
-+++ b/app/src/main/cpp/src/sapil_support_paint.cpp
-@@ -0,0 +1,122 @@
-+#include <jni.h>
-+
-+#include <array>
-+#include <cstdint>
-+#include <fstream>
-+#include <string>
-+
-+#include "libslic3r/Model.hpp"
-+#include "libslic3r/TriangleSelector.hpp"
-+
-+namespace sapil {
-+extern Slic3r::Model g_model;
-+}
-+
-+namespace {
-+
-+constexpr std::array<unsigned char, 4> SUPPORT_PAINT_MAGIC{'D', 'S', 'P', '1'};
-+constexpr std::array<unsigned char, 4> SEAM_PAINT_MAGIC{'D', 'S', 'E', '1'};
-+constexpr std::uint32_t MAX_PAINTED_FACETS = 100000;
-+constexpr std::uint64_t HEADER_BYTES = 8;
-+constexpr std::uint64_t ENTRY_BYTES = 5;
-+
-+bool read_u32_be(std::istream& input, std::uint32_t& value)
-+{
-+    std::array<unsigned char, 4> bytes{};
-+    if (!input.read(reinterpret_cast<char*>(bytes.data()), bytes.size())) return false;
-+    value = (static_cast<std::uint32_t>(bytes[0]) << 24) |
-+            (static_cast<std::uint32_t>(bytes[1]) << 16) |
-+            (static_cast<std::uint32_t>(bytes[2]) << 8) |
-+            static_cast<std::uint32_t>(bytes[3]);
-+    return true;
-+}
-+
-+bool apply_facet_paint(
-+    int object_index,
-+    int volume_index,
-+    const std::string& sidecar_path,
-+    const std::array<unsigned char, 4>& expected_magic,
-+    bool seam_paint)
-+{
-+    if (object_index < 0 || static_cast<std::size_t>(object_index) >= sapil::g_model.objects.size()) {
-+        return false;
+diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slicer_wrapper.cpp
+index 1158e2c4..01c1badc 100644
+--- a/app/src/main/cpp/src/slicer_wrapper.cpp
++++ b/app/src/main/cpp/src/slicer_wrapper.cpp
+@@ -365,6 +365,25 @@ Java_com_u1_slicer_NativeLibrary_setObjectPositions(JNIEnv* env, jobject, jfloat
+     return result ? JNI_TRUE : JNI_FALSE;
+ }
+ 
++JNIEXPORT jfloatArray JNICALL
++Java_com_u1_slicer_NativeLibrary_nativeAutoArrangeObjects(
++        JNIEnv* env, jobject, jfloatArray jbed_polygon, jfloat minimum_gap) {
++    if (!g_engine || !jbed_polygon) return nullptr;
++    const jsize length = env->GetArrayLength(jbed_polygon);
++    if (length < 6 || length > 512 || length % 2 != 0) return nullptr;
++    std::vector<float> bed_polygon(static_cast<size_t>(length));
++    env->GetFloatArrayRegion(jbed_polygon, 0, length, bed_polygon.data());
++    if (env->ExceptionCheck()) return nullptr;
++    auto positions = g_engine->autoArrangeObjects(bed_polygon, minimum_gap);
++    if (!positions) return nullptr;
++    jfloatArray result = env->NewFloatArray(static_cast<jsize>(positions->size()));
++    if (!positions->empty()) {
++        env->SetFloatArrayRegion(
++            result, 0, static_cast<jsize>(positions->size()), positions->data());
 +    }
-+    Slic3r::ModelObject* object = sapil::g_model.objects[static_cast<std::size_t>(object_index)];
-+    if (object == nullptr) return false;
-+    if (volume_index < 0 || static_cast<std::size_t>(volume_index) >= object->volumes.size()) {
-+        return false;
-+    }
-+    Slic3r::ModelVolume* volume = object->volumes[static_cast<std::size_t>(volume_index)];
-+    if (volume == nullptr || !volume->is_model_part()) return false;
-+
-+    std::ifstream input(sidecar_path, std::ios::binary | std::ios::ate);
-+    if (!input) return false;
-+    const std::streamoff size = input.tellg();
-+    if (size < static_cast<std::streamoff>(HEADER_BYTES)) return false;
-+    input.seekg(0, std::ios::beg);
-+
-+    std::array<unsigned char, 4> magic{};
-+    if (!input.read(reinterpret_cast<char*>(magic.data()), magic.size()) || magic != expected_magic) {
-+        return false;
-+    }
-+    std::uint32_t count = 0;
-+    if (!read_u32_be(input, count) || count > MAX_PAINTED_FACETS) return false;
-+    const std::uint64_t expected_size = HEADER_BYTES + static_cast<std::uint64_t>(count) * ENTRY_BYTES;
-+    if (static_cast<std::uint64_t>(size) != expected_size) return false;
-+
-+    const std::size_t triangle_count = volume->mesh().its.indices.size();
-+    Slic3r::TriangleSelector selector(volume->mesh());
-+    std::uint32_t previous_index = 0;
-+    bool has_previous = false;
-+    for (std::uint32_t entry = 0; entry < count; ++entry) {
-+        std::uint32_t facet_index = 0;
-+        unsigned char state = 0;
-+        if (!read_u32_be(input, facet_index) || !input.read(reinterpret_cast<char*>(&state), 1)) {
-+            return false;
-+        }
-+        if (static_cast<std::size_t>(facet_index) >= triangle_count ||
-+            (has_previous && facet_index <= previous_index) ||
-+            (state != 1 && state != 2)) {
-+            return false;
-+        }
-+        selector.set_facet(
-+            static_cast<int>(facet_index),
-+            state == 1 ? Slic3r::EnforcerBlockerType::ENFORCER
-+                       : Slic3r::EnforcerBlockerType::BLOCKER);
-+        previous_index = facet_index;
-+        has_previous = true;
-+    }
-+    const bool changed = seam_paint ? volume->seam_facets.set(selector)
-+                                    : volume->supported_facets.set(selector);
-+    return changed || count == 0;
++    return result;
 +}
 +
-+} // namespace
-+
-+extern "C" JNIEXPORT jboolean JNICALL
-+Java_com_u1_slicer_NativeLibrary_applySupportPaint(
-+        JNIEnv* env, jobject, jint object_index, jint volume_index, jstring sidecar_path)
-+{
-+    if (sidecar_path == nullptr) return JNI_FALSE;
-+    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
-+    if (path == nullptr) return JNI_FALSE;
-+    const bool result = apply_facet_paint(
-+        static_cast<int>(object_index), static_cast<int>(volume_index),
-+        std::string(path), SUPPORT_PAINT_MAGIC, false);
-+    env->ReleaseStringUTFChars(sidecar_path, path);
-+    return result ? JNI_TRUE : JNI_FALSE;
+ // ---- Cancellation ----
+ JNIEXPORT void JNICALL
+ Java_com_u1_slicer_NativeLibrary_cancelPreviewMesh(JNIEnv*, jobject) {
+@@ -401,6 +420,21 @@ Java_com_u1_slicer_NativeLibrary_nativeSplitObject(JNIEnv* env, jobject, jint ob
+     return out;
+ }
+ 
++JNIEXPORT jintArray JNICALL
++Java_com_u1_slicer_NativeLibrary_nativeCutObject(
++        JNIEnv* env, jobject, jint objIdx, jfloat heightRatio, jboolean placeOnCut) {
++    if (!g_engine) return nullptr;
++    auto res = g_engine->cutObject(
++        static_cast<int>(objIdx),
++        static_cast<float>(heightRatio),
++        placeOnCut == JNI_TRUE);
++    if (!res) return nullptr;
++    jintArray out = env->NewIntArray(2);
++    jint vals[2] = { res->removedIdx, res->addedCount };
++    env->SetIntArrayRegion(out, 0, 2, vals);
++    return out;
 +}
 +
-+extern "C" JNIEXPORT jboolean JNICALL
-+Java_com_u1_slicer_NativeLibrary_applySeamPaint(
-+        JNIEnv* env, jobject, jint object_index, jint volume_index, jstring sidecar_path)
-+{
-+    if (sidecar_path == nullptr) return JNI_FALSE;
-+    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
-+    if (path == nullptr) return JNI_FALSE;
-+    const bool result = apply_facet_paint(
-+        static_cast<int>(object_index), static_cast<int>(volume_index),
-+        std::string(path), SEAM_PAINT_MAGIC, true);
-+    env->ReleaseStringUTFChars(sidecar_path, path);
-+    return result ? JNI_TRUE : JNI_FALSE;
-+}
+ JNIEXPORT jint JNICALL
+ Java_com_u1_slicer_NativeLibrary_nativeSplitVolume(JNIEnv*, jobject, jint objIdx, jint volIdx) {
+     if (!g_engine) return -1;
 diff --git a/app/src/main/cpp/src/sapil_multi_color_paint.cpp b/app/src/main/cpp/src/sapil_multi_color_paint.cpp
 new file mode 100644
-index 00000000..4b25f9ad
+index 00000000..fdd1290a
 --- /dev/null
 +++ b/app/src/main/cpp/src/sapil_multi_color_paint.cpp
 @@ -0,0 +1,102 @@
@@ -1746,135 +2119,6 @@ index 00000000..4b25f9ad
 +    if (path == nullptr) return JNI_FALSE;
 +    const bool result = apply_multi_color_paint(
 +        static_cast<int>(object_index), static_cast<int>(volume_index), std::string(path));
-+    env->ReleaseStringUTFChars(sidecar_path, path);
-+    return result ? JNI_TRUE : JNI_FALSE;
-+}
-diff --git a/app/src/main/cpp/src/sapil_variable_layer_height.cpp b/app/src/main/cpp/src/sapil_variable_layer_height.cpp
-new file mode 100644
-index 00000000..9d941c00
---- /dev/null
-+++ b/app/src/main/cpp/src/sapil_variable_layer_height.cpp
-@@ -0,0 +1,123 @@
-+#include <jni.h>
-+
-+#include <array>
-+#include <cmath>
-+#include <cstdint>
-+#include <cstring>
-+#include <fstream>
-+#include <string>
-+#include <tuple>
-+#include <vector>
-+
-+#include "libslic3r/Model.hpp"
-+
-+namespace sapil {
-+extern Slic3r::Model g_model;
-+}
-+
-+namespace {
-+
-+constexpr std::array<unsigned char, 4> MAGIC{'D', 'V', 'L', '1'};
-+constexpr std::uint32_t MAX_RANGES = 32;
-+constexpr std::uint64_t HEADER_BYTES = 8;
-+constexpr std::uint64_t ENTRY_BYTES = 12;
-+constexpr float MINIMUM_LAYER_HEIGHT_MM = 0.01F;
-+constexpr float MAXIMUM_LAYER_HEIGHT_MM = 2.0F;
-+
-+bool read_u32_be(std::istream& input, std::uint32_t& value)
-+{
-+    std::array<unsigned char, 4> bytes{};
-+    if (!input.read(reinterpret_cast<char*>(bytes.data()), bytes.size())) return false;
-+    value = (static_cast<std::uint32_t>(bytes[0]) << 24) |
-+            (static_cast<std::uint32_t>(bytes[1]) << 16) |
-+            (static_cast<std::uint32_t>(bytes[2]) << 8) |
-+            static_cast<std::uint32_t>(bytes[3]);
-+    return true;
-+}
-+
-+bool read_f32_be(std::istream& input, float& value)
-+{
-+    std::uint32_t bits = 0;
-+    if (!read_u32_be(input, bits)) return false;
-+    static_assert(sizeof(bits) == sizeof(value));
-+    std::memcpy(&value, &bits, sizeof(value));
-+    return true;
-+}
-+
-+bool apply_variable_layer_heights(int object_index, const std::string& sidecar_path)
-+{
-+    if (object_index < 0 || static_cast<std::size_t>(object_index) >= sapil::g_model.objects.size()) {
-+        return false;
-+    }
-+    Slic3r::ModelObject* object = sapil::g_model.objects[static_cast<std::size_t>(object_index)];
-+    if (object == nullptr) return false;
-+
-+    std::ifstream input(sidecar_path, std::ios::binary | std::ios::ate);
-+    if (!input) return false;
-+    const std::streamoff size = input.tellg();
-+    if (size < static_cast<std::streamoff>(HEADER_BYTES)) return false;
-+    input.seekg(0, std::ios::beg);
-+
-+    std::array<unsigned char, 4> magic{};
-+    if (!input.read(reinterpret_cast<char*>(magic.data()), magic.size()) || magic != MAGIC) {
-+        return false;
-+    }
-+    std::uint32_t count = 0;
-+    if (!read_u32_be(input, count) || count > MAX_RANGES) return false;
-+    const std::uint64_t expected_size = HEADER_BYTES + static_cast<std::uint64_t>(count) * ENTRY_BYTES;
-+    if (static_cast<std::uint64_t>(size) != expected_size) return false;
-+
-+    std::vector<std::tuple<float, float, float>> ranges;
-+    ranges.reserve(count);
-+    float previous_end = 0.0F;
-+    for (std::uint32_t index = 0; index < count; ++index) {
-+        float start_ratio = 0.0F;
-+        float end_ratio = 0.0F;
-+        float layer_height = 0.0F;
-+        if (!read_f32_be(input, start_ratio) ||
-+            !read_f32_be(input, end_ratio) ||
-+            !read_f32_be(input, layer_height)) {
-+            return false;
-+        }
-+        if (!std::isfinite(start_ratio) || !std::isfinite(end_ratio) ||
-+            !std::isfinite(layer_height) || start_ratio < 0.0F || end_ratio > 1.0F ||
-+            start_ratio >= end_ratio || (index > 0 && start_ratio < previous_end) ||
-+            layer_height < MINIMUM_LAYER_HEIGHT_MM || layer_height > MAXIMUM_LAYER_HEIGHT_MM) {
-+            return false;
-+        }
-+        ranges.emplace_back(start_ratio, end_ratio, layer_height);
-+        previous_end = end_ratio;
-+    }
-+
-+    const double object_height = object->raw_mesh_bounding_box().size().z();
-+    if (!std::isfinite(object_height) || object_height <= 0.0) return false;
-+    Slic3r::t_layer_config_ranges native_ranges;
-+    for (const auto& [start_ratio, end_ratio, layer_height] : ranges) {
-+        Slic3r::ModelConfig config;
-+        config.set_key_value(
-+            "layer_height",
-+            new Slic3r::ConfigOptionFloat(static_cast<double>(layer_height)));
-+        const auto range = Slic3r::t_layer_height_range(
-+            static_cast<double>(start_ratio) * object_height,
-+            static_cast<double>(end_ratio) * object_height);
-+        if (!native_ranges.emplace(range, std::move(config)).second) return false;
-+    }
-+    object->layer_config_ranges = std::move(native_ranges);
-+    object->layer_height_profile.clear();
-+    return true;
-+}
-+
-+} // namespace
-+
-+extern "C" JNIEXPORT jboolean JNICALL
-+Java_com_u1_slicer_NativeLibrary_applyVariableLayerHeights(
-+        JNIEnv* env, jobject, jint object_index, jstring sidecar_path)
-+{
-+    if (sidecar_path == nullptr) return JNI_FALSE;
-+    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
-+    if (path == nullptr) return JNI_FALSE;
-+    const bool result = apply_variable_layer_heights(
-+        static_cast<int>(object_index), std::string(path));
 +    env->ReleaseStringUTFChars(sidecar_path, path);
 +    return result ? JNI_TRUE : JNI_FALSE;
 +}
@@ -2016,186 +2260,9 @@ index 00000000..34483c04
 +    env->ReleaseStringUTFChars(sidecar_path, path);
 +    return result ? JNI_TRUE : JNI_FALSE;
 +}
-diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slicer_wrapper.cpp
-index 1158e2c4..94d6147e 100644
---- a/app/src/main/cpp/src/slicer_wrapper.cpp
-+++ b/app/src/main/cpp/src/slicer_wrapper.cpp
-@@ -365,6 +365,25 @@ Java_com_u1_slicer_NativeLibrary_setObjectPositions(JNIEnv* env, jobject, jfloat
-     return result ? JNI_TRUE : JNI_FALSE;
- }
- 
-+JNIEXPORT jfloatArray JNICALL
-+Java_com_u1_slicer_NativeLibrary_nativeAutoArrangeObjects(
-+        JNIEnv* env, jobject, jfloatArray jbed_polygon, jfloat minimum_gap) {
-+    if (!g_engine || !jbed_polygon) return nullptr;
-+    const jsize length = env->GetArrayLength(jbed_polygon);
-+    if (length < 6 || length > 512 || length % 2 != 0) return nullptr;
-+    std::vector<float> bed_polygon(static_cast<size_t>(length));
-+    env->GetFloatArrayRegion(jbed_polygon, 0, length, bed_polygon.data());
-+    if (env->ExceptionCheck()) return nullptr;
-+    auto positions = g_engine->autoArrangeObjects(bed_polygon, minimum_gap);
-+    if (!positions) return nullptr;
-+    jfloatArray result = env->NewFloatArray(static_cast<jsize>(positions->size()));
-+    if (!positions->empty()) {
-+        env->SetFloatArrayRegion(
-+            result, 0, static_cast<jsize>(positions->size()), positions->data());
-+    }
-+    return result;
-+}
-+
- // ---- Cancellation ----
- JNIEXPORT void JNICALL
- Java_com_u1_slicer_NativeLibrary_cancelPreviewMesh(JNIEnv*, jobject) {
-diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil_arrange.cpp
---- a/app/src/main/cpp/src/sapil_arrange.cpp
-+++ b/app/src/main/cpp/src/sapil_arrange.cpp
-@@ -565,10 +565,14 @@ static bool f66_volIdxValid(int objIdx, int volIdx) {
- }
- 
- bool SlicerEngine::isObjectSplittable(int objIdx) const {
-     if (!f66_objIdxValid(objIdx)) return false;
-     auto* obj = getGlobalModel().objects[objIdx];
--    return obj->parts_count() > 1;
-+    // Match OrcaSlicer's ObjectList::is_splittable(to_objects=true): a
-+    // multi-volume object can be separated by volume, while a single-volume
-+    // object is splittable when its mesh contains disconnected islands.
-+    return obj->volumes.size() > 1 ||
-+           (obj->volumes.size() == 1 && obj->volumes[0]->is_splittable());
- }
- 
- bool SlicerEngine::isVolumeSplittable(int objIdx, int volIdx) const {
-     if (!f66_volIdxValid(objIdx, volIdx)) return false;
-diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
---- a/app/src/main/cpp/include/sapil.h
-+++ b/app/src/main/cpp/include/sapil.h
-@@ -468,6 +468,12 @@ public:
-     struct SplitResult { int removedIdx; int addedCount; };
-     std::optional<SplitResult> splitObject(int objIdx);
- 
-+    // Cut one object with a horizontal plane positioned at `heightRatio`
-+    // through its current world-space bounding box. Both solids are kept as
-+    // separate objects. `placeOnCut` asks Orca to place both new cut faces on
-+    // the bed. Returns the same replacement shape as splitObject.
-+    std::optional<SplitResult> cutObject(int objIdx, float heightRatio, bool placeOnCut);
-+
-     // Split one volume's mesh into multiple volumes within the same object.
-     // Returns the new volume count for the object on success, -1 on failure.
-     int splitVolume(int objIdx, int volIdx);
-diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil_arrange.cpp
---- a/app/src/main/cpp/src/sapil_arrange.cpp
-+++ b/app/src/main/cpp/src/sapil_arrange.cpp
-@@ -3,7 +3,8 @@
- #include "libslic3r/Model.hpp"
- #include "libslic3r/ModelArrange.hpp"
- #include "libslic3r/Orient.hpp"
-+#include "libslic3r/CutUtils.hpp"
- #include <algorithm>
- #include <cmath>
- #include "libslic3r/BoundingBox.hpp"
- #include "libslic3r/TriangleMesh.hpp"
-@@ -687,6 +688,75 @@ std::optional<SlicerEngine::SplitResult> SlicerEngine::splitObject(int objIdx) {
-     return SplitResult{objIdx, (int)added};
- }
- 
-+std::optional<SlicerEngine::SplitResult> SlicerEngine::cutObject(
-+        int objIdx, float heightRatio, bool placeOnCut) {
-+    if (!f66_objIdxValid(objIdx) || !std::isfinite(heightRatio) ||
-+        heightRatio <= 0.0f || heightRatio >= 1.0f) {
-+        return std::nullopt;
-+    }
-+    Slic3r::Model& model = getGlobalModel();
-+    Slic3r::ModelObject* source = model.objects[objIdx];
-+    if (source == nullptr || source->instances.empty()) return std::nullopt;
-+
-+    const Slic3r::BoundingBoxf3 bounds = source->instance_bounding_box(0);
-+    if (!bounds.defined || !std::isfinite(bounds.min.z()) ||
-+        !std::isfinite(bounds.max.z()) || bounds.size().z() <= 0.0) {
-+        return std::nullopt;
-+    }
-+    const double cut_z = bounds.min.z() + bounds.size().z() * heightRatio;
-+    Slic3r::Transform3d cut_matrix = Slic3r::Transform3d::Identity();
-+    cut_matrix.translation() = Slic3r::Vec3d(0.0, 0.0, cut_z);
-+    const Slic3r::ModelObjectCutAttributes attributes = placeOnCut ?
-+        Slic3r::ModelObjectCutAttribute::KeepUpper |
-+            Slic3r::ModelObjectCutAttribute::KeepLower |
-+            Slic3r::ModelObjectCutAttribute::InvalidateCutInfo |
-+            Slic3r::ModelObjectCutAttribute::PlaceOnCutUpper |
-+            Slic3r::ModelObjectCutAttribute::PlaceOnCutLower :
-+        Slic3r::ModelObjectCutAttribute::KeepUpper |
-+            Slic3r::ModelObjectCutAttribute::KeepLower |
-+            Slic3r::ModelObjectCutAttribute::InvalidateCutInfo;
-+
-+    Slic3r::Cut cut(source, 0, cut_matrix, attributes);
-+    const Slic3r::ModelObjectPtrs& parts = cut.perform_with_plane();
-+    if (parts.size() != 2 || parts[0] == nullptr || parts[1] == nullptr ||
-+        parts[0]->volumes.empty() || parts[1]->volumes.empty()) {
-+        return std::nullopt;
-+    }
-+
-+    const size_t before_size = model.objects.size();
-+    std::vector<Slic3r::ModelObject*> replacements;
-+    replacements.reserve(parts.size());
-+    for (const Slic3r::ModelObject* part : parts) {
-+        Slic3r::ModelObject* replacement = model.add_object(*part);
-+        if (replacement == nullptr) {
-+            while (model.objects.size() > before_size) {
-+                model.delete_object(model.objects.size() - 1);
-+            }
-+            return std::nullopt;
-+        }
-+        replacements.push_back(replacement);
-+    }
-+    model.objects.erase(model.objects.begin() + before_size, model.objects.end());
-+    model.delete_object(static_cast<size_t>(objIdx));
-+    model.objects.insert(
-+        model.objects.begin() + objIdx,
-+        replacements.begin(),
-+        replacements.end());
-+
-+    const int new_vol_count = replacements.empty() ? 0 :
-+        static_cast<int>(replacements.front()->volumes.size());
-+    onSplitObjectReshape(objIdx, static_cast<int>(replacements.size()), new_vol_count);
-+    resetLoadTimeScaleFactors();
-+    resetRotationBases();
-+    invalidatePreviewMeshCache();
-+    SAPIL_LOGI(
-+        "cutObject: cut %d at %.3f into %d objects",
-+        objIdx,
-+        heightRatio,
-+        static_cast<int>(replacements.size()));
-+    return SplitResult{objIdx, static_cast<int>(replacements.size())};
-+}
-+
- std::optional<int> SlicerEngine::duplicateObject(int objIdx) {
-     if (!f66_objIdxValid(objIdx)) return std::nullopt;
-     Slic3r::Model& model = getGlobalModel();
-diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slicer_wrapper.cpp
---- a/app/src/main/cpp/src/slicer_wrapper.cpp
-+++ b/app/src/main/cpp/src/slicer_wrapper.cpp
-@@ -424,6 +424,21 @@ Java_com_u1_slicer_NativeLibrary_nativeSplitObject(JNIEnv* env, jobject, jint ob
-     return out;
- }
- 
-+JNIEXPORT jintArray JNICALL
-+Java_com_u1_slicer_NativeLibrary_nativeCutObject(
-+        JNIEnv* env, jobject, jint objIdx, jfloat heightRatio, jboolean placeOnCut) {
-+    if (!g_engine) return nullptr;
-+    auto res = g_engine->cutObject(
-+        static_cast<int>(objIdx),
-+        static_cast<float>(heightRatio),
-+        placeOnCut == JNI_TRUE);
-+    if (!res) return nullptr;
-+    jintArray out = env->NewIntArray(2);
-+    jint vals[2] = { res->removedIdx, res->addedCount };
-+    env->SetIntArrayRegion(out, 0, 2, vals);
-+    return out;
-+}
-+
- JNIEXPORT jint JNICALL
- Java_com_u1_slicer_NativeLibrary_nativeSplitVolume(JNIEnv*, jobject, jint objIdx, jint volIdx) {
-     if (!g_engine) return -1;
 diff --git a/app/src/main/cpp/src/sapil_primitive.cpp b/app/src/main/cpp/src/sapil_primitive.cpp
 new file mode 100644
+index 00000000..3dbe981e
 --- /dev/null
 +++ b/app/src/main/cpp/src/sapil_primitive.cpp
 @@ -0,0 +1,91 @@
@@ -2290,493 +2357,260 @@ new file mode 100644
 +    env->ReleaseStringUTFChars(output_path, path);
 +    return result ? JNI_TRUE : JNI_FALSE;
 +}
-diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil_arrange.cpp
---- a/app/src/main/cpp/src/sapil_arrange.cpp
-+++ b/app/src/main/cpp/src/sapil_arrange.cpp
-@@ -670,18 +670,35 @@ std::optional<std::array<double, 3>> SlicerEngine::autoOrientObject(int objIdx) {
-     if (!f66_objIdxValid(objIdx)) return std::nullopt;
-     auto* obj = getGlobalModel().objects[objIdx];
-     if (obj->instances.empty()) return std::nullopt;
-+    std::array<double, 3> rotation{};
-     try {
--        Slic3r::orientation::orient(obj);
-+        Slic3r::orientation::OrientMeshs selected(1);
-+        selected.front().name = obj->name;
-+        selected.front().mesh = obj->mesh();
-+        Slic3r::orientation::OrientParams params;
-+        // Match Orca's default OrientJob mode. The convenience overload uses
-+        // the older minimum-area scoring path and can legitimately return an
-+        // identity transform for models the desktop job rotates.
-+        params.min_volume = true;
-+        params.parallel = false;
-+        params.progressind = [](unsigned, std::string) {};
-+        params.stopcondition = []() { return false; };
-+        Slic3r::orientation::orient(selected, {}, params);
-+        const Slic3r::Matrix3d& matrix = selected.front().rotation_matrix;
-+        const double y = std::asin(std::clamp(-matrix(2, 0), -1.0, 1.0));
-+        const double cosine_y = std::cos(y);
-+        const double x = std::abs(cosine_y) > 1e-8 ?
-+            std::atan2(matrix(2, 1), matrix(2, 2)) :
-+            std::atan2(-matrix(1, 2), matrix(1, 1));
-+        const double z = std::abs(cosine_y) > 1e-8 ?
-+            std::atan2(matrix(1, 0), matrix(0, 0)) : 0.0;
-+        rotation = {x, y, z};
-     } catch (...) {
-         SAPIL_LOGE("autoOrientObject: orient threw on object %d", objIdx);
-         return std::nullopt;
-     }
-     obj->invalidate_bounding_box();
--    Slic3r::Vec3d rot = obj->instances[0]->get_rotation();
--    // F66 review-2026-05-30 P1: orient mutates per-instance rotation; if any
--    // user later calls global setModelRotation it must re-snapshot against
--    // the new orientation, not stack on the pre-orient base.
-     resetRotationBases();
-     invalidatePreviewMeshCache();
--    return std::array<double, 3>{rot.x(), rot.y(), rot.z()};
-+    return rotation;
- }
-
-diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
-index 68f0b3e8..5c9603bf 100644
---- a/app/src/main/cpp/include/sapil.h
-+++ b/app/src/main/cpp/include/sapil.h
-@@ -122,6 +122,15 @@ struct SliceConfig {
-     float internal_solid_infill_acceleration = 100.0f;
-     bool internal_solid_infill_acceleration_percent = true;
- 
-+    // Per-feature jerk (mm/s). A zero default keeps Orca's jerk control disabled.
-+    float default_jerk = 0.0f;
-+    float outer_wall_jerk = 9.0f;
-+    float inner_wall_jerk = 9.0f;
-+    float top_surface_jerk = 9.0f;
-+    float infill_jerk = 9.0f;
-+    float first_layer_jerk = 9.0f;
-+    float travel_jerk = 12.0f;
+diff --git a/app/src/main/cpp/src/sapil_support_paint.cpp b/app/src/main/cpp/src/sapil_support_paint.cpp
+new file mode 100644
+index 00000000..5dd264c5
+--- /dev/null
++++ b/app/src/main/cpp/src/sapil_support_paint.cpp
+@@ -0,0 +1,122 @@
++#include <jni.h>
 +
-     // Temperature
-     int nozzle_temp = 210;
-     int bed_temp = 60;
-diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
-index c2bddce7..b8859892 100644
---- a/app/src/main/cpp/src/sapil_config.cpp
-+++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -166,6 +166,13 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
-     config.sparse_infill_acceleration_percent = getBool("sparseInfillAccelerationPercent");
-     config.internal_solid_infill_acceleration = getFloat("internalSolidInfillAcceleration");
-     config.internal_solid_infill_acceleration_percent = getBool("internalSolidInfillAccelerationPercent");
-+    config.default_jerk = getFloat("defaultJerk");
-+    config.outer_wall_jerk = getFloat("outerWallJerk");
-+    config.inner_wall_jerk = getFloat("innerWallJerk");
-+    config.top_surface_jerk = getFloat("topSurfaceJerk");
-+    config.infill_jerk = getFloat("infillJerk");
-+    config.first_layer_jerk = getFloat("firstLayerJerk");
-+    config.travel_jerk = getFloat("travelJerk");
-     config.travel_speed = getFloat("travelSpeed");
-     config.first_layer_speed = getFloat("firstLayerSpeed");
- 
-@@ -508,6 +515,13 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
-     setBool("sparseInfillAccelerationPercent", config.sparse_infill_acceleration_percent);
-     setFloat("internalSolidInfillAcceleration", config.internal_solid_infill_acceleration);
-     setBool("internalSolidInfillAccelerationPercent", config.internal_solid_infill_acceleration_percent);
-+    setFloat("defaultJerk", config.default_jerk);
-+    setFloat("outerWallJerk", config.outer_wall_jerk);
-+    setFloat("innerWallJerk", config.inner_wall_jerk);
-+    setFloat("topSurfaceJerk", config.top_surface_jerk);
-+    setFloat("infillJerk", config.infill_jerk);
-+    setFloat("firstLayerJerk", config.first_layer_jerk);
-+    setFloat("travelJerk", config.travel_jerk);
-     setFloat("travelSpeed", config.travel_speed);
-     setFloat("firstLayerSpeed", config.first_layer_speed);
-     setInt("nozzleTemp", config.nozzle_temp);
-diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
-index 57431bb5..415d2590 100644
---- a/app/src/main/cpp/src/sapil_print.cpp
-+++ b/app/src/main/cpp/src/sapil_print.cpp
-@@ -352,6 +352,13 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
-         config.sparse_infill_acceleration, config.sparse_infill_acceleration_percent));
-     dpc.set_key_value("internal_solid_infill_acceleration", new Slic3r::ConfigOptionFloatOrPercent(
-         config.internal_solid_infill_acceleration, config.internal_solid_infill_acceleration_percent));
-+    dpc.set_key_value("default_jerk",             new Slic3r::ConfigOptionFloat(config.default_jerk));
-+    dpc.set_key_value("outer_wall_jerk",          new Slic3r::ConfigOptionFloat(config.outer_wall_jerk));
-+    dpc.set_key_value("inner_wall_jerk",          new Slic3r::ConfigOptionFloat(config.inner_wall_jerk));
-+    dpc.set_key_value("top_surface_jerk",         new Slic3r::ConfigOptionFloat(config.top_surface_jerk));
-+    dpc.set_key_value("infill_jerk",              new Slic3r::ConfigOptionFloat(config.infill_jerk));
-+    dpc.set_key_value("initial_layer_jerk",       new Slic3r::ConfigOptionFloat(config.first_layer_jerk));
-+    dpc.set_key_value("travel_jerk",              new Slic3r::ConfigOptionFloat(config.travel_jerk));
- 
-     // Multi-extruder setup
-     int n_ext = std::max(1, config.extruder_count);
-
-diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
---- a/app/src/main/cpp/include/sapil.h
-+++ b/app/src/main/cpp/include/sapil.h
-@@ -283,6 +283,15 @@ struct SliceConfig {
-     std::vector<int> extruder_temps;           // per-extruder nozzle temps
-     std::vector<float> extruder_retract_length; // per-extruder retraction
-     std::vector<float> extruder_retract_speed;  // per-extruder retraction speed
-+    std::vector<float> extruder_deretract_speed;
-+    std::vector<float> extruder_retraction_minimum_travel;
-+    std::vector<int> extruder_retract_when_changing_layer;
-+    std::vector<int> extruder_wipe_while_retracting;
-+    std::vector<float> extruder_wipe_distance;
-+    std::vector<float> extruder_retract_before_wipe;
-+    std::vector<float> extruder_retract_restart_extra;
-+    std::vector<float> extruder_z_hop;
-+    std::vector<std::string> extruder_z_hop_type;
- 
-     // Wipe tower (for multi-extruder)
-     bool wipe_tower_enabled = false;
-diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
---- a/app/src/main/cpp/src/sapil_config.cpp
-+++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -317,6 +317,15 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
-     config.extruder_temps = getIntArray("extruderTemps");
-     config.extruder_retract_length = getFloatArray("extruderRetractLength");
-     config.extruder_retract_speed = getFloatArray("extruderRetractSpeed");
-+    config.extruder_deretract_speed = getFloatArray("extruderDeretractSpeed");
-+    config.extruder_retraction_minimum_travel = getFloatArray("extruderRetractionMinimumTravel");
-+    config.extruder_retract_when_changing_layer = getIntArray("extruderRetractWhenChangingLayer");
-+    config.extruder_wipe_while_retracting = getIntArray("extruderWipeWhileRetracting");
-+    config.extruder_wipe_distance = getFloatArray("extruderWipeDistance");
-+    config.extruder_retract_before_wipe = getFloatArray("extruderRetractBeforeWipe");
-+    config.extruder_retract_restart_extra = getFloatArray("extruderRetractRestartExtra");
-+    config.extruder_z_hop = getFloatArray("extruderZHop");
-+    config.extruder_z_hop_type = getStringArray("extruderZHopType");
-     config.wipe_tower_enabled = getBool("wipeTowerEnabled");
-     config.wipe_tower_x = getFloat("wipeTowerX");
-     config.wipe_tower_y = getFloat("wipeTowerY");
-@@ -660,6 +669,15 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
-     setIntArray("extruderTemps", config.extruder_temps);
-     setFloatArray("extruderRetractLength", config.extruder_retract_length);
-     setFloatArray("extruderRetractSpeed", config.extruder_retract_speed);
-+    setFloatArray("extruderDeretractSpeed", config.extruder_deretract_speed);
-+    setFloatArray("extruderRetractionMinimumTravel", config.extruder_retraction_minimum_travel);
-+    setIntArray("extruderRetractWhenChangingLayer", config.extruder_retract_when_changing_layer);
-+    setIntArray("extruderWipeWhileRetracting", config.extruder_wipe_while_retracting);
-+    setFloatArray("extruderWipeDistance", config.extruder_wipe_distance);
-+    setFloatArray("extruderRetractBeforeWipe", config.extruder_retract_before_wipe);
-+    setFloatArray("extruderRetractRestartExtra", config.extruder_retract_restart_extra);
-+    setFloatArray("extruderZHop", config.extruder_z_hop);
-+    setStringArray("extruderZHopType", config.extruder_z_hop_type);
-     setBool("wipeTowerEnabled", config.wipe_tower_enabled);
-     setFloat("wipeTowerX", config.wipe_tower_x);
-     setFloat("wipeTowerY", config.wipe_tower_y);
-diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
---- a/app/src/main/cpp/src/sapil_print.cpp
-+++ b/app/src/main/cpp/src/sapil_print.cpp
-@@ -372,6 +372,33 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
-     std::vector<int> bed_temps(n_ext, config.bed_temp);
-     std::vector<double> retract_len(n_ext, config.retract_length);
-     std::vector<double> retract_spd(n_ext, config.retract_speed);
-+    auto per_ext_floats = [n_ext](const std::vector<float>& values, double fallback) {
-+        std::vector<double> result(n_ext, fallback);
-+        for (int i = 0; i < n_ext && i < static_cast<int>(values.size()); ++i)
-+            result[i] = values[i];
-+        return result;
-+    };
-+    auto per_ext_bools = [n_ext](const std::vector<int>& values, bool fallback) {
-+        std::vector<unsigned char> result(n_ext, fallback ? 1 : 0);
-+        for (int i = 0; i < n_ext && i < static_cast<int>(values.size()); ++i)
-+            result[i] = values[i] != 0 ? 1 : 0;
-+        return result;
-+    };
-+    const auto deretract_spd = per_ext_floats(config.extruder_deretract_speed, 0.0);
-+    const auto retract_minimum_travel = per_ext_floats(config.extruder_retraction_minimum_travel, 2.0);
-+    const auto retract_layer_change = per_ext_bools(config.extruder_retract_when_changing_layer, false);
-+    const auto wipe = per_ext_bools(config.extruder_wipe_while_retracting, false);
-+    const auto wipe_distance = per_ext_floats(config.extruder_wipe_distance, 1.0);
-+    const auto retract_before_wipe = per_ext_floats(config.extruder_retract_before_wipe, 100.0);
-+    const auto retract_restart_extra = per_ext_floats(config.extruder_retract_restart_extra, 0.0);
-+    const auto z_hop = per_ext_floats(config.extruder_z_hop, 0.4);
-+    std::vector<int> z_hop_types(n_ext, Slic3r::ZHopType::zhtSlope);
-+    for (int i = 0; i < n_ext && i < static_cast<int>(config.extruder_z_hop_type.size()); ++i) {
-+        const auto& value = config.extruder_z_hop_type[i];
-+        z_hop_types[i] = value == "auto" ? Slic3r::ZHopType::zhtAuto :
-+            value == "normal" ? Slic3r::ZHopType::zhtNormal :
-+            value == "spiral" ? Slic3r::ZHopType::zhtSpiral : Slic3r::ZHopType::zhtSlope;
++#include <array>
++#include <cstdint>
++#include <fstream>
++#include <string>
++
++#include "libslic3r/Model.hpp"
++#include "libslic3r/TriangleSelector.hpp"
++
++namespace sapil {
++extern Slic3r::Model g_model;
++}
++
++namespace {
++
++constexpr std::array<unsigned char, 4> SUPPORT_PAINT_MAGIC{'D', 'S', 'P', '1'};
++constexpr std::array<unsigned char, 4> SEAM_PAINT_MAGIC{'D', 'S', 'E', '1'};
++constexpr std::uint32_t MAX_PAINTED_FACETS = 100000;
++constexpr std::uint64_t HEADER_BYTES = 8;
++constexpr std::uint64_t ENTRY_BYTES = 5;
++
++bool read_u32_be(std::istream& input, std::uint32_t& value)
++{
++    std::array<unsigned char, 4> bytes{};
++    if (!input.read(reinterpret_cast<char*>(bytes.data()), bytes.size())) return false;
++    value = (static_cast<std::uint32_t>(bytes[0]) << 24) |
++            (static_cast<std::uint32_t>(bytes[1]) << 16) |
++            (static_cast<std::uint32_t>(bytes[2]) << 8) |
++            static_cast<std::uint32_t>(bytes[3]);
++    return true;
++}
++
++bool apply_facet_paint(
++    int object_index,
++    int volume_index,
++    const std::string& sidecar_path,
++    const std::array<unsigned char, 4>& expected_magic,
++    bool seam_paint)
++{
++    if (object_index < 0 || static_cast<std::size_t>(object_index) >= sapil::g_model.objects.size()) {
++        return false;
 +    }
- 
-     // Override with per-extruder values if provided.
-     // When the array covers all extruders, use ALL values (including 0 for unused slots)
-@@ -431,6 +458,20 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
-     // ship 10mm bowden defaults that cause heat-creep clogs.
-     dpc.set_key_value("retraction_length", new Slic3r::ConfigOptionFloats(retract_len));
-     dpc.set_key_value("retraction_speed", new Slic3r::ConfigOptionFloats(retract_spd));
-+    dpc.set_key_value("deretraction_speed", new Slic3r::ConfigOptionFloats(deretract_spd));
-+    dpc.set_key_value("retraction_minimum_travel", new Slic3r::ConfigOptionFloats(retract_minimum_travel));
-+    dpc.set_key_value("retract_when_changing_layer", new Slic3r::ConfigOptionBools(retract_layer_change));
-+    dpc.set_key_value("wipe", new Slic3r::ConfigOptionBools(wipe));
-+    dpc.set_key_value("wipe_distance", new Slic3r::ConfigOptionFloats(wipe_distance));
-+    dpc.set_key_value("retract_before_wipe", new Slic3r::ConfigOptionPercents(retract_before_wipe));
-+    dpc.set_key_value("retract_restart_extra", new Slic3r::ConfigOptionFloats(retract_restart_extra));
-+    dpc.set_key_value("z_hop", new Slic3r::ConfigOptionFloats(z_hop));
-+    auto* z_hop_type_option = dpc.option<Slic3r::ConfigOptionEnumsGeneric>("z_hop_types");
-+    if (z_hop_type_option != nullptr) {
-+        // Keep Orca's enum key map: replacing this option with a raw value-only
-+        // instance makes G-code config serialization dereference a null map.
-+        z_hop_type_option->values = std::move(z_hop_types);
++    Slic3r::ModelObject* object = sapil::g_model.objects[static_cast<std::size_t>(object_index)];
++    if (object == nullptr) return false;
++    if (volume_index < 0 || static_cast<std::size_t>(volume_index) >= object->volumes.size()) {
++        return false;
 +    }
-     // Toolchange retraction — OrcaSlicer defaults to 10mm (bowden).  For the Snapmaker U1's
-     // direct-drive extruders this pulls filament past the heat break, causing heat-creep clogs
-     // during the standby period between tool changes.  Use the same length as normal retraction.
-@@ -563,13 +604,6 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
-     // profile must provide a compatible start template because Orca delegates
-     // part of temperature setup to that template for this flavor.
- 
--    // Deretraction speed — OrcaSlicer defaults to 0 (= same as retraction speed).
--    // Snapmaker profile uses 35 mm/s for smoother prime-after-retract.
--    // Hardware-tuned (direct-drive vs bowden); always write the JNI value,
--    // never let an embed override it.
--    dpc.set_key_value("deretraction_speed", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, 35.0)));
--    dpc.set_key_value("retraction_minimum_travel", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, 1.0)));
--
-     // Line widths — must be set explicitly.
-     // When left at 0 (absolute), MultiMaterialSegmentation calls
-     // config.get_abs_value("outer_wall_line_width", nozzle_diameter) which returns
-diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
---- a/app/src/main/cpp/src/sapil_print.cpp
-+++ b/app/src/main/cpp/src/sapil_print.cpp
-@@ -1324,8 +1324,17 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
-                 pad_floats("filament_toolchange_delay");
- 
-                 // Retraction arrays (set by applyConfigToPrusa from JNI config)
--                pad_floats("retract_length");
--                pad_floats("retract_speed");
-+                pad_floats("retraction_length");
-+                pad_floats("retraction_speed");
-+                pad_floats("deretraction_speed");
-+                pad_floats("retraction_minimum_travel");
-+                pad_bools("retract_when_changing_layer");
-+                pad_bools("wipe");
-+                pad_floats("wipe_distance");
-+                pad_floats("retract_before_wipe");
-+                pad_floats("retract_restart_extra");
-+                pad_floats("z_hop");
-+                pad_ints("z_hop_types");
-                 pad_floats("retract_length_toolchange");
- 
-                 // Extruder offsets
-diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
---- a/app/src/main/cpp/include/sapil.h
-+++ b/app/src/main/cpp/include/sapil.h
-@@ -299,6 +299,12 @@ struct SliceConfig {
-     float wipe_tower_x = 170.0f;
-     float wipe_tower_y = 140.0f;
-     float wipe_tower_width = 60.0f;
-+    float prime_volume = 45.0f;
-+    float prime_tower_brim_width = 3.0f;
-+    bool wipe_tower_no_sparse_layers = false;
-+    bool ooze_prevention = false;
-+    int standby_temperature_delta = -5;
-+    bool interface_shells = false;
- 
-     // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
-     // Empty = use OrcaSlicer's built-in default. OrcaSlicer resolves {variable}
-diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
---- a/app/src/main/cpp/src/sapil_config.cpp
-+++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -331,6 +331,12 @@ static SliceConfig readConfig(JNIEnv* env, jobject configObj) {
-     config.wipe_tower_x = getFloat("wipeTowerX");
-     config.wipe_tower_y = getFloat("wipeTowerY");
-     config.wipe_tower_width = getFloat("wipeTowerWidth");
-+    config.prime_volume = getFloat("primeVolume");
-+    config.prime_tower_brim_width = getFloat("primeTowerBrimWidth");
-+    config.wipe_tower_no_sparse_layers = getBool("wipeTowerNoSparseLayers");
-+    config.ooze_prevention = getBool("oozePrevention");
-+    config.standby_temperature_delta = getInt("standbyTemperatureDelta");
-+    config.interface_shells = getBool("interfaceShells");
- 
-     // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
-     config.machine_start_gcode = getString("machineStartGcode");
-@@ -683,6 +689,12 @@ static void writeConfig(JNIEnv* env, jobject configObj, const SliceConfig& config
-     setFloat("wipeTowerX", config.wipe_tower_x);
-     setFloat("wipeTowerY", config.wipe_tower_y);
-     setFloat("wipeTowerWidth", config.wipe_tower_width);
-+    setFloat("primeVolume", config.prime_volume);
-+    setFloat("primeTowerBrimWidth", config.prime_tower_brim_width);
-+    setBool("wipeTowerNoSparseLayers", config.wipe_tower_no_sparse_layers);
-+    setBool("oozePrevention", config.ooze_prevention);
-+    setInt("standbyTemperatureDelta", config.standby_temperature_delta);
-+    setBool("interfaceShells", config.interface_shells);
-     setString("machineStartGcode", config.machine_start_gcode);
-     setString("machineEndGcode", config.machine_end_gcode);
-     setString("gcodeFlavor", config.gcode_flavor);
-diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
---- a/app/src/main/cpp/src/sapil_print.cpp
-+++ b/app/src/main/cpp/src/sapil_print.cpp
-@@ -808,14 +808,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
--    // Idle extruder standby temperature — prevents idle nozzles from staying at full print temp.
--    // Snapmaker profiles embed ooze_prevention=0 and standby_temperature_delta=-5, which leaves
--    // parked extruders at full print temperature for the entire job.  Always override for
--    // multi-extruder prints with a -100°C standby delta (applied after profile_keys[] load,
--    // so it wins regardless of what the profile says).
--    // This gives ~120°C standby for PLA and ~135°C for PETG — above glass transition,
--    // well below print temp, preventing ooze and thermal degradation on idle extruders.
-+    // Preserve the selected Orca process semantics instead of silently substituting a
-+    // machine-specific standby policy. A zero idle temperature delegates to the delta.
-+    dpc.set_key_value("ooze_prevention", new Slic3r::ConfigOptionBool(config.ooze_prevention));
-+    dpc.set_key_value("standby_temperature_delta", new Slic3r::ConfigOptionInt(config.standby_temperature_delta));
-+    dpc.set_key_value("interface_shells", new Slic3r::ConfigOptionBool(config.interface_shells));
-     if (n_ext > 1) {
--        dpc.set_key_value("ooze_prevention", new Slic3r::ConfigOptionBool(true));
--        dpc.set_key_value("standby_temperature_delta", new Slic3r::ConfigOptionInt(-100));
--        // idle_temperature of 0 means "use standby_temperature_delta" (per OrcaSlicer GCode.cpp)
-         dpc.set_key_value("idle_temperature", new Slic3r::ConfigOptionInts(std::vector<int>(n_ext, 0)));
-     }
- 
-@@ -885,6 +882,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
- 
-     // Prime tower / wipe tower (OrcaSlicer keys)
-     // wipe_tower_x/y are coFloats (arrays) in OrcaSlicer, one value per extruder
-+    dpc.set_key_value("prime_volume", new Slic3r::ConfigOptionFloat(config.prime_volume));
-+    dpc.set_key_value("prime_tower_brim_width", new Slic3r::ConfigOptionFloat(config.prime_tower_brim_width));
-+    dpc.set_key_value("wipe_tower_no_sparse_layers", new Slic3r::ConfigOptionBool(config.wipe_tower_no_sparse_layers));
-     if (n_ext > 1 && config.wipe_tower_enabled) {
-         dpc.set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(true));
-         dpc.set_key_value("wipe_tower_x", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, config.wipe_tower_x)));
-diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
---- a/app/src/main/cpp/include/sapil.h
-+++ b/app/src/main/cpp/include/sapil.h
-@@ -305,6 +305,7 @@ struct SliceConfig {
-     bool ooze_prevention = false;
-     int standby_temperature_delta = -5;
-     bool interface_shells = false;
-+    bool enable_arc_fitting = false;
- 
-     // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
-     // Empty = use OrcaSlicer's built-in default. OrcaSlicer resolves {variable}
-diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
---- a/app/src/main/cpp/src/sapil_config.cpp
-+++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -337,6 +337,7 @@ static SliceConfig readConfig(JNIEnv* env, jobject configObj) {
-     config.ooze_prevention = getBool("oozePrevention");
-     config.standby_temperature_delta = getInt("standbyTemperatureDelta");
-     config.interface_shells = getBool("interfaceShells");
-+    config.enable_arc_fitting = getBool("enableArcFitting");
- 
-     // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
-     config.machine_start_gcode = getString("machineStartGcode");
-@@ -695,6 +696,7 @@ static void writeConfig(JNIEnv* env, jobject configObj, const SliceConfig& config
-     setBool("oozePrevention", config.ooze_prevention);
-     setInt("standbyTemperatureDelta", config.standby_temperature_delta);
-     setBool("interfaceShells", config.interface_shells);
-+    setBool("enableArcFitting", config.enable_arc_fitting);
-     setString("machineStartGcode", config.machine_start_gcode);
-     setString("machineEndGcode", config.machine_end_gcode);
-     setString("gcodeFlavor", config.gcode_flavor);
-diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
---- a/app/src/main/cpp/src/sapil_print.cpp
-+++ b/app/src/main/cpp/src/sapil_print.cpp
-@@ -813,6 +813,7 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
-     dpc.set_key_value("ooze_prevention", new Slic3r::ConfigOptionBool(config.ooze_prevention));
-     dpc.set_key_value("standby_temperature_delta", new Slic3r::ConfigOptionInt(config.standby_temperature_delta));
-     dpc.set_key_value("interface_shells", new Slic3r::ConfigOptionBool(config.interface_shells));
-+    dpc.set_key_value("enable_arc_fitting", new Slic3r::ConfigOptionBool(config.enable_arc_fitting));
-     if (n_ext > 1) {
-         dpc.set_key_value("idle_temperature", new Slic3r::ConfigOptionInts(std::vector<int>(n_ext, 0)));
-     }
-diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
---- a/app/src/main/cpp/include/sapil.h
-+++ b/app/src/main/cpp/include/sapil.h
-@@ -306,5 +306,7 @@ struct SliceConfig {
-     bool interface_shells = false;
-     bool enable_arc_fitting = false;
-+    bool gcode_label_objects = true;
-+    bool exclude_object = false;
- 
-     // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
-     // Empty = use OrcaSlicer's built-in default. OrcaSlicer resolves {variable}
-diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
---- a/app/src/main/cpp/src/sapil_config.cpp
-+++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -338,5 +338,7 @@ static SliceConfig readConfig(JNIEnv* env, jobject configObj) {
-     config.interface_shells = getBool("interfaceShells");
-     config.enable_arc_fitting = getBool("enableArcFitting");
-+    config.gcode_label_objects = getBool("gcodeLabelObjects");
-+    config.exclude_object = getBool("excludeObject");
- 
-     // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
-     config.machine_start_gcode = getString("machineStartGcode");
-@@ -697,5 +699,7 @@ static void writeConfig(JNIEnv* env, jobject configObj, const SliceConfig& config
-     setBool("interfaceShells", config.interface_shells);
-     setBool("enableArcFitting", config.enable_arc_fitting);
-+    setBool("gcodeLabelObjects", config.gcode_label_objects);
-+    setBool("excludeObject", config.exclude_object);
-     setString("machineStartGcode", config.machine_start_gcode);
-     setString("machineEndGcode", config.machine_end_gcode);
-     setString("gcodeFlavor", config.gcode_flavor);
-diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
---- a/app/src/main/cpp/src/sapil_print.cpp
-+++ b/app/src/main/cpp/src/sapil_print.cpp
-@@ -813,5 +813,7 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
-     dpc.set_key_value("interface_shells", new Slic3r::ConfigOptionBool(config.interface_shells));
-     dpc.set_key_value("enable_arc_fitting", new Slic3r::ConfigOptionBool(config.enable_arc_fitting));
-+    dpc.set_key_value("gcode_label_objects", new Slic3r::ConfigOptionBool(config.gcode_label_objects));
-+    dpc.set_key_value("exclude_object", new Slic3r::ConfigOptionBool(config.exclude_object));
-     if (n_ext > 1) {
-         dpc.set_key_value("idle_temperature", new Slic3r::ConfigOptionInts(std::vector<int>(n_ext, 0)));
-     }
-diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
---- a/app/src/main/cpp/src/sapil_print.cpp
-+++ b/app/src/main/cpp/src/sapil_print.cpp
-@@ -912,11 +912,6 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
-         }
-     }
- 
--    // Exclude object / cancel object support — enables EXCLUDE_OBJECT_DEFINE / EXCLUDE_OBJECT_START /
--    // EXCLUDE_OBJECT_END G-code markers so firmware can cancel individual objects mid-print.
--    // OrcaSlicer defaults to false; enable unconditionally for all U1 prints.
--    dpc.set_key_value("exclude_object", new Slic3r::ConfigOptionBool(true));
--
-     // Full-spectrum mixed-filament (stage 2): when the caller passed a
-     // recipe via SliceConfig.mixed_filament_definitions, write it into
-     // the engine's config key. Empty (default) is a no-op — engine
-diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
---- a/app/src/main/cpp/include/sapil.h
-+++ b/app/src/main/cpp/include/sapil.h
-@@ -308,5 +308,9 @@ struct SliceConfig {
-     bool gcode_label_objects = true;
-     bool exclude_object = false;
-+    float initial_layer_travel_speed = 100.0f;
-+    bool initial_layer_travel_speed_percent = true;
-+    bool accel_to_decel_enabled = true;
-+    float accel_to_decel_factor = 50.0f;
- 
-     // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
-     // Empty = use OrcaSlicer's built-in default. OrcaSlicer resolves {variable}
-diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
---- a/app/src/main/cpp/src/sapil_config.cpp
-+++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -340,5 +340,9 @@ static SliceConfig readConfig(JNIEnv* env, jobject configObj) {
-     config.gcode_label_objects = getBool("gcodeLabelObjects");
-     config.exclude_object = getBool("excludeObject");
-+    config.initial_layer_travel_speed = getFloat("initialLayerTravelSpeed");
-+    config.initial_layer_travel_speed_percent = getBool("initialLayerTravelSpeedPercent");
-+    config.accel_to_decel_enabled = getBool("accelToDecelEnabled");
-+    config.accel_to_decel_factor = getFloat("accelToDecelFactor");
- 
-     // B106: machine G-code templates for STL files (no embedded Snapmaker profile).
-     config.machine_start_gcode = getString("machineStartGcode");
-@@ -705,5 +709,9 @@ static void writeConfig(JNIEnv* env, jobject configObj, const SliceConfig& config
-     setBool("gcodeLabelObjects", config.gcode_label_objects);
-     setBool("excludeObject", config.exclude_object);
-+    setFloat("initialLayerTravelSpeed", config.initial_layer_travel_speed);
-+    setBool("initialLayerTravelSpeedPercent", config.initial_layer_travel_speed_percent);
-+    setBool("accelToDecelEnabled", config.accel_to_decel_enabled);
-+    setFloat("accelToDecelFactor", config.accel_to_decel_factor);
-     setString("machineStartGcode", config.machine_start_gcode);
-     setString("machineEndGcode", config.machine_end_gcode);
-     setString("gcodeFlavor", config.gcode_flavor);
-diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
---- a/app/src/main/cpp/src/sapil_print.cpp
-+++ b/app/src/main/cpp/src/sapil_print.cpp
-@@ -815,5 +815,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
-     dpc.set_key_value("gcode_label_objects", new Slic3r::ConfigOptionBool(config.gcode_label_objects));
-     dpc.set_key_value("exclude_object", new Slic3r::ConfigOptionBool(config.exclude_object));
-+    dpc.set_key_value("initial_layer_travel_speed", new Slic3r::ConfigOptionFloatOrPercent(
-+        config.initial_layer_travel_speed, config.initial_layer_travel_speed_percent));
-+    dpc.set_key_value("accel_to_decel_enable", new Slic3r::ConfigOptionBool(config.accel_to_decel_enabled));
-+    dpc.set_key_value("accel_to_decel_factor", new Slic3r::ConfigOptionPercent(config.accel_to_decel_factor));
-     if (n_ext > 1) {
-         dpc.set_key_value("idle_temperature", new Slic3r::ConfigOptionInts(std::vector<int>(n_ext, 0)));
-     }
++    Slic3r::ModelVolume* volume = object->volumes[static_cast<std::size_t>(volume_index)];
++    if (volume == nullptr || !volume->is_model_part()) return false;
++
++    std::ifstream input(sidecar_path, std::ios::binary | std::ios::ate);
++    if (!input) return false;
++    const std::streamoff size = input.tellg();
++    if (size < static_cast<std::streamoff>(HEADER_BYTES)) return false;
++    input.seekg(0, std::ios::beg);
++
++    std::array<unsigned char, 4> magic{};
++    if (!input.read(reinterpret_cast<char*>(magic.data()), magic.size()) || magic != expected_magic) {
++        return false;
++    }
++    std::uint32_t count = 0;
++    if (!read_u32_be(input, count) || count > MAX_PAINTED_FACETS) return false;
++    const std::uint64_t expected_size = HEADER_BYTES + static_cast<std::uint64_t>(count) * ENTRY_BYTES;
++    if (static_cast<std::uint64_t>(size) != expected_size) return false;
++
++    const std::size_t triangle_count = volume->mesh().its.indices.size();
++    Slic3r::TriangleSelector selector(volume->mesh());
++    std::uint32_t previous_index = 0;
++    bool has_previous = false;
++    for (std::uint32_t entry = 0; entry < count; ++entry) {
++        std::uint32_t facet_index = 0;
++        unsigned char state = 0;
++        if (!read_u32_be(input, facet_index) || !input.read(reinterpret_cast<char*>(&state), 1)) {
++            return false;
++        }
++        if (static_cast<std::size_t>(facet_index) >= triangle_count ||
++            (has_previous && facet_index <= previous_index) ||
++            (state != 1 && state != 2)) {
++            return false;
++        }
++        selector.set_facet(
++            static_cast<int>(facet_index),
++            state == 1 ? Slic3r::EnforcerBlockerType::ENFORCER
++                       : Slic3r::EnforcerBlockerType::BLOCKER);
++        previous_index = facet_index;
++        has_previous = true;
++    }
++    const bool changed = seam_paint ? volume->seam_facets.set(selector)
++                                    : volume->supported_facets.set(selector);
++    return changed || count == 0;
++}
++
++} // namespace
++
++extern "C" JNIEXPORT jboolean JNICALL
++Java_com_u1_slicer_NativeLibrary_applySupportPaint(
++        JNIEnv* env, jobject, jint object_index, jint volume_index, jstring sidecar_path)
++{
++    if (sidecar_path == nullptr) return JNI_FALSE;
++    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
++    if (path == nullptr) return JNI_FALSE;
++    const bool result = apply_facet_paint(
++        static_cast<int>(object_index), static_cast<int>(volume_index),
++        std::string(path), SUPPORT_PAINT_MAGIC, false);
++    env->ReleaseStringUTFChars(sidecar_path, path);
++    return result ? JNI_TRUE : JNI_FALSE;
++}
++
++extern "C" JNIEXPORT jboolean JNICALL
++Java_com_u1_slicer_NativeLibrary_applySeamPaint(
++        JNIEnv* env, jobject, jint object_index, jint volume_index, jstring sidecar_path)
++{
++    if (sidecar_path == nullptr) return JNI_FALSE;
++    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
++    if (path == nullptr) return JNI_FALSE;
++    const bool result = apply_facet_paint(
++        static_cast<int>(object_index), static_cast<int>(volume_index),
++        std::string(path), SEAM_PAINT_MAGIC, true);
++    env->ReleaseStringUTFChars(sidecar_path, path);
++    return result ? JNI_TRUE : JNI_FALSE;
++}
+diff --git a/app/src/main/cpp/src/sapil_variable_layer_height.cpp b/app/src/main/cpp/src/sapil_variable_layer_height.cpp
+new file mode 100644
+index 00000000..4e832d76
+--- /dev/null
++++ b/app/src/main/cpp/src/sapil_variable_layer_height.cpp
+@@ -0,0 +1,123 @@
++#include <jni.h>
++
++#include <array>
++#include <cmath>
++#include <cstdint>
++#include <cstring>
++#include <fstream>
++#include <string>
++#include <tuple>
++#include <vector>
++
++#include "libslic3r/Model.hpp"
++
++namespace sapil {
++extern Slic3r::Model g_model;
++}
++
++namespace {
++
++constexpr std::array<unsigned char, 4> MAGIC{'D', 'V', 'L', '1'};
++constexpr std::uint32_t MAX_RANGES = 32;
++constexpr std::uint64_t HEADER_BYTES = 8;
++constexpr std::uint64_t ENTRY_BYTES = 12;
++constexpr float MINIMUM_LAYER_HEIGHT_MM = 0.01F;
++constexpr float MAXIMUM_LAYER_HEIGHT_MM = 2.0F;
++
++bool read_u32_be(std::istream& input, std::uint32_t& value)
++{
++    std::array<unsigned char, 4> bytes{};
++    if (!input.read(reinterpret_cast<char*>(bytes.data()), bytes.size())) return false;
++    value = (static_cast<std::uint32_t>(bytes[0]) << 24) |
++            (static_cast<std::uint32_t>(bytes[1]) << 16) |
++            (static_cast<std::uint32_t>(bytes[2]) << 8) |
++            static_cast<std::uint32_t>(bytes[3]);
++    return true;
++}
++
++bool read_f32_be(std::istream& input, float& value)
++{
++    std::uint32_t bits = 0;
++    if (!read_u32_be(input, bits)) return false;
++    static_assert(sizeof(bits) == sizeof(value));
++    std::memcpy(&value, &bits, sizeof(value));
++    return true;
++}
++
++bool apply_variable_layer_heights(int object_index, const std::string& sidecar_path)
++{
++    if (object_index < 0 || static_cast<std::size_t>(object_index) >= sapil::g_model.objects.size()) {
++        return false;
++    }
++    Slic3r::ModelObject* object = sapil::g_model.objects[static_cast<std::size_t>(object_index)];
++    if (object == nullptr) return false;
++
++    std::ifstream input(sidecar_path, std::ios::binary | std::ios::ate);
++    if (!input) return false;
++    const std::streamoff size = input.tellg();
++    if (size < static_cast<std::streamoff>(HEADER_BYTES)) return false;
++    input.seekg(0, std::ios::beg);
++
++    std::array<unsigned char, 4> magic{};
++    if (!input.read(reinterpret_cast<char*>(magic.data()), magic.size()) || magic != MAGIC) {
++        return false;
++    }
++    std::uint32_t count = 0;
++    if (!read_u32_be(input, count) || count > MAX_RANGES) return false;
++    const std::uint64_t expected_size = HEADER_BYTES + static_cast<std::uint64_t>(count) * ENTRY_BYTES;
++    if (static_cast<std::uint64_t>(size) != expected_size) return false;
++
++    std::vector<std::tuple<float, float, float>> ranges;
++    ranges.reserve(count);
++    float previous_end = 0.0F;
++    for (std::uint32_t index = 0; index < count; ++index) {
++        float start_ratio = 0.0F;
++        float end_ratio = 0.0F;
++        float layer_height = 0.0F;
++        if (!read_f32_be(input, start_ratio) ||
++            !read_f32_be(input, end_ratio) ||
++            !read_f32_be(input, layer_height)) {
++            return false;
++        }
++        if (!std::isfinite(start_ratio) || !std::isfinite(end_ratio) ||
++            !std::isfinite(layer_height) || start_ratio < 0.0F || end_ratio > 1.0F ||
++            start_ratio >= end_ratio || (index > 0 && start_ratio < previous_end) ||
++            layer_height < MINIMUM_LAYER_HEIGHT_MM || layer_height > MAXIMUM_LAYER_HEIGHT_MM) {
++            return false;
++        }
++        ranges.emplace_back(start_ratio, end_ratio, layer_height);
++        previous_end = end_ratio;
++    }
++
++    const double object_height = object->raw_mesh_bounding_box().size().z();
++    if (!std::isfinite(object_height) || object_height <= 0.0) return false;
++    Slic3r::t_layer_config_ranges native_ranges;
++    for (const auto& [start_ratio, end_ratio, layer_height] : ranges) {
++        Slic3r::ModelConfig config;
++        config.set_key_value(
++            "layer_height",
++            new Slic3r::ConfigOptionFloat(static_cast<double>(layer_height)));
++        const auto range = Slic3r::t_layer_height_range(
++            static_cast<double>(start_ratio) * object_height,
++            static_cast<double>(end_ratio) * object_height);
++        if (!native_ranges.emplace(range, std::move(config)).second) return false;
++    }
++    object->layer_config_ranges = std::move(native_ranges);
++    object->layer_height_profile.clear();
++    return true;
++}
++
++} // namespace
++
++extern "C" JNIEXPORT jboolean JNICALL
++Java_com_u1_slicer_NativeLibrary_applyVariableLayerHeights(
++        JNIEnv* env, jobject, jint object_index, jstring sidecar_path)
++{
++    if (sidecar_path == nullptr) return JNI_FALSE;
++    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
++    if (path == nullptr) return JNI_FALSE;
++    const bool result = apply_variable_layer_heights(
++        static_cast<int>(object_index), std::string(path));
++    env->ReleaseStringUTFChars(sidecar_path, path);
++    return result ? JNI_TRUE : JNI_FALSE;
++}

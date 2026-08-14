@@ -233,6 +233,26 @@ class SliceOptionsPersistenceTest {
         assertEquals(true, restored.staggeredInnerSeams)
         assertEquals(3.5f, restored.seamGap)
         assertEquals(true, restored.seamGapPercent)
+        assertEquals(
+            ScarfSeamSettings(
+                type = "all",
+                conditional = true,
+                angleThreshold = 142,
+                overhangThreshold = 37f,
+                speed = 63f,
+                speedPercent = true,
+                flowRatio = 0.92f,
+                startHeight = 18f,
+                startHeightPercent = true,
+                entireLoop = true,
+                length = 24.5f,
+                steps = 13,
+                innerWalls = true,
+            ),
+            restored.scarfSeam,
+        )
+        assertEquals("all", restored.toNativeConfig().scarfSeamType)
+        assertEquals(0.92f, restored.toNativeConfig().scarfJointFlowRatio)
         assertEquals(true, restored.wipeBeforeExternalLoop)
         assertEquals(true, restored.wipeOnLoops)
         assertEquals(false, restored.roleBasedWipeSpeed)
@@ -490,6 +510,21 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         staggeredInnerSeams = true,
         seamGap = 3.5f,
         seamGapPercent = true,
+        scarfSeam = ScarfSeamSettings(
+            type = "all",
+            conditional = true,
+            angleThreshold = 142,
+            overhangThreshold = 37f,
+            speed = 63f,
+            speedPercent = true,
+            flowRatio = 0.92f,
+            startHeight = 18f,
+            startHeightPercent = true,
+            entireLoop = true,
+            length = 24.5f,
+            steps = 13,
+            innerWalls = true,
+        ),
         wipeBeforeExternalLoop = true,
         wipeOnLoops = true,
         roleBasedWipeSpeed = false,
