@@ -787,6 +787,9 @@
     <string name="flush_into_objects">객체에서 버리기</string>
     <string name="ooze_prevention">흘러내림 방지</string>
     <string name="standby_temperature_delta">대기 온도 차이</string>
+    <string name="preheat_time">다음 도구 예열 시간</string>
+    <string name="preheat_delta_temperature">예열 온도 조정</string>
+    <string name="preheat_steps">예열 단계</string>
     <string name="interface_shells">소재 경계 쉘</string>
     <string name="material_interlocking">소재 맞물림</string>
     <string name="interlocking_beam">맞물림 빔</string>

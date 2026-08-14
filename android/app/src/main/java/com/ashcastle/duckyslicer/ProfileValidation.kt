@@ -263,6 +263,9 @@ internal object ProfileValidation {
             profile.multiMaterial.wipeTowerExtraRibLength in -1_000f..300f &&
             profile.multiMaterial.wipeTowerRibWidth in 0f..1_000f &&
             profile.multiMaterial.standbyTemperatureDelta in -500..500 &&
+            profile.multiMaterial.preheatTime in 0f..120f &&
+            profile.multiMaterial.preheatDeltaTemperature in -50..50 &&
+            profile.multiMaterial.preheatSteps in 1..10 &&
             profile.multiMaterial.interlockingBeamWidth in 0.01f..1_000f &&
             profile.multiMaterial.interlockingOrientation in 0f..360f &&
             profile.multiMaterial.interlockingBeamLayerCount in 1..1_000 &&

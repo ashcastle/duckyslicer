@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 43
+SCHEMA_VERSION = 44
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -847,6 +847,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "flushIntoObjects": boolean(raw.get("flush_into_objects")),
         "oozePrevention": boolean(raw.get("ooze_prevention")),
         "standbyTemperatureDelta": integer(raw.get("standby_temperature_delta"), -5),
+        "preheatTime": number(raw.get("preheat_time"), 30),
+        "preheatDeltaTemperature": integer(raw.get("delta_temperature"), 0),
+        "preheatSteps": integer(raw.get("preheat_steps"), 1),
         "interfaceShells": boolean(raw.get("interface_shells")),
         "interlockingBeam": boolean(raw.get("interlocking_beam")),
         "interlockingBeamWidth": number(raw.get("interlocking_beam_width"), 0.8),
@@ -1099,6 +1102,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0 <= profile["brimObjectGap"] <= 20
         and 0 <= profile["brimEarsMaxAngle"] <= 180
         and 0 <= profile["brimEarsDetectionLength"] <= 1_000
+        and 0 <= profile["preheatTime"] <= 120
+        and -50 <= profile["preheatDeltaTemperature"] <= 50
+        and 1 <= profile["preheatSteps"] <= 10
         and 0.01 <= profile["interlockingBeamWidth"] <= 1_000
         and 0 <= profile["interlockingOrientation"] <= 360
         and 1 <= profile["interlockingBeamLayerCount"] <= 1_000

@@ -327,6 +327,9 @@ data class SliceConfig(
     @JvmField var wipeTowerNoSparseLayers: Boolean = false
     @JvmField var oozePrevention: Boolean = false
     @JvmField var standbyTemperatureDelta: Int = -5
+    @JvmField var preheatTime: Float = 30f
+    @JvmField var preheatDeltaTemperature: Int = 0
+    @JvmField var preheatSteps: Int = 1
     @JvmField var interfaceShells: Boolean = false
     @JvmField var interlockingBeam: Boolean = false
     @JvmField var interlockingBeamWidth: Float = 0.8f

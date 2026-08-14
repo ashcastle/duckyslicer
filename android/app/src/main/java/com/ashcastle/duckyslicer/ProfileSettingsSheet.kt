@@ -4286,6 +4286,60 @@ private fun SlicingSettingsSheet(
                             )
                         },
                     )
+                    SettingSlider(
+                        label = stringResource(R.string.preheat_time),
+                        valueText = stringResource(
+                            R.string.seconds_value,
+                            options.multiMaterial.preheatTime,
+                        ),
+                        value = options.multiMaterial.preheatTime.coerceIn(0f, 120f),
+                        range = 0f..120f,
+                        steps = 119,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        preheatTime = it.roundToInt().toFloat(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.preheat_delta_temperature),
+                        valueText = stringResource(
+                            R.string.celsius_value,
+                            options.multiMaterial.preheatDeltaTemperature,
+                        ),
+                        value = options.multiMaterial.preheatDeltaTemperature.toFloat(),
+                        range = -50f..50f,
+                        steps = 99,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        preheatDeltaTemperature = it.roundToInt(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.preheat_steps),
+                        valueText = options.multiMaterial.preheatSteps.toString(),
+                        value = options.multiMaterial.preheatSteps.toFloat(),
+                        range = 1f..10f,
+                        steps = 8,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        preheatSteps = it.roundToInt(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
                 }
                 SettingsSwitch(
                     label = stringResource(R.string.interface_shells),

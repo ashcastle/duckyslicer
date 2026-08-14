@@ -787,6 +787,9 @@
     <string name="flush_into_objects">Flush into this object</string>
     <string name="ooze_prevention">Ooze prevention</string>
     <string name="standby_temperature_delta">Standby temperature difference</string>
+    <string name="preheat_time">Next-tool preheat time</string>
+    <string name="preheat_delta_temperature">Preheat temperature adjustment</string>
+    <string name="preheat_steps">Preheat steps</string>
     <string name="interface_shells">Interface shells</string>
     <string name="material_interlocking">Material interlocking</string>
     <string name="interlocking_beam">Interlocking beams</string>

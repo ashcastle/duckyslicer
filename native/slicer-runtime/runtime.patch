@@ -369,7 +369,7 @@ index 116a4a85..6b3048bc 100644
      float max_print_height = 270.0f;
  
      // Nozzle
-@@ -86,18 +282,90 @@ struct SliceConfig {
+@@ -86,18 +282,93 @@ struct SliceConfig {
      std::vector<int> extruder_temps;           // per-extruder nozzle temps
      std::vector<float> extruder_retract_length; // per-extruder retraction
      std::vector<float> extruder_retract_speed;  // per-extruder retraction speed
@@ -407,6 +407,9 @@ index 116a4a85..6b3048bc 100644
 +    bool flush_into_objects = false;
 +    bool ooze_prevention = false;
 +    int standby_temperature_delta = -5;
++    float preheat_time = 30.0f;
++    int preheat_delta_temperature = 0;
++    int preheat_steps = 1;
 +    bool interface_shells = false;
 +    bool interlocking_beam = false;
 +    float interlocking_beam_width = 0.8f;
@@ -993,7 +996,7 @@ index d93efb7d..fdf9a877 100644
      config.max_print_height = getFloat("maxPrintHeight");
  
      config.nozzle_diameter = getFloat("nozzleDiameter");
-@@ -129,14 +316,86 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -129,14 +316,89 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.extruder_temps = getIntArray("extruderTemps");
      config.extruder_retract_length = getFloatArray("extruderRetractLength");
      config.extruder_retract_speed = getFloatArray("extruderRetractSpeed");
@@ -1029,6 +1032,9 @@ index d93efb7d..fdf9a877 100644
 +    config.flush_into_objects = getBool("flushIntoObjects");
 +    config.ooze_prevention = getBool("oozePrevention");
 +    config.standby_temperature_delta = getInt("standbyTemperatureDelta");
++    config.preheat_time = getFloat("preheatTime");
++    config.preheat_delta_temperature = getInt("preheatDeltaTemperature");
++    config.preheat_steps = getInt("preheatSteps");
 +    config.interface_shells = getBool("interfaceShells");
 +    config.interlocking_beam = getBool("interlockingBeam");
 +    config.interlocking_beam_width = getFloat("interlockingBeamWidth");
@@ -1342,7 +1348,7 @@ index d93efb7d..fdf9a877 100644
      setFloat("maxPrintHeight", config.max_print_height);
      setFloat("nozzleDiameter", config.nozzle_diameter);
      setFloat("filamentDiameter", config.filament_diameter);
-@@ -265,12 +694,85 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -265,12 +694,88 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setIntArray("extruderTemps", config.extruder_temps);
      setFloatArray("extruderRetractLength", config.extruder_retract_length);
      setFloatArray("extruderRetractSpeed", config.extruder_retract_speed);
@@ -1378,6 +1384,9 @@ index d93efb7d..fdf9a877 100644
 +    setBool("flushIntoObjects", config.flush_into_objects);
 +    setBool("oozePrevention", config.ooze_prevention);
 +    setInt("standbyTemperatureDelta", config.standby_temperature_delta);
++    setFloat("preheatTime", config.preheat_time);
++    setInt("preheatDeltaTemperature", config.preheat_delta_temperature);
++    setInt("preheatSteps", config.preheat_steps);
 +    setBool("interfaceShells", config.interface_shells);
 +    setBool("interlockingBeam", config.interlocking_beam);
 +    setFloat("interlockingBeamWidth", config.interlocking_beam_width);
@@ -1915,7 +1924,7 @@ index 8d61c9cf..f285d044 100644
      // F91 (2026-05-25) — SliceConfig user overrides for the per-filament tuning keys
      // that applyConfigToPrusa doesn't otherwise touch. When the user sets a value via the
      // Filament Library, populate dpc here so the slicer picks it up. When unset, the
-@@ -568,31 +764,95 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -568,31 +764,98 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          dpc.set_key_value("filament_cost", new Slic3r::ConfigOptionFloats(std::move(v)));
      }
  
@@ -1998,6 +2007,9 @@ index 8d61c9cf..f285d044 100644
 +    dpc.set_key_value("flush_into_objects", new Slic3r::ConfigOptionBool(config.flush_into_objects));
 +    dpc.set_key_value("ooze_prevention", new Slic3r::ConfigOptionBool(config.ooze_prevention));
 +    dpc.set_key_value("standby_temperature_delta", new Slic3r::ConfigOptionInt(config.standby_temperature_delta));
++    dpc.set_key_value("preheat_time", new Slic3r::ConfigOptionFloat(config.preheat_time));
++    dpc.set_key_value("delta_temperature", new Slic3r::ConfigOptionInt(config.preheat_delta_temperature));
++    dpc.set_key_value("preheat_steps", new Slic3r::ConfigOptionInt(config.preheat_steps));
 +    dpc.set_key_value("interface_shells", new Slic3r::ConfigOptionBool(config.interface_shells));
 +    dpc.set_key_value("interlocking_beam", new Slic3r::ConfigOptionBool(config.interlocking_beam));
 +    dpc.set_key_value("interlocking_beam_width", new Slic3r::ConfigOptionFloat(config.interlocking_beam_width));

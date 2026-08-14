@@ -78,6 +78,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "flush_into_objects": "1",
                 "ooze_prevention": "1",
                 "standby_temperature_delta": "-35",
+                "preheat_time": "94.5",
+                "delta_temperature": "-18",
+                "preheat_steps": "7",
                 "interface_shells": "1",
                 "interlocking_beam": "1",
                 "interlocking_beam_width": "1.25",
@@ -137,6 +140,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(profile["flushIntoObjects"])
         self.assertTrue(profile["oozePrevention"])
         self.assertEqual(-35, profile["standbyTemperatureDelta"])
+        self.assertEqual(94.5, profile["preheatTime"])
+        self.assertEqual(-18, profile["preheatDeltaTemperature"])
+        self.assertEqual(7, profile["preheatSteps"])
         self.assertTrue(profile["interfaceShells"])
         self.assertTrue(profile["interlockingBeam"])
         self.assertEqual(1.25, profile["interlockingBeamWidth"])

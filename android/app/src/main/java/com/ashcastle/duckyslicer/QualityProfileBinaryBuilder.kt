@@ -167,6 +167,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var flushIntoObjects: Boolean = base.multiMaterial.flushIntoObjects
     private var oozePrevention: Boolean = base.multiMaterial.oozePrevention
     private var standbyTemperatureDelta: Int = base.multiMaterial.standbyTemperatureDelta
+    private var preheatTime: Float = base.multiMaterial.preheatTime
+    private var preheatDeltaTemperature: Int = base.multiMaterial.preheatDeltaTemperature
+    private var preheatSteps: Int = base.multiMaterial.preheatSteps
     private var interfaceShells: Boolean = base.multiMaterial.interfaceShells
     private var interlockingBeam: Boolean = base.multiMaterial.interlockingBeam
     private var interlockingBeamWidth: Float = base.multiMaterial.interlockingBeamWidth
@@ -572,6 +575,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         flushIntoObjects = input.readCatalogBoolean()
         oozePrevention = input.readCatalogBoolean()
         standbyTemperatureDelta = input.readInt()
+        preheatTime = input.readFloat()
+        preheatDeltaTemperature = input.readInt()
+        preheatSteps = input.readInt()
         interfaceShells = input.readCatalogBoolean()
         interlockingBeam = input.readCatalogBoolean()
         interlockingBeamWidth = input.readFloat()
@@ -808,6 +814,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             flushIntoObjects = flushIntoObjects,
             oozePrevention = oozePrevention,
             standbyTemperatureDelta = standbyTemperatureDelta,
+            preheatTime = preheatTime,
+            preheatDeltaTemperature = preheatDeltaTemperature,
+            preheatSteps = preheatSteps,
             interfaceShells = interfaceShells,
             interlockingBeam = interlockingBeam,
             interlockingBeamWidth = interlockingBeamWidth,
@@ -1194,6 +1203,9 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("flushIntoObjects", BINARY_BOOL),
     BinaryField("oozePrevention", BINARY_BOOL),
     BinaryField("standbyTemperatureDelta", BINARY_INT),
+    BinaryField("preheatTime", BINARY_FLOAT),
+    BinaryField("preheatDeltaTemperature", BINARY_INT),
+    BinaryField("preheatSteps", BINARY_INT),
     BinaryField("interfaceShells", BINARY_BOOL),
     BinaryField("interlockingBeam", BINARY_BOOL),
     BinaryField("interlockingBeamWidth", BINARY_FLOAT),

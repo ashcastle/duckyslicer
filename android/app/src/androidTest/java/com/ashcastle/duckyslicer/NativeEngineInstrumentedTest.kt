@@ -1316,6 +1316,9 @@ class NativeEngineInstrumentedTest {
                     flushIntoObjects = true,
                     oozePrevention = true,
                     standbyTemperatureDelta = -42,
+                    preheatTime = 94.5f,
+                    preheatDeltaTemperature = -18,
+                    preheatSteps = 7,
                     interfaceShells = true,
                     interlockingBeam = true,
                     interlockingBeamWidth = 1.25f,
@@ -1520,6 +1523,9 @@ class NativeEngineInstrumentedTest {
         assertTrue(restored.slicing.last().multiMaterial.flushIntoObjects)
         assertTrue(restored.slicing.last().multiMaterial.oozePrevention)
         assertEquals(-42, restored.slicing.last().multiMaterial.standbyTemperatureDelta)
+        assertEquals(94.5f, restored.slicing.last().multiMaterial.preheatTime)
+        assertEquals(-18, restored.slicing.last().multiMaterial.preheatDeltaTemperature)
+        assertEquals(7, restored.slicing.last().multiMaterial.preheatSteps)
         assertTrue(restored.slicing.last().multiMaterial.interfaceShells)
         assertTrue(restored.slicing.last().multiMaterial.interlockingBeam)
         assertEquals(1.25f, restored.slicing.last().multiMaterial.interlockingBeamWidth)
@@ -1730,7 +1736,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(43, catalog.schemaVersion)
+        assertEquals(44, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1789,6 +1795,9 @@ class NativeEngineInstrumentedTest {
                     it.multiMaterial.singleExtruderMultiMaterialPriming ||
                     !it.multiMaterial.flushIntoSupport ||
                     it.multiMaterial.oozePrevention ||
+                    it.multiMaterial.preheatTime != 30f ||
+                    it.multiMaterial.preheatDeltaTemperature != 0 ||
+                    it.multiMaterial.preheatSteps != 1 ||
                     it.multiMaterial.interfaceShells ||
                     it.multiMaterial.interlockingBeam
             },
@@ -2509,6 +2518,9 @@ class NativeEngineInstrumentedTest {
                     flushIntoObjects = false,
                     oozePrevention = true,
                     standbyTemperatureDelta = -35,
+                    preheatTime = 94.5f,
+                    preheatDeltaTemperature = -18,
+                    preheatSteps = 7,
                     interfaceShells = true,
                     interlockingBeam = true,
                     interlockingBeamWidth = 1.25f,
@@ -2573,6 +2585,13 @@ class NativeEngineInstrumentedTest {
         assertTrue("Object flushing must remain disabled", gcode.contains("; flush_into_objects = 0"))
         assertTrue("Ooze prevention must reach Orca", gcode.contains("; ooze_prevention = 1"))
         assertTrue("Standby temperature delta must reach Orca", gcode.contains("; standby_temperature_delta = -35"))
+        assertTrue("Preheat time must reach Orca", gcode.contains("; preheat_time = 94.5"))
+        assertTrue("Preheat temperature adjustment must reach Orca", gcode.contains("; delta_temperature = -18"))
+        assertTrue("Preheat steps must reach Orca", gcode.contains("; preheat_steps = 7"))
+        assertTrue(
+            "The next tool must receive a real early preheat command",
+            gcode.lineSequence().any { it.startsWith("M104") && it.contains("preheat T1 time:") },
+        )
         assertTrue("Interface shells must reach Orca", gcode.contains("; interface_shells = 1"))
         assertTrue("Interlocking must reach Orca", gcode.contains("; interlocking_beam = 1"))
         assertTrue("Interlocking width must reach Orca", gcode.contains("; interlocking_beam_width = 1.25"))
@@ -2672,6 +2691,9 @@ class NativeEngineInstrumentedTest {
         assertTrue("Object flushing must default off", defaultsGcode.contains("; flush_into_objects = 0"))
         assertTrue("Ooze prevention must not be forced on", defaultsGcode.contains("; ooze_prevention = 0"))
         assertTrue("The inherited standby delta must remain intact", defaultsGcode.contains("; standby_temperature_delta = -5"))
+        assertTrue("Preheat time must retain Orca's default", defaultsGcode.contains("; preheat_time = 30"))
+        assertTrue("Preheat temperature adjustment must default to zero", defaultsGcode.contains("; delta_temperature = 0"))
+        assertTrue("Preheat steps must retain Orca's default", defaultsGcode.contains("; preheat_steps = 1"))
         assertTrue("Interface shells must not be forced on", defaultsGcode.contains("; interface_shells = 0"))
         assertTrue("Interlocking must default off", defaultsGcode.contains("; interlocking_beam = 0"))
         assertTrue("Interlocking width must retain Orca's default", defaultsGcode.contains("; interlocking_beam_width = 0.8"))

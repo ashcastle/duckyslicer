@@ -52,6 +52,9 @@ class SliceOptionsPersistenceTest {
                     flushIntoObjects = true,
                     oozePrevention = true,
                     standbyTemperatureDelta = -35,
+                    preheatTime = 94.5f,
+                    preheatDeltaTemperature = -18,
+                    preheatSteps = 7,
                     interfaceShells = true,
                     interlockingBeam = true,
                     interlockingBeamWidth = 1.25f,
@@ -109,6 +112,9 @@ class SliceOptionsPersistenceTest {
         assertEquals(true, native.singleExtruderMultiMaterialPriming)
         assertEquals(true, native.oozePrevention)
         assertEquals(-35, native.standbyTemperatureDelta)
+        assertEquals(94.5f, native.preheatTime)
+        assertEquals(-18, native.preheatDeltaTemperature)
+        assertEquals(7, native.preheatSteps)
         assertEquals(true, native.interfaceShells)
         assertEquals(true, native.interlockingBeam)
         assertEquals(1.25f, native.interlockingBeamWidth)
@@ -681,6 +687,9 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             flushIntoObjects = true,
             oozePrevention = true,
             standbyTemperatureDelta = -42,
+            preheatTime = 94.5f,
+            preheatDeltaTemperature = -18,
+            preheatSteps = 7,
             interfaceShells = true,
             interlockingBeam = true,
             interlockingBeamWidth = 1.25f,
