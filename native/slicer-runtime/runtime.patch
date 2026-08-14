@@ -373,7 +373,7 @@ index 116a4a85..6b3048bc 100644
      float max_print_height = 270.0f;
  
      // Nozzle
-@@ -86,18 +282,93 @@ struct SliceConfig {
+@@ -86,18 +282,96 @@ struct SliceConfig {
      std::vector<int> extruder_temps;           // per-extruder nozzle temps
      std::vector<float> extruder_retract_length; // per-extruder retraction
      std::vector<float> extruder_retract_speed;  // per-extruder retraction speed
@@ -421,6 +421,9 @@ index 116a4a85..6b3048bc 100644
 +    int interlocking_beam_layer_count = 2;
 +    int interlocking_depth = 2;
 +    int interlocking_boundary_avoidance = 2;
++    float max_volumetric_extrusion_rate_slope = 0.0f;
++    float max_volumetric_extrusion_rate_slope_segment_length = 3.0f;
++    bool extrusion_rate_smoothing_external_perimeter_only = false;
 +    bool enable_arc_fitting = false;
 +    bool gcode_label_objects = true;
 +    bool exclude_object = false;
@@ -1004,7 +1007,7 @@ index d93efb7d..fdf9a877 100644
      config.max_print_height = getFloat("maxPrintHeight");
  
      config.nozzle_diameter = getFloat("nozzleDiameter");
-@@ -129,14 +316,89 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -129,14 +316,94 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.extruder_temps = getIntArray("extruderTemps");
      config.extruder_retract_length = getFloatArray("extruderRetractLength");
      config.extruder_retract_speed = getFloatArray("extruderRetractSpeed");
@@ -1050,6 +1053,11 @@ index d93efb7d..fdf9a877 100644
 +    config.interlocking_beam_layer_count = getInt("interlockingBeamLayerCount");
 +    config.interlocking_depth = getInt("interlockingDepth");
 +    config.interlocking_boundary_avoidance = getInt("interlockingBoundaryAvoidance");
++    config.max_volumetric_extrusion_rate_slope = getFloat("maxVolumetricExtrusionRateSlope");
++    config.max_volumetric_extrusion_rate_slope_segment_length =
++        getFloat("maxVolumetricExtrusionRateSlopeSegmentLength");
++    config.extrusion_rate_smoothing_external_perimeter_only =
++        getBool("extrusionRateSmoothingExternalOnly");
 +    config.enable_arc_fitting = getBool("enableArcFitting");
 +    config.gcode_label_objects = getBool("gcodeLabelObjects");
 +    config.exclude_object = getBool("excludeObject");
@@ -1360,7 +1368,7 @@ index d93efb7d..fdf9a877 100644
      setFloat("maxPrintHeight", config.max_print_height);
      setFloat("nozzleDiameter", config.nozzle_diameter);
      setFloat("filamentDiameter", config.filament_diameter);
-@@ -265,12 +694,88 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -265,12 +694,95 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setIntArray("extruderTemps", config.extruder_temps);
      setFloatArray("extruderRetractLength", config.extruder_retract_length);
      setFloatArray("extruderRetractSpeed", config.extruder_retract_speed);
@@ -1406,6 +1414,13 @@ index d93efb7d..fdf9a877 100644
 +    setInt("interlockingBeamLayerCount", config.interlocking_beam_layer_count);
 +    setInt("interlockingDepth", config.interlocking_depth);
 +    setInt("interlockingBoundaryAvoidance", config.interlocking_boundary_avoidance);
++    setFloat("maxVolumetricExtrusionRateSlope", config.max_volumetric_extrusion_rate_slope);
++    setFloat(
++        "maxVolumetricExtrusionRateSlopeSegmentLength",
++        config.max_volumetric_extrusion_rate_slope_segment_length);
++    setBool(
++        "extrusionRateSmoothingExternalOnly",
++        config.extrusion_rate_smoothing_external_perimeter_only);
 +    setBool("enableArcFitting", config.enable_arc_fitting);
 +    setBool("gcodeLabelObjects", config.gcode_label_objects);
 +    setBool("excludeObject", config.exclude_object);
@@ -1940,7 +1955,7 @@ index 8d61c9cf..f285d044 100644
      // F91 (2026-05-25) — SliceConfig user overrides for the per-filament tuning keys
      // that applyConfigToPrusa doesn't otherwise touch. When the user sets a value via the
      // Filament Library, populate dpc here so the slicer picks it up. When unset, the
-@@ -568,31 +764,98 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -568,31 +764,110 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          dpc.set_key_value("filament_cost", new Slic3r::ConfigOptionFloats(std::move(v)));
      }
  
@@ -2035,7 +2050,19 @@ index 8d61c9cf..f285d044 100644
 +    dpc.set_key_value(
 +        "interlocking_boundary_avoidance",
 +        new Slic3r::ConfigOptionInt(config.interlocking_boundary_avoidance));
-+    dpc.set_key_value("enable_arc_fitting", new Slic3r::ConfigOptionBool(config.enable_arc_fitting));
++    dpc.set_key_value(
++        "max_volumetric_extrusion_rate_slope",
++        new Slic3r::ConfigOptionFloat(config.max_volumetric_extrusion_rate_slope));
++    dpc.set_key_value(
++        "max_volumetric_extrusion_rate_slope_segment_length",
++        new Slic3r::ConfigOptionFloat(config.max_volumetric_extrusion_rate_slope_segment_length));
++    dpc.set_key_value(
++        "extrusion_rate_smoothing_external_perimeter_only",
++        new Slic3r::ConfigOptionBool(config.extrusion_rate_smoothing_external_perimeter_only));
++    dpc.set_key_value(
++        "enable_arc_fitting",
++        new Slic3r::ConfigOptionBool(
++            config.enable_arc_fitting && config.max_volumetric_extrusion_rate_slope <= 0.0f));
 +    dpc.set_key_value("gcode_label_objects", new Slic3r::ConfigOptionBool(config.gcode_label_objects));
 +    dpc.set_key_value("exclude_object", new Slic3r::ConfigOptionBool(config.exclude_object));
 +    dpc.set_key_value("initial_layer_travel_speed", new Slic3r::ConfigOptionFloatOrPercent(

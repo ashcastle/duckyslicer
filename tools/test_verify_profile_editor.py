@@ -31,7 +31,7 @@ def valid_sources() -> dict[str, str]:
             ".semantics { stateDescription = groupState }"
             " internal fun SettingsSwitch( .heightIn(min = 48.dp) .toggleable( "
             "role = Role.Switch .semantics(mergeDescendants = true) "
-            "contentDescription = label Switch(checked = checked, onCheckedChange = null) "
+            "contentDescription = label Switch(checked = checked, enabled = enabled, onCheckedChange = null) "
             "@Composable internal fun SettingSlider( modifier = Modifier.semantics "
             "contentDescription = label stateDescription = valueText @Composable"
             " LocalWindowInfo.current.containerSize.height.toDp()"
@@ -241,7 +241,7 @@ class VerifyProfileEditorTest(unittest.TestCase):
     def test_rejects_switch_with_duplicate_nested_action(self) -> None:
         sources = valid_sources()
         sources["ProfileSettingsSheet.kt"] = sources["ProfileSettingsSheet.kt"].replace(
-            "Switch(checked = checked, onCheckedChange = null)",
+            "Switch(checked = checked, enabled = enabled, onCheckedChange = null)",
             "Switch(checked = checked, onCheckedChange = onCheckedChange)",
         )
         with self.assertRaisesRegex(VerificationError, "profile switch accessibility"):

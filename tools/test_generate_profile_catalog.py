@@ -88,6 +88,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "interlocking_beam_layer_count": "3",
                 "interlocking_depth": "4",
                 "interlocking_boundary_avoidance": "1",
+                "max_volumetric_extrusion_rate_slope": "20",
+                "max_volumetric_extrusion_rate_slope_segment_length": "5",
+                "extrusion_rate_smoothing_external_perimeter_only": "1",
                 "enable_arc_fitting": "1",
                 "gcode_label_objects": "0",
                 "exclude_object": "1",
@@ -150,6 +153,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(3, profile["interlockingBeamLayerCount"])
         self.assertEqual(4, profile["interlockingDepth"])
         self.assertEqual(1, profile["interlockingBoundaryAvoidance"])
+        self.assertEqual(20.0, profile["maxVolumetricExtrusionRateSlope"])
+        self.assertEqual(5.0, profile["maxVolumetricExtrusionRateSlopeSegmentLength"])
+        self.assertTrue(profile["extrusionRateSmoothingExternalOnly"])
         self.assertTrue(profile["enableArcFitting"])
         self.assertFalse(profile["gcodeLabelObjects"])
         self.assertTrue(profile["excludeObject"])

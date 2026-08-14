@@ -141,6 +141,8 @@ internal object ProfileValidation {
                 profile.gcodeSettings.initialLayerTravelSpeedPercent,
             ) &&
             profile.gcodeSettings.accelToDecelFactor in 1f..100f &&
+            profile.extrusionRateSmoothing.maximumSlope in 0f..10_000f &&
+            profile.extrusionRateSmoothing.segmentLength in 0.5f..5f &&
             profile.maxTravelDetourDistance in 0f..1_000f &&
             optionalFeatureSpeedIsValid(profile.smallPerimeterSpeed, profile.smallPerimeterSpeedPercent) &&
             profile.smallPerimeterThreshold in 0f..1_000_000f &&

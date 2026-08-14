@@ -177,6 +177,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var interlockingBeamLayerCount: Int = base.multiMaterial.interlockingBeamLayerCount
     private var interlockingDepth: Int = base.multiMaterial.interlockingDepth
     private var interlockingBoundaryAvoidance: Int = base.multiMaterial.interlockingBoundaryAvoidance
+    private var maxVolumetricExtrusionRateSlope: Float = base.extrusionRateSmoothing.maximumSlope
+    private var maxVolumetricExtrusionRateSlopeSegmentLength: Float =
+        base.extrusionRateSmoothing.segmentLength
+    private var extrusionRateSmoothingExternalOnly: Boolean = base.extrusionRateSmoothing.externalOnly
     private var enableArcFitting: Boolean = base.gcodeSettings.arcFitting
     private var gcodeLabelObjects: Boolean = base.gcodeSettings.labelObjects
     private var excludeObject: Boolean = base.gcodeSettings.excludeObjects
@@ -593,6 +597,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         interlockingBeamLayerCount = input.readInt()
         interlockingDepth = input.readInt()
         interlockingBoundaryAvoidance = input.readInt()
+        maxVolumetricExtrusionRateSlope = input.readFloat()
+        maxVolumetricExtrusionRateSlopeSegmentLength = input.readFloat()
+        extrusionRateSmoothingExternalOnly = input.readCatalogBoolean()
         enableArcFitting = input.readCatalogBoolean()
         gcodeLabelObjects = input.readCatalogBoolean()
         excludeObject = input.readCatalogBoolean()
@@ -832,6 +839,11 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             interlockingBeamLayerCount = interlockingBeamLayerCount,
             interlockingDepth = interlockingDepth,
             interlockingBoundaryAvoidance = interlockingBoundaryAvoidance,
+        ),
+        extrusionRateSmoothing = ExtrusionRateSmoothingSettings(
+            maximumSlope = maxVolumetricExtrusionRateSlope,
+            segmentLength = maxVolumetricExtrusionRateSlopeSegmentLength,
+            externalOnly = extrusionRateSmoothingExternalOnly,
         ),
         gcodeSettings = GcodeSettings(
             arcFitting = enableArcFitting,
@@ -1231,6 +1243,9 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("interlockingBeamLayerCount", BINARY_INT),
     BinaryField("interlockingDepth", BINARY_INT),
     BinaryField("interlockingBoundaryAvoidance", BINARY_INT),
+    BinaryField("maxVolumetricExtrusionRateSlope", BINARY_FLOAT),
+    BinaryField("maxVolumetricExtrusionRateSlopeSegmentLength", BINARY_FLOAT),
+    BinaryField("extrusionRateSmoothingExternalOnly", BINARY_BOOL),
     BinaryField("enableArcFitting", BINARY_BOOL),
     BinaryField("gcodeLabelObjects", BINARY_BOOL),
     BinaryField("excludeObject", BINARY_BOOL),

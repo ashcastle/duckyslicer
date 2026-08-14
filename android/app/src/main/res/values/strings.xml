@@ -335,6 +335,9 @@
     <string name="number_of_slow_layers">Number of slow layers</string>
     <string name="acceleration_smoothing">Acceleration smoothing</string>
     <string name="acceleration_smoothing_ratio">Smoothing ratio</string>
+    <string name="extrusion_rate_smoothing">Extrusion rate smoothing</string>
+    <string name="smoothing_segment_length">Smoothing segment length</string>
+    <string name="smoothing_external_only">Apply only on external features</string>
     <string name="avoid_crossing_walls">Avoid crossing walls</string>
     <string name="maximum_travel_detour">Maximum travel detour</string>
     <string name="reduce_infill_retraction">Reduce infill retraction</string>
@@ -490,6 +493,7 @@
     <string name="millimeters_value_fine">%1$.3f mm</string>
     <string name="flow_ratio_value">%1$.2f</string>
     <string name="volumetric_speed_value">%1$.0f mm³/s</string>
+    <string name="volumetric_slope_value">%1$.0f mm³/s²</string>
     <string name="print_speed_value">%1$.0f mm/s</string>
     <string name="seconds_value">%1$.0f s</string>
     <string name="celsius_value">%1$d °C</string>

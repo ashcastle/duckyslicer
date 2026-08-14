@@ -1899,7 +1899,9 @@ private fun SlicingSettingsSheet(
                 )
                 SettingsSwitch(
                     label = stringResource(R.string.arc_fitting),
-                    checked = options.gcodeSettings.arcFitting,
+                    checked = options.gcodeSettings.arcFitting &&
+                        options.quality.extrusionRateSmoothing.maximumSlope <= 0f,
+                    enabled = options.quality.extrusionRateSmoothing.maximumSlope <= 0f,
                     onCheckedChange = {
                         onOptionsChanged(
                             options.copy(
@@ -2430,6 +2432,74 @@ private fun SlicingSettingsSheet(
                                 options.copy(
                                     gcodeSettings = options.gcodeSettings.copy(
                                         accelToDecelFactor = it.roundToInt().toFloat(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                }
+                SettingsGroupTitle(stringResource(R.string.extrusion_rate_smoothing))
+                val extrusionRateSmoothing = options.quality.extrusionRateSmoothing
+                val maximumExtrusionSlope = max(100f, extrusionRateSmoothing.maximumSlope)
+                SettingSlider(
+                    label = stringResource(R.string.extrusion_rate_smoothing),
+                    valueText = stringResource(
+                        R.string.volumetric_slope_value,
+                        extrusionRateSmoothing.maximumSlope,
+                    ),
+                    value = extrusionRateSmoothing.maximumSlope,
+                    range = 0f..maximumExtrusionSlope,
+                    steps = maximumExtrusionSlope.roundToInt().coerceAtLeast(2) - 1,
+                    onValueChange = {
+                        val slope = it.roundToInt().toFloat()
+                        onOptionsChanged(
+                            options.copy(
+                                quality = options.quality.copy(
+                                    extrusionRateSmoothing = extrusionRateSmoothing.copy(
+                                        maximumSlope = slope,
+                                    ),
+                                ),
+                                gcodeSettings = if (slope > 0f) {
+                                    options.gcodeSettings.copy(arcFitting = false)
+                                } else {
+                                    options.gcodeSettings
+                                },
+                            ),
+                        )
+                    },
+                )
+                if (extrusionRateSmoothing.maximumSlope > 0f || settingsQuery.isNotBlank()) {
+                    SettingSlider(
+                        label = stringResource(R.string.smoothing_segment_length),
+                        valueText = stringResource(
+                            R.string.millimeters_value_precise,
+                            extrusionRateSmoothing.segmentLength,
+                        ),
+                        value = extrusionRateSmoothing.segmentLength,
+                        range = 0.5f..5f,
+                        steps = 44,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    quality = options.quality.copy(
+                                        extrusionRateSmoothing = extrusionRateSmoothing.copy(
+                                            segmentLength = (it * 10f).roundToInt() / 10f,
+                                        ),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingsSwitch(
+                        label = stringResource(R.string.smoothing_external_only),
+                        checked = extrusionRateSmoothing.externalOnly,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    quality = options.quality.copy(
+                                        extrusionRateSmoothing = extrusionRateSmoothing.copy(
+                                            externalOnly = it,
+                                        ),
                                     ),
                                 ),
                             )
@@ -4751,7 +4821,12 @@ private fun SettingsGroupTitle(title: String) {
 }
 
 @Composable
-internal fun SettingsSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+internal fun SettingsSwitch(
+    label: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit,
+) {
     if (!settingMatchesQuery(label)) return
     Row(
         modifier = Modifier
@@ -4759,6 +4834,7 @@ internal fun SettingsSwitch(label: String, checked: Boolean, onCheckedChange: (B
             .heightIn(min = 48.dp)
             .toggleable(
                 value = checked,
+                enabled = enabled,
                 role = Role.Switch,
                 onValueChange = onCheckedChange,
             )
@@ -4769,7 +4845,7 @@ internal fun SettingsSwitch(label: String, checked: Boolean, onCheckedChange: (B
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, fontWeight = FontWeight.SemiBold)
-        Switch(checked = checked, onCheckedChange = null)
+        Switch(checked = checked, enabled = enabled, onCheckedChange = null)
     }
 }
 

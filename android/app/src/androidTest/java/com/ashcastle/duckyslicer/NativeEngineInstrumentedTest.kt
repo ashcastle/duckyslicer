@@ -129,6 +129,60 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun extrusionRateSmoothingChangesRealExtrusionMotion() {
+        val baseQuality = QualityProfile.DRAFT.copy(
+            extrusionRateSmoothing = ExtrusionRateSmoothingSettings(),
+        )
+        val base = SliceOptions()
+            .selectQuality(baseQuality)
+            .copy(
+                printSpeed = 180f,
+                innerWallSpeed = 180f,
+                sparseInfillSpeed = 180f,
+                internalSolidInfillSpeed = 140f,
+                topSurfaceSpeed = 80f,
+                gcodeSettings = GcodeSettings(arcFitting = true),
+            )
+        val plain = OnDeviceSlicer.slice(fixtureModel(), base)
+        val smoothed = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.copy(
+                quality = base.quality.copy(
+                    extrusionRateSmoothing = ExtrusionRateSmoothingSettings(
+                        maximumSlope = 20f,
+                        segmentLength = 5f,
+                        externalOnly = false,
+                    ),
+                ),
+            ),
+        )
+        try {
+            fun extrusionMotion(gcode: String): List<String> = gcode.lineSequence()
+                .filter { line ->
+                    line.startsWith("G1 ") && line.contains(" E") &&
+                        (line.contains(" X") || line.contains(" Y"))
+                }
+                .map { it.substringBefore(';').trimEnd() }
+                .toList()
+
+            val plainGcode = plain.output.readText()
+            val smoothedGcode = smoothed.output.readText()
+            assertTrue(smoothedGcode.contains("; max_volumetric_extrusion_rate_slope = 20"))
+            assertTrue(smoothedGcode.contains("; max_volumetric_extrusion_rate_slope_segment_length = 5"))
+            assertTrue(smoothedGcode.contains("; extrusion_rate_smoothing_external_perimeter_only = 0"))
+            assertTrue(smoothedGcode.contains("; enable_arc_fitting = 0"))
+            assertNotEquals(
+                "Pressure Equalizer must rewrite real extrusion motion, not only profile metadata",
+                extrusionMotion(plainGcode),
+                extrusionMotion(smoothedGcode),
+            )
+        } finally {
+            plain.output.delete()
+            smoothed.output.delete()
+        }
+    }
+
+    @Test
     fun fuzzySkinChangesRealOuterWallGeometry() {
         val baseOptions = SliceOptions()
             .selectQuality(QualityProfile.DRAFT)
@@ -1838,7 +1892,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(45, catalog.schemaVersion)
+        assertEquals(46, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1880,6 +1934,13 @@ class NativeEngineInstrumentedTest {
         )
         assertTrue(catalog.slicing.all { !it.printableOverhangs.enabled })
         assertTrue(catalog.slicing.all { it.printableOverhangs.holeArea == 0f })
+        assertTrue(
+            "Pressure Equalizer process values must survive catalog normalization",
+            catalog.slicing.any { it.extrusionRateSmoothing.maximumSlope > 0f },
+        )
+        assertTrue(
+            catalog.slicing.any { it.extrusionRateSmoothing.segmentLength == 5f },
+        )
         assertTrue(
             "Feature filament routing must survive catalog normalization",
             catalog.slicing.any { it.featureFilaments.wipeTowerFilament != 0 },

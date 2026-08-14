@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 46
+internal const val USER_PROFILE_SCHEMA_VERSION = 47
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -220,6 +220,7 @@ class ProfileStore private constructor(
             infillJerk = options.infillJerk,
             firstLayerJerk = options.firstLayerJerk,
             travelJerk = options.travelJerk,
+            extrusionRateSmoothing = options.quality.extrusionRateSmoothing,
             fuzzySkin = options.fuzzySkin,
             supportEnabled = options.supportEnabled,
             brimType = options.brimType,
@@ -565,6 +566,9 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("infillJerk", infillJerk)
     .put("firstLayerJerk", firstLayerJerk)
     .put("travelJerk", travelJerk)
+    .put("maxVolumetricExtrusionRateSlope", extrusionRateSmoothing.maximumSlope)
+    .put("maxVolumetricExtrusionRateSlopeSegmentLength", extrusionRateSmoothing.segmentLength)
+    .put("extrusionRateSmoothingExternalOnly", extrusionRateSmoothing.externalOnly)
     .put("fuzzySkinType", fuzzySkin.type)
     .put("fuzzySkinFirstLayer", fuzzySkin.firstLayer)
     .put("fuzzySkinPointDistance", fuzzySkin.pointDistance)
@@ -945,6 +949,11 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         infillJerk = optDouble("infillJerk", 9.0).toFloat(),
         firstLayerJerk = optDouble("firstLayerJerk", 9.0).toFloat(),
         travelJerk = optDouble("travelJerk", 12.0).toFloat(),
+        extrusionRateSmoothing = ExtrusionRateSmoothingSettings(
+            maximumSlope = optDouble("maxVolumetricExtrusionRateSlope", 0.0).toFloat(),
+            segmentLength = optDouble("maxVolumetricExtrusionRateSlopeSegmentLength", 3.0).toFloat(),
+            externalOnly = optBoolean("extrusionRateSmoothingExternalOnly"),
+        ),
         fuzzySkin = FuzzySkinSettings(
             type = optString("fuzzySkinType", "none"),
             firstLayer = optBoolean("fuzzySkinFirstLayer"),

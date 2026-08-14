@@ -186,7 +186,7 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "role = Role.Switch",
         ".semantics(mergeDescendants = true)",
         "contentDescription = label",
-        "Switch(checked = checked, onCheckedChange = null)",
+        "Switch(checked = checked, enabled = enabled, onCheckedChange = null)",
     ):
         if marker not in settings_switch:
             raise VerificationError(f"profile switch accessibility is missing: {marker}")

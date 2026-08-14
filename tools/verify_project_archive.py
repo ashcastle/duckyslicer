@@ -107,7 +107,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
             'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
             "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-            "PROJECT_ARCHIVE_SCHEMA_VERSION = 15",
+            "PROJECT_ARCHIVE_SCHEMA_VERSION = 16",
             "ArchivedProjectPlate",
             "ArchivedProjectVolume",
             'getJSONArray("plates")',
@@ -463,7 +463,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         (
             "manifest.json",
             "models/000.stl",
-            "schema version `15`",
+            "schema version `16`",
             "Schema 1 through 11 projects remain readable",
             "up to 16 plates",
             "plate-local objects and settings",

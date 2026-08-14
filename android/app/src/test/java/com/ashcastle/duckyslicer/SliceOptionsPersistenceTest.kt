@@ -73,6 +73,13 @@ class SliceOptionsPersistenceTest {
                     accelToDecelEnabled = false,
                     accelToDecelFactor = 27f,
                 ),
+                quality = QualityProfile.STANDARD.copy(
+                    extrusionRateSmoothing = ExtrusionRateSmoothingSettings(
+                        maximumSlope = 20f,
+                        segmentLength = 5f,
+                        externalOnly = true,
+                    ),
+                ),
             )
 
         val restored = requireNotNull(options.toProjectJson().toProjectSliceOptionsOrNull())
@@ -122,7 +129,10 @@ class SliceOptionsPersistenceTest {
         assertEquals(3, native.interlockingBeamLayerCount)
         assertEquals(4, native.interlockingDepth)
         assertEquals(1, native.interlockingBoundaryAvoidance)
-        assertEquals(true, native.enableArcFitting)
+        assertEquals(20f, native.maxVolumetricExtrusionRateSlope)
+        assertEquals(5f, native.maxVolumetricExtrusionRateSlopeSegmentLength)
+        assertEquals(true, native.extrusionRateSmoothingExternalOnly)
+        assertEquals(false, native.enableArcFitting)
         assertEquals(false, native.gcodeLabelObjects)
         assertEquals(true, native.excludeObject)
         assertEquals(35f, native.initialLayerTravelSpeed)
@@ -468,6 +478,9 @@ class SliceOptionsPersistenceTest {
                 remove("holeToPolyholeThresholdPercent")
                 remove("holeToPolyholeTwisted")
                 remove("slowDownLayers")
+                remove("maxVolumetricExtrusionRateSlope")
+                remove("maxVolumetricExtrusionRateSlopeSegmentLength")
+                remove("extrusionRateSmoothingExternalOnly")
             }
         }
 
@@ -484,6 +497,7 @@ class SliceOptionsPersistenceTest {
         assertEquals(true, restored.toNativeConfig().holeToPolyholeTwisted)
         assertEquals(0, restored.gcodeSettings.slowDownLayers)
         assertEquals(0, restored.toNativeConfig().slowDownLayers)
+        assertEquals(ExtrusionRateSmoothingSettings(), restored.quality.extrusionRateSmoothing)
     }
 
     @Test

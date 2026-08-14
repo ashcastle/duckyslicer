@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 45
+SCHEMA_VERSION = 46
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -864,6 +864,15 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "interlockingBeamLayerCount": integer(raw.get("interlocking_beam_layer_count"), 2),
         "interlockingDepth": integer(raw.get("interlocking_depth"), 2),
         "interlockingBoundaryAvoidance": integer(raw.get("interlocking_boundary_avoidance"), 2),
+        "maxVolumetricExtrusionRateSlope": number(
+            raw.get("max_volumetric_extrusion_rate_slope"), 0
+        ),
+        "maxVolumetricExtrusionRateSlopeSegmentLength": number(
+            raw.get("max_volumetric_extrusion_rate_slope_segment_length"), 3
+        ),
+        "extrusionRateSmoothingExternalOnly": boolean(
+            raw.get("extrusion_rate_smoothing_external_perimeter_only")
+        ),
         "enableArcFitting": boolean(raw.get("enable_arc_fitting")),
         "gcodeLabelObjects": boolean(raw.get("gcode_label_objects"), True),
         "excludeObject": boolean(raw.get("exclude_object")),
@@ -992,6 +1001,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
                 "travelJerk",
             ]
         )
+        and 0 <= profile["maxVolumetricExtrusionRateSlope"] <= 10_000
+        and 0.5 <= profile["maxVolumetricExtrusionRateSlopeSegmentLength"] <= 5
         and 10 <= profile["bridgeDensity"] <= 100
         and 10 <= profile["internalBridgeDensity"] <= 100
         and 0 <= profile["bridgeAngle"] <= 360

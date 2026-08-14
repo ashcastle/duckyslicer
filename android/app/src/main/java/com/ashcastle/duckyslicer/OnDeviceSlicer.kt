@@ -400,6 +400,12 @@ data class GcodeSettings(
     val accelToDecelFactor: Float = 50f,
 )
 
+data class ExtrusionRateSmoothingSettings(
+    val maximumSlope: Float = 0f,
+    val segmentLength: Float = 3f,
+    val externalOnly: Boolean = false,
+)
+
 data class BrimEarSettings(
     val maximumAngle: Float = 125f,
     val detectionRadius: Float = 1f,
@@ -561,6 +567,7 @@ data class QualityProfile(
     val infillJerk: Float = 9f,
     val firstLayerJerk: Float = 9f,
     val travelJerk: Float = 12f,
+    val extrusionRateSmoothing: ExtrusionRateSmoothingSettings = ExtrusionRateSmoothingSettings(),
     val fuzzySkin: FuzzySkinSettings = FuzzySkinSettings(),
     val supportEnabled: Boolean = false,
     val brimType: String = "no_brim",
@@ -805,7 +812,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 45,
+    val schemaVersion: Int = 46,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1748,7 +1755,11 @@ data class SliceOptions(
             native.interlockingBeamLayerCount = multiMaterial.interlockingBeamLayerCount
             native.interlockingDepth = multiMaterial.interlockingDepth
             native.interlockingBoundaryAvoidance = multiMaterial.interlockingBoundaryAvoidance
-            native.enableArcFitting = gcodeSettings.arcFitting
+            native.maxVolumetricExtrusionRateSlope = quality.extrusionRateSmoothing.maximumSlope
+            native.maxVolumetricExtrusionRateSlopeSegmentLength = quality.extrusionRateSmoothing.segmentLength
+            native.extrusionRateSmoothingExternalOnly = quality.extrusionRateSmoothing.externalOnly
+            native.enableArcFitting = gcodeSettings.arcFitting &&
+                quality.extrusionRateSmoothing.maximumSlope <= 0f
             native.slicingMode = precision.mode
             native.sliceClosingRadius = precision.closingRadius
             native.preciseZHeight = precision.preciseZHeight
