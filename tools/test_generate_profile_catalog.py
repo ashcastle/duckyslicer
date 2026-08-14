@@ -160,6 +160,35 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(0.35, profile["spiralStartingFlowRatio"])
         self.assertEqual(0.2, profile["spiralFinishingFlowRatio"])
 
+    def test_preserves_advanced_support_process_values(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Advanced support",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "support_angle": "73",
+                "support_threshold_overlap": "0.33",
+                "support_object_first_layer_gap": "0.42",
+                "support_interface_not_for_body": "0",
+                "support_ironing": "1",
+                "support_ironing_pattern": "concentric",
+                "support_ironing_flow": "17%",
+                "support_ironing_spacing": "0.18",
+            },
+            {},
+        )
+
+        self.assertEqual(73.0, profile["supportPatternAngle"])
+        self.assertEqual(0.33, profile["supportThresholdOverlap"])
+        self.assertFalse(profile["supportThresholdOverlapPercent"])
+        self.assertEqual(0.42, profile["supportObjectFirstLayerGap"])
+        self.assertFalse(profile["avoidSupportInterfaceFilamentForBase"])
+        self.assertTrue(profile["supportIroning"])
+        self.assertEqual("concentric", profile["supportIroningPattern"])
+        self.assertEqual(17.0, profile["supportIroningFlow"])
+        self.assertEqual(0.18, profile["supportIroningSpacing"])
+
     def test_preserves_multi_object_print_sequence(self) -> None:
         profile = build_process(
             "Example",

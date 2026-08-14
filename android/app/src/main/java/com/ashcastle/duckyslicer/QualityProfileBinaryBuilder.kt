@@ -115,6 +115,15 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var supportBasePattern: String = base.supportBasePattern
     private var supportInterfacePattern: String = base.supportInterfacePattern
     private var supportStyle: String = base.supportStyle
+    private var supportPatternAngle: Float = base.supportAdvanced.patternAngle
+    private var supportThresholdOverlap: Float = base.supportAdvanced.thresholdOverlap
+    private var supportThresholdOverlapPercent: Boolean = base.supportAdvanced.thresholdOverlapPercent
+    private var supportObjectFirstLayerGap: Float = base.supportAdvanced.objectFirstLayerGap
+    private var avoidSupportInterfaceFilamentForBase: Boolean = base.supportAdvanced.avoidInterfaceFilamentForBase
+    private var supportIroning: Boolean = base.supportAdvanced.ironingEnabled
+    private var supportIroningPattern: String = base.supportAdvanced.ironingPattern
+    private var supportIroningFlow: Float = base.supportAdvanced.ironingFlow
+    private var supportIroningSpacing: Float = base.supportAdvanced.ironingSpacing
     private var supportFilament: Int = base.supportFilament
     private var supportInterfaceFilament: Int = base.supportInterfaceFilament
     private var wipeTowerEnabled: Boolean = base.wipeTowerEnabled
@@ -387,6 +396,15 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         supportBasePattern = input.readCatalogString()
         supportInterfacePattern = input.readCatalogString()
         supportStyle = input.readCatalogString()
+        supportPatternAngle = input.readFloat()
+        supportThresholdOverlap = input.readFloat()
+        supportThresholdOverlapPercent = input.readCatalogBoolean()
+        supportObjectFirstLayerGap = input.readFloat()
+        avoidSupportInterfaceFilamentForBase = input.readCatalogBoolean()
+        supportIroning = input.readCatalogBoolean()
+        supportIroningPattern = input.readCatalogString()
+        supportIroningFlow = input.readFloat()
+        supportIroningSpacing = input.readFloat()
     }
 
     private fun readGroup5(input: DataInputStream) {
@@ -672,6 +690,17 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         supportBasePattern = supportBasePattern,
         supportInterfacePattern = supportInterfacePattern,
         supportStyle = supportStyle,
+        supportAdvanced = SupportAdvancedSettings(
+            patternAngle = supportPatternAngle,
+            thresholdOverlap = supportThresholdOverlap,
+            thresholdOverlapPercent = supportThresholdOverlapPercent,
+            objectFirstLayerGap = supportObjectFirstLayerGap,
+            avoidInterfaceFilamentForBase = avoidSupportInterfaceFilamentForBase,
+            ironingEnabled = supportIroning,
+            ironingPattern = supportIroningPattern,
+            ironingFlow = supportIroningFlow,
+            ironingSpacing = supportIroningSpacing,
+        ),
         supportFilament = supportFilament,
         supportInterfaceFilament = supportInterfaceFilament,
         wipeTowerEnabled = wipeTowerEnabled,
@@ -932,6 +961,15 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("supportBasePattern", BINARY_STRING),
     BinaryField("supportInterfacePattern", BINARY_STRING),
     BinaryField("supportStyle", BINARY_STRING),
+    BinaryField("supportPatternAngle", BINARY_FLOAT),
+    BinaryField("supportThresholdOverlap", BINARY_FLOAT),
+    BinaryField("supportThresholdOverlapPercent", BINARY_BOOL),
+    BinaryField("supportObjectFirstLayerGap", BINARY_FLOAT),
+    BinaryField("avoidSupportInterfaceFilamentForBase", BINARY_BOOL),
+    BinaryField("supportIroning", BINARY_BOOL),
+    BinaryField("supportIroningPattern", BINARY_STRING),
+    BinaryField("supportIroningFlow", BINARY_FLOAT),
+    BinaryField("supportIroningSpacing", BINARY_FLOAT),
     BinaryField("skirtLoops", BINARY_INT),
     BinaryField("skirtDistance", BINARY_FLOAT),
     BinaryField("skirtHeight", BINARY_INT),

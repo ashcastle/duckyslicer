@@ -3020,6 +3020,20 @@ private fun SlicingSettingsSheet(
                         onSelected = { onOptionsChanged(options.copy(supportBasePattern = it)) },
                     )
                     SettingSlider(
+                        label = stringResource(R.string.support_pattern_angle),
+                        valueText = stringResource(R.string.degrees_value, options.supportAdvanced.patternAngle),
+                        value = options.supportAdvanced.patternAngle,
+                        range = 0f..359f,
+                        steps = 358,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    supportAdvanced = options.supportAdvanced.copy(patternAngle = it.roundToInt().toFloat()),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
                         label = stringResource(R.string.support_base_pattern_spacing),
                         valueText = stringResource(
                             R.string.millimeters_value_precise,
@@ -3096,6 +3110,17 @@ private fun SlicingSettingsSheet(
                             onOptionsChanged(options.copy(supportInterfaceFilament = it.roundToInt()))
                         },
                     )
+                    SettingsSwitch(
+                        label = stringResource(R.string.avoid_interface_filament_for_base),
+                        checked = options.supportAdvanced.avoidInterfaceFilamentForBase,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    supportAdvanced = options.supportAdvanced.copy(avoidInterfaceFilamentForBase = it),
+                                ),
+                            )
+                        },
+                    )
                     SettingSlider(
                         label = stringResource(R.string.support_threshold_angle),
                         valueText = stringResource(R.string.degrees_value, options.supportAngle),
@@ -3103,6 +3128,46 @@ private fun SlicingSettingsSheet(
                         range = 10f..80f,
                         steps = 69,
                         onValueChange = { onOptionsChanged(options.copy(supportAngle = it.roundToInt().toFloat())) },
+                    )
+                    SettingChoices(
+                        settingLabel = stringResource(R.string.support_threshold_overlap_unit),
+                        entries = listOf("percent", "millimeters"),
+                        selected = if (options.supportAdvanced.thresholdOverlapPercent) "percent" else "millimeters",
+                        optionLabel = {
+                            stringResource(if (it == "percent") R.string.percent_unit else R.string.millimeters_unit)
+                        },
+                        onSelected = {
+                            val asPercent = it == "percent"
+                            onOptionsChanged(
+                                options.copy(
+                                    supportAdvanced = options.supportAdvanced.copy(
+                                        thresholdOverlap = if (asPercent) 50f else 0.2f,
+                                        thresholdOverlapPercent = asPercent,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.support_threshold_overlap),
+                        valueText = if (options.supportAdvanced.thresholdOverlapPercent) {
+                            stringResource(R.string.percent_value, options.supportAdvanced.thresholdOverlap.roundToInt())
+                        } else {
+                            stringResource(R.string.millimeters_value_precise, options.supportAdvanced.thresholdOverlap)
+                        },
+                        value = options.supportAdvanced.thresholdOverlap,
+                        range = if (options.supportAdvanced.thresholdOverlapPercent) 0f..100f else 0f..0.5f,
+                        steps = if (options.supportAdvanced.thresholdOverlapPercent) 99 else 49,
+                        onValueChange = {
+                            val value = if (options.supportAdvanced.thresholdOverlapPercent) {
+                                it.roundToInt().toFloat()
+                            } else {
+                                (it * 100f).roundToInt() / 100f
+                            }
+                            onOptionsChanged(
+                                options.copy(supportAdvanced = options.supportAdvanced.copy(thresholdOverlap = value)),
+                            )
+                        },
                     )
                     SettingSlider(
                         label = stringResource(R.string.support_top_interface_layers),
@@ -3164,6 +3229,87 @@ private fun SlicingSettingsSheet(
                         steps = (max(5f, options.supportObjectXYDistance) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
                         onValueChange = { onOptionsChanged(options.copy(supportObjectXYDistance = (it / 0.05f).roundToInt() * 0.05f)) },
                     )
+                    SettingSlider(
+                        label = stringResource(R.string.support_object_first_layer_gap),
+                        valueText = stringResource(
+                            R.string.millimeters_value_precise,
+                            options.supportAdvanced.objectFirstLayerGap,
+                        ),
+                        value = options.supportAdvanced.objectFirstLayerGap,
+                        range = 0f..max(2f, options.supportAdvanced.objectFirstLayerGap),
+                        steps = (max(2f, options.supportAdvanced.objectFirstLayerGap) / 0.02f)
+                            .roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    supportAdvanced = options.supportAdvanced.copy(
+                                        objectFirstLayerGap = (it * 50f).roundToInt() / 50f,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingsGroupTitle(stringResource(R.string.support_ironing))
+                    SettingsSwitch(
+                        label = stringResource(R.string.support_ironing),
+                        checked = options.supportAdvanced.ironingEnabled,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(supportAdvanced = options.supportAdvanced.copy(ironingEnabled = it)),
+                            )
+                        },
+                    )
+                    if (options.supportAdvanced.ironingEnabled || settingsQuery.isNotBlank()) {
+                        SettingChoices(
+                            settingLabel = stringResource(R.string.support_ironing_pattern),
+                            entries = listOf("rectilinear", "concentric"),
+                            selected = options.supportAdvanced.ironingPattern,
+                            optionLabel = { enumLabel(it) },
+                            onSelected = {
+                                onOptionsChanged(
+                                    options.copy(supportAdvanced = options.supportAdvanced.copy(ironingPattern = it)),
+                                )
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.support_ironing_flow),
+                            valueText = stringResource(
+                                R.string.percent_value,
+                                options.supportAdvanced.ironingFlow.roundToInt(),
+                            ),
+                            value = options.supportAdvanced.ironingFlow,
+                            range = 0f..100f,
+                            steps = 99,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        supportAdvanced = options.supportAdvanced.copy(
+                                            ironingFlow = it.roundToInt().toFloat(),
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.support_ironing_spacing),
+                            valueText = stringResource(
+                                R.string.millimeters_value_precise,
+                                options.supportAdvanced.ironingSpacing,
+                            ),
+                            value = options.supportAdvanced.ironingSpacing,
+                            range = 0f..1f,
+                            steps = 99,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        supportAdvanced = options.supportAdvanced.copy(
+                                            ironingSpacing = (it * 100f).roundToInt() / 100f,
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                    }
                 }
             }
 

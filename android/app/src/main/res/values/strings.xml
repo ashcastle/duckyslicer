@@ -463,6 +463,17 @@
     <string name="support_top_z_distance">Top Z distance</string>
     <string name="support_bottom_z_distance">Bottom Z distance</string>
     <string name="support_object_xy_distance">Object XY distance</string>
+    <string name="support_pattern_angle">Support pattern angle</string>
+    <string name="support_threshold_overlap">Threshold overlap</string>
+    <string name="support_threshold_overlap_unit">Threshold overlap unit</string>
+    <string name="percent_unit">Percent</string>
+    <string name="millimeters_unit">Millimeters</string>
+    <string name="support_object_first_layer_gap">First-layer object gap</string>
+    <string name="avoid_interface_filament_for_base">Keep interface filament off support base</string>
+    <string name="support_ironing">Support ironing</string>
+    <string name="support_ironing_pattern">Support ironing pattern</string>
+    <string name="support_ironing_flow">Support ironing flow</string>
+    <string name="support_ironing_spacing">Support ironing spacing</string>
     <string name="bed_adhesion">Bed adhesion</string>
     <string name="skirt_loops">Skirt loops</string>
     <string name="skirt_distance">Skirt distance</string>

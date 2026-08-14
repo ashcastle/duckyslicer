@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 35
+SCHEMA_VERSION = 36
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -550,6 +550,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     spiral_xy_smoothing, spiral_xy_smoothing_percent = float_or_percent(
         raw.get("spiral_mode_max_xy_smoothing"), "200%"
     )
+    support_threshold_overlap, support_threshold_overlap_percent = float_or_percent(
+        raw.get("support_threshold_overlap"), "50%"
+    )
     legacy_wall_order = str(scalar(raw.get("wall_infill_order"), ""))
     resolved_wall_order = raw.get("wall_sequence", legacy_wall_order)
     profile = {
@@ -679,6 +682,17 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
             {"default", "grid", "snug", "organic", "tree_slim", "tree_strong", "tree_hybrid"},
             "default",
         ),
+        "supportPatternAngle": number(raw.get("support_angle"), 0),
+        "supportThresholdOverlap": support_threshold_overlap,
+        "supportThresholdOverlapPercent": support_threshold_overlap_percent,
+        "supportObjectFirstLayerGap": absolute_number(raw.get("support_object_first_layer_gap"), 0.2),
+        "avoidSupportInterfaceFilamentForBase": boolean(raw.get("support_interface_not_for_body"), True),
+        "supportIroning": boolean(raw.get("support_ironing")),
+        "supportIroningPattern": enum_value(
+            raw.get("support_ironing_pattern"), {"rectilinear", "concentric"}, "rectilinear"
+        ),
+        "supportIroningFlow": number(raw.get("support_ironing_flow"), 10),
+        "supportIroningSpacing": number(raw.get("support_ironing_spacing"), 0.1),
         "skirtLoops": integer(raw.get("skirt_loops"), 0),
         "skirtDistance": number(raw.get("skirt_distance"), 6),
         "skirtHeight": integer(raw.get("skirt_height"), 1),
@@ -1011,6 +1025,14 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0 <= profile["supportTopZDistance"] <= 20
         and 0 <= profile["supportBottomZDistance"] <= 20
         and 0 <= profile["supportObjectXYDistance"] <= 20
+        and 0 <= profile["supportPatternAngle"] <= 359
+        and 0 <= profile["supportThresholdOverlap"] <= (
+            100 if profile["supportThresholdOverlapPercent"] else 0.5
+        )
+        and 0 <= profile["supportObjectFirstLayerGap"] <= 10
+        and profile["supportIroningPattern"] in {"rectilinear", "concentric"}
+        and 0 <= profile["supportIroningFlow"] <= 100
+        and 0 <= profile["supportIroningSpacing"] <= 1
         and 0 <= profile["brimObjectGap"] <= 20
         and 0 <= profile["skirtHeight"] <= 10_000
         and 0 <= profile["skirtSpeed"] <= 2_000

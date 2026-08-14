@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 36
+internal const val USER_PROFILE_SCHEMA_VERSION = 37
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -271,6 +271,7 @@ class ProfileStore private constructor(
             supportInterfacePattern = options.supportInterfacePattern,
             supportStyle = options.supportStyle,
             supportCoverage = options.supportCoverage,
+            supportAdvanced = options.supportAdvanced,
             supportBasePatternSpacing = options.supportBasePatternSpacing,
             supportExpansion = options.supportExpansion,
             supportInterfaceLoopPattern = options.supportInterfaceLoopPattern,
@@ -611,6 +612,15 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("supportOnBuildPlateOnly", supportCoverage.onBuildPlateOnly)
     .put("supportCriticalRegionsOnly", supportCoverage.criticalRegionsOnly)
     .put("supportRemoveSmallOverhangs", supportCoverage.removeSmallOverhangs)
+    .put("supportPatternAngle", supportAdvanced.patternAngle)
+    .put("supportThresholdOverlap", supportAdvanced.thresholdOverlap)
+    .put("supportThresholdOverlapPercent", supportAdvanced.thresholdOverlapPercent)
+    .put("supportObjectFirstLayerGap", supportAdvanced.objectFirstLayerGap)
+    .put("avoidSupportInterfaceFilamentForBase", supportAdvanced.avoidInterfaceFilamentForBase)
+    .put("supportIroning", supportAdvanced.ironingEnabled)
+    .put("supportIroningPattern", supportAdvanced.ironingPattern)
+    .put("supportIroningFlow", supportAdvanced.ironingFlow)
+    .put("supportIroningSpacing", supportAdvanced.ironingSpacing)
     .put("supportBasePatternSpacing", supportBasePatternSpacing)
     .put("supportExpansion", supportExpansion)
     .put("supportInterfaceLoopPattern", supportInterfaceLoopPattern)
@@ -951,6 +961,17 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
             onBuildPlateOnly = optBoolean("supportOnBuildPlateOnly"),
             criticalRegionsOnly = optBoolean("supportCriticalRegionsOnly"),
             removeSmallOverhangs = optBoolean("supportRemoveSmallOverhangs", true),
+        ),
+        supportAdvanced = SupportAdvancedSettings(
+            patternAngle = optDouble("supportPatternAngle", 0.0).toFloat(),
+            thresholdOverlap = optDouble("supportThresholdOverlap", 50.0).toFloat(),
+            thresholdOverlapPercent = optBoolean("supportThresholdOverlapPercent", true),
+            objectFirstLayerGap = optDouble("supportObjectFirstLayerGap", 0.2).toFloat(),
+            avoidInterfaceFilamentForBase = optBoolean("avoidSupportInterfaceFilamentForBase", true),
+            ironingEnabled = optBoolean("supportIroning"),
+            ironingPattern = optString("supportIroningPattern", "rectilinear"),
+            ironingFlow = optDouble("supportIroningFlow", 10.0).toFloat(),
+            ironingSpacing = optDouble("supportIroningSpacing", 0.1).toFloat(),
         ),
         supportBasePatternSpacing = optDouble("supportBasePatternSpacing", 2.5).toFloat(),
         supportExpansion = optDouble("supportExpansion", 0.0).toFloat(),

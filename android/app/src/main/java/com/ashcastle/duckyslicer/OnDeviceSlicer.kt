@@ -334,6 +334,18 @@ data class SupportCoverageSettings(
     val removeSmallOverhangs: Boolean = true,
 )
 
+data class SupportAdvancedSettings(
+    val patternAngle: Float = 0f,
+    val thresholdOverlap: Float = 50f,
+    val thresholdOverlapPercent: Boolean = true,
+    val objectFirstLayerGap: Float = 0.2f,
+    val avoidInterfaceFilamentForBase: Boolean = true,
+    val ironingEnabled: Boolean = false,
+    val ironingPattern: String = "rectilinear",
+    val ironingFlow: Float = 10f,
+    val ironingSpacing: Float = 0.1f,
+)
+
 internal fun FilamentProfile.resolveRetraction(printer: PrinterProfile) = RetractionSettings(
     length = retractLength ?: printer.retractLength,
     speed = retractSpeed ?: printer.retractSpeed,
@@ -462,6 +474,7 @@ data class QualityProfile(
     val supportInterfacePattern: String = "auto",
     val supportStyle: String = "default",
     val supportCoverage: SupportCoverageSettings = SupportCoverageSettings(),
+    val supportAdvanced: SupportAdvancedSettings = SupportAdvancedSettings(),
     val supportBasePatternSpacing: Float = 2.5f,
     val supportExpansion: Float = 0f,
     val supportInterfaceLoopPattern: Boolean = false,
@@ -647,7 +660,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 35,
+    val schemaVersion: Int = 36,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -777,6 +790,7 @@ data class SliceOptions(
     val supportInterfacePattern: String = quality.supportInterfacePattern,
     val supportStyle: String = quality.supportStyle,
     val supportCoverage: SupportCoverageSettings = quality.supportCoverage,
+    val supportAdvanced: SupportAdvancedSettings = quality.supportAdvanced,
     val supportBasePatternSpacing: Float = quality.supportBasePatternSpacing,
     val supportExpansion: Float = quality.supportExpansion,
     val supportInterfaceLoopPattern: Boolean = quality.supportInterfaceLoopPattern,
@@ -1122,6 +1136,7 @@ data class SliceOptions(
         supportInterfacePattern = profile.supportInterfacePattern,
         supportStyle = profile.supportStyle,
         supportCoverage = profile.supportCoverage,
+        supportAdvanced = profile.supportAdvanced,
         supportBasePatternSpacing = profile.supportBasePatternSpacing,
         supportExpansion = profile.supportExpansion,
         supportInterfaceLoopPattern = profile.supportInterfaceLoopPattern,
@@ -1569,6 +1584,15 @@ data class SliceOptions(
             native.supportOnBuildPlateOnly = supportCoverage.onBuildPlateOnly
             native.supportCriticalRegionsOnly = supportCoverage.criticalRegionsOnly
             native.supportRemoveSmallOverhangs = supportCoverage.removeSmallOverhangs
+            native.supportPatternAngle = supportAdvanced.patternAngle
+            native.supportThresholdOverlap = supportAdvanced.thresholdOverlap
+            native.supportThresholdOverlapPercent = supportAdvanced.thresholdOverlapPercent
+            native.supportObjectFirstLayerGap = supportAdvanced.objectFirstLayerGap
+            native.avoidSupportInterfaceFilamentForBase = supportAdvanced.avoidInterfaceFilamentForBase
+            native.supportIroning = supportAdvanced.ironingEnabled
+            native.supportIroningPattern = supportAdvanced.ironingPattern
+            native.supportIroningFlow = supportAdvanced.ironingFlow
+            native.supportIroningSpacing = supportAdvanced.ironingSpacing
             native.gcodeLabelObjects = gcodeSettings.labelObjects
             native.excludeObject = gcodeSettings.excludeObjects
             native.initialLayerTravelSpeed = gcodeSettings.initialLayerTravelSpeed

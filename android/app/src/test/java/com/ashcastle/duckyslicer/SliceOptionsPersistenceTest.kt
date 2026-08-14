@@ -172,6 +172,22 @@ class SliceOptionsPersistenceTest {
         )
         assertEquals(true, restored.toNativeConfig().supportCriticalRegionsOnly)
         assertEquals(false, restored.toNativeConfig().supportRemoveSmallOverhangs)
+        assertEquals(
+            SupportAdvancedSettings(
+                patternAngle = 73f,
+                thresholdOverlap = 0.33f,
+                thresholdOverlapPercent = false,
+                objectFirstLayerGap = 0.42f,
+                avoidInterfaceFilamentForBase = false,
+                ironingEnabled = true,
+                ironingPattern = "concentric",
+                ironingFlow = 17f,
+                ironingSpacing = 0.18f,
+            ),
+            restored.supportAdvanced,
+        )
+        assertEquals(73f, restored.toNativeConfig().supportPatternAngle)
+        assertEquals(true, restored.toNativeConfig().supportIroning)
         assertEquals(3.2f, restored.supportBasePatternSpacing)
         assertEquals(-0.4f, restored.supportExpansion)
         assertEquals(true, restored.supportInterfaceLoopPattern)
@@ -505,6 +521,17 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             onBuildPlateOnly = true,
             criticalRegionsOnly = true,
             removeSmallOverhangs = false,
+        ),
+        supportAdvanced = SupportAdvancedSettings(
+            patternAngle = 73f,
+            thresholdOverlap = 0.33f,
+            thresholdOverlapPercent = false,
+            objectFirstLayerGap = 0.42f,
+            avoidInterfaceFilamentForBase = false,
+            ironingEnabled = true,
+            ironingPattern = "concentric",
+            ironingFlow = 17f,
+            ironingSpacing = 0.18f,
         ),
         supportBasePatternSpacing = 3.2f,
         supportExpansion = -0.4f,

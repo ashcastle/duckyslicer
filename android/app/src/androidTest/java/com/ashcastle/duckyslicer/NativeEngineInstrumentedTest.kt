@@ -1065,6 +1065,17 @@ class NativeEngineInstrumentedTest {
                     criticalRegionsOnly = true,
                     removeSmallOverhangs = false,
                 ),
+                supportAdvanced = SupportAdvancedSettings(
+                    patternAngle = 45f,
+                    thresholdOverlap = 37f,
+                    thresholdOverlapPercent = true,
+                    objectFirstLayerGap = 0.36f,
+                    avoidInterfaceFilamentForBase = false,
+                    ironingEnabled = true,
+                    ironingPattern = "concentric",
+                    ironingFlow = 16f,
+                    ironingSpacing = 0.19f,
+                ),
                 supportFilament = 1,
                 supportInterfaceFilament = 1,
                 wipeTowerEnabled = true,
@@ -1240,6 +1251,11 @@ class NativeEngineInstrumentedTest {
             ),
             restored.slicing.last().supportCoverage,
         )
+        assertEquals(45f, restored.slicing.last().supportAdvanced.patternAngle)
+        assertEquals(37f, restored.slicing.last().supportAdvanced.thresholdOverlap)
+        assertTrue(restored.slicing.last().supportAdvanced.thresholdOverlapPercent)
+        assertTrue(restored.slicing.last().supportAdvanced.ironingEnabled)
+        assertEquals("concentric", restored.slicing.last().supportAdvanced.ironingPattern)
         assertEquals(1, restored.slicing.last().supportFilament)
         assertEquals(1, restored.slicing.last().supportInterfaceFilament)
         assertTrue(restored.slicing.last().wipeTowerEnabled)
@@ -1460,7 +1476,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(35, catalog.schemaVersion)
+        assertEquals(36, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1558,6 +1574,7 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.supportCoverage.onBuildPlateOnly })
         assertTrue(catalog.slicing.any { it.supportCoverage.criticalRegionsOnly })
         assertTrue(catalog.slicing.any { it.supportCoverage.removeSmallOverhangs })
+        assertTrue(catalog.slicing.any { it.supportAdvanced.patternAngle == 45f })
         assertTrue(catalog.slicing.any { it.supportBasePatternSpacing != 2.5f })
         assertTrue(catalog.slicing.any { it.supportExpansion != 0f })
         assertTrue(catalog.slicing.any { it.supportInterfaceLoopPattern })
@@ -2572,6 +2589,17 @@ class NativeEngineInstrumentedTest {
                     criticalRegionsOnly = true,
                     removeSmallOverhangs = false,
                 ),
+                supportAdvanced = SupportAdvancedSettings(
+                    patternAngle = 73f,
+                    thresholdOverlap = 0.33f,
+                    thresholdOverlapPercent = false,
+                    objectFirstLayerGap = 0.42f,
+                    avoidInterfaceFilamentForBase = false,
+                    ironingEnabled = true,
+                    ironingPattern = "concentric",
+                    ironingFlow = 17f,
+                    ironingSpacing = 0.18f,
+                ),
                 supportBasePatternSpacing = 3.2f,
                 supportExpansion = -0.4f,
                 supportInterfaceLoopPattern = true,
@@ -2794,6 +2822,14 @@ class NativeEngineInstrumentedTest {
         assertTrue("Build-plate-only support must reach Orca", gcode.contains("; support_on_build_plate_only = 1"))
         assertTrue("Critical-region support must reach Orca", gcode.contains("; support_critical_regions_only = 1"))
         assertTrue("Small-overhang filtering must reach Orca", gcode.contains("; support_remove_small_overhang = 0"))
+        assertTrue("Support pattern angle must reach Orca", gcode.contains("; support_angle = 73"))
+        assertTrue("Support threshold overlap must preserve millimeters", gcode.contains("; support_threshold_overlap = 0.33"))
+        assertTrue("First-layer support gap must reach Orca", gcode.contains("; support_object_first_layer_gap = 0.42"))
+        assertTrue("Support filament policy must reach Orca", gcode.contains("; support_interface_not_for_body = 0"))
+        assertTrue("Support ironing must reach Orca", gcode.contains("; support_ironing = 1"))
+        assertTrue("Support ironing pattern must reach Orca", gcode.contains("; support_ironing_pattern = concentric"))
+        assertTrue("Support ironing flow must reach Orca", gcode.contains("; support_ironing_flow = 17%"))
+        assertTrue("Support ironing spacing must reach Orca", gcode.contains("; support_ironing_spacing = 0.18"))
         assertTrue("Support base spacing must reach Orca", gcode.contains("; support_base_pattern_spacing = 3.2"))
         assertTrue("Support expansion must reach Orca", gcode.contains("; support_expansion = -0.4"))
         assertTrue("Support interface loops must reach Orca", gcode.contains("; support_interface_loop_pattern = 1"))

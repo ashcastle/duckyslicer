@@ -206,6 +206,14 @@ internal object ProfileValidation {
             profile.supportBasePattern in SUPPORT_BASE_PATTERNS &&
             profile.supportInterfacePattern in SUPPORT_INTERFACE_PATTERNS &&
             profile.supportStyle in SUPPORT_STYLES &&
+            profile.supportAdvanced.patternAngle in 0f..359f &&
+            profile.supportAdvanced.thresholdOverlap in 0f..(
+                if (profile.supportAdvanced.thresholdOverlapPercent) 100f else 0.5f
+            ) &&
+            profile.supportAdvanced.objectFirstLayerGap in 0f..10f &&
+            profile.supportAdvanced.ironingPattern in setOf("rectilinear", "concentric") &&
+            profile.supportAdvanced.ironingFlow in 0f..100f &&
+            profile.supportAdvanced.ironingSpacing in 0f..1f &&
             profile.supportBasePatternSpacing in 0f..100f &&
             profile.supportExpansion in -100f..100f &&
             profile.treeSupportBranchAngle in 0f..60f &&

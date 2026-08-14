@@ -275,6 +275,15 @@ data class SliceConfig(
     @JvmField var wipeTowerRibWidth: Float = 8f
     @JvmField var wipeTowerFilletWall: Boolean = true
     @JvmField var singleExtruderMultiMaterialPriming: Boolean = false
+    @JvmField var supportPatternAngle: Float = 0f
+    @JvmField var supportThresholdOverlap: Float = 50f
+    @JvmField var supportThresholdOverlapPercent: Boolean = true
+    @JvmField var supportObjectFirstLayerGap: Float = 0.2f
+    @JvmField var avoidSupportInterfaceFilamentForBase: Boolean = true
+    @JvmField var supportIroning: Boolean = false
+    @JvmField var supportIroningPattern: String = "rectilinear"
+    @JvmField var supportIroningFlow: Float = 10f
+    @JvmField var supportIroningSpacing: Float = 0.1f
     @JvmField var printSequence: String = "by layer"
     @JvmField var printOrder: String = "default"
     @JvmField var extruderClearanceRadius: Float = 40f

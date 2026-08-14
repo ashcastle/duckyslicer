@@ -463,6 +463,17 @@
     <string name="support_top_z_distance">상단 Z 간격</string>
     <string name="support_bottom_z_distance">하단 Z 간격</string>
     <string name="support_object_xy_distance">오브젝트 XY 간격</string>
+    <string name="support_pattern_angle">서포트 패턴 각도</string>
+    <string name="support_threshold_overlap">임계 오버랩</string>
+    <string name="support_threshold_overlap_unit">임계 오버랩 단위</string>
+    <string name="percent_unit">퍼센트</string>
+    <string name="millimeters_unit">밀리미터</string>
+    <string name="support_object_first_layer_gap">첫 레이어 오브젝트 간격</string>
+    <string name="avoid_interface_filament_for_base">서포트 본체에 인터페이스 필라멘트 사용 안 함</string>
+    <string name="support_ironing">서포트 다림질</string>
+    <string name="support_ironing_pattern">서포트 다림질 패턴</string>
+    <string name="support_ironing_flow">서포트 다림질 유량</string>
+    <string name="support_ironing_spacing">서포트 다림질 간격</string>
     <string name="bed_adhesion">베드 접착</string>
     <string name="skirt_loops">스커트 루프</string>
     <string name="skirt_distance">스커트 거리</string>
