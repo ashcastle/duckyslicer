@@ -256,6 +256,7 @@ internal object ProfileValidation {
             profile.featureFilaments.wipeTowerFilament in 0..MAX_FILAMENT_SLOTS &&
             profile.wipeTowerWidth in 10f..300f &&
             profile.multiMaterial.primeVolume in 1f..1_000f &&
+            purgeVolumesAreValid(profile.multiMaterial.purgeVolumes) &&
             profile.multiMaterial.primeTowerBrimWidth in 0f..100f &&
             profile.multiMaterial.wipeTowerRotationAngle in 0f..359f &&
             profile.multiMaterial.wipeTowerBridging in 0f..1_000f &&
@@ -380,4 +381,14 @@ internal object ProfileValidation {
     private const val MAX_LABEL_LENGTH = 512
     private const val MAX_COMPATIBILITY_ENTRIES = 512
     private const val MAX_GCODE_TEMPLATE_LENGTH = 262_144
+}
+
+private fun purgeVolumesAreValid(values: List<Float>): Boolean {
+    if (values.isEmpty()) return true
+    val size = (1..MAX_FILAMENT_SLOTS).firstOrNull { it * it == values.size } ?: return false
+    return values.indices.all { index ->
+        val value = values[index]
+        value.isFinite() && value in MIN_PURGE_VOLUME..MAX_PURGE_VOLUME &&
+            (index / size != index % size || value == 0f)
+    }
 }

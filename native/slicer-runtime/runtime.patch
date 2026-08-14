@@ -374,7 +374,7 @@ index 116a4a85..6b3048bc 100644
      float max_print_height = 270.0f;
  
      // Nozzle
-@@ -86,18 +282,96 @@ struct SliceConfig {
+@@ -86,18 +282,99 @@ struct SliceConfig {
      std::vector<int> extruder_temps;           // per-extruder nozzle temps
      std::vector<float> extruder_retract_length; // per-extruder retraction
      std::vector<float> extruder_retract_speed;  // per-extruder retraction speed
@@ -394,6 +394,9 @@ index 116a4a85..6b3048bc 100644
      float wipe_tower_y = 140.0f;
      float wipe_tower_width = 60.0f;
 +    float prime_volume = 45.0f;
++    std::vector<float> purge_volumes;
++    bool single_extruder_multi_material = false;
++    bool purge_in_prime_tower = false;
 +    float prime_tower_brim_width = 3.0f;
 +    bool wipe_tower_no_sparse_layers = false;
 +    float wipe_tower_rotation_angle = 0.0f;
@@ -1009,7 +1012,7 @@ index d93efb7d..fdf9a877 100644
      config.max_print_height = getFloat("maxPrintHeight");
  
      config.nozzle_diameter = getFloat("nozzleDiameter");
-@@ -129,14 +316,94 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -129,14 +316,97 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.extruder_temps = getIntArray("extruderTemps");
      config.extruder_retract_length = getFloatArray("extruderRetractLength");
      config.extruder_retract_speed = getFloatArray("extruderRetractSpeed");
@@ -1027,6 +1030,9 @@ index d93efb7d..fdf9a877 100644
      config.wipe_tower_y = getFloat("wipeTowerY");
      config.wipe_tower_width = getFloat("wipeTowerWidth");
 +    config.prime_volume = getFloat("primeVolume");
++    config.purge_volumes = getFloatArray("purgeVolumes");
++    config.single_extruder_multi_material = getBool("singleExtruderMultiMaterial");
++    config.purge_in_prime_tower = getBool("purgeInPrimeTower");
 +    config.prime_tower_brim_width = getFloat("primeTowerBrimWidth");
 +    config.wipe_tower_no_sparse_layers = getBool("wipeTowerNoSparseLayers");
 +    config.wipe_tower_rotation_angle = getFloat("wipeTowerRotationAngle");
@@ -1371,7 +1377,7 @@ index d93efb7d..fdf9a877 100644
      setFloat("maxPrintHeight", config.max_print_height);
      setFloat("nozzleDiameter", config.nozzle_diameter);
      setFloat("filamentDiameter", config.filament_diameter);
-@@ -265,12 +694,95 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -265,12 +694,98 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setIntArray("extruderTemps", config.extruder_temps);
      setFloatArray("extruderRetractLength", config.extruder_retract_length);
      setFloatArray("extruderRetractSpeed", config.extruder_retract_speed);
@@ -1389,6 +1395,9 @@ index d93efb7d..fdf9a877 100644
      setFloat("wipeTowerY", config.wipe_tower_y);
      setFloat("wipeTowerWidth", config.wipe_tower_width);
 +    setFloat("primeVolume", config.prime_volume);
++    setFloatArray("purgeVolumes", config.purge_volumes);
++    setBool("singleExtruderMultiMaterial", config.single_extruder_multi_material);
++    setBool("purgeInPrimeTower", config.purge_in_prime_tower);
 +    setFloat("primeTowerBrimWidth", config.prime_tower_brim_width);
 +    setBool("wipeTowerNoSparseLayers", config.wipe_tower_no_sparse_layers);
 +    setFloat("wipeTowerRotationAngle", config.wipe_tower_rotation_angle);
@@ -1471,8 +1480,15 @@ diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_p
 index 8d61c9cf..f285d044 100644
 --- a/app/src/main/cpp/src/sapil_print.cpp
 +++ b/app/src/main/cpp/src/sapil_print.cpp
-@@ -6,6 +6,8 @@
+@@ -1,11 +1,15 @@
+ #include "../include/sapil.h"
+ #include "sapil_internal.h"
+ #include "sapil_diagnostics.h"
++#include <algorithm>
+ #include <atomic>
+ #include <thread>
  #include <chrono>
++#include <cmath>
  #include <fstream>
  #include <sstream>
 +#include <stdexcept>
@@ -1779,7 +1795,7 @@ index 8d61c9cf..f285d044 100644
  
      // Override with per-extruder values if provided.
      // When the array covers all extruders, use ALL values (including 0 for unused slots)
-@@ -333,6 +458,20 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -333,36 +458,48 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      // ship 10mm bowden defaults that cause heat-creep clogs.
      dpc.set_key_value("retraction_length", new Slic3r::ConfigOptionFloats(retract_len));
      dpc.set_key_value("retraction_speed", new Slic3r::ConfigOptionFloats(retract_spd));
@@ -1800,6 +1816,86 @@ index 8d61c9cf..f285d044 100644
      // Toolchange retraction — OrcaSlicer defaults to 10mm (bowden).  For the Snapmaker U1's
      // direct-drive extruders this pulls filament past the heat break, causing heat-creep clogs
      // during the standby period between tool changes.  Use the same length as normal retraction.
+     dpc.set_key_value("retract_length_toolchange", new Slic3r::ConfigOptionFloats(retract_len));
+ 
+-    // Multi-extruder machine type — the Snapmaker U1 has 4 independent extruders, NOT a
+-    // single-extruder multi-material (SEMM) setup like Bambu/Prusa MMU.  Embedded Snapmaker
+-    // profiles incorrectly set single_extruder_multi_material=1, which disables ooze_prevention
+-    // and causes bowden-style unload/reload sequences.  Always override to false.
+-    dpc.set_key_value("single_extruder_multi_material", new Slic3r::ConfigOptionBool(false));
+-
+-    // Wipe tower filament handling — OrcaSlicer defaults are for bowden SEMM printers
+-    // (cooling_tube_retraction=91.5, cooling_tube_length=5, parking_pos=92, ramming=on).
+-    // Snapmaker fdm_common.json sets all of these to 0 and disables ramming, because the U1
+-    // tool changer physically parks/unparks extruders — filament stays loaded in each hotend.
+-    dpc.set_key_value("cooling_tube_retraction", new Slic3r::ConfigOptionFloat(0.0));
+-    dpc.set_key_value("cooling_tube_length", new Slic3r::ConfigOptionFloat(0.0));
+-    dpc.set_key_value("parking_pos_retraction", new Slic3r::ConfigOptionFloat(0.0));
+-    dpc.set_key_value("extra_loading_move", new Slic3r::ConfigOptionFloat(-2.0));
+-    dpc.set_key_value("enable_filament_ramming", new Slic3r::ConfigOptionBool(false));
+-
+-    // Filament loading/unloading speeds — Snapmaker profile uses conservative 25mm/s (not
+-    // OrcaSlicer's 90/100mm/s bowden defaults).  These only matter if ramming were re-enabled,
+-    // but set them correctly as a safety net.
+-    dpc.set_key_value("filament_unloading_speed", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, 25.0)));
+-    dpc.set_key_value("filament_unloading_speed_start", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, 3.0)));
+-    dpc.set_key_value("filament_loading_speed", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, 25.0)));
+-    dpc.set_key_value("filament_loading_speed_start", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, 3.0)));
+-    dpc.set_key_value("filament_cooling_moves", new Slic3r::ConfigOptionInts(std::vector<int>(n_ext, 0)));
+-    dpc.set_key_value("filament_toolchange_delay", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, 0.0)));
++    // Preserve Orca's two distinct multi-material paths.  Independent tool changers keep
++    // filament loaded in each hotend, while SEMM machines unload/reload one physical nozzle
++    // and consume the directional flush matrix in the prime tower.
++    const bool is_semm = config.single_extruder_multi_material;
++    dpc.set_key_value("single_extruder_multi_material", new Slic3r::ConfigOptionBool(is_semm));
++    dpc.set_key_value(
++        "purge_in_prime_tower",
++        new Slic3r::ConfigOptionBool(config.purge_in_prime_tower && is_semm));
++
++    if (!is_semm) {
++        // Independent direct-drive tool changers do not perform bowden-style unloading.
++        dpc.set_key_value("cooling_tube_retraction", new Slic3r::ConfigOptionFloat(0.0));
++        dpc.set_key_value("cooling_tube_length", new Slic3r::ConfigOptionFloat(0.0));
++        dpc.set_key_value("parking_pos_retraction", new Slic3r::ConfigOptionFloat(0.0));
++        dpc.set_key_value("extra_loading_move", new Slic3r::ConfigOptionFloat(-2.0));
++        dpc.set_key_value("enable_filament_ramming", new Slic3r::ConfigOptionBool(false));
++        dpc.set_key_value("filament_unloading_speed", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, 25.0)));
++        dpc.set_key_value("filament_unloading_speed_start", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, 3.0)));
++        dpc.set_key_value("filament_loading_speed", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, 25.0)));
++        dpc.set_key_value("filament_loading_speed_start", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, 3.0)));
++        dpc.set_key_value("filament_cooling_moves", new Slic3r::ConfigOptionInts(std::vector<int>(n_ext, 0)));
++        dpc.set_key_value("filament_toolchange_delay", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, 0.0)));
++    }
+ 
+     // Nozzle/filament diameter (per-extruder — same key names)
+     dpc.set_key_value("nozzle_diameter", new Slic3r::ConfigOptionFloats(nozzle_diameters));
+@@ -408,6 +560,26 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+         }
+     }
+ 
++    // A complete user matrix wins over both embedded profile values and the safe fallback.
++    // Kotlin sends a canonical row-major NxN matrix for the active filament slots. Reject the
++    // whole matrix at this trust boundary if its shape or any value is invalid; never combine a
++    // partly valid user matrix with profile values because directed transitions must stay paired.
++    if (n_ext > 1 && static_cast<int>(config.purge_volumes.size()) == n_ext * n_ext) {
++        const bool valid = std::all_of(
++            config.purge_volumes.begin(),
++            config.purge_volumes.end(),
++            [](float value) { return std::isfinite(value) && value >= 0.0f && value <= 1000.0f; });
++        if (valid) {
++            std::vector<double> matrix(config.purge_volumes.begin(), config.purge_volumes.end());
++            for (int tool = 0; tool < n_ext; ++tool) matrix[tool * n_ext + tool] = 0.0;
++            dpc.set_key_value(
++                "flush_volumes_matrix",
++                new Slic3r::ConfigOptionFloats(std::move(matrix)));
++        } else {
++            SAPIL_LOGW("Ignoring invalid user purge-volume matrix");
++        }
++    }
++
+     // Extruder offsets — all (0,0) for Snapmaker U1 (firmware handles offsets).
+     // MUST be sized to match extruder count; the default is a single entry, and
+     // WipeTowerIntegration copies the raw vector then indexes by tool ID — OOB
 @@ -461,18 +600,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      applyPerExtFloats("slow_down_layer_time",    config.filament_slow_down_layer_times, 4.0);
      applyPerExtFloats("slow_down_min_speed",     config.filament_slow_down_min_speeds, 20.0);

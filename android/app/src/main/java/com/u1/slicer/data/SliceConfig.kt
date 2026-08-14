@@ -328,6 +328,9 @@ data class SliceConfig(
     @JvmField var extruderZHop: FloatArray = floatArrayOf()
     @JvmField var extruderZHopType: Array<String> = arrayOf()
     @JvmField var primeVolume: Float = 45f
+    @JvmField var purgeVolumes: FloatArray = floatArrayOf()
+    @JvmField var singleExtruderMultiMaterial: Boolean = false
+    @JvmField var purgeInPrimeTower: Boolean = false
     @JvmField var primeTowerBrimWidth: Float = 3f
     @JvmField var wipeTowerNoSparseLayers: Boolean = false
     @JvmField var oozePrevention: Boolean = false

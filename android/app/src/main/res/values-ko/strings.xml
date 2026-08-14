@@ -218,6 +218,8 @@
     <string name="build_volume">출력 영역</string>
     <string name="extruder">익스트루더</string>
     <string name="nozzle_diameter">노즐 지름</string>
+    <string name="extruder_count">압출기 수</string>
+    <string name="single_extruder_multi_material">단일 압출기 멀티 소재</string>
     <string name="nozzle_temperature">노즐 온도</string>
     <string name="first_layer_nozzle_temperature">첫 레이어 노즐 온도</string>
     <string name="bed_temperature">베드 온도</string>
@@ -792,6 +794,10 @@
     <string name="wipe_tower_fillet_wall">타워 벽 필렛</string>
     <string name="single_extruder_multi_material_priming">사용 압출기 모두 프라임</string>
     <string name="flush_options">버리기 옵션</string>
+    <string name="filament_changes">필라멘트 전환</string>
+    <string name="from_filament">이전 필라멘트</string>
+    <string name="to_filament">다음 필라멘트</string>
+    <string name="purge_volume">퍼지량</string>
     <string name="flush_into_infill">객체의 채우기에서 버리기</string>
     <string name="flush_into_support">객체의 서포트에서 버리기</string>
     <string name="flush_into_objects">객체에서 버리기</string>

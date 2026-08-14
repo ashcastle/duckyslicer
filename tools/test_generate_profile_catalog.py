@@ -360,6 +360,24 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(71.5, profile["extruderClearanceRadius"])
         self.assertEqual(28.5, profile["extruderClearanceHeightToRod"])
         self.assertEqual(118.0, profile["extruderClearanceHeightToLid"])
+        self.assertFalse(profile["singleExtruderMultiMaterial"])
+        self.assertEqual(1, profile["extruderCount"])
+
+    def test_classifies_single_extruder_multi_material_printers(self) -> None:
+        profile = build_printer(
+            "Example",
+            {
+                "name": "SEMM printer",
+                "printable_area": ["0x0", "200x0", "200x200", "0x200"],
+                "printable_height": "220",
+                "nozzle_diameter": ["0.4"],
+                "single_extruder_multi_material": "1",
+                "gcode_flavor": "marlin",
+            },
+        )
+
+        self.assertTrue(profile["singleExtruderMultiMaterial"])
+        self.assertEqual(16, profile["extruderCount"])
 
     def test_preserves_printer_retraction_and_nullable_filament_overrides(self) -> None:
         printer = build_printer(

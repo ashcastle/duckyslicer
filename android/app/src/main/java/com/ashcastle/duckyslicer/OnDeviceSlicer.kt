@@ -149,6 +149,7 @@ data class PrinterProfile(
     val bedOriginX: Float = 0f,
     val bedOriginY: Float = 0f,
     val bedPolygon: List<Float> = rectangularBedPolygon(bedSizeX, bedSizeY),
+    val singleExtruderMultiMaterial: Boolean = false,
     val extruderCount: Int = 1,
 ) {
     companion object {
@@ -328,6 +329,7 @@ data class RetractionSettings(
 
 data class MultiMaterialSettings(
     val primeVolume: Float = 45f,
+    val purgeVolumes: List<Float> = emptyList(),
     val primeTowerBrimWidth: Float = 3f,
     val wipeTowerNoSparseLayers: Boolean = false,
     val wipeTowerRotationAngle: Float = 0f,
@@ -356,7 +358,45 @@ data class MultiMaterialSettings(
     val interlockingBeamLayerCount: Int = 2,
     val interlockingDepth: Int = 2,
     val interlockingBoundaryAvoidance: Int = 2,
-)
+) {
+    fun resolvedPurgeVolumes(slotCount: Int): List<Float> {
+        val targetSize = slotCount.coerceIn(1, MAX_FILAMENT_SLOTS)
+        val sourceSize = (1..MAX_FILAMENT_SLOTS).firstOrNull { it * it == purgeVolumes.size } ?: 0
+        return List(targetSize * targetSize) { index ->
+            val from = index / targetSize
+            val to = index % targetSize
+            when {
+                from == to -> 0f
+                from < sourceSize && to < sourceSize -> purgeVolumes[from * sourceSize + to]
+                    .takeIf(Float::isFinite)
+                    ?.coerceIn(MIN_PURGE_VOLUME, MAX_PURGE_VOLUME)
+                    ?: DEFAULT_PURGE_VOLUME
+                else -> DEFAULT_PURGE_VOLUME
+            }
+        }
+    }
+
+    fun resizedPurgeVolumes(slotCount: Int): MultiMaterialSettings = copy(
+        purgeVolumes = resolvedPurgeVolumes(slotCount),
+    )
+
+    fun withPurgeVolume(slotCount: Int, fromSlot: Int, toSlot: Int, volume: Float): MultiMaterialSettings {
+        val size = slotCount.coerceIn(1, MAX_FILAMENT_SLOTS)
+        require(fromSlot in 0 until size && toSlot in 0 until size && fromSlot != toSlot) {
+            "Purge transition is unavailable"
+        }
+        val updated = resolvedPurgeVolumes(size).toMutableList()
+        updated[fromSlot * size + toSlot] = volume
+            .takeIf(Float::isFinite)
+            ?.coerceIn(MIN_PURGE_VOLUME, MAX_PURGE_VOLUME)
+            ?: DEFAULT_PURGE_VOLUME
+        return copy(purgeVolumes = updated)
+    }
+}
+
+internal const val DEFAULT_PURGE_VOLUME = 140f
+internal const val MIN_PURGE_VOLUME = 0f
+internal const val MAX_PURGE_VOLUME = 1_000f
 
 data class FeatureFilamentSettings(
     val infillOverrideEnabled: Boolean = false,
@@ -813,7 +853,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 47,
+    val schemaVersion: Int = 48,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1163,7 +1203,7 @@ data class SliceOptions(
     )
 
     fun updatePrinterRetraction(profile: PrinterProfile): SliceOptions {
-        return copy(printerProfile = profile)
+        return copy(printerProfile = profile).boundedToFilamentSlots(profile.extruderCount)
     }
 
     fun resolvedFilamentSlots(): List<FilamentProfile> = filamentSlots
@@ -1185,7 +1225,8 @@ data class SliceOptions(
             "No filament slot is available"
         }
         return FilamentSlotAssignment(
-            options = copy(filamentSlots = current + profile),
+            options = copy(filamentSlots = current + profile)
+                .boundedToFilamentSlots(current.size + 1),
             slot = current.size,
         )
     }
@@ -1196,6 +1237,7 @@ data class SliceOptions(
             "No filament slot is available"
         }
         return copy(filamentSlots = current + profile)
+            .boundedToFilamentSlots(current.size + 1)
     }
 
     fun removeLastFilamentSlot(): SliceOptions {
@@ -1210,6 +1252,7 @@ data class SliceOptions(
             supportFilament = supportFilament.coerceIn(0, maximum),
             supportInterfaceFilament = supportInterfaceFilament.coerceIn(0, maximum),
             featureFilaments = featureFilaments.boundedTo(maximum),
+            multiMaterial = multiMaterial.resizedPurgeVolumes(maximum),
         )
     }
 
@@ -1746,6 +1789,10 @@ data class SliceOptions(
             native.extruderZHop = nativeRetractions.map(RetractionSettings::zHop).toFloatArray()
             native.extruderZHopType = nativeRetractions.map(RetractionSettings::zHopType).toTypedArray()
             native.primeVolume = multiMaterial.primeVolume
+            native.purgeVolumes = multiMaterial.resolvedPurgeVolumes(nativeFilaments.size).toFloatArray()
+            native.singleExtruderMultiMaterial = printerProfile.singleExtruderMultiMaterial
+            native.purgeInPrimeTower = printerProfile.singleExtruderMultiMaterial &&
+                multiMaterial.purgeVolumes.isNotEmpty()
             native.primeTowerBrimWidth = multiMaterial.primeTowerBrimWidth
             native.wipeTowerNoSparseLayers = multiMaterial.wipeTowerNoSparseLayers
             native.wipeTowerRotationAngle = multiMaterial.wipeTowerRotationAngle

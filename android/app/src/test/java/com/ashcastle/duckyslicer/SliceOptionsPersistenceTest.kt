@@ -34,6 +34,7 @@ class SliceOptionsPersistenceTest {
                 wipeTowerWidth = 42f,
                 multiMaterial = MultiMaterialSettings(
                     primeVolume = 61.5f,
+                    purgeVolumes = listOf(0f, 65f, 175f, 0f),
                     primeTowerBrimWidth = 4.5f,
                     wipeTowerNoSparseLayers = true,
                     wipeTowerRotationAngle = 73f,
@@ -104,6 +105,9 @@ class SliceOptionsPersistenceTest {
         assertEquals(true, native.wipeTowerEnabled)
         assertEquals(42f, native.wipeTowerWidth)
         assertEquals(61.5f, native.primeVolume)
+        assertEquals(listOf(0f, 65f, 175f, 0f), native.purgeVolumes.toList())
+        assertEquals(false, native.singleExtruderMultiMaterial)
+        assertEquals(false, native.purgeInPrimeTower)
         assertEquals(4.5f, native.primeTowerBrimWidth)
         assertEquals(true, native.wipeTowerNoSparseLayers)
         assertEquals(73f, native.wipeTowerRotationAngle)
@@ -140,6 +144,34 @@ class SliceOptionsPersistenceTest {
         assertEquals(4, native.slowDownLayers)
         assertEquals(false, native.accelToDecelEnabled)
         assertEquals(27f, native.accelToDecelFactor)
+    }
+
+    @Test
+    fun semmPrinterClassificationRoundTripsAndEnablesDirectedPrimeTowerPurging() {
+        val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(
+            id = "test-semm-printer",
+            name = "Test SEMM printer",
+            singleExtruderMultiMaterial = true,
+            extruderCount = 2,
+        )
+        val options = SliceOptions()
+            .selectPrinter(printer)
+            .selectFilament(FilamentProfile.PLA)
+            .copy(
+                filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+                multiMaterial = MultiMaterialSettings(
+                    purgeVolumes = listOf(0f, 65f, 175f, 0f),
+                ),
+            )
+
+        val restored = requireNotNull(options.toProjectJson().toProjectSliceOptionsOrNull())
+        val native = restored.toNativeConfig()
+
+        assertEquals(true, restored.printerProfile.singleExtruderMultiMaterial)
+        assertEquals(2, restored.printerProfile.extruderCount)
+        assertEquals(true, native.singleExtruderMultiMaterial)
+        assertEquals(true, native.purgeInPrimeTower)
+        assertEquals(listOf(0f, 65f, 175f, 0f), native.purgeVolumes.toList())
     }
 
     @Test
@@ -484,6 +516,7 @@ class SliceOptionsPersistenceTest {
                 remove("maxVolumetricExtrusionRateSlopeSegmentLength")
                 remove("extrusionRateSmoothingExternalOnly")
                 remove("travelSpeedZ")
+                remove("purgeVolumes")
             }
         }
 
@@ -503,6 +536,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(ExtrusionRateSmoothingSettings(), restored.quality.extrusionRateSmoothing)
         assertEquals(0f, restored.travelSpeedZ)
         assertEquals(0f, restored.toNativeConfig().travelSpeedZ)
+        assertEquals(emptyList<Float>(), restored.multiMaterial.purgeVolumes)
+        assertEquals(listOf(0f), restored.toNativeConfig().purgeVolumes.toList())
     }
 
     @Test

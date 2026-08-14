@@ -31,6 +31,7 @@ class ProfileStoreMigrationTest {
                 remove("maxVolumetricExtrusionRateSlopeSegmentLength")
                 remove("extrusionRateSmoothingExternalOnly")
                 remove("travelSpeedZ")
+                remove("purgeVolumes")
             }
             file.writeText(
                 JSONObject()
@@ -48,6 +49,7 @@ class ProfileStoreMigrationTest {
 
             assertFalse(restoredPrinter.builtIn)
             assertNull(restoredPrinter.brand)
+            assertFalse(restoredPrinter.singleExtruderMultiMaterial)
             assertTrue(restoredFilament.compatiblePrinters.isEmpty())
             assertTrue(restoredSlicing.compatiblePrinters.isEmpty())
             assertEquals("V3 Filament", restoredFilament.name)
@@ -57,6 +59,7 @@ class ProfileStoreMigrationTest {
             assertEquals(0, restoredSlicing.gcodeSettings.slowDownLayers)
             assertEquals(ExtrusionRateSmoothingSettings(), restoredSlicing.extrusionRateSmoothing)
             assertEquals(0f, restoredSlicing.travelSpeedZ)
+            assertEquals(emptyList<Float>(), restoredSlicing.multiMaterial.purgeVolumes)
             assertEquals(BrimEarSettings(), restoredSlicing.precision.brimEars)
         } finally {
             file.delete()
@@ -101,6 +104,8 @@ class ProfileStoreMigrationTest {
                     bedOriginX = -110f,
                     bedOriginY = -110f,
                     bedPolygon = polygon,
+                    singleExtruderMultiMaterial = true,
+                    extruderCount = 2,
                 ),
             )
             val saved = ProfileStore(file).savePrinter("Delta bed", options)
@@ -109,6 +114,8 @@ class ProfileStoreMigrationTest {
             assertEquals(polygon, restored.bedPolygon)
             assertEquals(-110f, restored.bedOriginX)
             assertEquals(-110f, restored.bedOriginY)
+            assertTrue(restored.singleExtruderMultiMaterial)
+            assertEquals(2, restored.extruderCount)
 
             val root = JSONObject(file.readText())
             root.getJSONArray("printers").getJSONObject(0)

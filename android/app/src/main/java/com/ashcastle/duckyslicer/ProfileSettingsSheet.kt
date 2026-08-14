@@ -424,6 +424,31 @@ private fun PrinterSettingsSheet(
             )
         },
     )
+    SettingSlider(
+        label = stringResource(R.string.extruder_count),
+        valueText = options.printerProfile.extruderCount.toString(),
+        value = options.printerProfile.extruderCount.toFloat(),
+        range = 1f..MAX_FILAMENT_SLOTS.toFloat(),
+        steps = MAX_FILAMENT_SLOTS - 2,
+        onValueChange = {
+            onOptionsChanged(
+                options.updatePrinterRetraction(
+                    options.printerProfile.copy(extruderCount = it.roundToInt()),
+                ),
+            )
+        },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.single_extruder_multi_material),
+        checked = options.printerProfile.singleExtruderMultiMaterial,
+        onCheckedChange = {
+            onOptionsChanged(
+                options.updatePrinterRetraction(
+                    options.printerProfile.copy(singleExtruderMultiMaterial = it),
+                ),
+            )
+        },
+    )
     SettingChoices(
         settingLabel = stringResource(R.string.printer_firmware),
         entries = listOf("marlin", "marlin2", "klipper"),
@@ -4333,6 +4358,16 @@ private fun SlicingSettingsSheet(
                     )
                 }
                 if (maximumFilamentSlot > 1) {
+                    if (options.printerProfile.singleExtruderMultiMaterial) {
+                        SettingsGroupTitle(stringResource(R.string.filament_changes))
+                        DirectionalPurgeSetting(
+                            filaments = options.resolvedFilamentSlots(),
+                            multiMaterial = options.multiMaterial,
+                            onChanged = {
+                                onOptionsChanged(options.copy(multiMaterial = it))
+                            },
+                        )
+                    }
                     SettingsGroupTitle(stringResource(R.string.filament_for_features))
                     FilamentSlotSetting(
                         label = stringResource(R.string.wall_filament),
@@ -4973,6 +5008,69 @@ private fun <T> SettingChoices(
         label = optionLabel,
         onSelected = onSelected,
     )
+}
+
+@Composable
+private fun DirectionalPurgeSetting(
+    filaments: List<FilamentProfile>,
+    multiMaterial: MultiMaterialSettings,
+    onChanged: (MultiMaterialSettings) -> Unit,
+) {
+    if (filaments.size < 2) return
+    val purgeLabel = stringResource(R.string.purge_volume)
+    val fromLabel = stringResource(R.string.from_filament)
+    val toLabel = stringResource(R.string.to_filament)
+    val query = LocalSettingsQuery.current
+    if (listOf(purgeLabel, fromLabel, toLabel).none { settingQueryMatches(query, it) }) return
+
+    var fromSlot by rememberSaveable(filaments.size) { mutableStateOf(1) }
+    var toSlot by rememberSaveable(filaments.size) { mutableStateOf(2) }
+    LaunchedEffect(filaments.size) {
+        fromSlot = fromSlot.coerceIn(1, filaments.size)
+        toSlot = toSlot.coerceIn(1, filaments.size)
+        if (fromSlot == toSlot) toSlot = if (fromSlot < filaments.size) fromSlot + 1 else 1
+    }
+    val matrix = multiMaterial.resolvedPurgeVolumes(filaments.size)
+    val volume = matrix[(fromSlot - 1) * filaments.size + (toSlot - 1)]
+    fun differentFrom(slot: Int): Int = if (slot < filaments.size) slot + 1 else 1
+
+    CompositionLocalProvider(LocalSettingsQuery provides "") {
+        FilamentSlotSetting(
+            label = fromLabel,
+            filaments = filaments,
+            selectedSlot = fromSlot,
+            onSelected = { selected ->
+                fromSlot = selected
+                if (toSlot == selected) toSlot = differentFrom(selected)
+            },
+        )
+        FilamentSlotSetting(
+            label = toLabel,
+            filaments = filaments,
+            selectedSlot = toSlot,
+            onSelected = { selected ->
+                toSlot = selected
+                if (fromSlot == selected) fromSlot = differentFrom(selected)
+            },
+        )
+        SettingSlider(
+            label = purgeLabel,
+            valueText = stringResource(R.string.cubic_millimeters_value, volume),
+            value = volume,
+            range = MIN_PURGE_VOLUME..MAX_PURGE_VOLUME,
+            steps = (MAX_PURGE_VOLUME - MIN_PURGE_VOLUME).roundToInt() - 1,
+            onValueChange = {
+                onChanged(
+                    multiMaterial.withPurgeVolume(
+                        filaments.size,
+                        fromSlot - 1,
+                        toSlot - 1,
+                        it.roundToInt().toFloat(),
+                    ),
+                )
+            },
+        )
+    }
 }
 
 @Composable

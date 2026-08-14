@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v47.bin"
+private const val CATALOG_ASSET = "profile_catalog_v48.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 47) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 48) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -65,6 +65,7 @@ class OrcaProfileCatalog(private val context: Context) {
         bedPolygon = input.readCatalogFloatList(),
         maxPrintHeight = input.readFloat(),
         nozzleDiameter = input.readFloat(),
+        singleExtruderMultiMaterial = input.readCatalogBoolean(),
         extruderCount = input.readInt(),
         machineStartGcode = input.readCatalogString(),
         machineEndGcode = input.readCatalogString(),
@@ -211,6 +212,7 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("bedPolygon", BINARY_FLOAT_LIST),
     BinaryField("maxPrintHeight", BINARY_FLOAT),
     BinaryField("nozzleDiameter", BINARY_FLOAT),
+    BinaryField("singleExtruderMultiMaterial", BINARY_BOOL),
     BinaryField("extruderCount", BINARY_INT),
     BinaryField("machineStartGcode", BINARY_STRING),
     BinaryField("machineEndGcode", BINARY_STRING),

@@ -52,6 +52,9 @@ class FeatureFilamentRoutingTest {
                     solidInfillFilament = 2,
                     wipeTowerFilament = 2,
                 ),
+                multiMaterial = MultiMaterialSettings(
+                    purgeVolumes = listOf(0f, 65f, 175f, 0f),
+                ),
             )
             .removeLastFilamentSlot()
 
@@ -62,6 +65,7 @@ class FeatureFilamentRoutingTest {
         assertEquals(1, options.featureFilaments.wallFilament)
         assertEquals(1, options.featureFilaments.solidInfillFilament)
         assertEquals(1, options.featureFilaments.wipeTowerFilament)
+        assertEquals(listOf(0f), options.multiMaterial.purgeVolumes)
     }
 
     @Test
@@ -69,6 +73,35 @@ class FeatureFilamentRoutingTest {
         assertThrows(IllegalArgumentException::class.java) {
             SliceOptions().removeLastFilamentSlot()
         }
+    }
+
+    @Test
+    fun addingAndRemovingSlotsPreservesDirectedPurgePairs() {
+        val twoTools = SliceOptions().copy(
+            filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+            multiMaterial = MultiMaterialSettings(
+                purgeVolumes = listOf(0f, 65f, 175f, 0f),
+            ),
+        )
+
+        val threeTools = twoTools.addFilamentSlot(FilamentProfile.ABS)
+        assertEquals(
+            listOf(
+                0f, 65f, DEFAULT_PURGE_VOLUME,
+                175f, 0f, DEFAULT_PURGE_VOLUME,
+                DEFAULT_PURGE_VOLUME, DEFAULT_PURGE_VOLUME, 0f,
+            ),
+            threeTools.multiMaterial.purgeVolumes,
+        )
+
+        val adjusted = threeTools.copy(
+            multiMaterial = threeTools.multiMaterial.withPurgeVolume(3, 2, 0, 88f),
+        )
+        assertEquals(88f, adjusted.multiMaterial.purgeVolumes[6])
+        assertEquals(
+            listOf(0f, 65f, 175f, 0f),
+            adjusted.removeLastFilamentSlot().multiMaterial.purgeVolumes,
+        )
     }
 
     @Test

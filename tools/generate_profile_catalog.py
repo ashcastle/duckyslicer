@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 47
+SCHEMA_VERSION = 48
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -225,6 +225,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "bedPolygon": bed_polygon,
         "maxPrintHeight": height,
         "nozzleDiameter": nozzle,
+        "singleExtruderMultiMaterial": supports_multi_material,
         "extruderCount": extruder_count,
         "machineStartGcode": str(raw.get("machine_start_gcode", "")),
         "machineEndGcode": str(raw.get("machine_end_gcode", "")),

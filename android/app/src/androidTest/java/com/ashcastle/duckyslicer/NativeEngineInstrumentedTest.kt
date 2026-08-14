@@ -1934,7 +1934,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(47, catalog.schemaVersion)
+        assertEquals(48, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2709,6 +2709,7 @@ class NativeEngineInstrumentedTest {
                 wipeTowerWidth = 42f,
                 multiMaterial = MultiMaterialSettings(
                     primeVolume = 61.5f,
+                    purgeVolumes = listOf(0f, 65f, 175f, 0f),
                     primeTowerBrimWidth = 4.5f,
                     wipeTowerNoSparseLayers = true,
                     wipeTowerRotationAngle = 73f,
@@ -2773,6 +2774,18 @@ class NativeEngineInstrumentedTest {
         assertTrue("Prime tower must remain enabled for a two-tool plate", gcode.contains("; enable_prime_tower = 1"))
         assertTrue("Prime-tower width must reach Orca", gcode.contains("; prime_tower_width = 42"))
         assertTrue("Prime volume must reach Orca", gcode.contains("; prime_volume = 61.5"))
+        assertTrue(
+            "Directed purge volumes must reach Orca",
+            gcode.contains("; flush_volumes_matrix = 0,65,175,0"),
+        )
+        assertTrue(
+            "Independent tool changers must not be classified as SEMM",
+            gcode.contains("; single_extruder_multi_material = 0"),
+        )
+        assertTrue(
+            "Independent tool changers must not consume the SEMM purge matrix",
+            gcode.contains("; purge_in_prime_tower = 0"),
+        )
         assertTrue("Tower brim width must reach Orca", gcode.contains("; prime_tower_brim_width = 4.5"))
         assertTrue("Sparse tower layers must remain disabled", gcode.contains("; wipe_tower_no_sparse_layers = 1"))
         assertTrue("Tower rotation must reach Orca", gcode.contains("; wipe_tower_rotation_angle = 73"))
@@ -2942,6 +2955,68 @@ class NativeEngineInstrumentedTest {
             "Interlocking boundary clearance must retain Orca's default",
             defaultsGcode.contains("; interlocking_boundary_avoidance = 2"),
         )
+    }
+
+    @Test
+    fun directedPurgeVolumeChangesRealWipeTowerExtrusion() {
+        val model = inspectModel(fixtureModel().absolutePath)
+        val objects = listOf(
+            ProjectObject(
+                id = "purge-primary",
+                model = model,
+                transform = ModelTransform(offsetXmm = -20f),
+                filamentSlot = 0,
+            ),
+            ProjectObject(
+                id = "purge-secondary",
+                model = model,
+                transform = ModelTransform(offsetXmm = 20f),
+                filamentSlot = 1,
+            ),
+        )
+        val base = SliceOptions()
+            .selectPrinter(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(
+                    id = "test-semm-04",
+                    name = "Test SEMM · 0.4 mm",
+                    singleExtruderMultiMaterial = true,
+                    extruderCount = 2,
+                ),
+            )
+            .selectFilament(FilamentProfile.PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+                wipeTowerEnabled = true,
+                multiMaterial = MultiMaterialSettings(
+                    purgeVolumes = listOf(0f, 20f, 75f, 0f),
+                ),
+            )
+
+        val low = OnDeviceSlicer.slice(objects, base)
+        val high = OnDeviceSlicer.slice(
+            objects,
+            base.copy(
+                multiMaterial = base.multiMaterial.withPurgeVolume(2, 0, 1, 260f),
+            ),
+        )
+        try {
+            val lowGcode = low.output.readText()
+            val highGcode = high.output.readText()
+            assertTrue(lowGcode.contains("; flush_volumes_matrix = 0,20,75,0"))
+            assertTrue(highGcode.contains("; flush_volumes_matrix = 0,260,75,0"))
+            assertTrue(lowGcode.contains("; single_extruder_multi_material = 1"))
+            assertTrue(lowGcode.contains("; purge_in_prime_tower = 1"))
+            assertTrue(lowGcode.lineSequence().any { it == "T1" })
+            assertTrue(highGcode.lineSequence().any { it == "T1" })
+            assertTrue(
+                "A larger T1 purge must produce more real wipe-tower extrusion",
+                wipeTowerExtrusion(highGcode) > wipeTowerExtrusion(lowGcode) + 50f,
+            )
+        } finally {
+            low.output.delete()
+            high.output.delete()
+        }
     }
 
     @Test
@@ -4323,4 +4398,20 @@ class NativeEngineInstrumentedTest {
         }
     }
 
+    private fun wipeTowerExtrusion(gcode: String): Float {
+        val extrusion = Regex("(?:^|\\s)E(-?[0-9]+(?:\\.[0-9]+)?)")
+        var insideToolChange = false
+        var total = 0f
+        gcode.lineSequence().forEach { line ->
+            when (line) {
+                "; WIPE_TOWER_START" -> insideToolChange = true
+                "; WIPE_TOWER_END" -> insideToolChange = false
+                else -> if (insideToolChange) {
+                    val value = extrusion.find(line)?.groupValues?.get(1)?.toFloatOrNull() ?: 0f
+                    if (value > 0f) total += value
+                }
+            }
+        }
+        return total
+    }
 }

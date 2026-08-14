@@ -199,6 +199,8 @@
     <string name="build_volume">Build volume</string>
     <string name="extruder">Extruder</string>
     <string name="nozzle_diameter">Nozzle diameter</string>
+    <string name="extruder_count">Extruder count</string>
+    <string name="single_extruder_multi_material">Single Extruder Multi Material</string>
     <string name="nozzle_temperature">Nozzle temperature</string>
     <string name="first_layer_nozzle_temperature">First layer nozzle temperature</string>
     <string name="bed_temperature">Bed temperature</string>
@@ -792,6 +794,10 @@
     <string name="wipe_tower_fillet_wall">Fillet tower wall</string>
     <string name="single_extruder_multi_material_priming">Prime all printing extruders</string>
     <string name="flush_options">Flush options</string>
+    <string name="filament_changes">Filament changes</string>
+    <string name="from_filament">From filament</string>
+    <string name="to_filament">To filament</string>
+    <string name="purge_volume">Flushing Volume</string>
     <string name="flush_into_infill">Flush into objects\' infill</string>
     <string name="flush_into_support">Flush into objects\' support</string>
     <string name="flush_into_objects">Flush into this object</string>

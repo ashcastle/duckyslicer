@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 48
+internal const val USER_PROFILE_SCHEMA_VERSION = 49
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -87,6 +87,7 @@ class ProfileStore private constructor(
             extruderClearanceRadius = options.extruderClearanceRadius,
             extruderClearanceHeightToRod = options.extruderClearanceHeightToRod,
             extruderClearanceHeightToLid = options.extruderClearanceHeightToLid,
+            singleExtruderMultiMaterial = options.printerProfile.singleExtruderMultiMaterial,
             extruderCount = options.printerProfile.extruderCount,
         )
         require(ProfileValidation.printer(profile)) { "Printer profile contains unsafe values" }
@@ -485,6 +486,7 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("extruderClearanceRadius", extruderClearanceRadius)
     .put("extruderClearanceHeightToRod", extruderClearanceHeightToRod)
     .put("extruderClearanceHeightToLid", extruderClearanceHeightToLid)
+    .put("singleExtruderMultiMaterial", singleExtruderMultiMaterial)
     .put("extruderCount", extruderCount)
     .put("builtIn", builtIn)
     .put("brand", brand ?: JSONObject.NULL)
@@ -672,6 +674,7 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("wipeTowerEnabled", wipeTowerEnabled)
     .put("wipeTowerWidth", wipeTowerWidth)
     .put("primeVolume", multiMaterial.primeVolume)
+    .put("purgeVolumes", JSONArray(multiMaterial.purgeVolumes))
     .put("primeTowerBrimWidth", multiMaterial.primeTowerBrimWidth)
     .put("wipeTowerNoSparseLayers", multiMaterial.wipeTowerNoSparseLayers)
     .put("wipeTowerRotationAngle", multiMaterial.wipeTowerRotationAngle)
@@ -856,6 +859,7 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         } else {
             rectangularBedPolygon(bedSizeX, bedSizeY)
         },
+        singleExtruderMultiMaterial = optBoolean("singleExtruderMultiMaterial"),
         extruderCount = optInt("extruderCount", 1),
     )
 }.getOrNull()
@@ -1072,6 +1076,7 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         wipeTowerWidth = optDouble("wipeTowerWidth", 60.0).toFloat(),
         multiMaterial = MultiMaterialSettings(
             primeVolume = optDouble("primeVolume", 45.0).toFloat(),
+            purgeVolumes = purgeVolumeList("purgeVolumes"),
             primeTowerBrimWidth = optDouble("primeTowerBrimWidth", 3.0).toFloat(),
             wipeTowerNoSparseLayers = optBoolean("wipeTowerNoSparseLayers"),
             wipeTowerRotationAngle = optDouble("wipeTowerRotationAngle", 0.0).toFloat(),
@@ -1254,6 +1259,12 @@ private fun JSONObject.floatList(key: String): List<Float>? = optJSONArray(key)?
     if (values.length() !in 6..512 || values.length() % 2 != 0) return null
     List(values.length()) { index -> values.getDouble(index).toFloat() }
 }
+
+private fun JSONObject.purgeVolumeList(key: String): List<Float> = optJSONArray(key)?.let { values ->
+    val dimension = (1..MAX_FILAMENT_SLOTS).firstOrNull { it * it == values.length() }
+        ?: return emptyList()
+    List(dimension * dimension) { index -> values.getDouble(index).toFloat() }
+}.orEmpty()
 
 private fun JSONArray?.objects(): List<JSONObject> = if (this == null) {
     emptyList()
