@@ -81,7 +81,17 @@ class ProjectArchiveTest {
                         BrimPoint(8f, 9f, -0.0001f, 5f),
                     ),
                 ),
-            )
+            ).let { projectObject ->
+                projectObject.copy(
+                    volumes = listOf(
+                        projectObject.singleVolume.copy(
+                            config = ProjectVolumeConfig(
+                                mapOf("wall_loops" to "5", "sparse_infill_density" to "31%"),
+                            ),
+                        ),
+                    ),
+                )
+            }
             val second = first.copy(
                 id = "duck-b",
                 volumes = listOf(
@@ -92,6 +102,16 @@ class ProjectArchiveTest {
                         seamPaint = SeamPaint().paint(1, SeamPaintState.BLOCK),
                         multiColorPaint = MultiColorPaint().paint(0, 1),
                         filamentSlot = 1,
+                    ),
+                    first.singleVolume.copy(
+                        id = legacyProjectVolumeId("duck-b", 1),
+                        model = first.model.copy(fileName = "cutout.stl"),
+                        supportPaint = SupportPaint(),
+                        seamPaint = SeamPaint(),
+                        multiColorPaint = MultiColorPaint(),
+                        filamentSlot = 0,
+                        role = ProjectVolumeRole.NEGATIVE_VOLUME,
+                        config = ProjectVolumeConfig(),
                     ),
                 ),
                 transform = ModelTransform(offsetXmm = -18f, rotationXdeg = 90f),
@@ -118,7 +138,7 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(26, manifest.getInt("schemaVersion"))
+            assertEquals(27, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(
@@ -137,7 +157,7 @@ class ProjectArchiveTest {
             assertEquals(
                 setOf(
                     "id", "displayName", "modelEntry", "supportPaint", "seamPaint",
-                    "multiColorPaint", "filamentSlot",
+                    "multiColorPaint", "filamentSlot", "role", "config",
                 ),
                 manifestVolume.keys().asSequence().toSet(),
             )
@@ -158,17 +178,22 @@ class ProjectArchiveTest {
             assertEquals(second.id, imported.snapshot.selectedObjectId)
             assertEquals(2, imported.snapshot.objects.size)
             assertEquals(first.singleVolume.id, imported.snapshot.objects[0].singleVolume.id)
-            assertEquals(second.singleVolume.id, imported.snapshot.objects[1].singleVolume.id)
+            assertEquals(second.volumes.map(ProjectVolume::id), imported.snapshot.objects[1].volumes.map(ProjectVolume::id))
             assertEquals("오리 모델.stl", imported.snapshot.objects[0].model.fileName)
-            assertEquals("duck-copy.stl", imported.snapshot.objects[1].model.fileName)
+            assertEquals("duck-copy.stl", imported.snapshot.objects[1].volumes[0].model.fileName)
             assertEquals(first.transform, imported.snapshot.objects[0].transform)
             assertEquals(second.transform, imported.snapshot.objects[1].transform)
             assertEquals(first.supportPaint, imported.snapshot.objects[0].supportPaint)
-            assertEquals(second.supportPaint, imported.snapshot.objects[1].supportPaint)
+            assertEquals(second.volumes[0].supportPaint, imported.snapshot.objects[1].volumes[0].supportPaint)
             assertEquals(first.seamPaint, imported.snapshot.objects[0].seamPaint)
-            assertEquals(second.seamPaint, imported.snapshot.objects[1].seamPaint)
+            assertEquals(second.volumes[0].seamPaint, imported.snapshot.objects[1].volumes[0].seamPaint)
             assertEquals(first.multiColorPaint, imported.snapshot.objects[0].multiColorPaint)
-            assertEquals(second.multiColorPaint, imported.snapshot.objects[1].multiColorPaint)
+            assertEquals(second.volumes[0].multiColorPaint, imported.snapshot.objects[1].volumes[0].multiColorPaint)
+            assertEquals(first.singleVolume.config, imported.snapshot.objects[0].singleVolume.config)
+            assertEquals(
+                ProjectVolumeRole.NEGATIVE_VOLUME,
+                imported.snapshot.objects[1].volumes[1].role,
+            )
             assertEquals(
                 first.variableLayerHeights,
                 imported.snapshot.objects[0].variableLayerHeights,
@@ -182,10 +207,10 @@ class ProjectArchiveTest {
             assertEquals(first.brimPoints, imported.snapshot.objects[0].brimPoints)
             assertEquals(second.brimPoints, imported.snapshot.objects[1].brimPoints)
             assertEquals(0, imported.snapshot.objects[0].filamentSlot)
-            assertEquals(1, imported.snapshot.objects[1].filamentSlot)
+            assertEquals(1, imported.snapshot.objects[1].volumes[0].filamentSlot)
             assertEquals(
                 imported.snapshot.objects[0].model.localPath,
-                imported.snapshot.objects[1].model.localPath,
+                imported.snapshot.objects[1].volumes[0].model.localPath,
             )
             assertEquals(
                 options.toProjectJson().toString(),

@@ -30,6 +30,9 @@ internal suspend fun splitProjectObjectVolume(
         "Project has no room for split parts"
     }
     val source = projectObject.volumes[sourceIndex]
+    require(source.role == ProjectVolumeRole.MODEL_PART) {
+        "Only printable model parts can be split"
+    }
     val staging = projectStore.createModelImportStaging()
     val installed = ArrayList<File>()
     try {
@@ -67,6 +70,8 @@ internal suspend fun splitProjectObjectVolume(
                 },
                 model = model,
                 filamentSlot = source.filamentSlot,
+                role = source.role,
+                config = source.config,
             )
         }
         val replacementVolumes = buildList {

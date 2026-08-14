@@ -66,6 +66,7 @@ def _strings(name: str, source: str) -> dict[str, str]:
 def verify_project_archive(sources: dict[str, str]) -> None:
     required_files = {
         "ProjectArchive.kt",
+        "ProjectVolumeSemantics.kt",
         "ProjectStore.kt",
         "ProjectOpenRequest.kt",
         "ProjectTransfer.kt",
@@ -75,6 +76,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "AndroidManifest.xml",
         "AndroidTestManifest.xml",
         "ProjectArchiveTest.kt",
+        "ProjectVolumeSemanticsTest.kt",
         "ProjectTransferStateTest.kt",
         "ProjectArchiveIntentInstrumentedTest.kt",
         "CreatedDocumentLifecycleInstrumentedTest.kt",
@@ -107,9 +109,13 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
             'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
             "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-            "PROJECT_ARCHIVE_SCHEMA_VERSION = 26",
+            "PROJECT_ARCHIVE_SCHEMA_VERSION = 27",
             "ArchivedProjectPlate",
             "ArchivedProjectVolume",
+            'put("role", volume.role.name)',
+            'put("config", volume.config.toJson())',
+            "ProjectVolumeRole.valueOf",
+            "ProjectVolumeConfig.fromJson",
             'getJSONArray("plates")',
             "selectedPlateId",
             "plateOptions: Map<String, SliceOptions>",
@@ -167,12 +173,32 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
             "beginCommit: () -> Unit = {}",
             "beginCommit()",
+            "SCHEMA_VERSION = 29",
+            'put("role", role.name)',
+            'put("config", config.toJson())',
         ),
     )
     if store.index("save(snapshot, plateOptions)") > store.index(
         "pruneUnreferencedModels(snapshot)"
     ):
         raise VerificationError("ProjectStore.kt must commit imported metadata before pruning")
+
+    _require_markers(
+        "ProjectVolumeSemantics.kt",
+        sources["ProjectVolumeSemantics.kt"],
+        (
+            "enum class ProjectVolumeRole",
+            "NEGATIVE_VOLUME(1)",
+            "PARAMETER_MODIFIER(2)",
+            "SUPPORT_BLOCKER(3)",
+            "SUPPORT_ENFORCER(4)",
+            "MAX_ENTRIES = 128",
+            "MAX_VALUE_BYTES = 4 * 1_024",
+            "MAX_SIDECAR_BYTES = 64 * 1_024",
+            "fun readSidecar",
+            "fun fromJson",
+        ),
+    )
 
     _require_markers(
         "ProjectOpenRequest.kt",
@@ -463,8 +489,11 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         (
             "manifest.json",
             "models/000.stl",
-            "schema version `16`",
-            "Schema 1 through 11 projects remain readable",
+            "schema version `27`",
+            "Schema 1 through 27 projects remain readable",
+            "parameter modifier",
+            "support blocker",
+            "support enforcer",
             "up to 16 plates",
             "plate-local objects and settings",
             "stable, bounded `volumes` list",
@@ -495,6 +524,16 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "startupRecoveryRemovesOnlyExactAbandonedArchiveDirectories",
             "canceledArchiveCopyRemovesStagingAndPreservesTheCurrentProject",
             "cancellationWinningTheCommitGateRemovesInstalledModelsAndPreservesCurrentProject",
+        ),
+    )
+    _require_markers(
+        "ProjectVolumeSemanticsTest.kt",
+        sources["ProjectVolumeSemanticsTest.kt"],
+        (
+            "nativeRoleValuesAreStableAndComplete",
+            "volumeConfigSidecarAndJsonRoundTripExactly",
+            "auxiliaryVolumesRejectPrintableOnlyState",
+            "projectAndArchiveObjectsRequirePrintableModelParts",
         ),
     )
     _require_markers(
@@ -622,6 +661,9 @@ def read_sources() -> dict[str, str]:
     tests = ROOT / "android/app/src"
     return {
         "ProjectArchive.kt": (package / "ProjectArchive.kt").read_text(encoding="utf-8"),
+        "ProjectVolumeSemantics.kt": (package / "ProjectVolumeSemantics.kt").read_text(
+            encoding="utf-8"
+        ),
         "ProjectStore.kt": (package / "ProjectStore.kt").read_text(encoding="utf-8"),
         "ProjectOpenRequest.kt": (package / "ProjectOpenRequest.kt").read_text(encoding="utf-8"),
         "ProjectTransfer.kt": (package / "ProjectTransfer.kt").read_text(encoding="utf-8"),
@@ -634,6 +676,9 @@ def read_sources() -> dict[str, str]:
         ),
         "ProjectArchiveTest.kt": (
             tests / "test/java/com/ashcastle/duckyslicer/ProjectArchiveTest.kt"
+        ).read_text(encoding="utf-8"),
+        "ProjectVolumeSemanticsTest.kt": (
+            tests / "test/java/com/ashcastle/duckyslicer/ProjectVolumeSemanticsTest.kt"
         ).read_text(encoding="utf-8"),
         "ProjectTransferStateTest.kt": (
             tests / "test/java/com/ashcastle/duckyslicer/ProjectTransferStateTest.kt"

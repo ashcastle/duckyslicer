@@ -24,7 +24,17 @@ internal data class ArchivedProjectVolume(
     val seamPaint: SeamPaint,
     val multiColorPaint: MultiColorPaint,
     val filamentSlot: Int,
-)
+    val role: ProjectVolumeRole,
+    val config: ProjectVolumeConfig,
+) {
+    init {
+        require(role.acceptsFacetPaint || (
+            supportPaint.facets.isEmpty() && seamPaint.facets.isEmpty() &&
+                multiColorPaint.facets.isEmpty()
+        ))
+        require(role.acceptsFilament || filamentSlot == 0)
+    }
+}
 
 internal data class ArchivedProjectObject(
     val id: String,
@@ -33,7 +43,11 @@ internal data class ArchivedProjectObject(
     val variableLayerHeights: VariableLayerHeights,
     val processOverrides: ObjectProcessOverrides,
     val brimPoints: BrimPoints,
-)
+) {
+    init {
+        require(volumes.any { it.role == ProjectVolumeRole.MODEL_PART })
+    }
+}
 
 internal data class ArchivedProjectPlate(
     val id: String,
@@ -336,7 +350,7 @@ internal object ProjectArchiveCodec {
                     )
                     val volumeIds = HashSet<String>()
                     List(volumeValues.length()) { volumeIndex ->
-                        parseVolume(volumeValues.getJSONObject(volumeIndex)).also { volume ->
+                        parseVolume(volumeValues.getJSONObject(volumeIndex), schemaVersion).also { volume ->
                             require(volumeIds.add(volume.id))
                         }
                     }
@@ -398,9 +412,14 @@ internal object ProjectArchiveCodec {
             MultiColorPaint()
         },
         filamentSlot = checkedArchiveFilamentSlot(value.optInt("filamentSlot", 0)),
+        role = ProjectVolumeRole.MODEL_PART,
+        config = ProjectVolumeConfig(),
     )
 
-    private fun parseVolume(value: JSONObject): ArchivedProjectVolume = ArchivedProjectVolume(
+    private fun parseVolume(
+        value: JSONObject,
+        schemaVersion: Int,
+    ): ArchivedProjectVolume = ArchivedProjectVolume(
         id = checkedArchiveId(value.getString("id")),
         displayName = checkedArchiveDisplayName(value.getString("displayName")),
         modelEntry = checkedArchiveModelEntry(value.getString("modelEntry")),
@@ -408,6 +427,18 @@ internal object ProjectArchiveCodec {
         seamPaint = value.getJSONArray("seamPaint").toArchiveSeamPaint(),
         multiColorPaint = value.getJSONArray("multiColorPaint").toArchiveMultiColorPaint(),
         filamentSlot = checkedArchiveFilamentSlot(value.getInt("filamentSlot")),
+        role = if (schemaVersion >= 27) {
+            runCatching { ProjectVolumeRole.valueOf(value.getString("role")) }
+                .getOrElse { throw ProjectArchiveException() }
+        } else {
+            ProjectVolumeRole.MODEL_PART
+        },
+        config = if (schemaVersion >= 27) {
+            runCatching { ProjectVolumeConfig.fromJson(value.getJSONObject("config")) }
+                .getOrElse { throw ProjectArchiveException() }
+        } else {
+            ProjectVolumeConfig()
+        },
     )
 
     private fun checkedArchiveModelEntry(value: String): String =
@@ -437,7 +468,9 @@ private fun ProjectObject.toArchiveJson(modelEntries: Map<File, String>): JSONOb
                             .put("supportPaint", volume.supportPaint.toArchiveJson())
                             .put("seamPaint", volume.seamPaint.toArchiveJson())
                             .put("multiColorPaint", volume.multiColorPaint.toArchiveJson())
-                            .put("filamentSlot", volume.filamentSlot),
+                            .put("filamentSlot", volume.filamentSlot)
+                            .put("role", volume.role.name)
+                            .put("config", volume.config.toJson()),
                     )
                 }
             },
@@ -728,6 +761,6 @@ private const val MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES
 private const val MAX_PROJECT_ARCHIVE_ENTRY_NAME = 128
 private const val PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"
 private const val MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1
-private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 26
+private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 27
 private const val PROJECT_ARCHIVE_MANIFEST = "manifest.json"
 private val PROJECT_ARCHIVE_MODEL_ENTRY = Regex("models/[0-9]{3}\\.stl")

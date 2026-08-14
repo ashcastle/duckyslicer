@@ -246,6 +246,41 @@ class ProjectStateTest {
     }
 
     @Test
+    fun surfacePaintingRejectsAuxiliaryVolumes() {
+        val base = projectObject("assembly")
+        val modelPart = base.singleVolume.copy(id = "model")
+        val negative = base.singleVolume.copy(
+            id = "negative",
+            role = ProjectVolumeRole.NEGATIVE_VOLUME,
+        )
+        val state = ProjectHistoryState().add(
+            base.copy(volumes = listOf(modelPart, negative)),
+        )
+
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            state.updateSupportPaint(
+                "assembly",
+                "negative",
+                SupportPaint().paint(0, SupportPaintState.BLOCK),
+            )
+        }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            state.updateSeamPaint(
+                "assembly",
+                "negative",
+                SeamPaint().paint(0, SeamPaintState.BLOCK),
+            )
+        }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            state.updateMultiColorPaint(
+                "assembly",
+                "negative",
+                MultiColorPaint().paint(0, 0),
+            )
+        }
+    }
+
+    @Test
     fun variableLayerHeightsAreObjectScopedAndUndoable() {
         var state = ProjectHistoryState().add(projectObject("part"))
         val variableLayers = VariableLayerHeights(
@@ -335,6 +370,39 @@ class ProjectStateTest {
         assertTrue(state.current.selectedObject!!.volumes.all { it.filamentSlot == 0 })
         state = state.undo()
         assertTrue(state.current.selectedObject!!.volumes.all { it.filamentSlot == 1 })
+    }
+
+    @Test
+    fun filamentAssignmentPreservesNonFilamentAuxiliaryVolumes() {
+        val base = projectObject("assembly")
+        val modelPart = base.singleVolume.copy(id = "model")
+        val modifier = base.singleVolume.copy(
+            id = "modifier",
+            role = ProjectVolumeRole.PARAMETER_MODIFIER,
+        )
+        val negative = base.singleVolume.copy(
+            id = "negative",
+            role = ProjectVolumeRole.NEGATIVE_VOLUME,
+        )
+        val blocker = base.singleVolume.copy(
+            id = "blocker",
+            role = ProjectVolumeRole.SUPPORT_BLOCKER,
+        )
+        var state = ProjectHistoryState().add(
+            base.copy(volumes = listOf(negative, modelPart, blocker, modifier)),
+        )
+
+        state = state.updateSelectedFilamentSlot(2)
+
+        val assigned = state.current.selectedObject!!.volumes.associateBy(ProjectVolume::id)
+        assertEquals(2, assigned.getValue("model").filamentSlot)
+        assertEquals(2, assigned.getValue("modifier").filamentSlot)
+        assertEquals(0, assigned.getValue("negative").filamentSlot)
+        assertEquals(0, assigned.getValue("blocker").filamentSlot)
+        assertEquals("model", state.current.selectedObject!!.primaryModelPart.id)
+
+        val restored = state.undo().current.selectedObject!!.volumes
+        assertTrue(restored.all { it.filamentSlot == 0 })
     }
 
     @Test

@@ -243,6 +243,14 @@ internal fun shouldUseDepthTestedPreview(
 internal fun filamentSlotColor(slot: Int): Color =
     FilamentSlotColors[Math.floorMod(slot, FilamentSlotColors.size)]
 
+internal fun projectVolumeColor(role: ProjectVolumeRole, filamentSlot: Int): Color = when (role) {
+    ProjectVolumeRole.MODEL_PART -> filamentSlotColor(filamentSlot)
+    ProjectVolumeRole.NEGATIVE_VOLUME -> Color(0xFFFF7043)
+    ProjectVolumeRole.PARAMETER_MODIFIER -> Color(0xFF42C6D7)
+    ProjectVolumeRole.SUPPORT_BLOCKER -> Color(0xFFEF5350)
+    ProjectVolumeRole.SUPPORT_ENFORCER -> Color(0xFF66BB6A)
+}
+
 private enum class SupportPaintTool(val state: SupportPaintState?, val label: Int) {
     ENFORCE(SupportPaintState.ENFORCE, R.string.support_enforce),
     BLOCK(SupportPaintState.BLOCK, R.string.support_block),
@@ -265,12 +273,14 @@ internal data class ModelScreenTriangle(
     val surfaceShade: Float = 1f,
     val volumeId: String = "",
     val filamentSlot: Int = 0,
+    val volumeRole: ProjectVolumeRole = ProjectVolumeRole.MODEL_PART,
 )
 
 private data class ModelFaceBucket(
     val depthBand: Int,
     val filamentSlot: Int,
     val shadeBand: Int,
+    val volumeRole: ProjectVolumeRole,
 )
 
 internal data class ModelMeshEdge(
@@ -1066,7 +1076,7 @@ internal fun WorkspaceScreen(
     }
     if (showModelTools && selectedObject != null) {
         val filamentSlots = sliceOptions.resolvedFilamentSlots()
-        val selectedFilamentSlot = selectedObject.volumes.first().filamentSlot
+        val selectedFilamentSlot = selectedObject.primaryModelPart.filamentSlot
         ModelTransformSheet(
             transform = modelTransform,
             filamentSlot = selectedFilamentSlot,
@@ -1081,7 +1091,7 @@ internal fun WorkspaceScreen(
             splitting = splitting,
             cutting = cutting,
             simplifying = simplifying,
-            triangleCount = selectedObject.volumes.sumOf { it.model.triangles },
+            triangleCount = selectedObject.modelPartVolumes.sumOf { it.model.triangles },
             canAutoLay = true,
             canEditSingleVolumeModel = selectedSingleVolume != null,
             onAutoLay = onAutoLay,
@@ -1152,7 +1162,7 @@ internal fun WorkspaceScreen(
     }
     if (showFilamentPicker && selectedObject != null) {
         FilamentAssignmentSheet(
-            selectedSlot = selectedObject.volumes.first().filamentSlot,
+            selectedSlot = selectedObject.primaryModelPart.filamentSlot,
             options = sliceOptions,
             catalog = profileCatalog,
             recentIds = profileRecents.filamentIds,
@@ -1443,13 +1453,14 @@ internal fun SplitPartsSheet(
     onApply: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val splittableVolumes = projectObject.modelPartVolumes
     var selectedVolumeId by rememberSaveable(
         projectObject.id,
-        projectObject.volumes.map(ProjectVolume::id),
+        splittableVolumes.map(ProjectVolume::id),
     ) {
-        mutableStateOf(projectObject.volumes.first().id)
+        mutableStateOf(splittableVolumes.first().id)
     }
-    val selectedVolume = projectObject.volumes.first { it.id == selectedVolumeId }
+    val selectedVolume = splittableVolumes.first { it.id == selectedVolumeId }
     val clearsPaint = selectedVolume.supportPaint.facets.isNotEmpty() ||
         selectedVolume.seamPaint.facets.isNotEmpty() ||
         selectedVolume.multiColorPaint.facets.isNotEmpty()
@@ -1479,7 +1490,7 @@ internal fun SplitPartsSheet(
                 color = Color(0xFFC8C9C2),
                 style = MaterialTheme.typography.bodyMedium,
             )
-            projectObject.volumes.forEachIndexed { index, volume ->
+            splittableVolumes.forEachIndexed { index, volume ->
                 val isSelected = volume.id == selectedVolumeId
                 Surface(
                     modifier = Modifier
@@ -3028,7 +3039,7 @@ private fun BedScene(
             emptyMap()
         } else {
             withModelPreparationContext {
-                selected.volumes.associate { volume ->
+                selected.modelPartVolumes.associate { volume ->
                     volume.id to detectLayOnFaceCandidates(
                         volume.model.previewTriangles,
                         checkCancellation = { ensureActive() },
@@ -3039,7 +3050,7 @@ private fun BedScene(
     }
     val layOnFaceCandidateFacets = remember(layOnFaceCandidates, modelTopology) {
         projectObjects.firstOrNull { it.id == layOnFaceObjectId }
-            ?.volumes
+            ?.modelPartVolumes
             ?.associate { volume ->
                 val selectable = BooleanArray(volume.model.previewTriangles.size / 9)
                 layOnFaceCandidates[volume.id].orEmpty().forEach { candidate ->
@@ -3199,6 +3210,9 @@ private fun BedScene(
                 }
                 val paintingObject = supportPaintingObject ?: seamPaintingObject ?:
                     multiColorPaintingObject
+                val paintableVolumeIds = paintingObject?.modelPartVolumes
+                    ?.mapTo(HashSet()) { it.id }
+                    .orEmpty()
                 if (brimEditingObject != null) {
                     val markerTouchRadius = 24.dp.toPx()
                     val touchedIndex = brimPointScreenPositions
@@ -3479,12 +3493,15 @@ private fun BedScene(
                                 screenX = position.x,
                                 screenY = position.y,
                                 touchRadiusPx = 18.dp.toPx(),
+                                selectableVolumeIds = paintableVolumeIds,
                                 pickingIndices = currentModelPickingIndices,
                             )
                         }
                     } else {
                         closestModelTriangle(
-                            modelScreenTriangles[objectId].orEmpty(),
+                            modelScreenTriangles[objectId].orEmpty().filter {
+                                it.volumeId in paintableVolumeIds
+                            },
                             position,
                             18.dp.toPx(),
                         )
@@ -3492,6 +3509,7 @@ private fun BedScene(
                     if (paintedVolumeId == null) {
                         val volume = paintingObject.volumes.firstOrNull { it.id == hit.volumeId }
                             ?: return
+                        if (!volume.role.acceptsFacetPaint) return
                         paintedVolumeId = volume.id
                         supportPaintStart = volume.supportPaint.takeIf { supportPaintingObject != null }
                         seamPaintStart = volume.seamPaint.takeIf { seamPaintingObject != null }
@@ -3930,6 +3948,7 @@ private fun BedScene(
                         surfaceShade = modelSurfaceShade(aPosition, bPosition, cPosition),
                         volumeId = volume.id,
                         filamentSlot = volume.filamentSlot,
+                        volumeRole = volume.role,
                     )
                     screenTriangles += screenTriangle
                     volumeScreenTriangles += screenTriangle
@@ -3976,7 +3995,12 @@ private fun BedScene(
                     val shadeBand = (
                         triangle.surfaceShade * (ModelFaceShadeBands - 1)
                         ).roundToInt().coerceIn(0, ModelFaceShadeBands - 1)
-                    val bucket = ModelFaceBucket(depthBand, triangle.filamentSlot, shadeBand)
+                    val bucket = ModelFaceBucket(
+                        depthBand,
+                        triangle.filamentSlot,
+                        shadeBand,
+                        triangle.volumeRole,
+                    )
                     facePaths.getOrPut(bucket, ::Path).addTriangle(
                         triangle.a,
                         triangle.b,
@@ -3988,6 +4012,7 @@ private fun BedScene(
                         compareBy<Map.Entry<ModelFaceBucket, Path>>(
                             { it.key.depthBand },
                             { it.key.filamentSlot },
+                            { it.key.volumeRole.nativeValue },
                             { it.key.shadeBand },
                         ),
                     )
@@ -4002,14 +4027,20 @@ private fun BedScene(
                         path,
                         lerp(
                             Color(0xFF11130F),
-                            filamentSlotColor(bucket.filamentSlot),
+                            projectVolumeColor(bucket.volumeRole, bucket.filamentSlot),
                             light.coerceIn(0f, 1f),
                         )
-                            .copy(alpha = 0.98f),
+                            .copy(
+                                alpha = if (bucket.volumeRole == ProjectVolumeRole.MODEL_PART) {
+                                    0.98f
+                                } else {
+                                    0.52f
+                                },
+                            ),
                     )
                     }
                 if (projectObject.id == layOnFaceObjectId) {
-                    projectObject.volumes.forEach { volume ->
+                    projectObject.modelPartVolumes.forEach { volume ->
                         val volumeTriangles = screenTrianglesByVolume[volume.id].orEmpty()
                         layOnFaceCandidates[volume.id].orEmpty().forEach { candidate ->
                             val candidatePath = Path()
@@ -5487,7 +5518,7 @@ private fun ProjectSheet(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    projectObject.volumes.first().model.fileName,
+                    projectObject.primaryModelPart.model.fileName,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

@@ -427,6 +427,8 @@ struct StlTransform {
 struct StlGroupTransformRequest {
     input_paths: Vec<String>,
     output_paths: Vec<String>,
+    #[serde(default)]
+    bounds_mask: Option<Vec<bool>>,
     transform: StlTransform,
 }
 
@@ -1642,6 +1644,7 @@ fn transform_stl(
 fn transform_stl_group(
     input_paths: &[String],
     output_paths: &[String],
+    bounds_mask: Option<&[bool]>,
     transform: &StlTransform,
 ) -> Result<StlTransformFrame, EngineError> {
     const MAX_GROUP_VOLUMES: usize = 64;
@@ -1651,6 +1654,14 @@ fn transform_stl_group(
     {
         return Err(EngineError::Parse(
             "STL volume group has an invalid size".to_owned(),
+        ));
+    }
+    let bounds_mask = bounds_mask
+        .map(|mask| mask.to_vec())
+        .unwrap_or_else(|| vec![true; input_paths.len()]);
+    if bounds_mask.len() != input_paths.len() || !bounds_mask.iter().any(|included| *included) {
+        return Err(EngineError::Parse(
+            "STL volume group has an invalid bounds mask".to_owned(),
         ));
     }
     if output_paths.iter().collect::<HashSet<_>>().len() != output_paths.len() {
@@ -1698,7 +1709,7 @@ fn transform_stl_group(
     let mut triangle_counts = Vec::with_capacity(input_paths.len());
     let mut min = [f32::INFINITY; 3];
     let mut max = [f32::NEG_INFINITY; 3];
-    for input_path in input_paths {
+    for (volume_index, input_path) in input_paths.iter().enumerate() {
         let mut first_pass_file = open_stl_input(input_path)?;
         let first_pass = stl_io::create_stl_reader(&mut first_pass_file)
             .map_err(|error| EngineError::Parse(error.to_string()))?;
@@ -1709,10 +1720,12 @@ fn transform_stl_group(
             triangle_count = triangle_count
                 .checked_add(1)
                 .ok_or_else(|| EngineError::Parse("STL contains too many triangles".to_owned()))?;
-            for vertex in triangle.vertices.map(|vertex| vertex.0) {
-                for axis in 0..3 {
-                    min[axis] = min[axis].min(vertex[axis]);
-                    max[axis] = max[axis].max(vertex[axis]);
+            if bounds_mask[volume_index] {
+                for vertex in triangle.vertices.map(|vertex| vertex.0) {
+                    for axis in 0..3 {
+                        min[axis] = min[axis].min(vertex[axis]);
+                        max[axis] = max[axis].max(vertex[axis]);
+                    }
                 }
             }
         }
@@ -1728,7 +1741,10 @@ fn transform_stl_group(
         (min[2] + max[2]) / 2.0,
     ];
     let mut transformed_min_z = f32::INFINITY;
-    for input_path in input_paths {
+    for (volume_index, input_path) in input_paths.iter().enumerate() {
+        if !bounds_mask[volume_index] {
+            continue;
+        }
         let mut minimum_pass_file = open_stl_input(input_path)?;
         let minimum_pass = stl_io::create_stl_reader(&mut minimum_pass_file)
             .map_err(|error| EngineError::Parse(error.to_string()))?;
@@ -2368,6 +2384,7 @@ pub extern "system" fn Java_com_ashcastle_duckyslicer_NativeEngine_transformStlG
         let frame = transform_stl_group(
             &request.input_paths,
             &request.output_paths,
+            request.bounds_mask.as_deref(),
             &request.transform,
         )?;
         Ok(StlTransformResponse {
@@ -3459,6 +3476,7 @@ mod tests {
         transform_stl_group(
             &inputs,
             &outputs,
+            None,
             &StlTransform {
                 bed_center_mm: [50.0, 50.0],
                 offset_mm: [0.0, 0.0],
@@ -3481,6 +3499,64 @@ mod tests {
         assert!((right.min_mm[0] - left.min_mm[0] - 10.0).abs() < 0.001);
         assert_eq!(left.min_mm[2], 0.0);
         assert_eq!(right.min_mm[2], 0.0);
+    }
+
+    #[test]
+    fn stl_group_bounds_mask_keeps_auxiliary_volume_out_of_object_frame() {
+        let root = std::env::temp_dir();
+        let process = std::process::id();
+        let model_input = root.join(format!("duckyslicer-mask-model-input-{process}.stl"));
+        let auxiliary_input = root.join(format!("duckyslicer-mask-aux-input-{process}.stl"));
+        let model_output = root.join(format!("duckyslicer-mask-model-output-{process}.stl"));
+        let auxiliary_output = root.join(format!("duckyslicer-mask-aux-output-{process}.stl"));
+        let write_triangle = |path: &Path, offset_x: f32| {
+            let mut file = File::create(path).expect("create mask fixture");
+            writeln!(
+                file,
+                "solid model\nfacet normal 0 0 1\nouter loop\nvertex {offset_x} 0 0\nvertex {} 0 0\nvertex {offset_x} 1 0\nendloop\nendfacet\nendsolid model",
+                offset_x + 1.0,
+            )
+            .expect("write mask fixture");
+        };
+        write_triangle(&model_input, 0.0);
+        write_triangle(&auxiliary_input, 100.0);
+        let inputs = vec![
+            model_input.to_string_lossy().into_owned(),
+            auxiliary_input.to_string_lossy().into_owned(),
+        ];
+        let outputs = vec![
+            model_output.to_string_lossy().into_owned(),
+            auxiliary_output.to_string_lossy().into_owned(),
+        ];
+
+        transform_stl_group(
+            &inputs,
+            &outputs,
+            Some(&[true, false]),
+            &StlTransform {
+                bed_center_mm: [50.0, 50.0],
+                offset_mm: [0.0, 0.0],
+                offset_z_mm: 0.0,
+                rotation_deg: [0.0; 3],
+                scale: 1.0,
+                scale_axes: None,
+                mirror: [false; 3],
+            },
+        )
+        .expect("transform masked volume group");
+        let model = inspect_stl(&outputs[0]).expect("inspect masked model");
+        let auxiliary = inspect_stl(&outputs[1]).expect("inspect masked auxiliary");
+
+        for path in [
+            &model_input,
+            &auxiliary_input,
+            &model_output,
+            &auxiliary_output,
+        ] {
+            std::fs::remove_file(path).expect("remove mask fixture");
+        }
+        assert!((model.min_mm[0] - 49.5).abs() < 0.001);
+        assert!((auxiliary.min_mm[0] - 149.5).abs() < 0.001);
     }
 
     #[test]

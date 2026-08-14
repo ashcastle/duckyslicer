@@ -1989,8 +1989,10 @@ object OnDeviceSlicer {
             ) { "Spiral vase requires one wall, no infill, no top layers, and no supports" }
             val usedFilamentSlots = buildSet {
                 objects.single().volumes.forEach { volume ->
-                    add(volume.filamentSlot)
-                    addAll(volume.multiColorPaint.facets.values)
+                    if (volume.role.acceptsFilament) add(volume.filamentSlot)
+                    if (volume.role.acceptsFacetPaint) {
+                        addAll(volume.multiColorPaint.facets.values)
+                    }
                 }
             }
             require(usedFilamentSlots.size <= 1) { "Spiral vase supports one filament" }
@@ -2065,7 +2067,7 @@ object OnDeviceSlicer {
                         File.createTempFile(
                             "slice-layers-$index-",
                             ".bin",
-                            File(projectObject.volumes.first().model.localPath).parentFile,
+                            File(projectObject.primaryModelPart.model.localPath).parentFile,
                         ).also(it::writeSidecar)
                     }
             }
@@ -2087,7 +2089,7 @@ object OnDeviceSlicer {
                         File.createTempFile(
                             "slice-process-$index-",
                             ".bin",
-                            File(projectObject.volumes.first().model.localPath).parentFile,
+                            File(projectObject.primaryModelPart.model.localPath).parentFile,
                         ).also(it::writeSidecar)
                     }
             }
@@ -2096,7 +2098,16 @@ object OnDeviceSlicer {
                     File.createTempFile(
                         "slice-brim-$index-",
                         ".bin",
-                        File(objects[index].volumes.first().model.localPath).parentFile,
+                        File(objects[index].primaryModelPart.model.localPath).parentFile,
+                    ).also(it::writeSidecar)
+                }
+            }
+            val volumeConfigFiles = volumes.mapIndexed { index, volume ->
+                volume.config.takeUnless { it.isEmpty }?.let {
+                    File.createTempFile(
+                        "slice-volume-config-$index-",
+                        ".bin",
+                        File(volume.model.localPath).parentFile,
                     ).also(it::writeSidecar)
                 }
             }
@@ -2112,6 +2123,8 @@ object OnDeviceSlicer {
                     options,
                     objectVolumeCounts = transformedModels.objectVolumeCounts,
                     filamentSlots = volumes.map(ProjectVolume::filamentSlot).toIntArray(),
+                    volumeRoles = volumes.map { it.role.nativeValue }.toIntArray(),
+                    volumeConfigFiles = volumeConfigFiles,
                     foregroundSession = foregroundSession,
                     cancellationRequested = cancellationRequested,
                     onProgress = onProgress,
@@ -2123,6 +2136,7 @@ object OnDeviceSlicer {
                 variableLayerHeightFiles.filterNotNull().forEach(File::delete)
                 processOverrideFiles.filterNotNull().forEach(File::delete)
                 brimPointFiles.filterNotNull().forEach(File::delete)
+                volumeConfigFiles.filterNotNull().forEach(File::delete)
             }
         }
     }
@@ -2142,14 +2156,18 @@ object OnDeviceSlicer {
                 SlicerProcessClient.projectRequestCancellationRequested(requestId)
             },
         ) { transformedModels ->
+            val volumeRoles = objects.flatMap(ProjectObject::volumes).map(ProjectVolume::role)
+            val printableModels = transformedModels.files.filterIndexed { index, _ ->
+                volumeRoles[index] == ProjectVolumeRole.MODEL_PART
+            }
             SlicerProcessClient.autoArrange(
-                transformedModels = transformedModels.files,
+                transformedModels = printableModels,
                 bedSizeX = options.bedSizeX,
                 bedSizeY = options.bedSizeY,
                 bedOriginX = options.bedOriginX,
                 bedOriginY = options.bedOriginY,
                 bedPolygon = options.bedPolygon,
-                objectVolumeCounts = transformedModels.objectVolumeCounts,
+                objectVolumeCounts = objects.map { it.modelPartVolumes.size }.toIntArray(),
                 minimumGap = minimumGap,
                 requestId = requestId,
             )
@@ -2212,6 +2230,12 @@ object OnDeviceSlicer {
                                 .put(
                                     "outputPaths",
                                     JSONArray(objectOutputs.map(File::getAbsolutePath)),
+                                )
+                                .put(
+                                    "boundsMask",
+                                    JSONArray(projectObject.volumes.map { volume ->
+                                        volume.role == ProjectVolumeRole.MODEL_PART
+                                    }),
                                 )
                                 .put("transform", JSONObject(transform))
                                 .toString(),

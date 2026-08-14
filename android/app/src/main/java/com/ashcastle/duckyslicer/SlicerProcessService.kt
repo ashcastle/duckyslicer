@@ -54,6 +54,9 @@ internal object SlicerProcessClient {
         options: SliceOptions,
         objectVolumeCounts: IntArray = IntArray(transformedModels.size) { 1 },
         filamentSlots: IntArray = IntArray(transformedModels.size),
+        volumeRoles: IntArray = IntArray(transformedModels.size) {
+            ProjectVolumeRole.MODEL_PART.nativeValue
+        },
         foregroundSession: ForegroundSliceSession? = null,
         cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit,
@@ -68,6 +71,8 @@ internal object SlicerProcessClient {
         options,
         objectVolumeCounts,
         filamentSlots,
+        volumeRoles,
+        List(transformedModels.size) { null },
         foregroundSession,
         cancellationRequested,
         null,
@@ -85,6 +90,10 @@ internal object SlicerProcessClient {
         options: SliceOptions,
         objectVolumeCounts: IntArray = IntArray(transformedModels.size) { 1 },
         filamentSlots: IntArray = IntArray(transformedModels.size),
+        volumeRoles: IntArray = IntArray(transformedModels.size) {
+            ProjectVolumeRole.MODEL_PART.nativeValue
+        },
+        volumeConfigFiles: List<File?> = List(transformedModels.size) { null },
         foregroundSession: ForegroundSliceSession? = null,
         cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit,
@@ -99,6 +108,8 @@ internal object SlicerProcessClient {
         options,
         objectVolumeCounts,
         filamentSlots,
+        volumeRoles,
+        volumeConfigFiles,
         foregroundSession,
         cancellationRequested,
         null,
@@ -126,6 +137,8 @@ internal object SlicerProcessClient {
             options,
             IntArray(transformedModels.size) { 1 },
             IntArray(transformedModels.size),
+            IntArray(transformedModels.size) { ProjectVolumeRole.MODEL_PART.nativeValue },
+            List(transformedModels.size) { null },
             null,
             { false },
             maximumGcodeBytes,
@@ -426,10 +439,11 @@ internal object SlicerProcessClient {
         }
         val canonicalStaging = stagingDirectory.canonicalFile
         val seen = HashSet<File>()
+        val seenConfigs = HashSet<File>()
         val grouped = ArrayList<MutableList<OrcaImportedProjectVolumeRecord>>()
         records.forEach { record ->
-            val values = record.split('\t', limit = 7)
-            require(values.size == 7) { "Slicer returned invalid project model metadata" }
+            val values = record.split('\t', limit = 9)
+            require(values.size == 9) { "Slicer returned invalid project model metadata" }
             val output = checkedImportedModelFile(values[0], canonicalStaging, seen)
             val objectName = values[1].trim().takeIf { it.length in 1..200 } ?: "model"
             val volumeName = values[2].trim().takeIf { it.length in 1..200 } ?: "part.stl"
@@ -441,6 +455,19 @@ internal object SlicerProcessClient {
             val objectOrdinal = requireNotNull(values[6].toIntOrNull()) {
                 "Slicer returned invalid object grouping metadata"
             }
+            val role = ProjectVolumeRole.fromNative(
+                requireNotNull(values[7].toIntOrNull()) {
+                    "Slicer returned invalid volume role metadata"
+                },
+            )
+            val config = values[8].takeIf(String::isNotEmpty)?.let { path ->
+                val file = File(path).canonicalFile
+                require(
+                    file.parentFile == canonicalStaging && seenConfigs.add(file) && file.isFile &&
+                        file.length() in 8..ProjectVolumeConfig.MAX_SIDECAR_BYTES.toLong(),
+                ) { "Slicer returned an unsafe volume setting file" }
+                ProjectVolumeConfig.readSidecar(file)
+            } ?: ProjectVolumeConfig()
             require(filamentSlot in 0 until MAX_FILAMENT_SLOTS) {
                 "Slicer returned an invalid volume filament"
             }
@@ -456,7 +483,13 @@ internal object SlicerProcessClient {
                 "Slicer returned too many volumes for one object"
             }
             group += OrcaImportedProjectVolumeRecord(
-                volume = OrcaImportedProjectVolume(output, volumeName, filamentSlot),
+                volume = OrcaImportedProjectVolume(
+                    output,
+                    volumeName,
+                    if (role.acceptsFilament) filamentSlot else 0,
+                    role,
+                    config,
+                ),
                 objectName = objectName,
                 centerXmm = centerX,
                 centerYmm = centerY,
@@ -467,6 +500,9 @@ internal object SlicerProcessClient {
         }
         return grouped.map { group ->
             val first = group.first()
+            require(group.any { it.volume.role == ProjectVolumeRole.MODEL_PART }) {
+                "Slicer returned an object without a printable model part"
+            }
             require(group.all { record ->
                 record.objectName == first.objectName &&
                     kotlin.math.abs(record.centerXmm - first.centerXmm) <= 0.001f &&
@@ -592,6 +628,8 @@ internal object SlicerProcessClient {
         options: SliceOptions,
         objectVolumeCounts: IntArray,
         filamentSlots: IntArray,
+        volumeRoles: IntArray,
+        volumeConfigFiles: List<File?>,
         foregroundSession: ForegroundSliceSession?,
         cancellationRequested: () -> Boolean,
         maximumGcodeBytesForTest: Int?,
@@ -623,17 +661,23 @@ internal object SlicerProcessClient {
             "Brim point count does not match objects"
         }
         require(filamentSlots.size == transformedModels.size) { "Filament slot count does not match models" }
+        require(volumeRoles.size == transformedModels.size) { "Volume role count does not match models" }
+        require(volumeConfigFiles.size == transformedModels.size) {
+            "Volume setting count does not match models"
+        }
         val supportPaintPaths = supportPaintFiles.map { it?.absolutePath.orEmpty() }
         val seamPaintPaths = seamPaintFiles.map { it?.absolutePath.orEmpty() }
         val multiColorPaintPaths = multiColorPaintFiles.map { it?.absolutePath.orEmpty() }
         val variableLayerHeightPaths = variableLayerHeightFiles.map { it?.absolutePath.orEmpty() }
         val processOverridePaths = processOverrideFiles.map { it?.absolutePath.orEmpty() }
         val brimPointPaths = brimPointFiles.map { it?.absolutePath.orEmpty() }
+        val volumeConfigPaths = volumeConfigFiles.map { it?.absolutePath.orEmpty() }
         val optionsText = options.toProjectJson().toString()
         require(
             encodedRequestBytes(
                 modelPaths + supportPaintPaths + seamPaintPaths + multiColorPaintPaths +
-                    variableLayerHeightPaths + processOverridePaths + brimPointPaths,
+                    variableLayerHeightPaths + processOverridePaths + brimPointPaths +
+                    volumeConfigPaths,
                 optionsText,
             ) <=
                 SlicerProcessContract.MAX_REQUEST_BYTES,
@@ -670,9 +714,14 @@ internal object SlicerProcessClient {
                 SlicerProcessContract.KEY_BRIM_POINT_PATHS,
                 ArrayList(brimPointPaths),
             )
+            putStringArrayList(
+                SlicerProcessContract.KEY_VOLUME_CONFIG_PATHS,
+                ArrayList(volumeConfigPaths),
+            )
             putString(SlicerProcessContract.KEY_OPTIONS, optionsText)
             putIntArray(SlicerProcessContract.KEY_OBJECT_VOLUME_COUNTS, objectVolumeCounts)
             putIntArray(SlicerProcessContract.KEY_FILAMENT_SLOTS, filamentSlots)
+            putIntArray(SlicerProcessContract.KEY_VOLUME_ROLES, volumeRoles)
             maximumGcodeBytesForTest?.let {
                 putInt(SlicerProcessContract.KEY_MAXIMUM_GCODE_BYTES_FOR_TEST, it)
             }
@@ -1295,6 +1344,8 @@ internal data class OrcaImportedProjectVolume(
     val file: File,
     val displayName: String,
     val filamentSlot: Int,
+    val role: ProjectVolumeRole = ProjectVolumeRole.MODEL_PART,
+    val config: ProjectVolumeConfig = ProjectVolumeConfig(),
 )
 
 internal data class OrcaImportedProjectObject(
@@ -1954,6 +2005,15 @@ class SlicerProcessService : Service() {
         val brimPointFiles = brimPointPaths.map { path ->
             path.takeIf(String::isNotEmpty)?.let(::validateBrimPoints)
         }
+        val volumeConfigPaths = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_VOLUME_CONFIG_PATHS),
+        ) { "Volume setting paths are unavailable" }
+        require(volumeConfigPaths.size == models.size) {
+            "Volume setting count does not match models"
+        }
+        val volumeConfigFiles = volumeConfigPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let(::validateVolumeConfig)
+        }
         val optionsText = requireNotNull(extras.getString(SlicerProcessContract.KEY_OPTIONS)) {
             "Slice settings are unavailable"
         }
@@ -1963,7 +2023,8 @@ class SlicerProcessService : Service() {
         require(
             encodedRequestBytes(
                 paths + supportPaintPaths + seamPaintPaths + multiColorPaintPaths +
-                    variableLayerHeightPaths + processOverridePaths + brimPointPaths,
+                    variableLayerHeightPaths + processOverridePaths + brimPointPaths +
+                    volumeConfigPaths,
                 optionsText,
             ) <=
                 SlicerProcessContract.MAX_REQUEST_BYTES,
@@ -1973,13 +2034,38 @@ class SlicerProcessService : Service() {
         val options = requireNotNull(JSONObject(optionsText).toProjectSliceOptionsOrNull()) {
             "Slice settings are invalid"
         }
+        val volumeRoleValues = requireNotNull(
+            extras.getIntArray(SlicerProcessContract.KEY_VOLUME_ROLES),
+        ) { "Volume roles are unavailable" }
+        require(volumeRoleValues.size == models.size) { "Volume roles are invalid" }
+        val volumeRoles = volumeRoleValues.map(ProjectVolumeRole::fromNative)
+        var roleOffset = 0
+        objectVolumeCounts.forEach { count ->
+            require(
+                volumeRoles.subList(roleOffset, roleOffset + count)
+                    .any { it == ProjectVolumeRole.MODEL_PART },
+            ) { "Project object has no printable model part" }
+            roleOffset += count
+        }
+        require(volumeRoles.indices.all { index ->
+            volumeRoles[index].acceptsFacetPaint || (
+                supportPaintFiles[index] == null && seamPaintFiles[index] == null &&
+                    multiColorPaintFiles[index] == null
+            )
+        }) { "Auxiliary project volumes cannot carry facet paint" }
         val filamentSlots = requireNotNull(
             extras.getIntArray(SlicerProcessContract.KEY_FILAMENT_SLOTS),
         ) { "Filament assignments are unavailable" }
         val availableFilaments = options.resolvedFilamentSlots()
         require(
             filamentSlots.size == models.size &&
-                filamentSlots.all { it in availableFilaments.indices } &&
+                filamentSlots.indices.all { index ->
+                    if (volumeRoles[index].acceptsFilament) {
+                        filamentSlots[index] in availableFilaments.indices
+                    } else {
+                        filamentSlots[index] == 0
+                    }
+                } &&
                 multiColorPaintFiles.filterNotNull().all { paint ->
                     paint.filamentSlots.all { it in availableFilaments.indices }
                 },
@@ -2007,6 +2093,8 @@ class SlicerProcessService : Service() {
                 brimPointFiles,
                 objectVolumeCounts,
                 filamentSlots,
+                volumeRoles,
+                volumeConfigFiles,
                 options,
                 maximumGcodeBytes,
                 onProgress,
@@ -2062,7 +2150,7 @@ class SlicerProcessService : Service() {
         try {
             check(runtime.loadModel(source.absolutePath)) { "Model could not be prepared" }
             check(runtime.nativeGetUnsupportedProjectSemanticCount() == 0) {
-                "Model contains paint, modifier, negative, or support data that is not importable yet"
+                "Model contains facet paint data that is not importable yet"
             }
             val records = requireNotNull(
                 runtime.nativeExportLoadedProjectVolumes(outputDirectory.absolutePath),
@@ -2411,6 +2499,8 @@ class SlicerProcessService : Service() {
         brimPointFiles: List<ValidatedBrimPoints?>,
         objectVolumeCounts: IntArray,
         filamentSlots: IntArray,
+        volumeRoles: List<ProjectVolumeRole>,
+        volumeConfigFiles: List<File?>,
         options: SliceOptions,
         maximumGcodeBytes: Int,
         onProgress: (Int) -> Unit,
@@ -2421,15 +2511,27 @@ class SlicerProcessService : Service() {
             val mapping = loadNativeObjects(runtime, models, objectVolumeCounts)
             val volumeObjectIndices = mapping.objectIndices
             val nativeVolumeIndices = mapping.volumeIndices
-            filamentSlots.forEachIndexed { volumeIndex, slot ->
+            volumeRoles.forEachIndexed { volumeIndex, role ->
                 check(
-                    runtime.nativeSetVolumeExtruder(
+                    runtime.nativeSetVolumeSemantics(
                         volumeObjectIndices[volumeIndex],
                         nativeVolumeIndices[volumeIndex],
-                        options.featureFilaments.nativeVolumeSlot(slot),
+                        role.nativeValue,
+                        volumeConfigFiles[volumeIndex]?.absolutePath.orEmpty(),
                     ),
-                ) {
-                    "Volume filament could not be applied"
+                ) { "Volume role or settings could not be applied" }
+            }
+            filamentSlots.forEachIndexed { volumeIndex, slot ->
+                if (volumeRoles[volumeIndex].acceptsFilament) {
+                    check(
+                        runtime.nativeSetVolumeExtruder(
+                            volumeObjectIndices[volumeIndex],
+                            nativeVolumeIndices[volumeIndex],
+                            options.featureFilaments.nativeVolumeSlot(slot),
+                        ),
+                    ) {
+                        "Volume filament could not be applied"
+                    }
                 }
             }
             supportPaintFiles.forEachIndexed { volumeIndex, supportPaint ->
@@ -2830,6 +2932,17 @@ class SlicerProcessService : Service() {
         return ValidatedObjectProcessOverrides(sidecar)
     }
 
+    private fun validateVolumeConfig(path: String): File {
+        require(path.length in 1..MAX_PATH_LENGTH) { "Invalid volume setting path" }
+        val sidecar = File(path).canonicalFile
+        val allowedRoots = listOf(filesDir.canonicalFile, cacheDir.canonicalFile)
+        require(allowedRoots.any(sidecar::isInside)) {
+            "Volume settings are outside private storage"
+        }
+        ProjectVolumeConfig.readSidecar(sidecar)
+        return sidecar
+    }
+
     private fun success(outcome: SliceOutcome) = Bundle().apply {
         putBoolean(SlicerProcessContract.KEY_OK, true)
         putInt(SlicerProcessContract.KEY_PID, Process.myPid())
@@ -2976,6 +3089,8 @@ private object SlicerProcessContract {
     const val KEY_NORMALIZED_MODELS = "normalizedModels"
     const val KEY_OBJECT_VOLUME_COUNTS = "objectVolumeCounts"
     const val KEY_FILAMENT_SLOTS = "filamentSlots"
+    const val KEY_VOLUME_ROLES = "volumeRoles"
+    const val KEY_VOLUME_CONFIG_PATHS = "volumeConfigPaths"
     const val KEY_MODEL_NOT_SPLITTABLE = "modelNotSplittable"
     const val KEY_MODEL_NOT_CUTTABLE = "modelNotCuttable"
     const val KEY_CUT_HEIGHT_RATIO = "cutHeightRatio"

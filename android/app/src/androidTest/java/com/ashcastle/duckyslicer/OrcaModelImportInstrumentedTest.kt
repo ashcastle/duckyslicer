@@ -148,10 +148,11 @@ class OrcaModelImportInstrumentedTest {
     }
 
     @Test
-    fun modifier3mfIsRejectedInsteadOfSilentlyBecomingSolidGeometry() = runBlocking {
+    fun negative3mfVolumePreservesItsRoleAndDoesNotBecomePrintableGeometry() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
         val archive = File(context.cacheDir, "modifier-volume.3mf")
+        var gcode: File? = null
         projectRoot.deleteRecursively()
         archive.delete()
         try {
@@ -161,19 +162,82 @@ class OrcaModelImportInstrumentedTest {
                 "${context.packageName}.debug-files",
                 archive,
             )
-            val failure = runCatching {
-                importOrcaModels(context, uri, ProjectStore(context), SliceOptions())
-            }.exceptionOrNull()
-
-            assertTrue("Unsupported 3MF volume semantics must fail import", failure != null)
-            assertTrue(
-                "The failure must identify unsupported volume semantics: ${failure?.message}",
-                failure?.message?.contains("modifier", ignoreCase = true) == true,
+            val options = SliceOptions().copy(
+                filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+                bedSizeX = 100f,
+                bedSizeY = 100f,
+                bedPolygon = rectangularBedPolygon(100f, 100f),
             )
-            val retainedModels = File(projectRoot, "models").listFiles().orEmpty()
-            assertTrue("A rejected 3MF must not install partial solids", retainedModels.isEmpty())
+            val store = ProjectStore(context)
+            val imported = importOrcaModels(context, uri, store, options).single()
+
+            assertEquals(
+                listOf(ProjectVolumeRole.MODEL_PART, ProjectVolumeRole.NEGATIVE_VOLUME),
+                imported.volumes.map(ProjectVolume::role),
+            )
+            assertEquals(listOf(0, 0), imported.volumes.map(ProjectVolume::filamentSlot))
+            assertEquals("2", imported.volumes[1].config.values["extruder"])
+            store.save(ProjectSnapshot(listOf(imported), imported.id), options)
+            val restored = store.loadProject().snapshot.selectedObject!!
+            assertEquals(ProjectVolumeRole.NEGATIVE_VOLUME, restored.volumes[1].role)
+            assertEquals(imported.volumes[1].config, restored.volumes[1].config)
+
+            val outcome = OnDeviceSlicer.slice(listOf(restored), options)
+            gcode = outcome.output
+            val commands = outcome.output.readLines().map(String::trim)
+            assertTrue("Negative-volume 3MF must slice through Orca", outcome.output.length() > 1_000L)
+            assertTrue("The printable body must use tool 0", commands.any { it == "T0" })
+            assertTrue("A negative volume must not become tool-1 geometry", commands.none { it == "T1" })
         } finally {
+            gcode?.delete()
             archive.delete()
+            projectRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun supportVolumeRolesSurvive3mfImportAndNativeSlice() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        val outputs = ArrayList<File>()
+        projectRoot.deleteRecursively()
+        try {
+            val options = SliceOptions().copy(
+                supportEnabled = true,
+                bedSizeX = 100f,
+                bedSizeY = 100f,
+                bedPolygon = rectangularBedPolygon(100f, 100f),
+            )
+            listOf(
+                "support_blocker" to ProjectVolumeRole.SUPPORT_BLOCKER,
+                "support_enforcer" to ProjectVolumeRole.SUPPORT_ENFORCER,
+            ).forEachIndexed { index, (subtype, expectedRole) ->
+                val archive = File(context.cacheDir, "support-role-$index.3mf")
+                archive.delete()
+                try {
+                    writeMultiVolume3mf(archive, accentSubtype = subtype)
+                    val uri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.debug-files",
+                        archive,
+                    )
+                    val imported = importOrcaModels(
+                        context,
+                        uri,
+                        ProjectStore(context),
+                        options,
+                    ).single()
+                    assertEquals(expectedRole, imported.volumes[1].role)
+                    assertEquals(0, imported.volumes[1].filamentSlot)
+                    val outcome = OnDeviceSlicer.slice(listOf(imported), options)
+                    outputs += outcome.output
+                    assertTrue("$subtype must reach the Orca slice boundary", outcome.layers > 0)
+                } finally {
+                    archive.delete()
+                }
+            }
+        } finally {
+            outputs.forEach(File::delete)
             projectRoot.deleteRecursively()
         }
     }
@@ -219,7 +283,15 @@ class OrcaModelImportInstrumentedTest {
         destination: File,
         accentSubtype: String = "normal_part",
     ) {
-        require(accentSubtype == "normal_part" || accentSubtype == "negative_part")
+        require(
+            accentSubtype in setOf(
+                "normal_part",
+                "negative_part",
+                "modifier_part",
+                "support_blocker",
+                "support_enforcer",
+            ),
+        )
         ZipOutputStream(destination.outputStream().buffered()).use { zip ->
             zip.writeEntry(
                 "[Content_Types].xml",

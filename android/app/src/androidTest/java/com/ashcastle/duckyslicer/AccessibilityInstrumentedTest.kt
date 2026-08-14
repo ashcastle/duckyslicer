@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.graphics.Rect
+import android.os.Bundle
 import android.os.SystemClock
 import android.os.ParcelFileDescriptor
 import android.view.accessibility.AccessibilityNodeInfo
@@ -487,15 +488,22 @@ class AccessibilityInstrumentedTest {
         val supports = context.getString(R.string.supports)
         val supportBody = context.getString(R.string.support_filament)
         val supportInterface = context.getString(R.string.support_interface_filament)
+        val supportBasePattern = context.getString(R.string.support_base_pattern)
+        val supportInterfacePattern = context.getString(R.string.support_interface_pattern)
+        val searchSettings = context.getString(R.string.search_settings)
         launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE_PROFILES).use {
             tapCenter(waitForNode(slicingProfile) { it.isClickable })
             tapCenter(waitForNode(supports) { it.isClickable })
+            replaceEditableText(searchSettings, supportBody)
 
-            val bodyPicker = scrollUntilClickable(
+            val bodyPicker = scrollUntilNode(
                 supportBody,
-                scrollAnchorLabel = supports,
+                scrollAnchorLabel = searchSettings,
                 timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
-            )
+            ) { node ->
+                node.isClickable && !node.isEditable &&
+                    !node.effectiveLabel().contains(supportBasePattern)
+            }
             assertTrue(
                 "Support body material must be a named picker, not a numeric seek bar",
                 bodyPicker.className?.toString() != SEEK_BAR_CLASS,
@@ -505,12 +513,16 @@ class AccessibilityInstrumentedTest {
                 it.isClickable && it.isCheckable && it.effectiveLabel().contains("PETG")
             }
             assertTrue(secondBodyMaterial.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            replaceEditableText(searchSettings, supportInterface)
 
-            val interfacePicker = scrollUntilClickable(
+            val interfacePicker = scrollUntilNode(
                 supportInterface,
-                scrollAnchorLabel = supportBody,
+                scrollAnchorLabel = searchSettings,
                 timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
-            )
+            ) { node ->
+                node.isClickable && !node.isEditable &&
+                    !node.effectiveLabel().contains(supportInterfacePattern)
+            }
             assertTrue(
                 "Support interface material must be independently selectable",
                 interfacePicker.className?.toString() != SEEK_BAR_CLASS,
@@ -521,11 +533,14 @@ class AccessibilityInstrumentedTest {
             }
             assertTrue(secondInterfaceMaterial.performAction(AccessibilityNodeInfo.ACTION_CLICK))
 
-            val selectedInterface = scrollUntilClickable(
+            val selectedInterface = scrollUntilNode(
                 supportInterface,
-                scrollAnchorLabel = supportBody,
+                scrollAnchorLabel = searchSettings,
                 timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
-            )
+            ) { node ->
+                node.isClickable && !node.isEditable &&
+                    !node.effectiveLabel().contains(supportInterfacePattern)
+            }
             assertTrue(
                 "The selected support interface must expose its tool and filament name",
                 selectedInterface.effectiveLabel().contains("T2") &&
@@ -882,6 +897,25 @@ class AccessibilityInstrumentedTest {
             SystemClock.sleep(NODE_POLL_MILLIS)
         } while (SystemClock.elapsedRealtime() < deadline)
         throw AssertionError("Timed out waiting for accessibility node: $label")
+    }
+
+    private fun replaceEditableText(label: String, value: String) {
+        val field = waitForNode(label) { node ->
+            node.isEditable && node.actionList.any { action ->
+                action.id == AccessibilityNodeInfo.ACTION_SET_TEXT
+            }
+        }
+        val arguments = Bundle().apply {
+            putCharSequence(
+                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                value,
+            )
+        }
+        assertTrue("The settings search field must accept text", field.performAction(
+            AccessibilityNodeInfo.ACTION_SET_TEXT,
+            arguments,
+        ))
+        waitForNode(value) { node -> node.isEditable && node.text?.toString() == value }
     }
 
     private fun scrollUntilNode(

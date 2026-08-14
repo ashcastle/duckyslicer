@@ -1344,7 +1344,10 @@ private fun DuckySlicerScreen(
             val current = projectTransferModel.state.value.history
             val projectObject = current.current.objects.firstOrNull { it.id == objectId }
             val volume = projectObject?.volumes?.firstOrNull { it.id == volumeId }
-            if (volume != null && facetIndex in 0 until volume.model.triangles) {
+            if (
+                volume?.role?.acceptsFacetPaint == true &&
+                facetIndex in 0 until volume.model.triangles
+            ) {
                 val nextPaint = volume.supportPaint.paint(facetIndex, state)
                 val nextHistory = current.updateSupportPaint(
                     objectId,
@@ -1372,7 +1375,10 @@ private fun DuckySlicerScreen(
             val current = projectTransferModel.state.value.history
             val projectObject = current.current.objects.firstOrNull { it.id == objectId }
             val volume = projectObject?.volumes?.firstOrNull { it.id == volumeId }
-            if (volume != null && facetIndex in 0 until volume.model.triangles) {
+            if (
+                volume?.role?.acceptsFacetPaint == true &&
+                facetIndex in 0 until volume.model.triangles
+            ) {
                 val nextPaint = volume.seamPaint.paint(facetIndex, state)
                 val nextHistory = current.updateSeamPaint(
                     objectId,
@@ -1413,6 +1419,7 @@ private fun DuckySlicerScreen(
             val availableSlots = session.sliceOptions.resolvedFilamentSlots().indices
             if (
                 volume != null &&
+                volume.role.acceptsFacetPaint &&
                 facetIndex in 0 until volume.model.triangles &&
                 (slot == null || slot in availableSlots)
             ) {

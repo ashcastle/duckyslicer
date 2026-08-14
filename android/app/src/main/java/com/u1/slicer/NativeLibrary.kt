@@ -31,6 +31,12 @@ class NativeLibrary(
     external fun nativeCutObject(objectIndex: Int, heightRatio: Float, placeOnCut: Boolean): IntArray?
     external fun nativeSimplifyObject(objectIndex: Int, targetTriangles: Int): Int
     external fun nativeAddModelPartVolume(objectIndex: Int, path: String, name: String): Int
+    external fun nativeSetVolumeSemantics(
+        objectIndex: Int,
+        volumeIndex: Int,
+        volumeType: Int,
+        configPath: String,
+    ): Boolean
     external fun nativeCreatePrimitive(primitiveType: Int, sizeMm: Float, outputPath: String): Boolean
     external fun nativeIsObjectSplittable(objectIndex: Int): Boolean
     external fun nativeSetVolumeExtruder(objectIndex: Int, volumeIndex: Int, slot: Int): Boolean

@@ -381,7 +381,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val orientation = SlicerProcessClient.autoOrient(
-                    target.volumes.map { volume -> File(volume.model.localPath) },
+                    target.modelPartVolumes.map { volume -> File(volume.model.localPath) },
                     baseline.operation.requestId,
                 )
                 val nextHistory = baseline.history.updateTransform(
@@ -481,7 +481,10 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     fun splitSelectedVolume(sourceVolumeId: String): Boolean {
         val current = mutableState.value
         val target = current.history.current.selectedObject ?: return false
-        if (target.volumes.none { it.id == sourceVolumeId }) return false
+        if (target.volumes.none {
+                it.id == sourceVolumeId && it.role == ProjectVolumeRole.MODEL_PART
+            }
+        ) return false
         val otherVolumeCount = current.history.current.allObjects.sumOf { it.volumes.size } -
             target.volumes.size
         val maximumResultingVolumes = minOf(

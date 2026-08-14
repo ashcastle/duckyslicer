@@ -106,8 +106,10 @@ internal suspend fun importOrcaModels(
                         ImportedVolumeGeometry(
                             model = model,
                             filamentSlot = volume.filamentSlot.takeIf {
-                                it in 0 until availableFilamentSlots
+                                volume.role.acceptsFilament && it in 0 until availableFilamentSlots
                             } ?: 0,
+                            role = volume.role,
+                            config = volume.config,
                         )
                     }
                     ImportedGeometry(
@@ -127,6 +129,8 @@ internal suspend fun importOrcaModels(
                                 id = legacyProjectVolumeId(objectId, volumeIndex),
                                 model = volume.model,
                                 filamentSlot = volume.filamentSlot,
+                                role = volume.role,
+                                config = volume.config,
                             )
                         },
                         transform = transforms[index],
@@ -153,6 +157,8 @@ private data class ModelDocumentMetadata(
 private data class ImportedVolumeGeometry(
     val model: ModelInfo,
     val filamentSlot: Int,
+    val role: ProjectVolumeRole = ProjectVolumeRole.MODEL_PART,
+    val config: ProjectVolumeConfig = ProjectVolumeConfig(),
 )
 
 private data class ImportedGeometry(
@@ -160,12 +166,15 @@ private data class ImportedGeometry(
     val originalCenterX: Float,
     val originalCenterY: Float,
 ) {
-    val minX: Double get() = volumes.minOf { it.model.minMm[0] }
-    val minY: Double get() = volumes.minOf { it.model.minMm[1] }
-    val minZ: Double get() = volumes.minOf { it.model.minMm[2] }
-    val maxX: Double get() = volumes.maxOf { it.model.maxMm[0] }
-    val maxY: Double get() = volumes.maxOf { it.model.maxMm[1] }
-    val maxZ: Double get() = volumes.maxOf { it.model.maxMm[2] }
+    private val printableVolumes: List<ImportedVolumeGeometry>
+        get() = volumes.filter { it.role == ProjectVolumeRole.MODEL_PART }
+
+    val minX: Double get() = printableVolumes.minOf { it.model.minMm[0] }
+    val minY: Double get() = printableVolumes.minOf { it.model.minMm[1] }
+    val minZ: Double get() = printableVolumes.minOf { it.model.minMm[2] }
+    val maxX: Double get() = printableVolumes.maxOf { it.model.maxMm[0] }
+    val maxY: Double get() = printableVolumes.maxOf { it.model.maxMm[1] }
+    val maxZ: Double get() = printableVolumes.maxOf { it.model.maxMm[2] }
 }
 
 private fun queryModelMetadata(

@@ -122,6 +122,39 @@ class PrepareModelPickingTest {
     }
 
     @Test
+    fun layOnFacePickingIgnoresAuxiliaryVolumesInFrontOfTheModel() {
+        val base = triangleObject("semantic-face")
+        val modelPart = base.singleVolume.copy(id = "model-part")
+        val auxiliaryModel = modelPart.model.copy(
+            fileName = "negative.stl",
+            minMm = listOf(0.0, 0.0, 1.0),
+            maxMm = listOf(2.0, 2.0, 1.0),
+            previewTriangles = modelPart.model.previewTriangles.copyOf().also { vertices ->
+                for (index in 2 until vertices.size step 3) vertices[index] = 1f
+            },
+        )
+        val negative = ProjectVolume(
+            id = "negative",
+            model = auxiliaryModel,
+            role = ProjectVolumeRole.NEGATIVE_VOLUME,
+        )
+        val projectObject = base.copy(volumes = listOf(modelPart, negative))
+        val placement = placements(projectObject).getValue(projectObject.id)
+
+        val hit = findLayOnFaceFacetAtScreen(
+            projectObject = projectObject,
+            placement = placement,
+            viewport = viewport,
+            screenX = 498f,
+            screenY = 382f,
+            touchRadiusPx = 0f,
+            pickingIndices = buildPreparePickingIndices(listOf(projectObject)),
+        )
+
+        assertEquals(modelPart.id, hit?.volumeId)
+    }
+
+    @Test
     fun spatialIndexCullsArbitraryFacetOrderWithoutChangingExactHits() {
         val orderedVertices = FloatArray(10 * 6 * 2 * 9)
         var output = 0

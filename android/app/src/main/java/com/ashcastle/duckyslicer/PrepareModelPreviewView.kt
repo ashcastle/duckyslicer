@@ -59,6 +59,7 @@ internal fun DepthTestedPrepareModelScene(
                 objectId = projectObject.id,
                 volumeId = volume.id,
                 filamentSlot = volume.filamentSlot,
+                role = volume.role,
                 model = volume.model,
             )
         }
@@ -147,6 +148,7 @@ private data class PrepareModelTopologyKey(
     val objectId: String,
     val volumeId: String,
     val filamentSlot: Int,
+    val role: ProjectVolumeRole,
     val model: ModelInfo,
 )
 
@@ -176,6 +178,7 @@ internal data class PrepareModelMeshData(
     val objectId: String,
     val volumeId: String,
     val filamentSlot: Int,
+    val role: ProjectVolumeRole,
     val sourceCenter: FloatArray,
     val vertices: FloatArray,
     val detailVertices: FloatArray = vertices,
@@ -191,6 +194,9 @@ internal data class PrepareModelSceneGeometry(
     val bedOutline: FloatArray,
     val meshes: List<PrepareModelMeshData>,
 )
+
+private fun prepareVolumeColor(mesh: PrepareModelMeshData) =
+    projectVolumeColor(mesh.role, mesh.filamentSlot)
 
 internal object PrepareModelSceneBuilder {
     fun build(
@@ -244,6 +250,7 @@ internal object PrepareModelSceneBuilder {
                     objectId = projectObject.id,
                     volumeId = volume.id,
                     filamentSlot = volume.filamentSlot,
+                    role = volume.role,
                     sourceCenter = center,
                     // The imported preview already is a packed triangle-position stream.
                     // Keep it by reference instead of rebuilding and doubling it with three
@@ -1020,10 +1027,14 @@ internal class PrepareModelRenderer(
         setObjectMode(true)
         val useDetail = !frame.interactionActive && frame.overlays.isEmpty()
         lastMeshVertexCount = 0
-        frame.geometry.meshes.forEachIndexed { index, mesh ->
-            val objectState = frame.objects[mesh.objectId] ?: return@forEachIndexed
+        val drawOrder = frame.geometry.meshes.indices.sortedBy { index ->
+            frame.geometry.meshes[index].role != ProjectVolumeRole.MODEL_PART
+        }
+        drawOrder.forEach { index ->
+            val mesh = frame.geometry.meshes[index]
+            val objectState = frame.objects[mesh.objectId] ?: return@forEach
             applyObject(objectState, mesh.sourceCenter, frame.geometry)
-            val color = filamentSlotColor(mesh.filamentSlot)
+            val color = prepareVolumeColor(mesh)
             GLES30.glUniform1i(
                 selectedLocation,
                 if (mesh.objectId == frame.selectedObjectId) 1 else 0,
@@ -1031,12 +1042,23 @@ internal class PrepareModelRenderer(
             val vertices = if (useDetail) mesh.detailVertices else mesh.vertices
             val buffer = if (useDetail) detailMeshBuffers[index] else meshBuffers[index]
             lastMeshVertexCount += vertices.size / PREPARE_VERTEX_FLOATS
+            val auxiliary = mesh.role != ProjectVolumeRole.MODEL_PART
+            if (auxiliary) {
+                GLES30.glEnable(GLES30.GL_BLEND)
+                GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+                GLES30.glDepthMask(false)
+            }
             drawBuffer(
                 buffer,
                 vertices.size / PREPARE_VERTEX_FLOATS,
                 GLES30.GL_TRIANGLES,
                 floatArrayOf(color.red, color.green, color.blue),
+                if (auxiliary) 0.48f else 1f,
             )
+            if (auxiliary) {
+                GLES30.glDepthMask(true)
+                GLES30.glDisable(GLES30.GL_BLEND)
+            }
         }
     }
 
@@ -1121,10 +1143,16 @@ internal class PrepareModelRenderer(
         }
     }
 
-    private fun drawBuffer(id: Int, vertexCount: Int, mode: Int, color: FloatArray) {
+    private fun drawBuffer(
+        id: Int,
+        vertexCount: Int,
+        mode: Int,
+        color: FloatArray,
+        opacity: Float = 1f,
+    ) {
         if (id == 0 || vertexCount == 0) return
         GLES30.glUniform3f(baseColorLocation, color[0], color[1], color[2])
-        GLES30.glUniform1f(opacityLocation, 1f)
+        GLES30.glUniform1f(opacityLocation, opacity)
         bindVertexBuffer(id)
         GLES30.glDrawArrays(mode, 0, vertexCount)
     }

@@ -121,7 +121,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(28, persisted.getInt("schemaVersion"))
+        assertEquals(29, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),
@@ -144,7 +144,7 @@ class ProjectStoreTest {
         assertEquals(
             setOf(
                 "id", "displayName", "modelFile", "supportPaint", "seamPaint",
-                "multiColorPaint", "filamentSlot",
+                "multiColorPaint", "filamentSlot", "role", "config",
             ),
             persistedVolume.keys().asSequence().toSet(),
         )

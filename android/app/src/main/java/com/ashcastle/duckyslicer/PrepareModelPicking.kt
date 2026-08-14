@@ -386,6 +386,7 @@ internal fun findPrepareFacetAtScreen(
     screenY: Float,
     touchRadiusPx: Float,
     selectableTriangles: Map<String, BooleanArray>? = null,
+    selectableVolumeIds: Set<String>? = null,
     pickingIndices: Map<PreparePickingIndexKey, PrepareVolumePickingIndex> = emptyMap(),
 ): ModelScreenTriangle? {
     if (
@@ -414,6 +415,7 @@ internal fun findPrepareFacetAtScreen(
     var hasInside = false
 
     projectObject.volumes.forEach { volume ->
+        if (selectableVolumeIds != null && volume.id !in selectableVolumeIds) return@forEach
         val vertices = volume.model.previewTriangles
         val triangleCount = vertices.size / 9
         val candidates = pickingIndices[
@@ -506,6 +508,7 @@ internal fun findLayOnFaceFacetAtScreen(
     screenX = screenX,
     screenY = screenY,
     touchRadiusPx = touchRadiusPx,
+    selectableVolumeIds = projectObject.modelPartVolumes.mapTo(HashSet()) { it.id },
     pickingIndices = pickingIndices,
 )
 

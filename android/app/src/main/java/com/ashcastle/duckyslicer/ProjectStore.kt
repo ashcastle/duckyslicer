@@ -165,6 +165,8 @@ internal class ProjectStore(
                                         seamPaint = volume.seamPaint,
                                         multiColorPaint = volume.multiColorPaint,
                                         filamentSlot = volume.filamentSlot,
+                                        role = volume.role,
+                                        config = volume.config,
                                     )
                                 },
                                 transform = archived.transform,
@@ -420,9 +422,9 @@ internal class ProjectStore(
             require(values.length() in 1..SUPPORTED_PROJECT_VOLUMES_PER_OBJECT) {
                 "Project volume count is unsupported"
             }
-            List(values.length()) { index -> restoreVolume(values.getJSONObject(index)) }
+            List(values.length()) { index -> restoreVolume(values.getJSONObject(index), schemaVersion) }
         } else {
-            listOf(restoreLegacyVolume(id, value))
+            listOf(restoreLegacyVolume(id, value, schemaVersion))
         }
         return ProjectObject(
             id = id,
@@ -434,10 +436,17 @@ internal class ProjectStore(
         )
     }
 
-    private fun restoreLegacyVolume(objectId: String, value: JSONObject): ProjectVolume =
-        restoreVolume(value, legacyProjectVolumeId(objectId))
+    private fun restoreLegacyVolume(
+        objectId: String,
+        value: JSONObject,
+        schemaVersion: Int,
+    ): ProjectVolume = restoreVolume(value, schemaVersion, legacyProjectVolumeId(objectId))
 
-    private fun restoreVolume(value: JSONObject, fallbackId: String? = null): ProjectVolume {
+    private fun restoreVolume(
+        value: JSONObject,
+        schemaVersion: Int,
+        fallbackId: String? = null,
+    ): ProjectVolume {
         val volumeId = fallbackId ?: value.getString("id").takeIf {
             it.length in 1..MAX_ID_LENGTH
         } ?: error("Invalid volume id")
@@ -464,6 +473,16 @@ internal class ProjectStore(
             ?: MultiColorPaint()
         val filamentSlot = value.optInt("filamentSlot", 0)
         require(filamentSlot in 0 until MAX_FILAMENT_SLOTS) { "Filament slot is invalid" }
+        val role = if (schemaVersion >= 29) {
+            ProjectVolumeRole.valueOf(value.getString("role"))
+        } else {
+            ProjectVolumeRole.MODEL_PART
+        }
+        val config = if (schemaVersion >= 29) {
+            ProjectVolumeConfig.fromJson(value.getJSONObject("config"))
+        } else {
+            ProjectVolumeConfig()
+        }
         return ProjectVolume(
             id = volumeId,
             model = model,
@@ -471,6 +490,8 @@ internal class ProjectStore(
             seamPaint = seamPaint,
             multiColorPaint = multiColorPaint,
             filamentSlot = filamentSlot,
+            role = role,
+            config = config,
         )
     }
 
@@ -575,7 +596,11 @@ internal class ProjectStore(
                 require(volumeValues.length() in 1..SUPPORTED_PROJECT_VOLUMES_PER_OBJECT)
                 val volumeIds = HashSet<String>()
                 repeat(volumeValues.length()) { volumeIndex ->
-                    validateStoredVolume(volumeValues.getJSONObject(volumeIndex), volumeIds)
+                    validateStoredVolume(
+                        volumeValues.getJSONObject(volumeIndex),
+                        volumeIds,
+                        schemaVersion,
+                    )
                 }
             } else {
                 validateLegacyStoredVolume(value, schemaVersion)
@@ -604,7 +629,11 @@ internal class ProjectStore(
         require(value.optInt("filamentSlot", 0) in 0 until MAX_FILAMENT_SLOTS)
     }
 
-    private fun validateStoredVolume(value: JSONObject, ids: MutableSet<String>) {
+    private fun validateStoredVolume(
+        value: JSONObject,
+        ids: MutableSet<String>,
+        schemaVersion: Int,
+    ) {
         val id = value.getString("id")
         require(id.length in 1..MAX_ID_LENGTH && ids.add(id))
         validateStoredModelReference(value)
@@ -612,6 +641,16 @@ internal class ProjectStore(
         require(value.optJSONArray("seamPaint")?.isValidSeamPaintArray() == true)
         require(value.optJSONArray("multiColorPaint")?.isValidMultiColorPaintArray() == true)
         require(value.optInt("filamentSlot", -1) in 0 until MAX_FILAMENT_SLOTS)
+        if (schemaVersion >= 29) {
+            val role = ProjectVolumeRole.valueOf(value.getString("role"))
+            ProjectVolumeConfig.fromJson(value.getJSONObject("config"))
+            if (!role.acceptsFacetPaint) {
+                require(value.getJSONArray("supportPaint").length() == 0)
+                require(value.getJSONArray("seamPaint").length() == 0)
+                require(value.getJSONArray("multiColorPaint").length() == 0)
+            }
+            if (!role.acceptsFilament) require(value.getInt("filamentSlot") == 0)
+        }
     }
 
     private fun validateStoredModelReference(value: JSONObject) {
@@ -646,6 +685,8 @@ internal class ProjectStore(
             .put("supportPaint", supportPaint.toStoredJson())
             .put("seamPaint", seamPaint.toStoredJson())
             .put("multiColorPaint", multiColorPaint.toStoredJson())
+            .put("role", role.name)
+            .put("config", config.toJson())
             .put(
                 "filamentSlot",
                 filamentSlot.takeIf { it in 0 until MAX_FILAMENT_SLOTS }
@@ -904,7 +945,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 28
+        const val SCHEMA_VERSION = 29
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"

@@ -22,8 +22,10 @@ def valid_sources() -> dict[str, str]:
                 "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
                 'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
                 "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-                "PROJECT_ARCHIVE_SCHEMA_VERSION = 26",
-                "ArchivedProjectPlate ArchivedProjectVolume",
+                "PROJECT_ARCHIVE_SCHEMA_VERSION = 27",
+                'ArchivedProjectPlate ArchivedProjectVolume put("role", volume.role.name) '
+                'put("config", volume.config.toJson()) ProjectVolumeRole.valueOf '
+                "ProjectVolumeConfig.fromJson",
                 'getJSONArray("plates") getJSONArray("volumes") legacyProjectVolumeId',
                 "selectedPlateId plateOptions: Map<String, SliceOptions>",
                 'Regex("models/[0-9]{3}\\\\.stl")',
@@ -48,6 +50,12 @@ def valid_sources() -> dict[str, str]:
                 "catch (failure: DocumentTransferCancelledException)",
             )
         ),
+        "ProjectVolumeSemantics.kt": (
+            "enum class ProjectVolumeRole NEGATIVE_VOLUME(1) PARAMETER_MODIFIER(2) "
+            "SUPPORT_BLOCKER(3) SUPPORT_ENFORCER(4) MAX_ENTRIES = 128 "
+            "MAX_VALUE_BYTES = 4 * 1_024 MAX_SIDECAR_BYTES = 64 * 1_024 "
+            "fun readSidecar fun fromJson"
+        ),
         "ProjectStore.kt": " ".join(
             (
                 'File(projectRoot, ".archive-${UUID.randomUUID()}")',
@@ -64,6 +72,7 @@ def valid_sources() -> dict[str, str]:
                 "checkCancellation: () -> Unit = {}",
                 "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
                 "beginCommit: () -> Unit = {} beginCommit()",
+                'SCHEMA_VERSION = 29 put("role", role.name) put("config", config.toJson())',
             )
         ),
         "ProjectOpenRequest.kt": " ".join(
@@ -166,6 +175,12 @@ def valid_sources() -> dict[str, str]:
             "canceledArchiveCopyRemovesStagingAndPreservesTheCurrentProject "
             "cancellationWinningTheCommitGateRemovesInstalledModelsAndPreservesCurrentProject"
         ),
+        "ProjectVolumeSemanticsTest.kt": (
+            "nativeRoleValuesAreStableAndComplete "
+            "volumeConfigSidecarAndJsonRoundTripExactly "
+            "auxiliaryVolumesRejectPrintableOnlyState "
+            "projectAndArchiveObjectsRequirePrintableModelParts"
+        ),
         "ProjectTransferStateTest.kt": (
             "retainedSessionMutationKeepsHistoryAndOptionsTogether "
             "staleOrBusySessionMutationIsRejected withUpdatedSession "
@@ -264,8 +279,9 @@ def valid_sources() -> dict[str, str]:
         ),
         "SUPPORT.md": "`.duckyproject` model geometry include saved printer addresses, access keys, or G-code",
         "PROJECT_FORMAT.md": (
-            "manifest.json models/000.stl schema version `16` "
-            "Schema 1 through 11 projects remain readable up to 16 plates "
+            "manifest.json models/000.stl schema version `27` "
+            "Schema 1 through 27 projects remain readable up to 16 plates "
+            "parameter modifier support blocker support enforcer "
             "plate-local objects and settings stable, bounded `volumes` list "
             "up to 64 volumes per object independent X, Y, and Z scale "
             "multi-color painting manual Brim-ear points variable layer-height ranges "

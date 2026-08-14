@@ -1,6 +1,7 @@
 #include <jni.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
@@ -21,6 +22,10 @@ namespace {
 
 constexpr std::size_t MAX_EXPORTED_OBJECTS = 256;
 constexpr std::size_t MAX_EXPORTED_VOLUMES_PER_OBJECT = 64;
+constexpr std::size_t MAX_VOLUME_CONFIG_ENTRIES = 128;
+constexpr std::size_t MAX_VOLUME_CONFIG_KEY_BYTES = 128;
+constexpr std::size_t MAX_VOLUME_CONFIG_VALUE_BYTES = 4 * 1024;
+constexpr std::uint64_t MAX_VOLUME_CONFIG_BYTES = 64 * 1024;
 constexpr int MAX_FILAMENT_SLOTS = 16;
 constexpr std::uint64_t MAX_EXPORTED_BYTES = 512ULL * 1024ULL * 1024ULL;
 constexpr std::uint64_t BINARY_STL_HEADER_BYTES = 84;
@@ -41,7 +46,87 @@ struct ProjectExportRecord {
     double center_y;
     int filament_slot;
     std::size_t object_ordinal;
+    int volume_type;
+    std::string config_path;
 };
+
+bool valid_config_key(const std::string& key)
+{
+    if (key.empty() || key.size() > MAX_VOLUME_CONFIG_KEY_BYTES ||
+        key.front() < 'a' || key.front() > 'z') {
+        return false;
+    }
+    return std::all_of(key.begin() + 1, key.end(), [](char value) {
+        return (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9') ||
+            value == '_';
+    });
+}
+
+void write_u32_be(std::ofstream& output, std::uint32_t value)
+{
+    const std::array<unsigned char, 4> encoded{
+        static_cast<unsigned char>((value >> 24U) & 0xFFU),
+        static_cast<unsigned char>((value >> 16U) & 0xFFU),
+        static_cast<unsigned char>((value >> 8U) & 0xFFU),
+        static_cast<unsigned char>(value & 0xFFU),
+    };
+    output.write(reinterpret_cast<const char*>(encoded.data()), encoded.size());
+}
+
+bool append_volume_config(
+    const std::string& directory,
+    std::size_t file_index,
+    const Slic3r::ModelConfigObject& config,
+    std::string& path,
+    std::vector<std::string>& outputs)
+{
+    const std::vector<std::string> keys = config.keys();
+    if (keys.empty()) {
+        path.clear();
+        return true;
+    }
+    if (keys.size() > MAX_VOLUME_CONFIG_ENTRIES) return false;
+    std::vector<std::pair<std::string, std::string>> values;
+    values.reserve(keys.size());
+    std::uint64_t encoded_bytes = 8;
+    for (const std::string& key : keys) {
+        const std::string value = config.opt_serialize(key);
+        if (!valid_config_key(key) || value.size() > MAX_VOLUME_CONFIG_VALUE_BYTES ||
+            value.find('\0') != std::string::npos) {
+            return false;
+        }
+        encoded_bytes += 8 + key.size() + value.size();
+        if (encoded_bytes > MAX_VOLUME_CONFIG_BYTES) return false;
+        values.emplace_back(key, value);
+    }
+    std::sort(values.begin(), values.end());
+    char file_name[56];
+    std::snprintf(
+        file_name,
+        sizeof(file_name),
+        "project-volume-config-%03zu.bin",
+        file_index);
+    path = directory + "/" + file_name;
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    if (!output) return false;
+    output.write("DVC1", 4);
+    write_u32_be(output, static_cast<std::uint32_t>(values.size()));
+    for (const auto& [key, value] : values) {
+        write_u32_be(output, static_cast<std::uint32_t>(key.size()));
+        write_u32_be(output, static_cast<std::uint32_t>(value.size()));
+        output.write(key.data(), static_cast<std::streamsize>(key.size()));
+        output.write(value.data(), static_cast<std::streamsize>(value.size()));
+    }
+    output.close();
+    std::ifstream written(path, std::ios::binary | std::ios::ate);
+    if (!written || static_cast<std::uint64_t>(written.tellg()) != encoded_bytes) {
+        std::remove(path.c_str());
+        path.clear();
+        return false;
+    }
+    outputs.push_back(path);
+    return true;
+}
 
 std::string safe_name(std::string name, std::size_t fallback_index)
 {
@@ -157,7 +242,8 @@ jobjectArray encode_project_records(
         const std::string encoded = record.path + "\t" + record.object_name + "\t" +
             record.volume_name + "\t" + std::to_string(record.center_x) + "\t" +
             std::to_string(record.center_y) + "\t" + std::to_string(record.filament_slot) +
-            "\t" + std::to_string(record.object_ordinal);
+            "\t" + std::to_string(record.object_ordinal) + "\t" +
+            std::to_string(record.volume_type) + "\t" + record.config_path;
         jstring value = env->NewStringUTF(encoded.c_str());
         if (value == nullptr) {
             remove_outputs(outputs);
@@ -271,14 +357,20 @@ Java_com_u1_slicer_NativeLibrary_nativeExportLoadedProjectVolumes(
                 return volume != nullptr && volume->is_model_part();
             });
         if (model_part_count == 0) continue;
-        if (model_part_count > MAX_EXPORTED_VOLUMES_PER_OBJECT) {
+        const std::size_t volume_count = std::count_if(
+            object->volumes.begin(),
+            object->volumes.end(),
+            [](const Slic3r::ModelVolume* volume) {
+                return volume != nullptr && !volume->mesh().empty();
+            });
+        if (volume_count > MAX_EXPORTED_VOLUMES_PER_OBJECT) {
             remove_outputs(outputs);
             return nullptr;
         }
         for (std::size_t instance_index = 0; instance_index < object->instances.size(); ++instance_index) {
             const Slic3r::ModelInstance* instance = object->instances[instance_index];
             if (instance == nullptr || object_ordinal >= MAX_EXPORTED_OBJECTS ||
-                project_records.size() > MAX_EXPORTED_OBJECTS - model_part_count) {
+                project_records.size() > MAX_EXPORTED_OBJECTS - volume_count) {
                 remove_outputs(outputs);
                 return nullptr;
             }
@@ -290,10 +382,10 @@ Java_com_u1_slicer_NativeLibrary_nativeExportLoadedProjectVolumes(
             if (object->instances.size() > 1) {
                 object_name += " " + std::to_string(instance_index + 1);
             }
-            std::size_t model_part_ordinal = 0;
+            std::size_t volume_ordinal = 0;
             for (std::size_t volume_index = 0; volume_index < object->volumes.size(); ++volume_index) {
                 const Slic3r::ModelVolume* volume = object->volumes[volume_index];
-                if (volume == nullptr || !volume->is_model_part()) continue;
+                if (volume == nullptr || volume->mesh().empty()) continue;
                 const std::size_t triangles = volume->mesh().facets_count();
                 if (triangles > (MAX_EXPORTED_BYTES - BINARY_STL_HEADER_BYTES) /
                         BINARY_STL_TRIANGLE_BYTES) {
@@ -304,38 +396,52 @@ Java_com_u1_slicer_NativeLibrary_nativeExportLoadedProjectVolumes(
                     instance_transform * volume->get_matrix();
                 Slic3r::TriangleMesh exported = volume->mesh();
                 exported.transform(world_transform, true);
-                object_bounds.merge(exported.bounding_box());
+                if (volume->is_model_part()) object_bounds.merge(exported.bounding_box());
                 if (!append_export(
                         directory,
                         "project-volume",
                         project_records.size(),
                         std::move(exported),
                         triangles,
-                        safe_name(volume->name, model_part_ordinal),
+                        safe_name(volume->name, volume_ordinal),
                         total_bytes,
                         flat_records,
                         outputs)) {
                     remove_outputs(outputs);
                     return nullptr;
                 }
-                int extruder = volume->config.has("extruder") ? volume->config.extruder() :
-                    (object->config.has("extruder") ? object->config.extruder() : 1);
+                const bool accepts_filament = volume->is_model_part() || volume->is_modifier();
+                int extruder = accepts_filament ?
+                    (volume->config.has("extruder") ? volume->config.extruder() :
+                        (object->config.has("extruder") ? object->config.extruder() : 1)) : 1;
                 if (extruder <= 0) extruder = 1;
                 if (extruder > MAX_FILAMENT_SLOTS) {
                     remove_outputs(outputs);
                     return nullptr;
                 }
                 const ExportRecord& flat = flat_records.back();
+                std::string config_path;
+                if (!append_volume_config(
+                        directory,
+                        project_records.size(),
+                        volume->config,
+                        config_path,
+                        outputs)) {
+                    remove_outputs(outputs);
+                    return nullptr;
+                }
                 project_records.push_back({
                     flat.path,
                     object_name,
                     flat.name,
                     0.0,
                     0.0,
-                    extruder - 1,
+                    accepts_filament ? extruder - 1 : 0,
                     object_ordinal,
+                    static_cast<int>(volume->type()),
+                    std::move(config_path),
                 });
-                ++model_part_ordinal;
+                ++volume_ordinal;
             }
             if (!object_bounds.defined || project_records.size() == record_begin) {
                 remove_outputs(outputs);
@@ -364,7 +470,6 @@ Java_com_u1_slicer_NativeLibrary_nativeGetUnsupportedProjectSemanticCount(
         if (object == nullptr) continue;
         for (const Slic3r::ModelVolume* volume : object->volumes) {
             if (volume != nullptr && (
-                    !volume->is_model_part() ||
                     volume->is_fdm_support_painted() ||
                     volume->is_seam_painted() ||
                     volume->is_mm_painted() ||

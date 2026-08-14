@@ -311,7 +311,7 @@ internal fun ProjectObject.defaultManualBrimPoint(
     val minimumRotatedZ = transform.minimumRotatedZ(this)
     var bestLocal: FloatArray? = null
     var bestWorld: FloatArray? = null
-    volumes.forEach { volume ->
+    modelPartVolumes.forEach { volume ->
         val vertices = volume.model.previewTriangles
         var index = 0
         while (index + 2 < vertices.size) {
@@ -380,10 +380,10 @@ internal fun ProjectObject.placedModelFootprint(
 ): PlacedModelFootprint {
     val geometry = geometry()
     val minimumRotatedZ = transform.minimumRotatedZ(this)
-    val triangleCount = volumes.sumOf { it.model.previewTriangles.size / 9 }
+    val triangleCount = modelPartVolumes.sumOf { it.model.previewTriangles.size / 9 }
     val footprint = FloatArray(triangleCount * 6)
     var output = 0
-    volumes.forEach { volume ->
+    modelPartVolumes.forEach { volume ->
         val triangles = volume.model.previewTriangles
         var index = 0
         while (index + 8 < triangles.size) {
@@ -498,14 +498,17 @@ internal data class ProjectObjectGeometry(
         )
 }
 
-internal fun ProjectObject.geometry(): ProjectObjectGeometry = ProjectObjectGeometry(
-    minX = volumes.minOf { it.model.minMm[0] }.toFloat(),
-    minY = volumes.minOf { it.model.minMm[1] }.toFloat(),
-    minZ = volumes.minOf { it.model.minMm[2] }.toFloat(),
-    maxX = volumes.maxOf { it.model.maxMm[0] }.toFloat(),
-    maxY = volumes.maxOf { it.model.maxMm[1] }.toFloat(),
-    maxZ = volumes.maxOf { it.model.maxMm[2] }.toFloat(),
-)
+internal fun ProjectObject.geometry(): ProjectObjectGeometry {
+    val printable = modelPartVolumes
+    return ProjectObjectGeometry(
+        minX = printable.minOf { it.model.minMm[0] }.toFloat(),
+        minY = printable.minOf { it.model.minMm[1] }.toFloat(),
+        minZ = printable.minOf { it.model.minMm[2] }.toFloat(),
+        maxX = printable.maxOf { it.model.maxMm[0] }.toFloat(),
+        maxY = printable.maxOf { it.model.maxMm[1] }.toFloat(),
+        maxZ = printable.maxOf { it.model.maxMm[2] }.toFloat(),
+    )
+}
 
 internal fun ModelTransform.minimumRotatedZ(projectObject: ProjectObject): Float {
     val geometry = projectObject.geometry()
@@ -515,7 +518,7 @@ internal fun ModelTransform.minimumRotatedZ(projectObject: ProjectObject): Float
     minimumZWithoutTilt(geometry, centerZ)?.let { return it }
     val calculator = MinimumRotatedZCalculator(this)
     var minimum = Float.POSITIVE_INFINITY
-    projectObject.volumes.forEach { volume ->
+    projectObject.modelPartVolumes.forEach { volume ->
         minimum = minOf(
             minimum,
             calculator.minimum(volume.model.placementVertices, centerX, centerY, centerZ),

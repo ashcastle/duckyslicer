@@ -12,9 +12,18 @@ data class ProjectVolume(
     val seamPaint: SeamPaint = SeamPaint(),
     val multiColorPaint: MultiColorPaint = MultiColorPaint(),
     val filamentSlot: Int = 0,
+    val role: ProjectVolumeRole = ProjectVolumeRole.MODEL_PART,
+    val config: ProjectVolumeConfig = ProjectVolumeConfig(),
 ) {
     init {
         require(id.length in 1..ProjectStore.MAX_ID_LENGTH) { "Invalid project volume id" }
+        require(role.acceptsFacetPaint || (
+            supportPaint.facets.isEmpty() && seamPaint.facets.isEmpty() &&
+                multiColorPaint.facets.isEmpty()
+        )) { "Auxiliary project volumes cannot carry facet paint" }
+        require(role.acceptsFilament || filamentSlot == 0) {
+            "Auxiliary project volume filament assignment is invalid"
+        }
     }
 }
 
@@ -58,6 +67,9 @@ data class ProjectObject(
         require(volumes.map(ProjectVolume::id).toSet().size == volumes.size) {
             "Project object contains duplicate volume ids"
         }
+        require(volumes.any { it.role == ProjectVolumeRole.MODEL_PART }) {
+            "Project object has no printable model part"
+        }
     }
 
     constructor(
@@ -91,6 +103,12 @@ data class ProjectObject(
 
     val singleVolumeOrNull: ProjectVolume?
         get() = volumes.singleOrNull()
+
+    val modelPartVolumes: List<ProjectVolume>
+        get() = volumes.filter { it.role == ProjectVolumeRole.MODEL_PART }
+
+    val primaryModelPart: ProjectVolume
+        get() = modelPartVolumes.first()
 
     val singleVolume: ProjectVolume
         get() = requireNotNull(singleVolumeOrNull) {
@@ -381,13 +399,21 @@ data class ProjectHistoryState(
     fun updateSelectedFilamentSlot(slot: Int): ProjectHistoryState {
         require(slot in 0 until MAX_FILAMENT_SLOTS) { "Filament slot is invalid" }
         val selected = current.selectedObject ?: return this
-        if (selected.volumes.all { it.filamentSlot == slot }) return this
+        if (selected.volumes.filter { it.role.acceptsFilament }.all { it.filamentSlot == slot }) {
+            return this
+        }
         return record(
             current.updateActivePlate(
                 objects = current.objects.map { projectObject ->
                     if (projectObject.id == selected.id) {
                         projectObject.copy(
-                            volumes = projectObject.volumes.map { it.copy(filamentSlot = slot) },
+                            volumes = projectObject.volumes.map { volume ->
+                                if (volume.role.acceptsFilament) {
+                                    volume.copy(filamentSlot = slot)
+                                } else {
+                                    volume
+                                }
+                            },
                         )
                     } else {
                         projectObject
@@ -454,6 +480,9 @@ data class ProjectHistoryState(
     ): ProjectHistoryState {
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
         val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
+        require(targetVolume.role.acceptsFacetPaint) {
+            "Support paint is unavailable for auxiliary project volumes"
+        }
         if (targetVolume.supportPaint == supportPaint) return this
         require(supportPaint.facets.keys.all { it in 0 until targetVolume.model.triangles }) {
             "Support paint references an unavailable facet"
@@ -486,6 +515,9 @@ data class ProjectHistoryState(
     ): ProjectHistoryState {
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
         val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
+        require(targetVolume.role.acceptsFacetPaint) {
+            "Support paint is unavailable for auxiliary project volumes"
+        }
         if (targetVolume.supportPaint == previous) return this
         val previousSnapshot = current.updateActivePlate(
             objects = current.objects.map { projectObject ->
@@ -523,6 +555,9 @@ data class ProjectHistoryState(
     ): ProjectHistoryState {
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
         val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
+        require(targetVolume.role.acceptsFacetPaint) {
+            "Seam paint is unavailable for auxiliary project volumes"
+        }
         if (targetVolume.seamPaint == seamPaint) return this
         require(seamPaint.facets.keys.all { it in 0 until targetVolume.model.triangles }) {
             "Seam paint references an unavailable facet"
@@ -555,6 +590,9 @@ data class ProjectHistoryState(
     ): ProjectHistoryState {
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
         val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
+        require(targetVolume.role.acceptsFacetPaint) {
+            "Seam paint is unavailable for auxiliary project volumes"
+        }
         if (targetVolume.seamPaint == previous) return this
         val previousSnapshot = current.updateActivePlate(
             objects = current.objects.map { projectObject ->
@@ -592,6 +630,9 @@ data class ProjectHistoryState(
     ): ProjectHistoryState {
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
         val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
+        require(targetVolume.role.acceptsFacetPaint) {
+            "Multi-color paint is unavailable for auxiliary project volumes"
+        }
         if (targetVolume.multiColorPaint == multiColorPaint) return this
         require(multiColorPaint.facets.keys.all { it in 0 until targetVolume.model.triangles }) {
             "Multi-color paint references an unavailable facet"
@@ -627,6 +668,9 @@ data class ProjectHistoryState(
     ): ProjectHistoryState {
         val target = current.objects.firstOrNull { it.id == objectId } ?: return this
         val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
+        require(targetVolume.role.acceptsFacetPaint) {
+            "Multi-color paint is unavailable for auxiliary project volumes"
+        }
         if (targetVolume.multiColorPaint == previous) return this
         val previousSnapshot = current.updateActivePlate(
             objects = current.objects.map { projectObject ->

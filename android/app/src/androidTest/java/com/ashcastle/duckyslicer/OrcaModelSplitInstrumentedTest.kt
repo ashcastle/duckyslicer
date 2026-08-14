@@ -33,6 +33,7 @@ class OrcaModelSplitInstrumentedTest {
                 model = sourceModel,
                 supportPaint = SupportPaint().paint(0, SupportPaintState.ENFORCE),
                 filamentSlot = 0,
+                config = ProjectVolumeConfig(mapOf("wall_loops" to "4")),
             )
             val siblingVolume = ProjectVolume(
                 id = "sibling-volume",
@@ -92,6 +93,8 @@ class OrcaModelSplitInstrumentedTest {
             assertEquals(siblingVolume, split.volumes[2])
             assertTrue(split.volumes.take(2).all { it.supportPaint.facets.isEmpty() })
             assertTrue(split.volumes.take(2).all { it.filamentSlot == sourceVolume.filamentSlot })
+            assertTrue(split.volumes.take(2).all { it.role == sourceVolume.role })
+            assertTrue(split.volumes.take(2).all { it.config == sourceVolume.config })
             val splitGeometry = split.geometry()
             assertEquals(originalGeometry.minX.toDouble(), splitGeometry.minX.toDouble(), 0.01)
             assertEquals(originalGeometry.maxX.toDouble(), splitGeometry.maxX.toDouble(), 0.01)
