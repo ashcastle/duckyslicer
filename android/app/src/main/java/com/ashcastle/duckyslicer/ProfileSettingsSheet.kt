@@ -624,30 +624,86 @@ private fun PrinterSettingsSheet(
         },
     )
     SettingsGroupTitle(stringResource(R.string.motion_limits))
-    SettingSlider(
+    QuantizedSettingSlider(
         label = stringResource(R.string.maximum_x_speed),
         valueText = stringResource(R.string.print_speed_value, options.maxSpeedX),
         value = options.maxSpeedX,
-        range = 50f..700f,
-        steps = 649,
-        onValueChange = { onOptionsChanged(options.copy(maxSpeedX = it.roundToInt().toFloat())) },
+        minimum = 1f,
+        defaultMaximum = 700f,
+        increment = 1f,
+        onValueChange = { onOptionsChanged(options.copy(maxSpeedX = it)) },
     )
-    SettingSlider(
+    QuantizedSettingSlider(
         label = stringResource(R.string.maximum_y_speed),
         valueText = stringResource(R.string.print_speed_value, options.maxSpeedY),
         value = options.maxSpeedY,
-        range = 50f..700f,
-        steps = 649,
-        onValueChange = { onOptionsChanged(options.copy(maxSpeedY = it.roundToInt().toFloat())) },
+        minimum = 1f,
+        defaultMaximum = 700f,
+        increment = 1f,
+        onValueChange = { onOptionsChanged(options.copy(maxSpeedY = it)) },
     )
-    SettingSlider(
+    QuantizedSettingSlider(
+        label = stringResource(R.string.maximum_z_speed),
+        valueText = stringResource(R.string.print_speed_value, options.maxSpeedZ),
+        value = options.maxSpeedZ,
+        minimum = 0.1f,
+        defaultMaximum = 100f,
+        increment = 0.1f,
+        onValueChange = { onOptionsChanged(options.copy(maxSpeedZ = it)) },
+    )
+    QuantizedSettingSlider(
+        label = stringResource(R.string.maximum_e_speed),
+        valueText = stringResource(R.string.print_speed_value, options.maxSpeedE),
+        value = options.maxSpeedE,
+        minimum = 1f,
+        defaultMaximum = 500f,
+        increment = 1f,
+        onValueChange = { onOptionsChanged(options.copy(maxSpeedE = it)) },
+    )
+    QuantizedSettingSlider(
+        label = stringResource(R.string.maximum_x_acceleration),
+        valueText = stringResource(R.string.acceleration_value, options.maxAccelerationX),
+        value = options.maxAccelerationX,
+        minimum = 1f,
+        defaultMaximum = 50_000f,
+        increment = 100f,
+        onValueChange = { onOptionsChanged(options.copy(maxAccelerationX = it)) },
+    )
+    QuantizedSettingSlider(
+        label = stringResource(R.string.maximum_y_acceleration),
+        valueText = stringResource(R.string.acceleration_value, options.maxAccelerationY),
+        value = options.maxAccelerationY,
+        minimum = 1f,
+        defaultMaximum = 50_000f,
+        increment = 100f,
+        onValueChange = { onOptionsChanged(options.copy(maxAccelerationY = it)) },
+    )
+    QuantizedSettingSlider(
+        label = stringResource(R.string.maximum_z_acceleration),
+        valueText = stringResource(R.string.acceleration_value, options.maxAccelerationZ),
+        value = options.maxAccelerationZ,
+        minimum = 1f,
+        defaultMaximum = 50_000f,
+        increment = 50f,
+        onValueChange = { onOptionsChanged(options.copy(maxAccelerationZ = it)) },
+    )
+    QuantizedSettingSlider(
+        label = stringResource(R.string.maximum_e_acceleration),
+        valueText = stringResource(R.string.acceleration_value, options.maxAccelerationE),
+        value = options.maxAccelerationE,
+        minimum = 1f,
+        defaultMaximum = 50_000f,
+        increment = 50f,
+        onValueChange = { onOptionsChanged(options.copy(maxAccelerationE = it)) },
+    )
+    QuantizedSettingSlider(
         label = stringResource(R.string.maximum_print_acceleration),
         valueText = stringResource(R.string.acceleration_value, options.maxAccelerationExtruding),
         value = options.maxAccelerationExtruding,
-        range = 500f..30_000f,
-        steps = 117,
-        onValueChange = {
-            val value = (it / 250f).roundToInt() * 250f
+        minimum = 1f,
+        defaultMaximum = 50_000f,
+        increment = 100f,
+        onValueChange = { value ->
             onOptionsChanged(
                 options.copy(
                     maxAccelerationExtruding = value,
@@ -657,14 +713,23 @@ private fun PrinterSettingsSheet(
             )
         },
     )
-    SettingSlider(
+    QuantizedSettingSlider(
+        label = stringResource(R.string.maximum_retracting_acceleration),
+        valueText = stringResource(R.string.acceleration_value, options.maxAccelerationRetracting),
+        value = options.maxAccelerationRetracting,
+        minimum = 1f,
+        defaultMaximum = 50_000f,
+        increment = 100f,
+        onValueChange = { onOptionsChanged(options.copy(maxAccelerationRetracting = it)) },
+    )
+    QuantizedSettingSlider(
         label = stringResource(R.string.maximum_travel_acceleration),
         valueText = stringResource(R.string.acceleration_value, options.maxAccelerationTravel),
         value = options.maxAccelerationTravel,
-        range = 500f..30_000f,
-        steps = 117,
-        onValueChange = {
-            val value = (it / 250f).roundToInt() * 250f
+        minimum = 1f,
+        defaultMaximum = 50_000f,
+        increment = 100f,
+        onValueChange = { value ->
             onOptionsChanged(
                 options.copy(
                     maxAccelerationTravel = value,
@@ -673,6 +738,42 @@ private fun PrinterSettingsSheet(
                 ),
             )
         },
+    )
+    QuantizedSettingSlider(
+        label = stringResource(R.string.maximum_x_jerk),
+        valueText = stringResource(R.string.jerk_value, options.maxJerkX),
+        value = options.maxJerkX,
+        minimum = 0f,
+        defaultMaximum = 100f,
+        increment = 0.1f,
+        onValueChange = { onOptionsChanged(options.copy(maxJerkX = it)) },
+    )
+    QuantizedSettingSlider(
+        label = stringResource(R.string.maximum_y_jerk),
+        valueText = stringResource(R.string.jerk_value, options.maxJerkY),
+        value = options.maxJerkY,
+        minimum = 0f,
+        defaultMaximum = 100f,
+        increment = 0.1f,
+        onValueChange = { onOptionsChanged(options.copy(maxJerkY = it)) },
+    )
+    QuantizedSettingSlider(
+        label = stringResource(R.string.maximum_z_jerk),
+        valueText = stringResource(R.string.jerk_value, options.maxJerkZ),
+        value = options.maxJerkZ,
+        minimum = 0f,
+        defaultMaximum = 20f,
+        increment = 0.1f,
+        onValueChange = { onOptionsChanged(options.copy(maxJerkZ = it)) },
+    )
+    QuantizedSettingSlider(
+        label = stringResource(R.string.maximum_e_jerk),
+        valueText = stringResource(R.string.jerk_value, options.maxJerkE),
+        value = options.maxJerkE,
+        minimum = 0f,
+        defaultMaximum = 100f,
+        increment = 0.1f,
+        onValueChange = { onOptionsChanged(options.copy(maxJerkE = it)) },
     )
         SaveProfileField(onSave = { name -> onSave(name, options) }, onDismiss = onDismiss)
     }
@@ -5929,6 +6030,32 @@ private fun SaveProfileField(onSave: (String) -> Unit, onDismiss: () -> Unit) {
     ) {
         Text(stringResource(R.string.save_as_new_profile))
     }
+}
+
+@Composable
+private fun QuantizedSettingSlider(
+    label: String,
+    valueText: String,
+    value: Float,
+    minimum: Float,
+    defaultMaximum: Float,
+    increment: Float,
+    onValueChange: (Float) -> Unit,
+) {
+    val maximum = max(defaultMaximum, value).coerceAtLeast(minimum + increment)
+    val steps = (((maximum - minimum) / increment).roundToInt() - 1).coerceIn(0, 999)
+    SettingSlider(
+        label = label,
+        valueText = valueText,
+        value = value,
+        range = minimum..maximum,
+        steps = steps,
+        onValueChange = { rawValue ->
+            onValueChange(
+                ((rawValue / increment).roundToInt() * increment).coerceIn(minimum, maximum),
+            )
+        },
+    )
 }
 
 @Composable

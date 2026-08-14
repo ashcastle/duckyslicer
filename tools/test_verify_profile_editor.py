@@ -67,6 +67,13 @@ def valid_sources() -> dict[str, str]:
             " R.string.segmented_region_max_width R.string.segmented_region_interlocking_depth"
             " segmentedRegionMaxWidth = segmentedRegionInterlockingDepth ="
             " segmentedRegionInterlockingDepth = if (it)"
+            " R.string.maximum_z_speed R.string.maximum_e_speed"
+            " R.string.maximum_x_acceleration R.string.maximum_y_acceleration"
+            " R.string.maximum_z_acceleration R.string.maximum_e_acceleration"
+            " R.string.maximum_retracting_acceleration"
+            " R.string.maximum_x_jerk R.string.maximum_y_jerk"
+            " R.string.maximum_z_jerk R.string.maximum_e_jerk"
+            " QuantizedSettingSlider("
             " R.string.feature_jerk"
             " options.jerk.copy(defaultJerk options.jerk.copy(outerWallJerk"
             " options.jerk.copy(innerWallJerk options.jerk.copy(topSurfaceJerk"
@@ -137,6 +144,12 @@ def valid_sources() -> dict[str, str]:
             ' name="tree_support_branch_density" name="tree_support_adaptive_layer_height"'
             ' name="tree_support_auto_brim" name="tree_support_brim_width"'
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
+            ' name="maximum_z_speed" name="maximum_e_speed"'
+            ' name="maximum_x_acceleration" name="maximum_y_acceleration"'
+            ' name="maximum_z_acceleration" name="maximum_e_acceleration"'
+            ' name="maximum_retracting_acceleration"'
+            ' name="maximum_x_jerk" name="maximum_y_jerk"'
+            ' name="maximum_z_jerk" name="maximum_e_jerk"'
             ' name="feature_jerk" name="jerk_value" name="initial_layer" name="travel"'
         ),
         "strings-ko.xml": (
@@ -170,6 +183,12 @@ def valid_sources() -> dict[str, str]:
             ' name="tree_support_branch_density" name="tree_support_adaptive_layer_height"'
             ' name="tree_support_auto_brim" name="tree_support_brim_width"'
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
+            ' name="maximum_z_speed" name="maximum_e_speed"'
+            ' name="maximum_x_acceleration" name="maximum_y_acceleration"'
+            ' name="maximum_z_acceleration" name="maximum_e_acceleration"'
+            ' name="maximum_retracting_acceleration"'
+            ' name="maximum_x_jerk" name="maximum_y_jerk"'
+            ' name="maximum_z_jerk" name="maximum_e_jerk"'
             ' name="feature_jerk" name="jerk_value" name="initial_layer" name="travel"'
         ),
         "CONTRIBUTING.md": "Quality Strength Speed Support Others",

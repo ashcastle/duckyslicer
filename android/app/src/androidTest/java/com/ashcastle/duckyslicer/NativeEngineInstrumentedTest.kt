@@ -1769,9 +1769,20 @@ class NativeEngineInstrumentedTest {
                 raftFirstLayerExpansion = 3.6f,
                 gcodeFlavor = "marlin2",
                 maxSpeedX = 320f,
+                maxSpeedY = 330f,
+                maxSpeedZ = 24f,
+                maxSpeedE = 82f,
                 maxAccelerationX = 4_200f,
+                maxAccelerationY = 4_300f,
+                maxAccelerationZ = 620f,
+                maxAccelerationE = 6_400f,
+                maxAccelerationExtruding = 3_800f,
+                maxAccelerationRetracting = 3_900f,
                 maxAccelerationTravel = 5_000f,
                 maxJerkX = 7f,
+                maxJerkY = 7.5f,
+                maxJerkZ = 0.5f,
+                maxJerkE = 4f,
             )
 
         val printer = store.savePrinter("Workshop U1", edited)
@@ -2027,9 +2038,20 @@ class NativeEngineInstrumentedTest {
         assertEquals(3.6f, restored.slicing.last().raftFirstLayerExpansion)
         assertEquals("marlin2", restored.printers.last().gcodeFlavor)
         assertEquals(320f, restored.printers.last().maxSpeedX)
+        assertEquals(330f, restored.printers.last().maxSpeedY)
+        assertEquals(24f, restored.printers.last().maxSpeedZ)
+        assertEquals(82f, restored.printers.last().maxSpeedE)
         assertEquals(4_200f, restored.printers.last().maxAccelerationX)
+        assertEquals(4_300f, restored.printers.last().maxAccelerationY)
+        assertEquals(620f, restored.printers.last().maxAccelerationZ)
+        assertEquals(6_400f, restored.printers.last().maxAccelerationE)
+        assertEquals(3_800f, restored.printers.last().maxAccelerationExtruding)
+        assertEquals(3_900f, restored.printers.last().maxAccelerationRetracting)
         assertEquals(5_000f, restored.printers.last().maxAccelerationTravel)
         assertEquals(7f, restored.printers.last().maxJerkX)
+        assertEquals(7.5f, restored.printers.last().maxJerkY)
+        assertEquals(0.5f, restored.printers.last().maxJerkZ)
+        assertEquals(4f, restored.printers.last().maxJerkE)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
         assertEquals(USER_PROFILE_SCHEMA_VERSION, JSONObject(file.readText()).getInt("schemaVersion"))
@@ -4426,10 +4448,19 @@ class NativeEngineInstrumentedTest {
             gcodeFlavor = "marlin2",
             maxSpeedX = 240f,
             maxSpeedY = 250f,
+            maxSpeedZ = 26f,
+            maxSpeedE = 88f,
             maxAccelerationX = 4_200f,
             maxAccelerationY = 4_300f,
+            maxAccelerationZ = 650f,
+            maxAccelerationE = 6_800f,
             maxAccelerationExtruding = 3_100f,
+            maxAccelerationRetracting = 3_200f,
             maxAccelerationTravel = 4_000f,
+            maxJerkX = 7.1f,
+            maxJerkY = 7.2f,
+            maxJerkZ = 0.6f,
+            maxJerkE = 4.4f,
             extruderClearanceRadius = 71f,
             extruderClearanceHeightToRod = 29f,
             extruderClearanceHeightToLid = 119f,
@@ -4449,8 +4480,28 @@ class NativeEngineInstrumentedTest {
         assertTrue("Custom height must reach Orca", gcode.contains("; printable_height = 180"))
         assertTrue("Custom X speed must reach Orca", gcode.contains("; machine_max_speed_x = 240,240"))
         assertTrue("Custom Y speed must reach Orca", gcode.contains("; machine_max_speed_y = 250,250"))
+        assertTrue("Custom Z speed must reach Orca", gcode.contains("; machine_max_speed_z = 26,26"))
+        assertTrue("Custom E speed must reach Orca", gcode.contains("; machine_max_speed_e = 88,88"))
         assertTrue("Custom X acceleration must reach Orca", gcode.contains("; machine_max_acceleration_x = 4200,4200"))
         assertTrue("Custom Y acceleration must reach Orca", gcode.contains("; machine_max_acceleration_y = 4300,4300"))
+        assertTrue("Custom Z acceleration must reach Orca", gcode.contains("; machine_max_acceleration_z = 650,650"))
+        assertTrue("Custom E acceleration must reach Orca", gcode.contains("; machine_max_acceleration_e = 6800,6800"))
+        assertTrue(
+            "Custom print acceleration must reach Orca",
+            gcode.contains("; machine_max_acceleration_extruding = 3100,3100"),
+        )
+        assertTrue(
+            "Custom retracting acceleration must reach Orca",
+            gcode.contains("; machine_max_acceleration_retracting = 3200,3200"),
+        )
+        assertTrue(
+            "Custom travel acceleration must reach Orca",
+            gcode.contains("; machine_max_acceleration_travel = 4000,4000"),
+        )
+        assertTrue("Custom X jerk must reach Orca", gcode.contains("; machine_max_jerk_x = 7.1,7.1"))
+        assertTrue("Custom Y jerk must reach Orca", gcode.contains("; machine_max_jerk_y = 7.2,7.2"))
+        assertTrue("Custom Z jerk must reach Orca", gcode.contains("; machine_max_jerk_z = 0.6,0.6"))
+        assertTrue("Custom E jerk must reach Orca", gcode.contains("; machine_max_jerk_e = 4.4,4.4"))
         assertTrue("Print-head radius must reach Orca", gcode.contains("; extruder_clearance_radius = 71"))
         assertTrue("Print-head rod clearance must reach Orca", gcode.contains("; extruder_clearance_height_to_rod = 29"))
         assertTrue("Print-head lid clearance must reach Orca", gcode.contains("; extruder_clearance_height_to_lid = 119"))
