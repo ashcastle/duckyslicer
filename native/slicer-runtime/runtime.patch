@@ -174,7 +174,7 @@ index 116a4a85..6b3048bc 100644
      // Temperature
      int nozzle_temp = 210;
      int bed_temp = 60;
-@@ -58,19 +141,132 @@ struct SliceConfig {
+@@ -58,19 +141,135 @@ struct SliceConfig {
  
      // Support
      bool support_enabled = false;
@@ -245,6 +245,9 @@ index 116a4a85..6b3048bc 100644
 +    float small_perimeter_threshold = 0.0f;
 +    bool slowdown_for_curled_perimeters = true;
 +    float resolution = 0.01f;
++    std::string slicing_mode = "regular";
++    float slice_closing_radius = 0.049f;
++    bool precise_z_height = false;
 +    std::string seam_position = "aligned";
 +    bool staggered_inner_seams = false;
 +    float seam_gap = 10.0f;
@@ -740,7 +743,7 @@ index d93efb7d..fdf9a877 100644
      config.travel_speed = getFloat("travelSpeed");
      config.first_layer_speed = getFloat("firstLayerSpeed");
  
-@@ -108,15 +185,125 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -108,15 +185,128 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.support_enabled = getBool("supportEnabled");
      config.support_type = getString("supportType");
      config.support_angle = getFloat("supportAngle");
@@ -802,6 +805,9 @@ index d93efb7d..fdf9a877 100644
 +    config.small_perimeter_threshold = getFloat("smallPerimeterThreshold");
 +    config.slowdown_for_curled_perimeters = getBool("slowdownForCurledPerimeters");
 +    config.resolution = getFloat("resolution");
++    config.slicing_mode = getString("slicingMode");
++    config.slice_closing_radius = getFloat("sliceClosingRadius");
++    config.precise_z_height = getBool("preciseZHeight");
 +    config.seam_position = getString("seamPosition");
 +    config.staggered_inner_seams = getBool("staggeredInnerSeams");
 +    config.seam_gap = getFloat("seamGap");
@@ -1030,7 +1036,7 @@ index d93efb7d..fdf9a877 100644
      setFloat("travelSpeed", config.travel_speed);
      setFloat("firstLayerSpeed", config.first_layer_speed);
      setInt("nozzleTemp", config.nozzle_temp);
-@@ -247,13 +566,123 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -247,13 +566,126 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setBool("supportEnabled", config.support_enabled);
      setString("supportType", config.support_type);
      setFloat("supportAngle", config.support_angle);
@@ -1091,6 +1097,9 @@ index d93efb7d..fdf9a877 100644
 +    setFloat("smallPerimeterThreshold", config.small_perimeter_threshold);
 +    setBool("slowdownForCurledPerimeters", config.slowdown_for_curled_perimeters);
 +    setFloat("resolution", config.resolution);
++    setString("slicingMode", config.slicing_mode);
++    setFloat("sliceClosingRadius", config.slice_closing_radius);
++    setBool("preciseZHeight", config.precise_z_height);
 +    setString("seamPosition", config.seam_position);
 +    setBool("staggeredInnerSeams", config.staggered_inner_seams);
 +    setFloat("seamGap", config.seam_gap);
@@ -1563,7 +1572,7 @@ index 8d61c9cf..f285d044 100644
  
      // Line widths — must be set explicitly.
      // When left at 0 (absolute), MultiMaterialSegmentation calls
-@@ -480,32 +610,98 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -480,32 +610,101 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      // the literal 0, not the auto-resolved value, causing Flow::rounded_rectangle_extrusion_spacing()
      // to throw FlowErrorNegativeSpacing on multi-color models.
      double nd = config.nozzle_diameter;
@@ -1617,6 +1626,9 @@ index 8d61c9cf..f285d044 100644
 +    dpc.set_key_value("small_perimeter_threshold", new Slic3r::ConfigOptionFloat(config.small_perimeter_threshold));
 +    dpc.set_key_value("slowdown_for_curled_perimeters", new Slic3r::ConfigOptionBool(config.slowdown_for_curled_perimeters));
 +    dpc.set_key_value("resolution", new Slic3r::ConfigOptionFloat(config.resolution));
++    dpc.set_deserialize_strict("slicing_mode", config.slicing_mode);
++    dpc.set_key_value("slice_closing_radius", new Slic3r::ConfigOptionFloat(config.slice_closing_radius));
++    dpc.set_key_value("precise_z_height", new Slic3r::ConfigOptionBool(config.precise_z_height));
 +
 +    const Slic3r::PerimeterGeneratorType wall_generator = config.wall_generator == "classic"
 +        ? Slic3r::PerimeterGeneratorType::Classic

@@ -150,6 +150,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var smallPerimeterThreshold: Float = base.smallPerimeterThreshold
     private var slowdownForCurledPerimeters: Boolean = base.slowdownForCurledPerimeters
     private var resolution: Float = base.resolution
+    private var slicingMode: String = base.meshSlicing.mode
+    private var sliceClosingRadius: Float = base.meshSlicing.closingRadius
+    private var preciseZHeight: Boolean = base.meshSlicing.preciseZHeight
     private var seamPosition: String = base.seamPosition
     private var staggeredInnerSeams: Boolean = base.staggeredInnerSeams
     private var seamGap: Float = base.seamGap
@@ -392,6 +395,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         smallPerimeterThreshold = input.readFloat()
         slowdownForCurledPerimeters = input.readCatalogBoolean()
         resolution = input.readFloat()
+        slicingMode = input.readCatalogString()
+        sliceClosingRadius = input.readFloat()
+        preciseZHeight = input.readCatalogBoolean()
         seamPosition = input.readCatalogString()
         staggeredInnerSeams = input.readCatalogBoolean()
         seamGap = input.readFloat()
@@ -664,6 +670,11 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         smallPerimeterThreshold = smallPerimeterThreshold,
         slowdownForCurledPerimeters = slowdownForCurledPerimeters,
         resolution = resolution,
+        meshSlicing = MeshSlicingSettings(
+            mode = slicingMode,
+            closingRadius = sliceClosingRadius,
+            preciseZHeight = preciseZHeight,
+        ),
         seamPosition = seamPosition,
         staggeredInnerSeams = staggeredInnerSeams,
         seamGap = seamGap,
@@ -879,6 +890,9 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("smallPerimeterThreshold", BINARY_FLOAT),
     BinaryField("slowdownForCurledPerimeters", BINARY_BOOL),
     BinaryField("resolution", BINARY_FLOAT),
+    BinaryField("slicingMode", BINARY_STRING),
+    BinaryField("sliceClosingRadius", BINARY_FLOAT),
+    BinaryField("preciseZHeight", BINARY_BOOL),
     BinaryField("seamPosition", BINARY_STRING),
     BinaryField("staggeredInnerSeams", BINARY_BOOL),
     BinaryField("seamGap", BINARY_FLOAT),

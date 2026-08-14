@@ -401,6 +401,12 @@
     <string name="role_based_wipe_speed">Use toolpath speed for wiping</string>
     <string name="wipe_speed">Wipe speed</string>
     <string name="path_resolution">Toolpath resolution</string>
+    <string name="slicing_mode">Slicing mode</string>
+    <string name="slicing_mode_regular">Regular</string>
+    <string name="slicing_mode_even_odd">Even-odd</string>
+    <string name="slicing_mode_close_holes">Close holes</string>
+    <string name="slice_gap_closing_radius">Slice gap closing radius</string>
+    <string name="precise_z_height">Precise Z height</string>
     <string name="arc_fitting">Arc fitting</string>
     <string name="overhang_speed">Slow down overhangs</string>
     <string name="overhang_speed_1">Slight overhang</string>

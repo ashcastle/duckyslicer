@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 29
+SCHEMA_VERSION = 30
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -702,6 +702,11 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "smallPerimeterThreshold": number(raw.get("small_perimeter_threshold"), 0),
         "slowdownForCurledPerimeters": boolean(raw.get("slowdown_for_curled_perimeters"), True),
         "resolution": max(number(raw.get("resolution"), 0.01), 0.001),
+        "slicingMode": enum_value(
+            raw.get("slicing_mode"), {"regular", "even_odd", "close_holes"}, "regular"
+        ),
+        "sliceClosingRadius": number(raw.get("slice_closing_radius"), 0.049),
+        "preciseZHeight": boolean(raw.get("precise_z_height")),
         "seamPosition": enum_value(
             raw.get("seam_position"), {"nearest", "aligned", "aligned_back", "back", "random"}, "aligned"
         ),
@@ -911,6 +916,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         )
         and 0 <= profile["smallPerimeterThreshold"] <= 1_000_000
         and 0.001 <= profile["resolution"] <= 100
+        and profile["slicingMode"] in {"regular", "even_odd", "close_holes"}
+        and 0 <= profile["sliceClosingRadius"] <= 10
         and 0 <= profile["seamGap"] <= 1_000
         and profile["scarfSeamType"] in {"none", "external", "all"}
         and 0 <= profile["scarfAngleThreshold"] <= 180

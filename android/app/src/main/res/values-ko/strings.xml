@@ -401,6 +401,12 @@
     <string name="role_based_wipe_speed">툴패스 속도로 와이프</string>
     <string name="wipe_speed">와이프 속도</string>
     <string name="path_resolution">툴패스 해상도</string>
+    <string name="slicing_mode">슬라이싱 모드</string>
+    <string name="slicing_mode_regular">일반</string>
+    <string name="slicing_mode_even_odd">짝수-홀수</string>
+    <string name="slicing_mode_close_holes">구멍 닫기</string>
+    <string name="slice_gap_closing_radius">슬라이스 틈 닫기 반경</string>
+    <string name="precise_z_height">정밀 Z 높이</string>
     <string name="arc_fitting">원호 맞춤</string>
     <string name="overhang_speed">오버행 감속</string>
     <string name="overhang_speed_1">완만한 오버행</string>

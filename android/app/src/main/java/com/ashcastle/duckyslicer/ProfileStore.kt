@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 30
+internal const val USER_PROFILE_SCHEMA_VERSION = 31
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -664,6 +664,9 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("smallPerimeterThreshold", smallPerimeterThreshold)
     .put("slowdownForCurledPerimeters", slowdownForCurledPerimeters)
     .put("resolution", resolution)
+    .put("slicingMode", meshSlicing.mode)
+    .put("sliceClosingRadius", meshSlicing.closingRadius)
+    .put("preciseZHeight", meshSlicing.preciseZHeight)
     .put("seamPosition", seamPosition)
     .put("staggeredInnerSeams", staggeredInnerSeams)
     .put("seamGap", seamGap)
@@ -985,6 +988,11 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         smallPerimeterThreshold = optDouble("smallPerimeterThreshold", 0.0).toFloat(),
         slowdownForCurledPerimeters = optBoolean("slowdownForCurledPerimeters", true),
         resolution = optDouble("resolution", 0.01).toFloat(),
+        meshSlicing = MeshSlicingSettings(
+            mode = optString("slicingMode", "regular"),
+            closingRadius = optDouble("sliceClosingRadius", 0.049).toFloat(),
+            preciseZHeight = optBoolean("preciseZHeight"),
+        ),
         seamPosition = optString("seamPosition", "aligned"),
         staggeredInnerSeams = optBoolean("staggeredInnerSeams"),
         seamGap = optDouble("seamGap", 10.0).toFloat(),

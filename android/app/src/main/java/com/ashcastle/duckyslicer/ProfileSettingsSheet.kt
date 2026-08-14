@@ -1731,6 +1731,55 @@ private fun SlicingSettingsSheet(
                     steps = ((max(0.1f, options.resolution) - 0.001f) / 0.001f).roundToInt().coerceAtLeast(2) - 1,
                     onValueChange = { onOptionsChanged(options.copy(resolution = (it * 1_000f).roundToInt() / 1_000f)) },
                 )
+                SettingChoices(
+                    settingLabel = stringResource(R.string.slicing_mode),
+                    entries = listOf("regular", "even_odd", "close_holes"),
+                    selected = options.meshSlicing.mode,
+                    optionLabel = {
+                        stringResource(
+                            when (it) {
+                                "even_odd" -> R.string.slicing_mode_even_odd
+                                "close_holes" -> R.string.slicing_mode_close_holes
+                                else -> R.string.slicing_mode_regular
+                            },
+                        )
+                    },
+                    onSelected = {
+                        onOptionsChanged(
+                            options.copy(meshSlicing = options.meshSlicing.copy(mode = it)),
+                        )
+                    },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.slice_gap_closing_radius),
+                    valueText = stringResource(
+                        R.string.millimeters_value_fine,
+                        options.meshSlicing.closingRadius,
+                    ),
+                    value = options.meshSlicing.closingRadius,
+                    range = 0f..max(1f, options.meshSlicing.closingRadius),
+                    steps = 999,
+                    onValueChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                meshSlicing = options.meshSlicing.copy(
+                                    closingRadius = (it * 1_000f).roundToInt() / 1_000f,
+                                ),
+                            ),
+                        )
+                    },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.precise_z_height),
+                    checked = options.meshSlicing.preciseZHeight,
+                    onCheckedChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                meshSlicing = options.meshSlicing.copy(preciseZHeight = it),
+                            ),
+                        )
+                    },
+                )
                 SettingsSwitch(
                     label = stringResource(R.string.arc_fitting),
                     checked = options.gcodeSettings.arcFitting,

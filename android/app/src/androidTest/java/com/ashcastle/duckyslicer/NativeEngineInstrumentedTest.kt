@@ -1402,7 +1402,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(29, catalog.schemaVersion)
+        assertEquals(30, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1536,6 +1536,9 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.wipeOnLoops })
         assertTrue(catalog.slicing.any { !it.roleBasedWipeSpeed })
         assertTrue(catalog.slicing.any { it.resolution == 0.012f })
+        assertTrue(catalog.slicing.all { it.meshSlicing.mode in setOf("regular", "even_odd", "close_holes") })
+        assertTrue(catalog.slicing.all { it.meshSlicing.closingRadius >= 0f })
+        assertTrue(catalog.slicing.any { it.meshSlicing.preciseZHeight })
         assertTrue(catalog.slicing.any { it.overhangReverse })
         assertTrue(catalog.slicing.any { it.minWidthTopSurface != 300f })
         assertTrue(catalog.slicing.any { it.internalBridgeFilter == "limited" })
@@ -2468,6 +2471,11 @@ class NativeEngineInstrumentedTest {
                 smallPerimeterThreshold = 7.5f,
                 slowdownForCurledPerimeters = false,
                 resolution = 0.021f,
+                meshSlicing = MeshSlicingSettings(
+                    mode = "even_odd",
+                    closingRadius = 0.123f,
+                    preciseZHeight = true,
+                ),
                 seamPosition = "nearest",
                 staggeredInnerSeams = true,
                 seamGap = 7f,
@@ -2699,6 +2707,9 @@ class NativeEngineInstrumentedTest {
         assertTrue("Small-perimeter threshold must reach Orca", gcode.contains("; small_perimeter_threshold = 7.5"))
         assertTrue("Curled-perimeter slowdown must reach Orca", gcode.contains("; slowdown_for_curled_perimeters = 0"))
         assertTrue("Toolpath resolution must reach Orca", gcode.contains("; resolution = 0.021"))
+        assertTrue("Mesh winding mode must reach Orca", gcode.contains("; slicing_mode = even_odd"))
+        assertTrue("Mesh gap closing radius must reach Orca", gcode.contains("; slice_closing_radius = 0.123"))
+        assertTrue("Precise Z height must reach Orca", gcode.contains("; precise_z_height = 1"))
         assertTrue("Inner seam staggering must reach Orca", gcode.contains("; staggered_inner_seams = 1"))
         assertTrue("Seam gap must preserve percent units", gcode.contains("; seam_gap = 7%"))
         assertTrue("Outer-wall pre-wipe must reach Orca", gcode.contains("; wipe_before_external_loop = 1"))

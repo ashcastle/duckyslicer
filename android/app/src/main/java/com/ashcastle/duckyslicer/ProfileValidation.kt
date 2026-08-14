@@ -144,6 +144,8 @@ internal object ProfileValidation {
             optionalFeatureSpeedIsValid(profile.smallPerimeterSpeed, profile.smallPerimeterSpeedPercent) &&
             profile.smallPerimeterThreshold in 0f..1_000_000f &&
             profile.resolution in 0.001f..100f &&
+            profile.meshSlicing.mode in setOf("regular", "even_odd", "close_holes") &&
+            profile.meshSlicing.closingRadius in 0f..10f &&
             profile.seamGap in 0f..1_000f &&
             optionalFeatureSpeedIsValid(profile.wipeSpeed, profile.wipeSpeedPercent) &&
             listOf(

@@ -230,6 +230,17 @@ class SliceOptionsPersistenceTest {
         assertEquals(6.5f, restored.smallPerimeterThreshold)
         assertEquals(false, restored.slowdownForCurledPerimeters)
         assertEquals(0.023f, restored.resolution)
+        assertEquals(
+            MeshSlicingSettings(
+                mode = "close_holes",
+                closingRadius = 0.125f,
+                preciseZHeight = true,
+            ),
+            restored.meshSlicing,
+        )
+        assertEquals("close_holes", restored.toNativeConfig().slicingMode)
+        assertEquals(0.125f, restored.toNativeConfig().sliceClosingRadius)
+        assertEquals(true, restored.toNativeConfig().preciseZHeight)
         assertEquals(true, restored.staggeredInnerSeams)
         assertEquals(3.5f, restored.seamGap)
         assertEquals(true, restored.seamGapPercent)
@@ -506,6 +517,11 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         smallPerimeterThreshold = 6.5f,
         slowdownForCurledPerimeters = false,
         resolution = 0.023f,
+        meshSlicing = MeshSlicingSettings(
+            mode = "close_holes",
+            closingRadius = 0.125f,
+            preciseZHeight = true,
+        ),
         seamPosition = "nearest",
         staggeredInnerSeams = true,
         seamGap = 3.5f,

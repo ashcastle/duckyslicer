@@ -252,6 +252,9 @@ data class SliceConfig(
     @JvmField var maximumGcodeBytes: Int = 1_073_741_824,
 ) {
     // Keep newly added JNI fields out of the already large generated constructor signature.
+    @JvmField var slicingMode: String = "regular"
+    @JvmField var sliceClosingRadius: Float = 0.049f
+    @JvmField var preciseZHeight: Boolean = false
     @JvmField var printSequence: String = "by layer"
     @JvmField var printOrder: String = "default"
     @JvmField var extruderClearanceRadius: Float = 40f
