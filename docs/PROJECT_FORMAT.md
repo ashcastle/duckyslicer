@@ -4,7 +4,7 @@ DuckySlicer saves portable projects with the `.duckyproject` extension and the M
 type `application/vnd.duckyslicer.project+zip`. The format is a versioned ZIP archive
 so a project can be inspected and recovered with standard tools.
 
-## Schema 30
+## Schema 31
 
 An archive contains exactly:
 
@@ -16,7 +16,7 @@ models/001.stl
 ```
 
 `manifest.json` identifies the format as `com.ashcastle.duckyslicer.project`, declares
-schema version `30`, and stores the selected plate plus a bounded `plates` list. Each plate
+schema version `31`, and stores the selected plate plus a bounded `plates` list. Each plate
 owns its stable identity, selected object, objects, and resolved printer, filament, and
 slicing settings. Each object owns a stable, bounded `volumes` list. The object owns its
 transform (including independent X, Y, and Z scale), variable layer-height ranges, and
@@ -28,9 +28,11 @@ parameter modifier, support blocker, or support enforcer) and bounded per-volume
 Objects or volumes that share one source model also share one model entry. Resolved filament
 profiles preserve the diameter used to calculate E-axis extrusion plus the material density and
 price per kilogram used for weight and cost statistics, plus soluble and dedicated-support
-material semantics used by multi-material tool ordering and purging.
+material semantics used by multi-material tool ordering and purging. Per-filament minimum
+wipe-tower purge volume and auxiliary cooling speed are retained alongside the printer's
+auxiliary-fan capability, so portable projects preserve tool-change and cooling output.
 
-Schema 1 through 30 projects remain readable and migrate deterministically to one plate.
+Schema 1 through 31 projects remain readable and migrate deterministically to one plate.
 Their single object-level model, filament, and paint fields migrate deterministically to
 one stable volume; older uniform-scale transforms, missing object-specific settings, and
 missing Brim points receive safe defaults. Current projects may contain up to 16 plates and

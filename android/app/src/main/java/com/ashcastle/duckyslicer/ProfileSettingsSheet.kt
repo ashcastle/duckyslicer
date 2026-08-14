@@ -452,6 +452,17 @@ private fun PrinterSettingsSheet(
             )
         },
     )
+    SettingsSwitch(
+        label = stringResource(R.string.auxiliary_part_cooling_fan),
+        checked = options.printerProfile.auxiliaryFan,
+        onCheckedChange = {
+            onOptionsChanged(
+                options.updatePrinterRetraction(
+                    options.printerProfile.copy(auxiliaryFan = it),
+                ),
+            )
+        },
+    )
     SettingChoices(
         settingLabel = stringResource(R.string.printer_firmware),
         entries = listOf("marlin", "marlin2", "klipper"),
@@ -1055,6 +1066,20 @@ private fun FilamentSettingsSheet(
                 )
             },
         )
+        DecimalSettingField(
+            label = stringResource(R.string.filament_minimal_purge_on_wipe_tower),
+            value = activeProfile.minimalPurgeOnWipeTower,
+            maximum = MAX_PURGE_VOLUME,
+            suffix = stringResource(R.string.cubic_millimeters_suffix),
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(minimalPurgeOnWipeTower = it),
+                    ),
+                )
+            },
+        )
         SettingsGroupTitle(stringResource(R.string.retraction))
         SettingsSwitch(
             label = stringResource(R.string.use_printer_retraction_defaults),
@@ -1215,6 +1240,24 @@ private fun FilamentSettingsSheet(
             },
         )
         SettingsGroupTitle(stringResource(R.string.cooling))
+        SettingSlider(
+            label = stringResource(R.string.auxiliary_part_cooling_fan),
+            valueText = stringResource(
+                R.string.percent_value,
+                activeProfile.additionalCoolingFanSpeed,
+            ),
+            value = activeProfile.additionalCoolingFanSpeed.toFloat(),
+            range = 0f..100f,
+            steps = 99,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(additionalCoolingFanSpeed = it.roundToInt()),
+                    ),
+                )
+            },
+        )
         SettingSlider(
             label = stringResource(R.string.minimum_fan_speed),
             valueText = stringResource(R.string.percent_value, activeProfile.fanMinSpeed),

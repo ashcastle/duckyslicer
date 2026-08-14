@@ -234,6 +234,9 @@
     <string name="per_kilogram_suffix">/kg</string>
     <string name="filament_soluble_material">용해성 재료</string>
     <string name="filament_support_material">서포트 재료</string>
+    <string name="filament_minimal_purge_on_wipe_tower">와이프 타워 최소 퍼지량</string>
+    <string name="auxiliary_part_cooling_fan">보조 출력물 냉각 팬</string>
+    <string name="cubic_millimeters_suffix">mm³</string>
     <string name="retraction">리트랙션</string>
     <string name="retraction_defaults">리트랙션 기본값</string>
     <string name="retraction_length">리트랙션 길이</string>

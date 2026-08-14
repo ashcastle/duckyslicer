@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v59.bin"
+private const val CATALOG_ASSET = "profile_catalog_v60.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 59) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 60) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -67,6 +67,7 @@ class OrcaProfileCatalog(private val context: Context) {
         nozzleDiameter = input.readFloat(),
         singleExtruderMultiMaterial = input.readCatalogBoolean(),
         extruderCount = input.readInt(),
+        auxiliaryFan = input.readCatalogBoolean(),
         machineStartGcode = input.readCatalogString(),
         machineEndGcode = input.readCatalogString(),
         gcodeFlavor = input.readCatalogString(),
@@ -118,6 +119,8 @@ class OrcaProfileCatalog(private val context: Context) {
         costPerKilogram = input.readFloat(),
         soluble = input.readBoolean(),
         supportMaterial = input.readBoolean(),
+        minimalPurgeOnWipeTower = input.readFloat(),
+        additionalCoolingFanSpeed = input.readInt(),
         filamentStartGcode = input.readCatalogString(),
         filamentEndGcode = input.readCatalogString(),
         retractLength = input.readCatalogNullableFloat(),
@@ -221,6 +224,7 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("nozzleDiameter", BINARY_FLOAT),
     BinaryField("singleExtruderMultiMaterial", BINARY_BOOL),
     BinaryField("extruderCount", BINARY_INT),
+    BinaryField("auxiliaryFan", BINARY_BOOL),
     BinaryField("machineStartGcode", BINARY_STRING),
     BinaryField("machineEndGcode", BINARY_STRING),
     BinaryField("gcodeFlavor", BINARY_STRING),
@@ -273,6 +277,8 @@ private val FILAMENT_BINARY_FIELDS = arrayOf(
     BinaryField("costPerKilogram", BINARY_FLOAT),
     BinaryField("soluble", BINARY_BOOL),
     BinaryField("supportMaterial", BINARY_BOOL),
+    BinaryField("minimalPurgeOnWipeTower", BINARY_FLOAT),
+    BinaryField("additionalCoolingFanSpeed", BINARY_INT),
     BinaryField("filamentStartGcode", BINARY_STRING),
     BinaryField("filamentEndGcode", BINARY_STRING),
     BinaryField("retractLength", BINARY_NULLABLE_FLOAT),

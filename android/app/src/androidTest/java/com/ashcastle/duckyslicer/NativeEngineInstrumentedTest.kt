@@ -2098,7 +2098,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(59, catalog.schemaVersion)
+        assertEquals(60, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2114,6 +2114,18 @@ class NativeEngineInstrumentedTest {
         assertTrue(
             "Dedicated support material semantics must survive catalog generation",
             catalog.filaments.any { it.supportMaterial },
+        )
+        assertTrue(
+            "Inherited minimum wipe-tower purge values must survive catalog generation",
+            catalog.filaments.any { kotlin.math.abs(it.minimalPurgeOnWipeTower - 15f) >= 0.001f },
+        )
+        assertTrue(
+            "Inherited auxiliary cooling speeds must survive catalog generation",
+            catalog.filaments.any { it.additionalCoolingFanSpeed > 0 },
+        )
+        assertTrue(
+            "Inherited auxiliary-fan capability must survive catalog generation",
+            catalog.printers.any { it.auxiliaryFan },
         )
         val representativeBrands = setOf(
             "Prusa", "Creality", "Anycubic", "Elegoo", "Snapmaker", "Sovol", "Qidi",
@@ -3214,6 +3226,81 @@ class NativeEngineInstrumentedTest {
         } finally {
             low.output.delete()
             high.output.delete()
+        }
+    }
+
+    @Test
+    fun filamentPurgeFloorAndAuxiliaryCoolingReachRealGcode() {
+        val model = inspectModel(fixtureModel().absolutePath)
+        val objects = listOf(
+            ProjectObject(
+                id = "purge-floor-primary",
+                model = model,
+                transform = ModelTransform(offsetXmm = -20f),
+                filamentSlot = 0,
+            ),
+            ProjectObject(
+                id = "purge-floor-secondary",
+                model = model,
+                transform = ModelTransform(offsetXmm = 20f),
+                filamentSlot = 1,
+            ),
+        )
+        val lowPrimary = FilamentProfile.PLA.copy(
+            minimalPurgeOnWipeTower = 5f,
+            additionalCoolingFanSpeed = 70,
+            closeFanFirstLayers = 0,
+        )
+        val lowSecondary = FilamentProfile.PETG.copy(
+            minimalPurgeOnWipeTower = 5f,
+            additionalCoolingFanSpeed = 70,
+            closeFanFirstLayers = 0,
+        )
+        val base = SliceOptions()
+            .selectPrinter(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(
+                    id = "test-purge-floor-semm-04",
+                    name = "Test purge floor SEMM · 0.4 mm",
+                    singleExtruderMultiMaterial = true,
+                    extruderCount = 2,
+                    auxiliaryFan = true,
+                ),
+            )
+            .selectFilament(lowPrimary)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                filamentSlots = listOf(lowPrimary, lowSecondary),
+                wipeTowerEnabled = true,
+                multiMaterial = MultiMaterialSettings(
+                    purgeVolumes = listOf(0f, 0f, 0f, 0f),
+                ),
+            )
+        val highPrimary = lowPrimary.copy(minimalPurgeOnWipeTower = 80f)
+        val highSecondary = lowSecondary.copy(minimalPurgeOnWipeTower = 80f)
+        val high = base.selectFilament(highPrimary).copy(
+            filamentSlots = listOf(highPrimary, highSecondary),
+        )
+
+        val lowResult = OnDeviceSlicer.slice(objects, base)
+        val highResult = OnDeviceSlicer.slice(objects, high)
+        try {
+            val lowGcode = lowResult.output.readText()
+            val highGcode = highResult.output.readText()
+            assertTrue(lowGcode.contains("; filament_minimal_purge_on_wipe_tower = 5,5"))
+            assertTrue(highGcode.contains("; filament_minimal_purge_on_wipe_tower = 80,80"))
+            assertTrue(lowGcode.contains("; additional_cooling_fan_speed = 70,70"))
+            assertTrue(lowGcode.contains("; auxiliary_fan = 1"))
+            assertTrue(
+                "Auxiliary cooling must emit the printer's P2 fan command",
+                lowGcode.lineSequence().any { it.startsWith("M106 P2 S178") },
+            )
+            assertTrue(
+                "A larger target-material purge floor must increase real wipe-tower extrusion",
+                wipeTowerExtrusion(highGcode) > wipeTowerExtrusion(lowGcode) + 50f,
+            )
+        } finally {
+            lowResult.output.delete()
+            highResult.output.delete()
         }
     }
 

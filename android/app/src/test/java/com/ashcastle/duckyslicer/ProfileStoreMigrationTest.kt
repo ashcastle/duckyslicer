@@ -18,12 +18,17 @@ class ProfileStoreMigrationTest {
             val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(id = "v3-printer", name = "V3 Printer")
             val filament = FilamentProfile.GENERIC_PLA.copy(id = "v3-filament", name = "V3 Filament")
             val slicing = QualityProfile.STANDARD.copy(id = "v3-slicing", name = "V3 Slicing")
+            val legacyPrinter = printer.toProfileJson().withoutProfileMetadata().apply {
+                remove("auxiliaryFan")
+            }
             val legacyFilament = filament.toProfileJson().withoutProfileMetadata().apply {
                 remove("diameter")
                 remove("density")
                 remove("costPerKilogram")
                 remove("soluble")
                 remove("supportMaterial")
+                remove("minimalPurgeOnWipeTower")
+                remove("additionalCoolingFanSpeed")
             }
             val legacySlicing = slicing.toProfileJson().withoutProfileMetadata().apply {
                 remove("makeOverhangPrintable")
@@ -57,7 +62,7 @@ class ProfileStoreMigrationTest {
             file.writeText(
                 JSONObject()
                     .put("schemaVersion", 3)
-                    .put("printers", JSONArray().put(printer.toProfileJson().withoutProfileMetadata()))
+                    .put("printers", JSONArray().put(legacyPrinter))
                     .put("filaments", JSONArray().put(legacyFilament))
                     .put("slicing", JSONArray().put(legacySlicing))
                     .toString(),
@@ -71,6 +76,7 @@ class ProfileStoreMigrationTest {
             assertFalse(restoredPrinter.builtIn)
             assertNull(restoredPrinter.brand)
             assertFalse(restoredPrinter.singleExtruderMultiMaterial)
+            assertFalse(restoredPrinter.auxiliaryFan)
             assertTrue(restoredFilament.compatiblePrinters.isEmpty())
             assertTrue(restoredSlicing.compatiblePrinters.isEmpty())
             assertEquals("V3 Filament", restoredFilament.name)
@@ -79,6 +85,8 @@ class ProfileStoreMigrationTest {
             assertEquals(0f, restoredFilament.costPerKilogram)
             assertFalse(restoredFilament.soluble)
             assertFalse(restoredFilament.supportMaterial)
+            assertEquals(15f, restoredFilament.minimalPurgeOnWipeTower)
+            assertEquals(0, restoredFilament.additionalCoolingFanSpeed)
             assertEquals("V3 Slicing", restoredSlicing.name)
             assertEquals(PrintableOverhangSettings(), restoredSlicing.printableOverhangs)
             assertEquals(PolyholeSettings(), restoredSlicing.precision.polyholes)
@@ -149,6 +157,7 @@ class ProfileStoreMigrationTest {
                     bedPolygon = polygon,
                     singleExtruderMultiMaterial = true,
                     extruderCount = 2,
+                    auxiliaryFan = true,
                 ),
             )
             val saved = ProfileStore(file).savePrinter("Delta bed", options)
@@ -159,6 +168,7 @@ class ProfileStoreMigrationTest {
             assertEquals(-110f, restored.bedOriginY)
             assertTrue(restored.singleExtruderMultiMaterial)
             assertEquals(2, restored.extruderCount)
+            assertTrue(restored.auxiliaryFan)
 
             val root = JSONObject(file.readText())
             root.getJSONArray("printers").getJSONObject(0)
@@ -291,6 +301,8 @@ class ProfileStoreMigrationTest {
                         costPerKilogram = 42.5f,
                         soluble = true,
                         supportMaterial = true,
+                        minimalPurgeOnWipeTower = 35f,
+                        additionalCoolingFanSpeed = 70,
                     ),
                 )
 
@@ -313,6 +325,10 @@ class ProfileStoreMigrationTest {
             assertTrue(restored.soluble)
             assertTrue(saved.supportMaterial)
             assertTrue(restored.supportMaterial)
+            assertEquals(35f, saved.minimalPurgeOnWipeTower)
+            assertEquals(35f, restored.minimalPurgeOnWipeTower)
+            assertEquals(70, saved.additionalCoolingFanSpeed)
+            assertEquals(70, restored.additionalCoolingFanSpeed)
         } finally {
             directory.deleteRecursively()
         }

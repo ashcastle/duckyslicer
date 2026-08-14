@@ -121,7 +121,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(32, persisted.getInt("schemaVersion"))
+        assertEquals(33, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),
@@ -181,6 +181,15 @@ class ProjectStoreTest {
             listOf(42.5f, 75f),
             restored.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::costPerKilogram),
         )
+        assertEquals(
+            listOf(9f, 35f),
+            restored.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::minimalPurgeOnWipeTower),
+        )
+        assertEquals(
+            listOf(40, 70),
+            restored.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::additionalCoolingFanSpeed),
+        )
+        assertEquals(true, restored.sliceOptions?.printerProfile?.auxiliaryFan)
         assertEquals(
             listOf(false, true),
             restored.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::soluble),
@@ -466,6 +475,8 @@ internal fun multiFilamentSettingsFixture(): SliceOptions {
         costPerKilogram = 75f,
         soluble = true,
         supportMaterial = true,
+        minimalPurgeOnWipeTower = 35f,
+        additionalCoolingFanSpeed = 70,
     )
     return options.copy(filamentSlots = listOf(options.filamentProfile, secondary))
 }

@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 59
+SCHEMA_VERSION = 60
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -227,6 +227,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "nozzleDiameter": nozzle,
         "singleExtruderMultiMaterial": supports_multi_material,
         "extruderCount": extruder_count,
+        "auxiliaryFan": boolean(raw.get("auxiliary_fan")),
         "machineStartGcode": str(raw.get("machine_start_gcode", "")),
         "machineEndGcode": str(raw.get("machine_end_gcode", "")),
         "gcodeFlavor": flavor,
@@ -437,6 +438,8 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "costPerKilogram": number(raw.get("filament_cost"), 0),
         "soluble": boolean(raw.get("filament_soluble")),
         "supportMaterial": boolean(raw.get("filament_is_support")),
+        "minimalPurgeOnWipeTower": number(raw.get("filament_minimal_purge_on_wipe_tower"), 15),
+        "additionalCoolingFanSpeed": integer(raw.get("additional_cooling_fan_speed"), 0),
         "filamentStartGcode": str(scalar(raw.get("filament_start_gcode"), "")),
         "filamentEndGcode": str(scalar(raw.get("filament_end_gcode"), "")),
         "retractLength": nullable_number(raw.get("filament_retraction_length")),
@@ -469,7 +472,16 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and 0 <= profile["costPerKilogram"] <= 1_000_000
         and len(profile["filamentStartGcode"].encode("utf-8")) <= 262_144
         and len(profile["filamentEndGcode"].encode("utf-8")) <= 262_144
-        and all(0 <= profile[key] <= 100 for key in ["fanMinSpeed", "fanMaxSpeed", "overhangFanSpeed"])
+        and all(
+            0 <= profile[key] <= 100
+            for key in [
+                "fanMinSpeed",
+                "fanMaxSpeed",
+                "overhangFanSpeed",
+                "additionalCoolingFanSpeed",
+            ]
+        )
+        and 0 <= profile["minimalPurgeOnWipeTower"] <= 1_000
         and (profile["retractLength"] is None or 0 <= profile["retractLength"] <= 100)
         and (profile["retractSpeed"] is None or 0 <= profile["retractSpeed"] <= 500)
         and (profile["deretractSpeed"] is None or 0 <= profile["deretractSpeed"] <= 500)

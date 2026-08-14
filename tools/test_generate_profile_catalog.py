@@ -425,6 +425,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "printable_height": "220",
                 "nozzle_diameter": "0.4",
                 "gcode_flavor": "marlin",
+                "auxiliary_fan": "1",
                 "extruder_clearance_radius": "71.5",
                 "extruder_clearance_height_to_rod": "28.5",
                 "extruder_clearance_height_to_lid": "118",
@@ -436,6 +437,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(118.0, profile["extruderClearanceHeightToLid"])
         self.assertFalse(profile["singleExtruderMultiMaterial"])
         self.assertEqual(1, profile["extruderCount"])
+        self.assertTrue(profile["auxiliaryFan"])
 
     def test_classifies_single_extruder_multi_material_printers(self) -> None:
         profile = build_printer(
@@ -452,6 +454,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
 
         self.assertTrue(profile["singleExtruderMultiMaterial"])
         self.assertEqual(16, profile["extruderCount"])
+        self.assertFalse(profile["auxiliaryFan"])
 
     def test_preserves_printer_retraction_and_nullable_filament_overrides(self) -> None:
         printer = build_printer(
@@ -498,6 +501,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "filament_cost": ["42.5"],
                 "filament_soluble": ["1"],
                 "filament_is_support": ["1"],
+                "filament_minimal_purge_on_wipe_tower": ["35"],
+                "additional_cooling_fan_speed": ["75%"],
                 "filament_z_hop_types": ["Normal Lift"],
                 "filament_wipe": ["0"],
             },
@@ -516,6 +521,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(42.5, overridden["costPerKilogram"])
         self.assertTrue(overridden["soluble"])
         self.assertTrue(overridden["supportMaterial"])
+        self.assertEqual(35.0, overridden["minimalPurgeOnWipeTower"])
+        self.assertEqual(75, overridden["additionalCoolingFanSpeed"])
         self.assertEqual("normal", overridden["zHopType"])
         self.assertFalse(overridden["wipeWhileRetracting"])
 
@@ -539,6 +546,23 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                     "Example",
                     {
                         "name": "Unsafe statistics",
+                        "filament_type": ["PLA"],
+                        "nozzle_temperature": ["220"],
+                        "hot_plate_temp": ["60"],
+                        key: [value],
+                    },
+                )
+
+    def test_rejects_unsafe_purge_floor_and_auxiliary_fan_speed(self) -> None:
+        for key, value in (
+            ("filament_minimal_purge_on_wipe_tower", "1000.01"),
+            ("additional_cooling_fan_speed", "101"),
+        ):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                build_filament(
+                    "Example",
+                    {
+                        "name": "Unsafe material control",
                         "filament_type": ["PLA"],
                         "nozzle_temperature": ["220"],
                         "hot_plate_temp": ["60"],

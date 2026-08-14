@@ -138,7 +138,7 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(30, manifest.getInt("schemaVersion"))
+            assertEquals(31, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(
@@ -236,6 +236,15 @@ class ProjectArchiveTest {
                 listOf(42.5f, 75f),
                 imported.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::costPerKilogram),
             )
+            assertEquals(
+                listOf(9f, 35f),
+                imported.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::minimalPurgeOnWipeTower),
+            )
+            assertEquals(
+                listOf(40, 70),
+                imported.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::additionalCoolingFanSpeed),
+            )
+            assertEquals(true, imported.sliceOptions?.printerProfile?.auxiliaryFan)
             assertEquals(
                 listOf(false, true),
                 imported.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::soluble),

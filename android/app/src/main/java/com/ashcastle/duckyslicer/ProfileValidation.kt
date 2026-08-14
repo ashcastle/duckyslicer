@@ -56,8 +56,14 @@ internal object ProfileValidation {
             profile.diameter in 0.5f..4f &&
             profile.density in 0f..10f &&
             profile.costPerKilogram in 0f..1_000_000f &&
-            listOf(profile.fanMinSpeed, profile.fanMaxSpeed, profile.overhangFanSpeed)
+            listOf(
+                profile.fanMinSpeed,
+                profile.fanMaxSpeed,
+                profile.overhangFanSpeed,
+                profile.additionalCoolingFanSpeed,
+            )
                 .all { it in 0..100 } &&
+            profile.minimalPurgeOnWipeTower in MIN_PURGE_VOLUME..MAX_PURGE_VOLUME &&
             profile.retractLength.isNullOrIn(0f..100f) &&
             profile.retractSpeed.isNullOrIn(0f..500f) &&
             profile.deretractSpeed.isNullOrIn(0f..500f) &&

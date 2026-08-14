@@ -17,13 +17,20 @@ class ProfileBundleTest {
         val destinationDirectory = Files.createTempDirectory("duckyslicer-profile-destination-").toFile()
         try {
             val source = ProfileStore(sourceDirectory.resolve("user_profiles.json"))
-            source.savePrinter("Portable printer", SliceOptions())
+            source.savePrinter(
+                "Portable printer",
+                SliceOptions().selectPrinter(
+                    PrinterProfile.CUSTOM_CARTESIAN.copy(auxiliaryFan = true),
+                ),
+            )
             source.saveFilament(
                 "Portable filament",
                 SliceOptions().selectFilament(
                     FilamentProfile.GENERIC_PLA.copy(
                         filamentStartGcode = "M117 BUNDLE_FILAMENT_START",
                         filamentEndGcode = "M117 BUNDLE_FILAMENT_END",
+                        minimalPurgeOnWipeTower = 35f,
+                        additionalCoolingFanSpeed = 70,
                     ),
                 ),
             )
@@ -48,12 +55,18 @@ class ProfileBundleTest {
             assertEquals(3, imported.importedTotal)
             assertEquals(0, imported.skippedDuplicates)
             val catalog = destination.load()
-            assertTrue(catalog.printers.any { it.name == "Portable printer" && !it.builtIn })
+            assertTrue(
+                catalog.printers.any {
+                    it.name == "Portable printer" && !it.builtIn && it.auxiliaryFan
+                },
+            )
             val importedFilament = catalog.filaments.single {
                 it.name == "Portable filament" && !it.builtIn
             }
             assertEquals("M117 BUNDLE_FILAMENT_START", importedFilament.filamentStartGcode)
             assertEquals("M117 BUNDLE_FILAMENT_END", importedFilament.filamentEndGcode)
+            assertEquals(35f, importedFilament.minimalPurgeOnWipeTower)
+            assertEquals(70, importedFilament.additionalCoolingFanSpeed)
             assertTrue(catalog.slicing.any { it.name == "Portable slicing" && !it.builtIn })
 
             val firstGeneration = destinationFile.readBytes()

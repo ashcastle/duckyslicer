@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 60
+internal const val USER_PROFILE_SCHEMA_VERSION = 61
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -89,6 +89,7 @@ class ProfileStore private constructor(
             extruderClearanceHeightToLid = options.extruderClearanceHeightToLid,
             singleExtruderMultiMaterial = options.printerProfile.singleExtruderMultiMaterial,
             extruderCount = options.printerProfile.extruderCount,
+            auxiliaryFan = options.printerProfile.auxiliaryFan,
         )
         require(ProfileValidation.printer(profile)) { "Printer profile contains unsafe values" }
         append("printers", profile.toProfileJson())
@@ -113,6 +114,8 @@ class ProfileStore private constructor(
                 costPerKilogram = options.filamentProfile.costPerKilogram,
                 soluble = options.filamentProfile.soluble,
                 supportMaterial = options.filamentProfile.supportMaterial,
+                minimalPurgeOnWipeTower = options.filamentProfile.minimalPurgeOnWipeTower,
+                additionalCoolingFanSpeed = options.filamentProfile.additionalCoolingFanSpeed,
                 fanMinSpeed = options.fanMinSpeed,
                 fanMaxSpeed = options.fanMaxSpeed,
                 overhangFanSpeed = options.overhangFanSpeed,
@@ -163,6 +166,8 @@ class ProfileStore private constructor(
             costPerKilogram = effective.costPerKilogram,
             soluble = effective.soluble,
             supportMaterial = effective.supportMaterial,
+            minimalPurgeOnWipeTower = effective.minimalPurgeOnWipeTower,
+            additionalCoolingFanSpeed = effective.additionalCoolingFanSpeed,
         )
         require(ProfileValidation.filament(profile)) { "Filament profile contains unsafe values" }
         append("filaments", profile.toProfileJson())
@@ -514,6 +519,7 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("extruderClearanceHeightToLid", extruderClearanceHeightToLid)
     .put("singleExtruderMultiMaterial", singleExtruderMultiMaterial)
     .put("extruderCount", extruderCount)
+    .put("auxiliaryFan", auxiliaryFan)
     .put("builtIn", builtIn)
     .put("brand", brand ?: JSONObject.NULL)
 
@@ -543,6 +549,8 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("costPerKilogram", costPerKilogram)
     .put("soluble", soluble)
     .put("supportMaterial", supportMaterial)
+    .put("minimalPurgeOnWipeTower", minimalPurgeOnWipeTower)
+    .put("additionalCoolingFanSpeed", additionalCoolingFanSpeed)
     .put("builtIn", builtIn)
     .put("brand", brand ?: JSONObject.NULL)
     .put("compatiblePrinters", JSONArray(compatiblePrinters))
@@ -911,6 +919,7 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         },
         singleExtruderMultiMaterial = optBoolean("singleExtruderMultiMaterial"),
         extruderCount = optInt("extruderCount", 1),
+        auxiliaryFan = optBoolean("auxiliaryFan", false),
     )
 }.getOrNull()
 
@@ -950,6 +959,8 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         costPerKilogram = optDouble("costPerKilogram", 0.0).toFloat(),
         soluble = optBoolean("soluble", false),
         supportMaterial = optBoolean("supportMaterial", false),
+        minimalPurgeOnWipeTower = optDouble("minimalPurgeOnWipeTower", 15.0).toFloat(),
+        additionalCoolingFanSpeed = optInt("additionalCoolingFanSpeed", 0),
     )
 }.getOrNull()
 

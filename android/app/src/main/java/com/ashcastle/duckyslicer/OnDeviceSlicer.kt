@@ -151,6 +151,7 @@ data class PrinterProfile(
     val bedPolygon: List<Float> = rectangularBedPolygon(bedSizeX, bedSizeY),
     val singleExtruderMultiMaterial: Boolean = false,
     val extruderCount: Int = 1,
+    val auxiliaryFan: Boolean = false,
 ) {
     companion object {
         val U1_02 = PrinterProfile(
@@ -241,6 +242,8 @@ data class FilamentProfile(
     val costPerKilogram: Float = 0f,
     val soluble: Boolean = false,
     val supportMaterial: Boolean = false,
+    val minimalPurgeOnWipeTower: Float = 15f,
+    val additionalCoolingFanSpeed: Int = 0,
 ) {
     companion object {
         // Curated from the included Snapmaker U1 filament catalog.
@@ -885,7 +888,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 56,
+    val schemaVersion: Int = 60,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1798,6 +1801,13 @@ data class SliceOptions(
         ).also { native ->
             native.filamentSoluble = nativeFilaments.map { if (it.soluble) 1 else 0 }.toIntArray()
             native.filamentIsSupport = nativeFilaments.map { if (it.supportMaterial) 1 else 0 }.toIntArray()
+            native.filamentMinimalPurgeOnWipeTower = nativeFilaments
+                .map(FilamentProfile::minimalPurgeOnWipeTower)
+                .toFloatArray()
+            native.filamentAdditionalCoolingFanSpeeds = nativeFilaments
+                .map(FilamentProfile::additionalCoolingFanSpeed)
+                .toIntArray()
+            native.auxiliaryFan = printerProfile.auxiliaryFan
             native.topSurfaceDensity = quality.surfaceDensity.topPercent
             native.bottomSurfaceDensity = quality.surfaceDensity.bottomPercent
             native.skeletonInfillDensity = quality.skeletonInfillDensity

@@ -17,6 +17,8 @@ class SliceOptionsPersistenceTest {
             diameter = 2.85f,
             density = 1.07f,
             costPerKilogram = 42.5f,
+            minimalPurgeOnWipeTower = 9f,
+            additionalCoolingFanSpeed = 40,
         )
         val secondary = FilamentProfile.PETG.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_04.name),
@@ -27,9 +29,11 @@ class SliceOptionsPersistenceTest {
             costPerKilogram = 75f,
             soluble = true,
             supportMaterial = true,
+            minimalPurgeOnWipeTower = 35f,
+            additionalCoolingFanSpeed = 70,
         )
         val options = SliceOptions()
-            .selectPrinter(PrinterProfile.U1_04)
+            .selectPrinter(PrinterProfile.U1_04.copy(auxiliaryFan = true))
             .selectFilament(primary)
             .copy(
                 filamentSlots = listOf(primary, secondary),
@@ -117,6 +121,9 @@ class SliceOptionsPersistenceTest {
         assertArrayEquals(floatArrayOf(42.5f, 75f), native.filamentCosts, 0.001f)
         assertEquals(listOf(0, 1), native.filamentSoluble.toList())
         assertEquals(listOf(0, 1), native.filamentIsSupport.toList())
+        assertArrayEquals(floatArrayOf(9f, 35f), native.filamentMinimalPurgeOnWipeTower, 0.001f)
+        assertEquals(listOf(40, 70), native.filamentAdditionalCoolingFanSpeeds.toList())
+        assertEquals(true, native.auxiliaryFan)
         assertEquals(listOf("PLA", "PETG"), native.filamentTypes.toList())
         assertEquals(listOf(primary.nozzleTemp, secondary.nozzleTemp), native.extruderTemps.toList())
         assertEquals(listOf(primary.flowRatio, secondary.flowRatio), native.filamentFlowRatios.toList())
@@ -599,11 +606,16 @@ class SliceOptionsPersistenceTest {
             getJSONObject("filament").remove("costPerKilogram")
             getJSONObject("filament").remove("soluble")
             getJSONObject("filament").remove("supportMaterial")
+            getJSONObject("filament").remove("minimalPurgeOnWipeTower")
+            getJSONObject("filament").remove("additionalCoolingFanSpeed")
+            getJSONObject("printer").remove("auxiliaryFan")
             getJSONArray("filamentSlots").getJSONObject(0).remove("diameter")
             getJSONArray("filamentSlots").getJSONObject(0).remove("density")
             getJSONArray("filamentSlots").getJSONObject(0).remove("costPerKilogram")
             getJSONArray("filamentSlots").getJSONObject(0).remove("soluble")
             getJSONArray("filamentSlots").getJSONObject(0).remove("supportMaterial")
+            getJSONArray("filamentSlots").getJSONObject(0).remove("minimalPurgeOnWipeTower")
+            getJSONArray("filamentSlots").getJSONObject(0).remove("additionalCoolingFanSpeed")
             getJSONObject("slicing").apply {
                 remove("makeOverhangPrintable")
                 remove("makeOverhangPrintableAngle")
@@ -673,11 +685,17 @@ class SliceOptionsPersistenceTest {
         assertEquals(0f, restored.filamentProfile.costPerKilogram)
         assertEquals(false, restored.filamentProfile.soluble)
         assertEquals(false, restored.filamentProfile.supportMaterial)
+        assertEquals(15f, restored.filamentProfile.minimalPurgeOnWipeTower)
+        assertEquals(0, restored.filamentProfile.additionalCoolingFanSpeed)
+        assertEquals(false, restored.printerProfile.auxiliaryFan)
         assertEquals(2.85f, restored.toNativeConfig().filamentDiameter)
         assertEquals(listOf(1.24f), restored.toNativeConfig().filamentDensities.toList())
         assertEquals(listOf(0f), restored.toNativeConfig().filamentCosts.toList())
         assertEquals(listOf(0), restored.toNativeConfig().filamentSoluble.toList())
         assertEquals(listOf(0), restored.toNativeConfig().filamentIsSupport.toList())
+        assertEquals(listOf(15f), restored.toNativeConfig().filamentMinimalPurgeOnWipeTower.toList())
+        assertEquals(listOf(0), restored.toNativeConfig().filamentAdditionalCoolingFanSpeeds.toList())
+        assertEquals(false, restored.toNativeConfig().auxiliaryFan)
         assertEquals(0f, restored.travelSpeedZ)
         assertEquals(0f, restored.toNativeConfig().travelSpeedZ)
         assertEquals(emptyList<Float>(), restored.multiMaterial.purgeVolumes)
@@ -713,11 +731,21 @@ class SliceOptionsPersistenceTest {
                 FilamentProfile.GENERIC_PLA.copy(costPerKilogram = 1_000_000.1f),
             ),
         )
+        assertFalse(
+            ProfileValidation.filament(
+                FilamentProfile.GENERIC_PLA.copy(minimalPurgeOnWipeTower = 1_000.1f),
+            ),
+        )
+        assertFalse(
+            ProfileValidation.filament(
+                FilamentProfile.GENERIC_PLA.copy(additionalCoolingFanSpeed = 101),
+            ),
+        )
     }
 }
 
 internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
-    .selectPrinter(PrinterProfile.U1_06)
+    .selectPrinter(PrinterProfile.U1_06.copy(auxiliaryFan = true))
     .selectFilament(
         FilamentProfile.PETG.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_06.name),
@@ -726,6 +754,8 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             diameter = 2.85f,
             density = 1.07f,
             costPerKilogram = 42.5f,
+            minimalPurgeOnWipeTower = 9f,
+            additionalCoolingFanSpeed = 40,
             retractLength = 1.1f,
             retractSpeed = 37f,
             deretractSpeed = 35f,

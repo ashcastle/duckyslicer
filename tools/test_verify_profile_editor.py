@@ -76,6 +76,11 @@ def valid_sources() -> dict[str, str]:
             " R.string.filament_price_per_kilogram activeProfile.copy(costPerKilogram ="
             " R.string.filament_soluble_material activeProfile.copy(soluble ="
             " R.string.filament_support_material activeProfile.copy(supportMaterial ="
+            " R.string.filament_minimal_purge_on_wipe_tower"
+            " activeProfile.copy(minimalPurgeOnWipeTower ="
+            " R.string.auxiliary_part_cooling_fan"
+            " activeProfile.copy(additionalCoolingFanSpeed ="
+            " options.printerProfile.copy(auxiliaryFan ="
             " filamentStartGcode = filamentEndGcode ="
             " R.string.maximum_z_speed R.string.maximum_e_speed"
             " R.string.maximum_x_acceleration R.string.maximum_y_acceleration"
@@ -159,6 +164,8 @@ def valid_sources() -> dict[str, str]:
             ' name="filament_diameter"'
             ' name="filament_density" name="filament_price_per_kilogram"'
             ' name="filament_soluble_material" name="filament_support_material"'
+            ' name="filament_minimal_purge_on_wipe_tower"'
+            ' name="auxiliary_part_cooling_fan" name="cubic_millimeters_suffix"'
             ' name="maximum_z_speed" name="maximum_e_speed"'
             ' name="maximum_x_acceleration" name="maximum_y_acceleration"'
             ' name="maximum_z_acceleration" name="maximum_e_acceleration"'
@@ -203,6 +210,8 @@ def valid_sources() -> dict[str, str]:
             ' name="filament_diameter"'
             ' name="filament_density" name="filament_price_per_kilogram"'
             ' name="filament_soluble_material" name="filament_support_material"'
+            ' name="filament_minimal_purge_on_wipe_tower"'
+            ' name="auxiliary_part_cooling_fan" name="cubic_millimeters_suffix"'
             ' name="maximum_z_speed" name="maximum_e_speed"'
             ' name="maximum_x_acceleration" name="maximum_y_acceleration"'
             ' name="maximum_z_acceleration" name="maximum_e_acceleration"'

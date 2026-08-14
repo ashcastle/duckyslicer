@@ -90,7 +90,7 @@ index 963808df..057e767e 100644
      src/sapil_bambu_plate.cpp
      src/sapil_bambu_objects.cpp
 diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
-index 116a4a85..97124ae3 100644
+index 116a4a85..8e401e9d 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
 @@ -40,14 +40,124 @@ struct SliceConfig {
@@ -389,7 +389,7 @@ index 116a4a85..97124ae3 100644
      float max_print_height = 270.0f;
  
      // Nozzle
-@@ -86,18 +344,102 @@ struct SliceConfig {
+@@ -86,18 +344,103 @@ struct SliceConfig {
      std::vector<int> extruder_temps;           // per-extruder nozzle temps
      std::vector<float> extruder_retract_length; // per-extruder retraction
      std::vector<float> extruder_retract_speed;  // per-extruder retraction speed
@@ -474,6 +474,7 @@ index 116a4a85..97124ae3 100644
      std::string machine_start_gcode;
      std::string machine_end_gcode;
 +    std::string gcode_flavor = "marlin";
++    bool auxiliary_fan = false;
 +    float machine_max_speed_x = 500.0f;
 +    float machine_max_speed_y = 500.0f;
 +    float machine_max_speed_z = 20.0f;
@@ -781,7 +782,7 @@ index 44041ca3..54aac93d 100644
      vol->config.set_key_value("extruder", new Slic3r::ConfigOptionInt(slot));
      // F66 — sync the static preview-extruder override cache. sapil_model.cpp's
 diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
-index d93efb7d..47399bd0 100644
+index d93efb7d..0f897bb2 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
 @@ -92,11 +92,113 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
@@ -1059,7 +1060,7 @@ index d93efb7d..47399bd0 100644
      config.max_print_height = getFloat("maxPrintHeight");
  
      config.nozzle_diameter = getFloat("nozzleDiameter");
-@@ -129,17 +376,105 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -129,17 +376,106 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.extruder_temps = getIntArray("extruderTemps");
      config.extruder_retract_length = getFloatArray("extruderRetractLength");
      config.extruder_retract_speed = getFloatArray("extruderRetractSpeed");
@@ -1142,6 +1143,7 @@ index d93efb7d..47399bd0 100644
      config.machine_start_gcode = getString("machineStartGcode");
      config.machine_end_gcode = getString("machineEndGcode");
 +    config.gcode_flavor = getString("gcodeFlavor");
++    config.auxiliary_fan = getBool("auxiliaryFan");
 +    config.machine_max_speed_x = getFloat("machineMaxSpeedX");
 +    config.machine_max_speed_y = getFloat("machineMaxSpeedY");
 +    config.machine_max_speed_z = getFloat("machineMaxSpeedZ");
@@ -1451,7 +1453,7 @@ index d93efb7d..47399bd0 100644
      setFloat("maxPrintHeight", config.max_print_height);
      setFloat("nozzleDiameter", config.nozzle_diameter);
      setFloat("filamentDiameter", config.filament_diameter);
-@@ -265,12 +851,103 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -265,12 +851,104 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setIntArray("extruderTemps", config.extruder_temps);
      setFloatArray("extruderRetractLength", config.extruder_retract_length);
      setFloatArray("extruderRetractSpeed", config.extruder_retract_speed);
@@ -1534,6 +1536,7 @@ index d93efb7d..47399bd0 100644
      setString("machineStartGcode", config.machine_start_gcode);
      setString("machineEndGcode", config.machine_end_gcode);
 +    setString("gcodeFlavor", config.gcode_flavor);
++    setBool("auxiliaryFan", config.auxiliary_fan);
 +    setFloat("machineMaxSpeedX", config.machine_max_speed_x);
 +    setFloat("machineMaxSpeedY", config.machine_max_speed_y);
 +    setFloat("machineMaxSpeedZ", config.machine_max_speed_z);
@@ -1899,7 +1902,7 @@ index 00000000..3dbe981e
 +    return result ? JNI_TRUE : JNI_FALSE;
 +}
 diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
-index 8d61c9cf..0ea4284d 100644
+index 8d61c9cf..1618c798 100644
 --- a/app/src/main/cpp/src/sapil_print.cpp
 +++ b/app/src/main/cpp/src/sapil_print.cpp
 @@ -1,11 +1,15 @@
@@ -1957,7 +1960,7 @@ index 8d61c9cf..0ea4284d 100644
  void SlicerEngine::cancelSlice() {
      g_slice_cancel.store(true, std::memory_order_release);
      auto* print = g_active_print.load(std::memory_order_acquire);
-@@ -183,84 +212,208 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -183,84 +212,209 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
      dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
      dpc.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(config.bottom_solid_layers));
@@ -2183,6 +2186,7 @@ index 8d61c9cf..0ea4284d 100644
 +    if (config.gcode_flavor == "marlin2") flavor = Slic3r::gcfMarlinFirmware;
 +    else if (config.gcode_flavor == "klipper") flavor = Slic3r::gcfKlipper;
 +    dpc.set_key_value("gcode_flavor", new Slic3r::ConfigOptionEnum<Slic3r::GCodeFlavor>(flavor));
++    dpc.set_key_value("auxiliary_fan", new Slic3r::ConfigOptionBool(config.auxiliary_fan));
 +
 +    const double xy_machine_acceleration = std::min(max_acceleration_x, max_acceleration_y);
 +    const double default_acceleration = config.default_acceleration > 0.0f
