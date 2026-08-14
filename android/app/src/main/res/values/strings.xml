@@ -212,6 +212,7 @@
     <string name="gcode_output">G-code output</string>
     <string name="label_objects">Label objects</string>
     <string name="exclude_objects">Exclude objects</string>
+    <string name="verbose_gcode">Verbose G-code</string>
     <string name="intra_layer_order">Intra-layer order</string>
     <string name="print_by_layer">By layer</string>
     <string name="print_by_object">By object</string>

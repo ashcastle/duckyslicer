@@ -193,6 +193,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var enableArcFitting: Boolean = base.gcodeSettings.arcFitting
     private var gcodeLabelObjects: Boolean = base.gcodeSettings.labelObjects
     private var excludeObject: Boolean = base.gcodeSettings.excludeObjects
+    private var gcodeComments: Boolean = base.gcodeSettings.verboseComments
     private var initialLayerTravelSpeed: Float = base.gcodeSettings.initialLayerTravelSpeed
     private var initialLayerTravelSpeedPercent: Boolean = base.gcodeSettings.initialLayerTravelSpeedPercent
     private var slowDownLayers: Int = base.gcodeSettings.slowDownLayers
@@ -623,6 +624,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         enableArcFitting = input.readCatalogBoolean()
         gcodeLabelObjects = input.readCatalogBoolean()
         excludeObject = input.readCatalogBoolean()
+        gcodeComments = input.readCatalogBoolean()
         initialLayerTravelSpeed = input.readFloat()
         initialLayerTravelSpeedPercent = input.readCatalogBoolean()
         slowDownLayers = input.readInt()
@@ -878,6 +880,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             arcFitting = enableArcFitting,
             labelObjects = gcodeLabelObjects,
             excludeObjects = excludeObject,
+            verboseComments = gcodeComments,
             initialLayerTravelSpeed = initialLayerTravelSpeed,
             initialLayerTravelSpeedPercent = initialLayerTravelSpeedPercent,
             slowDownLayers = slowDownLayers,
@@ -1289,6 +1292,7 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("enableArcFitting", BINARY_BOOL),
     BinaryField("gcodeLabelObjects", BINARY_BOOL),
     BinaryField("excludeObject", BINARY_BOOL),
+    BinaryField("gcodeComments", BINARY_BOOL),
     BinaryField("initialLayerTravelSpeed", BINARY_FLOAT),
     BinaryField("initialLayerTravelSpeedPercent", BINARY_BOOL),
     BinaryField("slowDownLayers", BINARY_INT),

@@ -68,6 +68,7 @@ class SliceOptionsPersistenceTest {
                     arcFitting = true,
                     labelObjects = false,
                     excludeObjects = true,
+                    verboseComments = true,
                     initialLayerTravelSpeed = 35f,
                     initialLayerTravelSpeedPercent = true,
                     slowDownLayers = 4,
@@ -536,6 +537,7 @@ class SliceOptionsPersistenceTest {
                 remove("skeletonInfillLineWidth")
                 remove("skeletonInfillLineWidthPercent")
                 remove("skirtStartAngle")
+                remove("gcodeComments")
             }
         }
 
@@ -563,6 +565,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(true, restored.quality.skeletonInfillLineWidthPercent)
         assertEquals(-135f, restored.quality.skirtStartAngle)
         assertEquals(-135f, restored.toNativeConfig().skirtStartAngle)
+        assertEquals(false, restored.gcodeSettings.verboseComments)
+        assertEquals(false, restored.toNativeConfig().gcodeComments)
         assertEquals(0f, restored.travelSpeedZ)
         assertEquals(0f, restored.toNativeConfig().travelSpeedZ)
         assertEquals(emptyList<Float>(), restored.multiMaterial.purgeVolumes)
@@ -817,6 +821,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             arcFitting = true,
             labelObjects = false,
             excludeObjects = true,
+            verboseComments = true,
             initialLayerTravelSpeed = 35f,
             initialLayerTravelSpeedPercent = true,
             slowDownLayers = 4,

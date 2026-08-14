@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 51
+internal const val USER_PROFILE_SCHEMA_VERSION = 52
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -723,6 +723,7 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("enableArcFitting", gcodeSettings.arcFitting)
     .put("gcodeLabelObjects", gcodeSettings.labelObjects)
     .put("excludeObject", gcodeSettings.excludeObjects)
+    .put("gcodeComments", gcodeSettings.verboseComments)
     .put("initialLayerTravelSpeed", gcodeSettings.initialLayerTravelSpeed)
     .put("initialLayerTravelSpeedPercent", gcodeSettings.initialLayerTravelSpeedPercent)
     .put("slowDownLayers", gcodeSettings.slowDownLayers)
@@ -1136,6 +1137,7 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
             arcFitting = optBoolean("enableArcFitting"),
             labelObjects = optBoolean("gcodeLabelObjects", true),
             excludeObjects = optBoolean("excludeObject"),
+            verboseComments = optBoolean("gcodeComments"),
             initialLayerTravelSpeed = optDouble("initialLayerTravelSpeed", 100.0).toFloat(),
             initialLayerTravelSpeedPercent = optBoolean("initialLayerTravelSpeedPercent", true),
             slowDownLayers = optInt("slowDownLayers", 0),

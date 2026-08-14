@@ -4056,6 +4056,17 @@ private fun SlicingSettingsSheet(
                         )
                     },
                 )
+                SettingsSwitch(
+                    label = stringResource(R.string.verbose_gcode),
+                    checked = options.gcodeSettings.verboseComments,
+                    onCheckedChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                gcodeSettings = options.gcodeSettings.copy(verboseComments = it),
+                            ),
+                        )
+                    },
+                )
                 SettingsGroupTitle(stringResource(R.string.spiral_vase))
                 SettingsSwitch(
                     label = stringResource(R.string.spiral_vase),

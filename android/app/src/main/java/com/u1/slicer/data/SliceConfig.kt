@@ -259,6 +259,7 @@ data class SliceConfig(
     @JvmField var skeletonInfillLineWidth: Float = 100f
     @JvmField var skeletonInfillLineWidthPercent: Boolean = true
     @JvmField var skirtStartAngle: Float = -135f
+    @JvmField var gcodeComments: Boolean = false
     @JvmField var slicingMode: String = "regular"
     @JvmField var sliceClosingRadius: Float = 0.049f
     @JvmField var preciseZHeight: Boolean = false

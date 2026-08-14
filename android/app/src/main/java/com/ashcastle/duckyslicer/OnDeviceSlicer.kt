@@ -433,6 +433,7 @@ data class GcodeSettings(
     val arcFitting: Boolean = false,
     val labelObjects: Boolean = true,
     val excludeObjects: Boolean = false,
+    val verboseComments: Boolean = false,
     val initialLayerTravelSpeed: Float = 100f,
     val initialLayerTravelSpeedPercent: Boolean = true,
     val slowDownLayers: Int = 0,
@@ -862,7 +863,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 50,
+    val schemaVersion: Int = 51,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1877,6 +1878,7 @@ data class SliceOptions(
             native.supportIroningSpacing = supportAdvanced.ironingSpacing
             native.gcodeLabelObjects = gcodeSettings.labelObjects
             native.excludeObject = gcodeSettings.excludeObjects
+            native.gcodeComments = gcodeSettings.verboseComments
             native.initialLayerTravelSpeed = gcodeSettings.initialLayerTravelSpeed
             native.initialLayerTravelSpeedPercent = gcodeSettings.initialLayerTravelSpeedPercent
             native.slowDownLayers = gcodeSettings.slowDownLayers

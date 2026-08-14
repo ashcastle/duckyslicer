@@ -201,6 +201,7 @@
     <string name="gcode_output">G-code 출력</string>
     <string name="label_objects">오브젝트 라벨</string>
     <string name="exclude_objects">오브젝트 제외</string>
+    <string name="verbose_gcode">상세 G-code</string>
     <string name="intra_layer_order">레이어 내부 순서</string>
     <string name="print_by_layer">레이어별</string>
     <string name="print_by_object">오브젝트별</string>

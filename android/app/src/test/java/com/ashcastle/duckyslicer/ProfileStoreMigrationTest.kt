@@ -41,6 +41,7 @@ class ProfileStoreMigrationTest {
                 remove("skeletonInfillLineWidth")
                 remove("skeletonInfillLineWidthPercent")
                 remove("skirtStartAngle")
+                remove("gcodeComments")
             }
             file.writeText(
                 JSONObject()
@@ -79,6 +80,7 @@ class ProfileStoreMigrationTest {
             assertEquals(100f, restoredSlicing.skeletonInfillLineWidth)
             assertTrue(restoredSlicing.skeletonInfillLineWidthPercent)
             assertEquals(-135f, restoredSlicing.skirtStartAngle)
+            assertEquals(false, restoredSlicing.gcodeSettings.verboseComments)
         } finally {
             file.delete()
         }
@@ -204,6 +206,7 @@ class ProfileStoreMigrationTest {
         try {
             val options = SliceOptions().copy(
                 fillPattern = "lockedzag",
+                gcodeSettings = GcodeSettings(verboseComments = true),
                 quality = QualityProfile.STANDARD.copy(
                     skeletonInfillDensity = 31f,
                     skinInfillDensity = 47f,
@@ -230,6 +233,7 @@ class ProfileStoreMigrationTest {
             assertEquals(0.62f, restored.skeletonInfillLineWidth)
             assertEquals(false, restored.skeletonInfillLineWidthPercent)
             assertEquals(-25f, restored.skirtStartAngle)
+            assertEquals(true, restored.gcodeSettings.verboseComments)
         } finally {
             directory.deleteRecursively()
         }

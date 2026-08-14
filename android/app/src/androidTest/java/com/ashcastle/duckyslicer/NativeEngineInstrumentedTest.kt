@@ -2000,7 +2000,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(50, catalog.schemaVersion)
+        assertEquals(51, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -3304,6 +3304,7 @@ class NativeEngineInstrumentedTest {
                 bottomSurfacePattern = "concentric",
                 internalSolidInfillPattern = "rectilinear",
                 travelSpeed = 420f,
+                gcodeSettings = GcodeSettings(verboseComments = true),
                 firstLayerSpeed = 35f,
                 skirtLoops = 2,
                 skirtDistance = 7f,
@@ -3571,6 +3572,7 @@ class NativeEngineInstrumentedTest {
         assertTrue("Skirt loops must reach G-code", gcode.contains("; skirt_loops = 2"))
         assertTrue("Skirt distance must reach Orca", gcode.contains("; skirt_distance = 7"))
         assertTrue("Skirt start point must reach Orca", gcode.contains("; skirt_start_angle = -25"))
+        assertTrue("Verbose G-code must reach Orca", gcode.contains("; gcode_comments = 1"))
         assertTrue("Skirt height must reach Orca", gcode.contains("; skirt_height = 3"))
         assertTrue("Skirt speed must reach Orca", gcode.contains("; skirt_speed = 59"))
         assertTrue("Minimum skirt extrusion must reach Orca", gcode.contains("; min_skirt_length = 14"))
@@ -4034,6 +4036,39 @@ class NativeEngineInstrumentedTest {
             "Changing the start angle must move the first physical skirt extrusion",
             defaultStart,
             zeroStart,
+        )
+    }
+
+    @Test
+    fun verboseGcodeAddsCommandDescriptionsWithoutRemovingPreviewRoles() {
+        val model = fixtureModel()
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.CUSTOM_CARTESIAN)
+            .selectFilament(FilamentProfile.GENERIC_PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(skirtLoops = 0, brimWidth = 0f)
+
+        fun slice(verbose: Boolean): String = OnDeviceSlicer.slice(
+            model,
+            base.copy(
+                gcodeSettings = base.gcodeSettings.copy(verboseComments = verbose),
+            ),
+        ).output.readText()
+
+        fun describedCommands(gcode: String): Int = gcode.lineSequence().count { line ->
+            line.startsWith("G") && line.contains(" ; ")
+        }
+
+        val compact = slice(false)
+        val verbose = slice(true)
+
+        assertTrue(compact.contains("; gcode_comments = 0"))
+        assertTrue(verbose.contains("; gcode_comments = 1"))
+        assertTrue(compact.contains(";TYPE:Outer wall"))
+        assertTrue(verbose.contains(";TYPE:Outer wall"))
+        assertTrue(
+            "Verbose output must add real per-command descriptions",
+            describedCommands(verbose) > describedCommands(compact),
         )
     }
 
