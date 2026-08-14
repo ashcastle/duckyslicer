@@ -77,6 +77,8 @@ class SliceOptionsPersistenceTest {
                 ),
                 quality = QualityProfile.STANDARD.copy(
                     surfaceDensity = SurfaceDensitySettings(topPercent = 44f, bottomPercent = 71f),
+                    infillShiftStep = 1.7f,
+                    symmetricInfillYAxis = true,
                     extrusionRateSmoothing = ExtrusionRateSmoothingSettings(
                         maximumSlope = 20f,
                         segmentLength = 5f,
@@ -362,6 +364,10 @@ class SliceOptionsPersistenceTest {
         assertEquals(71f, restored.quality.surfaceDensity.bottomPercent)
         assertEquals(44f, restored.toNativeConfig().topSurfaceDensity)
         assertEquals(71f, restored.toNativeConfig().bottomSurfaceDensity)
+        assertEquals(1.7f, restored.quality.infillShiftStep)
+        assertEquals(true, restored.quality.symmetricInfillYAxis)
+        assertEquals(1.7f, restored.toNativeConfig().infillShiftStep)
+        assertEquals(true, restored.toNativeConfig().symmetricInfillYAxis)
         assertEquals(4, restored.supportInterfaceTopLayers)
         assertEquals(2, restored.supportInterfaceBottomLayers)
         assertEquals(0.24f, restored.supportInterfaceSpacing)
@@ -545,6 +551,8 @@ class SliceOptionsPersistenceTest {
                 remove("gcodeComments")
                 remove("topSurfaceDensity")
                 remove("bottomSurfaceDensity")
+                remove("infillShiftStep")
+                remove("symmetricInfillYAxis")
             }
         }
 
@@ -577,6 +585,10 @@ class SliceOptionsPersistenceTest {
         assertEquals(SurfaceDensitySettings(), restored.quality.surfaceDensity)
         assertEquals(100f, restored.toNativeConfig().topSurfaceDensity)
         assertEquals(100f, restored.toNativeConfig().bottomSurfaceDensity)
+        assertEquals(0.4f, restored.quality.infillShiftStep)
+        assertEquals(false, restored.quality.symmetricInfillYAxis)
+        assertEquals(0.4f, restored.toNativeConfig().infillShiftStep)
+        assertEquals(false, restored.toNativeConfig().symmetricInfillYAxis)
         assertEquals(0f, restored.travelSpeedZ)
         assertEquals(0f, restored.toNativeConfig().travelSpeedZ)
         assertEquals(emptyList<Float>(), restored.multiMaterial.purgeVolumes)
@@ -658,6 +670,8 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         quality = QualityProfile.FINE_06.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_06.name),
             surfaceDensity = SurfaceDensitySettings(topPercent = 44f, bottomPercent = 71f),
+            infillShiftStep = 1.7f,
+            symmetricInfillYAxis = true,
             travelSpeedZ = 17f,
             skeletonInfillDensity = 31f,
             skinInfillDensity = 47f,

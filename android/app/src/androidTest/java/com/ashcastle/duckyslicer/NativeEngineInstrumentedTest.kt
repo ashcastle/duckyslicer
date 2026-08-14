@@ -296,6 +296,66 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun lockedZagShiftChangesRealSparseInfillGeometry() {
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.U1_04)
+            .selectFilament(FilamentProfile.PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                fillPattern = "lockedzag",
+                fillDensity = 0.28f,
+                topSolidLayers = 2,
+                bottomSolidLayers = 2,
+                perimeters = 2,
+            )
+
+        fun slice(shift: Float, symmetric: Boolean): SliceOutcome = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.copy(
+                quality = base.quality.copy(
+                    infillShiftStep = shift,
+                    symmetricInfillYAxis = symmetric,
+                ),
+            ),
+        )
+
+        fun sparseInfillMotion(gcode: String): List<String> {
+            var sparseInfill = false
+            return gcode.lineSequence().mapNotNull { line ->
+                if (line.startsWith(";TYPE:")) sparseInfill = line == ";TYPE:Sparse infill"
+                line.substringBefore(';').trimEnd().takeIf {
+                    sparseInfill && it.startsWith("G1 ") && it.contains(" E") &&
+                        (it.contains(" X") || it.contains(" Y"))
+                }
+            }.toList()
+        }
+
+        val stationary = slice(0f, false)
+        val shifted = slice(2f, true)
+        try {
+            val stationaryGcode = stationary.output.readText()
+            val shiftedGcode = shifted.output.readText()
+            val stationaryMotion = sparseInfillMotion(stationaryGcode)
+            val shiftedMotion = sparseInfillMotion(shiftedGcode)
+
+            assertTrue(stationaryGcode.contains("; infill_shift_step = 0"))
+            assertTrue(stationaryGcode.contains("; symmetric_infill_y_axis = 0"))
+            assertTrue(shiftedGcode.contains("; infill_shift_step = 2"))
+            assertTrue(shiftedGcode.contains("; symmetric_infill_y_axis = 1"))
+            assertTrue("Locked Zag must retain physical sparse infill", stationaryMotion.isNotEmpty())
+            assertTrue("Shifted Locked Zag must retain physical sparse infill", shiftedMotion.isNotEmpty())
+            assertNotEquals(
+                "Infill shift must change real sparse-infill geometry, not only metadata",
+                stationaryMotion,
+                shiftedMotion,
+            )
+        } finally {
+            stationary.output.delete()
+            shifted.output.delete()
+        }
+    }
+
+    @Test
     fun printableOverhangsChangeRealModelGeometry() {
         val baseOptions = SliceOptions()
             .selectQuality(QualityProfile.DRAFT)
@@ -2000,7 +2060,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(52, catalog.schemaVersion)
+        assertEquals(53, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -3428,6 +3488,8 @@ class NativeEngineInstrumentedTest {
                     skinInfillDensity = 47f,
                     skinInfillDepth = 3.5f,
                     infillLockDepth = 1.25f,
+                    infillShiftStep = 1.7f,
+                    symmetricInfillYAxis = true,
                     skinInfillLineWidth = 135f,
                     skinInfillLineWidthPercent = true,
                     skeletonInfillLineWidth = 0.62f,
@@ -3683,6 +3745,8 @@ class NativeEngineInstrumentedTest {
         assertTrue("Maximum infill anchor must preserve absolute units", gcode.contains("; infill_anchor_max = 17.5"))
         assertTrue("Locked Zag skeleton density must reach Orca", gcode.contains("; skeleton_infill_density = 31%"))
         assertTrue("Locked Zag skin density must reach Orca", gcode.contains("; skin_infill_density = 47%"))
+        assertTrue("Infill shift must reach Orca", gcode.contains("; infill_shift_step = 1.7"))
+        assertTrue("Symmetric infill must reach Orca", gcode.contains("; symmetric_infill_y_axis = 1"))
         assertTrue("Locked Zag skin depth must reach Orca", gcode.contains("; skin_infill_depth = 3.5"))
         assertTrue("Locked Zag lock depth must reach Orca", gcode.contains("; infill_lock_depth = 1.25"))
         assertTrue("Locked Zag skin width must preserve percent units", gcode.contains("; skin_infill_line_width = 135%"))

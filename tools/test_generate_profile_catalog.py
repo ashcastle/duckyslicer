@@ -97,6 +97,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "gcode_comments": "1",
                 "top_surface_density": "42%",
                 "bottom_surface_density": "68%",
+                "infill_shift_step": "1.7",
+                "symmetric_infill_y_axis": "1",
                 "travel_speed_z": "17",
                 "initial_layer_travel_speed": "35%",
                 "accel_to_decel_enable": "0",
@@ -166,6 +168,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(profile["gcodeComments"])
         self.assertEqual(42.0, profile["topSurfaceDensity"])
         self.assertEqual(68.0, profile["bottomSurfaceDensity"])
+        self.assertEqual(1.7, profile["infillShiftStep"])
+        self.assertTrue(profile["symmetricInfillYAxis"])
         self.assertEqual(17.0, profile["travelSpeedZ"])
         self.assertEqual(35.0, profile["initialLayerTravelSpeed"])
         self.assertTrue(profile["initialLayerTravelSpeedPercent"])

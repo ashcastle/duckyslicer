@@ -262,6 +262,8 @@ data class SliceConfig(
     @JvmField var gcodeComments: Boolean = false
     @JvmField var topSurfaceDensity: Float = 100f
     @JvmField var bottomSurfaceDensity: Float = 100f
+    @JvmField var infillShiftStep: Float = 0.4f
+    @JvmField var symmetricInfillYAxis: Boolean = false
     @JvmField var slicingMode: String = "regular"
     @JvmField var sliceClosingRadius: Float = 0.049f
     @JvmField var preciseZHeight: Boolean = false

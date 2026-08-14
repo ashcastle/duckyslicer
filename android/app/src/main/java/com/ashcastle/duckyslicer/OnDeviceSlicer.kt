@@ -652,6 +652,8 @@ data class QualityProfile(
     val skinInfillDensity: Float = 25f,
     val skinInfillDepth: Float = 2f,
     val infillLockDepth: Float = 1f,
+    val infillShiftStep: Float = 0.4f,
+    val symmetricInfillYAxis: Boolean = false,
     val skinInfillLineWidth: Float = 100f,
     val skinInfillLineWidthPercent: Boolean = true,
     val skeletonInfillLineWidth: Float = 100f,
@@ -869,7 +871,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 52,
+    val schemaVersion: Int = 53,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1762,6 +1764,8 @@ data class SliceOptions(
             native.skinInfillDensity = quality.skinInfillDensity
             native.skinInfillDepth = quality.skinInfillDepth
             native.infillLockDepth = quality.infillLockDepth
+            native.infillShiftStep = quality.infillShiftStep
+            native.symmetricInfillYAxis = quality.symmetricInfillYAxis
             native.skinInfillLineWidth = quality.skinInfillLineWidth
             native.skinInfillLineWidthPercent = quality.skinInfillLineWidthPercent
             native.skeletonInfillLineWidth = quality.skeletonInfillLineWidth

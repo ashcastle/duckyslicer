@@ -204,6 +204,7 @@ internal object ProfileValidation {
             profile.skinInfillDensity in 0f..100f &&
             profile.skinInfillDepth in 0f..100f &&
             profile.infillLockDepth in 0f..100f &&
+            profile.infillShiftStep in 0f..10f &&
             lineWidthIsValid(profile.skinInfillLineWidth, profile.skinInfillLineWidthPercent) &&
             lineWidthIsValid(profile.skeletonInfillLineWidth, profile.skeletonInfillLineWidthPercent) &&
             profile.gapFillTarget in setOf("everywhere", "topbottom", "nowhere") &&

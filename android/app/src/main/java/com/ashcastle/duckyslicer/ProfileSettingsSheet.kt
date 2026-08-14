@@ -2198,7 +2198,8 @@ private fun SlicingSettingsSheet(
                     settingLabel = stringResource(R.string.sparse_infill_pattern),
                     entries = listOf(
                         "crosshatch", "grid", "rectilinear", "gyroid", "cubic",
-                        "alignedrectilinear", "lockedzag", "triangles", "lightning",
+                        "alignedrectilinear", "zigzag", "crosszag", "lockedzag",
+                        "triangles", "lightning",
                     ),
                     selected = options.fillPattern,
                     optionLabel = { fillPatternLabel(it) },
@@ -2278,6 +2279,43 @@ private fun SlicingSettingsSheet(
                                         skeletonInfillLineWidth = adjustedValue,
                                         skeletonInfillLineWidthPercent = selectedPercent,
                                     ),
+                                ),
+                            )
+                        },
+                    )
+                }
+                if (options.fillPattern in setOf("crosszag", "lockedzag") || settingsQuery.isNotBlank()) {
+                    SettingSlider(
+                        label = stringResource(R.string.infill_shift_step),
+                        valueText = stringResource(
+                            R.string.millimeters_value_precise,
+                            options.quality.infillShiftStep,
+                        ),
+                        value = options.quality.infillShiftStep,
+                        range = 0f..10f,
+                        steps = 99,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    quality = options.quality.copy(
+                                        infillShiftStep = (it * 10f).roundToInt() / 10f,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                }
+                if (
+                    options.fillPattern in setOf("zigzag", "crosszag", "lockedzag") ||
+                    settingsQuery.isNotBlank()
+                ) {
+                    SettingsSwitch(
+                        label = stringResource(R.string.symmetric_infill_y_axis),
+                        checked = options.quality.symmetricInfillYAxis,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    quality = options.quality.copy(symmetricInfillYAxis = it),
                                 ),
                             )
                         },
@@ -5371,6 +5409,8 @@ private fun fillPatternLabel(value: String): String = when (value) {
     "honeycomb" -> stringResource(R.string.infill_honeycomb)
     "rectilinear" -> stringResource(R.string.infill_rectilinear)
     "alignedrectilinear" -> stringResource(R.string.infill_aligned_rectilinear)
+    "zigzag" -> stringResource(R.string.infill_zig_zag)
+    "crosszag" -> stringResource(R.string.infill_cross_zag)
     "lockedzag" -> stringResource(R.string.infill_locked_zag)
     "gyroid" -> stringResource(R.string.infill_gyroid)
     else -> enumLabel(value)

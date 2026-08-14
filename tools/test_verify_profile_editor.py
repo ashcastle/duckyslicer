@@ -48,6 +48,8 @@ def valid_sources() -> dict[str, str]:
             " R.string.number_of_slow_layers"
             " R.string.brim_ear_maximum_angle R.string.brim_ear_detection_radius"
             " R.string.top_surface_density R.string.bottom_surface_density"
+            " R.string.infill_shift_step R.string.symmetric_infill_y_axis"
+            " infillShiftStep = (it * 10f) symmetricInfillYAxis = it"
             " R.string.support_on_build_plate_only R.string.support_base_pattern_spacing"
             " R.string.support_expansion R.string.support_interface_loop_pattern"
             " R.string.independent_support_layer_height"
@@ -116,6 +118,7 @@ def valid_sources() -> dict[str, str]:
             ' name="number_of_slow_layers"'
             ' name="brim_ear_maximum_angle" name="brim_ear_detection_radius"'
             ' name="top_surface_density" name="bottom_surface_density"'
+            ' name="infill_shift_step" name="symmetric_infill_y_axis"'
             ' name="support_on_build_plate_only" name="support_base_pattern_spacing"'
             ' name="support_expansion" name="support_interface_loop_pattern"'
             ' name="independent_support_layer_height"'
@@ -147,6 +150,7 @@ def valid_sources() -> dict[str, str]:
             ' name="number_of_slow_layers"'
             ' name="brim_ear_maximum_angle" name="brim_ear_detection_radius"'
             ' name="top_surface_density" name="bottom_surface_density"'
+            ' name="infill_shift_step" name="symmetric_infill_y_axis"'
             ' name="support_on_build_plate_only" name="support_base_pattern_spacing"'
             ' name="support_expansion" name="support_interface_loop_pattern"'
             ' name="independent_support_layer_height"'

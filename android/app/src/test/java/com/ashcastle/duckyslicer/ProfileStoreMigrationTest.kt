@@ -44,6 +44,8 @@ class ProfileStoreMigrationTest {
                 remove("gcodeComments")
                 remove("topSurfaceDensity")
                 remove("bottomSurfaceDensity")
+                remove("infillShiftStep")
+                remove("symmetricInfillYAxis")
             }
             file.writeText(
                 JSONObject()
@@ -84,6 +86,8 @@ class ProfileStoreMigrationTest {
             assertEquals(-135f, restoredSlicing.skirtStartAngle)
             assertEquals(false, restoredSlicing.gcodeSettings.verboseComments)
             assertEquals(SurfaceDensitySettings(), restoredSlicing.surfaceDensity)
+            assertEquals(0.4f, restoredSlicing.infillShiftStep)
+            assertEquals(false, restoredSlicing.symmetricInfillYAxis)
         } finally {
             file.delete()
         }
@@ -216,6 +220,8 @@ class ProfileStoreMigrationTest {
                     skinInfillDensity = 47f,
                     skinInfillDepth = 3.5f,
                     infillLockDepth = 1.25f,
+                    infillShiftStep = 1.7f,
+                    symmetricInfillYAxis = true,
                     skinInfillLineWidth = 135f,
                     skinInfillLineWidthPercent = true,
                     skeletonInfillLineWidth = 0.62f,
@@ -240,6 +246,8 @@ class ProfileStoreMigrationTest {
             assertEquals(true, restored.gcodeSettings.verboseComments)
             assertEquals(42f, restored.surfaceDensity.topPercent)
             assertEquals(68f, restored.surfaceDensity.bottomPercent)
+            assertEquals(1.7f, restored.infillShiftStep)
+            assertEquals(true, restored.symmetricInfillYAxis)
         } finally {
             directory.deleteRecursively()
         }

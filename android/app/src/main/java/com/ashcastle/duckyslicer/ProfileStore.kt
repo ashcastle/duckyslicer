@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 53
+internal const val USER_PROFILE_SCHEMA_VERSION = 54
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -259,6 +259,8 @@ class ProfileStore private constructor(
             skinInfillDensity = options.quality.skinInfillDensity,
             skinInfillDepth = options.quality.skinInfillDepth,
             infillLockDepth = options.quality.infillLockDepth,
+            infillShiftStep = options.quality.infillShiftStep,
+            symmetricInfillYAxis = options.quality.symmetricInfillYAxis,
             skinInfillLineWidth = options.quality.skinInfillLineWidth,
             skinInfillLineWidthPercent = options.quality.skinInfillLineWidthPercent,
             skeletonInfillLineWidth = options.quality.skeletonInfillLineWidth,
@@ -628,6 +630,8 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("skinInfillDensity", skinInfillDensity)
     .put("skinInfillDepth", skinInfillDepth)
     .put("infillLockDepth", infillLockDepth)
+    .put("infillShiftStep", infillShiftStep)
+    .put("symmetricInfillYAxis", symmetricInfillYAxis)
     .put("skinInfillLineWidth", skinInfillLineWidth)
     .put("skinInfillLineWidthPercent", skinInfillLineWidthPercent)
     .put("skeletonInfillLineWidth", skeletonInfillLineWidth)
@@ -1033,6 +1037,8 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         skinInfillDensity = optDouble("skinInfillDensity", 25.0).toFloat(),
         skinInfillDepth = optDouble("skinInfillDepth", 2.0).toFloat(),
         infillLockDepth = optDouble("infillLockDepth", 1.0).toFloat(),
+        infillShiftStep = optDouble("infillShiftStep", 0.4).toFloat(),
+        symmetricInfillYAxis = optBoolean("symmetricInfillYAxis"),
         skinInfillLineWidth = optDouble("skinInfillLineWidth", 100.0).toFloat(),
         skinInfillLineWidthPercent = optBoolean("skinInfillLineWidthPercent", true),
         skeletonInfillLineWidth = optDouble("skeletonInfillLineWidth", 100.0).toFloat(),

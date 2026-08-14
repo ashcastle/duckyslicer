@@ -113,6 +113,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var skinInfillDensity: Float = base.skinInfillDensity
     private var skinInfillDepth: Float = base.skinInfillDepth
     private var infillLockDepth: Float = base.infillLockDepth
+    private var infillShiftStep: Float = base.infillShiftStep
+    private var symmetricInfillYAxis: Boolean = base.symmetricInfillYAxis
     private var skinInfillLineWidth: Float = base.skinInfillLineWidth
     private var skinInfillLineWidthPercent: Boolean = base.skinInfillLineWidthPercent
     private var skeletonInfillLineWidth: Float = base.skeletonInfillLineWidth
@@ -436,6 +438,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         skinInfillDensity = input.readFloat()
         skinInfillDepth = input.readFloat()
         infillLockDepth = input.readFloat()
+        infillShiftStep = input.readFloat()
+        symmetricInfillYAxis = input.readCatalogBoolean()
         skinInfillLineWidth = input.readFloat()
         skinInfillLineWidthPercent = input.readCatalogBoolean()
         skeletonInfillLineWidth = input.readFloat()
@@ -799,6 +803,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         skinInfillDensity = skinInfillDensity,
         skinInfillDepth = skinInfillDepth,
         infillLockDepth = infillLockDepth,
+        infillShiftStep = infillShiftStep,
+        symmetricInfillYAxis = symmetricInfillYAxis,
         skinInfillLineWidth = skinInfillLineWidth,
         skinInfillLineWidthPercent = skinInfillLineWidthPercent,
         skeletonInfillLineWidth = skeletonInfillLineWidth,
@@ -1125,6 +1131,8 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("skinInfillDensity", BINARY_FLOAT),
     BinaryField("skinInfillDepth", BINARY_FLOAT),
     BinaryField("infillLockDepth", BINARY_FLOAT),
+    BinaryField("infillShiftStep", BINARY_FLOAT),
+    BinaryField("symmetricInfillYAxis", BINARY_BOOL),
     BinaryField("skinInfillLineWidth", BINARY_FLOAT),
     BinaryField("skinInfillLineWidthPercent", BINARY_BOOL),
     BinaryField("skeletonInfillLineWidth", BINARY_FLOAT),

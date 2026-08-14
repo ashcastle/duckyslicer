@@ -320,6 +320,10 @@
     <string name="infill_rectilinear">직선</string>
     <string name="infill_aligned_rectilinear">정렬 직선</string>
     <string name="infill_locked_zag">잠금 지그재그</string>
+    <string name="infill_zig_zag">지그재그</string>
+    <string name="infill_cross_zag">크로스 재그</string>
+    <string name="infill_shift_step">인필 이동 간격</string>
+    <string name="symmetric_infill_y_axis">Y축 대칭 인필</string>
     <string name="locked_zag_infill">잠금 지그재그</string>
     <string name="skin_infill_density">외곽 인필 밀도</string>
     <string name="skeleton_infill_density">내부 인필 밀도</string>

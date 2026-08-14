@@ -320,6 +320,10 @@
     <string name="infill_rectilinear">Rectilinear</string>
     <string name="infill_aligned_rectilinear">Aligned rectilinear</string>
     <string name="infill_locked_zag">Locked Zig Zag</string>
+    <string name="infill_zig_zag">Zig Zag</string>
+    <string name="infill_cross_zag">Cross Zag</string>
+    <string name="infill_shift_step">Infill shift step</string>
+    <string name="symmetric_infill_y_axis">Symmetric infill Y axis</string>
     <string name="locked_zag_infill">Locked Zig Zag</string>
     <string name="skin_infill_density">Skin infill density</string>
     <string name="skeleton_infill_density">Skeleton infill density</string>

@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 52
+SCHEMA_VERSION = 53
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -684,6 +684,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "skinInfillDensity": number(raw.get("skin_infill_density"), 25),
         "skinInfillDepth": number(raw.get("skin_infill_depth"), 2),
         "infillLockDepth": number(raw.get("infill_lock_depth"), 1),
+        "infillShiftStep": number(raw.get("infill_shift_step"), 0.4),
+        "symmetricInfillYAxis": boolean(raw.get("symmetric_infill_y_axis")),
         "skinInfillLineWidth": skin_infill_line_width,
         "skinInfillLineWidthPercent": skin_infill_line_width_percent,
         "skeletonInfillLineWidth": skeleton_infill_line_width,
@@ -1088,6 +1090,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
             0 <= profile[key] <= 100
             for key in ["skeletonInfillDensity", "skinInfillDensity", "skinInfillDepth", "infillLockDepth"]
         )
+        and 0 <= profile["infillShiftStep"] <= 10
         and 0 <= profile["skinInfillLineWidth"] <= (
             1_000 if profile["skinInfillLineWidthPercent"] else 10
         )
