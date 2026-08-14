@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 49
+SCHEMA_VERSION = 50
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -730,6 +730,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "supportIroningSpacing": number(raw.get("support_ironing_spacing"), 0.1),
         "skirtLoops": integer(raw.get("skirt_loops"), 0),
         "skirtDistance": number(raw.get("skirt_distance"), 6),
+        "skirtStartAngle": number(raw.get("skirt_start_angle"), -135),
         "skirtHeight": integer(raw.get("skirt_height"), 1),
         "skirtSpeed": number(raw.get("skirt_speed"), 50),
         "minimumSkirtLength": number(raw.get("min_skirt_length"), 0),
@@ -1156,6 +1157,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 1 <= profile["interlockingBeamLayerCount"] <= 1_000
         and 1 <= profile["interlockingDepth"] <= 1_000
         and 0 <= profile["interlockingBoundaryAvoidance"] <= 1_000
+        and -180 <= profile["skirtStartAngle"] <= 180
         and 0 <= profile["skirtHeight"] <= 10_000
         and 0 <= profile["skirtSpeed"] <= 2_000
         and 0 <= profile["minimumSkirtLength"] <= 1_000_000

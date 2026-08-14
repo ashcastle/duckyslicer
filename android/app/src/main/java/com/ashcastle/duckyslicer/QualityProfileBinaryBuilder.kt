@@ -200,6 +200,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var accelToDecelFactor: Float = base.gcodeSettings.accelToDecelFactor
     private var skirtLoops: Int = base.skirtLoops
     private var skirtDistance: Float = base.skirtDistance
+    private var skirtStartAngle: Float = base.skirtStartAngle
     private var skirtHeight: Int = base.skirtHeight
     private var skirtSpeed: Float = base.skirtSpeed
     private var minimumSkirtLength: Float = base.minimumSkirtLength
@@ -472,6 +473,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private fun readGroup5(input: DataInputStream) {
         skirtLoops = input.readInt()
         skirtDistance = input.readFloat()
+        skirtStartAngle = input.readFloat()
         skirtHeight = input.readInt()
         skirtSpeed = input.readFloat()
         minimumSkirtLength = input.readFloat()
@@ -884,6 +886,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         ),
         skirtLoops = skirtLoops,
         skirtDistance = skirtDistance,
+        skirtStartAngle = skirtStartAngle,
         skirtHeight = skirtHeight,
         skirtSpeed = skirtSpeed,
         minimumSkirtLength = minimumSkirtLength,
@@ -1145,6 +1148,7 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("supportIroningSpacing", BINARY_FLOAT),
     BinaryField("skirtLoops", BINARY_INT),
     BinaryField("skirtDistance", BINARY_FLOAT),
+    BinaryField("skirtStartAngle", BINARY_FLOAT),
     BinaryField("skirtHeight", BINARY_INT),
     BinaryField("skirtSpeed", BINARY_FLOAT),
     BinaryField("minimumSkirtLength", BINARY_FLOAT),

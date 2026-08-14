@@ -2000,7 +2000,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(49, catalog.schemaVersion)
+        assertEquals(50, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -3430,6 +3430,7 @@ class NativeEngineInstrumentedTest {
                     skinInfillLineWidthPercent = true,
                     skeletonInfillLineWidth = 0.62f,
                     skeletonInfillLineWidthPercent = false,
+                    skirtStartAngle = -25f,
                 ),
                 gapFillTarget = "everywhere",
                 filterOutGapFill = 0.9f,
@@ -3569,6 +3570,7 @@ class NativeEngineInstrumentedTest {
         assertTrue("Z-hop type must reach G-code", gcode.contains("; z_hop_types = Spiral Lift"))
         assertTrue("Skirt loops must reach G-code", gcode.contains("; skirt_loops = 2"))
         assertTrue("Skirt distance must reach Orca", gcode.contains("; skirt_distance = 7"))
+        assertTrue("Skirt start point must reach Orca", gcode.contains("; skirt_start_angle = -25"))
         assertTrue("Skirt height must reach Orca", gcode.contains("; skirt_height = 3"))
         assertTrue("Skirt speed must reach Orca", gcode.contains("; skirt_speed = 59"))
         assertTrue("Minimum skirt extrusion must reach Orca", gcode.contains("; min_skirt_length = 14"))
@@ -3993,6 +3995,45 @@ class NativeEngineInstrumentedTest {
         assertTrue(
             "Positive contour compensation must expand generated Y geometry",
             expanded.maxY - expanded.minY > original.maxY - original.minY + 0.4f,
+        )
+    }
+
+    @Test
+    fun skirtStartPointChangesTheFirstRealSkirtExtrusion() {
+        val model = fixtureModel()
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.CUSTOM_CARTESIAN)
+            .selectFilament(FilamentProfile.GENERIC_PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(skirtLoops = 1, skirtDistance = 5f, brimWidth = 0f)
+
+        fun sliceAt(angle: Float): String = OnDeviceSlicer.slice(
+            model,
+            base.copy(quality = base.quality.copy(skirtStartAngle = angle)),
+        ).output.readText()
+
+        fun firstSkirtExtrusion(gcode: String): String? {
+            var inSkirt = false
+            return gcode.lineSequence().firstOrNull { line ->
+                if (line.startsWith(";TYPE:")) inSkirt = line == ";TYPE:Skirt"
+                inSkirt && line.startsWith("G1 ") && line.contains(" E") &&
+                    (line.contains(" X") || line.contains(" Y"))
+            }
+        }
+
+        val defaultAngle = sliceAt(-135f)
+        val zeroAngle = sliceAt(0f)
+        val defaultStart = firstSkirtExtrusion(defaultAngle)
+        val zeroStart = firstSkirtExtrusion(zeroAngle)
+
+        assertTrue(defaultAngle.contains("; skirt_start_angle = -135"))
+        assertTrue(zeroAngle.contains("; skirt_start_angle = 0"))
+        assertTrue("The default skirt needs a real extrusion start", defaultStart != null)
+        assertTrue("The rotated skirt needs a real extrusion start", zeroStart != null)
+        assertNotEquals(
+            "Changing the start angle must move the first physical skirt extrusion",
+            defaultStart,
+            zeroStart,
         )
     }
 

@@ -330,6 +330,7 @@ internal object ProfileValidation {
             profile.spiralFinishingFlowRatio in 0f..1f &&
             profile.skirtLoops in 0..100 &&
             profile.skirtDistance in 0f..1_000f &&
+            profile.skirtStartAngle in -180f..180f &&
             profile.skirtHeight in 0..10_000 &&
             profile.skirtSpeed in 0f..2_000f &&
             profile.minimumSkirtLength in 0f..1_000_000f &&

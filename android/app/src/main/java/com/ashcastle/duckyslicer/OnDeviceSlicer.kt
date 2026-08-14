@@ -699,6 +699,7 @@ data class QualityProfile(
     val gcodeSettings: GcodeSettings = GcodeSettings(),
     val skirtLoops: Int = 0,
     val skirtDistance: Float = 6f,
+    val skirtStartAngle: Float = -135f,
     val skirtHeight: Int = 1,
     val skirtSpeed: Float = 50f,
     val minimumSkirtLength: Float = 0f,
@@ -861,7 +862,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 49,
+    val schemaVersion: Int = 50,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1756,6 +1757,7 @@ data class SliceOptions(
             native.skinInfillLineWidthPercent = quality.skinInfillLineWidthPercent
             native.skeletonInfillLineWidth = quality.skeletonInfillLineWidth
             native.skeletonInfillLineWidthPercent = quality.skeletonInfillLineWidthPercent
+            native.skirtStartAngle = quality.skirtStartAngle
             native.fuzzySkinType = fuzzySkin.type
             native.fuzzySkinFirstLayer = fuzzySkin.firstLayer
             native.fuzzySkinPointDistance = fuzzySkin.pointDistance

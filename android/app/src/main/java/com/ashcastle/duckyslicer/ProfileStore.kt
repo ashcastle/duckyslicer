@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 50
+internal const val USER_PROFILE_SCHEMA_VERSION = 51
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -312,6 +312,7 @@ class ProfileStore private constructor(
             gcodeSettings = options.gcodeSettings,
             skirtLoops = options.skirtLoops,
             skirtDistance = options.skirtDistance,
+            skirtStartAngle = options.quality.skirtStartAngle,
             skirtHeight = options.skirtHeight,
             skirtSpeed = options.skirtSpeed,
             minimumSkirtLength = options.minimumSkirtLength,
@@ -732,6 +733,7 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("minimumSkirtLength", minimumSkirtLength)
     .put("draftShield", draftShield)
     .put("skirtDistance", skirtDistance)
+    .put("skirtStartAngle", skirtStartAngle)
     .put("outerWallLineWidth", outerWallLineWidth)
     .put("innerWallLineWidth", innerWallLineWidth)
     .put("topSurfaceLineWidth", topSurfaceLineWidth)
@@ -1142,6 +1144,7 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         ),
         skirtLoops = optInt("skirtLoops", 0),
         skirtDistance = optDouble("skirtDistance", 6.0).toFloat(),
+        skirtStartAngle = optDouble("skirtStartAngle", -135.0).toFloat(),
         skirtHeight = optInt("skirtHeight", 1),
         skirtSpeed = optDouble("skirtSpeed", 50.0).toFloat(),
         minimumSkirtLength = optDouble("minimumSkirtLength", 0.0).toFloat(),

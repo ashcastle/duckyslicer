@@ -499,6 +499,7 @@
     <string name="bed_adhesion">Bed adhesion</string>
     <string name="skirt_loops">Skirt loops</string>
     <string name="skirt_distance">Skirt distance</string>
+    <string name="skirt_start_point">Skirt start point</string>
     <string name="brim_width">Brim width</string>
     <string name="millimeters_value">%1$.0f mm</string>
     <string name="millimeters_value_precise">%1$.2f mm</string>

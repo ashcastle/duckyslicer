@@ -40,6 +40,7 @@ class ProfileStoreMigrationTest {
                 remove("skinInfillLineWidthPercent")
                 remove("skeletonInfillLineWidth")
                 remove("skeletonInfillLineWidthPercent")
+                remove("skirtStartAngle")
             }
             file.writeText(
                 JSONObject()
@@ -77,6 +78,7 @@ class ProfileStoreMigrationTest {
             assertTrue(restoredSlicing.skinInfillLineWidthPercent)
             assertEquals(100f, restoredSlicing.skeletonInfillLineWidth)
             assertTrue(restoredSlicing.skeletonInfillLineWidthPercent)
+            assertEquals(-135f, restoredSlicing.skirtStartAngle)
         } finally {
             file.delete()
         }
@@ -211,6 +213,7 @@ class ProfileStoreMigrationTest {
                     skinInfillLineWidthPercent = true,
                     skeletonInfillLineWidth = 0.62f,
                     skeletonInfillLineWidthPercent = false,
+                    skirtStartAngle = -25f,
                 ),
             )
 
@@ -226,6 +229,7 @@ class ProfileStoreMigrationTest {
             assertEquals(true, restored.skinInfillLineWidthPercent)
             assertEquals(0.62f, restored.skeletonInfillLineWidth)
             assertEquals(false, restored.skeletonInfillLineWidthPercent)
+            assertEquals(-25f, restored.skirtStartAngle)
         } finally {
             directory.deleteRecursively()
         }

@@ -489,6 +489,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(0.2f, restored.spiralFinishingFlowRatio)
         assertEquals(2, restored.skirtLoops)
         assertEquals(8f, restored.skirtDistance)
+        assertEquals(-25f, restored.quality.skirtStartAngle)
+        assertEquals(-25f, restored.toNativeConfig().skirtStartAngle)
         assertEquals(3, restored.skirtHeight)
         assertEquals(57f, restored.skirtSpeed)
         assertEquals(12f, restored.minimumSkirtLength)
@@ -533,6 +535,7 @@ class SliceOptionsPersistenceTest {
                 remove("skinInfillLineWidthPercent")
                 remove("skeletonInfillLineWidth")
                 remove("skeletonInfillLineWidthPercent")
+                remove("skirtStartAngle")
             }
         }
 
@@ -558,6 +561,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(true, restored.quality.skinInfillLineWidthPercent)
         assertEquals(100f, restored.quality.skeletonInfillLineWidth)
         assertEquals(true, restored.quality.skeletonInfillLineWidthPercent)
+        assertEquals(-135f, restored.quality.skirtStartAngle)
+        assertEquals(-135f, restored.toNativeConfig().skirtStartAngle)
         assertEquals(0f, restored.travelSpeedZ)
         assertEquals(0f, restored.toNativeConfig().travelSpeedZ)
         assertEquals(emptyList<Float>(), restored.multiMaterial.purgeVolumes)
@@ -647,6 +652,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             skinInfillLineWidthPercent = true,
             skeletonInfillLineWidth = 0.62f,
             skeletonInfillLineWidthPercent = false,
+            skirtStartAngle = -25f,
         ),
         firstLayerSpeed = 32f,
         supportEnabled = true,

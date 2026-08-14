@@ -4713,6 +4713,20 @@ private fun SlicingSettingsSheet(
                     onValueChange = { onOptionsChanged(options.copy(skirtDistance = (it * 2f).roundToInt() / 2f)) },
                 )
                 SettingSlider(
+                    label = stringResource(R.string.skirt_start_point),
+                    valueText = stringResource(R.string.degrees_value, options.quality.skirtStartAngle),
+                    value = options.quality.skirtStartAngle,
+                    range = -180f..180f,
+                    steps = 359,
+                    onValueChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                quality = options.quality.copy(skirtStartAngle = it.roundToInt().toFloat()),
+                            ),
+                        )
+                    },
+                )
+                SettingSlider(
                     label = stringResource(R.string.skirt_height),
                     valueText = options.skirtHeight.toString(),
                     value = options.skirtHeight.toFloat().coerceAtMost(max(10, options.skirtHeight).toFloat()),

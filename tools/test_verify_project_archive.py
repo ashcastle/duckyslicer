@@ -22,7 +22,7 @@ def valid_sources() -> dict[str, str]:
                 "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
                 'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
                 "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-                "PROJECT_ARCHIVE_SCHEMA_VERSION = 19",
+                "PROJECT_ARCHIVE_SCHEMA_VERSION = 20",
                 "ArchivedProjectPlate ArchivedProjectVolume",
                 'getJSONArray("plates") getJSONArray("volumes") legacyProjectVolumeId',
                 "selectedPlateId plateOptions: Map<String, SliceOptions>",

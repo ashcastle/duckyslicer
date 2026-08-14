@@ -230,6 +230,20 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(0.62, profile["skeletonInfillLineWidth"])
         self.assertFalse(profile["skeletonInfillLineWidthPercent"])
 
+    def test_preserves_skirt_start_point(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Directed skirt",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "skirt_start_angle": "-25",
+            },
+            {},
+        )
+
+        self.assertEqual(-25.0, profile["skirtStartAngle"])
+
     def test_normalizes_legacy_zero_feature_filaments_to_first_tool(self) -> None:
         profile = build_process(
             "Example",
