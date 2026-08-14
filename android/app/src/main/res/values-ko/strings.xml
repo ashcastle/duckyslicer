@@ -419,7 +419,9 @@
     <string name="ironing_pattern">아이러닝 패턴</string>
     <string name="ironing_flow">아이러닝 유량</string>
     <string name="ironing_spacing">아이러닝 간격</string>
+    <string name="ironing_inset">아이러닝 여백</string>
     <string name="ironing_speed">아이러닝 속도</string>
+    <string name="ironing_angle">아이러닝 각도</string>
     <string name="support_style">서포트 형태</string>
     <string name="support_on_build_plate_only">빌드 플레이트에만 생성</string>
     <string name="support_base_pattern_spacing">베이스 패턴 간격</string>

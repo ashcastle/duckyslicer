@@ -304,6 +304,16 @@ data class PrecisionSettings(
     val firstLayerMinimumWallWidth: Float = 85f,
 )
 
+data class IroningSettings(
+    val type: String = "no ironing",
+    val pattern: String = "rectilinear",
+    val flow: Float = 10f,
+    val spacing: Float = 0.1f,
+    val inset: Float = 0f,
+    val speed: Float = 20f,
+    val angle: Float = -1f,
+)
+
 internal fun FilamentProfile.resolveRetraction(printer: PrinterProfile) = RetractionSettings(
     length = retractLength ?: printer.retractLength,
     speed = retractSpeed ?: printer.retractSpeed,
@@ -485,11 +495,7 @@ data class QualityProfile(
     val roleBasedWipeSpeed: Boolean = true,
     val wipeSpeed: Float = 80f,
     val wipeSpeedPercent: Boolean = true,
-    val ironingType: String = "no ironing",
-    val ironingPattern: String = "rectilinear",
-    val ironingFlow: Float = 10f,
-    val ironingSpacing: Float = 0.1f,
-    val ironingSpeed: Float = 20f,
+    val ironing: IroningSettings = IroningSettings(),
     val wallGenerator: String = "arachne",
     val wallTransitionLength: Float = 100f,
     val wallTransitionFilterDeviation: Float = 25f,
@@ -621,7 +627,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 31,
+    val schemaVersion: Int = 32,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -819,11 +825,7 @@ data class SliceOptions(
     val roleBasedWipeSpeed: Boolean = quality.roleBasedWipeSpeed,
     val wipeSpeed: Float = quality.wipeSpeed,
     val wipeSpeedPercent: Boolean = quality.wipeSpeedPercent,
-    val ironingType: String = quality.ironingType,
-    val ironingPattern: String = quality.ironingPattern,
-    val ironingFlow: Float = quality.ironingFlow,
-    val ironingSpacing: Float = quality.ironingSpacing,
-    val ironingSpeed: Float = quality.ironingSpeed,
+    val ironing: IroningSettings = quality.ironing,
     val wallGenerator: String = quality.wallGenerator,
     val wallTransitionLength: Float = quality.wallTransitionLength,
     val wallTransitionFilterDeviation: Float = quality.wallTransitionFilterDeviation,
@@ -1167,11 +1169,7 @@ data class SliceOptions(
         roleBasedWipeSpeed = profile.roleBasedWipeSpeed,
         wipeSpeed = profile.wipeSpeed,
         wipeSpeedPercent = profile.wipeSpeedPercent,
-        ironingType = profile.ironingType,
-        ironingPattern = profile.ironingPattern,
-        ironingFlow = profile.ironingFlow,
-        ironingSpacing = profile.ironingSpacing,
-        ironingSpeed = profile.ironingSpeed,
+        ironing = profile.ironing,
         wallGenerator = profile.wallGenerator,
         wallTransitionLength = profile.wallTransitionLength,
         wallTransitionFilterDeviation = profile.wallTransitionFilterDeviation,
@@ -1396,11 +1394,6 @@ data class SliceOptions(
             roleBasedWipeSpeed = roleBasedWipeSpeed,
             wipeSpeed = wipeSpeed,
             wipeSpeedPercent = wipeSpeedPercent,
-            ironingType = ironingType,
-            ironingPattern = ironingPattern,
-            ironingFlow = ironingFlow,
-            ironingSpacing = ironingSpacing,
-            ironingSpeed = ironingSpeed,
             topShellThickness = topShellThickness,
             bottomShellThickness = bottomShellThickness,
             wallGenerator = wallGenerator,
@@ -1533,6 +1526,13 @@ data class SliceOptions(
             native.preciseZHeight = precision.preciseZHeight
             native.minimumWallWidth = precision.minimumWallWidth
             native.firstLayerMinimumWallWidth = precision.firstLayerMinimumWallWidth
+            native.ironingType = ironing.type
+            native.ironingPattern = ironing.pattern
+            native.ironingFlow = ironing.flow
+            native.ironingSpacing = ironing.spacing
+            native.ironingInset = ironing.inset
+            native.ironingSpeed = ironing.speed
+            native.ironingAngle = ironing.angle
             native.gcodeLabelObjects = gcodeSettings.labelObjects
             native.excludeObject = gcodeSettings.excludeObjects
             native.initialLayerTravelSpeed = gcodeSettings.initialLayerTravelSpeed

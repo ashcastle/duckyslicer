@@ -419,7 +419,9 @@
     <string name="ironing_pattern">Ironing pattern</string>
     <string name="ironing_flow">Ironing flow</string>
     <string name="ironing_spacing">Ironing spacing</string>
+    <string name="ironing_inset">Ironing inset</string>
     <string name="ironing_speed">Ironing speed</string>
+    <string name="ironing_angle">Ironing angle</string>
     <string name="support_style">Support style</string>
     <string name="support_on_build_plate_only">On build plate only</string>
     <string name="support_base_pattern_spacing">Base pattern spacing</string>

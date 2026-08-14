@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 32
+internal const val USER_PROFILE_SCHEMA_VERSION = 33
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -324,11 +324,7 @@ class ProfileStore private constructor(
             roleBasedWipeSpeed = options.roleBasedWipeSpeed,
             wipeSpeed = options.wipeSpeed,
             wipeSpeedPercent = options.wipeSpeedPercent,
-            ironingType = options.ironingType,
-            ironingPattern = options.ironingPattern,
-            ironingFlow = options.ironingFlow,
-            ironingSpacing = options.ironingSpacing,
-            ironingSpeed = options.ironingSpeed,
+            ironing = options.ironing,
             wallGenerator = options.wallGenerator,
             wallTransitionLength = options.wallTransitionLength,
             wallTransitionFilterDeviation = options.wallTransitionFilterDeviation,
@@ -690,11 +686,13 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("roleBasedWipeSpeed", roleBasedWipeSpeed)
     .put("wipeSpeed", wipeSpeed)
     .put("wipeSpeedPercent", wipeSpeedPercent)
-    .put("ironingType", ironingType)
-    .put("ironingPattern", ironingPattern)
-    .put("ironingFlow", ironingFlow)
-    .put("ironingSpacing", ironingSpacing)
-    .put("ironingSpeed", ironingSpeed)
+    .put("ironingType", ironing.type)
+    .put("ironingPattern", ironing.pattern)
+    .put("ironingFlow", ironing.flow)
+    .put("ironingSpacing", ironing.spacing)
+    .put("ironingInset", ironing.inset)
+    .put("ironingSpeed", ironing.speed)
+    .put("ironingAngle", ironing.angle)
     .put("wallGenerator", wallGenerator)
     .put("wallTransitionLength", wallTransitionLength)
     .put("wallTransitionFilterDeviation", wallTransitionFilterDeviation)
@@ -1022,11 +1020,15 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         roleBasedWipeSpeed = optBoolean("roleBasedWipeSpeed", true),
         wipeSpeed = optDouble("wipeSpeed", 80.0).toFloat(),
         wipeSpeedPercent = optBoolean("wipeSpeedPercent", true),
-        ironingType = optString("ironingType", "no ironing"),
-        ironingPattern = optString("ironingPattern", "rectilinear"),
-        ironingFlow = optDouble("ironingFlow", 10.0).toFloat(),
-        ironingSpacing = optDouble("ironingSpacing", 0.1).toFloat(),
-        ironingSpeed = optDouble("ironingSpeed", 20.0).toFloat(),
+        ironing = IroningSettings(
+            type = optString("ironingType", "no ironing"),
+            pattern = optString("ironingPattern", "rectilinear"),
+            flow = optDouble("ironingFlow", 10.0).toFloat(),
+            spacing = optDouble("ironingSpacing", 0.1).toFloat(),
+            inset = optDouble("ironingInset", 0.0).toFloat(),
+            speed = optDouble("ironingSpeed", 20.0).toFloat(),
+            angle = optDouble("ironingAngle", -1.0).toFloat(),
+        ),
         wallGenerator = optString("wallGenerator", "arachne"),
         wallTransitionLength = optDouble("wallTransitionLength", 100.0).toFloat(),
         wallTransitionFilterDeviation = optDouble("wallTransitionFilterDeviation", 25.0).toFloat(),

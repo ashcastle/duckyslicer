@@ -175,11 +175,13 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var roleBasedWipeSpeed: Boolean = base.roleBasedWipeSpeed
     private var wipeSpeed: Float = base.wipeSpeed
     private var wipeSpeedPercent: Boolean = base.wipeSpeedPercent
-    private var ironingType: String = base.ironingType
-    private var ironingPattern: String = base.ironingPattern
-    private var ironingFlow: Float = base.ironingFlow
-    private var ironingSpacing: Float = base.ironingSpacing
-    private var ironingSpeed: Float = base.ironingSpeed
+    private var ironingType: String = base.ironing.type
+    private var ironingPattern: String = base.ironing.pattern
+    private var ironingFlow: Float = base.ironing.flow
+    private var ironingSpacing: Float = base.ironing.spacing
+    private var ironingInset: Float = base.ironing.inset
+    private var ironingSpeed: Float = base.ironing.speed
+    private var ironingAngle: Float = base.ironing.angle
     private var wallGenerator: String = base.wallGenerator
     private var wallTransitionLength: Float = base.wallTransitionLength
     private var wallTransitionFilterDeviation: Float = base.wallTransitionFilterDeviation
@@ -426,7 +428,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         ironingPattern = input.readCatalogString()
         ironingFlow = input.readFloat()
         ironingSpacing = input.readFloat()
+        ironingInset = input.readFloat()
         ironingSpeed = input.readFloat()
+        ironingAngle = input.readFloat()
         wallGenerator = input.readCatalogString()
         wallTransitionLength = input.readFloat()
         wallTransitionFilterDeviation = input.readFloat()
@@ -705,11 +709,15 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         roleBasedWipeSpeed = roleBasedWipeSpeed,
         wipeSpeed = wipeSpeed,
         wipeSpeedPercent = wipeSpeedPercent,
-        ironingType = ironingType,
-        ironingPattern = ironingPattern,
-        ironingFlow = ironingFlow,
-        ironingSpacing = ironingSpacing,
-        ironingSpeed = ironingSpeed,
+        ironing = IroningSettings(
+            type = ironingType,
+            pattern = ironingPattern,
+            flow = ironingFlow,
+            spacing = ironingSpacing,
+            inset = ironingInset,
+            speed = ironingSpeed,
+            angle = ironingAngle,
+        ),
         wallGenerator = wallGenerator,
         wallTransitionLength = wallTransitionLength,
         wallTransitionFilterDeviation = wallTransitionFilterDeviation,
@@ -925,7 +933,9 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("ironingPattern", BINARY_STRING),
     BinaryField("ironingFlow", BINARY_FLOAT),
     BinaryField("ironingSpacing", BINARY_FLOAT),
+    BinaryField("ironingInset", BINARY_FLOAT),
     BinaryField("ironingSpeed", BINARY_FLOAT),
+    BinaryField("ironingAngle", BINARY_FLOAT),
     BinaryField("wallGenerator", BINARY_STRING),
     BinaryField("wallTransitionLength", BINARY_FLOAT),
     BinaryField("wallTransitionFilterDeviation", BINARY_FLOAT),

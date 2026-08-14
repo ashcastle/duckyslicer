@@ -152,11 +152,6 @@ data class SliceConfig(
     @JvmField var roleBasedWipeSpeed: Boolean = true,
     @JvmField var wipeSpeed: Float = 80f,
     @JvmField var wipeSpeedPercent: Boolean = true,
-    @JvmField var ironingType: String = "no ironing",
-    @JvmField var ironingPattern: String = "rectilinear",
-    @JvmField var ironingFlow: Float = 10f,
-    @JvmField var ironingSpacing: Float = 0.1f,
-    @JvmField var ironingSpeed: Float = 20f,
     @JvmField var topShellThickness: Float = 0f,
     @JvmField var bottomShellThickness: Float = 0f,
     @JvmField var wallGenerator: String = "arachne",
@@ -257,6 +252,13 @@ data class SliceConfig(
     @JvmField var preciseZHeight: Boolean = false
     @JvmField var minimumWallWidth: Float = 85f
     @JvmField var firstLayerMinimumWallWidth: Float = 85f
+    @JvmField var ironingType: String = "no ironing"
+    @JvmField var ironingPattern: String = "rectilinear"
+    @JvmField var ironingFlow: Float = 10f
+    @JvmField var ironingSpacing: Float = 0.1f
+    @JvmField var ironingInset: Float = 0f
+    @JvmField var ironingSpeed: Float = 20f
+    @JvmField var ironingAngle: Float = -1f
     @JvmField var printSequence: String = "by layer"
     @JvmField var printOrder: String = "default"
     @JvmField var extruderClearanceRadius: Float = 40f

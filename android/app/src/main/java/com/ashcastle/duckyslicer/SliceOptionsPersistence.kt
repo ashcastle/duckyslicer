@@ -213,11 +213,7 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         roleBasedWipeSpeed = roleBasedWipeSpeed,
         wipeSpeed = wipeSpeed,
         wipeSpeedPercent = wipeSpeedPercent,
-        ironingType = ironingType,
-        ironingPattern = ironingPattern,
-        ironingFlow = ironingFlow,
-        ironingSpacing = ironingSpacing,
-        ironingSpeed = ironingSpeed,
+        ironing = ironing,
         wallGenerator = wallGenerator,
         wallTransitionLength = wallTransitionLength,
         wallTransitionFilterDeviation = wallTransitionFilterDeviation,
@@ -313,7 +309,7 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 30
+private const val SLICE_OPTIONS_FORMAT_VERSION = 31
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f

@@ -117,11 +117,20 @@ class SliceOptionsPersistenceTest {
         assertEquals("concentric", restored.bottomSurfacePattern)
         assertEquals("rectilinear", restored.internalSolidInfillPattern)
         assertEquals("nearest", restored.seamPosition)
-        assertEquals("top", restored.ironingType)
-        assertEquals("concentric", restored.ironingPattern)
-        assertEquals(13f, restored.ironingFlow)
-        assertEquals(0.17f, restored.ironingSpacing)
-        assertEquals(27f, restored.ironingSpeed)
+        assertEquals(
+            IroningSettings(
+                type = "top",
+                pattern = "concentric",
+                flow = 13f,
+                spacing = 0.17f,
+                inset = 0.37f,
+                speed = 27f,
+                angle = 123f,
+            ),
+            restored.ironing,
+        )
+        assertEquals(0.37f, restored.toNativeConfig().ironingInset)
+        assertEquals(123f, restored.toNativeConfig().ironingAngle)
         assertEquals("tree(auto)", restored.supportType)
         assertEquals("by object", restored.printSequence)
         assertEquals("as_obj_list", restored.printOrder)
@@ -552,11 +561,15 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         roleBasedWipeSpeed = false,
         wipeSpeed = 66f,
         wipeSpeedPercent = false,
-        ironingType = "top",
-        ironingPattern = "concentric",
-        ironingFlow = 13f,
-        ironingSpacing = 0.17f,
-        ironingSpeed = 27f,
+        ironing = IroningSettings(
+            type = "top",
+            pattern = "concentric",
+            flow = 13f,
+            spacing = 0.17f,
+            inset = 0.37f,
+            speed = 27f,
+            angle = 123f,
+        ),
         defaultAcceleration = 4_000f,
         outerWallAcceleration = 2_000f,
         innerWallAcceleration = 3_500f,

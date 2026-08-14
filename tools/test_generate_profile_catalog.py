@@ -164,6 +164,22 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(73.0, profile["minimumWallWidth"])
         self.assertEqual(112.0, profile["firstLayerMinimumWallWidth"])
 
+    def test_preserves_ironing_inset_and_angle(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Ironing tuned",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "ironing_inset": "0.37",
+                "ironing_angle": "123",
+            },
+            {},
+        )
+
+        self.assertEqual(0.37, profile["ironingInset"])
+        self.assertEqual(123.0, profile["ironingAngle"])
+
     def test_preserves_per_feature_jerk_values(self) -> None:
         profile = build_process(
             "Example",

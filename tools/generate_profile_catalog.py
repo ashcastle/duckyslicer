@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 31
+SCHEMA_VERSION = 32
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -739,7 +739,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "ironingPattern": infill_pattern(raw.get("ironing_pattern"), "rectilinear"),
         "ironingFlow": number(raw.get("ironing_flow"), 10),
         "ironingSpacing": number(raw.get("ironing_spacing"), 0.1),
+        "ironingInset": number(raw.get("ironing_inset"), 0),
         "ironingSpeed": number(raw.get("ironing_speed"), 20),
+        "ironingAngle": number(raw.get("ironing_angle"), -1),
         "wallGenerator": wall_generator(raw.get("wall_generator")),
         "wallTransitionLength": number(raw.get("wall_transition_length"), 100),
         "wallTransitionFilterDeviation": number(raw.get("wall_transition_filter_deviation"), 25),
@@ -1005,7 +1007,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and profile["ironingPattern"] in INFILL_PATTERNS
         and 0 <= profile["ironingFlow"] <= 100
         and 0 <= profile["ironingSpacing"] <= 1
+        and 0 <= profile["ironingInset"] <= 100
         and 1 <= profile["ironingSpeed"] <= 2_000
+        and -1 <= profile["ironingAngle"] <= 359
         and 0 <= profile["wallTransitionLength"] <= 10_000
         and 0 <= profile["wallTransitionFilterDeviation"] <= 10_000
         and 1 <= profile["wallTransitionAngle"] <= 59

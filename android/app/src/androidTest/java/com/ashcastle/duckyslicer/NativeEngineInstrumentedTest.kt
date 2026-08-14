@@ -1116,11 +1116,15 @@ class NativeEngineInstrumentedTest {
                 roleBasedWipeSpeed = false,
                 wipeSpeed = 67f,
                 wipeSpeedPercent = false,
-                ironingType = "top",
-                ironingPattern = "concentric",
-                ironingFlow = 12f,
-                ironingSpacing = 0.16f,
-                ironingSpeed = 26f,
+                ironing = IroningSettings(
+                    type = "top",
+                    pattern = "concentric",
+                    flow = 12f,
+                    spacing = 0.16f,
+                    inset = 0.36f,
+                    speed = 26f,
+                    angle = 122f,
+                ),
                 defaultAcceleration = 4_000f,
                 outerWallAcceleration = 2_000f,
                 innerWallAcceleration = 3_500f,
@@ -1227,11 +1231,18 @@ class NativeEngineInstrumentedTest {
         assertFalse(restored.slicing.last().gcodeSettings.accelToDecelEnabled)
         assertEquals(27f, restored.slicing.last().gcodeSettings.accelToDecelFactor)
         assertEquals("nearest", restored.slicing.last().seamPosition)
-        assertEquals("top", restored.slicing.last().ironingType)
-        assertEquals("concentric", restored.slicing.last().ironingPattern)
-        assertEquals(12f, restored.slicing.last().ironingFlow)
-        assertEquals(0.16f, restored.slicing.last().ironingSpacing)
-        assertEquals(26f, restored.slicing.last().ironingSpeed)
+        assertEquals(
+            IroningSettings(
+                type = "top",
+                pattern = "concentric",
+                flow = 12f,
+                spacing = 0.16f,
+                inset = 0.36f,
+                speed = 26f,
+                angle = 122f,
+            ),
+            restored.slicing.last().ironing,
+        )
         assertEquals(164f, restored.slicing.last().internalBridgeSpeed)
         assertTrue(restored.slicing.last().internalBridgeSpeedPercent)
         assertTrue(restored.slicing.last().infillFirst)
@@ -1408,7 +1419,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(31, catalog.schemaVersion)
+        assertEquals(32, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1493,7 +1504,9 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.fillPattern == "crosshatch" })
         assertTrue(catalog.slicing.any { it.overhangSpeed1Percent })
         assertTrue(catalog.slicing.any { it.seamPosition == "nearest" })
-        assertTrue(catalog.slicing.any { it.ironingType == "top" })
+        assertTrue(catalog.slicing.any { it.ironing.type == "top" })
+        assertTrue(catalog.slicing.any { it.ironing.inset != 0f })
+        assertTrue(catalog.slicing.all { it.ironing.angle in -1f..359f })
         assertTrue(catalog.slicing.any { it.supportBasePattern == "rectilinear-grid" })
         assertTrue(catalog.slicing.any { it.supportOnBuildPlateOnly })
         assertTrue(catalog.slicing.any { it.supportBasePatternSpacing != 2.5f })
@@ -2495,11 +2508,15 @@ class NativeEngineInstrumentedTest {
                 roleBasedWipeSpeed = false,
                 wipeSpeed = 61f,
                 wipeSpeedPercent = false,
-                ironingType = "top",
-                ironingPattern = "concentric",
-                ironingFlow = 13f,
-                ironingSpacing = 0.17f,
-                ironingSpeed = 27f,
+                ironing = IroningSettings(
+                    type = "top",
+                    pattern = "concentric",
+                    flow = 13f,
+                    spacing = 0.17f,
+                    inset = 0.38f,
+                    speed = 27f,
+                    angle = 124f,
+                ),
                 defaultAcceleration = 4_567f,
                 outerWallAcceleration = 2_345f,
                 innerWallAcceleration = 3_456f,
@@ -2674,7 +2691,9 @@ class NativeEngineInstrumentedTest {
         assertTrue("Ironing pattern must reach Orca", gcode.contains("; ironing_pattern = concentric"))
         assertTrue("Ironing flow must reach Orca", gcode.contains("; ironing_flow = 13%"))
         assertTrue("Ironing spacing must reach Orca", gcode.contains("; ironing_spacing = 0.17"))
+        assertTrue("Ironing inset must reach Orca", gcode.contains("; ironing_inset = 0.38"))
         assertTrue("Ironing speed must reach Orca", gcode.contains("; ironing_speed = 27"))
+        assertTrue("Ironing angle must reach Orca", gcode.contains("; ironing_angle = 124"))
         assertTrue("Overhang stage 1 must preserve percent units", gcode.contains("; overhang_1_4_speed = 81%"))
         assertTrue("Overhang stage 2 must preserve absolute units", gcode.contains("; overhang_2_4_speed = 52"))
         assertTrue("Overhang stage 3 must preserve percent units", gcode.contains("; overhang_3_4_speed = 33%"))

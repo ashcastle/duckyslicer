@@ -2449,41 +2449,61 @@ private fun SlicingSettingsSheet(
                 SettingChoices(
                     settingLabel = stringResource(R.string.ironing),
                     entries = listOf("no ironing", "top", "topmost", "solid"),
-                    selected = options.ironingType,
+                    selected = options.ironing.type,
                     optionLabel = { enumLabel(it) },
-                    onSelected = { onOptionsChanged(options.copy(ironingType = it)) },
+                    onSelected = { onOptionsChanged(options.copy(ironing = options.ironing.copy(type = it))) },
                 )
-                if (options.ironingType != "no ironing" || settingsQuery.isNotBlank()) {
+                if (options.ironing.type != "no ironing" || settingsQuery.isNotBlank()) {
                     SettingChoices(
                         settingLabel = stringResource(R.string.ironing_pattern),
                         entries = listOf("rectilinear", "concentric"),
-                        selected = options.ironingPattern,
+                        selected = options.ironing.pattern,
                         optionLabel = { fillPatternLabel(it) },
-                        onSelected = { onOptionsChanged(options.copy(ironingPattern = it)) },
+                        onSelected = { onOptionsChanged(options.copy(ironing = options.ironing.copy(pattern = it))) },
                     )
                     SettingSlider(
                         label = stringResource(R.string.ironing_flow),
-                        valueText = stringResource(R.string.percent_value, options.ironingFlow.roundToInt()),
-                        value = options.ironingFlow,
+                        valueText = stringResource(R.string.percent_value, options.ironing.flow.roundToInt()),
+                        value = options.ironing.flow,
                         range = 0f..100f,
                         steps = 99,
-                        onValueChange = { onOptionsChanged(options.copy(ironingFlow = it.roundToInt().toFloat())) },
+                        onValueChange = { onOptionsChanged(options.copy(ironing = options.ironing.copy(flow = it.roundToInt().toFloat()))) },
                     )
                     SettingSlider(
                         label = stringResource(R.string.ironing_spacing),
-                        valueText = stringResource(R.string.millimeters_value_precise, options.ironingSpacing),
-                        value = options.ironingSpacing,
+                        valueText = stringResource(R.string.millimeters_value_precise, options.ironing.spacing),
+                        value = options.ironing.spacing,
                         range = 0.05f..0.5f,
                         steps = 44,
-                        onValueChange = { onOptionsChanged(options.copy(ironingSpacing = it)) },
+                        onValueChange = { onOptionsChanged(options.copy(ironing = options.ironing.copy(spacing = it))) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.ironing_inset),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.ironing.inset),
+                        value = options.ironing.inset,
+                        range = 0f..100f,
+                        steps = 9_999,
+                        onValueChange = { onOptionsChanged(options.copy(ironing = options.ironing.copy(inset = it))) },
                     )
                     SettingSlider(
                         label = stringResource(R.string.ironing_speed),
-                        valueText = stringResource(R.string.print_speed_value, options.ironingSpeed),
-                        value = options.ironingSpeed,
+                        valueText = stringResource(R.string.print_speed_value, options.ironing.speed),
+                        value = options.ironing.speed,
                         range = 1f..maximumFeatureSpeed,
                         steps = maximumFeatureSpeed.roundToInt().coerceAtLeast(2) - 2,
-                        onValueChange = { onOptionsChanged(options.copy(ironingSpeed = it.roundToInt().toFloat())) },
+                        onValueChange = { onOptionsChanged(options.copy(ironing = options.ironing.copy(speed = it.roundToInt().toFloat()))) },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.ironing_angle),
+                        valueText = if (options.ironing.angle < 0f) {
+                            stringResource(R.string.order_default)
+                        } else {
+                            stringResource(R.string.angle_value, options.ironing.angle)
+                        },
+                        value = options.ironing.angle,
+                        range = -1f..359f,
+                        steps = 359,
+                        onValueChange = { onOptionsChanged(options.copy(ironing = options.ironing.copy(angle = it.roundToInt().toFloat()))) },
                     )
                 }
                 SettingsGroupTitle(stringResource(R.string.feature_flow_ratio))

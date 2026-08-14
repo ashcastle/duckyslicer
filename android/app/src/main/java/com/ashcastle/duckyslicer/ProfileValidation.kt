@@ -249,11 +249,13 @@ internal object ProfileValidation {
             ) &&
             profile.scarfSeam.length in 0f..1_000_000f &&
             profile.scarfSeam.steps in 1..1_000 &&
-            profile.ironingType in IRONING_TYPES &&
-            profile.ironingPattern in INFILL_PATTERNS &&
-            profile.ironingFlow in 0f..100f &&
-            profile.ironingSpacing in 0f..1f &&
-            profile.ironingSpeed in 0f..2_000f &&
+            profile.ironing.type in IRONING_TYPES &&
+            profile.ironing.pattern in INFILL_PATTERNS &&
+            profile.ironing.flow in 0f..100f &&
+            profile.ironing.spacing in 0f..1f &&
+            profile.ironing.inset in 0f..100f &&
+            profile.ironing.speed in 0f..2_000f &&
+            profile.ironing.angle in -1f..359f &&
             profile.ensureVerticalShellThickness in setOf(
                 "none", "ensure_critical_only", "ensure_moderate", "ensure_all",
             ) &&
