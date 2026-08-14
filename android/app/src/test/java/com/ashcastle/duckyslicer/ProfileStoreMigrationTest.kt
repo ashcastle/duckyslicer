@@ -90,6 +90,8 @@ class ProfileStoreMigrationTest {
             assertEquals(false, restoredSlicing.symmetricInfillYAxis)
             assertEquals("", restoredSlicing.sparseInfillRotationTemplate)
             assertEquals("", restoredSlicing.solidInfillRotationTemplate)
+            assertEquals(0f, restoredSlicing.multiMaterial.segmentedRegionMaxWidth)
+            assertEquals(0f, restoredSlicing.multiMaterial.segmentedRegionInterlockingDepth)
         } finally {
             file.delete()
         }

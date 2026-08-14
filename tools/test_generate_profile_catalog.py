@@ -82,6 +82,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "delta_temperature": "-18",
                 "preheat_steps": "7",
                 "interface_shells": "1",
+                "mmu_segmented_region_max_width": "2.4",
+                "mmu_segmented_region_interlocking_depth": "0.8",
                 "interlocking_beam": "1",
                 "interlocking_beam_width": "1.25",
                 "interlocking_orientation": "67.5",
@@ -153,6 +155,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(-18, profile["preheatDeltaTemperature"])
         self.assertEqual(7, profile["preheatSteps"])
         self.assertTrue(profile["interfaceShells"])
+        self.assertEqual(2.4, profile["segmentedRegionMaxWidth"])
+        self.assertEqual(0.8, profile["segmentedRegionInterlockingDepth"])
         self.assertTrue(profile["interlockingBeam"])
         self.assertEqual(1.25, profile["interlockingBeamWidth"])
         self.assertEqual(67.5, profile["interlockingOrientation"])
@@ -188,6 +192,20 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(24.5, profile["scarfLength"])
         self.assertEqual(13, profile["scarfSteps"])
         self.assertTrue(profile["scarfInnerWalls"])
+
+    def test_rejects_segmented_region_depth_larger_than_its_width(self) -> None:
+        with self.assertRaises(ValueError):
+            build_process(
+                "Example",
+                {
+                    "name": "Unsafe segmented region",
+                    "layer_height": "0.2",
+                    "initial_layer_print_height": "0.2",
+                    "mmu_segmented_region_max_width": "1.5",
+                    "mmu_segmented_region_interlocking_depth": "2",
+                },
+                {},
+            )
 
     def test_preserves_spiral_vase_process_values(self) -> None:
         profile = build_process(

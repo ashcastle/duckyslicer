@@ -186,6 +186,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var preheatDeltaTemperature: Int = base.multiMaterial.preheatDeltaTemperature
     private var preheatSteps: Int = base.multiMaterial.preheatSteps
     private var interfaceShells: Boolean = base.multiMaterial.interfaceShells
+    private var segmentedRegionMaxWidth: Float = base.multiMaterial.segmentedRegionMaxWidth
+    private var segmentedRegionInterlockingDepth: Float = base.multiMaterial.segmentedRegionInterlockingDepth
     private var interlockingBeam: Boolean = base.multiMaterial.interlockingBeam
     private var interlockingBeamWidth: Float = base.multiMaterial.interlockingBeamWidth
     private var interlockingOrientation: Float = base.multiMaterial.interlockingOrientation
@@ -624,6 +626,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         preheatDeltaTemperature = input.readInt()
         preheatSteps = input.readInt()
         interfaceShells = input.readCatalogBoolean()
+        segmentedRegionMaxWidth = input.readFloat()
+        segmentedRegionInterlockingDepth = input.readFloat()
         interlockingBeam = input.readCatalogBoolean()
         interlockingBeamWidth = input.readFloat()
         interlockingOrientation = input.readFloat()
@@ -884,6 +888,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             preheatDeltaTemperature = preheatDeltaTemperature,
             preheatSteps = preheatSteps,
             interfaceShells = interfaceShells,
+            segmentedRegionMaxWidth = segmentedRegionMaxWidth,
+            segmentedRegionInterlockingDepth = segmentedRegionInterlockingDepth,
             interlockingBeam = interlockingBeam,
             interlockingBeamWidth = interlockingBeamWidth,
             interlockingOrientation = interlockingOrientation,
@@ -1306,6 +1312,8 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("preheatDeltaTemperature", BINARY_INT),
     BinaryField("preheatSteps", BINARY_INT),
     BinaryField("interfaceShells", BINARY_BOOL),
+    BinaryField("segmentedRegionMaxWidth", BINARY_FLOAT),
+    BinaryField("segmentedRegionInterlockingDepth", BINARY_FLOAT),
     BinaryField("interlockingBeam", BINARY_BOOL),
     BinaryField("interlockingBeamWidth", BINARY_FLOAT),
     BinaryField("interlockingOrientation", BINARY_FLOAT),

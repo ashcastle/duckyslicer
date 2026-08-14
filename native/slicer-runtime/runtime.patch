@@ -389,7 +389,7 @@ index 116a4a85..6b3048bc 100644
      float max_print_height = 270.0f;
  
      // Nozzle
-@@ -86,18 +291,100 @@ struct SliceConfig {
+@@ -86,18 +291,102 @@ struct SliceConfig {
      std::vector<int> extruder_temps;           // per-extruder nozzle temps
      std::vector<float> extruder_retract_length; // per-extruder retraction
      std::vector<float> extruder_retract_speed;  // per-extruder retraction speed
@@ -434,6 +434,8 @@ index 116a4a85..6b3048bc 100644
 +    int preheat_delta_temperature = 0;
 +    int preheat_steps = 1;
 +    bool interface_shells = false;
++    float segmented_region_max_width = 0.0f;
++    float segmented_region_interlocking_depth = 0.0f;
 +    bool interlocking_beam = false;
 +    float interlocking_beam_width = 0.8f;
 +    float interlocking_orientation = 22.5f;
@@ -1043,7 +1045,7 @@ index d93efb7d..fdf9a877 100644
      config.max_print_height = getFloat("maxPrintHeight");
  
      config.nozzle_diameter = getFloat("nozzleDiameter");
-@@ -129,14 +325,98 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -129,14 +325,100 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.extruder_temps = getIntArray("extruderTemps");
      config.extruder_retract_length = getFloatArray("extruderRetractLength");
      config.extruder_retract_speed = getFloatArray("extruderRetractSpeed");
@@ -1086,6 +1088,8 @@ index d93efb7d..fdf9a877 100644
 +    config.preheat_delta_temperature = getInt("preheatDeltaTemperature");
 +    config.preheat_steps = getInt("preheatSteps");
 +    config.interface_shells = getBool("interfaceShells");
++    config.segmented_region_max_width = getFloat("segmentedRegionMaxWidth");
++    config.segmented_region_interlocking_depth = getFloat("segmentedRegionInterlockingDepth");
 +    config.interlocking_beam = getBool("interlockingBeam");
 +    config.interlocking_beam_width = getFloat("interlockingBeamWidth");
 +    config.interlocking_orientation = getFloat("interlockingOrientation");
@@ -1424,7 +1428,7 @@ index d93efb7d..fdf9a877 100644
      setFloat("maxPrintHeight", config.max_print_height);
      setFloat("nozzleDiameter", config.nozzle_diameter);
      setFloat("filamentDiameter", config.filament_diameter);
-@@ -265,12 +713,99 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -265,12 +713,101 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setIntArray("extruderTemps", config.extruder_temps);
      setFloatArray("extruderRetractLength", config.extruder_retract_length);
      setFloatArray("extruderRetractSpeed", config.extruder_retract_speed);
@@ -1467,6 +1471,8 @@ index d93efb7d..fdf9a877 100644
 +    setInt("preheatDeltaTemperature", config.preheat_delta_temperature);
 +    setInt("preheatSteps", config.preheat_steps);
 +    setBool("interfaceShells", config.interface_shells);
++    setFloat("segmentedRegionMaxWidth", config.segmented_region_max_width);
++    setFloat("segmentedRegionInterlockingDepth", config.segmented_region_interlocking_depth);
 +    setBool("interlockingBeam", config.interlocking_beam);
 +    setFloat("interlockingBeamWidth", config.interlocking_beam_width);
 +    setFloat("interlockingOrientation", config.interlocking_orientation);
@@ -2152,7 +2158,7 @@ index 8d61c9cf..f285d044 100644
      // F91 (2026-05-25) — SliceConfig user overrides for the per-filament tuning keys
      // that applyConfigToPrusa doesn't otherwise touch. When the user sets a value via the
      // Filament Library, populate dpc here so the slicer picks it up. When unset, the
-@@ -568,31 +772,111 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -568,31 +772,124 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          dpc.set_key_value("filament_cost", new Slic3r::ConfigOptionFloats(std::move(v)));
      }
  
@@ -2239,6 +2245,19 @@ index 8d61c9cf..f285d044 100644
 +    dpc.set_key_value("delta_temperature", new Slic3r::ConfigOptionInt(config.preheat_delta_temperature));
 +    dpc.set_key_value("preheat_steps", new Slic3r::ConfigOptionInt(config.preheat_steps));
 +    dpc.set_key_value("interface_shells", new Slic3r::ConfigOptionBool(config.interface_shells));
++    if (!std::isfinite(config.segmented_region_max_width) ||
++        !std::isfinite(config.segmented_region_interlocking_depth) ||
++        config.segmented_region_max_width < 0.0f || config.segmented_region_max_width > 1000.0f ||
++        config.segmented_region_interlocking_depth < 0.0f ||
++        config.segmented_region_interlocking_depth > config.segmented_region_max_width) {
++        throw std::invalid_argument("Invalid segmented-region interlocking geometry");
++    }
++    dpc.set_key_value(
++        "mmu_segmented_region_max_width",
++        new Slic3r::ConfigOptionFloat(config.segmented_region_max_width));
++    dpc.set_key_value(
++        "mmu_segmented_region_interlocking_depth",
++        new Slic3r::ConfigOptionFloat(config.segmented_region_interlocking_depth));
 +    dpc.set_key_value("interlocking_beam", new Slic3r::ConfigOptionBool(config.interlocking_beam));
 +    dpc.set_key_value("interlocking_beam_width", new Slic3r::ConfigOptionFloat(config.interlocking_beam_width));
 +    dpc.set_key_value("interlocking_orientation", new Slic3r::ConfigOptionFloat(config.interlocking_orientation));

@@ -57,6 +57,8 @@ class SliceOptionsPersistenceTest {
                     preheatDeltaTemperature = -18,
                     preheatSteps = 7,
                     interfaceShells = true,
+                    segmentedRegionMaxWidth = 2.4f,
+                    segmentedRegionInterlockingDepth = 0.8f,
                     interlockingBeam = true,
                     interlockingBeamWidth = 1.25f,
                     interlockingOrientation = 67.5f,
@@ -131,6 +133,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(-18, native.preheatDeltaTemperature)
         assertEquals(7, native.preheatSteps)
         assertEquals(true, native.interfaceShells)
+        assertEquals(2.4f, native.segmentedRegionMaxWidth)
+        assertEquals(0.8f, native.segmentedRegionInterlockingDepth)
         assertEquals(true, native.interlockingBeam)
         assertEquals(1.25f, native.interlockingBeamWidth)
         assertEquals(67.5f, native.interlockingOrientation)
@@ -841,6 +845,8 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             preheatDeltaTemperature = -18,
             preheatSteps = 7,
             interfaceShells = true,
+            segmentedRegionMaxWidth = 2.4f,
+            segmentedRegionInterlockingDepth = 0.8f,
             interlockingBeam = true,
             interlockingBeamWidth = 1.25f,
             interlockingOrientation = 67.5f,

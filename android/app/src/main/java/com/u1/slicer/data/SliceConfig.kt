@@ -355,6 +355,8 @@ data class SliceConfig(
     @JvmField var preheatDeltaTemperature: Int = 0
     @JvmField var preheatSteps: Int = 1
     @JvmField var interfaceShells: Boolean = false
+    @JvmField var segmentedRegionMaxWidth: Float = 0f
+    @JvmField var segmentedRegionInterlockingDepth: Float = 0f
     @JvmField var interlockingBeam: Boolean = false
     @JvmField var interlockingBeamWidth: Float = 0.8f
     @JvmField var interlockingOrientation: Float = 22.5f

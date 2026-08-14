@@ -64,6 +64,9 @@ def valid_sources() -> dict[str, str]:
             " R.string.tree_support_organic_branch_diameter R.string.tree_support_branch_diameter_angle"
             " R.string.tree_support_branch_density R.string.tree_support_adaptive_layer_height"
             " R.string.tree_support_auto_brim R.string.tree_support_brim_width"
+            " R.string.segmented_region_max_width R.string.segmented_region_interlocking_depth"
+            " segmentedRegionMaxWidth = segmentedRegionInterlockingDepth ="
+            " segmentedRegionInterlockingDepth = if (it)"
             " R.string.feature_jerk"
             " options.jerk.copy(defaultJerk options.jerk.copy(outerWallJerk"
             " options.jerk.copy(innerWallJerk options.jerk.copy(topSurfaceJerk"
@@ -133,6 +136,7 @@ def valid_sources() -> dict[str, str]:
             ' name="tree_support_organic_branch_diameter" name="tree_support_branch_diameter_angle"'
             ' name="tree_support_branch_density" name="tree_support_adaptive_layer_height"'
             ' name="tree_support_auto_brim" name="tree_support_brim_width"'
+            ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="feature_jerk" name="jerk_value" name="initial_layer" name="travel"'
         ),
         "strings-ko.xml": (
@@ -165,6 +169,7 @@ def valid_sources() -> dict[str, str]:
             ' name="tree_support_organic_branch_diameter" name="tree_support_branch_diameter_angle"'
             ' name="tree_support_branch_density" name="tree_support_adaptive_layer_height"'
             ' name="tree_support_auto_brim" name="tree_support_brim_width"'
+            ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="feature_jerk" name="jerk_value" name="initial_layer" name="travel"'
         ),
         "CONTRIBUTING.md": "Quality Strength Speed Support Others",

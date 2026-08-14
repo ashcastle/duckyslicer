@@ -352,6 +352,8 @@ data class MultiMaterialSettings(
     val preheatDeltaTemperature: Int = 0,
     val preheatSteps: Int = 1,
     val interfaceShells: Boolean = false,
+    val segmentedRegionMaxWidth: Float = 0f,
+    val segmentedRegionInterlockingDepth: Float = 0f,
     val interlockingBeam: Boolean = false,
     val interlockingBeamWidth: Float = 0.8f,
     val interlockingOrientation: Float = 22.5f,
@@ -873,7 +875,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 54,
+    val schemaVersion: Int = 55,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1850,6 +1852,8 @@ data class SliceOptions(
             native.preheatDeltaTemperature = multiMaterial.preheatDeltaTemperature
             native.preheatSteps = multiMaterial.preheatSteps
             native.interfaceShells = multiMaterial.interfaceShells
+            native.segmentedRegionMaxWidth = multiMaterial.segmentedRegionMaxWidth
+            native.segmentedRegionInterlockingDepth = multiMaterial.segmentedRegionInterlockingDepth
             native.interlockingBeam = multiMaterial.interlockingBeam
             native.interlockingBeamWidth = multiMaterial.interlockingBeamWidth
             native.interlockingOrientation = multiMaterial.interlockingOrientation

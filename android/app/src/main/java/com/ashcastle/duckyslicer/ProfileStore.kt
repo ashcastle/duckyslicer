@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 55
+internal const val USER_PROFILE_SCHEMA_VERSION = 56
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -725,6 +725,8 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("preheatDeltaTemperature", multiMaterial.preheatDeltaTemperature)
     .put("preheatSteps", multiMaterial.preheatSteps)
     .put("interfaceShells", multiMaterial.interfaceShells)
+    .put("segmentedRegionMaxWidth", multiMaterial.segmentedRegionMaxWidth)
+    .put("segmentedRegionInterlockingDepth", multiMaterial.segmentedRegionInterlockingDepth)
     .put("interlockingBeam", multiMaterial.interlockingBeam)
     .put("interlockingBeamWidth", multiMaterial.interlockingBeamWidth)
     .put("interlockingOrientation", multiMaterial.interlockingOrientation)
@@ -1145,6 +1147,11 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
             preheatDeltaTemperature = optInt("preheatDeltaTemperature", 0),
             preheatSteps = optInt("preheatSteps", 1),
             interfaceShells = optBoolean("interfaceShells"),
+            segmentedRegionMaxWidth = optDouble("segmentedRegionMaxWidth", 0.0).toFloat(),
+            segmentedRegionInterlockingDepth = optDouble(
+                "segmentedRegionInterlockingDepth",
+                0.0,
+            ).toFloat(),
             interlockingBeam = optBoolean("interlockingBeam"),
             interlockingBeamWidth = optDouble("interlockingBeamWidth", 0.8).toFloat(),
             interlockingOrientation = optDouble("interlockingOrientation", 22.5).toFloat(),

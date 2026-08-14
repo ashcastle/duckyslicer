@@ -849,4 +849,6 @@
     <string name="infill_rotation_template_example">0,90</string>
     <string name="infill_rotation_template_hint">입력한 각도를 레이어마다 반복합니다. 비우면 고정 방향을 사용합니다.</string>
     <string name="infill_rotation_template_invalid">−360°~360° 각도를 쉼표로 구분해 32개까지 입력하세요.</string>
+    <string name="segmented_region_max_width">세그먼트 영역 최대 너비</string>
+    <string name="segmented_region_interlocking_depth">세그먼트 영역 맞물림 깊이</string>
 </resources>

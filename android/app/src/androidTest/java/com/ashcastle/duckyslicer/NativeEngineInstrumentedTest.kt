@@ -1633,6 +1633,8 @@ class NativeEngineInstrumentedTest {
                     preheatDeltaTemperature = -18,
                     preheatSteps = 7,
                     interfaceShells = true,
+                    segmentedRegionMaxWidth = 2.4f,
+                    segmentedRegionInterlockingDepth = 0.8f,
                     interlockingBeam = true,
                     interlockingBeamWidth = 1.25f,
                     interlockingOrientation = 67.5f,
@@ -1846,6 +1848,8 @@ class NativeEngineInstrumentedTest {
         assertEquals(-18, restored.slicing.last().multiMaterial.preheatDeltaTemperature)
         assertEquals(7, restored.slicing.last().multiMaterial.preheatSteps)
         assertTrue(restored.slicing.last().multiMaterial.interfaceShells)
+        assertEquals(2.4f, restored.slicing.last().multiMaterial.segmentedRegionMaxWidth)
+        assertEquals(0.8f, restored.slicing.last().multiMaterial.segmentedRegionInterlockingDepth)
         assertTrue(restored.slicing.last().multiMaterial.interlockingBeam)
         assertEquals(1.25f, restored.slicing.last().multiMaterial.interlockingBeamWidth)
         assertEquals(67.5f, restored.slicing.last().multiMaterial.interlockingOrientation)
@@ -2060,7 +2064,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(54, catalog.schemaVersion)
+        assertEquals(55, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2131,6 +2135,13 @@ class NativeEngineInstrumentedTest {
                     it.multiMaterial.preheatSteps != 1 ||
                     it.multiMaterial.interfaceShells ||
                     it.multiMaterial.interlockingBeam
+            },
+        )
+        assertTrue(
+            "Bundled Orca profiles must retain their disabled segmented-region defaults",
+            catalog.slicing.all {
+                it.multiMaterial.segmentedRegionMaxWidth == 0f &&
+                    it.multiMaterial.segmentedRegionInterlockingDepth == 0f
             },
         )
         assertTrue(catalog.slicing.all(ProfileValidation::slicing))

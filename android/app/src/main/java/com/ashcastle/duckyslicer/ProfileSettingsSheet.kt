@@ -4705,11 +4705,80 @@ private fun SlicingSettingsSheet(
                     onCheckedChange = {
                         onOptionsChanged(
                             options.copy(
-                                multiMaterial = options.multiMaterial.copy(interlockingBeam = it),
+                                multiMaterial = options.multiMaterial.copy(
+                                    interlockingBeam = it,
+                                    segmentedRegionInterlockingDepth = if (it) {
+                                        0f
+                                    } else {
+                                        options.multiMaterial.segmentedRegionInterlockingDepth
+                                    },
+                                ),
                             ),
                         )
                     },
                 )
+                if (!options.multiMaterial.interlockingBeam || settingsQuery.isNotBlank()) {
+                    val segmentedWidthMaximum = max(
+                        20f,
+                        options.multiMaterial.segmentedRegionMaxWidth,
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.segmented_region_max_width),
+                        valueText = stringResource(
+                            R.string.millimeters_value_precise,
+                            options.multiMaterial.segmentedRegionMaxWidth,
+                        ),
+                        value = options.multiMaterial.segmentedRegionMaxWidth,
+                        range = 0f..segmentedWidthMaximum,
+                        steps = (segmentedWidthMaximum * 10f).roundToInt().coerceAtLeast(2) - 1,
+                        enabled = !options.multiMaterial.interlockingBeam,
+                        onValueChange = { rawValue ->
+                            val width = (rawValue * 10f).roundToInt() / 10f
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        segmentedRegionMaxWidth = width,
+                                        segmentedRegionInterlockingDepth = if (width == 0f) {
+                                            0f
+                                        } else {
+                                            options.multiMaterial.segmentedRegionInterlockingDepth
+                                                .coerceAtMost(width)
+                                        },
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    if (
+                        options.multiMaterial.segmentedRegionMaxWidth > 0f ||
+                        settingsQuery.isNotBlank()
+                    ) {
+                        val depthMaximum = options.multiMaterial.segmentedRegionMaxWidth
+                            .coerceAtLeast(0.1f)
+                        SettingSlider(
+                            label = stringResource(R.string.segmented_region_interlocking_depth),
+                            valueText = stringResource(
+                                R.string.millimeters_value_precise,
+                                options.multiMaterial.segmentedRegionInterlockingDepth,
+                            ),
+                            value = options.multiMaterial.segmentedRegionInterlockingDepth,
+                            range = 0f..depthMaximum,
+                            steps = (depthMaximum * 10f).roundToInt().coerceAtLeast(2) - 1,
+                            enabled = !options.multiMaterial.interlockingBeam &&
+                                options.multiMaterial.segmentedRegionMaxWidth > 0f,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        multiMaterial = options.multiMaterial.copy(
+                                            segmentedRegionInterlockingDepth =
+                                                (it * 10f).roundToInt() / 10f,
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                    }
+                }
                 if (options.multiMaterial.interlockingBeam || settingsQuery.isNotBlank()) {
                     val beamWidthMaximum = max(10f, options.multiMaterial.interlockingBeamWidth)
                     SettingSlider(

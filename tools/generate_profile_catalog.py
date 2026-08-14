@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 54
+SCHEMA_VERSION = 55
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -900,6 +900,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "preheatDeltaTemperature": integer(raw.get("delta_temperature"), 0),
         "preheatSteps": integer(raw.get("preheat_steps"), 1),
         "interfaceShells": boolean(raw.get("interface_shells")),
+        "segmentedRegionMaxWidth": number(raw.get("mmu_segmented_region_max_width"), 0),
+        "segmentedRegionInterlockingDepth": number(
+            raw.get("mmu_segmented_region_interlocking_depth"), 0
+        ),
         "interlockingBeam": boolean(raw.get("interlocking_beam")),
         "interlockingBeamWidth": number(raw.get("interlocking_beam_width"), 0.8),
         "interlockingOrientation": number(raw.get("interlocking_orientation"), 22.5),
@@ -1182,6 +1186,12 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and -50 <= profile["preheatDeltaTemperature"] <= 50
         and 1 <= profile["preheatSteps"] <= 10
         and 0.01 <= profile["interlockingBeamWidth"] <= 1_000
+        and 0 <= profile["segmentedRegionMaxWidth"] <= 1_000
+        and 0 <= profile["segmentedRegionInterlockingDepth"] <= 1_000
+        and (
+            profile["segmentedRegionInterlockingDepth"] == 0
+            or profile["segmentedRegionInterlockingDepth"] <= profile["segmentedRegionMaxWidth"]
+        )
         and 0 <= profile["interlockingOrientation"] <= 360
         and 1 <= profile["interlockingBeamLayerCount"] <= 1_000
         and 1 <= profile["interlockingDepth"] <= 1_000
