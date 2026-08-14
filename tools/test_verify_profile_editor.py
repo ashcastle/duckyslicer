@@ -45,6 +45,7 @@ def valid_sources() -> dict[str, str]:
             " R.string.extruder_clearance_height_to_rod R.string.extruder_clearance_height_to_lid"
             " R.string.make_overhangs_printable R.string.maximum_overhang_angle"
             " R.string.overhang_base_hole_area"
+            " R.string.number_of_slow_layers"
             " R.string.support_on_build_plate_only R.string.support_base_pattern_spacing"
             " R.string.support_expansion R.string.support_interface_loop_pattern"
             " R.string.independent_support_layer_height"
@@ -110,6 +111,7 @@ def valid_sources() -> dict[str, str]:
             ' name="extruder_clearance_height_to_rod" name="extruder_clearance_height_to_lid"'
             ' name="make_overhangs_printable" name="maximum_overhang_angle"'
             ' name="overhang_base_hole_area"'
+            ' name="number_of_slow_layers"'
             ' name="support_on_build_plate_only" name="support_base_pattern_spacing"'
             ' name="support_expansion" name="support_interface_loop_pattern"'
             ' name="independent_support_layer_height"'
@@ -138,6 +140,7 @@ def valid_sources() -> dict[str, str]:
             ' name="extruder_clearance_height_to_rod" name="extruder_clearance_height_to_lid"'
             ' name="make_overhangs_printable" name="maximum_overhang_angle"'
             ' name="overhang_base_hole_area"'
+            ' name="number_of_slow_layers"'
             ' name="support_on_build_plate_only" name="support_base_pattern_spacing"'
             ' name="support_expansion" name="support_interface_loop_pattern"'
             ' name="independent_support_layer_height"'

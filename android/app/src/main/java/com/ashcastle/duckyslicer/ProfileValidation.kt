@@ -171,6 +171,7 @@ internal object ProfileValidation {
             profile.wallDirection in setOf("auto", "ccw", "cw") &&
             profile.printableOverhangs.maximumAngle in 0f..90f &&
             profile.printableOverhangs.holeArea in 0f..1_000_000f &&
+            profile.gcodeSettings.slowDownLayers in 0..1_000 &&
             profile.minWidthTopSurface in 0f..1_500f &&
             profile.overhangReverseThreshold in 0f..2_000f &&
             profile.counterboreHoleBridging in setOf("none", "partiallybridge", "sacrificiallayer") &&

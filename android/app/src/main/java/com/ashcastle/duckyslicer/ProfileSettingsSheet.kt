@@ -2330,6 +2330,23 @@ private fun SlicingSettingsSheet(
                         )
                     },
                 )
+                val maximumSlowLayers = max(20, options.gcodeSettings.slowDownLayers)
+                SettingSlider(
+                    label = stringResource(R.string.number_of_slow_layers),
+                    valueText = options.gcodeSettings.slowDownLayers.toString(),
+                    value = options.gcodeSettings.slowDownLayers.toFloat(),
+                    range = 0f..maximumSlowLayers.toFloat(),
+                    steps = (maximumSlowLayers - 1).coerceAtLeast(0),
+                    onValueChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                gcodeSettings = options.gcodeSettings.copy(
+                                    slowDownLayers = it.roundToInt(),
+                                ),
+                            ),
+                        )
+                    },
+                )
                 SettingsSwitch(
                     label = stringResource(R.string.acceleration_smoothing),
                     checked = options.gcodeSettings.accelToDecelEnabled,

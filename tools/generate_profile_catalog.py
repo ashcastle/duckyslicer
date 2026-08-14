@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 40
+SCHEMA_VERSION = 41
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -851,6 +851,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "excludeObject": boolean(raw.get("exclude_object")),
         "initialLayerTravelSpeed": initial_layer_travel_speed,
         "initialLayerTravelSpeedPercent": initial_layer_travel_speed_percent,
+        "slowDownLayers": integer(raw.get("slow_down_layers"), 0),
         "accelToDecelEnabled": boolean(raw.get("accel_to_decel_enable"), True),
         "accelToDecelFactor": number(raw.get("accel_to_decel_factor"), 50),
         "spiralMode": boolean(raw.get("spiral_mode")),
@@ -931,6 +932,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 1 <= profile["initialLayerTravelSpeed"] <= (
             1_000 if profile["initialLayerTravelSpeedPercent"] else 2_000
         )
+        and 0 <= profile["slowDownLayers"] <= 1_000
         and 1 <= profile["accelToDecelFactor"] <= 100
         and all(
             0 <= profile[key] <= (100 if profile[f"{key}Percent"] else 2_000)

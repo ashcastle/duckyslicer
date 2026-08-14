@@ -332,6 +332,7 @@
     <string name="bottom_surface_flow_ratio">Bottom surface flow</string>
     <string name="travel_speed">Travel speed</string>
     <string name="initial_layer_travel_speed">Initial layer travel</string>
+    <string name="number_of_slow_layers">Number of slow layers</string>
     <string name="acceleration_smoothing">Acceleration smoothing</string>
     <string name="acceleration_smoothing_ratio">Smoothing ratio</string>
     <string name="avoid_crossing_walls">Avoid crossing walls</string>

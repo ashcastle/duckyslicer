@@ -22,7 +22,7 @@ def valid_sources() -> dict[str, str]:
                 "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
                 'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
                 "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-                "PROJECT_ARCHIVE_SCHEMA_VERSION = 10",
+                "PROJECT_ARCHIVE_SCHEMA_VERSION = 11",
                 "ArchivedProjectPlate ArchivedProjectVolume",
                 'getJSONArray("plates") getJSONArray("volumes") legacyProjectVolumeId',
                 "selectedPlateId plateOptions: Map<String, SliceOptions>",
@@ -264,8 +264,8 @@ def valid_sources() -> dict[str, str]:
         ),
         "SUPPORT.md": "`.duckyproject` model geometry include saved printer addresses, access keys, or G-code",
         "PROJECT_FORMAT.md": (
-            "manifest.json models/000.stl schema version `10` "
-            "Schema 1 through 9 projects remain readable up to 16 plates "
+            "manifest.json models/000.stl schema version `11` "
+            "Schema 1 through 10 projects remain readable up to 16 plates "
             "plate-local objects and settings stable, bounded `volumes` list "
             "up to 64 volumes per object independent X, Y, and Z scale "
             "multi-color painting manual Brim-ear points variable layer-height ranges "

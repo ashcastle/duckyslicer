@@ -367,7 +367,7 @@ index 116a4a85..6b3048bc 100644
      float max_print_height = 270.0f;
  
      // Nozzle
-@@ -86,18 +282,83 @@ struct SliceConfig {
+@@ -86,18 +282,84 @@ struct SliceConfig {
      std::vector<int> extruder_temps;           // per-extruder nozzle temps
      std::vector<float> extruder_retract_length; // per-extruder retraction
      std::vector<float> extruder_retract_speed;  // per-extruder retraction speed
@@ -411,6 +411,7 @@ index 116a4a85..6b3048bc 100644
 +    bool exclude_object = false;
 +    float initial_layer_travel_speed = 100.0f;
 +    bool initial_layer_travel_speed_percent = true;
++    int slow_down_layers = 0;
 +    bool accel_to_decel_enabled = true;
 +    float accel_to_decel_factor = 50.0f;
 +    std::string scarf_seam_type = "none";
@@ -982,7 +983,7 @@ index d93efb7d..fdf9a877 100644
      config.max_print_height = getFloat("maxPrintHeight");
  
      config.nozzle_diameter = getFloat("nozzleDiameter");
-@@ -129,14 +316,79 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -129,14 +316,80 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.extruder_temps = getIntArray("extruderTemps");
      config.extruder_retract_length = getFloatArray("extruderRetractLength");
      config.extruder_retract_speed = getFloatArray("extruderRetractSpeed");
@@ -1024,6 +1025,7 @@ index d93efb7d..fdf9a877 100644
 +    config.exclude_object = getBool("excludeObject");
 +    config.initial_layer_travel_speed = getFloat("initialLayerTravelSpeed");
 +    config.initial_layer_travel_speed_percent = getBool("initialLayerTravelSpeedPercent");
++    config.slow_down_layers = getInt("slowDownLayers");
 +    config.accel_to_decel_enabled = getBool("accelToDecelEnabled");
 +    config.accel_to_decel_factor = getFloat("accelToDecelFactor");
 +    config.scarf_seam_type = getString("scarfSeamType");
@@ -1322,7 +1324,7 @@ index d93efb7d..fdf9a877 100644
      setFloat("maxPrintHeight", config.max_print_height);
      setFloat("nozzleDiameter", config.nozzle_diameter);
      setFloat("filamentDiameter", config.filament_diameter);
-@@ -265,12 +694,78 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -265,12 +694,79 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setIntArray("extruderTemps", config.extruder_temps);
      setFloatArray("extruderRetractLength", config.extruder_retract_length);
      setFloatArray("extruderRetractSpeed", config.extruder_retract_speed);
@@ -1364,6 +1366,7 @@ index d93efb7d..fdf9a877 100644
 +    setBool("excludeObject", config.exclude_object);
 +    setFloat("initialLayerTravelSpeed", config.initial_layer_travel_speed);
 +    setBool("initialLayerTravelSpeedPercent", config.initial_layer_travel_speed_percent);
++    setInt("slowDownLayers", config.slow_down_layers);
 +    setBool("accelToDecelEnabled", config.accel_to_decel_enabled);
 +    setFloat("accelToDecelFactor", config.accel_to_decel_factor);
 +    setString("scarfSeamType", config.scarf_seam_type);
@@ -1888,7 +1891,7 @@ index 8d61c9cf..f285d044 100644
      // F91 (2026-05-25) — SliceConfig user overrides for the per-filament tuning keys
      // that applyConfigToPrusa doesn't otherwise touch. When the user sets a value via the
      // Filament Library, populate dpc here so the slicer picks it up. When unset, the
-@@ -568,31 +764,86 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -568,31 +764,87 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          dpc.set_key_value("filament_cost", new Slic3r::ConfigOptionFloats(std::move(v)));
      }
  
@@ -1977,6 +1980,7 @@ index 8d61c9cf..f285d044 100644
 +    dpc.set_key_value("exclude_object", new Slic3r::ConfigOptionBool(config.exclude_object));
 +    dpc.set_key_value("initial_layer_travel_speed", new Slic3r::ConfigOptionFloatOrPercent(
 +        config.initial_layer_travel_speed, config.initial_layer_travel_speed_percent));
++    dpc.set_key_value("slow_down_layers", new Slic3r::ConfigOptionInt(config.slow_down_layers));
 +    dpc.set_key_value("accel_to_decel_enable", new Slic3r::ConfigOptionBool(config.accel_to_decel_enabled));
 +    dpc.set_key_value("accel_to_decel_factor", new Slic3r::ConfigOptionPercent(config.accel_to_decel_factor));
 +    dpc.set_deserialize_strict("seam_slope_type", config.scarf_seam_type);

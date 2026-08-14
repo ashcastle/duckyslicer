@@ -416,6 +416,20 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(63.0, profile["makeOverhangPrintableAngle"])
         self.assertEqual(240.0, profile["makeOverhangPrintableHoleSize"])
 
+    def test_preserves_gradual_initial_layer_speed(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Gradual speed",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "slow_down_layers": "4",
+            },
+            {},
+        )
+
+        self.assertEqual(4, profile["slowDownLayers"])
+
     def test_preserves_tree_support_mode_and_geometry(self) -> None:
         profile = build_process(
             "Example",

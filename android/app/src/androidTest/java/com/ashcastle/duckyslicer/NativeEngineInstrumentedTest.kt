@@ -228,6 +228,38 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun gradualInitialLayerSpeedChangesRealPrintTime() {
+        val base = SliceOptions()
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                printSpeed = 150f,
+                innerWallSpeed = 150f,
+                sparseInfillSpeed = 150f,
+                internalSolidInfillSpeed = 150f,
+                topSurfaceSpeed = 150f,
+                firstLayerSpeed = 10f,
+                firstLayerInfillSpeed = 10f,
+                gcodeSettings = GcodeSettings(slowDownLayers = 0),
+            )
+        val plain = OnDeviceSlicer.slice(fixtureModel(), base)
+        val ramped = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.copy(gcodeSettings = base.gcodeSettings.copy(slowDownLayers = 12)),
+        )
+        try {
+            val rampedGcode = ramped.output.readText()
+            assertTrue(rampedGcode.contains("; slow_down_layers = 12"))
+            assertTrue(
+                "Gradual initial-layer speeds must increase real estimated print time",
+                ramped.estimatedSeconds > plain.estimatedSeconds + 1f,
+            )
+        } finally {
+            plain.output.delete()
+            ramped.output.delete()
+        }
+    }
+
+    @Test
     fun inheritedMotionOutputChangesFirstLayerTravelAndKlipperLimits() {
         val base = SliceOptions()
             .selectPrinter(PrinterProfile.U1_04.copy(gcodeFlavor = "klipper"))
@@ -1218,6 +1250,7 @@ class NativeEngineInstrumentedTest {
                     excludeObjects = true,
                     initialLayerTravelSpeed = 35f,
                     initialLayerTravelSpeedPercent = true,
+                    slowDownLayers = 5,
                     accelToDecelEnabled = false,
                     accelToDecelFactor = 27f,
                 ),
@@ -1412,6 +1445,7 @@ class NativeEngineInstrumentedTest {
         assertTrue(restored.slicing.last().gcodeSettings.excludeObjects)
         assertEquals(35f, restored.slicing.last().gcodeSettings.initialLayerTravelSpeed)
         assertTrue(restored.slicing.last().gcodeSettings.initialLayerTravelSpeedPercent)
+        assertEquals(5, restored.slicing.last().gcodeSettings.slowDownLayers)
         assertFalse(restored.slicing.last().gcodeSettings.accelToDecelEnabled)
         assertEquals(27f, restored.slicing.last().gcodeSettings.accelToDecelFactor)
         assertEquals("nearest", restored.slicing.last().seamPosition)
@@ -1607,7 +1641,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(40, catalog.schemaVersion)
+        assertEquals(41, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1693,6 +1727,10 @@ class NativeEngineInstrumentedTest {
             "The catalog must retain absolute and percentage initial travel speeds",
             catalog.slicing.any { it.gcodeSettings.initialLayerTravelSpeedPercent } &&
                 catalog.slicing.any { !it.gcodeSettings.initialLayerTravelSpeedPercent },
+        )
+        assertTrue(
+            "The catalog must retain gradual initial-layer speed ramps",
+            catalog.slicing.any { it.gcodeSettings.slowDownLayers > 0 },
         )
         assertTrue(
             "The catalog must retain both acceleration-smoothing policies",

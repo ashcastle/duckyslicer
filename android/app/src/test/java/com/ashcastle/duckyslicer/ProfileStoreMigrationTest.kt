@@ -22,6 +22,7 @@ class ProfileStoreMigrationTest {
                 remove("makeOverhangPrintable")
                 remove("makeOverhangPrintableAngle")
                 remove("makeOverhangPrintableHoleSize")
+                remove("slowDownLayers")
             }
             file.writeText(
                 JSONObject()
@@ -44,6 +45,7 @@ class ProfileStoreMigrationTest {
             assertEquals("V3 Filament", restoredFilament.name)
             assertEquals("V3 Slicing", restoredSlicing.name)
             assertEquals(PrintableOverhangSettings(), restoredSlicing.printableOverhangs)
+            assertEquals(0, restoredSlicing.gcodeSettings.slowDownLayers)
         } finally {
             file.delete()
         }

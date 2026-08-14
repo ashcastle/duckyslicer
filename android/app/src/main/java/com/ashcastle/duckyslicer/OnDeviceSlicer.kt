@@ -386,6 +386,7 @@ data class GcodeSettings(
     val excludeObjects: Boolean = false,
     val initialLayerTravelSpeed: Float = 100f,
     val initialLayerTravelSpeedPercent: Boolean = true,
+    val slowDownLayers: Int = 0,
     val accelToDecelEnabled: Boolean = true,
     val accelToDecelFactor: Float = 50f,
 )
@@ -781,7 +782,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 40,
+    val schemaVersion: Int = 41,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1747,6 +1748,7 @@ data class SliceOptions(
             native.excludeObject = gcodeSettings.excludeObjects
             native.initialLayerTravelSpeed = gcodeSettings.initialLayerTravelSpeed
             native.initialLayerTravelSpeedPercent = gcodeSettings.initialLayerTravelSpeedPercent
+            native.slowDownLayers = gcodeSettings.slowDownLayers
             native.accelToDecelEnabled = gcodeSettings.accelToDecelEnabled
             native.accelToDecelFactor = gcodeSettings.accelToDecelFactor
             native.scarfSeamType = scarfSeam.type

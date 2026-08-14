@@ -171,6 +171,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var excludeObject: Boolean = base.gcodeSettings.excludeObjects
     private var initialLayerTravelSpeed: Float = base.gcodeSettings.initialLayerTravelSpeed
     private var initialLayerTravelSpeedPercent: Boolean = base.gcodeSettings.initialLayerTravelSpeedPercent
+    private var slowDownLayers: Int = base.gcodeSettings.slowDownLayers
     private var accelToDecelEnabled: Boolean = base.gcodeSettings.accelToDecelEnabled
     private var accelToDecelFactor: Float = base.gcodeSettings.accelToDecelFactor
     private var skirtLoops: Int = base.skirtLoops
@@ -567,6 +568,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         excludeObject = input.readCatalogBoolean()
         initialLayerTravelSpeed = input.readFloat()
         initialLayerTravelSpeedPercent = input.readCatalogBoolean()
+        slowDownLayers = input.readInt()
         accelToDecelEnabled = input.readCatalogBoolean()
         accelToDecelFactor = input.readFloat()
         spiralMode = input.readCatalogBoolean()
@@ -798,6 +800,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             excludeObjects = excludeObject,
             initialLayerTravelSpeed = initialLayerTravelSpeed,
             initialLayerTravelSpeedPercent = initialLayerTravelSpeedPercent,
+            slowDownLayers = slowDownLayers,
             accelToDecelEnabled = accelToDecelEnabled,
             accelToDecelFactor = accelToDecelFactor,
         ),
@@ -1169,6 +1172,7 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("excludeObject", BINARY_BOOL),
     BinaryField("initialLayerTravelSpeed", BINARY_FLOAT),
     BinaryField("initialLayerTravelSpeedPercent", BINARY_BOOL),
+    BinaryField("slowDownLayers", BINARY_INT),
     BinaryField("accelToDecelEnabled", BINARY_BOOL),
     BinaryField("accelToDecelFactor", BINARY_FLOAT),
     BinaryField("spiralMode", BINARY_BOOL),

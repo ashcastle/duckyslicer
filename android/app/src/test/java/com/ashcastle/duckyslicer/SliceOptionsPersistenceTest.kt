@@ -60,6 +60,7 @@ class SliceOptionsPersistenceTest {
                     excludeObjects = true,
                     initialLayerTravelSpeed = 35f,
                     initialLayerTravelSpeedPercent = true,
+                    slowDownLayers = 4,
                     accelToDecelEnabled = false,
                     accelToDecelFactor = 27f,
                 ),
@@ -108,6 +109,7 @@ class SliceOptionsPersistenceTest {
         assertEquals(true, native.excludeObject)
         assertEquals(35f, native.initialLayerTravelSpeed)
         assertEquals(true, native.initialLayerTravelSpeedPercent)
+        assertEquals(4, native.slowDownLayers)
         assertEquals(false, native.accelToDecelEnabled)
         assertEquals(27f, native.accelToDecelFactor)
     }
@@ -430,6 +432,7 @@ class SliceOptionsPersistenceTest {
                 remove("makeOverhangPrintable")
                 remove("makeOverhangPrintableAngle")
                 remove("makeOverhangPrintableHoleSize")
+                remove("slowDownLayers")
             }
         }
 
@@ -439,6 +442,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(false, restored.toNativeConfig().makeOverhangPrintable)
         assertEquals(55f, restored.toNativeConfig().makeOverhangPrintableAngle)
         assertEquals(0f, restored.toNativeConfig().makeOverhangPrintableHoleSize)
+        assertEquals(0, restored.gcodeSettings.slowDownLayers)
+        assertEquals(0, restored.toNativeConfig().slowDownLayers)
     }
 
     @Test
@@ -669,6 +674,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             excludeObjects = true,
             initialLayerTravelSpeed = 35f,
             initialLayerTravelSpeedPercent = true,
+            slowDownLayers = 4,
             accelToDecelEnabled = false,
             accelToDecelFactor = 27f,
         ),

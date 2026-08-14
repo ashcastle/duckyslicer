@@ -331,6 +331,7 @@ data class SliceConfig(
     @JvmField var excludeObject: Boolean = false
     @JvmField var initialLayerTravelSpeed: Float = 100f
     @JvmField var initialLayerTravelSpeedPercent: Boolean = true
+    @JvmField var slowDownLayers: Int = 0
     @JvmField var accelToDecelEnabled: Boolean = true
     @JvmField var accelToDecelFactor: Float = 50f
     @JvmField var scarfSeamType: String = "none"

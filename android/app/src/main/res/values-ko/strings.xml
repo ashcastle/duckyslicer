@@ -332,6 +332,7 @@
     <string name="bottom_surface_flow_ratio">하단 표면 유량</string>
     <string name="travel_speed">이동 속도</string>
     <string name="initial_layer_travel_speed">첫 레이어 이동</string>
+    <string name="number_of_slow_layers">저속 레이어 수</string>
     <string name="acceleration_smoothing">가속도 완화</string>
     <string name="acceleration_smoothing_ratio">완화 비율</string>
     <string name="avoid_crossing_walls">벽을 가로지르는 이동 방지</string>
