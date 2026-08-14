@@ -3007,6 +3007,18 @@ private fun BedScene(
             buildPreparePickingIndices(snapshot) { ensureActive() }
         }
     }
+    LaunchedEffect(modelTopology, layOnFaceObjectId) {
+        val selected = projectObjects.firstOrNull { it.id == layOnFaceObjectId }
+            ?: return@LaunchedEffect
+        val missingIndex = selected.volumes.any { volume ->
+            PreparePickingIndexKey(selected.id, volume.id) !in modelPickingIndices
+        }
+        if (!missingIndex) return@LaunchedEffect
+        val selectedIndices = withModelPreparationContext {
+            buildPreparePickingIndices(listOf(selected)) { ensureActive() }
+        }
+        modelPickingIndices = modelPickingIndices + selectedIndices
+    }
     var layOnFaceCandidates by remember(layOnFaceObjectId, modelTopology) {
         mutableStateOf<Map<String, List<LayOnFaceCandidate>>>(emptyMap())
     }
@@ -3310,39 +3322,42 @@ private fun BedScene(
                         val activeObject = layOnFaceObject ?: checkNotNull(measuringObject)
                         val hit = if (useDepthTestedPrepare) {
                             currentModelPlacements[activeObject.id]?.let { placement ->
-                                findPrepareFacetAtScreen(
-                                    projectObject = activeObject,
-                                    placement = placement,
-                                    viewport = PrepareHitTestViewport(
-                                        widthPx = size.width.toFloat(),
-                                        heightPx = size.height.toFloat(),
-                                        bedSizeX = bedSizeX,
-                                        bedSizeY = bedSizeY,
-                                        yawDegrees = yaw,
-                                        pitchDegrees = pitch,
-                                        zoom = zoom,
-                                        panX = pan.x,
-                                        panY = pan.y,
-                                    ),
-                                    screenX = down.position.x,
-                                    screenY = down.position.y,
-                                    touchRadiusPx = 18.dp.toPx(),
-                                    selectableTriangles = layOnFaceCandidateFacets
-                                        .takeIf { layOnFaceObject != null },
-                                    pickingIndices = currentModelPickingIndices,
+                                val hitTestViewport = PrepareHitTestViewport(
+                                    widthPx = size.width.toFloat(),
+                                    heightPx = size.height.toFloat(),
+                                    bedSizeX = bedSizeX,
+                                    bedSizeY = bedSizeY,
+                                    yawDegrees = yaw,
+                                    pitchDegrees = pitch,
+                                    zoom = zoom,
+                                    panX = pan.x,
+                                    panY = pan.y,
                                 )
+                                if (layOnFaceObject != null) {
+                                    findLayOnFaceFacetAtScreen(
+                                        projectObject = activeObject,
+                                        placement = placement,
+                                        viewport = hitTestViewport,
+                                        screenX = down.position.x,
+                                        screenY = down.position.y,
+                                        touchRadiusPx = 18.dp.toPx(),
+                                        pickingIndices = currentModelPickingIndices,
+                                    )
+                                } else {
+                                    findPrepareFacetAtScreen(
+                                        projectObject = activeObject,
+                                        placement = placement,
+                                        viewport = hitTestViewport,
+                                        screenX = down.position.x,
+                                        screenY = down.position.y,
+                                        touchRadiusPx = 18.dp.toPx(),
+                                        pickingIndices = currentModelPickingIndices,
+                                    )
+                                }
                             }
                         } else {
-                            val selectableTriangles = if (layOnFaceObject != null) {
-                                modelScreenTriangles[activeObject.id].orEmpty().filter { triangle ->
-                                    layOnFaceCandidateFacets[triangle.volumeId]
-                                        ?.getOrNull(triangle.previewTriangleIndex) == true
-                                }
-                            } else {
-                                modelScreenTriangles[activeObject.id].orEmpty()
-                            }
                             closestModelTriangle(
-                                selectableTriangles,
+                                modelScreenTriangles[activeObject.id].orEmpty(),
                                 down.position,
                                 18.dp.toPx(),
                             )

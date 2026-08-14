@@ -486,6 +486,29 @@ internal fun findPrepareFacetAtScreen(
     )
 }
 
+/**
+ * Candidate planes are a visual aid, not an input gate. A valid visible triangle must remain
+ * selectable while suggestions are still being prepared and for models that have no large,
+ * connected planar candidate at all.
+ */
+internal fun findLayOnFaceFacetAtScreen(
+    projectObject: ProjectObject,
+    placement: PrepareObjectPlacement,
+    viewport: PrepareHitTestViewport,
+    screenX: Float,
+    screenY: Float,
+    touchRadiusPx: Float,
+    pickingIndices: Map<PreparePickingIndexKey, PrepareVolumePickingIndex> = emptyMap(),
+): ModelScreenTriangle? = findPrepareFacetAtScreen(
+    projectObject = projectObject,
+    placement = placement,
+    viewport = viewport,
+    screenX = screenX,
+    screenY = screenY,
+    touchRadiusPx = touchRadiusPx,
+    pickingIndices = pickingIndices,
+)
+
 private data class PrepareObjectHit(
     val objectId: String,
     val distance: Float,

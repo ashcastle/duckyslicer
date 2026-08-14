@@ -470,10 +470,21 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "interactionActive || layOnFaceObjectId != null",
         "delay(PREPARE_PICKING_PREWARM_DELAY_MS)",
         "modelPickingIndices = withModelPreparationContext",
+        "LaunchedEffect(modelTopology, layOnFaceObjectId)",
+        "buildPreparePickingIndices(listOf(selected))",
+        "modelPickingIndices = modelPickingIndices + selectedIndices",
+        "findLayOnFaceFacetAtScreen(",
         "checkCancellation = { ensureActive() }",
     ):
         if marker not in workspace:
             raise VerificationError(f"preview device policy is not connected to the UI: {marker}")
+    lay_on_face_touch = workspace.split(
+        "if (layOnFaceObject != null || measuringObject != null)", 1
+    )[-1].split("if (supportPaintObject != null", 1)[0]
+    if "layOnFaceCandidateFacets" in lay_on_face_touch:
+        raise VerificationError(
+            "place-on-face suggestions must not reject an otherwise valid surface tap"
+        )
     if workspace.count("pickingIndices = currentModelPickingIndices") < 3:
         raise VerificationError("all GPU Prepare touch paths must use the immutable picking index")
 

@@ -98,6 +98,30 @@ class PrepareModelPickingTest {
     }
 
     @Test
+    fun layOnFacePickingAcceptsAVisibleSurfaceWithoutSuggestedPlanes() {
+        val projectObject = triangleObject("unsuggested-face")
+        val placement = placements(projectObject).getValue(projectObject.id)
+        assertTrue(
+            detectLayOnFaceCandidates(
+                projectObject.singleVolume.model.previewTriangles,
+            ).isEmpty(),
+        )
+
+        val hit = findLayOnFaceFacetAtScreen(
+            projectObject = projectObject,
+            placement = placement,
+            viewport = viewport,
+            screenX = 498f,
+            screenY = 382f,
+            touchRadiusPx = 0f,
+            pickingIndices = buildPreparePickingIndices(listOf(projectObject)),
+        )
+
+        assertEquals(0, hit?.previewTriangleIndex)
+        assertEquals(projectObject.singleVolume.id, hit?.volumeId)
+    }
+
+    @Test
     fun spatialIndexCullsArbitraryFacetOrderWithoutChangingExactHits() {
         val orderedVertices = FloatArray(10 * 6 * 2 * 9)
         var output = 0
