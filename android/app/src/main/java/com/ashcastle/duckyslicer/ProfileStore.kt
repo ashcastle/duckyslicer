@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 57
+internal const val USER_PROFILE_SCHEMA_VERSION = 58
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -108,6 +108,7 @@ class ProfileStore private constructor(
                 firstLayerBedTemp = options.firstLayerBedTemp,
                 flowRatio = options.flowRatio,
                 maxVolumetricSpeed = options.maxVolumetricSpeed,
+                diameter = options.filamentDiameter,
                 fanMinSpeed = options.fanMinSpeed,
                 fanMaxSpeed = options.fanMaxSpeed,
                 overhangFanSpeed = options.overhangFanSpeed,
@@ -153,6 +154,7 @@ class ProfileStore private constructor(
             fullFanSpeedLayer = effective.fullFanSpeedLayer,
             pressureAdvanceEnabled = effective.pressureAdvanceEnabled,
             pressureAdvance = effective.pressureAdvance,
+            diameter = effective.diameter,
         )
         require(ProfileValidation.filament(profile)) { "Filament profile contains unsafe values" }
         append("filaments", profile.toProfileJson())
@@ -528,6 +530,7 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("slowDownLayerTime", slowDownLayerTime).put("slowDownMinSpeed", slowDownMinSpeed)
     .put("closeFanFirstLayers", closeFanFirstLayers).put("fullFanSpeedLayer", fullFanSpeedLayer)
     .put("pressureAdvanceEnabled", pressureAdvanceEnabled).put("pressureAdvance", pressureAdvance)
+    .put("diameter", diameter)
     .put("builtIn", builtIn)
     .put("brand", brand ?: JSONObject.NULL)
     .put("compatiblePrinters", JSONArray(compatiblePrinters))
@@ -930,6 +933,7 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         pressureAdvanceEnabled = optBoolean("pressureAdvanceEnabled"),
         pressureAdvance = optDouble("pressureAdvance", 0.0).toFloat(),
         compatiblePrinters = stringList("compatiblePrinters"),
+        diameter = optDouble("diameter", 1.75).toFloat(),
     )
 }.getOrNull()
 

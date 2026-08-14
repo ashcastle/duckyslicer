@@ -879,7 +879,8 @@ private fun FilamentSettingsSheet(
             OutlinedButton(
                 onClick = {
                     val nextProfile = profiles.firstOrNull { candidate ->
-                        slots.none { it.id == candidate.id }
+                        candidate.hasCompatibleDiameter(options.filamentProfile) &&
+                            slots.none { it.id == candidate.id }
                     } ?: options.filamentProfile
                     onOptionsChanged(options.addFilamentSlot(nextProfile))
                     selectedSlot = slots.size
@@ -975,6 +976,26 @@ private fun FilamentSettingsSheet(
                 )
             },
         )
+        if (selectedSlot == 0) {
+            SettingSlider(
+                label = stringResource(R.string.filament_diameter),
+                valueText = stringResource(
+                    R.string.millimeters_value_precise,
+                    activeProfile.diameter,
+                ),
+                value = activeProfile.diameter,
+                range = 0.5f..4f,
+                steps = 349,
+                onValueChange = {
+                    onOptionsChanged(
+                        options.updateFilamentSlot(
+                            selectedSlot,
+                            activeProfile.copy(diameter = (it * 100f).roundToInt() / 100f),
+                        ),
+                    )
+                },
+            )
+        }
         SettingsGroupTitle(stringResource(R.string.retraction))
         SettingsSwitch(
             label = stringResource(R.string.use_printer_retraction_defaults),
@@ -1302,7 +1323,11 @@ private fun FilamentSettingsSheet(
     }
     if (profilesOpen) {
         ProfileChooserSheet(
-            entries = profiles,
+            entries = if (selectedSlot == 0) {
+                profiles
+            } else {
+                profiles.filter { it.hasCompatibleDiameter(options.filamentProfile) }
+            },
             selected = activeProfile,
             recentIds = recentIds,
             id = { it.id },
@@ -1310,7 +1335,9 @@ private fun FilamentSettingsSheet(
             label = { profileLabel(it) },
             brand = { it.brand },
             builtIn = { it.builtIn },
-            searchTerms = { listOf(it.name, it.brand.orEmpty(), it.nativeName) },
+            searchTerms = {
+                listOf(it.name, it.brand.orEmpty(), it.nativeName, it.diameter.toString())
+            },
             onSelected = {
                 onOptionsChanged(options.updateFilamentSlot(selectedSlot, it))
                 profilesOpen = false

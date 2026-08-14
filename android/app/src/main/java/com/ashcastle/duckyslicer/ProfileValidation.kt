@@ -53,6 +53,7 @@ internal object ProfileValidation {
             profile.firstLayerBedTemp in 0..160 &&
             profile.flowRatio in 0.5f..1.5f &&
             profile.maxVolumetricSpeed in 0.1f..100f &&
+            profile.diameter in 0.5f..4f &&
             listOf(profile.fanMinSpeed, profile.fanMaxSpeed, profile.overhangFanSpeed)
                 .all { it in 0..100 } &&
             profile.retractLength.isNullOrIn(0f..100f) &&

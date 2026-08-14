@@ -236,6 +236,7 @@ data class FilamentProfile(
     val pressureAdvanceEnabled: Boolean = false,
     val pressureAdvance: Float = 0f,
     val compatiblePrinters: List<String> = emptyList(),
+    val diameter: Float = 1.75f,
 ) {
     companion object {
         // Curated from the included Snapmaker U1 filament catalog.
@@ -314,6 +315,9 @@ data class FilamentProfile(
         )
     }
 }
+
+internal fun FilamentProfile.hasCompatibleDiameter(other: FilamentProfile): Boolean =
+    abs(diameter - other.diameter) < 0.001f
 
 data class RetractionSettings(
     val length: Float,
@@ -1207,7 +1211,13 @@ data class SliceOptions(
     fun selectFilament(profile: FilamentProfile) = copy(
         filamentProfile = profile,
         filamentSlots = resolvedFilamentSlots().toMutableList().apply {
-            if (isEmpty()) add(profile) else this[0] = profile
+            if (isEmpty()) {
+                add(profile)
+            } else {
+                indices.forEach { index ->
+                    if (index == 0 || !this[index].hasCompatibleDiameter(profile)) this[index] = profile
+                }
+            }
         }.take(printerProfile.extruderCount.coerceAtLeast(1)),
         nozzleTemp = profile.nozzleTemp,
         firstLayerNozzleTemp = profile.firstLayerNozzleTemp,
@@ -1215,6 +1225,7 @@ data class SliceOptions(
         firstLayerBedTemp = profile.firstLayerBedTemp,
         flowRatio = profile.flowRatio,
         maxVolumetricSpeed = profile.maxVolumetricSpeed,
+        filamentDiameter = profile.diameter,
         fanMinSpeed = profile.fanMinSpeed,
         fanMaxSpeed = profile.fanMaxSpeed,
         overhangFanSpeed = profile.overhangFanSpeed,
@@ -1237,6 +1248,9 @@ data class SliceOptions(
     fun updateFilamentSlot(index: Int, profile: FilamentProfile): SliceOptions {
         require(index in resolvedFilamentSlots().indices) { "Filament slot is unavailable" }
         if (index == 0) return selectFilament(profile)
+        require(profile.hasCompatibleDiameter(filamentProfile)) {
+            "Filament slots must use the same diameter"
+        }
         val updated = resolvedFilamentSlots().toMutableList().apply { this[index] = profile }
         return copy(filamentSlots = updated)
     }
@@ -1247,6 +1261,9 @@ data class SliceOptions(
         if (existing >= 0) return FilamentSlotAssignment(this, existing)
         require(current.size < printerProfile.extruderCount.coerceIn(1, MAX_FILAMENT_SLOTS)) {
             "No filament slot is available"
+        }
+        require(profile.hasCompatibleDiameter(filamentProfile)) {
+            "Filament slots must use the same diameter"
         }
         return FilamentSlotAssignment(
             options = copy(filamentSlots = current + profile)
@@ -1259,6 +1276,9 @@ data class SliceOptions(
         val current = resolvedFilamentSlots()
         require(current.size < printerProfile.extruderCount.coerceIn(1, MAX_FILAMENT_SLOTS)) {
             "No filament slot is available"
+        }
+        require(profile.hasCompatibleDiameter(filamentProfile)) {
+            "Filament slots must use the same diameter"
         }
         return copy(filamentSlots = current + profile)
             .boundedToFilamentSlots(current.size + 1)
@@ -1503,6 +1523,7 @@ data class SliceOptions(
                     firstLayerBedTemp = firstLayerBedTemp,
                     flowRatio = flowRatio,
                     maxVolumetricSpeed = maxVolumetricSpeed,
+                    diameter = filamentDiameter,
                     retractLength = retractLength,
                     retractSpeed = retractSpeed,
                     deretractSpeed = deretractSpeed,
@@ -1525,6 +1546,9 @@ data class SliceOptions(
                     pressureAdvance = pressureAdvance,
                 )
             }
+        }
+        require(nativeFilaments.all { it.hasCompatibleDiameter(nativeFilaments.first()) }) {
+            "Filament slots must use the same diameter"
         }
         val nativeRetractions = nativeFilaments.map { it.resolveRetraction(printerProfile) }
         return SliceConfig(

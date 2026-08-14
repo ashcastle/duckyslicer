@@ -2348,6 +2348,9 @@ private fun FilamentAssignmentSheet(
         .asSequence()
         .filter { it.compatiblePrinters.matchesPrinter(options.printerProfile) }
         .filter { candidate ->
+            selectedSlot == 0 || candidate.hasCompatibleDiameter(options.filamentProfile)
+        }
+        .filter { candidate ->
             slots.any { it.id == candidate.id } || slots.size < slotLimit
         }
         .plus(selected)
@@ -2382,7 +2385,9 @@ private fun FilamentAssignmentSheet(
                 label = { profileLabel(it) },
                 brand = FilamentProfile::brand,
                 builtIn = FilamentProfile::builtIn,
-                searchTerms = { listOf(it.name, it.nativeName, it.brand.orEmpty()) },
+                searchTerms = {
+                    listOf(it.name, it.nativeName, it.brand.orEmpty(), it.diameter.toString())
+                },
                 onSelected = onSelected,
             )
         }

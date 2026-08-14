@@ -493,6 +493,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "nozzle_temperature": ["220"],
                 "hot_plate_temp": ["60"],
                 "filament_retraction_length": ["0.55"],
+                "filament_diameter": ["2.85"],
                 "filament_z_hop_types": ["Normal Lift"],
                 "filament_wipe": ["0"],
             },
@@ -506,8 +507,22 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertIsNone(inherited["retractLength"])
         self.assertIsNone(inherited["zHopType"])
         self.assertEqual(0.55, overridden["retractLength"])
+        self.assertEqual(2.85, overridden["diameter"])
         self.assertEqual("normal", overridden["zHopType"])
         self.assertFalse(overridden["wipeWhileRetracting"])
+
+    def test_rejects_unsafe_filament_diameter(self) -> None:
+        with self.assertRaises(ValueError):
+            build_filament(
+                "Example",
+                {
+                    "name": "Unsafe diameter",
+                    "filament_type": ["PLA"],
+                    "nozzle_temperature": ["220"],
+                    "hot_plate_temp": ["60"],
+                    "filament_diameter": ["4.01"],
+                },
+            )
 
     def test_preserves_first_per_filament_gcode_template(self) -> None:
         profile = build_filament(

@@ -1,5 +1,6 @@
 package com.ashcastle.duckyslicer
 
+import kotlin.math.abs
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -39,6 +40,7 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         firstLayerBedTemp = firstLayerBedTemp,
         flowRatio = flowRatio,
         maxVolumetricSpeed = maxVolumetricSpeed,
+        diameter = filamentDiameter,
         fanMinSpeed = fanMinSpeed,
         fanMaxSpeed = fanMaxSpeed,
         overhangFanSpeed = overhangFanSpeed,
@@ -269,7 +271,8 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
     }
     require(
         filaments.size in 1..printer.extruderCount.coerceIn(1, MAX_FILAMENT_SLOTS) &&
-            filaments.all(ProfileValidation::filament),
+            filaments.all(ProfileValidation::filament) &&
+            filaments.all { it.hasCompatibleDiameter(filament) },
     ) { "Invalid project filament slots" }
     return JSONObject()
         .put("formatVersion", SLICE_OPTIONS_FORMAT_VERSION)
@@ -283,27 +286,45 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
 }
 
 internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatching {
-    require(getInt("formatVersion") in MIN_SLICE_OPTIONS_FORMAT_VERSION..SLICE_OPTIONS_FORMAT_VERSION) {
+    val formatVersion = getInt("formatVersion")
+    require(formatVersion in MIN_SLICE_OPTIONS_FORMAT_VERSION..SLICE_OPTIONS_FORMAT_VERSION) {
         "Unsupported slice settings"
     }
     val printer = requireNotNull(getJSONObject("printer").toPrinterProfileOrNull())
-    val filament = requireNotNull(getJSONObject("filament").toFilamentProfileOrNull())
-    val filaments = optJSONArray("filamentSlots")?.let { values ->
+    val storedFilament = requireNotNull(getJSONObject("filament").toFilamentProfileOrNull())
+    val storedFilaments = optJSONArray("filamentSlots")?.let { values ->
         require(values.length() in 1..printer.extruderCount.coerceIn(1, MAX_FILAMENT_SLOTS))
         List(values.length()) { index ->
             requireNotNull(values.getJSONObject(index).toFilamentProfileOrNull())
         }
-    } ?: listOf(filament)
+    } ?: listOf(storedFilament)
     val slicing = requireNotNull(getJSONObject("slicing").toQualityProfileOrNull())
     val filamentDiameter = getDouble("filamentDiameter").toFloat()
+    val filament = if (formatVersion >= 56) {
+        storedFilament
+    } else {
+        storedFilament.copy(diameter = filamentDiameter)
+    }
+    val filaments = if (formatVersion >= 56) {
+        storedFilaments
+    } else {
+        storedFilaments.map { it.copy(diameter = filamentDiameter) }
+    }
     require(ProfileValidation.printer(printer)) { "Invalid project printer settings" }
     require(ProfileValidation.filament(filament)) { "Invalid project filament settings" }
-    require(filaments.all(ProfileValidation::filament) && filaments.first() == filament) {
+    require(
+        filaments.all(ProfileValidation::filament) &&
+            filaments.first() == filament &&
+            filaments.all { it.hasCompatibleDiameter(filament) },
+    ) {
         "Invalid project filament slots"
     }
     require(ProfileValidation.slicing(slicing)) { "Invalid project slicing settings" }
     require(filamentDiameter in MIN_FILAMENT_DIAMETER..MAX_FILAMENT_DIAMETER) {
         "Invalid filament diameter"
+    }
+    require(abs(filamentDiameter - filament.diameter) < 0.001f) {
+        "Project filament diameter does not match its profile"
     }
     SliceOptions(
         printerProfile = printer,
@@ -314,7 +335,7 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 55
+private const val SLICE_OPTIONS_FORMAT_VERSION = 56
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f

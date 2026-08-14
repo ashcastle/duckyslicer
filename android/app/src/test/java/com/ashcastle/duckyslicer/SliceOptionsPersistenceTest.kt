@@ -13,11 +13,13 @@ class SliceOptionsPersistenceTest {
             compatiblePrinters = listOf(PrinterProfile.U1_04.name),
             filamentStartGcode = "M117 PRIMARY_START",
             filamentEndGcode = "M117 PRIMARY_END",
+            diameter = 2.85f,
         )
         val secondary = FilamentProfile.PETG.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_04.name),
             filamentStartGcode = "M117 SECONDARY_START",
             filamentEndGcode = "M117 SECONDARY_END",
+            diameter = 2.85f,
         )
         val options = SliceOptions()
             .selectPrinter(PrinterProfile.U1_04)
@@ -101,6 +103,9 @@ class SliceOptionsPersistenceTest {
         assertNull(restored.filamentProfile.retractLength)
         assertNull(restored.filamentProfile.zHopType)
         assertEquals(2, native.extruderCount)
+        assertEquals(2.85f, restored.filamentDiameter)
+        assertEquals(2.85f, restored.filamentProfile.diameter)
+        assertEquals(2.85f, native.filamentDiameter)
         assertEquals(listOf("PLA", "PETG"), native.filamentTypes.toList())
         assertEquals(listOf(primary.nozzleTemp, secondary.nozzleTemp), native.extruderTemps.toList())
         assertEquals(listOf(primary.flowRatio, secondary.flowRatio), native.filamentFlowRatios.toList())
@@ -168,6 +173,34 @@ class SliceOptionsPersistenceTest {
     }
 
     @Test
+    fun mixedFilamentDiametersAreRejectedBeforeNativeSlicing() {
+        val primary = FilamentProfile.GENERIC_PLA.copy(diameter = 1.75f)
+        val secondary = FilamentProfile.PETG.copy(diameter = 2.85f)
+        val options = SliceOptions().selectFilament(primary)
+
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            options.copy(filamentSlots = listOf(primary, secondary)).toNativeConfig()
+        }
+    }
+
+    @Test
+    fun changingPrimaryDiameterReconcilesExistingSecondarySlots() {
+        val first = FilamentProfile.GENERIC_PLA.copy(diameter = 1.75f)
+        val second = FilamentProfile.PETG.copy(diameter = 1.75f)
+        val replacement = FilamentProfile.GENERIC_ABS.copy(diameter = 2.85f)
+        val options = SliceOptions().selectFilament(first).copy(filamentSlots = listOf(first, second))
+
+        val updated = options.selectFilament(replacement)
+
+        assertEquals(
+            listOf(replacement.id, replacement.id),
+            updated.resolvedFilamentSlots().map { it.id },
+        )
+        assertEquals(listOf(2.85f, 2.85f), updated.resolvedFilamentSlots().map { it.diameter })
+        assertEquals(2.85f, updated.filamentDiameter)
+    }
+
+    @Test
     fun semmPrinterClassificationRoundTripsAndEnablesDirectedPrimeTowerPurging() {
         val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(
             id = "test-semm-printer",
@@ -214,6 +247,9 @@ class SliceOptionsPersistenceTest {
         assertEquals(29f, restored.extruderClearanceHeightToRod)
         assertEquals(117f, restored.extruderClearanceHeightToLid)
         assertEquals(options.filamentProfile.compatiblePrinters, restored.filamentProfile.compatiblePrinters)
+        assertEquals(2.85f, restored.filamentProfile.diameter)
+        assertEquals(2.85f, restored.filamentDiameter)
+        assertEquals(2.85f, restored.toNativeConfig().filamentDiameter)
         assertEquals(options.quality.compatiblePrinters, restored.quality.compatiblePrinters)
         assertEquals(248, restored.nozzleTemp)
         assertEquals(0.64f, restored.outerWallLineWidth)
@@ -546,6 +582,9 @@ class SliceOptionsPersistenceTest {
     fun legacyProjectDefaultsPrintableOverhangGeometrySafely() {
         val json = SliceOptions().toProjectJson().apply {
             put("formatVersion", 1)
+            put("filamentDiameter", 2.85)
+            getJSONObject("filament").remove("diameter")
+            getJSONArray("filamentSlots").getJSONObject(0).remove("diameter")
             getJSONObject("slicing").apply {
                 remove("makeOverhangPrintable")
                 remove("makeOverhangPrintableAngle")
@@ -610,6 +649,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(false, restored.quality.symmetricInfillYAxis)
         assertEquals(0.4f, restored.toNativeConfig().infillShiftStep)
         assertEquals(false, restored.toNativeConfig().symmetricInfillYAxis)
+        assertEquals(2.85f, restored.filamentProfile.diameter)
+        assertEquals(2.85f, restored.toNativeConfig().filamentDiameter)
         assertEquals(0f, restored.travelSpeedZ)
         assertEquals(0f, restored.toNativeConfig().travelSpeedZ)
         assertEquals(emptyList<Float>(), restored.multiMaterial.purgeVolumes)
@@ -634,6 +675,9 @@ class SliceOptionsPersistenceTest {
         )
 
         assertFalse(ProfileValidation.filament(unsafe))
+        assertFalse(
+            ProfileValidation.filament(FilamentProfile.GENERIC_PLA.copy(diameter = 4.01f)),
+        )
     }
 }
 
@@ -644,6 +688,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             compatiblePrinters = listOf(PrinterProfile.U1_06.name),
             filamentStartGcode = "M117 PRIMARY_START",
             filamentEndGcode = "M117 PRIMARY_END",
+            diameter = 2.85f,
             retractLength = 1.1f,
             retractSpeed = 37f,
             deretractSpeed = 35f,

@@ -148,6 +148,8 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "R.string.filament_gcode",
         "R.string.filament_start_gcode",
         "R.string.filament_end_gcode",
+        "R.string.filament_diameter",
+        "activeProfile.copy(diameter =",
         "filamentStartGcode =",
         "filamentEndGcode =",
         "R.string.maximum_z_speed",

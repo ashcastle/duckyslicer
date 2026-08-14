@@ -4,7 +4,7 @@ DuckySlicer saves portable projects with the `.duckyproject` extension and the M
 type `application/vnd.duckyslicer.project+zip`. The format is a versioned ZIP archive
 so a project can be inspected and recovered with standard tools.
 
-## Schema 27
+## Schema 28
 
 An archive contains exactly:
 
@@ -16,7 +16,7 @@ models/001.stl
 ```
 
 `manifest.json` identifies the format as `com.ashcastle.duckyslicer.project`, declares
-schema version `27`, and stores the selected plate plus a bounded `plates` list. Each plate
+schema version `28`, and stores the selected plate plus a bounded `plates` list. Each plate
 owns its stable identity, selected object, objects, and resolved printer, filament, and
 slicing settings. Each object owns a stable, bounded `volumes` list. The object owns its
 transform (including independent X, Y, and Z scale), variable layer-height ranges, and
@@ -25,9 +25,10 @@ in model-local coordinates and millimetre radius units. Each volume owns its sta
 display name, model-entry reference, filament assignment, support and seam painting, and
 multi-color painting. A volume also records its Orca role (model part, negative volume,
 parameter modifier, support blocker, or support enforcer) and bounded per-volume Orca overrides.
-Objects or volumes that share one source model also share one model entry.
+Objects or volumes that share one source model also share one model entry. Resolved filament
+profiles preserve the diameter used by Orca to calculate E-axis extrusion.
 
-Schema 1 through 27 projects remain readable and migrate deterministically to one plate.
+Schema 1 through 28 projects remain readable and migrate deterministically to one plate.
 Their single object-level model, filament, and paint fields migrate deterministically to
 one stable volume; older uniform-scale transforms, missing object-specific settings, and
 missing Brim points receive safe defaults. Current projects may contain up to 16 plates and

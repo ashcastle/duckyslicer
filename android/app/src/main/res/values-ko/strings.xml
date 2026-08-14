@@ -227,6 +227,7 @@
     <string name="first_layer_bed_temperature">첫 레이어 베드 온도</string>
     <string name="flow_ratio">유량 비율</string>
     <string name="max_volumetric_speed">최대 유량</string>
+    <string name="filament_diameter">직경</string>
     <string name="retraction">리트랙션</string>
     <string name="retraction_defaults">리트랙션 기본값</string>
     <string name="retraction_length">리트랙션 길이</string>

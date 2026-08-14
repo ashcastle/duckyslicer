@@ -272,7 +272,7 @@ class ProfileStoreMigrationTest {
             )
             val options = SliceOptions()
                 .selectPrinter(printer)
-                .selectFilament(FilamentProfile.GENERIC_PLA)
+                .selectFilament(FilamentProfile.GENERIC_PLA.copy(diameter = 2.85f))
 
             val saved = ProfileStore(file).saveFilament("Inherited PLA", options)
             val restored = ProfileStore(file).load().filaments.single { it.id == saved.id }
@@ -283,6 +283,8 @@ class ProfileStoreMigrationTest {
             assertNull(restored.zHopType)
             assertEquals(1.35f, restored.resolveRetraction(printer).length)
             assertEquals("spiral", restored.resolveRetraction(printer).zHopType)
+            assertEquals(2.85f, saved.diameter)
+            assertEquals(2.85f, restored.diameter)
         } finally {
             directory.deleteRecursively()
         }

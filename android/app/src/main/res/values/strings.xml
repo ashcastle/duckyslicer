@@ -227,6 +227,7 @@
     <string name="spiral_starting_flow">Starting flow</string>
     <string name="spiral_finishing_flow">Finishing flow</string>
     <string name="max_volumetric_speed">Maximum flow</string>
+    <string name="filament_diameter">Diameter</string>
     <string name="retraction">Retraction</string>
     <string name="retraction_defaults">Retraction defaults</string>
     <string name="retraction_length">Retraction length</string>
