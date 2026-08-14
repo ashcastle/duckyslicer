@@ -104,6 +104,7 @@ internal class ToolpathSurfaceView(
         requestGeometryBuild = ::requestGeometryBuild,
         reportRendererStarting = { post { markRendererStarting() } },
         reportFrameReady = { post(::markRendererReady) },
+        reportEffectiveDetail = { detail -> post { updateSettledSurfaceDetail(detail) } },
         reportUnavailable = { post(::reportUnavailableOnce) },
     )
     private val memoryCallbacks = object : ComponentCallbacks2 {
@@ -122,8 +123,14 @@ internal class ToolpathSurfaceView(
     private var lastSpan = 0f
     private var lastCenterX = 0f
     private var lastCenterY = 0f
+    private var settledSurfaceDetail = PreviewDetail.PERFORMANCE
+    private var activeSurfaceDetail = PreviewDetail.PERFORMANCE
+    private var surfaceInteractionActive = false
+    private var appliedSurfaceSize: PreviewSurfaceSize? = null
     private val restoreDetail = Runnable {
+        surfaceInteractionActive = false
         toolpathRenderer.setInteractionActive(false)
+        applySurfaceDetail(settledSurfaceDetail)
         requestRender()
     }
 
@@ -147,6 +154,9 @@ internal class ToolpathSurfaceView(
         visibleRoles: Set<Int>,
         detail: PreviewDetail,
     ) {
+        updateSettledSurfaceDetail(
+            if (detail == PreviewDetail.AUTOMATIC) PreviewDetail.PERFORMANCE else detail,
+        )
         val scene = ToolpathScene(
             preview = preview,
             bedSizeX = bedSizeX,
@@ -174,11 +184,31 @@ internal class ToolpathSurfaceView(
 
     internal fun geometryUploadCountForTest(): Int = toolpathRenderer.geometryUploadCountForTest()
 
+    internal fun renderBufferSizeForTest(): PreviewSurfaceSize = holder.surfaceFrame.let { frame ->
+        PreviewSurfaceSize(frame.width(), frame.height())
+    }
+
+    internal fun logicalSurfaceSizeForTest(): PreviewSurfaceSize = PreviewSurfaceSize(
+        width.coerceAtLeast(1),
+        height.coerceAtLeast(1),
+    )
+
+    override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
+        super.onSizeChanged(width, height, oldWidth, oldHeight)
+        toolpathRenderer.setLogicalViewportSize(width, height)
+        appliedSurfaceSize = null
+        applySurfaceDetail(activeSurfaceDetail)
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 removeCallbacks(restoreDetail)
+                surfaceInteractionActive = true
                 toolpathRenderer.setInteractionActive(true)
+                applySurfaceDetail(
+                    previewDetailForInteraction(settledSurfaceDetail, interactionActive = true),
+                )
                 lastX = event.x
                 lastY = event.y
             }
@@ -308,6 +338,24 @@ internal class ToolpathSurfaceView(
         lastSpan = hypot(x1 - x0, y1 - y0).coerceAtLeast(1f)
         lastCenterX = (x0 + x1) / 2f
         lastCenterY = (y0 + y1) / 2f
+    }
+
+    private fun updateSettledSurfaceDetail(detail: PreviewDetail) {
+        settledSurfaceDetail = detail
+        if (!surfaceInteractionActive) applySurfaceDetail(detail)
+    }
+
+    private fun applySurfaceDetail(detail: PreviewDetail) {
+        activeSurfaceDetail = detail
+        if (width <= 0 || height <= 0) return
+        val target = previewSurfaceSize(width, height, detail)
+        if (target == appliedSurfaceSize) return
+        appliedSurfaceSize = target
+        if (target.width == width && target.height == height) {
+            holder.setSizeFromLayout()
+        } else {
+            holder.setFixedSize(target.width, target.height)
+        }
     }
 
     private fun scheduleStartupWatchdog() {
@@ -448,6 +496,7 @@ internal class ToolpathRenderer(
     private val requestGeometryBuild: ((ToolpathScene) -> Unit)? = null,
     private val reportRendererStarting: () -> Unit = {},
     private val reportFrameReady: () -> Unit = {},
+    private val reportEffectiveDetail: (PreviewDetail) -> Unit = {},
     private val reportUnavailable: () -> Unit = {},
     private val programFactory: ((String, String) -> Int)? = null,
 ) : GLSurfaceView.Renderer {
@@ -476,6 +525,10 @@ internal class ToolpathRenderer(
     private var lineMatrixLocation = 0
     private var viewportWidth = 1
     private var viewportHeight = 1
+    @Volatile
+    private var logicalViewportWidth = 1
+    @Volatile
+    private var logicalViewportHeight = 1
     private var yawDegrees = -45f
     private var elevationDegrees = 52f
     private var zoom = 1f
@@ -552,6 +605,11 @@ internal class ToolpathRenderer(
         interactionActive = active
     }
 
+    fun setLogicalViewportSize(width: Int, height: Int) {
+        logicalViewportWidth = width.coerceAtLeast(1)
+        logicalViewportHeight = height.coerceAtLeast(1)
+    }
+
     fun orbitBy(deltaX: Float, deltaY: Float) {
         yawDegrees += deltaX * 0.28f
         elevationDegrees = (elevationDegrees - deltaY * 0.22f).coerceIn(18f, 86f)
@@ -581,6 +639,7 @@ internal class ToolpathRenderer(
         geometryUploadNanos = 0L
         lastDrawSubmitNanos = 0L
         fallbackFrameCount = 0
+        lastEffectiveDetail = null
         pendingPrewarmScene = null
         refinementRequestedForScene = null
         lastDrawnScene = null
@@ -652,8 +711,8 @@ internal class ToolpathRenderer(
                 detail = PreviewDetail.AUTOMATIC,
                 segmentBudgetOverride = null,
             ),
-            viewportWidth = viewportWidth,
-            viewportHeight = viewportHeight,
+            viewportWidth = logicalViewportWidth,
+            viewportHeight = logicalViewportHeight,
             denseOverview = zoom <= DENSE_PREVIEW_RIBBON_ZOOM,
         )
         val effectiveDetail = adaptivePreviewController.detailFor(
@@ -685,7 +744,10 @@ internal class ToolpathRenderer(
         } else {
             resolvedScene
         }
-        lastEffectiveDetail = sourceScene.detail
+        if (lastEffectiveDetail != sourceScene.detail) {
+            lastEffectiveDetail = sourceScene.detail
+            reportEffectiveDetail(sourceScene.detail)
+        }
         val prewarmAtFrameStart = pendingPrewarmScene
         pendingPrewarmScene = null
         val prewarmDetail = previewDetailForInteraction(sourceScene.detail, interactionActive = true)
@@ -746,7 +808,7 @@ internal class ToolpathRenderer(
         if (!glOperationSucceeded("frame_draw")) return
         lastDrawnScene = drawScene
         if (measureAutomaticFrame) {
-            // Calibration is limited to two settled frames per tier. glFinish gives a
+            // Calibration is limited to a small bounded sample window per tier. glFinish gives a
             // portable GLES3 completion measurement that includes fragment work instead
             // of the tiny CPU submission time; explicit quality modes never pay this cost.
             GLES30.glFinish()

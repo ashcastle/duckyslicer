@@ -2,6 +2,7 @@ package com.ashcastle.duckyslicer
 
 import android.app.ActivityManager
 import android.content.Context
+import kotlin.math.roundToInt
 
 enum class PreviewDetail {
     AUTOMATIC,
@@ -61,6 +62,37 @@ internal fun depthPreviewInteractionSegmentBudget(detail: PreviewDetail): Int =
         PreviewDetail.AUTOMATIC -> error("concreteOrBalanced must resolve automatic detail")
     }
 
+internal data class PreviewSurfaceSize(
+    val width: Int,
+    val height: Int,
+)
+
+/**
+ * Keeps every selected path and layer while reducing only the number of fragments a weak GPU
+ * must shade. Automatic starts at Performance and restores the logical view resolution as each
+ * completed-frame tier proves that the device has enough raster headroom.
+ */
+internal fun previewSurfaceSize(
+    logicalWidth: Int,
+    logicalHeight: Int,
+    detail: PreviewDetail,
+): PreviewSurfaceSize {
+    val width = logicalWidth.coerceAtLeast(1)
+    val height = logicalHeight.coerceAtLeast(1)
+    val scale = when (detail) {
+        PreviewDetail.AUTOMATIC, PreviewDetail.PERFORMANCE -> PERFORMANCE_PREVIEW_SURFACE_SCALE
+        PreviewDetail.BALANCED -> BALANCED_PREVIEW_SURFACE_SCALE
+        PreviewDetail.DETAIL -> 1f
+    }
+    return PreviewSurfaceSize(
+        width = (width * scale).roundToInt().coerceIn(1, width),
+        height = (height * scale).roundToInt().coerceIn(1, height),
+    )
+}
+
+internal const val PERFORMANCE_PREVIEW_SURFACE_SCALE = 0.67f
+internal const val BALANCED_PREVIEW_SURFACE_SCALE = 0.85f
+
 internal fun shouldDrawToolpathLines(
     detail: PreviewDetail,
     interactionActive: Boolean,
@@ -109,7 +141,7 @@ private const val DENSE_PREVIEW_PIXELS_PER_SEGMENT = 48L
 // 60 Hz gesture frame. Emulator profiling showed that a 48 ms threshold promoted a one-vCPU
 // SwiftShader workload all the way to Detail even while interaction frames exceeded 30 ms.
 internal const val ADAPTIVE_PREVIEW_FAST_FRAME_MS = 24.0
-internal const val ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 3
+internal const val ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 5
 
 /**
  * Promotes Automatic Preview one bounded tier at a time after measuring completed GPU work.

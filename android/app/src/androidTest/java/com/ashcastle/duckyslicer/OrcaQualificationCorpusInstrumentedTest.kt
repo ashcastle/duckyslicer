@@ -355,6 +355,10 @@ class OrcaQualificationCorpusInstrumentedTest {
             tiers.put(
                 detail.name,
                 JSONObject()
+                    .put("framebufferWidth", metrics.framebufferWidth)
+                    .put("framebufferHeight", metrics.framebufferHeight)
+                    .put("interactionFramebufferWidth", metrics.interactionFramebufferWidth)
+                    .put("interactionFramebufferHeight", metrics.interactionFramebufferHeight)
                     .put("firstFrameMs", metrics.firstFrameMs)
                     .put("settledFrameP50Ms", metrics.settledFrameP50Ms)
                     .put("settledFrameP95Ms", metrics.settledFrameP95Ms)

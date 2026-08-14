@@ -402,7 +402,9 @@ class NativeEngineInstrumentedTest {
             adaptiveRenderer.submit(scene.copy(detail = PreviewDetail.AUTOMATIC))
             adaptiveRenderer.onSurfaceCreated(null, null)
             adaptiveRenderer.onSurfaceChanged(null, framebufferSize, framebufferSize)
-            repeat(15) { adaptiveRenderer.onDrawFrame(null) }
+            val maximumAutomaticCalibrationFrames =
+                ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT * PreviewDetail.entries.size + 10
+            repeat(maximumAutomaticCalibrationFrames) { adaptiveRenderer.onDrawFrame(null) }
             assertEquals(
                 "A trivial Preview workload must promote Automatic through measured tiers",
                 PreviewDetail.DETAIL,

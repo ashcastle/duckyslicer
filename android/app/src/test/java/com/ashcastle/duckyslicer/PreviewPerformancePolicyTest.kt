@@ -37,25 +37,25 @@ class PreviewPerformancePolicyTest {
     }
 
     @Test
-    fun automaticPromotesOnlyAfterThreeCompletedResponsiveFramesPerTier() {
+    fun automaticPromotesOnlyAfterFiveCompletedResponsiveFramesPerTier() {
         val controller = AdaptivePreviewDetailController()
         val workload = Any()
 
         assertEquals(PreviewDetail.PERFORMANCE, controller.detailFor(PreviewDetail.AUTOMATIC, workload))
         assertTrue(controller.shouldMeasure(PreviewDetail.AUTOMATIC, workload))
-        repeat(3) { sample ->
+        repeat(5) { sample ->
             assertTrue(
                 controller.recordCompletedFrame(
                     PreviewDetail.AUTOMATIC,
                     workload,
                     PreviewDetail.PERFORMANCE,
-                    completionMs = 20.0 + sample,
+                    completionMs = 18.0 + sample,
                 ),
             )
         }
         assertEquals(PreviewDetail.BALANCED, controller.detailFor(PreviewDetail.AUTOMATIC, workload))
 
-        repeat(3) {
+        repeat(5) {
             assertTrue(
                 controller.recordCompletedFrame(
                     PreviewDetail.AUTOMATIC,
@@ -66,7 +66,7 @@ class PreviewPerformancePolicyTest {
             )
         }
         assertEquals(PreviewDetail.DETAIL, controller.detailFor(PreviewDetail.AUTOMATIC, workload))
-        repeat(2) {
+        repeat(4) {
             assertTrue(
                 controller.recordCompletedFrame(
                     PreviewDetail.AUTOMATIC,
@@ -94,7 +94,7 @@ class PreviewPerformancePolicyTest {
         val controller = AdaptivePreviewDetailController()
         val workload = Any()
 
-        repeat(3) {
+        repeat(5) {
             assertTrue(
                 controller.recordCompletedFrame(
                     PreviewDetail.AUTOMATIC,
@@ -193,6 +193,19 @@ class PreviewPerformancePolicyTest {
         assertEquals(10_000, depthPreviewInteractionSegmentBudget(PreviewDetail.DETAIL))
         assertEquals(250, compatibilityPreviewSegmentBudget(PreviewDetail.PERFORMANCE, refined = false))
         assertEquals(8_000, compatibilityPreviewSegmentBudget(PreviewDetail.DETAIL, refined = true))
+    }
+
+    @Test
+    fun adaptiveSurfaceResolutionPreservesLogicalCoverageWhileScalingRasterWork() {
+        assertEquals(PreviewSurfaceSize(482, 858), previewSurfaceSize(720, 1_280, PreviewDetail.PERFORMANCE))
+        assertEquals(PreviewSurfaceSize(612, 1_088), previewSurfaceSize(720, 1_280, PreviewDetail.BALANCED))
+        assertEquals(PreviewSurfaceSize(720, 1_280), previewSurfaceSize(720, 1_280, PreviewDetail.DETAIL))
+        assertEquals(
+            PreviewSurfaceSize(482, 858),
+            previewSurfaceSize(720, 1_280, PreviewDetail.AUTOMATIC),
+        )
+        assertEquals(10_000, depthPreviewSegmentBudget(PreviewDetail.PERFORMANCE))
+        assertEquals(4_000, depthPreviewInteractionSegmentBudget(PreviewDetail.PERFORMANCE))
     }
 
     @Test

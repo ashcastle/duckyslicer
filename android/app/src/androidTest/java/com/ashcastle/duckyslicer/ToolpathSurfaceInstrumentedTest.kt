@@ -2,6 +2,7 @@ package com.ashcastle.duckyslicer
 
 import android.content.Intent
 import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.ViewGroup
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -9,6 +10,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -61,6 +63,82 @@ class ToolpathSurfaceInstrumentedTest {
                 "The background-built geometry must upload on the GL thread",
                 view.get().geometryUploadCountForTest() in 1..2,
             )
+            val surface = checkNotNull(view.get())
+            val logical = surface.logicalSurfaceSizeForTest()
+            val expected = previewSurfaceSize(logical.width, logical.height, PreviewDetail.PERFORMANCE)
+            val resizeDeadline = SystemClock.elapsedRealtime() + 5_000L
+            while (surface.renderBufferSizeForTest() != expected &&
+                SystemClock.elapsedRealtime() < resizeDeadline
+            ) {
+                SystemClock.sleep(20L)
+            }
+            assertEquals(
+                "Performance must lower raster resolution without changing Preview geometry",
+                expected,
+                surface.renderBufferSizeForTest(),
+            )
+            assertTrue(expected.width < logical.width && expected.height < logical.height)
+
+            scenario.onActivity {
+                surface.submit(
+                    preview = preview,
+                    bedSizeX = 220f,
+                    bedSizeY = 220f,
+                    bedOriginX = 0f,
+                    bedOriginY = 0f,
+                    bedPolygon = rectangularBedPolygon(220f, 220f),
+                    opacity = 1f,
+                    depthContrast = 0.8f,
+                    visibleRoles = (0 until GcodeLayerPreview.ROLE_COUNT).toSet(),
+                    detail = PreviewDetail.DETAIL,
+                )
+            }
+            waitForBuffer(surface, logical)
+            assertEquals("Detail must restore the logical surface resolution", logical, surface.renderBufferSizeForTest())
+
+            val downTime = SystemClock.uptimeMillis()
+            scenario.onActivity {
+                val event = MotionEvent.obtain(
+                    downTime, downTime, MotionEvent.ACTION_DOWN, 100f, 100f, 0,
+                )
+                try {
+                    surface.onTouchEvent(event)
+                } finally {
+                    event.recycle()
+                }
+            }
+            val interaction = previewSurfaceSize(
+                logical.width,
+                logical.height,
+                PreviewDetail.BALANCED,
+            )
+            waitForBuffer(surface, interaction)
+            assertEquals(
+                "Detail gestures must lower only raster resolution",
+                interaction,
+                surface.renderBufferSizeForTest(),
+            )
+
+            scenario.onActivity {
+                val now = SystemClock.uptimeMillis()
+                val event = MotionEvent.obtain(
+                    downTime, now, MotionEvent.ACTION_UP, 100f, 100f, 0,
+                )
+                try {
+                    surface.onTouchEvent(event)
+                } finally {
+                    event.recycle()
+                }
+            }
+            waitForBuffer(surface, logical)
+            assertEquals("Settled Detail must return to full resolution", logical, surface.renderBufferSizeForTest())
+        }
+    }
+
+    private fun waitForBuffer(surface: ToolpathSurfaceView, expected: PreviewSurfaceSize) {
+        val deadline = SystemClock.elapsedRealtime() + 5_000L
+        while (surface.renderBufferSizeForTest() != expected && SystemClock.elapsedRealtime() < deadline) {
+            SystemClock.sleep(20L)
         }
     }
 

@@ -45,7 +45,7 @@ def valid_sources() -> dict[str, str]:
             "DENSE_PREVIEW_MIN_SEGMENTS = 10_000 DENSE_PREVIEW_MAX_SEGMENTS = 32_000 "
             "compatibilityPreviewSegmentBudget( AdaptivePreviewDetailController( "
             "ADAPTIVE_PREVIEW_FAST_FRAME_MS = 24.0 "
-            "ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 3 recordCompletedFrame( "
+            "ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 5 recordCompletedFrame( "
             "currentDetail = lastProvenDetail"
         ),
         "AppSettingsSheet.kt": (
@@ -114,7 +114,13 @@ def valid_sources() -> dict[str, str]:
             "ByteBuffer.allocateDirect(maximumBytes).order(ByteOrder.nativeOrder()) "
             "if (segmentCount !in 0..plan.segmentCount) return null "
             "output.limit(usedBytes) "
-            "nativePackingUsed = nativePacked != null"
+            "nativePackingUsed = nativePacked != null "
+            "previewSurfaceSize(width, height, detail) "
+            "holder.setFixedSize(target.width, target.height) "
+            "holder.setSizeFromLayout() "
+            "reportEffectiveDetail(sourceScene.detail) "
+            "viewportWidth = logicalViewportWidth "
+            "viewportHeight = logicalViewportHeight"
         ),
         "PrepareModelPreviewView.kt": (
             "PrepareModelTopologyKey( filamentSlot = volume.filamentSlot "
@@ -151,7 +157,10 @@ def valid_sources() -> dict[str, str]:
             "detail = PreviewDetail.AUTOMATIC "
             "renderer.automaticCalibrationSettledForTest() "
             "automaticDetail = checkNotNull(renderer.effectiveDetailForTest()) "
-            "renderer.zoomBy( MAXIMUM_AUTOMATIC_CALIBRATION_FRAMES = 18"
+            "renderer.zoomBy( holder.setFixedSize(target.width, target.height) "
+            "framebufferWidth = width framebufferHeight = height "
+            "interactionFramebufferWidth = width interactionFramebufferHeight = height "
+            "Phase.WAIT_FOR_SURFACE MAXIMUM_AUTOMATIC_CALIBRATION_FRAMES = 30"
         ),
         "WorkspaceScreen.kt": (
             "previewDeviceCapabilities(context) resolvePreviewDetail(previewDetail, previewCapabilities) "
@@ -331,11 +340,12 @@ def valid_sources() -> dict[str, str]:
             "gesturesTemporarilyUseOneLowerGeometryTier "
             "segmentBudgetsStayBoundedForBothRenderers "
             "depthRendererFailureFallsBackWithoutOverwritingTheUserPreference "
-            "automaticPromotesOnlyAfterThreeCompletedResponsiveFramesPerTier "
+            "automaticPromotesOnlyAfterFiveCompletedResponsiveFramesPerTier "
             "slowCandidateFallsBackToLastProvenTierWithoutOscillation "
             "automaticCalibrationResetsForAChangedPreviewWorkload "
             "explicitQualityNeverRunsAutomaticCalibration"
-            " denseOverviewUsesScreenSpaceBudgetAndRestoresFullDetailWhenZoomed"
+            " denseOverviewUsesScreenSpaceBudgetAndRestoresFullDetailWhenZoomed "
+            "adaptiveSurfaceResolutionPreservesLogicalCoverageWhileScalingRasterWork"
         ),
         "ToolpathMeshBuilderTest.kt": (
             "balancedModeCapsDensePreviewGeometry "
@@ -353,6 +363,13 @@ def valid_sources() -> dict[str, str]:
             "Near-opaque paths must start at the high layer "
             "Translucent paths must retain source order "
             "pendingLodCanReuseOnlyGeometryFromTheSameVisualScene"
+        ),
+        "ToolpathSurfaceInstrumentedTest.kt": (
+            "productionSurfaceBuildsDenseGeometryOffTheGlThread "
+            "Performance must lower raster resolution without changing Preview geometry "
+            "Detail must restore the logical surface resolution "
+            "Detail gestures must lower only raster resolution "
+            "Settled Detail must return to full resolution"
         ),
         "WorkspaceLayoutPolicyTest.kt": (
             "landscapePhoneKeepsBottomNavigation "
@@ -633,6 +650,14 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "currentDetail = lastProvenDetail", "settled = true"
         )
         with self.assertRaisesRegex(VerificationError, "lastProvenDetail"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_missing_adaptive_surface_resolution(self) -> None:
+        sources = valid_sources()
+        sources["ToolpathPreviewView.kt"] = sources["ToolpathPreviewView.kt"].replace(
+            "holder.setFixedSize(target.width, target.height)", "holder.setSizeFromLayout()"
+        )
+        with self.assertRaisesRegex(VerificationError, "adaptive Preview surface scaling"):
             verify_preview_boundary(sources)
 
     def test_rejects_foreground_benchmark_that_does_not_measure_automatic_tier(self) -> None:

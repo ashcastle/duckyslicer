@@ -23,6 +23,10 @@ internal data class PreviewPerformanceRequest(
 )
 
 internal data class PreviewTierMetrics(
+    val framebufferWidth: Int,
+    val framebufferHeight: Int,
+    val interactionFramebufferWidth: Int,
+    val interactionFramebufferHeight: Int,
     val firstFrameMs: Double,
     val settledFrameP50Ms: Double,
     val settledFrameP95Ms: Double,
@@ -117,22 +121,34 @@ class PreviewPerformanceHarnessActivity : Activity() {
         session = activeSession
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val request = activeSession.request
+        lateinit var benchmarkRenderer: ForegroundPreviewBenchmarkRenderer
         val view = GLSurfaceView(this).apply {
             setEGLContextClientVersion(3)
             setEGLConfigChooser(8, 8, 8, 8, 24, 8)
-            setRenderer(
-                ForegroundPreviewBenchmarkRenderer(
-                    request = request,
-                    onComplete = { metrics ->
-                        activeSession.complete(metrics)
-                        runOnUiThread { finish() }
-                    },
-                    onFailure = { failure ->
-                        activeSession.fail(failure)
-                        runOnUiThread { finish() }
-                    },
-                ),
+            benchmarkRenderer = ForegroundPreviewBenchmarkRenderer(
+                request = request,
+                requestSurfaceDetail = { detail ->
+                    post {
+                        if (width <= 0 || height <= 0) return@post
+                        val target = previewSurfaceSize(width, height, detail)
+                        benchmarkRenderer.expectSurfaceSize(width, height, target)
+                        if (target.width == width && target.height == height) {
+                            holder.setSizeFromLayout()
+                        } else {
+                            holder.setFixedSize(target.width, target.height)
+                        }
+                    }
+                },
+                onComplete = { metrics ->
+                    activeSession.complete(metrics)
+                    runOnUiThread { finish() }
+                },
+                onFailure = { failure ->
+                    activeSession.fail(failure)
+                    runOnUiThread { finish() }
+                },
             )
+            setRenderer(benchmarkRenderer)
             renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
             preserveEGLContextOnPause = true
         }
@@ -155,10 +171,13 @@ class PreviewPerformanceHarnessActivity : Activity() {
 
 private class ForegroundPreviewBenchmarkRenderer(
     private val request: PreviewPerformanceRequest,
+    private val requestSurfaceDetail: (PreviewDetail) -> Unit,
     private val onComplete: (PreviewSurfaceMetrics) -> Unit,
     private val onFailure: (Throwable) -> Unit,
 ) : GLSurfaceView.Renderer {
-    private val renderer = ToolpathRenderer()
+    private val renderer = ToolpathRenderer(
+        reportEffectiveDetail = requestSurfaceDetail,
+    )
     private val details = listOf(
         PreviewDetail.PERFORMANCE,
         PreviewDetail.BALANCED,
@@ -173,6 +192,10 @@ private class ForegroundPreviewBenchmarkRenderer(
     private var uploadsAtTierStart = 0
     private var telemetryAtTierStart = ToolpathRendererTelemetry(0.0, 0.0, 0.0, 0.0, 0.0)
     private var firstFrameMs = 0.0
+    private var tierFramebufferWidth = 0
+    private var tierFramebufferHeight = 0
+    private var interactionFramebufferWidth = 0
+    private var interactionFramebufferHeight = 0
     private val settledIntervals = mutableListOf<Double>()
     private val interactionIntervals = mutableListOf<Double>()
     private val settledCompletions = mutableListOf<Double>()
@@ -184,6 +207,18 @@ private class ForegroundPreviewBenchmarkRenderer(
     private var gpuRenderer = ""
     private var automaticDetail = PreviewDetail.PERFORMANCE
     private var finished = false
+    @Volatile
+    private var expectedSurfaceSize = PreviewSurfaceSize(0, 0)
+    private var pendingStart = PendingStart.TIER
+
+    fun expectSurfaceSize(
+        logicalWidth: Int,
+        logicalHeight: Int,
+        target: PreviewSurfaceSize,
+    ) {
+        renderer.setLogicalViewportSize(logicalWidth, logicalHeight)
+        expectedSurfaceSize = target
+    }
 
     override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {
         try {
@@ -204,8 +239,15 @@ private class ForegroundPreviewBenchmarkRenderer(
     override fun onDrawFrame(unused: GL10?) {
         if (finished) return
         try {
-            check(width == request.width && height == request.height) {
-                "Foreground Preview surface is ${width}x${height}, expected ${request.width}x${request.height}"
+            if (phase == Phase.WAIT_FOR_SURFACE) {
+                val expected = expectedSurfaceSize
+                if (expected.width <= 0 || width != expected.width || height != expected.height) return
+                when (pendingStart) {
+                    PendingStart.TIER -> beginTier()
+                    PendingStart.AUTOMATIC -> beginAutomaticCalibration()
+                    PendingStart.INTERACTION -> beginInteraction()
+                }
+                return
             }
             val started = SystemClock.elapsedRealtimeNanos()
             val interval = if (lastFrameStartedNanos == 0L) {
@@ -237,6 +279,7 @@ private class ForegroundPreviewBenchmarkRenderer(
                     (SystemClock.elapsedRealtimeNanos() - started) / 1_000_000.0
                 }
                 Phase.AUTOMATIC_CALIBRATION -> null
+                Phase.WAIT_FOR_SURFACE -> error("Surface wait must return before measurement")
             }
             when (phase) {
                 Phase.FIRST -> {
@@ -251,8 +294,15 @@ private class ForegroundPreviewBenchmarkRenderer(
                     checkNotNull(completionMs).let(settledCompletions::add)
                     settledDrawSubmissions += drawSubmitMs
                     if (settledIntervals.size >= request.frameCount) {
-                        renderer.setInteractionActive(true)
-                        transition(Phase.INTERACTION_WARMUP)
+                        pendingStart = PendingStart.INTERACTION
+                        expectedSurfaceSize = PreviewSurfaceSize(0, 0)
+                        transition(Phase.WAIT_FOR_SURFACE)
+                        requestSurfaceDetail(
+                            previewDetailForInteraction(
+                                details[detailIndex],
+                                interactionActive = true,
+                            ),
+                        )
                     }
                 }
                 Phase.INTERACTION_WARMUP -> if (++phaseFrame >= WARMUP_FRAMES) {
@@ -276,6 +326,7 @@ private class ForegroundPreviewBenchmarkRenderer(
                         }
                     }
                 }
+                Phase.WAIT_FOR_SURFACE -> error("Surface wait must return before phase handling")
             }
         } catch (failure: Throwable) {
             fail(failure)
@@ -283,7 +334,16 @@ private class ForegroundPreviewBenchmarkRenderer(
     }
 
     private fun startTier() {
+        pendingStart = PendingStart.TIER
+        expectedSurfaceSize = PreviewSurfaceSize(0, 0)
+        transition(Phase.WAIT_FOR_SURFACE)
+        requestSurfaceDetail(details[detailIndex])
+    }
+
+    private fun beginTier() {
         val detail = details[detailIndex]
+        tierFramebufferWidth = width
+        tierFramebufferHeight = height
         renderer.setInteractionActive(false)
         renderer.submit(
             ToolpathScene(
@@ -315,6 +375,10 @@ private class ForegroundPreviewBenchmarkRenderer(
         val detail = details[detailIndex]
         val telemetry = renderer.telemetryForTest()
         results[detail] = PreviewTierMetrics(
+            framebufferWidth = tierFramebufferWidth,
+            framebufferHeight = tierFramebufferHeight,
+            interactionFramebufferWidth = interactionFramebufferWidth,
+            interactionFramebufferHeight = interactionFramebufferHeight,
             firstFrameMs = firstFrameMs,
             settledFrameP50Ms = percentile(settledIntervals, 0.50),
             settledFrameP95Ms = percentile(settledIntervals, 0.95),
@@ -342,7 +406,21 @@ private class ForegroundPreviewBenchmarkRenderer(
         startAutomaticCalibration()
     }
 
+    private fun beginInteraction() {
+        interactionFramebufferWidth = width
+        interactionFramebufferHeight = height
+        renderer.setInteractionActive(true)
+        transition(Phase.INTERACTION_WARMUP)
+    }
+
     private fun startAutomaticCalibration() {
+        pendingStart = PendingStart.AUTOMATIC
+        expectedSurfaceSize = PreviewSurfaceSize(0, 0)
+        transition(Phase.WAIT_FOR_SURFACE)
+        requestSurfaceDetail(PreviewDetail.PERFORMANCE)
+    }
+
+    private fun beginAutomaticCalibration() {
         renderer.setInteractionActive(false)
         renderer.submit(
             ToolpathScene(
@@ -403,10 +481,13 @@ private class ForegroundPreviewBenchmarkRenderer(
         INTERACTION_WARMUP,
         INTERACTION,
         AUTOMATIC_CALIBRATION,
+        WAIT_FOR_SURFACE,
     }
+
+    private enum class PendingStart { TIER, AUTOMATIC, INTERACTION }
 
     private companion object {
         const val WARMUP_FRAMES = 3
-        const val MAXIMUM_AUTOMATIC_CALIBRATION_FRAMES = 18
+        const val MAXIMUM_AUTOMATIC_CALIBRATION_FRAMES = 30
     }
 }

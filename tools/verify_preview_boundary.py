@@ -39,6 +39,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "ModelInfoTest.kt",
         "ModelImportPerformanceInstrumentedTest.kt",
         "ToolpathRendererPerformanceInstrumentedTest.kt",
+        "ToolpathSurfaceInstrumentedTest.kt",
         "ToolpathNativePackingInstrumentedTest.kt",
         "AccessibilityInstrumentedTest.kt",
         "PreviewModelsTest.kt",
@@ -153,7 +154,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "compatibilityPreviewSegmentBudget(",
         "AdaptivePreviewDetailController(",
         "ADAPTIVE_PREVIEW_FAST_FRAME_MS = 24.0",
-        "ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 3",
+        "ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 5",
         "recordCompletedFrame(",
         "currentDetail = lastProvenDetail",
     ):
@@ -384,6 +385,17 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         if marker not in toolpath_performance:
             raise VerificationError(f"toolpath performance regression is missing: {marker}")
 
+    surface_performance = sources["ToolpathSurfaceInstrumentedTest.kt"]
+    for marker in (
+        "productionSurfaceBuildsDenseGeometryOffTheGlThread",
+        "Performance must lower raster resolution without changing Preview geometry",
+        "Detail must restore the logical surface resolution",
+        "Detail gestures must lower only raster resolution",
+        "Settled Detail must return to full resolution",
+    ):
+        if marker not in surface_performance:
+            raise VerificationError(f"adaptive SurfaceView regression is missing: {marker}")
+
     rust = sources["lib.rs"]
     for marker in (
         "MODEL_PREVIEW_PAYLOAD_MAGIC",
@@ -407,7 +419,13 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "renderer.automaticCalibrationSettledForTest()",
         "automaticDetail = checkNotNull(renderer.effectiveDetailForTest())",
         "renderer.zoomBy(",
-        "MAXIMUM_AUTOMATIC_CALIBRATION_FRAMES = 18",
+        "holder.setFixedSize(target.width, target.height)",
+        "framebufferWidth = width",
+        "framebufferHeight = height",
+        "interactionFramebufferWidth = width",
+        "interactionFramebufferHeight = height",
+        "Phase.WAIT_FOR_SURFACE",
+        "MAXIMUM_AUTOMATIC_CALIBRATION_FRAMES = 30",
     ):
         if marker not in benchmark:
             raise VerificationError(f"foreground adaptive Preview benchmark is missing: {marker}")
@@ -757,14 +775,27 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "gesturesTemporarilyUseOneLowerGeometryTier",
         "segmentBudgetsStayBoundedForBothRenderers",
         "depthRendererFailureFallsBackWithoutOverwritingTheUserPreference",
-        "automaticPromotesOnlyAfterThreeCompletedResponsiveFramesPerTier",
+        "automaticPromotesOnlyAfterFiveCompletedResponsiveFramesPerTier",
         "slowCandidateFallsBackToLastProvenTierWithoutOscillation",
         "automaticCalibrationResetsForAChangedPreviewWorkload",
         "explicitQualityNeverRunsAutomaticCalibration",
         "denseOverviewUsesScreenSpaceBudgetAndRestoresFullDetailWhenZoomed",
+        "adaptiveSurfaceResolutionPreservesLogicalCoverageWhileScalingRasterWork",
     ):
         if marker not in policy_tests:
             raise VerificationError(f"adaptive preview host regression is missing: {marker}")
+
+    toolpath_surface = sources["ToolpathPreviewView.kt"]
+    for marker in (
+        "previewSurfaceSize(width, height, detail)",
+        "holder.setFixedSize(target.width, target.height)",
+        "holder.setSizeFromLayout()",
+        "reportEffectiveDetail(sourceScene.detail)",
+        "viewportWidth = logicalViewportWidth",
+        "viewportHeight = logicalViewportHeight",
+    ):
+        if marker not in toolpath_surface:
+            raise VerificationError(f"adaptive Preview surface scaling is missing: {marker}")
 
     for document in ("CONTRIBUTING.md",):
         lowered = sources[document].lower()
@@ -838,6 +869,9 @@ def read_sources() -> dict[str, str]:
         ).read_text(encoding="utf-8"),
         "ToolpathRendererPerformanceInstrumentedTest.kt": (
             device / "ToolpathRendererPerformanceInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "ToolpathSurfaceInstrumentedTest.kt": (
+            device / "ToolpathSurfaceInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "ToolpathNativePackingInstrumentedTest.kt": (
             device / "ToolpathNativePackingInstrumentedTest.kt"
