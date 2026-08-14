@@ -2060,7 +2060,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(53, catalog.schemaVersion)
+        assertEquals(54, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2214,6 +2214,10 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.infillFirst })
         assertTrue(catalog.slicing.any { it.wallSequence == "outer-inner" })
         assertTrue(catalog.slicing.any { it.infillCombination })
+        assertTrue(
+            "Legacy Orca solid-infill rotation must survive catalog normalization",
+            catalog.slicing.any { it.solidInfillRotationTemplate == "0,90" },
+        )
         assertTrue(catalog.slicing.any { it.internalBridgeSpeedPercent })
         assertTrue(catalog.slicing.any { !it.bridgeAccelerationPercent })
         assertTrue("Inherited Orca jerk profiles must survive catalog normalization", catalog.slicing.any { it.defaultJerk > 0f })
@@ -4197,6 +4201,69 @@ class NativeEngineInstrumentedTest {
         } finally {
             sparse.output.delete()
             dense.output.delete()
+        }
+    }
+
+    @Test
+    fun infillRotationTemplatesChangeRealExtrusionOrientation() {
+        val model = fixtureModel()
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.CUSTOM_CARTESIAN)
+            .selectFilament(FilamentProfile.GENERIC_PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                fillPattern = "rectilinear",
+                fillDensity = 0.25f,
+                topSolidLayers = 3,
+                bottomSolidLayers = 3,
+                infillDirection = 0f,
+                solidInfillDirection = 0f,
+                skirtLoops = 0,
+                brimWidth = 0f,
+            )
+
+        fun slice(angle: String): SliceOutcome = OnDeviceSlicer.slice(
+            model,
+            base.copy(
+                quality = base.quality.copy(
+                    sparseInfillRotationTemplate = angle,
+                    solidInfillRotationTemplate = angle,
+                ),
+            ),
+        )
+
+        fun roleMotion(gcode: String, role: String): List<String> {
+            var selected = false
+            return gcode.lineSequence().mapNotNull { line ->
+                if (line.startsWith(";TYPE:")) selected = line == ";TYPE:$role"
+                line.substringBefore(';').trimEnd().takeIf {
+                    selected && it.startsWith("G1 ") && it.contains(" E") &&
+                        (it.contains(" X") || it.contains(" Y"))
+                }
+            }.toList()
+        }
+
+        val zero = slice("0")
+        val ninety = slice("90")
+        try {
+            val zeroGcode = zero.output.readText()
+            val ninetyGcode = ninety.output.readText()
+            assertTrue(ninetyGcode.contains("; sparse_infill_rotate_template = 90"))
+            assertTrue(ninetyGcode.contains("; solid_infill_rotate_template = 90"))
+            listOf("Sparse infill", "Internal solid infill").forEach { role ->
+                val zeroMotion = roleMotion(zeroGcode, role)
+                val ninetyMotion = roleMotion(ninetyGcode, role)
+                assertTrue("$role needs physical extrusion", zeroMotion.isNotEmpty())
+                assertTrue("$role needs rotated physical extrusion", ninetyMotion.isNotEmpty())
+                assertNotEquals(
+                    "$role rotation template must change physical motion, not only metadata",
+                    zeroMotion,
+                    ninetyMotion,
+                )
+            }
+        } finally {
+            zero.output.delete()
+            ninety.output.delete()
         }
     }
 

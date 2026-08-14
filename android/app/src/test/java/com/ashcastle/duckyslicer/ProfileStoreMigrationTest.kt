@@ -88,6 +88,8 @@ class ProfileStoreMigrationTest {
             assertEquals(SurfaceDensitySettings(), restoredSlicing.surfaceDensity)
             assertEquals(0.4f, restoredSlicing.infillShiftStep)
             assertEquals(false, restoredSlicing.symmetricInfillYAxis)
+            assertEquals("", restoredSlicing.sparseInfillRotationTemplate)
+            assertEquals("", restoredSlicing.solidInfillRotationTemplate)
         } finally {
             file.delete()
         }
@@ -222,6 +224,8 @@ class ProfileStoreMigrationTest {
                     infillLockDepth = 1.25f,
                     infillShiftStep = 1.7f,
                     symmetricInfillYAxis = true,
+                    sparseInfillRotationTemplate = "0,60,120",
+                    solidInfillRotationTemplate = "0,90",
                     skinInfillLineWidth = 135f,
                     skinInfillLineWidthPercent = true,
                     skeletonInfillLineWidth = 0.62f,
@@ -248,6 +252,8 @@ class ProfileStoreMigrationTest {
             assertEquals(68f, restored.surfaceDensity.bottomPercent)
             assertEquals(1.7f, restored.infillShiftStep)
             assertEquals(true, restored.symmetricInfillYAxis)
+            assertEquals("0,60,120", restored.sparseInfillRotationTemplate)
+            assertEquals("0,90", restored.solidInfillRotationTemplate)
         } finally {
             directory.deleteRecursively()
         }

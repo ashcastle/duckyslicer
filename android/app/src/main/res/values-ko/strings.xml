@@ -844,4 +844,9 @@
     <string name="fuzzy_skin_scale">패턴 크기</string>
     <string name="fuzzy_skin_octaves">패턴 디테일</string>
     <string name="fuzzy_skin_persistence">디테일 강도</string>
+    <string name="sparse_infill_rotation_template">희소 인필 레이어별 방향</string>
+    <string name="solid_infill_rotation_template">솔리드 인필 레이어별 방향</string>
+    <string name="infill_rotation_template_example">0,90</string>
+    <string name="infill_rotation_template_hint">입력한 각도를 레이어마다 반복합니다. 비우면 고정 방향을 사용합니다.</string>
+    <string name="infill_rotation_template_invalid">−360°~360° 각도를 쉼표로 구분해 32개까지 입력하세요.</string>
 </resources>

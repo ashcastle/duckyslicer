@@ -226,6 +226,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "infill_lock_depth": "1.25",
                 "skin_infill_line_width": "135%",
                 "skeleton_infill_line_width": "0.62",
+                "sparse_infill_rotate_template": "0,60,120",
+                "rotate_solid_infill_direction": "1",
             },
             {},
         )
@@ -239,6 +241,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(profile["skinInfillLineWidthPercent"])
         self.assertEqual(0.62, profile["skeletonInfillLineWidth"])
         self.assertFalse(profile["skeletonInfillLineWidthPercent"])
+        self.assertEqual("0,60,120", profile["sparseInfillRotationTemplate"])
+        self.assertEqual("0,90", profile["solidInfillRotationTemplate"])
 
     def test_preserves_skirt_start_point(self) -> None:
         profile = build_process(

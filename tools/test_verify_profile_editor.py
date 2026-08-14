@@ -49,6 +49,8 @@ def valid_sources() -> dict[str, str]:
             " R.string.brim_ear_maximum_angle R.string.brim_ear_detection_radius"
             " R.string.top_surface_density R.string.bottom_surface_density"
             " R.string.infill_shift_step R.string.symmetric_infill_y_axis"
+            " R.string.sparse_infill_rotation_template R.string.solid_infill_rotation_template"
+            " RotationTemplateSetting("
             " infillShiftStep = (it * 10f) symmetricInfillYAxis = it"
             " R.string.support_on_build_plate_only R.string.support_base_pattern_spacing"
             " R.string.support_expansion R.string.support_interface_loop_pattern"

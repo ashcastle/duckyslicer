@@ -2384,22 +2384,44 @@ private fun SlicingSettingsSheet(
                         },
                     )
                 }
-                SettingSlider(
-                    label = stringResource(R.string.sparse_infill_direction),
-                    valueText = stringResource(R.string.degrees_value, options.infillDirection),
-                    value = options.infillDirection,
-                    range = 0f..360f,
-                    steps = 359,
-                    onValueChange = { onOptionsChanged(options.copy(infillDirection = it.roundToInt().toFloat())) },
+                RotationTemplateSetting(
+                    label = stringResource(R.string.sparse_infill_rotation_template),
+                    value = options.quality.sparseInfillRotationTemplate,
+                    onValueChange = {
+                        onOptionsChanged(
+                            options.copy(quality = options.quality.copy(sparseInfillRotationTemplate = it)),
+                        )
+                    },
                 )
-                SettingSlider(
-                    label = stringResource(R.string.solid_infill_direction),
-                    valueText = stringResource(R.string.degrees_value, options.solidInfillDirection),
-                    value = options.solidInfillDirection,
-                    range = 0f..360f,
-                    steps = 359,
-                    onValueChange = { onOptionsChanged(options.copy(solidInfillDirection = it.roundToInt().toFloat())) },
+                if (options.quality.sparseInfillRotationTemplate.isBlank() || settingsQuery.isNotBlank()) {
+                    SettingSlider(
+                        label = stringResource(R.string.sparse_infill_direction),
+                        valueText = stringResource(R.string.degrees_value, options.infillDirection),
+                        value = options.infillDirection,
+                        range = 0f..360f,
+                        steps = 359,
+                        onValueChange = { onOptionsChanged(options.copy(infillDirection = it.roundToInt().toFloat())) },
+                    )
+                }
+                RotationTemplateSetting(
+                    label = stringResource(R.string.solid_infill_rotation_template),
+                    value = options.quality.solidInfillRotationTemplate,
+                    onValueChange = {
+                        onOptionsChanged(
+                            options.copy(quality = options.quality.copy(solidInfillRotationTemplate = it)),
+                        )
+                    },
                 )
+                if (options.quality.solidInfillRotationTemplate.isBlank() || settingsQuery.isNotBlank()) {
+                    SettingSlider(
+                        label = stringResource(R.string.solid_infill_direction),
+                        valueText = stringResource(R.string.degrees_value, options.solidInfillDirection),
+                        value = options.solidInfillDirection,
+                        range = 0f..360f,
+                        steps = 359,
+                        onValueChange = { onOptionsChanged(options.copy(solidInfillDirection = it.roundToInt().toFloat())) },
+                    )
+                }
                 SettingsSwitch(
                     label = stringResource(R.string.align_infill_to_model),
                     checked = options.alignInfillDirectionToModel,
@@ -5059,6 +5081,39 @@ internal fun SettingsSwitch(
         Text(label, fontWeight = FontWeight.SemiBold)
         Switch(checked = checked, enabled = enabled, onCheckedChange = null)
     }
+}
+
+@Composable
+private fun RotationTemplateSetting(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    if (!settingMatchesQuery(label)) return
+    OutlinedTextField(
+        value = value,
+        onValueChange = { candidate ->
+            if (candidate.length <= 128 && candidate.all { it.isDigit() || it in "-+., " }) {
+                onValueChange(candidate)
+            }
+        },
+        label = { Text(label) },
+        placeholder = { Text(stringResource(R.string.infill_rotation_template_example)) },
+        supportingText = {
+            Text(
+                stringResource(
+                    if (rotationTemplateIsValid(value)) {
+                        R.string.infill_rotation_template_hint
+                    } else {
+                        R.string.infill_rotation_template_invalid
+                    },
+                ),
+            )
+        },
+        isError = !rotationTemplateIsValid(value),
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable

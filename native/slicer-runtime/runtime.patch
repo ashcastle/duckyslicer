@@ -93,7 +93,7 @@ diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
 index 116a4a85..6b3048bc 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -40,14 +40,122 @@ struct SliceConfig {
+@@ -40,14 +40,124 @@ struct SliceConfig {
      int perimeters = 2;
      int top_solid_layers = 5;
      int bottom_solid_layers = 4;
@@ -103,6 +103,8 @@ index 116a4a85..6b3048bc 100644
 +    float bottom_surface_density = 100.0f;
 +    float infill_shift_step = 0.4f;
 +    bool symmetric_infill_y_axis = false;
++    std::string sparse_infill_rotation_template;
++    std::string solid_infill_rotation_template;
      float fill_density = 0.15f;  // 0.0 - 1.0
      std::string fill_pattern = "gyroid";
 +    std::string top_surface_pattern = "monotonicline";
@@ -767,7 +769,7 @@ diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_
 index d93efb7d..fdf9a877 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -92,10 +92,110 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -92,10 +92,112 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.perimeters = getInt("perimeters");
      config.top_solid_layers = getInt("topSolidLayers");
      config.bottom_solid_layers = getInt("bottomSolidLayers");
@@ -777,6 +779,8 @@ index d93efb7d..fdf9a877 100644
 +    config.bottom_surface_density = getFloat("bottomSurfaceDensity");
 +    config.infill_shift_step = getFloat("infillShiftStep");
 +    config.symmetric_infill_y_axis = getBool("symmetricInfillYAxis");
++    config.sparse_infill_rotation_template = getString("sparseInfillRotationTemplate");
++    config.solid_infill_rotation_template = getString("solidInfillRotationTemplate");
      config.fill_density = getFloat("fillDensity");
      config.fill_pattern = getString("fillPattern");
 +    config.top_surface_pattern = getString("topSurfacePattern");
@@ -1149,7 +1153,7 @@ index d93efb7d..fdf9a877 100644
  
      env->DeleteLocalRef(cls);
      return config;
-@@ -235,9 +487,109 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -235,9 +487,111 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setInt("perimeters", config.perimeters);
      setInt("topSolidLayers", config.top_solid_layers);
      setInt("bottomSolidLayers", config.bottom_solid_layers);
@@ -1159,6 +1163,8 @@ index d93efb7d..fdf9a877 100644
 +    setFloat("bottomSurfaceDensity", config.bottom_surface_density);
 +    setFloat("infillShiftStep", config.infill_shift_step);
 +    setBool("symmetricInfillYAxis", config.symmetric_infill_y_axis);
++    setString("sparseInfillRotationTemplate", config.sparse_infill_rotation_template);
++    setString("solidInfillRotationTemplate", config.solid_infill_rotation_template);
      setFloat("fillDensity", config.fill_density);
      setString("fillPattern", config.fill_pattern);
 +    setString("topSurfacePattern", config.top_surface_pattern);
@@ -1546,7 +1552,38 @@ index 8d61c9cf..f285d044 100644
  #include "libslic3r/clipper.hpp"
  
  // =============================================================================
-@@ -183,84 +186,202 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -36,6 +41,30 @@ static std::atomic<Slic3r::Print*> g_active_print{nullptr};
+ // B55: independent cancel flag checked during config setup (before g_active_print is set).
+ static std::atomic<bool> g_slice_cancel{false};
+ 
++static bool validRotationTemplate(const std::string& value) {
++    if (value.empty()) return true;
++    if (value.size() > 128) return false;
++    std::stringstream stream(value);
++    std::string token;
++    int count = 0;
++    while (std::getline(stream, token, ',')) {
++        const auto first = token.find_first_not_of(" \t");
++        const auto last = token.find_last_not_of(" \t");
++        if (first == std::string::npos || ++count > 32) return false;
++        const std::string trimmed = token.substr(first, last - first + 1);
++        std::size_t parsed = 0;
++        try {
++            const double angle = std::stod(trimmed, &parsed);
++            if (parsed != trimmed.size() || !std::isfinite(angle) || angle < -360.0 || angle > 360.0) {
++                return false;
++            }
++        } catch (const std::exception&) {
++            return false;
++        }
++    }
++    return count > 0 && value.back() != ',';
++}
++
+ void SlicerEngine::cancelSlice() {
+     g_slice_cancel.store(true, std::memory_order_release);
+     auto* print = g_active_print.load(std::memory_order_acquire);
+@@ -183,84 +212,208 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
      dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
      dpc.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(config.bottom_solid_layers));
@@ -1574,6 +1611,12 @@ index 8d61c9cf..f285d044 100644
 +    dpc.set_key_value("bottom_surface_density", new Slic3r::ConfigOptionPercent(config.bottom_surface_density));
 +    dpc.set_key_value("infill_shift_step", new Slic3r::ConfigOptionFloat(config.infill_shift_step));
 +    dpc.set_key_value("symmetric_infill_y_axis", new Slic3r::ConfigOptionBool(config.symmetric_infill_y_axis));
++    if (!validRotationTemplate(config.sparse_infill_rotation_template) ||
++        !validRotationTemplate(config.solid_infill_rotation_template)) {
++        throw std::invalid_argument("Invalid infill rotation template");
++    }
++    dpc.set_key_value("sparse_infill_rotate_template", new Slic3r::ConfigOptionString(config.sparse_infill_rotation_template));
++    dpc.set_key_value("solid_infill_rotate_template", new Slic3r::ConfigOptionString(config.solid_infill_rotation_template));
 +
 +    // Preserve Orca's complete enum vocabulary. The old hand-written mapping silently
 +    // turned unsupported values (notably crosshatch) into gyroid and made distinct

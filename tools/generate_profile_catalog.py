@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 53
+SCHEMA_VERSION = 54
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -386,6 +386,22 @@ def vertical_shell_mode(value: Any) -> str:
     } else "ensure_all"
 
 
+def rotation_template(value: Any, default: str = "") -> str:
+    candidate = str(scalar(value, default)).strip()
+    if not candidate:
+        return ""
+    tokens = [token.strip() for token in candidate.split(",")]
+    if not (1 <= len(tokens) <= 32):
+        return default
+    try:
+        angles = [float(token) for token in tokens]
+    except ValueError:
+        return default
+    if not all(math.isfinite(angle) and -360 <= angle <= 360 for angle in angles):
+        return default
+    return ",".join(f"{angle:g}" for angle in angles)
+
+
 def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     name = str(raw["name"])
     filament_type = str(scalar(raw.get("filament_type"), "")).strip()
@@ -674,6 +690,11 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "infillCombinationMaxLayerHeightPercent": infill_combination_height_percent,
         "infillDirection": number(raw.get("infill_direction"), 45),
         "solidInfillDirection": number(raw.get("solid_infill_direction"), 45),
+        "sparseInfillRotationTemplate": rotation_template(raw.get("sparse_infill_rotate_template")),
+        "solidInfillRotationTemplate": rotation_template(
+            raw.get("solid_infill_rotate_template"),
+            "0,90" if boolean(raw.get("rotate_solid_infill_direction")) else "",
+        ),
         "alignInfillDirectionToModel": boolean(raw.get("align_infill_direction_to_model")),
         "minimumSparseInfillArea": number(raw.get("minimum_sparse_infill_area"), 15),
         "infillAnchor": infill_anchor,

@@ -197,6 +197,8 @@ internal object ProfileValidation {
             ) &&
             profile.infillDirection in 0f..360f &&
             profile.solidInfillDirection in 0f..360f &&
+            rotationTemplateIsValid(profile.sparseInfillRotationTemplate) &&
+            rotationTemplateIsValid(profile.solidInfillRotationTemplate) &&
             profile.minimumSparseInfillArea in 0f..1_000_000f &&
             profile.infillAnchor in 0f..1_000f &&
             profile.infillAnchorMax in 0f..1_000f &&
@@ -403,5 +405,14 @@ private fun purgeVolumesAreValid(values: List<Float>): Boolean {
         val value = values[index]
         value.isFinite() && value in MIN_PURGE_VOLUME..MAX_PURGE_VOLUME &&
             (index / size != index % size || value == 0f)
+    }
+}
+
+internal fun rotationTemplateIsValid(value: String): Boolean {
+    if (value.isBlank()) return true
+    if (value.length > 128) return false
+    val angles = value.split(',')
+    return angles.size in 1..32 && angles.all { token ->
+        token.trim().toFloatOrNull()?.let { it.isFinite() && it in -360f..360f } == true
     }
 }

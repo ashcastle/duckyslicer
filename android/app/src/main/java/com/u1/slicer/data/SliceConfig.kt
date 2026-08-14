@@ -264,6 +264,8 @@ data class SliceConfig(
     @JvmField var bottomSurfaceDensity: Float = 100f
     @JvmField var infillShiftStep: Float = 0.4f
     @JvmField var symmetricInfillYAxis: Boolean = false
+    @JvmField var sparseInfillRotationTemplate: String = ""
+    @JvmField var solidInfillRotationTemplate: String = ""
     @JvmField var slicingMode: String = "regular"
     @JvmField var sliceClosingRadius: Float = 0.049f
     @JvmField var preciseZHeight: Boolean = false

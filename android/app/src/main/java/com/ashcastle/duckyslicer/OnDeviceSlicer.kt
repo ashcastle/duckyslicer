@@ -642,6 +642,8 @@ data class QualityProfile(
     val infillCombinationMaxLayerHeightPercent: Boolean = true,
     val infillDirection: Float = 45f,
     val solidInfillDirection: Float = 45f,
+    val sparseInfillRotationTemplate: String = "",
+    val solidInfillRotationTemplate: String = "",
     val alignInfillDirectionToModel: Boolean = false,
     val minimumSparseInfillArea: Float = 15f,
     val infillAnchor: Float = 400f,
@@ -871,7 +873,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 53,
+    val schemaVersion: Int = 54,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1766,6 +1768,8 @@ data class SliceOptions(
             native.infillLockDepth = quality.infillLockDepth
             native.infillShiftStep = quality.infillShiftStep
             native.symmetricInfillYAxis = quality.symmetricInfillYAxis
+            native.sparseInfillRotationTemplate = quality.sparseInfillRotationTemplate
+            native.solidInfillRotationTemplate = quality.solidInfillRotationTemplate
             native.skinInfillLineWidth = quality.skinInfillLineWidth
             native.skinInfillLineWidthPercent = quality.skinInfillLineWidthPercent
             native.skeletonInfillLineWidth = quality.skeletonInfillLineWidth

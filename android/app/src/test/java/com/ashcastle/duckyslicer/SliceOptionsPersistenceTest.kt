@@ -325,6 +325,10 @@ class SliceOptionsPersistenceTest {
         assertEquals(false, restored.infillCombinationMaxLayerHeightPercent)
         assertEquals(37f, restored.infillDirection)
         assertEquals(123f, restored.solidInfillDirection)
+        assertEquals("0,60,120", restored.quality.sparseInfillRotationTemplate)
+        assertEquals("0,90", restored.quality.solidInfillRotationTemplate)
+        assertEquals("0,60,120", restored.toNativeConfig().sparseInfillRotationTemplate)
+        assertEquals("0,90", restored.toNativeConfig().solidInfillRotationTemplate)
         assertEquals(true, restored.alignInfillDirectionToModel)
         assertEquals(42f, restored.minimumSparseInfillArea)
         assertEquals(321f, restored.infillAnchor)
@@ -672,6 +676,8 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             surfaceDensity = SurfaceDensitySettings(topPercent = 44f, bottomPercent = 71f),
             infillShiftStep = 1.7f,
             symmetricInfillYAxis = true,
+            sparseInfillRotationTemplate = "0,60,120",
+            solidInfillRotationTemplate = "0,90",
             travelSpeedZ = 17f,
             skeletonInfillDensity = 31f,
             skinInfillDensity = 47f,
