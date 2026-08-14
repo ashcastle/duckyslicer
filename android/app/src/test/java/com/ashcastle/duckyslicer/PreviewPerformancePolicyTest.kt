@@ -209,6 +209,18 @@ class PreviewPerformancePolicyTest {
     }
 
     @Test
+    fun prepareInteractionScalesOnlyTheTransientRenderBuffer() {
+        assertEquals(
+            PreviewSurfaceSize(518, 922),
+            prepareSurfaceSize(720, 1_280, interactionActive = true),
+        )
+        assertEquals(
+            PreviewSurfaceSize(720, 1_280),
+            prepareSurfaceSize(720, 1_280, interactionActive = false),
+        )
+    }
+
+    @Test
     fun weakDevicePerformanceTierKeepsContinuousPathsCheap() {
         assertTrue(shouldDrawToolpathLines(PreviewDetail.PERFORMANCE, false, false))
         assertTrue(shouldDrawToolpathLines(PreviewDetail.BALANCED, true, false))

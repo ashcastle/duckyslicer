@@ -157,6 +157,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 5",
         "recordCompletedFrame(",
         "currentDetail = lastProvenDetail",
+        "prepareSurfaceSize(",
+        "PREPARE_INTERACTION_SURFACE_SCALE = 0.72f",
     ):
         if marker not in settings:
             raise VerificationError(f"adaptive preview policy is missing: {marker}")
@@ -275,6 +277,12 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "overlays = withContext(Dispatchers.Default)",
         "detailVertices: FloatArray = vertices",
         "val useDetail = !frame.interactionActive && frame.overlays.isEmpty()",
+        "prepareSurfaceSize(",
+        "texture.setDefaultBufferSize(target.width, target.height)",
+        "resizeEglSurface(texture, target)",
+        "EGL14.eglDestroySurface(eglDisplay, eglSurface)",
+        "renderer.setLogicalViewportSize(logicalSurfaceWidth, logicalSurfaceHeight)",
+        "GLES30.glUniform2f(viewportLocation, logicalWidth.toFloat(), logicalHeight.toFloat())",
     ):
         if marker not in prepare_renderer:
             raise VerificationError(f"Prepare model loading contract is missing: {marker}")
@@ -336,6 +344,10 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "lastMeshVertexCountForTest()",
         "interactionActive = true",
         "p95Ms <= 1.0",
+        "densePrepareInteractionReducesRasterWorkWithoutDroppingTheLowDetailShape",
+        "productionPrepareSurfaceRestoresFullDetailAfterReducedRasterInteraction",
+        "reducedMetrics.vertexCount",
+        "reducedMetrics.p95Ms <= fullMetrics.p95Ms * 1.35 + 2.0",
     ):
         if marker not in prepare_tests:
             raise VerificationError(f"Prepare performance regression is missing: {marker}")
@@ -781,6 +793,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "explicitQualityNeverRunsAutomaticCalibration",
         "denseOverviewUsesScreenSpaceBudgetAndRestoresFullDetailWhenZoomed",
         "adaptiveSurfaceResolutionPreservesLogicalCoverageWhileScalingRasterWork",
+        "prepareInteractionScalesOnlyTheTransientRenderBuffer",
     ):
         if marker not in policy_tests:
             raise VerificationError(f"adaptive preview host regression is missing: {marker}")

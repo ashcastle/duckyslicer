@@ -93,6 +93,27 @@ internal fun previewSurfaceSize(
 internal const val PERFORMANCE_PREVIEW_SURFACE_SCALE = 0.67f
 internal const val BALANCED_PREVIEW_SURFACE_SCALE = 0.85f
 
+/**
+ * Prepare keeps the complete low-detail model during a gesture and reduces only transient raster
+ * work. The logical viewport is unchanged, so camera framing and hit testing remain pixel-exact;
+ * the full-resolution buffer is restored as soon as interaction ends.
+ */
+internal fun prepareSurfaceSize(
+    logicalWidth: Int,
+    logicalHeight: Int,
+    interactionActive: Boolean,
+): PreviewSurfaceSize {
+    val width = logicalWidth.coerceAtLeast(1)
+    val height = logicalHeight.coerceAtLeast(1)
+    val scale = if (interactionActive) PREPARE_INTERACTION_SURFACE_SCALE else 1f
+    return PreviewSurfaceSize(
+        width = (width * scale).roundToInt().coerceIn(1, width),
+        height = (height * scale).roundToInt().coerceIn(1, height),
+    )
+}
+
+internal const val PREPARE_INTERACTION_SURFACE_SCALE = 0.72f
+
 internal fun shouldDrawToolpathLines(
     detail: PreviewDetail,
     interactionActive: Boolean,

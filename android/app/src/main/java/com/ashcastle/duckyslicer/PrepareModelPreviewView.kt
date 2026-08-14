@@ -288,7 +288,7 @@ internal object PrepareModelSceneBuilder {
     }
 }
 
-private class PrepareModelSurfaceView(
+internal class PrepareModelSurfaceView(
     context: Context,
     private val onUnavailable: () -> Unit,
 ) : TextureView(context), TextureView.SurfaceTextureListener {
@@ -297,10 +297,17 @@ private class PrepareModelSurfaceView(
     private var renderHandler: Handler? = null
     private val renderPending = AtomicBoolean(false)
     private var unavailableReported = false
+    @Volatile
     private var rendererReady = false
     private var sceneSubmitted = false
+    private var logicalSurfaceWidth = 1
+    private var logicalSurfaceHeight = 1
+    private var interactionActive = false
+    private var appliedBufferSize: PreviewSurfaceSize? = null
     @Volatile
     private var textureAvailable = false
+    @Volatile
+    private var renderedBufferSize = PreviewSurfaceSize(0, 0)
     private var eglDisplay = EGL14.EGL_NO_DISPLAY
     private var eglContext = EGL14.EGL_NO_CONTEXT
     private var eglSurface = EGL14.EGL_NO_SURFACE
@@ -339,6 +346,7 @@ private class PrepareModelSurfaceView(
         overlays: List<PrepareModelOverlayData>,
     ) {
         sceneSubmitted = true
+        this.interactionActive = interactionActive
         renderer.submit(
             geometry,
             objects,
@@ -347,10 +355,22 @@ private class PrepareModelSurfaceView(
             interactionActive,
             overlays,
         )
+        applyRenderBufferSize()
         removeCallbacks(startupWatchdog)
         if (!rendererReady) postDelayed(startupWatchdog, PREPARE_RENDERER_STARTUP_TIMEOUT_MS)
         requestTextureRender()
     }
+
+    internal fun rendererReadyForTest(): Boolean = rendererReady
+
+    internal fun renderBufferSizeForTest(): PreviewSurfaceSize = renderedBufferSize
+
+    internal fun logicalSurfaceSizeForTest(): PreviewSurfaceSize = PreviewSurfaceSize(
+        logicalSurfaceWidth,
+        logicalSurfaceHeight,
+    )
+
+    internal fun lastMeshVertexCountForTest(): Int = renderer.lastMeshVertexCountForTest()
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
@@ -366,6 +386,7 @@ private class PrepareModelSurfaceView(
         textureAvailable = false
         rendererReady = false
         renderPending.set(false)
+        appliedBufferSize = null
         if (memoryCallbacksRegistered) {
             applicationContext.unregisterComponentCallbacks(memoryCallbacks)
             memoryCallbacksRegistered = false
@@ -390,25 +411,35 @@ private class PrepareModelSurfaceView(
         ensureRenderThread()
         textureAvailable = true
         rendererReady = false
+        logicalSurfaceWidth = this.width.coerceAtLeast(width).coerceAtLeast(1)
+        logicalSurfaceHeight = this.height.coerceAtLeast(height).coerceAtLeast(1)
+        renderer.setLogicalViewportSize(logicalSurfaceWidth, logicalSurfaceHeight)
+        val target = prepareSurfaceSize(
+            logicalSurfaceWidth,
+            logicalSurfaceHeight,
+            interactionActive,
+        )
+        surface.setDefaultBufferSize(target.width, target.height)
+        appliedBufferSize = target
         renderHandler?.post {
-            if (!initializeEgl(surface, width, height)) return@post
+            if (!initializeEgl(surface, target.width, target.height)) return@post
             requestTextureRender()
         }
     }
 
     override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
-        renderHandler?.post {
-            if (makeCurrent()) {
-                renderer.onSurfaceChanged(null, width, height)
-                drawNow()
-            }
-        }
+        logicalSurfaceWidth = this.width.coerceAtLeast(1)
+        logicalSurfaceHeight = this.height.coerceAtLeast(1)
+        renderer.setLogicalViewportSize(logicalSurfaceWidth, logicalSurfaceHeight)
+        appliedBufferSize = null
+        applyRenderBufferSize()
     }
 
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
         textureAvailable = false
         rendererReady = false
         renderPending.set(false)
+        appliedBufferSize = null
         val releasePosted = renderHandler?.post {
             releaseEgl()
             surface.release()
@@ -418,6 +449,15 @@ private class PrepareModelSurfaceView(
     }
 
     override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
+
+    override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
+        super.onSizeChanged(width, height, oldWidth, oldHeight)
+        logicalSurfaceWidth = width.coerceAtLeast(1)
+        logicalSurfaceHeight = height.coerceAtLeast(1)
+        renderer.setLogicalViewportSize(logicalSurfaceWidth, logicalSurfaceHeight)
+        appliedBufferSize = null
+        applyRenderBufferSize()
+    }
 
     private fun releaseGpuMemory() {
         renderHandler?.post {
@@ -433,8 +473,32 @@ private class PrepareModelSurfaceView(
         }
     }
 
+    private fun applyRenderBufferSize() {
+        if (!textureAvailable) return
+        val texture = surfaceTexture ?: return
+        val target = prepareSurfaceSize(
+            logicalSurfaceWidth,
+            logicalSurfaceHeight,
+            interactionActive,
+        )
+        if (target == appliedBufferSize) return
+        appliedBufferSize = target
+        texture.setDefaultBufferSize(target.width, target.height)
+        renderHandler?.post {
+            resizeEglSurface(texture, target)
+        }
+    }
+
     private fun drawNow() {
         if (!textureAvailable || !makeCurrent()) return
+        val queriedWidth = IntArray(1)
+        val queriedHeight = IntArray(1)
+        if (
+            EGL14.eglQuerySurface(eglDisplay, eglSurface, EGL14.EGL_WIDTH, queriedWidth, 0) &&
+            EGL14.eglQuerySurface(eglDisplay, eglSurface, EGL14.EGL_HEIGHT, queriedHeight, 0)
+        ) {
+            renderedBufferSize = PreviewSurfaceSize(queriedWidth[0], queriedHeight[0])
+        }
         renderer.onDrawFrame(null)
         if (!EGL14.eglSwapBuffers(eglDisplay, eglSurface)) reportUnavailableOnceOnUi()
     }
@@ -531,6 +595,36 @@ private class PrepareModelSurfaceView(
             eglContext,
         )
 
+    private fun resizeEglSurface(
+        texture: SurfaceTexture,
+        target: PreviewSurfaceSize,
+    ): Boolean {
+        val config = eglConfig ?: return false
+        if (eglDisplay == EGL14.EGL_NO_DISPLAY || eglContext == EGL14.EGL_NO_CONTEXT) return false
+        EGL14.eglMakeCurrent(
+            eglDisplay,
+            EGL14.EGL_NO_SURFACE,
+            EGL14.EGL_NO_SURFACE,
+            EGL14.EGL_NO_CONTEXT,
+        )
+        if (eglSurface != EGL14.EGL_NO_SURFACE) {
+            EGL14.eglDestroySurface(eglDisplay, eglSurface)
+        }
+        eglSurface = EGL14.eglCreateWindowSurface(
+            eglDisplay,
+            config,
+            texture,
+            intArrayOf(EGL14.EGL_NONE),
+            0,
+        )
+        if (eglSurface == EGL14.EGL_NO_SURFACE || !makeCurrent()) {
+            reportUnavailableOnceOnUi()
+            return false
+        }
+        renderer.onSurfaceChanged(null, target.width, target.height)
+        return true
+    }
+
     private fun releaseEgl() {
         if (eglDisplay == EGL14.EGL_NO_DISPLAY) return
         if (makeCurrent()) renderer.releaseGpuGeometryForMemoryPressure()
@@ -617,14 +711,24 @@ internal class PrepareModelRenderer(
     private var selectedLocation = -1
     private var viewportWidth = 1
     private var viewportHeight = 1
+    @Volatile
+    private var logicalViewportWidth = 0
+    @Volatile
+    private var logicalViewportHeight = 0
     private var unavailable = false
     private var frameReadyReported = false
     private var geometryUploadCount = 0
+    @Volatile
     private var lastMeshVertexCount = 0
 
     internal fun geometryUploadCountForTest(): Int = geometryUploadCount
 
     internal fun lastMeshVertexCountForTest(): Int = lastMeshVertexCount
+
+    internal fun setLogicalViewportSize(width: Int, height: Int) {
+        logicalViewportWidth = width.coerceAtLeast(1)
+        logicalViewportHeight = height.coerceAtLeast(1)
+    }
 
     fun submit(
         geometry: PrepareModelSceneGeometry,
@@ -701,6 +805,10 @@ internal class PrepareModelRenderer(
     override fun onSurfaceChanged(unused: GL10?, width: Int, height: Int) {
         viewportWidth = width.coerceAtLeast(1)
         viewportHeight = height.coerceAtLeast(1)
+        if (logicalViewportWidth <= 0 || logicalViewportHeight <= 0) {
+            logicalViewportWidth = viewportWidth
+            logicalViewportHeight = viewportHeight
+        }
         GLES30.glViewport(0, 0, viewportWidth, viewportHeight)
     }
 
@@ -863,13 +971,15 @@ internal class PrepareModelRenderer(
 
     private fun applyCamera(frame: PrepareModelFrame) {
         val camera = frame.camera
-        val sceneScale = minOf(viewportWidth * 0.64f, viewportHeight * 0.72f) /
+        val logicalWidth = logicalViewportWidth.coerceAtLeast(1)
+        val logicalHeight = logicalViewportHeight.coerceAtLeast(1)
+        val sceneScale = minOf(logicalWidth * 0.64f, logicalHeight * 0.72f) /
             max(frame.geometry.bedSizeX, frame.geometry.bedSizeY) * camera.zoom
-        GLES30.glUniform2f(viewportLocation, viewportWidth.toFloat(), viewportHeight.toFloat())
+        GLES30.glUniform2f(viewportLocation, logicalWidth.toFloat(), logicalHeight.toFloat())
         GLES30.glUniform2f(
             sceneCenterLocation,
-            viewportWidth / 2f + camera.panX,
-            viewportHeight * 0.48f + camera.panY,
+            logicalWidth / 2f + camera.panX,
+            logicalHeight * 0.48f + camera.panY,
         )
         GLES30.glUniform2f(bedSizeLocation, frame.geometry.bedSizeX, frame.geometry.bedSizeY)
         GLES30.glUniform1f(sceneScaleLocation, sceneScale)

@@ -46,7 +46,8 @@ def valid_sources() -> dict[str, str]:
             "compatibilityPreviewSegmentBudget( AdaptivePreviewDetailController( "
             "ADAPTIVE_PREVIEW_FAST_FRAME_MS = 24.0 "
             "ADAPTIVE_PREVIEW_FAST_SAMPLE_COUNT = 5 recordCompletedFrame( "
-            "currentDetail = lastProvenDetail"
+            "currentDetail = lastProvenDetail prepareSurfaceSize( "
+            "PREPARE_INTERACTION_SURFACE_SCALE = 0.72f"
         ),
         "AppSettingsSheet.kt": (
             "FlowRow( PreviewRenderingMode.entries.forEach "
@@ -129,7 +130,11 @@ def valid_sources() -> dict[str, str]:
             "overlays.takeIf { sceneLoad.complete }.orEmpty() PrepareModelOverlayKey( "
             "overlays = withContext(Dispatchers.Default) "
             "detailVertices: FloatArray = vertices "
-            "val useDetail = !frame.interactionActive && frame.overlays.isEmpty()"
+            "val useDetail = !frame.interactionActive && frame.overlays.isEmpty() "
+            "prepareSurfaceSize( texture.setDefaultBufferSize(target.width, target.height) "
+            "resizeEglSurface(texture, target) EGL14.eglDestroySurface(eglDisplay, eglSurface) "
+            "renderer.setLogicalViewportSize(logicalSurfaceWidth, logicalSurfaceHeight) "
+            "GLES30.glUniform2f(viewportLocation, logicalWidth.toFloat(), logicalHeight.toFloat())"
         ),
         "PrepareModelPicking.kt": (
             "buildPreparePickingIndices( PreparePickingIndexBuilder( "
@@ -275,7 +280,11 @@ def valid_sources() -> dict[str, str]:
             "p95Ms <= 16.0 objectP95Ms <= 16.0 facetP95Ms <= 16.0 "
             "denseDefaultPlacementStaysWithinLoadBudget "
             "denseUnpaintedOverlayBuildStaysWithinLoadBudget "
-            "lastMeshVertexCountForTest() interactionActive = true p95Ms <= 1.0"
+            "lastMeshVertexCountForTest() interactionActive = true p95Ms <= 1.0 "
+            "densePrepareInteractionReducesRasterWorkWithoutDroppingTheLowDetailShape "
+            "productionPrepareSurfaceRestoresFullDetailAfterReducedRasterInteraction "
+            "reducedMetrics.vertexCount "
+            "reducedMetrics.p95Ms <= fullMetrics.p95Ms * 1.35 + 2.0"
         ),
         "PrepareModelPickingTest.kt": (
             "spatialIndexCullsArbitraryFacetOrderWithoutChangingExactHits "
@@ -345,7 +354,8 @@ def valid_sources() -> dict[str, str]:
             "automaticCalibrationResetsForAChangedPreviewWorkload "
             "explicitQualityNeverRunsAutomaticCalibration"
             " denseOverviewUsesScreenSpaceBudgetAndRestoresFullDetailWhenZoomed "
-            "adaptiveSurfaceResolutionPreservesLogicalCoverageWhileScalingRasterWork"
+            "adaptiveSurfaceResolutionPreservesLogicalCoverageWhileScalingRasterWork "
+            "prepareInteractionScalesOnlyTheTransientRenderBuffer"
         ),
         "ToolpathMeshBuilderTest.kt": (
             "balancedModeCapsDensePreviewGeometry "
@@ -543,6 +553,24 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "val placement = recalculatePlacement(projectObject)",
         )
         with self.assertRaisesRegex(VerificationError, "modelPlacements"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_prepare_renderer_without_interaction_raster_scaling(self) -> None:
+        sources = valid_sources()
+        sources["PrepareModelPreviewView.kt"] = sources["PrepareModelPreviewView.kt"].replace(
+            "texture.setDefaultBufferSize(target.width, target.height)",
+            "texture.setDefaultBufferSize(logicalSurfaceWidth, logicalSurfaceHeight)",
+        )
+        with self.assertRaisesRegex(VerificationError, "Prepare model loading"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_prepare_renderer_that_resizes_only_the_surface_texture(self) -> None:
+        sources = valid_sources()
+        sources["PrepareModelPreviewView.kt"] = sources["PrepareModelPreviewView.kt"].replace(
+            "resizeEglSurface(texture, target)",
+            "renderer.onSurfaceChanged(null, target.width, target.height)",
+        )
+        with self.assertRaisesRegex(VerificationError, "Prepare model loading"):
             verify_preview_boundary(sources)
 
     def test_rejects_prepare_touch_paths_without_the_coarse_index(self) -> None:

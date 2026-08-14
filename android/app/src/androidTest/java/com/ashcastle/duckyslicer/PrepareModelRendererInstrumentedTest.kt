@@ -1,12 +1,18 @@
 package com.ashcastle.duckyslicer
 
+import android.content.Intent
 import android.opengl.EGL14
 import android.opengl.EGLExt
 import android.opengl.GLES30
 import android.os.SystemClock
+import android.view.ViewGroup
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -18,6 +24,13 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class PrepareModelRendererInstrumentedTest {
+    private data class DenseFrameMetrics(
+        val p50Ms: Double,
+        val p95Ms: Double,
+        val vertexCount: Int,
+        val geometryUploads: Int,
+    )
+
     @Test
     fun denseLayOnFaceCandidatesBuildOffTheUiThreadPromptly() {
         val triangles = spatiallyScrambleTriangles(denseGridTriangles(columns = 100, rows = 60))
@@ -361,6 +374,135 @@ class PrepareModelRendererInstrumentedTest {
     }
 
     @Test
+    fun densePrepareInteractionReducesRasterWorkWithoutDroppingTheLowDetailShape() {
+        val logical = PreviewSurfaceSize(720, 1_280)
+        val reduced = prepareSurfaceSize(
+            logical.width,
+            logical.height,
+            interactionActive = true,
+        )
+        val fullMetrics = measureDensePrepareInteraction(logical, logical)
+        val reducedMetrics = measureDensePrepareInteraction(reduced, logical)
+        println(
+            "DuckyPrepare raster full=${logical.width}x${logical.height} " +
+                "reduced=${reduced.width}x${reduced.height} " +
+                "fullP50Ms=${fullMetrics.p50Ms} fullP95Ms=${fullMetrics.p95Ms} " +
+                "reducedP50Ms=${reducedMetrics.p50Ms} reducedP95Ms=${reducedMetrics.p95Ms} " +
+                "vertices=${reducedMetrics.vertexCount}",
+        )
+        assertTrue(reduced.width * reduced.height < logical.width * logical.height * 0.55f)
+        assertEquals(12_000 * 3, fullMetrics.vertexCount)
+        assertEquals(fullMetrics.vertexCount, reducedMetrics.vertexCount)
+        assertEquals(1, fullMetrics.geometryUploads)
+        assertEquals(1, reducedMetrics.geometryUploads)
+        assertTrue(
+            "Reduced Prepare raster must not regress interaction completion: " +
+                "full=${fullMetrics.p95Ms} reduced=${reducedMetrics.p95Ms}",
+            reducedMetrics.p95Ms <= fullMetrics.p95Ms * 1.35 + 2.0,
+        )
+    }
+
+    @Test
+    fun productionPrepareSurfaceRestoresFullDetailAfterReducedRasterInteraction() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val surfaceReference = AtomicReference<PrepareModelSurfaceView>()
+        val unavailable = AtomicBoolean(false)
+        val previewTriangles = denseGridTriangles(columns = 100, rows = 60)
+        val detailTriangles = denseGridTriangles(columns = 200, rows = 120)
+        val model = ModelInfo(
+            fileName = "production-dense-raster.stl",
+            triangles = 200_000,
+            dimensions = listOf(400.0, 360.0, 20.0),
+            localPath = "",
+            minMm = listOf(0.0, 0.0, 0.0),
+            maxMm = listOf(400.0, 360.0, 20.0),
+            previewTriangles = previewTriangles,
+            detailPreviewTriangles = detailTriangles,
+        )
+        val projectObject = ProjectObject(id = "production-dense", model = model)
+        val geometry = PrepareModelSceneBuilder.build(
+            listOf(projectObject),
+            440f,
+            440f,
+            rectangularBedPolygon(440f, 440f),
+        )
+        val objectStates = mapOf(
+            projectObject.id to PrepareObjectDrawState(
+                projectObject.id,
+                projectObject.transform,
+                projectObject.transform.minimumRotatedZ(projectObject),
+            ),
+        )
+        val camera = PrepareModelCamera(-45f, 55f, 1f, 0f, 0f)
+        ActivityScenario.launch<AccessibilityHarnessActivity>(
+            Intent(context, AccessibilityHarnessActivity::class.java),
+        ).use { scenario ->
+            scenario.onActivity { activity ->
+                val surface = PrepareModelSurfaceView(activity) { unavailable.set(true) }
+                activity.setContentView(
+                    surface,
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+                surface.submit(
+                    geometry,
+                    objectStates,
+                    projectObject.id,
+                    camera,
+                    interactionActive = false,
+                    overlays = emptyList(),
+                )
+                surfaceReference.set(surface)
+            }
+            val surface = checkNotNull(surfaceReference.get())
+            waitForPrepareSurface(surface) { it.rendererReadyForTest() }
+            assertFalse("The production Prepare renderer must remain available", unavailable.get())
+            val logical = surface.logicalSurfaceSizeForTest()
+            waitForPrepareSurface(surface) { it.renderBufferSizeForTest() == logical }
+            assertEquals(48_000 * 3, surface.lastMeshVertexCountForTest())
+
+            scenario.onActivity {
+                surface.submit(
+                    geometry,
+                    objectStates,
+                    projectObject.id,
+                    camera.copy(yawDegrees = -40f),
+                    interactionActive = true,
+                    overlays = emptyList(),
+                )
+            }
+            val interaction = prepareSurfaceSize(
+                logical.width,
+                logical.height,
+                interactionActive = true,
+            )
+            waitForPrepareSurface(surface) {
+                it.renderBufferSizeForTest() == interaction &&
+                    it.lastMeshVertexCountForTest() == 12_000 * 3
+            }
+            assertEquals(interaction, surface.renderBufferSizeForTest())
+
+            scenario.onActivity {
+                surface.submit(
+                    geometry,
+                    objectStates,
+                    projectObject.id,
+                    camera.copy(yawDegrees = -35f),
+                    interactionActive = false,
+                    overlays = emptyList(),
+                )
+            }
+            waitForPrepareSurface(surface) {
+                it.renderBufferSizeForTest() == logical &&
+                    it.lastMeshVertexCountForTest() == 48_000 * 3
+            }
+            assertEquals(logical, surface.renderBufferSizeForTest())
+        }
+    }
+
+    @Test
     fun prepareRendererDrawsModelThroughRealGles3Context() {
         val framebufferSize = 256
         val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
@@ -565,6 +707,77 @@ class PrepareModelRendererInstrumentedTest {
         return ByteArray(pixels.remaining()).also(pixels::get)
     }
 
+    private fun measureDensePrepareInteraction(
+        bufferSize: PreviewSurfaceSize,
+        logicalSize: PreviewSurfaceSize,
+    ): DenseFrameMetrics = withGles3Pbuffer(bufferSize.width, bufferSize.height) {
+        val previewTriangles = denseGridTriangles(columns = 100, rows = 60)
+        val detailTriangles = denseGridTriangles(columns = 200, rows = 120)
+        val model = ModelInfo(
+            fileName = "dense-raster.stl",
+            triangles = 200_000,
+            dimensions = listOf(400.0, 360.0, 20.0),
+            localPath = "",
+            minMm = listOf(0.0, 0.0, 0.0),
+            maxMm = listOf(400.0, 360.0, 20.0),
+            previewTriangles = previewTriangles,
+            detailPreviewTriangles = detailTriangles,
+        )
+        val projectObject = ProjectObject(id = "dense-raster", model = model)
+        val geometry = PrepareModelSceneBuilder.build(
+            listOf(projectObject),
+            440f,
+            440f,
+            rectangularBedPolygon(440f, 440f),
+        )
+        val renderer = PrepareModelRenderer()
+        renderer.setLogicalViewportSize(logicalSize.width, logicalSize.height)
+        renderer.onSurfaceCreated(null, null)
+        renderer.onSurfaceChanged(null, bufferSize.width, bufferSize.height)
+        val objectStates = mapOf(
+            projectObject.id to PrepareObjectDrawState(
+                projectObject.id,
+                projectObject.transform,
+                projectObject.transform.minimumRotatedZ(projectObject),
+            ),
+        )
+        val durations = ArrayList<Long>()
+        repeat(24) { frame ->
+            renderer.submit(
+                geometry,
+                objectStates,
+                projectObject.id,
+                PrepareModelCamera(-45f + frame * 1.5f, 55f, 1f, 0f, 0f),
+                interactionActive = true,
+            )
+            val started = SystemClock.elapsedRealtimeNanos()
+            renderer.onDrawFrame(null)
+            GLES30.glFinish()
+            durations += SystemClock.elapsedRealtimeNanos() - started
+        }
+        val sorted = durations.drop(4).sorted()
+        val metrics = DenseFrameMetrics(
+            p50Ms = sorted[sorted.size / 2] / 1_000_000.0,
+            p95Ms = sorted[(sorted.size * 0.95).toInt().coerceAtMost(sorted.lastIndex)] /
+                1_000_000.0,
+            vertexCount = renderer.lastMeshVertexCountForTest(),
+            geometryUploads = renderer.geometryUploadCountForTest(),
+        )
+        renderer.releaseGpuGeometryForMemoryPressure()
+        metrics
+    }
+
+    private fun waitForPrepareSurface(
+        surface: PrepareModelSurfaceView,
+        condition: (PrepareModelSurfaceView) -> Boolean,
+    ) {
+        val deadline = SystemClock.elapsedRealtime() + 10_000L
+        while (!condition(surface) && SystemClock.elapsedRealtime() < deadline) {
+            SystemClock.sleep(20L)
+        }
+        assertTrue("Prepare production Surface did not reach the expected state", condition(surface))
+    }
+
     private fun denseGridTriangles(columns: Int, rows: Int): FloatArray {
         val result = FloatArray(columns * rows * 2 * 9)
         var output = 0
@@ -604,7 +817,7 @@ class PrepareModelRendererInstrumentedTest {
         return result
     }
 
-    private inline fun withGles3Pbuffer(width: Int, height: Int, block: () -> Unit) {
+    private inline fun <T> withGles3Pbuffer(width: Int, height: Int, block: () -> T): T {
         val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
         val version = IntArray(2)
         assertTrue(EGL14.eglInitialize(display, version, 0, version, 1))
@@ -634,7 +847,7 @@ class PrepareModelRendererInstrumentedTest {
         )
         try {
             assertTrue(EGL14.eglMakeCurrent(display, surface, surface, context))
-            block()
+            return block()
         } finally {
             EGL14.eglMakeCurrent(
                 display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT,
