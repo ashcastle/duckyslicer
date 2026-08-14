@@ -72,6 +72,7 @@ private enum class ProfileSettingsKind {
 }
 
 private val LocalSettingsQuery = compositionLocalOf { "" }
+private const val MAX_MACHINE_GCODE_LENGTH = 262_144
 
 @Composable
 private fun settingMatchesQuery(label: String): Boolean {
@@ -461,6 +462,29 @@ private fun PrinterSettingsSheet(
             }
         },
         onSelected = { onOptionsChanged(options.copy(gcodeFlavor = it)) },
+    )
+    SettingsGroupTitle(stringResource(R.string.machine_gcode))
+    GcodeTemplateSetting(
+        label = stringResource(R.string.machine_start_gcode),
+        value = options.printerProfile.machineStartGcode,
+        onValueChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(machineStartGcode = it),
+                ),
+            )
+        },
+    )
+    GcodeTemplateSetting(
+        label = stringResource(R.string.machine_end_gcode),
+        value = options.printerProfile.machineEndGcode,
+        onValueChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(machineEndGcode = it),
+                ),
+            )
+        },
     )
     SettingsGroupTitle(stringResource(R.string.retraction_defaults))
     SettingSlider(
@@ -5282,6 +5306,27 @@ private fun RotationTemplateSetting(
         },
         isError = !rotationTemplateIsValid(value),
         singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun GcodeTemplateSetting(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    if (!settingMatchesQuery(label)) return
+    OutlinedTextField(
+        value = value,
+        onValueChange = { candidate ->
+            if (candidate.length <= MAX_MACHINE_GCODE_LENGTH) {
+                onValueChange(candidate)
+            }
+        },
+        label = { Text(label) },
+        minLines = 4,
+        maxLines = 10,
         modifier = Modifier.fillMaxWidth(),
     )
 }

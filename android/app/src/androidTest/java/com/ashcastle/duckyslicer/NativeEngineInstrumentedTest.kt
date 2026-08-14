@@ -1784,6 +1784,12 @@ class NativeEngineInstrumentedTest {
                 maxJerkZ = 0.5f,
                 maxJerkE = 4f,
             )
+            .copy(
+                printerProfile = PrinterProfile.U1_06.copy(
+                    machineStartGcode = "M117 SAVED_START",
+                    machineEndGcode = "M117 SAVED_END",
+                ),
+            )
 
         val printer = store.savePrinter("Workshop U1", edited)
         val filament = store.saveFilament("My PETG", edited)
@@ -2052,6 +2058,8 @@ class NativeEngineInstrumentedTest {
         assertEquals(7.5f, restored.printers.last().maxJerkY)
         assertEquals(0.5f, restored.printers.last().maxJerkZ)
         assertEquals(4f, restored.printers.last().maxJerkE)
+        assertEquals("M117 SAVED_START", restored.printers.last().machineStartGcode)
+        assertEquals("M117 SAVED_END", restored.printers.last().machineEndGcode)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
         assertEquals(USER_PROFILE_SCHEMA_VERSION, JSONObject(file.readText()).getInt("schemaVersion"))
@@ -4445,6 +4453,8 @@ class NativeEngineInstrumentedTest {
             bedOriginY = -95f,
             bedPolygon = listOf(90f, 0f, 180f, 95f, 90f, 190f, 0f, 95f),
             maxPrintHeight = 180f,
+            machineStartGcode = "M117 DUCKY_START",
+            machineEndGcode = "M117 DUCKY_END",
             gcodeFlavor = "marlin2",
             maxSpeedX = 240f,
             maxSpeedY = 250f,
@@ -4506,6 +4516,8 @@ class NativeEngineInstrumentedTest {
         assertTrue("Print-head rod clearance must reach Orca", gcode.contains("; extruder_clearance_height_to_rod = 29"))
         assertTrue("Print-head lid clearance must reach Orca", gcode.contains("; extruder_clearance_height_to_lid = 119"))
         assertTrue("Custom G-code flavor must reach Orca", gcode.contains("; gcode_flavor = marlin2"))
+        assertTrue("Custom start G-code must reach Orca", gcode.lineSequence().any { it == "M117 DUCKY_START" })
+        assertTrue("Custom end G-code must reach Orca", gcode.lineSequence().any { it == "M117 DUCKY_END" })
         val bounds = outerWallBounds(outcome.output)
         assertTrue("Centered-machine G-code must retain negative X coordinates", bounds.minX < -1f)
         assertTrue("Centered-machine G-code must retain positive X coordinates", bounds.maxX > 1f)

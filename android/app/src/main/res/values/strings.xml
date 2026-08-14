@@ -699,6 +699,9 @@
     <string name="close">Close</string>
     <string name="build_height">Build height</string>
     <string name="printer_firmware">Printer firmware</string>
+    <string name="machine_gcode">Start and end G-code</string>
+    <string name="machine_start_gcode">Start G-code</string>
+    <string name="machine_end_gcode">End G-code</string>
     <string name="motion_limits">Motion limits</string>
     <string name="maximum_x_speed">Maximum X speed</string>
     <string name="maximum_y_speed">Maximum Y speed</string>
