@@ -3346,6 +3346,199 @@ private fun SlicingSettingsSheet(
                             )
                         },
                     )
+                    SettingSlider(
+                        label = stringResource(R.string.wipe_tower_rotation_angle),
+                        valueText = stringResource(
+                            R.string.degrees_value,
+                            options.multiMaterial.wipeTowerRotationAngle,
+                        ),
+                        value = options.multiMaterial.wipeTowerRotationAngle.coerceIn(0f, 359f),
+                        range = 0f..359f,
+                        steps = 358,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        wipeTowerRotationAngle = it.roundToInt().toFloat(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.wipe_tower_bridging),
+                        valueText = stringResource(
+                            R.string.millimeters_value_precise,
+                            options.multiMaterial.wipeTowerBridging,
+                        ),
+                        value = options.multiMaterial.wipeTowerBridging,
+                        range = 0f..max(100f, options.multiMaterial.wipeTowerBridging),
+                        steps = (max(100f, options.multiMaterial.wipeTowerBridging) * 2f)
+                            .roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        wipeTowerBridging = (it * 2f).roundToInt() / 2f,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.wipe_tower_extra_spacing),
+                        valueText = stringResource(
+                            R.string.percent_value,
+                            options.multiMaterial.wipeTowerExtraSpacing.roundToInt(),
+                        ),
+                        value = options.multiMaterial.wipeTowerExtraSpacing.coerceIn(100f, 300f),
+                        range = 100f..300f,
+                        steps = 199,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        wipeTowerExtraSpacing = it.roundToInt().toFloat(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.wipe_tower_extra_flow),
+                        valueText = stringResource(
+                            R.string.percent_value,
+                            options.multiMaterial.wipeTowerExtraFlow.roundToInt(),
+                        ),
+                        value = options.multiMaterial.wipeTowerExtraFlow.coerceIn(100f, 300f),
+                        range = 100f..300f,
+                        steps = 199,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        wipeTowerExtraFlow = it.roundToInt().toFloat(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.wipe_tower_max_purge_speed),
+                        valueText = stringResource(
+                            R.string.print_speed_value,
+                            options.multiMaterial.wipeTowerMaxPurgeSpeed,
+                        ),
+                        value = options.multiMaterial.wipeTowerMaxPurgeSpeed,
+                        range = 10f..max(300f, options.multiMaterial.wipeTowerMaxPurgeSpeed),
+                        steps = (max(300f, options.multiMaterial.wipeTowerMaxPurgeSpeed) - 10f)
+                            .roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        wipeTowerMaxPurgeSpeed = it.roundToInt().toFloat(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingChoices(
+                        settingLabel = stringResource(R.string.wipe_tower_wall_type),
+                        entries = listOf("rectangle", "cone", "rib"),
+                        selected = options.multiMaterial.wipeTowerWallType,
+                        optionLabel = {
+                            when (it) {
+                                "cone" -> stringResource(R.string.wipe_tower_wall_cone)
+                                "rib" -> stringResource(R.string.wipe_tower_wall_rib)
+                                else -> stringResource(R.string.wipe_tower_wall_rectangle)
+                            }
+                        },
+                        onSelected = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(wipeTowerWallType = it),
+                                ),
+                            )
+                        },
+                    )
+                    if (options.multiMaterial.wipeTowerWallType == "cone" || settingsQuery.isNotBlank()) {
+                        SettingSlider(
+                            label = stringResource(R.string.wipe_tower_cone_angle),
+                            valueText = stringResource(
+                                R.string.degrees_value,
+                                options.multiMaterial.wipeTowerConeAngle,
+                            ),
+                            value = options.multiMaterial.wipeTowerConeAngle.coerceIn(0f, 90f),
+                            range = 0f..90f,
+                            steps = 89,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        multiMaterial = options.multiMaterial.copy(
+                                            wipeTowerConeAngle = it.roundToInt().toFloat(),
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                    }
+                    if (options.multiMaterial.wipeTowerWallType == "rib" || settingsQuery.isNotBlank()) {
+                        SettingSlider(
+                            label = stringResource(R.string.wipe_tower_extra_rib_length),
+                            valueText = stringResource(
+                                R.string.millimeters_value_precise,
+                                options.multiMaterial.wipeTowerExtraRibLength,
+                            ),
+                            value = options.multiMaterial.wipeTowerExtraRibLength,
+                            range = min(-300f, options.multiMaterial.wipeTowerExtraRibLength)..
+                                max(300f, options.multiMaterial.wipeTowerExtraRibLength),
+                            steps = (
+                                (max(300f, options.multiMaterial.wipeTowerExtraRibLength) -
+                                    min(-300f, options.multiMaterial.wipeTowerExtraRibLength)) * 2f
+                            ).roundToInt().coerceAtLeast(2) - 1,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        multiMaterial = options.multiMaterial.copy(
+                                            wipeTowerExtraRibLength = (it * 2f).roundToInt() / 2f,
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.wipe_tower_rib_width),
+                            valueText = stringResource(
+                                R.string.millimeters_value_precise,
+                                options.multiMaterial.wipeTowerRibWidth,
+                            ),
+                            value = options.multiMaterial.wipeTowerRibWidth,
+                            range = 0f..max(50f, options.multiMaterial.wipeTowerRibWidth),
+                            steps = (max(50f, options.multiMaterial.wipeTowerRibWidth) * 2f)
+                                .roundToInt().coerceAtLeast(2) - 1,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        multiMaterial = options.multiMaterial.copy(
+                                            wipeTowerRibWidth = (it * 2f).roundToInt() / 2f,
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                        SettingsSwitch(
+                            label = stringResource(R.string.wipe_tower_fillet_wall),
+                            checked = options.multiMaterial.wipeTowerFilletWall,
+                            onCheckedChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        multiMaterial = options.multiMaterial.copy(wipeTowerFilletWall = it),
+                                    ),
+                                )
+                            },
+                        )
+                    }
                     SettingsSwitch(
                         label = stringResource(R.string.wipe_tower_no_sparse_layers),
                         checked = options.multiMaterial.wipeTowerNoSparseLayers,
@@ -3354,6 +3547,19 @@ private fun SlicingSettingsSheet(
                                 options.copy(
                                     multiMaterial = options.multiMaterial.copy(
                                         wipeTowerNoSparseLayers = it,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingsSwitch(
+                        label = stringResource(R.string.single_extruder_multi_material_priming),
+                        checked = options.multiMaterial.singleExtruderMultiMaterialPriming,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        singleExtruderMultiMaterialPriming = it,
                                     ),
                                 ),
                             )

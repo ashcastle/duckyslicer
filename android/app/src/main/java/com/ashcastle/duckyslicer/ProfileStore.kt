@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 35
+internal const val USER_PROFILE_SCHEMA_VERSION = 36
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -636,6 +636,17 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("primeVolume", multiMaterial.primeVolume)
     .put("primeTowerBrimWidth", multiMaterial.primeTowerBrimWidth)
     .put("wipeTowerNoSparseLayers", multiMaterial.wipeTowerNoSparseLayers)
+    .put("wipeTowerRotationAngle", multiMaterial.wipeTowerRotationAngle)
+    .put("wipeTowerBridging", multiMaterial.wipeTowerBridging)
+    .put("wipeTowerExtraSpacing", multiMaterial.wipeTowerExtraSpacing)
+    .put("wipeTowerExtraFlow", multiMaterial.wipeTowerExtraFlow)
+    .put("wipeTowerMaxPurgeSpeed", multiMaterial.wipeTowerMaxPurgeSpeed)
+    .put("wipeTowerWallType", multiMaterial.wipeTowerWallType)
+    .put("wipeTowerConeAngle", multiMaterial.wipeTowerConeAngle)
+    .put("wipeTowerExtraRibLength", multiMaterial.wipeTowerExtraRibLength)
+    .put("wipeTowerRibWidth", multiMaterial.wipeTowerRibWidth)
+    .put("wipeTowerFilletWall", multiMaterial.wipeTowerFilletWall)
+    .put("singleExtruderMultiMaterialPriming", multiMaterial.singleExtruderMultiMaterialPriming)
     .put("flushIntoInfill", multiMaterial.flushIntoInfill)
     .put("flushIntoSupport", multiMaterial.flushIntoSupport)
     .put("flushIntoObjects", multiMaterial.flushIntoObjects)
@@ -967,6 +978,17 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
             primeVolume = optDouble("primeVolume", 45.0).toFloat(),
             primeTowerBrimWidth = optDouble("primeTowerBrimWidth", 3.0).toFloat(),
             wipeTowerNoSparseLayers = optBoolean("wipeTowerNoSparseLayers"),
+            wipeTowerRotationAngle = optDouble("wipeTowerRotationAngle", 0.0).toFloat(),
+            wipeTowerBridging = optDouble("wipeTowerBridging", 10.0).toFloat(),
+            wipeTowerExtraSpacing = optDouble("wipeTowerExtraSpacing", 100.0).toFloat(),
+            wipeTowerExtraFlow = optDouble("wipeTowerExtraFlow", 100.0).toFloat(),
+            wipeTowerMaxPurgeSpeed = optDouble("wipeTowerMaxPurgeSpeed", 90.0).toFloat(),
+            wipeTowerWallType = optString("wipeTowerWallType", "rectangle"),
+            wipeTowerConeAngle = optDouble("wipeTowerConeAngle", 30.0).toFloat(),
+            wipeTowerExtraRibLength = optDouble("wipeTowerExtraRibLength", 0.0).toFloat(),
+            wipeTowerRibWidth = optDouble("wipeTowerRibWidth", 8.0).toFloat(),
+            wipeTowerFilletWall = optBoolean("wipeTowerFilletWall", true),
+            singleExtruderMultiMaterialPriming = optBoolean("singleExtruderMultiMaterialPriming"),
             flushIntoInfill = optBoolean("flushIntoInfill"),
             flushIntoSupport = optBoolean("flushIntoSupport", true),
             flushIntoObjects = optBoolean("flushIntoObjects"),

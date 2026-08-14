@@ -122,6 +122,18 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var primeVolume: Float = base.multiMaterial.primeVolume
     private var primeTowerBrimWidth: Float = base.multiMaterial.primeTowerBrimWidth
     private var wipeTowerNoSparseLayers: Boolean = base.multiMaterial.wipeTowerNoSparseLayers
+    private var wipeTowerRotationAngle: Float = base.multiMaterial.wipeTowerRotationAngle
+    private var wipeTowerBridging: Float = base.multiMaterial.wipeTowerBridging
+    private var wipeTowerExtraSpacing: Float = base.multiMaterial.wipeTowerExtraSpacing
+    private var wipeTowerExtraFlow: Float = base.multiMaterial.wipeTowerExtraFlow
+    private var wipeTowerMaxPurgeSpeed: Float = base.multiMaterial.wipeTowerMaxPurgeSpeed
+    private var wipeTowerWallType: String = base.multiMaterial.wipeTowerWallType
+    private var wipeTowerConeAngle: Float = base.multiMaterial.wipeTowerConeAngle
+    private var wipeTowerExtraRibLength: Float = base.multiMaterial.wipeTowerExtraRibLength
+    private var wipeTowerRibWidth: Float = base.multiMaterial.wipeTowerRibWidth
+    private var wipeTowerFilletWall: Boolean = base.multiMaterial.wipeTowerFilletWall
+    private var singleExtruderMultiMaterialPriming: Boolean =
+        base.multiMaterial.singleExtruderMultiMaterialPriming
     private var flushIntoInfill: Boolean = base.multiMaterial.flushIntoInfill
     private var flushIntoSupport: Boolean = base.multiMaterial.flushIntoSupport
     private var flushIntoObjects: Boolean = base.multiMaterial.flushIntoObjects
@@ -483,6 +495,17 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         primeVolume = input.readFloat()
         primeTowerBrimWidth = input.readFloat()
         wipeTowerNoSparseLayers = input.readCatalogBoolean()
+        wipeTowerRotationAngle = input.readFloat()
+        wipeTowerBridging = input.readFloat()
+        wipeTowerExtraSpacing = input.readFloat()
+        wipeTowerExtraFlow = input.readFloat()
+        wipeTowerMaxPurgeSpeed = input.readFloat()
+        wipeTowerWallType = input.readCatalogString()
+        wipeTowerConeAngle = input.readFloat()
+        wipeTowerExtraRibLength = input.readFloat()
+        wipeTowerRibWidth = input.readFloat()
+        wipeTowerFilletWall = input.readCatalogBoolean()
+        singleExtruderMultiMaterialPriming = input.readCatalogBoolean()
         flushIntoInfill = input.readCatalogBoolean()
         flushIntoSupport = input.readCatalogBoolean()
         flushIntoObjects = input.readCatalogBoolean()
@@ -657,6 +680,17 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             primeVolume = primeVolume,
             primeTowerBrimWidth = primeTowerBrimWidth,
             wipeTowerNoSparseLayers = wipeTowerNoSparseLayers,
+            wipeTowerRotationAngle = wipeTowerRotationAngle,
+            wipeTowerBridging = wipeTowerBridging,
+            wipeTowerExtraSpacing = wipeTowerExtraSpacing,
+            wipeTowerExtraFlow = wipeTowerExtraFlow,
+            wipeTowerMaxPurgeSpeed = wipeTowerMaxPurgeSpeed,
+            wipeTowerWallType = wipeTowerWallType,
+            wipeTowerConeAngle = wipeTowerConeAngle,
+            wipeTowerExtraRibLength = wipeTowerExtraRibLength,
+            wipeTowerRibWidth = wipeTowerRibWidth,
+            wipeTowerFilletWall = wipeTowerFilletWall,
+            singleExtruderMultiMaterialPriming = singleExtruderMultiMaterialPriming,
             flushIntoInfill = flushIntoInfill,
             flushIntoSupport = flushIntoSupport,
             flushIntoObjects = flushIntoObjects,
@@ -994,6 +1028,17 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("primeVolume", BINARY_FLOAT),
     BinaryField("primeTowerBrimWidth", BINARY_FLOAT),
     BinaryField("wipeTowerNoSparseLayers", BINARY_BOOL),
+    BinaryField("wipeTowerRotationAngle", BINARY_FLOAT),
+    BinaryField("wipeTowerBridging", BINARY_FLOAT),
+    BinaryField("wipeTowerExtraSpacing", BINARY_FLOAT),
+    BinaryField("wipeTowerExtraFlow", BINARY_FLOAT),
+    BinaryField("wipeTowerMaxPurgeSpeed", BINARY_FLOAT),
+    BinaryField("wipeTowerWallType", BINARY_STRING),
+    BinaryField("wipeTowerConeAngle", BINARY_FLOAT),
+    BinaryField("wipeTowerExtraRibLength", BINARY_FLOAT),
+    BinaryField("wipeTowerRibWidth", BINARY_FLOAT),
+    BinaryField("wipeTowerFilletWall", BINARY_BOOL),
+    BinaryField("singleExtruderMultiMaterialPriming", BINARY_BOOL),
     BinaryField("flushIntoInfill", BINARY_BOOL),
     BinaryField("flushIntoSupport", BINARY_BOOL),
     BinaryField("flushIntoObjects", BINARY_BOOL),

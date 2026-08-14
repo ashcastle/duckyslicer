@@ -265,6 +265,17 @@ data class MultiMaterialSettings(
     val primeVolume: Float = 45f,
     val primeTowerBrimWidth: Float = 3f,
     val wipeTowerNoSparseLayers: Boolean = false,
+    val wipeTowerRotationAngle: Float = 0f,
+    val wipeTowerBridging: Float = 10f,
+    val wipeTowerExtraSpacing: Float = 100f,
+    val wipeTowerExtraFlow: Float = 100f,
+    val wipeTowerMaxPurgeSpeed: Float = 90f,
+    val wipeTowerWallType: String = "rectangle",
+    val wipeTowerConeAngle: Float = 30f,
+    val wipeTowerExtraRibLength: Float = 0f,
+    val wipeTowerRibWidth: Float = 8f,
+    val wipeTowerFilletWall: Boolean = true,
+    val singleExtruderMultiMaterialPriming: Boolean = false,
     val flushIntoInfill: Boolean = false,
     val flushIntoSupport: Boolean = true,
     val flushIntoObjects: Boolean = false,
@@ -636,7 +647,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 34,
+    val schemaVersion: Int = 35,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1525,6 +1536,17 @@ data class SliceOptions(
             native.primeVolume = multiMaterial.primeVolume
             native.primeTowerBrimWidth = multiMaterial.primeTowerBrimWidth
             native.wipeTowerNoSparseLayers = multiMaterial.wipeTowerNoSparseLayers
+            native.wipeTowerRotationAngle = multiMaterial.wipeTowerRotationAngle
+            native.wipeTowerBridging = multiMaterial.wipeTowerBridging
+            native.wipeTowerExtraSpacing = multiMaterial.wipeTowerExtraSpacing
+            native.wipeTowerExtraFlow = multiMaterial.wipeTowerExtraFlow
+            native.wipeTowerMaxPurgeSpeed = multiMaterial.wipeTowerMaxPurgeSpeed
+            native.wipeTowerWallType = multiMaterial.wipeTowerWallType
+            native.wipeTowerConeAngle = multiMaterial.wipeTowerConeAngle
+            native.wipeTowerExtraRibLength = multiMaterial.wipeTowerExtraRibLength
+            native.wipeTowerRibWidth = multiMaterial.wipeTowerRibWidth
+            native.wipeTowerFilletWall = multiMaterial.wipeTowerFilletWall
+            native.singleExtruderMultiMaterialPriming = multiMaterial.singleExtruderMultiMaterialPriming
             native.flushIntoInfill = multiMaterial.flushIntoInfill
             native.flushIntoSupport = multiMaterial.flushIntoSupport
             native.flushIntoObjects = multiMaterial.flushIntoObjects

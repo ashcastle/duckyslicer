@@ -54,6 +54,17 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "prime_volume": "61.5",
                 "prime_tower_brim_width": "4.5",
                 "wipe_tower_no_sparse_layers": "1",
+                "wipe_tower_rotation_angle": "73",
+                "wipe_tower_bridging": "12.5",
+                "wipe_tower_extra_spacing": "145%",
+                "wipe_tower_extra_flow": "118%",
+                "wipe_tower_max_purge_speed": "137",
+                "wipe_tower_wall_type": "rib",
+                "wipe_tower_cone_angle": "42",
+                "wipe_tower_extra_rib_length": "9.5",
+                "wipe_tower_rib_width": "11",
+                "wipe_tower_fillet_wall": "0",
+                "single_extruder_multi_material_priming": "1",
                 "flush_into_infill": "1",
                 "flush_into_support": "0",
                 "flush_into_objects": "1",
@@ -88,6 +99,17 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(61.5, profile["primeVolume"])
         self.assertEqual(4.5, profile["primeTowerBrimWidth"])
         self.assertTrue(profile["wipeTowerNoSparseLayers"])
+        self.assertEqual(73.0, profile["wipeTowerRotationAngle"])
+        self.assertEqual(12.5, profile["wipeTowerBridging"])
+        self.assertEqual(145.0, profile["wipeTowerExtraSpacing"])
+        self.assertEqual(118.0, profile["wipeTowerExtraFlow"])
+        self.assertEqual(137.0, profile["wipeTowerMaxPurgeSpeed"])
+        self.assertEqual("rib", profile["wipeTowerWallType"])
+        self.assertEqual(42.0, profile["wipeTowerConeAngle"])
+        self.assertEqual(9.5, profile["wipeTowerExtraRibLength"])
+        self.assertEqual(11.0, profile["wipeTowerRibWidth"])
+        self.assertFalse(profile["wipeTowerFilletWall"])
+        self.assertTrue(profile["singleExtruderMultiMaterialPriming"])
         self.assertTrue(profile["flushIntoInfill"])
         self.assertFalse(profile["flushIntoSupport"])
         self.assertTrue(profile["flushIntoObjects"])

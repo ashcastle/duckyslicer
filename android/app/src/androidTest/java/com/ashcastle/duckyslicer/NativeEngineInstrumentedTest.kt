@@ -1073,6 +1073,17 @@ class NativeEngineInstrumentedTest {
                     primeVolume = 58f,
                     primeTowerBrimWidth = 5.5f,
                     wipeTowerNoSparseLayers = true,
+                    wipeTowerRotationAngle = 73f,
+                    wipeTowerBridging = 12.5f,
+                    wipeTowerExtraSpacing = 145f,
+                    wipeTowerExtraFlow = 118f,
+                    wipeTowerMaxPurgeSpeed = 137f,
+                    wipeTowerWallType = "rib",
+                    wipeTowerConeAngle = 42f,
+                    wipeTowerExtraRibLength = 9.5f,
+                    wipeTowerRibWidth = 11f,
+                    wipeTowerFilletWall = false,
+                    singleExtruderMultiMaterialPriming = true,
                     flushIntoInfill = true,
                     flushIntoSupport = false,
                     flushIntoObjects = true,
@@ -1236,6 +1247,17 @@ class NativeEngineInstrumentedTest {
         assertEquals(58f, restored.slicing.last().multiMaterial.primeVolume)
         assertEquals(5.5f, restored.slicing.last().multiMaterial.primeTowerBrimWidth)
         assertTrue(restored.slicing.last().multiMaterial.wipeTowerNoSparseLayers)
+        assertEquals(73f, restored.slicing.last().multiMaterial.wipeTowerRotationAngle)
+        assertEquals(12.5f, restored.slicing.last().multiMaterial.wipeTowerBridging)
+        assertEquals(145f, restored.slicing.last().multiMaterial.wipeTowerExtraSpacing)
+        assertEquals(118f, restored.slicing.last().multiMaterial.wipeTowerExtraFlow)
+        assertEquals(137f, restored.slicing.last().multiMaterial.wipeTowerMaxPurgeSpeed)
+        assertEquals("rib", restored.slicing.last().multiMaterial.wipeTowerWallType)
+        assertEquals(42f, restored.slicing.last().multiMaterial.wipeTowerConeAngle)
+        assertEquals(9.5f, restored.slicing.last().multiMaterial.wipeTowerExtraRibLength)
+        assertEquals(11f, restored.slicing.last().multiMaterial.wipeTowerRibWidth)
+        assertFalse(restored.slicing.last().multiMaterial.wipeTowerFilletWall)
+        assertTrue(restored.slicing.last().multiMaterial.singleExtruderMultiMaterialPriming)
         assertTrue(restored.slicing.last().multiMaterial.flushIntoInfill)
         assertFalse(restored.slicing.last().multiMaterial.flushIntoSupport)
         assertTrue(restored.slicing.last().multiMaterial.flushIntoObjects)
@@ -1438,7 +1460,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(34, catalog.schemaVersion)
+        assertEquals(35, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1480,6 +1502,11 @@ class NativeEngineInstrumentedTest {
                 it.multiMaterial.primeVolume != 45f ||
                     it.multiMaterial.primeTowerBrimWidth != 3f ||
                     it.multiMaterial.wipeTowerNoSparseLayers ||
+                    it.multiMaterial.wipeTowerRotationAngle != 0f ||
+                    it.multiMaterial.wipeTowerExtraSpacing != 100f ||
+                    it.multiMaterial.wipeTowerWallType != "rectangle" ||
+                    it.multiMaterial.wipeTowerConeAngle != 30f ||
+                    it.multiMaterial.singleExtruderMultiMaterialPriming ||
                     !it.multiMaterial.flushIntoSupport ||
                     it.multiMaterial.oozePrevention ||
                     it.multiMaterial.interfaceShells
@@ -2117,6 +2144,17 @@ class NativeEngineInstrumentedTest {
                     primeVolume = 61.5f,
                     primeTowerBrimWidth = 4.5f,
                     wipeTowerNoSparseLayers = true,
+                    wipeTowerRotationAngle = 73f,
+                    wipeTowerBridging = 12.5f,
+                    wipeTowerExtraSpacing = 145f,
+                    wipeTowerExtraFlow = 118f,
+                    wipeTowerMaxPurgeSpeed = 137f,
+                    wipeTowerWallType = "rib",
+                    wipeTowerConeAngle = 42f,
+                    wipeTowerExtraRibLength = 9.5f,
+                    wipeTowerRibWidth = 11f,
+                    wipeTowerFilletWall = false,
+                    singleExtruderMultiMaterialPriming = true,
                     flushIntoInfill = true,
                     flushIntoSupport = false,
                     flushIntoObjects = false,
@@ -2154,6 +2192,20 @@ class NativeEngineInstrumentedTest {
         assertTrue("Prime volume must reach Orca", gcode.contains("; prime_volume = 61.5"))
         assertTrue("Tower brim width must reach Orca", gcode.contains("; prime_tower_brim_width = 4.5"))
         assertTrue("Sparse tower layers must remain disabled", gcode.contains("; wipe_tower_no_sparse_layers = 1"))
+        assertTrue("Tower rotation must reach Orca", gcode.contains("; wipe_tower_rotation_angle = 73"))
+        assertTrue("Tower bridging must reach Orca", gcode.contains("; wipe_tower_bridging = 12.5"))
+        assertTrue("Tower spacing must reach Orca", gcode.contains("; wipe_tower_extra_spacing = 145%"))
+        assertTrue("Tower flow must reach Orca", gcode.contains("; wipe_tower_extra_flow = 118%"))
+        assertTrue("Tower purge speed must reach Orca", gcode.contains("; wipe_tower_max_purge_speed = 137"))
+        assertTrue("Tower wall type must reach Orca", gcode.contains("; wipe_tower_wall_type = rib"))
+        assertTrue("Tower cone angle must reach Orca", gcode.contains("; wipe_tower_cone_angle = 42"))
+        assertTrue("Tower rib length must reach Orca", gcode.contains("; wipe_tower_extra_rib_length = 9.5"))
+        assertTrue("Tower rib width must reach Orca", gcode.contains("; wipe_tower_rib_width = 11"))
+        assertTrue("Tower rib fillet must reach Orca", gcode.contains("; wipe_tower_fillet_wall = 0"))
+        assertTrue(
+            "All-extruder priming must reach Orca",
+            gcode.contains("; single_extruder_multi_material_priming = 1"),
+        )
         assertTrue("Infill flushing must reach Orca", gcode.contains("; flush_into_infill = 1"))
         assertTrue("Support flushing must reach Orca", gcode.contains("; flush_into_support = 0"))
         assertTrue("Object flushing must remain disabled", gcode.contains("; flush_into_objects = 0"))
@@ -2207,6 +2259,20 @@ class NativeEngineInstrumentedTest {
             ),
         )
         val defaultsGcode = defaultsOutcome.output.readText()
+        assertTrue("Tower rotation must default to zero", defaultsGcode.contains("; wipe_tower_rotation_angle = 0"))
+        assertTrue("Tower bridging must retain its default", defaultsGcode.contains("; wipe_tower_bridging = 10"))
+        assertTrue("Tower spacing must retain its default", defaultsGcode.contains("; wipe_tower_extra_spacing = 100%"))
+        assertTrue("Tower flow must retain its default", defaultsGcode.contains("; wipe_tower_extra_flow = 100%"))
+        assertTrue("Tower purge speed must retain its default", defaultsGcode.contains("; wipe_tower_max_purge_speed = 90"))
+        assertTrue("Tower wall type must default to rectangle", defaultsGcode.contains("; wipe_tower_wall_type = rectangle"))
+        assertTrue("Tower cone angle must retain its default", defaultsGcode.contains("; wipe_tower_cone_angle = 30"))
+        assertTrue("Tower rib length must default to zero", defaultsGcode.contains("; wipe_tower_extra_rib_length = 0"))
+        assertTrue("Tower rib width must retain its default", defaultsGcode.contains("; wipe_tower_rib_width = 8"))
+        assertTrue("Tower rib fillet must default on", defaultsGcode.contains("; wipe_tower_fillet_wall = 1"))
+        assertTrue(
+            "All-extruder priming must default off",
+            defaultsGcode.contains("; single_extruder_multi_material_priming = 0"),
+        )
         assertTrue("Infill flushing must default off", defaultsGcode.contains("; flush_into_infill = 0"))
         assertTrue("Support flushing must default on", defaultsGcode.contains("; flush_into_support = 1"))
         assertTrue("Object flushing must default off", defaultsGcode.contains("; flush_into_objects = 0"))

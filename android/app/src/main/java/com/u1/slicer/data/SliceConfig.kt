@@ -264,6 +264,17 @@ data class SliceConfig(
     @JvmField var flushIntoInfill: Boolean = false
     @JvmField var flushIntoSupport: Boolean = true
     @JvmField var flushIntoObjects: Boolean = false
+    @JvmField var wipeTowerRotationAngle: Float = 0f
+    @JvmField var wipeTowerBridging: Float = 10f
+    @JvmField var wipeTowerExtraSpacing: Float = 100f
+    @JvmField var wipeTowerExtraFlow: Float = 100f
+    @JvmField var wipeTowerMaxPurgeSpeed: Float = 90f
+    @JvmField var wipeTowerWallType: String = "rectangle"
+    @JvmField var wipeTowerConeAngle: Float = 30f
+    @JvmField var wipeTowerExtraRibLength: Float = 0f
+    @JvmField var wipeTowerRibWidth: Float = 8f
+    @JvmField var wipeTowerFilletWall: Boolean = true
+    @JvmField var singleExtruderMultiMaterialPriming: Boolean = false
     @JvmField var printSequence: String = "by layer"
     @JvmField var printOrder: String = "default"
     @JvmField var extruderClearanceRadius: Float = 40f

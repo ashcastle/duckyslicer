@@ -226,6 +226,15 @@ internal object ProfileValidation {
             profile.wipeTowerWidth in 10f..300f &&
             profile.multiMaterial.primeVolume in 1f..1_000f &&
             profile.multiMaterial.primeTowerBrimWidth in 0f..100f &&
+            profile.multiMaterial.wipeTowerRotationAngle in 0f..359f &&
+            profile.multiMaterial.wipeTowerBridging in 0f..1_000f &&
+            profile.multiMaterial.wipeTowerExtraSpacing in 1f..1_000f &&
+            profile.multiMaterial.wipeTowerExtraFlow in 1f..1_000f &&
+            profile.multiMaterial.wipeTowerMaxPurgeSpeed in 1f..2_000f &&
+            profile.multiMaterial.wipeTowerWallType in setOf("rectangle", "cone", "rib") &&
+            profile.multiMaterial.wipeTowerConeAngle in 0f..90f &&
+            profile.multiMaterial.wipeTowerExtraRibLength in -1_000f..300f &&
+            profile.multiMaterial.wipeTowerRibWidth in 0f..1_000f &&
             profile.multiMaterial.standbyTemperatureDelta in -500..500 &&
             profile.brimType in setOf(
                 "auto_brim", "brim_ears", "outer_only", "inner_only", "outer_and_inner", "no_brim",

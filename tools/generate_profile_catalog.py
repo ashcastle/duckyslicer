@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 34
+SCHEMA_VERSION = 35
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -787,6 +787,21 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "primeVolume": number(raw.get("prime_volume"), 45),
         "primeTowerBrimWidth": number(raw.get("prime_tower_brim_width"), 3),
         "wipeTowerNoSparseLayers": boolean(raw.get("wipe_tower_no_sparse_layers")),
+        "wipeTowerRotationAngle": number(raw.get("wipe_tower_rotation_angle"), 0),
+        "wipeTowerBridging": number(raw.get("wipe_tower_bridging"), 10),
+        "wipeTowerExtraSpacing": number(raw.get("wipe_tower_extra_spacing"), 100),
+        "wipeTowerExtraFlow": number(raw.get("wipe_tower_extra_flow"), 100),
+        "wipeTowerMaxPurgeSpeed": number(raw.get("wipe_tower_max_purge_speed"), 90),
+        "wipeTowerWallType": enum_value(
+            raw.get("wipe_tower_wall_type"), {"rectangle", "cone", "rib"}, "rectangle"
+        ),
+        "wipeTowerConeAngle": number(raw.get("wipe_tower_cone_angle"), 30),
+        "wipeTowerExtraRibLength": number(raw.get("wipe_tower_extra_rib_length"), 0),
+        "wipeTowerRibWidth": number(raw.get("wipe_tower_rib_width"), 8),
+        "wipeTowerFilletWall": boolean(raw.get("wipe_tower_fillet_wall"), True),
+        "singleExtruderMultiMaterialPriming": boolean(
+            raw.get("single_extruder_multi_material_priming")
+        ),
         "flushIntoInfill": boolean(raw.get("flush_into_infill")),
         "flushIntoSupport": boolean(raw.get("flush_into_support"), True),
         "flushIntoObjects": boolean(raw.get("flush_into_objects")),

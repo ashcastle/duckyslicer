@@ -27,6 +27,17 @@ class SliceOptionsPersistenceTest {
                     primeVolume = 61.5f,
                     primeTowerBrimWidth = 4.5f,
                     wipeTowerNoSparseLayers = true,
+                    wipeTowerRotationAngle = 73f,
+                    wipeTowerBridging = 12.5f,
+                    wipeTowerExtraSpacing = 145f,
+                    wipeTowerExtraFlow = 118f,
+                    wipeTowerMaxPurgeSpeed = 137f,
+                    wipeTowerWallType = "rib",
+                    wipeTowerConeAngle = 42f,
+                    wipeTowerExtraRibLength = 9.5f,
+                    wipeTowerRibWidth = 11f,
+                    wipeTowerFilletWall = false,
+                    singleExtruderMultiMaterialPriming = true,
                     flushIntoInfill = true,
                     flushIntoSupport = false,
                     flushIntoObjects = true,
@@ -62,6 +73,17 @@ class SliceOptionsPersistenceTest {
         assertEquals(61.5f, native.primeVolume)
         assertEquals(4.5f, native.primeTowerBrimWidth)
         assertEquals(true, native.wipeTowerNoSparseLayers)
+        assertEquals(73f, native.wipeTowerRotationAngle)
+        assertEquals(12.5f, native.wipeTowerBridging)
+        assertEquals(145f, native.wipeTowerExtraSpacing)
+        assertEquals(118f, native.wipeTowerExtraFlow)
+        assertEquals(137f, native.wipeTowerMaxPurgeSpeed)
+        assertEquals("rib", native.wipeTowerWallType)
+        assertEquals(42f, native.wipeTowerConeAngle)
+        assertEquals(9.5f, native.wipeTowerExtraRibLength)
+        assertEquals(11f, native.wipeTowerRibWidth)
+        assertEquals(false, native.wipeTowerFilletWall)
+        assertEquals(true, native.singleExtruderMultiMaterialPriming)
         assertEquals(true, native.oozePrevention)
         assertEquals(-35, native.standbyTemperatureDelta)
         assertEquals(true, native.interfaceShells)
@@ -510,6 +532,17 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             primeVolume = 58f,
             primeTowerBrimWidth = 5.5f,
             wipeTowerNoSparseLayers = true,
+            wipeTowerRotationAngle = 73f,
+            wipeTowerBridging = 12.5f,
+            wipeTowerExtraSpacing = 145f,
+            wipeTowerExtraFlow = 118f,
+            wipeTowerMaxPurgeSpeed = 137f,
+            wipeTowerWallType = "rib",
+            wipeTowerConeAngle = 42f,
+            wipeTowerExtraRibLength = 9.5f,
+            wipeTowerRibWidth = 11f,
+            wipeTowerFilletWall = false,
+            singleExtruderMultiMaterialPriming = true,
             flushIntoInfill = true,
             flushIntoSupport = false,
             flushIntoObjects = true,
