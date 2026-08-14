@@ -1513,6 +1513,7 @@ private fun SlicingSettingsSheet(
                             value = options.scarfSeam.angleThreshold.toFloat(),
                             range = 0f..180f,
                             steps = 179,
+                            enabled = options.brimWidth > 0f,
                             onValueChange = {
                                 onOptionsChanged(
                                     options.copy(
@@ -4380,6 +4381,52 @@ private fun SlicingSettingsSheet(
                         steps = (max(2f, options.brimObjectGap) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
                         onValueChange = { onOptionsChanged(options.copy(brimObjectGap = (it * 20f).roundToInt() / 20f)) },
                     )
+                    if (options.brimType == "brim_ears" || settingsQuery.isNotBlank()) {
+                        SettingSlider(
+                            label = stringResource(R.string.brim_ear_maximum_angle),
+                            valueText = stringResource(
+                                R.string.degrees_value,
+                                options.precision.brimEars.maximumAngle,
+                            ),
+                            value = options.precision.brimEars.maximumAngle,
+                            range = 0f..180f,
+                            steps = 179,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        precision = options.precision.copy(
+                                            brimEars = options.precision.brimEars.copy(
+                                                maximumAngle = it.roundToInt().toFloat(),
+                                            ),
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.brim_ear_detection_radius),
+                            valueText = stringResource(
+                                R.string.millimeters_value_precise,
+                                options.precision.brimEars.detectionRadius,
+                            ),
+                            value = options.precision.brimEars.detectionRadius,
+                            range = 0f..max(20f, options.precision.brimEars.detectionRadius),
+                            steps = (max(20f, options.precision.brimEars.detectionRadius) * 10f)
+                                .roundToInt().coerceAtLeast(2) - 1,
+                            enabled = options.brimWidth > 0f,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        precision = options.precision.copy(
+                                            brimEars = options.precision.brimEars.copy(
+                                                detectionRadius = (it * 10f).roundToInt() / 10f,
+                                            ),
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                    }
                 }
                 SettingsGroupTitle(stringResource(R.string.raft))
                 SettingSlider(
@@ -5076,6 +5123,7 @@ internal fun SettingSlider(
     range: ClosedFloatingPointRange<Float>,
     steps: Int,
     onValueChange: (Float) -> Unit,
+    enabled: Boolean = true,
 ) {
     if (!settingMatchesQuery(label)) return
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -5086,6 +5134,7 @@ internal fun SettingSlider(
         Slider(
             value = value.coerceIn(range.start, range.endInclusive),
             onValueChange = onValueChange,
+            enabled = enabled,
             modifier = Modifier.semantics {
                 contentDescription = label
                 stateDescription = valueText

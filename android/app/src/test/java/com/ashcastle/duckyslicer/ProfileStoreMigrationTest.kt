@@ -46,6 +46,7 @@ class ProfileStoreMigrationTest {
             assertEquals("V3 Slicing", restoredSlicing.name)
             assertEquals(PrintableOverhangSettings(), restoredSlicing.printableOverhangs)
             assertEquals(0, restoredSlicing.gcodeSettings.slowDownLayers)
+            assertEquals(BrimEarSettings(), restoredSlicing.precision.brimEars)
         } finally {
             file.delete()
         }

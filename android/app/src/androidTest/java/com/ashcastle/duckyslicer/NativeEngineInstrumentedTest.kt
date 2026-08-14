@@ -228,6 +228,42 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun automaticBrimEarGeometryReachesTheRealEngine() {
+        val base = SliceOptions()
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                brimType = "brim_ears",
+                brimWidth = 6f,
+                brimObjectGap = 0f,
+                precision = PrecisionSettings(
+                    brimEars = BrimEarSettings(maximumAngle = 0f, detectionRadius = 1.6f),
+                ),
+            )
+        val disabled = OnDeviceSlicer.slice(fixtureModel(), base)
+        val enabled = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.copy(
+                precision = base.precision.copy(
+                    brimEars = base.precision.brimEars.copy(maximumAngle = 125f),
+                ),
+            ),
+        )
+        try {
+            val gcode = enabled.output.readText()
+            assertTrue(gcode.contains("; brim_type = brim_ears"))
+            assertTrue(gcode.contains("; brim_ears_max_angle = 125"))
+            assertTrue(gcode.contains("; brim_ears_detection_length = 1.6"))
+            assertTrue(
+                "Automatic Brim ears must add actual extrusion geometry when enabled",
+                enabled.filamentMm > disabled.filamentMm,
+            )
+        } finally {
+            disabled.output.delete()
+            enabled.output.delete()
+        }
+    }
+
+    @Test
     fun gradualInitialLayerSpeedChangesRealPrintTime() {
         val base = SliceOptions()
             .selectQuality(QualityProfile.DRAFT)
@@ -1324,6 +1360,7 @@ class NativeEngineInstrumentedTest {
                         maximumAngle = 64f,
                         holeArea = 250f,
                     ),
+                    brimEars = BrimEarSettings(maximumAngle = 133f, detectionRadius = 1.9f),
                 ),
                 minimumWallLengthFactor = 0.8f,
                 wallSequence = "outer-inner",
@@ -1597,6 +1634,8 @@ class NativeEngineInstrumentedTest {
         assertEquals("outer_and_inner", restored.slicing.last().brimType)
         assertEquals(6.5f, restored.slicing.last().brimWidth)
         assertEquals(0.16f, restored.slicing.last().brimObjectGap)
+        assertEquals(133f, restored.slicing.last().precision.brimEars.maximumAngle)
+        assertEquals(1.9f, restored.slicing.last().precision.brimEars.detectionRadius)
         assertEquals(3, restored.slicing.last().raftLayers)
         assertEquals(0.14f, restored.slicing.last().raftContactDistance)
         assertEquals(2.6f, restored.slicing.last().raftExpansion)
@@ -1641,7 +1680,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(41, catalog.schemaVersion)
+        assertEquals(42, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1815,6 +1854,8 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.brimType == "no_brim" })
         assertTrue(catalog.slicing.any { it.brimType == "outer_only" })
         assertTrue(catalog.slicing.any { it.brimObjectGap == 0.1f })
+        assertTrue(catalog.slicing.all { it.precision.brimEars.maximumAngle == 125f })
+        assertTrue(catalog.slicing.all { it.precision.brimEars.detectionRadius == 1f })
         assertTrue(catalog.slicing.any { it.skirtHeight > 1 })
         assertTrue(catalog.slicing.any { it.minimumSkirtLength > 0f })
         assertTrue(catalog.slicing.any { it.raftFirstLayerExpansion > 2f })
@@ -2874,6 +2915,7 @@ class NativeEngineInstrumentedTest {
                     preciseZHeight = true,
                     minimumWallWidth = 71f,
                     firstLayerMinimumWallWidth = 119f,
+                    brimEars = BrimEarSettings(maximumAngle = 136f, detectionRadius = 1.7f),
                 ),
                 seamPosition = "nearest",
                 staggeredInnerSeams = true,
@@ -3000,6 +3042,8 @@ class NativeEngineInstrumentedTest {
         assertTrue("Brim topology must reach Orca", gcode.contains("; brim_type = outer_and_inner"))
         assertTrue("Brim width must reach Orca", gcode.contains("; brim_width = 6"))
         assertTrue("Brim gap must reach Orca", gcode.contains("; brim_object_gap = 0.17"))
+        assertTrue("Brim ear angle must reach Orca", gcode.contains("; brim_ears_max_angle = 136"))
+        assertTrue("Brim ear radius must reach Orca", gcode.contains("; brim_ears_detection_length = 1.7"))
         assertTrue("Raft layer count must reach Orca", gcode.contains("; raft_layers = 2"))
         assertTrue("Raft contact distance must reach Orca", gcode.contains("; raft_contact_distance = 0.16"))
         assertTrue("Raft expansion must reach Orca", gcode.contains("; raft_expansion = 2.7"))

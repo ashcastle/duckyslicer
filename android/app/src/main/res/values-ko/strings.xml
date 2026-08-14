@@ -708,6 +708,8 @@
     <string name="brim_both">안쪽과 바깥쪽</string>
     <string name="brim_none">사용 안 함</string>
     <string name="brim_object_gap">브림 간격</string>
+    <string name="brim_ear_maximum_angle">브림 이어 최대 각도</string>
+    <string name="brim_ear_detection_radius">브림 이어 감지 반경</string>
     <string name="skirt_height">스커트 높이</string>
     <string name="skirt_speed">스커트 속도</string>
     <string name="minimum_skirt_length">최소 스커트 압출 길이</string>

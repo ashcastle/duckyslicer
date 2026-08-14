@@ -78,6 +78,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var brimType: String = base.brimType
     private var brimWidth: Float = base.brimWidth
     private var brimObjectGap: Float = base.brimObjectGap
+    private var brimEarsMaxAngle: Float = base.precision.brimEars.maximumAngle
+    private var brimEarsDetectionLength: Float = base.precision.brimEars.detectionRadius
     private var raftLayers: Int = base.raftLayers
     private var raftContactDistance: Float = base.raftContactDistance
     private var raftExpansion: Float = base.raftExpansion
@@ -371,6 +373,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         brimType = input.readCatalogString()
         brimWidth = input.readFloat()
         brimObjectGap = input.readFloat()
+        brimEarsMaxAngle = input.readFloat()
+        brimEarsDetectionLength = input.readFloat()
         topSolidLayers = input.readInt()
         bottomSolidLayers = input.readInt()
     }
@@ -833,6 +837,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
                 maximumAngle = makeOverhangPrintableAngle,
                 holeArea = makeOverhangPrintableHoleSize,
             ),
+            brimEars = BrimEarSettings(
+                maximumAngle = brimEarsMaxAngle,
+                detectionRadius = brimEarsDetectionLength,
+            ),
         ),
         seamPosition = seamPosition,
         staggeredInnerSeams = staggeredInnerSeams,
@@ -993,6 +1001,8 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("brimType", BINARY_STRING),
     BinaryField("brimWidth", BINARY_FLOAT),
     BinaryField("brimObjectGap", BINARY_FLOAT),
+    BinaryField("brimEarsMaxAngle", BINARY_FLOAT),
+    BinaryField("brimEarsDetectionLength", BINARY_FLOAT),
     BinaryField("topSolidLayers", BINARY_INT),
     BinaryField("bottomSolidLayers", BINARY_INT),
     BinaryField("topShellThickness", BINARY_FLOAT),

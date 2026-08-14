@@ -203,7 +203,7 @@ index 116a4a85..6b3048bc 100644
      // Temperature
      int nozzle_temp = 210;
      int bed_temp = 60;
-@@ -58,19 +141,160 @@ struct SliceConfig {
+@@ -58,19 +141,162 @@ struct SliceConfig {
  
      // Support
      bool support_enabled = false;
@@ -272,6 +272,8 @@ index 116a4a85..6b3048bc 100644
 -
 -    // Printer bed (Snapmaker U1: 270x270x270mm)
 +    float brim_object_gap = 0.0f;
++    float brim_ears_max_angle = 125.0f;
++    float brim_ears_detection_length = 1.0f;
 +    int raft_layers = 0;
 +    float raft_contact_distance = 0.1f;
 +    float raft_expansion = 1.5f;
@@ -829,7 +831,7 @@ index d93efb7d..fdf9a877 100644
      config.travel_speed = getFloat("travelSpeed");
      config.first_layer_speed = getFloat("firstLayerSpeed");
  
-@@ -108,15 +185,153 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -108,15 +185,155 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.support_enabled = getBool("supportEnabled");
      config.support_type = getString("supportType");
      config.support_angle = getFloat("supportAngle");
@@ -892,6 +894,8 @@ index d93efb7d..fdf9a877 100644
 +    config.brim_type = getString("brimType");
      config.brim_width = getFloat("brimWidth");
 +    config.brim_object_gap = getFloat("brimObjectGap");
++    config.brim_ears_max_angle = getFloat("brimEarsMaxAngle");
++    config.brim_ears_detection_length = getFloat("brimEarsDetectionLength");
 +    config.raft_layers = getInt("raftLayers");
 +    config.raft_contact_distance = getFloat("raftContactDistance");
 +    config.raft_expansion = getFloat("raftExpansion");
@@ -1172,7 +1176,7 @@ index d93efb7d..fdf9a877 100644
      setFloat("travelSpeed", config.travel_speed);
      setFloat("firstLayerSpeed", config.first_layer_speed);
      setInt("nozzleTemp", config.nozzle_temp);
-@@ -247,13 +566,151 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -247,13 +568,153 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setBool("supportEnabled", config.support_enabled);
      setString("supportType", config.support_type);
      setFloat("supportAngle", config.support_angle);
@@ -1234,6 +1238,8 @@ index d93efb7d..fdf9a877 100644
 +    setString("brimType", config.brim_type);
      setFloat("brimWidth", config.brim_width);
 +    setFloat("brimObjectGap", config.brim_object_gap);
++    setFloat("brimEarsMaxAngle", config.brim_ears_max_angle);
++    setFloat("brimEarsDetectionLength", config.brim_ears_detection_length);
 +    setInt("raftLayers", config.raft_layers);
 +    setFloat("raftContactDistance", config.raft_contact_distance);
 +    setFloat("raftExpansion", config.raft_expansion);
@@ -2003,7 +2009,7 @@ index 8d61c9cf..f285d044 100644
          dpc.set_key_value("idle_temperature", new Slic3r::ConfigOptionInts(std::vector<int>(n_ext, 0)));
      }
  
-@@ -646,16 +884,42 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -646,16 +884,46 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      // Skirt/Brim (same key names)
      dpc.set_key_value("skirt_loops", new Slic3r::ConfigOptionInt(config.skirt_loops));
      dpc.set_key_value("skirt_distance", new Slic3r::ConfigOptionFloat(config.skirt_distance));
@@ -2020,6 +2026,10 @@ index 8d61c9cf..f285d044 100644
 -        dpc.set_key_value("brim_type", new Slic3r::ConfigOptionEnum<Slic3r::BrimType>(btype));
 -    }
 +    dpc.set_key_value("brim_object_gap", new Slic3r::ConfigOptionFloat(config.brim_object_gap));
++    dpc.set_key_value("brim_ears_max_angle", new Slic3r::ConfigOptionFloat(config.brim_ears_max_angle));
++    dpc.set_key_value(
++        "brim_ears_detection_length",
++        new Slic3r::ConfigOptionFloat(config.brim_ears_detection_length));
 +    dpc.set_key_value("raft_layers", new Slic3r::ConfigOptionInt(config.raft_layers));
 +    dpc.set_key_value("raft_contact_distance", new Slic3r::ConfigOptionFloat(config.raft_contact_distance));
 +    dpc.set_key_value("raft_expansion", new Slic3r::ConfigOptionFloat(config.raft_expansion));

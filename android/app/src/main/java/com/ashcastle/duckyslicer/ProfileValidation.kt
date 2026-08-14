@@ -267,6 +267,8 @@ internal object ProfileValidation {
                 "auto_brim", "brim_ears", "outer_only", "inner_only", "outer_and_inner", "no_brim",
             ) &&
             profile.brimObjectGap in 0f..20f &&
+            profile.precision.brimEars.maximumAngle in 0f..180f &&
+            profile.precision.brimEars.detectionRadius in 0f..1_000f &&
             profile.raftLayers in 0..100 &&
             profile.raftContactDistance in 0f..20f &&
             profile.raftExpansion in 0f..1_000f &&

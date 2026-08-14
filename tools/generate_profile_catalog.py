@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 41
+SCHEMA_VERSION = 42
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -644,6 +644,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         ),
         "brimWidth": number(raw.get("brim_width"), 0),
         "brimObjectGap": number(raw.get("brim_object_gap"), 0),
+        "brimEarsMaxAngle": number(raw.get("brim_ears_max_angle"), 125),
+        "brimEarsDetectionLength": number(raw.get("brim_ears_detection_length"), 1),
         "topSolidLayers": integer(raw.get("top_shell_layers"), 5),
         "bottomSolidLayers": integer(raw.get("bottom_shell_layers"), 4),
         "topShellThickness": number(raw.get("top_shell_thickness"), 0),
@@ -1089,6 +1091,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0 <= profile["supportIroningFlow"] <= 100
         and 0 <= profile["supportIroningSpacing"] <= 1
         and 0 <= profile["brimObjectGap"] <= 20
+        and 0 <= profile["brimEarsMaxAngle"] <= 180
+        and 0 <= profile["brimEarsDetectionLength"] <= 1_000
         and 0 <= profile["skirtHeight"] <= 10_000
         and 0 <= profile["skirtSpeed"] <= 2_000
         and 0 <= profile["minimumSkirtLength"] <= 1_000_000

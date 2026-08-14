@@ -332,6 +332,7 @@ class SliceOptionsPersistenceTest {
                     maximumAngle = 63f,
                     holeArea = 240f,
                 ),
+                brimEars = BrimEarSettings(maximumAngle = 132f, detectionRadius = 1.7f),
             ),
             restored.precision,
         )
@@ -415,6 +416,8 @@ class SliceOptionsPersistenceTest {
         assertEquals("inner_only", restored.brimType)
         assertEquals(5f, restored.brimWidth)
         assertEquals(0.15f, restored.brimObjectGap)
+        assertEquals(132f, restored.precision.brimEars.maximumAngle)
+        assertEquals(1.7f, restored.precision.brimEars.detectionRadius)
         assertEquals(2, restored.raftLayers)
         assertEquals(0.13f, restored.raftContactDistance)
         assertEquals(2.5f, restored.raftExpansion)
@@ -715,6 +718,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
                 maximumAngle = 63f,
                 holeArea = 240f,
             ),
+            brimEars = BrimEarSettings(maximumAngle = 132f, detectionRadius = 1.7f),
         ),
         seamPosition = "nearest",
         staggeredInnerSeams = true,

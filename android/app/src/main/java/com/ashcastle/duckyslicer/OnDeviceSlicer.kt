@@ -391,6 +391,11 @@ data class GcodeSettings(
     val accelToDecelFactor: Float = 50f,
 )
 
+data class BrimEarSettings(
+    val maximumAngle: Float = 125f,
+    val detectionRadius: Float = 1f,
+)
+
 data class ScarfSeamSettings(
     val type: String = "none",
     val conditional: Boolean = false,
@@ -414,6 +419,7 @@ data class PrecisionSettings(
     val minimumWallWidth: Float = 85f,
     val firstLayerMinimumWallWidth: Float = 85f,
     val printableOverhangs: PrintableOverhangSettings = PrintableOverhangSettings(),
+    val brimEars: BrimEarSettings = BrimEarSettings(),
 )
 
 data class PrintableOverhangSettings(
@@ -782,7 +788,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 41,
+    val schemaVersion: Int = 42,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1751,6 +1757,8 @@ data class SliceOptions(
             native.slowDownLayers = gcodeSettings.slowDownLayers
             native.accelToDecelEnabled = gcodeSettings.accelToDecelEnabled
             native.accelToDecelFactor = gcodeSettings.accelToDecelFactor
+            native.brimEarsMaxAngle = precision.brimEars.maximumAngle
+            native.brimEarsDetectionLength = precision.brimEars.detectionRadius
             native.scarfSeamType = scarfSeam.type
             native.scarfSeamConditional = scarfSeam.conditional
             native.scarfAngleThreshold = scarfSeam.angleThreshold

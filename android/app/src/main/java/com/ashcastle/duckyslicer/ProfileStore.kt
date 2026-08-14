@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 42
+internal const val USER_PROFILE_SCHEMA_VERSION = 43
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -578,6 +578,8 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("brimType", brimType)
     .put("brimWidth", brimWidth)
     .put("brimObjectGap", brimObjectGap)
+    .put("brimEarsMaxAngle", precision.brimEars.maximumAngle)
+    .put("brimEarsDetectionLength", precision.brimEars.detectionRadius)
     .put("raftLayers", raftLayers)
     .put("raftContactDistance", raftContactDistance)
     .put("raftExpansion", raftExpansion)
@@ -1103,6 +1105,10 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
                 enabled = optBoolean("makeOverhangPrintable"),
                 maximumAngle = optDouble("makeOverhangPrintableAngle", 55.0).toFloat(),
                 holeArea = optDouble("makeOverhangPrintableHoleSize", 0.0).toFloat(),
+            ),
+            brimEars = BrimEarSettings(
+                maximumAngle = optDouble("brimEarsMaxAngle", 125.0).toFloat(),
+                detectionRadius = optDouble("brimEarsDetectionLength", 1.0).toFloat(),
             ),
         ),
         seamPosition = optString("seamPosition", "aligned"),

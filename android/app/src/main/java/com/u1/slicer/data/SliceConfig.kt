@@ -126,6 +126,8 @@ data class SliceConfig(
     @JvmField var brimType: String = "no_brim",
     @JvmField var brimWidth: Float = 0f,
     @JvmField var brimObjectGap: Float = 0f,
+    @JvmField var brimEarsMaxAngle: Float = 125f,
+    @JvmField var brimEarsDetectionLength: Float = 1f,
     @JvmField var raftLayers: Int = 0,
     @JvmField var raftContactDistance: Float = 0.1f,
     @JvmField var raftExpansion: Float = 1.5f,

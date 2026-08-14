@@ -708,6 +708,8 @@
     <string name="brim_both">Inside and outside</string>
     <string name="brim_none">Off</string>
     <string name="brim_object_gap">Brim gap</string>
+    <string name="brim_ear_maximum_angle">Brim ear maximum angle</string>
+    <string name="brim_ear_detection_radius">Brim ear detection radius</string>
     <string name="skirt_height">Skirt height</string>
     <string name="skirt_speed">Skirt speed</string>
     <string name="minimum_skirt_length">Minimum skirt extrusion</string>

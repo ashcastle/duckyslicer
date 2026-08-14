@@ -472,6 +472,41 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertFalse(profile["treeSupportAutoBrim"])
         self.assertEqual(4.6, profile["treeSupportBrimWidth"])
 
+    def test_preserves_automatic_brim_ear_geometry(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Automatic brim ears",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "brim_type": "brim_ears",
+                "brim_width": "6",
+                "brim_ears_max_angle": "137",
+                "brim_ears_detection_length": "1.8",
+            },
+            {},
+        )
+
+        self.assertEqual("brim_ears", profile["brimType"])
+        self.assertEqual(137, profile["brimEarsMaxAngle"])
+        self.assertEqual(1.8, profile["brimEarsDetectionLength"])
+
+        for key, value in (
+            ("brim_ears_max_angle", "181"),
+            ("brim_ears_detection_length", "-0.1"),
+        ):
+            with self.assertRaises(ValueError):
+                build_process(
+                    "Example",
+                    {
+                        "name": "Unsafe automatic brim ears",
+                        "layer_height": "0.2",
+                        "initial_layer_print_height": "0.2",
+                        key: value,
+                    },
+                    {},
+                )
+
     def test_normalizes_support_style_for_the_selected_algorithm(self) -> None:
         normal = build_process(
             "Example",
