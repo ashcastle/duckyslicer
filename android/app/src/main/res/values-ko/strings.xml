@@ -258,7 +258,17 @@
     <string name="cooling">냉각</string>
     <string name="minimum_fan_speed">최소 팬 속도</string>
     <string name="maximum_fan_speed">최대 팬 속도</string>
+    <string name="minimum_fan_layer_time">최소 팬 레이어 시간</string>
+    <string name="slow_down_for_cooling">냉각을 위해 속도 낮추기</string>
+    <string name="keep_fan_running">팬 계속 켜두기</string>
+    <string name="keep_outer_wall_speed">외벽 속도 유지</string>
+    <string name="overhang_bridge_cooling">오버행·브리지 냉각</string>
     <string name="overhang_fan_speed">오버행 팬 속도</string>
+    <string name="overhang_fan_threshold">오버행 냉각 기준</string>
+    <string name="internal_bridge_fan_speed">내부 브리지 팬 속도</string>
+    <string name="support_interface_fan_speed">서포트 접촉면 팬 속도</string>
+    <string name="fan_override_disabled">끄기</string>
+    <string name="seconds_suffix">초</string>
     <string name="slow_down_layer_time">레이어 시간 감속 기준</string>
     <string name="minimum_print_speed">최소 출력 속도</string>
     <string name="no_fan_first_layers">초기 팬 끄기 레이어</string>

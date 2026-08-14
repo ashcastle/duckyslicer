@@ -503,6 +503,14 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "filament_is_support": ["1"],
                 "filament_minimal_purge_on_wipe_tower": ["35"],
                 "additional_cooling_fan_speed": ["75%"],
+                "fan_cooling_layer_time": ["42"],
+                "slow_down_for_layer_cooling": ["0"],
+                "reduce_fan_stop_start_freq": ["1"],
+                "dont_slow_down_outer_wall": ["1"],
+                "enable_overhang_bridge_fan": ["1"],
+                "overhang_fan_threshold": ["25%"],
+                "internal_bridge_fan_speed": ["45"],
+                "support_material_interface_fan_speed": ["85"],
                 "filament_z_hop_types": ["Normal Lift"],
                 "filament_wipe": ["0"],
             },
@@ -523,6 +531,14 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(overridden["supportMaterial"])
         self.assertEqual(35.0, overridden["minimalPurgeOnWipeTower"])
         self.assertEqual(75, overridden["additionalCoolingFanSpeed"])
+        self.assertEqual(42.0, overridden["fanCoolingLayerTime"])
+        self.assertFalse(overridden["slowDownForLayerCooling"])
+        self.assertTrue(overridden["keepFanAlwaysOn"])
+        self.assertTrue(overridden["dontSlowDownOuterWall"])
+        self.assertTrue(overridden["enableOverhangBridgeFan"])
+        self.assertEqual("25%", overridden["overhangFanThreshold"])
+        self.assertEqual(45, overridden["internalBridgeFanSpeed"])
+        self.assertEqual(85, overridden["supportInterfaceFanSpeed"])
         self.assertEqual("normal", overridden["zHopType"])
         self.assertFalse(overridden["wipeWhileRetracting"])
 

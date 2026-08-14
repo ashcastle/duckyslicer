@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v60.bin"
+private const val CATALOG_ASSET = "profile_catalog_v61.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 60) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 61) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -136,7 +136,15 @@ class OrcaProfileCatalog(private val context: Context) {
         zHopType = input.readCatalogNullableString(),
         fanMinSpeed = input.readInt(),
         fanMaxSpeed = input.readInt(),
+        fanCoolingLayerTime = input.readFloat(),
+        slowDownForLayerCooling = input.readCatalogBoolean(),
+        keepFanAlwaysOn = input.readCatalogBoolean(),
+        dontSlowDownOuterWall = input.readCatalogBoolean(),
+        enableOverhangBridgeFan = input.readCatalogBoolean(),
         overhangFanSpeed = input.readInt(),
+        overhangFanThreshold = input.readCatalogString(),
+        internalBridgeFanSpeed = input.readInt(),
+        supportInterfaceFanSpeed = input.readInt(),
         slowDownLayerTime = input.readFloat(),
         slowDownMinSpeed = input.readFloat(),
         closeFanFirstLayers = input.readInt(),
@@ -294,7 +302,15 @@ private val FILAMENT_BINARY_FIELDS = arrayOf(
     BinaryField("zHopType", BINARY_NULLABLE_STRING),
     BinaryField("fanMinSpeed", BINARY_INT),
     BinaryField("fanMaxSpeed", BINARY_INT),
+    BinaryField("fanCoolingLayerTime", BINARY_FLOAT),
+    BinaryField("slowDownForLayerCooling", BINARY_BOOL),
+    BinaryField("keepFanAlwaysOn", BINARY_BOOL),
+    BinaryField("dontSlowDownOuterWall", BINARY_BOOL),
+    BinaryField("enableOverhangBridgeFan", BINARY_BOOL),
     BinaryField("overhangFanSpeed", BINARY_INT),
+    BinaryField("overhangFanThreshold", BINARY_STRING),
+    BinaryField("internalBridgeFanSpeed", BINARY_INT),
+    BinaryField("supportInterfaceFanSpeed", BINARY_INT),
     BinaryField("slowDownLayerTime", BINARY_FLOAT),
     BinaryField("slowDownMinSpeed", BINARY_FLOAT),
     BinaryField("closeFanFirstLayers", BINARY_INT),

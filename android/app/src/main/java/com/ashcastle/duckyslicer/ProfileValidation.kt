@@ -63,6 +63,10 @@ internal object ProfileValidation {
                 profile.additionalCoolingFanSpeed,
             )
                 .all { it in 0..100 } &&
+            profile.fanCoolingLayerTime in 0f..1_000f &&
+            profile.overhangFanThreshold in OVERHANG_FAN_THRESHOLDS &&
+            profile.internalBridgeFanSpeed in -1..100 &&
+            profile.supportInterfaceFanSpeed in -1..100 &&
             profile.minimalPurgeOnWipeTower in MIN_PURGE_VOLUME..MAX_PURGE_VOLUME &&
             profile.retractLength.isNullOrIn(0f..100f) &&
             profile.retractSpeed.isNullOrIn(0f..500f) &&

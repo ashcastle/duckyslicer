@@ -258,7 +258,17 @@
     <string name="cooling">Cooling</string>
     <string name="minimum_fan_speed">Minimum fan</string>
     <string name="maximum_fan_speed">Maximum fan</string>
+    <string name="minimum_fan_layer_time">Minimum fan layer time</string>
+    <string name="slow_down_for_cooling">Slow down for cooling</string>
+    <string name="keep_fan_running">Keep fan running</string>
+    <string name="keep_outer_wall_speed">Keep outer wall speed</string>
+    <string name="overhang_bridge_cooling">Overhang and bridge cooling</string>
     <string name="overhang_fan_speed">Overhang fan</string>
+    <string name="overhang_fan_threshold">Overhang cooling threshold</string>
+    <string name="internal_bridge_fan_speed">Internal bridge fan</string>
+    <string name="support_interface_fan_speed">Support interface fan</string>
+    <string name="fan_override_disabled">Off</string>
+    <string name="seconds_suffix">s</string>
     <string name="slow_down_layer_time">Slow down for layer time</string>
     <string name="minimum_print_speed">Minimum print speed</string>
     <string name="no_fan_first_layers">No fan for first layers</string>

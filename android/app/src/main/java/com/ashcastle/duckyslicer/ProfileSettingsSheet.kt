@@ -1275,6 +1275,20 @@ private fun FilamentSettingsSheet(
                 )
             },
         )
+        DecimalSettingField(
+            label = stringResource(R.string.minimum_fan_layer_time),
+            value = activeProfile.fanCoolingLayerTime,
+            maximum = 1_000f,
+            suffix = stringResource(R.string.seconds_suffix),
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(fanCoolingLayerTime = it),
+                    ),
+                )
+            },
+        )
         SettingSlider(
             label = stringResource(R.string.maximum_fan_speed),
             valueText = stringResource(R.string.percent_value, activeProfile.fanMaxSpeed),
@@ -1292,19 +1306,99 @@ private fun FilamentSettingsSheet(
                 )
             },
         )
+        SettingsSwitch(
+            label = stringResource(R.string.keep_fan_running),
+            checked = activeProfile.keepFanAlwaysOn,
+            onCheckedChange = {
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(keepFanAlwaysOn = it),
+                ))
+            },
+        )
+        SettingsSwitch(
+            label = stringResource(R.string.slow_down_for_cooling),
+            checked = activeProfile.slowDownForLayerCooling,
+            onCheckedChange = {
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(slowDownForLayerCooling = it),
+                ))
+            },
+        )
+        if (activeProfile.slowDownForLayerCooling || settingsQuery.isNotBlank()) {
+            SettingsSwitch(
+                label = stringResource(R.string.keep_outer_wall_speed),
+                checked = activeProfile.dontSlowDownOuterWall,
+                onCheckedChange = {
+                    onOptionsChanged(options.updateFilamentSlot(
+                        selectedSlot, activeProfile.copy(dontSlowDownOuterWall = it),
+                    ))
+                },
+            )
+        }
+        SettingsSwitch(
+            label = stringResource(R.string.overhang_bridge_cooling),
+            checked = activeProfile.enableOverhangBridgeFan,
+            onCheckedChange = {
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(enableOverhangBridgeFan = it),
+                ))
+            },
+        )
+        if (activeProfile.enableOverhangBridgeFan || settingsQuery.isNotBlank()) {
+            SettingChoices(
+                settingLabel = stringResource(R.string.overhang_fan_threshold),
+                entries = OVERHANG_FAN_THRESHOLDS,
+                selected = activeProfile.overhangFanThreshold,
+                optionLabel = { it },
+                onSelected = {
+                    onOptionsChanged(options.updateFilamentSlot(
+                        selectedSlot, activeProfile.copy(overhangFanThreshold = it),
+                    ))
+                },
+            )
+            SettingSlider(
+                label = stringResource(R.string.overhang_fan_speed),
+                valueText = stringResource(R.string.percent_value, activeProfile.overhangFanSpeed),
+                value = activeProfile.overhangFanSpeed.toFloat(),
+                range = 0f..100f,
+                steps = 99,
+                onValueChange = {
+                    onOptionsChanged(options.updateFilamentSlot(
+                        selectedSlot, activeProfile.copy(overhangFanSpeed = it.roundToInt()),
+                    ))
+                },
+            )
+            SettingSlider(
+                label = stringResource(R.string.internal_bridge_fan_speed),
+                valueText = if (activeProfile.internalBridgeFanSpeed < 0) {
+                    stringResource(R.string.fan_override_disabled)
+                } else {
+                    stringResource(R.string.percent_value, activeProfile.internalBridgeFanSpeed)
+                },
+                value = activeProfile.internalBridgeFanSpeed.toFloat(),
+                range = -1f..100f,
+                steps = 100,
+                onValueChange = {
+                    onOptionsChanged(options.updateFilamentSlot(
+                        selectedSlot, activeProfile.copy(internalBridgeFanSpeed = it.roundToInt()),
+                    ))
+                },
+            )
+        }
         SettingSlider(
-            label = stringResource(R.string.overhang_fan_speed),
-            valueText = stringResource(R.string.percent_value, activeProfile.overhangFanSpeed),
-            value = activeProfile.overhangFanSpeed.toFloat(),
-            range = 0f..100f,
-            steps = 99,
+            label = stringResource(R.string.support_interface_fan_speed),
+            valueText = if (activeProfile.supportInterfaceFanSpeed < 0) {
+                stringResource(R.string.fan_override_disabled)
+            } else {
+                stringResource(R.string.percent_value, activeProfile.supportInterfaceFanSpeed)
+            },
+            value = activeProfile.supportInterfaceFanSpeed.toFloat(),
+            range = -1f..100f,
+            steps = 100,
             onValueChange = {
-                onOptionsChanged(
-                    options.updateFilamentSlot(
-                        selectedSlot,
-                        activeProfile.copy(overhangFanSpeed = it.roundToInt()),
-                    ),
-                )
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(supportInterfaceFanSpeed = it.roundToInt()),
+                ))
             },
         )
         SettingSlider(

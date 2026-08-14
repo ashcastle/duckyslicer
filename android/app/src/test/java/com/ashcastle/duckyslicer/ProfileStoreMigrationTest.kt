@@ -29,6 +29,14 @@ class ProfileStoreMigrationTest {
                 remove("supportMaterial")
                 remove("minimalPurgeOnWipeTower")
                 remove("additionalCoolingFanSpeed")
+                remove("fanCoolingLayerTime")
+                remove("slowDownForLayerCooling")
+                remove("keepFanAlwaysOn")
+                remove("dontSlowDownOuterWall")
+                remove("enableOverhangBridgeFan")
+                remove("overhangFanThreshold")
+                remove("internalBridgeFanSpeed")
+                remove("supportInterfaceFanSpeed")
             }
             val legacySlicing = slicing.toProfileJson().withoutProfileMetadata().apply {
                 remove("makeOverhangPrintable")
@@ -87,6 +95,14 @@ class ProfileStoreMigrationTest {
             assertFalse(restoredFilament.supportMaterial)
             assertEquals(15f, restoredFilament.minimalPurgeOnWipeTower)
             assertEquals(0, restoredFilament.additionalCoolingFanSpeed)
+            assertEquals(60f, restoredFilament.fanCoolingLayerTime)
+            assertTrue(restoredFilament.slowDownForLayerCooling)
+            assertFalse(restoredFilament.keepFanAlwaysOn)
+            assertFalse(restoredFilament.dontSlowDownOuterWall)
+            assertTrue(restoredFilament.enableOverhangBridgeFan)
+            assertEquals("95%", restoredFilament.overhangFanThreshold)
+            assertEquals(-1, restoredFilament.internalBridgeFanSpeed)
+            assertEquals(-1, restoredFilament.supportInterfaceFanSpeed)
             assertEquals("V3 Slicing", restoredSlicing.name)
             assertEquals(PrintableOverhangSettings(), restoredSlicing.printableOverhangs)
             assertEquals(PolyholeSettings(), restoredSlicing.precision.polyholes)
@@ -303,6 +319,14 @@ class ProfileStoreMigrationTest {
                         supportMaterial = true,
                         minimalPurgeOnWipeTower = 35f,
                         additionalCoolingFanSpeed = 70,
+                        fanCoolingLayerTime = 42f,
+                        slowDownForLayerCooling = false,
+                        keepFanAlwaysOn = true,
+                        dontSlowDownOuterWall = true,
+                        enableOverhangBridgeFan = true,
+                        overhangFanThreshold = "25%",
+                        internalBridgeFanSpeed = 45,
+                        supportInterfaceFanSpeed = 85,
                     ),
                 )
 
@@ -329,6 +353,17 @@ class ProfileStoreMigrationTest {
             assertEquals(35f, restored.minimalPurgeOnWipeTower)
             assertEquals(70, saved.additionalCoolingFanSpeed)
             assertEquals(70, restored.additionalCoolingFanSpeed)
+            assertEquals(42f, saved.fanCoolingLayerTime)
+            assertEquals(42f, restored.fanCoolingLayerTime)
+            assertFalse(saved.slowDownForLayerCooling)
+            assertFalse(restored.slowDownForLayerCooling)
+            assertTrue(saved.keepFanAlwaysOn)
+            assertTrue(restored.keepFanAlwaysOn)
+            assertTrue(saved.dontSlowDownOuterWall)
+            assertTrue(restored.dontSlowDownOuterWall)
+            assertEquals("25%", restored.overhangFanThreshold)
+            assertEquals(45, restored.internalBridgeFanSpeed)
+            assertEquals(85, restored.supportInterfaceFanSpeed)
         } finally {
             directory.deleteRecursively()
         }

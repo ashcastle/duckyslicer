@@ -138,7 +138,7 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(31, manifest.getInt("schemaVersion"))
+            assertEquals(32, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(
@@ -243,6 +243,18 @@ class ProjectArchiveTest {
             assertEquals(
                 listOf(40, 70),
                 imported.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::additionalCoolingFanSpeed),
+            )
+            assertEquals(
+                listOf(42f, 91f),
+                imported.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::fanCoolingLayerTime),
+            )
+            assertEquals(
+                listOf("25%", "75%"),
+                imported.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::overhangFanThreshold),
+            )
+            assertEquals(
+                listOf(45, -1),
+                imported.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::internalBridgeFanSpeed),
             )
             assertEquals(true, imported.sliceOptions?.printerProfile?.auxiliaryFan)
             assertEquals(

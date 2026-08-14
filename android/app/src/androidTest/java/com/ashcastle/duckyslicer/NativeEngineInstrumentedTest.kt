@@ -2098,7 +2098,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(60, catalog.schemaVersion)
+        assertEquals(61, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2122,6 +2122,24 @@ class NativeEngineInstrumentedTest {
         assertTrue(
             "Inherited auxiliary cooling speeds must survive catalog generation",
             catalog.filaments.any { it.additionalCoolingFanSpeed > 0 },
+        )
+        assertTrue(
+            "Inherited layer-time fan thresholds must survive catalog generation",
+            catalog.filaments.any { kotlin.math.abs(it.fanCoolingLayerTime - 60f) >= 0.001f },
+        )
+        assertTrue(
+            "Inherited fan continuity must survive catalog generation",
+            catalog.filaments.any { it.keepFanAlwaysOn },
+        )
+        assertTrue(
+            "Inherited overhang cooling thresholds must survive catalog generation",
+            catalog.filaments.any { it.overhangFanThreshold != "95%" },
+        )
+        assertTrue(
+            "Inherited role-specific fan speeds must survive catalog generation",
+            catalog.filaments.any {
+                it.internalBridgeFanSpeed >= 0 || it.supportInterfaceFanSpeed >= 0
+            },
         )
         assertTrue(
             "Inherited auxiliary-fan capability must survive catalog generation",
@@ -3301,6 +3319,53 @@ class NativeEngineInstrumentedTest {
         } finally {
             lowResult.output.delete()
             highResult.output.delete()
+        }
+    }
+
+    @Test
+    fun filamentCoolingSemanticsReachOrcasRealCoolingPath() {
+        val baseFilament = FilamentProfile.PLA.copy(
+            fanMinSpeed = 15,
+            fanMaxSpeed = 100,
+            fanCoolingLayerTime = 120f,
+            slowDownForLayerCooling = false,
+            keepFanAlwaysOn = true,
+            dontSlowDownOuterWall = true,
+            enableOverhangBridgeFan = true,
+            overhangFanSpeed = 90,
+            overhangFanThreshold = "25%",
+            internalBridgeFanSpeed = 45,
+            supportInterfaceFanSpeed = 85,
+            slowDownLayerTime = 120f,
+            slowDownMinSpeed = 5f,
+            closeFanFirstLayers = 0,
+        )
+        val disabledOptions = SliceOptions()
+            .selectFilament(baseFilament)
+            .selectQuality(QualityProfile.DRAFT)
+        val enabledOptions = disabledOptions.selectFilament(
+            baseFilament.copy(slowDownForLayerCooling = true),
+        )
+
+        val disabled = OnDeviceSlicer.slice(fixtureModel(), disabledOptions)
+        val enabled = OnDeviceSlicer.slice(fixtureModel(), enabledOptions)
+        try {
+            val gcode = disabled.output.readText()
+            assertTrue(gcode.contains("; fan_cooling_layer_time = 120"))
+            assertTrue(gcode.contains("; slow_down_for_layer_cooling = 0"))
+            assertTrue(gcode.contains("; reduce_fan_stop_start_freq = 1"))
+            assertTrue(gcode.contains("; dont_slow_down_outer_wall = 1"))
+            assertTrue(gcode.contains("; enable_overhang_bridge_fan = 1"))
+            assertTrue(gcode.contains("; overhang_fan_threshold = 25%"))
+            assertTrue(gcode.contains("; internal_bridge_fan_speed = 45"))
+            assertTrue(gcode.contains("; support_material_interface_fan_speed = 85"))
+            assertTrue(
+                "Layer-cooling slowdown must change Orca's real print-time estimate",
+                enabled.estimatedSeconds > disabled.estimatedSeconds + 1f,
+            )
+        } finally {
+            disabled.output.delete()
+            enabled.output.delete()
         }
     }
 

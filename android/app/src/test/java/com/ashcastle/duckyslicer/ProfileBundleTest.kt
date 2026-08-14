@@ -31,6 +31,13 @@ class ProfileBundleTest {
                         filamentEndGcode = "M117 BUNDLE_FILAMENT_END",
                         minimalPurgeOnWipeTower = 35f,
                         additionalCoolingFanSpeed = 70,
+                        fanCoolingLayerTime = 42f,
+                        slowDownForLayerCooling = false,
+                        keepFanAlwaysOn = true,
+                        dontSlowDownOuterWall = true,
+                        overhangFanThreshold = "25%",
+                        internalBridgeFanSpeed = 45,
+                        supportInterfaceFanSpeed = 85,
                     ),
                 ),
             )
@@ -67,6 +74,13 @@ class ProfileBundleTest {
             assertEquals("M117 BUNDLE_FILAMENT_END", importedFilament.filamentEndGcode)
             assertEquals(35f, importedFilament.minimalPurgeOnWipeTower)
             assertEquals(70, importedFilament.additionalCoolingFanSpeed)
+            assertEquals(42f, importedFilament.fanCoolingLayerTime)
+            assertFalse(importedFilament.slowDownForLayerCooling)
+            assertTrue(importedFilament.keepFanAlwaysOn)
+            assertTrue(importedFilament.dontSlowDownOuterWall)
+            assertEquals("25%", importedFilament.overhangFanThreshold)
+            assertEquals(45, importedFilament.internalBridgeFanSpeed)
+            assertEquals(85, importedFilament.supportInterfaceFanSpeed)
             assertTrue(catalog.slicing.any { it.name == "Portable slicing" && !it.builtIn })
 
             val firstGeneration = destinationFile.readBytes()

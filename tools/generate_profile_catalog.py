@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 60
+SCHEMA_VERSION = 61
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -455,7 +455,21 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "zHopType": z_hop_type(raw.get("filament_z_hop_types"), None),
         "fanMinSpeed": integer(raw.get("fan_min_speed"), 30),
         "fanMaxSpeed": integer(raw.get("fan_max_speed"), 100),
+        "fanCoolingLayerTime": number(raw.get("fan_cooling_layer_time"), 60),
+        "slowDownForLayerCooling": boolean(raw.get("slow_down_for_layer_cooling"), True),
+        "keepFanAlwaysOn": boolean(raw.get("reduce_fan_stop_start_freq")),
+        "dontSlowDownOuterWall": boolean(raw.get("dont_slow_down_outer_wall")),
+        "enableOverhangBridgeFan": boolean(raw.get("enable_overhang_bridge_fan"), True),
         "overhangFanSpeed": integer(raw.get("overhang_fan_speed"), 100),
+        "overhangFanThreshold": enum_value(
+            raw.get("overhang_fan_threshold"),
+            {"0%", "10%", "25%", "50%", "75%", "95%"},
+            "95%",
+        ),
+        "internalBridgeFanSpeed": integer(raw.get("internal_bridge_fan_speed"), -1),
+        "supportInterfaceFanSpeed": integer(
+            raw.get("support_material_interface_fan_speed"), -1
+        ),
         "slowDownLayerTime": number(raw.get("slow_down_layer_time"), 8),
         "slowDownMinSpeed": number(raw.get("slow_down_min_speed"), 10),
         "closeFanFirstLayers": integer(raw.get("close_fan_the_first_x_layers"), 1),
@@ -482,6 +496,10 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
             ]
         )
         and 0 <= profile["minimalPurgeOnWipeTower"] <= 1_000
+        and 0 <= profile["fanCoolingLayerTime"] <= 1_000
+        and profile["overhangFanThreshold"] in {"0%", "10%", "25%", "50%", "75%", "95%"}
+        and -1 <= profile["internalBridgeFanSpeed"] <= 100
+        and -1 <= profile["supportInterfaceFanSpeed"] <= 100
         and (profile["retractLength"] is None or 0 <= profile["retractLength"] <= 100)
         and (profile["retractSpeed"] is None or 0 <= profile["retractSpeed"] <= 500)
         and (profile["deretractSpeed"] is None or 0 <= profile["deretractSpeed"] <= 500)

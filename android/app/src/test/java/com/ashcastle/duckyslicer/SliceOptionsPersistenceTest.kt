@@ -19,6 +19,14 @@ class SliceOptionsPersistenceTest {
             costPerKilogram = 42.5f,
             minimalPurgeOnWipeTower = 9f,
             additionalCoolingFanSpeed = 40,
+            fanCoolingLayerTime = 42f,
+            slowDownForLayerCooling = false,
+            keepFanAlwaysOn = true,
+            dontSlowDownOuterWall = true,
+            enableOverhangBridgeFan = true,
+            overhangFanThreshold = "25%",
+            internalBridgeFanSpeed = 45,
+            supportInterfaceFanSpeed = 85,
         )
         val secondary = FilamentProfile.PETG.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_04.name),
@@ -31,6 +39,14 @@ class SliceOptionsPersistenceTest {
             supportMaterial = true,
             minimalPurgeOnWipeTower = 35f,
             additionalCoolingFanSpeed = 70,
+            fanCoolingLayerTime = 91f,
+            slowDownForLayerCooling = true,
+            keepFanAlwaysOn = false,
+            dontSlowDownOuterWall = false,
+            enableOverhangBridgeFan = false,
+            overhangFanThreshold = "75%",
+            internalBridgeFanSpeed = -1,
+            supportInterfaceFanSpeed = 65,
         )
         val options = SliceOptions()
             .selectPrinter(PrinterProfile.U1_04.copy(auxiliaryFan = true))
@@ -123,6 +139,14 @@ class SliceOptionsPersistenceTest {
         assertEquals(listOf(0, 1), native.filamentIsSupport.toList())
         assertArrayEquals(floatArrayOf(9f, 35f), native.filamentMinimalPurgeOnWipeTower, 0.001f)
         assertEquals(listOf(40, 70), native.filamentAdditionalCoolingFanSpeeds.toList())
+        assertArrayEquals(floatArrayOf(42f, 91f), native.filamentFanCoolingLayerTimes, 0.001f)
+        assertEquals(listOf(0, 1), native.filamentSlowDownForLayerCooling.toList())
+        assertEquals(listOf(1, 0), native.filamentKeepFanAlwaysOn.toList())
+        assertEquals(listOf(1, 0), native.filamentDontSlowDownOuterWall.toList())
+        assertEquals(listOf(1, 0), native.filamentEnableOverhangBridgeFan.toList())
+        assertEquals(listOf(2, 4), native.filamentOverhangFanThresholds.toList())
+        assertEquals(listOf(45, -1), native.filamentInternalBridgeFanSpeeds.toList())
+        assertEquals(listOf(85, 65), native.filamentSupportInterfaceFanSpeeds.toList())
         assertEquals(true, native.auxiliaryFan)
         assertEquals(listOf("PLA", "PETG"), native.filamentTypes.toList())
         assertEquals(listOf(primary.nozzleTemp, secondary.nozzleTemp), native.extruderTemps.toList())
@@ -608,6 +632,7 @@ class SliceOptionsPersistenceTest {
             getJSONObject("filament").remove("supportMaterial")
             getJSONObject("filament").remove("minimalPurgeOnWipeTower")
             getJSONObject("filament").remove("additionalCoolingFanSpeed")
+            getJSONObject("filament").removeCoolingParityFields()
             getJSONObject("printer").remove("auxiliaryFan")
             getJSONArray("filamentSlots").getJSONObject(0).remove("diameter")
             getJSONArray("filamentSlots").getJSONObject(0).remove("density")
@@ -616,6 +641,7 @@ class SliceOptionsPersistenceTest {
             getJSONArray("filamentSlots").getJSONObject(0).remove("supportMaterial")
             getJSONArray("filamentSlots").getJSONObject(0).remove("minimalPurgeOnWipeTower")
             getJSONArray("filamentSlots").getJSONObject(0).remove("additionalCoolingFanSpeed")
+            getJSONArray("filamentSlots").getJSONObject(0).removeCoolingParityFields()
             getJSONObject("slicing").apply {
                 remove("makeOverhangPrintable")
                 remove("makeOverhangPrintableAngle")
@@ -687,6 +713,14 @@ class SliceOptionsPersistenceTest {
         assertEquals(false, restored.filamentProfile.supportMaterial)
         assertEquals(15f, restored.filamentProfile.minimalPurgeOnWipeTower)
         assertEquals(0, restored.filamentProfile.additionalCoolingFanSpeed)
+        assertEquals(60f, restored.filamentProfile.fanCoolingLayerTime)
+        assertEquals(true, restored.filamentProfile.slowDownForLayerCooling)
+        assertEquals(false, restored.filamentProfile.keepFanAlwaysOn)
+        assertEquals(false, restored.filamentProfile.dontSlowDownOuterWall)
+        assertEquals(true, restored.filamentProfile.enableOverhangBridgeFan)
+        assertEquals("95%", restored.filamentProfile.overhangFanThreshold)
+        assertEquals(-1, restored.filamentProfile.internalBridgeFanSpeed)
+        assertEquals(-1, restored.filamentProfile.supportInterfaceFanSpeed)
         assertEquals(false, restored.printerProfile.auxiliaryFan)
         assertEquals(2.85f, restored.toNativeConfig().filamentDiameter)
         assertEquals(listOf(1.24f), restored.toNativeConfig().filamentDensities.toList())
@@ -695,6 +729,14 @@ class SliceOptionsPersistenceTest {
         assertEquals(listOf(0), restored.toNativeConfig().filamentIsSupport.toList())
         assertEquals(listOf(15f), restored.toNativeConfig().filamentMinimalPurgeOnWipeTower.toList())
         assertEquals(listOf(0), restored.toNativeConfig().filamentAdditionalCoolingFanSpeeds.toList())
+        assertEquals(listOf(60f), restored.toNativeConfig().filamentFanCoolingLayerTimes.toList())
+        assertEquals(listOf(1), restored.toNativeConfig().filamentSlowDownForLayerCooling.toList())
+        assertEquals(listOf(0), restored.toNativeConfig().filamentKeepFanAlwaysOn.toList())
+        assertEquals(listOf(0), restored.toNativeConfig().filamentDontSlowDownOuterWall.toList())
+        assertEquals(listOf(1), restored.toNativeConfig().filamentEnableOverhangBridgeFan.toList())
+        assertEquals(listOf(5), restored.toNativeConfig().filamentOverhangFanThresholds.toList())
+        assertEquals(listOf(-1), restored.toNativeConfig().filamentInternalBridgeFanSpeeds.toList())
+        assertEquals(listOf(-1), restored.toNativeConfig().filamentSupportInterfaceFanSpeeds.toList())
         assertEquals(false, restored.toNativeConfig().auxiliaryFan)
         assertEquals(0f, restored.travelSpeedZ)
         assertEquals(0f, restored.toNativeConfig().travelSpeedZ)
@@ -741,7 +783,38 @@ class SliceOptionsPersistenceTest {
                 FilamentProfile.GENERIC_PLA.copy(additionalCoolingFanSpeed = 101),
             ),
         )
+        assertFalse(
+            ProfileValidation.filament(
+                FilamentProfile.GENERIC_PLA.copy(fanCoolingLayerTime = 1_000.1f),
+            ),
+        )
+        assertFalse(
+            ProfileValidation.filament(
+                FilamentProfile.GENERIC_PLA.copy(overhangFanThreshold = "33%"),
+            ),
+        )
+        assertFalse(
+            ProfileValidation.filament(
+                FilamentProfile.GENERIC_PLA.copy(internalBridgeFanSpeed = 101),
+            ),
+        )
+        assertFalse(
+            ProfileValidation.filament(
+                FilamentProfile.GENERIC_PLA.copy(supportInterfaceFanSpeed = -2),
+            ),
+        )
     }
+}
+
+private fun JSONObject.removeCoolingParityFields() {
+    remove("fanCoolingLayerTime")
+    remove("slowDownForLayerCooling")
+    remove("keepFanAlwaysOn")
+    remove("dontSlowDownOuterWall")
+    remove("enableOverhangBridgeFan")
+    remove("overhangFanThreshold")
+    remove("internalBridgeFanSpeed")
+    remove("supportInterfaceFanSpeed")
 }
 
 internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
@@ -756,6 +829,14 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             costPerKilogram = 42.5f,
             minimalPurgeOnWipeTower = 9f,
             additionalCoolingFanSpeed = 40,
+            fanCoolingLayerTime = 42f,
+            slowDownForLayerCooling = false,
+            keepFanAlwaysOn = true,
+            dontSlowDownOuterWall = true,
+            enableOverhangBridgeFan = true,
+            overhangFanThreshold = "25%",
+            internalBridgeFanSpeed = 45,
+            supportInterfaceFanSpeed = 85,
             retractLength = 1.1f,
             retractSpeed = 37f,
             deretractSpeed = 35f,

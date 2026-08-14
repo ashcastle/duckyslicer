@@ -256,6 +256,14 @@ data class SliceConfig(
     @JvmField var auxiliaryFan: Boolean = false
     @JvmField var filamentSoluble: IntArray = intArrayOf()
     @JvmField var filamentIsSupport: IntArray = intArrayOf()
+    @JvmField var filamentFanCoolingLayerTimes: FloatArray = floatArrayOf()
+    @JvmField var filamentSlowDownForLayerCooling: IntArray = intArrayOf()
+    @JvmField var filamentKeepFanAlwaysOn: IntArray = intArrayOf()
+    @JvmField var filamentDontSlowDownOuterWall: IntArray = intArrayOf()
+    @JvmField var filamentEnableOverhangBridgeFan: IntArray = intArrayOf()
+    @JvmField var filamentOverhangFanThresholds: IntArray = intArrayOf()
+    @JvmField var filamentInternalBridgeFanSpeeds: IntArray = intArrayOf()
+    @JvmField var filamentSupportInterfaceFanSpeeds: IntArray = intArrayOf()
     @JvmField var skeletonInfillDensity: Float = 25f
     @JvmField var skinInfillDensity: Float = 25f
     @JvmField var skinInfillDepth: Float = 2f

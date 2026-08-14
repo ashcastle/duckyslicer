@@ -121,7 +121,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(33, persisted.getInt("schemaVersion"))
+        assertEquals(34, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),
@@ -188,6 +188,18 @@ class ProjectStoreTest {
         assertEquals(
             listOf(40, 70),
             restored.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::additionalCoolingFanSpeed),
+        )
+        assertEquals(
+            listOf(42f, 91f),
+            restored.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::fanCoolingLayerTime),
+        )
+        assertEquals(
+            listOf("25%", "75%"),
+            restored.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::overhangFanThreshold),
+        )
+        assertEquals(
+            listOf(45, -1),
+            restored.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::internalBridgeFanSpeed),
         )
         assertEquals(true, restored.sliceOptions?.printerProfile?.auxiliaryFan)
         assertEquals(
@@ -477,6 +489,14 @@ internal fun multiFilamentSettingsFixture(): SliceOptions {
         supportMaterial = true,
         minimalPurgeOnWipeTower = 35f,
         additionalCoolingFanSpeed = 70,
+        fanCoolingLayerTime = 91f,
+        slowDownForLayerCooling = true,
+        keepFanAlwaysOn = false,
+        dontSlowDownOuterWall = false,
+        enableOverhangBridgeFan = false,
+        overhangFanThreshold = "75%",
+        internalBridgeFanSpeed = -1,
+        supportInterfaceFanSpeed = 65,
     )
     return options.copy(filamentSlots = listOf(options.filamentProfile, secondary))
 }

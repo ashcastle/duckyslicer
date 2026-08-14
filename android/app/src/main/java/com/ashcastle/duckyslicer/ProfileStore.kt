@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 61
+internal const val USER_PROFILE_SCHEMA_VERSION = 62
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -154,7 +154,15 @@ class ProfileStore private constructor(
             zHopType = effective.zHopType,
             fanMinSpeed = effective.fanMinSpeed,
             fanMaxSpeed = effective.fanMaxSpeed,
+            fanCoolingLayerTime = effective.fanCoolingLayerTime,
+            slowDownForLayerCooling = effective.slowDownForLayerCooling,
+            keepFanAlwaysOn = effective.keepFanAlwaysOn,
+            dontSlowDownOuterWall = effective.dontSlowDownOuterWall,
+            enableOverhangBridgeFan = effective.enableOverhangBridgeFan,
             overhangFanSpeed = effective.overhangFanSpeed,
+            overhangFanThreshold = effective.overhangFanThreshold,
+            internalBridgeFanSpeed = effective.internalBridgeFanSpeed,
+            supportInterfaceFanSpeed = effective.supportInterfaceFanSpeed,
             slowDownLayerTime = effective.slowDownLayerTime,
             slowDownMinSpeed = effective.slowDownMinSpeed,
             closeFanFirstLayers = effective.closeFanFirstLayers,
@@ -540,7 +548,15 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("retractRestartExtra", retractRestartExtra ?: JSONObject.NULL)
     .put("zHop", zHop ?: JSONObject.NULL).put("zHopType", zHopType ?: JSONObject.NULL)
     .put("fanMinSpeed", fanMinSpeed).put("fanMaxSpeed", fanMaxSpeed)
+    .put("fanCoolingLayerTime", fanCoolingLayerTime)
+    .put("slowDownForLayerCooling", slowDownForLayerCooling)
+    .put("keepFanAlwaysOn", keepFanAlwaysOn)
+    .put("dontSlowDownOuterWall", dontSlowDownOuterWall)
+    .put("enableOverhangBridgeFan", enableOverhangBridgeFan)
     .put("overhangFanSpeed", overhangFanSpeed)
+    .put("overhangFanThreshold", overhangFanThreshold)
+    .put("internalBridgeFanSpeed", internalBridgeFanSpeed)
+    .put("supportInterfaceFanSpeed", supportInterfaceFanSpeed)
     .put("slowDownLayerTime", slowDownLayerTime).put("slowDownMinSpeed", slowDownMinSpeed)
     .put("closeFanFirstLayers", closeFanFirstLayers).put("fullFanSpeedLayer", fullFanSpeedLayer)
     .put("pressureAdvanceEnabled", pressureAdvanceEnabled).put("pressureAdvance", pressureAdvance)
@@ -946,7 +962,15 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         zHopType = nullableString("zHopType"),
         fanMinSpeed = optInt("fanMinSpeed", 30),
         fanMaxSpeed = optInt("fanMaxSpeed", 100),
+        fanCoolingLayerTime = optDouble("fanCoolingLayerTime", 60.0).toFloat(),
+        slowDownForLayerCooling = optBoolean("slowDownForLayerCooling", true),
+        keepFanAlwaysOn = optBoolean("keepFanAlwaysOn", false),
+        dontSlowDownOuterWall = optBoolean("dontSlowDownOuterWall", false),
+        enableOverhangBridgeFan = optBoolean("enableOverhangBridgeFan", true),
         overhangFanSpeed = optInt("overhangFanSpeed", 100),
+        overhangFanThreshold = optString("overhangFanThreshold", "95%"),
+        internalBridgeFanSpeed = optInt("internalBridgeFanSpeed", -1),
+        supportInterfaceFanSpeed = optInt("supportInterfaceFanSpeed", -1),
         slowDownLayerTime = optDouble("slowDownLayerTime", 8.0).toFloat(),
         slowDownMinSpeed = optDouble("slowDownMinSpeed", 10.0).toFloat(),
         closeFanFirstLayers = optInt("closeFanFirstLayers", 1),

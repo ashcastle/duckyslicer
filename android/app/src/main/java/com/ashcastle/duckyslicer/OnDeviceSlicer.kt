@@ -229,7 +229,15 @@ data class FilamentProfile(
     val zHopType: String? = null,
     val fanMinSpeed: Int = 30,
     val fanMaxSpeed: Int = 100,
+    val fanCoolingLayerTime: Float = 60f,
+    val slowDownForLayerCooling: Boolean = true,
+    val keepFanAlwaysOn: Boolean = false,
+    val dontSlowDownOuterWall: Boolean = false,
+    val enableOverhangBridgeFan: Boolean = true,
     val overhangFanSpeed: Int = 100,
+    val overhangFanThreshold: String = "95%",
+    val internalBridgeFanSpeed: Int = -1,
+    val supportInterfaceFanSpeed: Int = -1,
     val slowDownLayerTime: Float = 8f,
     val slowDownMinSpeed: Float = 10f,
     val closeFanFirstLayers: Int = 1,
@@ -412,6 +420,7 @@ data class MultiMaterialSettings(
 internal const val DEFAULT_PURGE_VOLUME = 140f
 internal const val MIN_PURGE_VOLUME = 0f
 internal const val MAX_PURGE_VOLUME = 1_000f
+internal val OVERHANG_FAN_THRESHOLDS = listOf("0%", "10%", "25%", "50%", "75%", "95%")
 
 data class FeatureFilamentSettings(
     val infillOverrideEnabled: Boolean = false,
@@ -888,7 +897,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 60,
+    val schemaVersion: Int = 61,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1806,6 +1815,34 @@ data class SliceOptions(
                 .toFloatArray()
             native.filamentAdditionalCoolingFanSpeeds = nativeFilaments
                 .map(FilamentProfile::additionalCoolingFanSpeed)
+                .toIntArray()
+            native.filamentFanCoolingLayerTimes = nativeFilaments
+                .map(FilamentProfile::fanCoolingLayerTime)
+                .toFloatArray()
+            native.filamentSlowDownForLayerCooling = nativeFilaments
+                .map { if (it.slowDownForLayerCooling) 1 else 0 }
+                .toIntArray()
+            native.filamentKeepFanAlwaysOn = nativeFilaments
+                .map { if (it.keepFanAlwaysOn) 1 else 0 }
+                .toIntArray()
+            native.filamentDontSlowDownOuterWall = nativeFilaments
+                .map { if (it.dontSlowDownOuterWall) 1 else 0 }
+                .toIntArray()
+            native.filamentEnableOverhangBridgeFan = nativeFilaments
+                .map { if (it.enableOverhangBridgeFan) 1 else 0 }
+                .toIntArray()
+            native.filamentOverhangFanThresholds = nativeFilaments
+                .map {
+                    OVERHANG_FAN_THRESHOLDS.indexOf(it.overhangFanThreshold)
+                        .takeIf { index -> index >= 0 }
+                        ?: OVERHANG_FAN_THRESHOLDS.lastIndex
+                }
+                .toIntArray()
+            native.filamentInternalBridgeFanSpeeds = nativeFilaments
+                .map(FilamentProfile::internalBridgeFanSpeed)
+                .toIntArray()
+            native.filamentSupportInterfaceFanSpeeds = nativeFilaments
+                .map(FilamentProfile::supportInterfaceFanSpeed)
                 .toIntArray()
             native.auxiliaryFan = printerProfile.auxiliaryFan
             native.topSurfaceDensity = quality.surfaceDensity.topPercent
