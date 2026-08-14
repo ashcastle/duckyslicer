@@ -114,6 +114,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var maxTravelDetourDistancePercent: Boolean = base.maxTravelDetourDistancePercent
     private var reduceInfillRetraction: Boolean = base.reduceInfillRetraction
     private var travelSpeed: Float = base.travelSpeed
+    private var travelSpeedZ: Float = base.travelSpeedZ
     private var firstLayerSpeed: Float = base.firstLayerSpeed
     private var supportType: String = base.supportType
     private var supportAngle: Float = base.supportAngle
@@ -427,6 +428,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         maxTravelDetourDistancePercent = input.readCatalogBoolean()
         reduceInfillRetraction = input.readCatalogBoolean()
         travelSpeed = input.readFloat()
+        travelSpeedZ = input.readFloat()
         firstLayerSpeed = input.readFloat()
         supportType = input.readCatalogString()
         supportAngle = input.readFloat()
@@ -772,6 +774,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         maxTravelDetourDistancePercent = maxTravelDetourDistancePercent,
         reduceInfillRetraction = reduceInfillRetraction,
         travelSpeed = travelSpeed,
+        travelSpeedZ = travelSpeedZ,
         firstLayerSpeed = firstLayerSpeed,
         supportType = supportType,
         supportAngle = supportAngle,
@@ -1085,6 +1088,7 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("maxTravelDetourDistancePercent", BINARY_BOOL),
     BinaryField("reduceInfillRetraction", BINARY_BOOL),
     BinaryField("travelSpeed", BINARY_FLOAT),
+    BinaryField("travelSpeedZ", BINARY_FLOAT),
     BinaryField("firstLayerSpeed", BINARY_FLOAT),
     BinaryField("supportType", BINARY_STRING),
     BinaryField("supportAngle", BINARY_FLOAT),

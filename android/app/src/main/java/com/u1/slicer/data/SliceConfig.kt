@@ -83,6 +83,7 @@ data class SliceConfig(
     @JvmField var internalSolidInfillAcceleration: Float = 100f,
     @JvmField var internalSolidInfillAccelerationPercent: Boolean = true,
     @JvmField var travelSpeed: Float = 500f,
+    @JvmField var travelSpeedZ: Float = 0f,
     @JvmField var firstLayerSpeed: Float = 50f,
     @JvmField var nozzleTemp: Int = 210,
     @JvmField var bedTemp: Int = 60,

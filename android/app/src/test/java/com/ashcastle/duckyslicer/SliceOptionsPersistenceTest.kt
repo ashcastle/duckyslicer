@@ -170,6 +170,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(0.61f, restored.internalSolidInfillLineWidth)
         assertEquals(0.58f, restored.supportLineWidth)
         assertEquals(175f, restored.innerWallSpeed)
+        assertEquals(17f, restored.travelSpeedZ)
+        assertEquals(17f, restored.toNativeConfig().travelSpeedZ)
         assertEquals(210f, restored.sparseInfillSpeed)
         assertEquals(165f, restored.internalSolidInfillSpeed)
         assertEquals(95f, restored.topSurfaceSpeed)
@@ -481,6 +483,7 @@ class SliceOptionsPersistenceTest {
                 remove("maxVolumetricExtrusionRateSlope")
                 remove("maxVolumetricExtrusionRateSlopeSegmentLength")
                 remove("extrusionRateSmoothingExternalOnly")
+                remove("travelSpeedZ")
             }
         }
 
@@ -498,6 +501,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(0, restored.gcodeSettings.slowDownLayers)
         assertEquals(0, restored.toNativeConfig().slowDownLayers)
         assertEquals(ExtrusionRateSmoothingSettings(), restored.quality.extrusionRateSmoothing)
+        assertEquals(0f, restored.travelSpeedZ)
+        assertEquals(0f, restored.toNativeConfig().travelSpeedZ)
     }
 
     @Test
@@ -572,6 +577,10 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         bottomSurfacePattern = "concentric",
         internalSolidInfillPattern = "rectilinear",
         travelSpeed = 410f,
+        quality = QualityProfile.FINE_06.copy(
+            compatiblePrinters = listOf(PrinterProfile.U1_06.name),
+            travelSpeedZ = 17f,
+        ),
         firstLayerSpeed = 32f,
         supportEnabled = true,
         supportType = "tree(auto)",

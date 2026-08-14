@@ -2372,6 +2372,27 @@ private fun SlicingSettingsSheet(
                     steps = ((max(700f, options.travelSpeed) - 10f) / 5f).roundToInt().coerceAtLeast(2) - 1,
                     onValueChange = { onOptionsChanged(options.copy(travelSpeed = (it / 5f).roundToInt() * 5f)) },
                 )
+                val maximumVerticalTravelSpeed = max(500f, options.travelSpeedZ)
+                SettingSlider(
+                    label = stringResource(R.string.vertical_travel_speed),
+                    valueText = if (options.travelSpeedZ == 0f) {
+                        stringResource(R.string.use_travel_speed)
+                    } else {
+                        stringResource(R.string.print_speed_value, options.travelSpeedZ)
+                    },
+                    value = options.travelSpeedZ,
+                    range = 0f..maximumVerticalTravelSpeed,
+                    steps = maximumVerticalTravelSpeed.roundToInt().coerceAtLeast(2) - 1,
+                    onValueChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                quality = options.quality.copy(
+                                    travelSpeedZ = it.roundToInt().toFloat(),
+                                ),
+                            ),
+                        )
+                    },
+                )
                 OverhangSpeedSetting(
                     label = stringResource(R.string.initial_layer_travel_speed),
                     value = options.gcodeSettings.initialLayerTravelSpeed,

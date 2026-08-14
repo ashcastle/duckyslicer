@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 46
+SCHEMA_VERSION = 47
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -680,6 +680,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "maxTravelDetourDistancePercent": max_travel_detour_distance_percent,
         "reduceInfillRetraction": boolean(raw.get("reduce_infill_retraction")),
         "travelSpeed": number(raw.get("travel_speed"), 300),
+        "travelSpeedZ": number(raw.get("travel_speed_z"), 0),
         "firstLayerSpeed": first_layer_speed,
         "supportType": normalized_support_type,
         "supportAngle": number(raw.get("support_threshold_angle"), 45),
@@ -956,6 +957,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
             1_000 if profile["internalBridgeSpeedPercent"] else 2_000
         )
         and 1 <= profile["travelSpeed"] <= 2_000
+        and 0 <= profile["travelSpeedZ"] <= 2_000
         and 1 <= profile["initialLayerTravelSpeed"] <= (
             1_000 if profile["initialLayerTravelSpeedPercent"] else 2_000
         )

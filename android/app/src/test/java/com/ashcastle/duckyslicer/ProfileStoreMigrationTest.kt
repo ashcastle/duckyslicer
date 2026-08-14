@@ -30,6 +30,7 @@ class ProfileStoreMigrationTest {
                 remove("maxVolumetricExtrusionRateSlope")
                 remove("maxVolumetricExtrusionRateSlopeSegmentLength")
                 remove("extrusionRateSmoothingExternalOnly")
+                remove("travelSpeedZ")
             }
             file.writeText(
                 JSONObject()
@@ -55,6 +56,7 @@ class ProfileStoreMigrationTest {
             assertEquals(PolyholeSettings(), restoredSlicing.precision.polyholes)
             assertEquals(0, restoredSlicing.gcodeSettings.slowDownLayers)
             assertEquals(ExtrusionRateSmoothingSettings(), restoredSlicing.extrusionRateSmoothing)
+            assertEquals(0f, restoredSlicing.travelSpeedZ)
             assertEquals(BrimEarSettings(), restoredSlicing.precision.brimEars)
         } finally {
             file.delete()

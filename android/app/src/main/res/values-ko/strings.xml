@@ -331,6 +331,8 @@
     <string name="top_surface_flow_ratio">상단 표면 유량</string>
     <string name="bottom_surface_flow_ratio">하단 표면 유량</string>
     <string name="travel_speed">이동 속도</string>
+    <string name="vertical_travel_speed">수직 이동 속도</string>
+    <string name="use_travel_speed">이동 속도 사용</string>
     <string name="initial_layer_travel_speed">첫 레이어 이동</string>
     <string name="number_of_slow_layers">저속 레이어 수</string>
     <string name="acceleration_smoothing">가속도 완화</string>

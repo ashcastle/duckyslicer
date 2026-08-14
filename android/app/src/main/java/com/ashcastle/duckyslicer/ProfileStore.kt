@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 47
+internal const val USER_PROFILE_SCHEMA_VERSION = 48
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -260,6 +260,7 @@ class ProfileStore private constructor(
             maxTravelDetourDistancePercent = options.maxTravelDetourDistancePercent,
             reduceInfillRetraction = options.reduceInfillRetraction,
             travelSpeed = options.travelSpeed,
+            travelSpeedZ = options.travelSpeedZ,
             firstLayerSpeed = options.firstLayerSpeed,
             supportType = normalizedSupportType(options.supportType),
             supportAngle = options.supportAngle,
@@ -616,6 +617,7 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("maxTravelDetourDistancePercent", maxTravelDetourDistancePercent)
     .put("reduceInfillRetraction", reduceInfillRetraction)
     .put("travelSpeed", travelSpeed)
+    .put("travelSpeedZ", travelSpeedZ)
     .put("firstLayerSpeed", firstLayerSpeed).put("supportType", normalizedSupportType(supportType))
     .put("supportAngle", supportAngle).put("skirtLoops", skirtLoops)
     .put("supportInterfaceTopLayers", supportInterfaceTopLayers)
@@ -1004,6 +1006,7 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         maxTravelDetourDistancePercent = optBoolean("maxTravelDetourDistancePercent"),
         reduceInfillRetraction = optBoolean("reduceInfillRetraction"),
         travelSpeed = optDouble("travelSpeed", 500.0).toFloat(),
+        travelSpeedZ = optDouble("travelSpeedZ", 0.0).toFloat(),
         firstLayerSpeed = optDouble("firstLayerSpeed", 50.0).toFloat(),
         supportType = normalizedSupportType(optString("supportType", "normal(auto)")),
         supportAngle = optDouble("supportAngle", 45.0).toFloat(),

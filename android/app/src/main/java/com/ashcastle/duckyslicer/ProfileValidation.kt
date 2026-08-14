@@ -136,6 +136,7 @@ internal object ProfileValidation {
             ) &&
             profile.internalBridgeFilter in setOf("disabled", "limited", "nofilter") &&
             profile.travelSpeed in 1f..2_000f &&
+            profile.travelSpeedZ in 0f..2_000f &&
             featureSpeedIsValid(
                 profile.gcodeSettings.initialLayerTravelSpeed,
                 profile.gcodeSettings.initialLayerTravelSpeedPercent,

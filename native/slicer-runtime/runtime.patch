@@ -93,7 +93,7 @@ diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
 index 116a4a85..6b3048bc 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -40,14 +40,109 @@ struct SliceConfig {
+@@ -40,14 +40,110 @@ struct SliceConfig {
      int perimeters = 2;
      int top_solid_layers = 5;
      int bottom_solid_layers = 4;
@@ -148,6 +148,7 @@ index 116a4a85..6b3048bc 100644
 +    float overhang_speed_4 = 10.0f;
 +    bool overhang_speed_4_percent = false;
      float travel_speed = 150.0f;
++    float travel_speed_z = 0.0f;
      float first_layer_speed = 20.0f;
  
 +    // Process and feature flow ratios.
@@ -749,7 +750,7 @@ diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_
 index d93efb7d..fdf9a877 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -92,10 +92,97 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -92,10 +92,98 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.perimeters = getInt("perimeters");
      config.top_solid_layers = getInt("topSolidLayers");
      config.bottom_solid_layers = getInt("bottomSolidLayers");
@@ -845,6 +846,7 @@ index d93efb7d..fdf9a877 100644
 +    config.fuzzy_skin_octaves = getInt("fuzzySkinOctaves");
 +    config.fuzzy_skin_persistence = getFloat("fuzzySkinPersistence");
      config.travel_speed = getFloat("travelSpeed");
++    config.travel_speed_z = getFloat("travelSpeedZ");
      config.first_layer_speed = getFloat("firstLayerSpeed");
  
 @@ -108,15 +185,159 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
@@ -1113,7 +1115,7 @@ index d93efb7d..fdf9a877 100644
  
      env->DeleteLocalRef(cls);
      return config;
-@@ -235,9 +477,96 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -235,9 +477,97 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setInt("perimeters", config.perimeters);
      setInt("topSolidLayers", config.top_solid_layers);
      setInt("bottomSolidLayers", config.bottom_solid_layers);
@@ -1208,6 +1210,7 @@ index d93efb7d..fdf9a877 100644
 +    setInt("fuzzySkinOctaves", config.fuzzy_skin_octaves);
 +    setFloat("fuzzySkinPersistence", config.fuzzy_skin_persistence);
      setFloat("travelSpeed", config.travel_speed);
++    setFloat("travelSpeedZ", config.travel_speed_z);
      setFloat("firstLayerSpeed", config.first_layer_speed);
      setInt("nozzleTemp", config.nozzle_temp);
 @@ -247,13 +568,157 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
@@ -1485,7 +1488,7 @@ index 8d61c9cf..f285d044 100644
  #include "libslic3r/clipper.hpp"
  
  // =============================================================================
-@@ -183,84 +186,189 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -183,84 +186,190 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
      dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
      dpc.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(config.bottom_solid_layers));
@@ -1565,6 +1568,7 @@ index 8d61c9cf..f285d044 100644
 +        config.internal_bridge_speed, config.internal_bridge_speed_percent));
 +    dpc.set_key_value("gap_infill_speed",          new Slic3r::ConfigOptionFloat(config.gap_infill_speed));
      dpc.set_key_value("travel_speed",              new Slic3r::ConfigOptionFloat(config.travel_speed));
++    dpc.set_key_value("travel_speed_z",            new Slic3r::ConfigOptionFloat(config.travel_speed_z));
      dpc.set_key_value("initial_layer_speed",       new Slic3r::ConfigOptionFloat(config.first_layer_speed));
 -    dpc.set_key_value("initial_layer_infill_speed",new Slic3r::ConfigOptionFloat(config.first_layer_speed * 2.1));
 -

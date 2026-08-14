@@ -608,6 +608,7 @@ data class QualityProfile(
     val maxTravelDetourDistancePercent: Boolean = false,
     val reduceInfillRetraction: Boolean = false,
     val travelSpeed: Float = 500f,
+    val travelSpeedZ: Float = 0f,
     val firstLayerSpeed: Float = 50f,
     val supportType: String = "normal(auto)",
     val supportAngle: Float = 45f,
@@ -812,7 +813,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 46,
+    val schemaVersion: Int = 47,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1073,6 +1074,8 @@ data class SliceOptions(
     val extruderClearanceHeightToRod: Float = printerProfile.extruderClearanceHeightToRod,
     val extruderClearanceHeightToLid: Float = printerProfile.extruderClearanceHeightToLid,
 ) {
+    val travelSpeedZ: Float get() = quality.travelSpeedZ
+
     val printableOverhangs: PrintableOverhangSettings
         get() = precision.printableOverhangs
 
@@ -1536,6 +1539,7 @@ data class SliceOptions(
             internalSolidInfillAcceleration = internalSolidInfillAcceleration,
             internalSolidInfillAccelerationPercent = internalSolidInfillAccelerationPercent,
             travelSpeed = travelSpeed,
+            travelSpeedZ = travelSpeedZ,
             firstLayerSpeed = firstLayerSpeed,
             nozzleTemp = nozzleTemp,
             bedTemp = bedTemp,

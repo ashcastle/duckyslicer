@@ -477,6 +477,46 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun verticalTravelSpeedChangesRealZOnlyMotion() {
+        val base = SliceOptions()
+            .selectQuality(QualityProfile.DRAFT.copy(travelSpeedZ = 0f))
+            .copy(travelSpeed = 400f)
+        val inherited = OnDeviceSlicer.slice(fixtureModel(), base)
+        val explicit = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.copy(quality = base.quality.copy(travelSpeedZ = 17f)),
+        )
+        try {
+            fun zOnlyFeeds(gcode: String): Set<Float> = gcode.lineSequence()
+                .filter { line ->
+                    (line.startsWith("G0 ") || line.startsWith("G1 ")) &&
+                        line.contains(" Z") && !line.contains(" X") &&
+                        !line.contains(" Y") && !line.contains(" E")
+                }
+                .mapNotNull { line ->
+                    Regex("(?:^| )F([0-9.]+)").find(line)?.groupValues?.get(1)?.toFloatOrNull()
+                }
+                .toSet()
+
+            val inheritedGcode = inherited.output.readText()
+            val explicitGcode = explicit.output.readText()
+            assertTrue(inheritedGcode.contains("; travel_speed_z = 0"))
+            assertTrue(explicitGcode.contains("; travel_speed_z = 17"))
+            assertTrue(
+                "A 17 mm/s vertical speed must emit F1020 on real Z-only motion",
+                1_020f in zOnlyFeeds(explicitGcode),
+            )
+            assertFalse(
+                "The inherited travel-speed path must not emit the explicit Z feedrate",
+                1_020f in zOnlyFeeds(inheritedGcode),
+            )
+        } finally {
+            inherited.output.delete()
+            explicit.output.delete()
+        }
+    }
+
+    @Test
     fun depthPreviewPrewarmsGestureVboAndReusesItAcrossCameraFrames() {
         val framebufferSize = 256
         val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
@@ -1365,6 +1405,7 @@ class NativeEngineInstrumentedTest {
                 internalSolidInfillPattern = "rectilinear",
                 topSolidLayers = 7,
                 travelSpeed = 420f,
+                quality = QualityProfile.FINE_06.copy(travelSpeedZ = 17f),
                 fanMinSpeed = 40,
                 pressureAdvanceEnabled = true,
                 pressureAdvance = 0.035f,
@@ -1745,6 +1786,7 @@ class NativeEngineInstrumentedTest {
         assertTrue(restored.slicing.last().internalSolidInfillAccelerationPercent)
         assertEquals(7, restored.slicing.last().topSolidLayers)
         assertEquals(420f, restored.slicing.last().travelSpeed)
+        assertEquals(17f, restored.slicing.last().travelSpeedZ)
         assertEquals(1.2f, restored.filaments.last().retractLength)
         assertEquals(41f, restored.filaments.last().retractSpeed)
         assertEquals(36f, restored.filaments.last().deretractSpeed)
@@ -1892,7 +1934,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(46, catalog.schemaVersion)
+        assertEquals(47, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1989,6 +2031,10 @@ class NativeEngineInstrumentedTest {
             "The catalog must retain absolute and percentage initial travel speeds",
             catalog.slicing.any { it.gcodeSettings.initialLayerTravelSpeedPercent } &&
                 catalog.slicing.any { !it.gcodeSettings.initialLayerTravelSpeedPercent },
+        )
+        assertTrue(
+            "Inherited Orca vertical travel speeds must survive catalog normalization",
+            catalog.slicing.any { it.travelSpeedZ > 0f },
         )
         assertTrue(
             "The catalog must retain gradual initial-layer speed ramps",
