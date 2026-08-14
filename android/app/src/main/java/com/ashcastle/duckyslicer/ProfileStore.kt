@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 40
+internal const val USER_PROFILE_SCHEMA_VERSION = 41
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -752,6 +752,9 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("wallDirection", wallDirection)
     .put("detectThinWalls", detectThinWalls)
     .put("detectOverhangWalls", detectOverhangWalls)
+    .put("makeOverhangPrintable", printableOverhangs.enabled)
+    .put("makeOverhangPrintableAngle", printableOverhangs.maximumAngle)
+    .put("makeOverhangPrintableHoleSize", printableOverhangs.holeArea)
     .put("onlyOneWallOnTop", onlyOneWallOnTop)
     .put("minWidthTopSurface", minWidthTopSurface)
     .put("minWidthTopSurfacePercent", minWidthTopSurfacePercent)
@@ -1094,6 +1097,11 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
             preciseZHeight = optBoolean("preciseZHeight"),
             minimumWallWidth = optDouble("minimumWallWidth", 85.0).toFloat(),
             firstLayerMinimumWallWidth = optDouble("firstLayerMinimumWallWidth", 85.0).toFloat(),
+            printableOverhangs = PrintableOverhangSettings(
+                enabled = optBoolean("makeOverhangPrintable"),
+                maximumAngle = optDouble("makeOverhangPrintableAngle", 55.0).toFloat(),
+                holeArea = optDouble("makeOverhangPrintableHoleSize", 0.0).toFloat(),
+            ),
         ),
         seamPosition = optString("seamPosition", "aligned"),
         staggeredInnerSeams = optBoolean("staggeredInnerSeams"),

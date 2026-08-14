@@ -236,6 +236,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var wallDirection: String = base.wallDirection
     private var detectThinWalls: Boolean = base.detectThinWalls
     private var detectOverhangWalls: Boolean = base.detectOverhangWalls
+    private var makeOverhangPrintable: Boolean = base.printableOverhangs.enabled
+    private var makeOverhangPrintableAngle: Float = base.printableOverhangs.maximumAngle
+    private var makeOverhangPrintableHoleSize: Float = base.printableOverhangs.holeArea
     private var onlyOneWallOnTop: Boolean = base.onlyOneWallOnTop
     private var minWidthTopSurface: Float = base.minWidthTopSurface
     private var minWidthTopSurfacePercent: Boolean = base.minWidthTopSurfacePercent
@@ -501,6 +504,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         wallDirection = input.readCatalogString()
         detectThinWalls = input.readCatalogBoolean()
         detectOverhangWalls = input.readCatalogBoolean()
+        makeOverhangPrintable = input.readCatalogBoolean()
+        makeOverhangPrintableAngle = input.readFloat()
+        makeOverhangPrintableHoleSize = input.readFloat()
         onlyOneWallOnTop = input.readCatalogBoolean()
         minWidthTopSurface = input.readFloat()
         minWidthTopSurfacePercent = input.readCatalogBoolean()
@@ -819,6 +825,11 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             preciseZHeight = preciseZHeight,
             minimumWallWidth = minimumWallWidth,
             firstLayerMinimumWallWidth = firstLayerMinimumWallWidth,
+            printableOverhangs = PrintableOverhangSettings(
+                enabled = makeOverhangPrintable,
+                maximumAngle = makeOverhangPrintableAngle,
+                holeArea = makeOverhangPrintableHoleSize,
+            ),
         ),
         seamPosition = seamPosition,
         staggeredInnerSeams = staggeredInnerSeams,
@@ -1098,6 +1109,9 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("wallDirection", BINARY_STRING),
     BinaryField("detectThinWalls", BINARY_BOOL),
     BinaryField("detectOverhangWalls", BINARY_BOOL),
+    BinaryField("makeOverhangPrintable", BINARY_BOOL),
+    BinaryField("makeOverhangPrintableAngle", BINARY_FLOAT),
+    BinaryField("makeOverhangPrintableHoleSize", BINARY_FLOAT),
     BinaryField("onlyOneWallOnTop", BINARY_BOOL),
     BinaryField("minWidthTopSurface", BINARY_FLOAT),
     BinaryField("minWidthTopSurfacePercent", BINARY_BOOL),

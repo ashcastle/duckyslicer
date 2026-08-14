@@ -412,6 +412,13 @@ data class PrecisionSettings(
     val preciseZHeight: Boolean = false,
     val minimumWallWidth: Float = 85f,
     val firstLayerMinimumWallWidth: Float = 85f,
+    val printableOverhangs: PrintableOverhangSettings = PrintableOverhangSettings(),
+)
+
+data class PrintableOverhangSettings(
+    val enabled: Boolean = false,
+    val maximumAngle: Float = 55f,
+    val holeArea: Float = 0f,
 )
 
 data class IroningSettings(
@@ -681,6 +688,9 @@ data class QualityProfile(
     val brand: String? = null,
     val compatiblePrinters: List<String> = emptyList(),
 ) {
+    val printableOverhangs: PrintableOverhangSettings
+        get() = precision.printableOverhangs
+
     companion object {
         // Curated from the included Snapmaker U1 process catalog.
         val FINE_02 = QualityProfile(
@@ -771,7 +781,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 39,
+    val schemaVersion: Int = 40,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1032,6 +1042,9 @@ data class SliceOptions(
     val extruderClearanceHeightToRod: Float = printerProfile.extruderClearanceHeightToRod,
     val extruderClearanceHeightToLid: Float = printerProfile.extruderClearanceHeightToLid,
 ) {
+    val printableOverhangs: PrintableOverhangSettings
+        get() = precision.printableOverhangs
+
     val retraction: RetractionSettings get() = filamentProfile.resolveRetraction(printerProfile)
     val retractLength: Float get() = retraction.length
     val retractSpeed: Float get() = retraction.speed
@@ -1708,6 +1721,9 @@ data class SliceOptions(
             native.preciseZHeight = precision.preciseZHeight
             native.minimumWallWidth = precision.minimumWallWidth
             native.firstLayerMinimumWallWidth = precision.firstLayerMinimumWallWidth
+            native.makeOverhangPrintable = printableOverhangs.enabled
+            native.makeOverhangPrintableAngle = printableOverhangs.maximumAngle
+            native.makeOverhangPrintableHoleSize = printableOverhangs.holeArea
             native.ironingType = ironing.type
             native.ironingPattern = ironing.pattern
             native.ironingFlow = ironing.flow

@@ -398,6 +398,24 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(profile["supportInterfaceLoopPattern"])
         self.assertFalse(profile["independentSupportLayerHeight"])
 
+    def test_preserves_printable_overhang_geometry_values(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Printable overhangs",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "make_overhang_printable": "1",
+                "make_overhang_printable_angle": "63",
+                "make_overhang_printable_hole_size": "240",
+            },
+            {},
+        )
+
+        self.assertTrue(profile["makeOverhangPrintable"])
+        self.assertEqual(63.0, profile["makeOverhangPrintableAngle"])
+        self.assertEqual(240.0, profile["makeOverhangPrintableHoleSize"])
+
     def test_preserves_tree_support_mode_and_geometry(self) -> None:
         profile = build_process(
             "Example",

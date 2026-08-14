@@ -283,6 +283,9 @@
     <string name="minimum_wall_length">최소 벽 길이</string>
     <string name="detect_thin_walls">얇은 벽 채우기</string>
     <string name="detect_overhang_walls">오버행 벽 감지</string>
+    <string name="make_overhangs_printable">서포트 없이 출력 가능한 오버행 만들기</string>
+    <string name="maximum_overhang_angle">최대 오버행 각도</string>
+    <string name="overhang_base_hole_area">바닥 홀 면적</string>
     <string name="one_wall_on_top">상단 면 한 줄 벽</string>
     <string name="one_wall_on_first_layer">첫 레이어 한 줄 벽</string>
     <string name="extra_perimeters_on_overhangs">오버행에 추가 벽 생성</string>

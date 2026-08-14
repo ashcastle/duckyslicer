@@ -1695,6 +1695,64 @@ private fun SlicingSettingsSheet(
                     onCheckedChange = { onOptionsChanged(options.copy(detectOverhangWalls = it)) },
                 )
                 SettingsSwitch(
+                    label = stringResource(R.string.make_overhangs_printable),
+                    checked = options.printableOverhangs.enabled,
+                    onCheckedChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                precision = options.precision.copy(
+                                    printableOverhangs = options.printableOverhangs.copy(enabled = it),
+                                ),
+                            ),
+                        )
+                    },
+                )
+                if (options.printableOverhangs.enabled || settingsQuery.isNotBlank()) {
+                    SettingSlider(
+                        label = stringResource(R.string.maximum_overhang_angle),
+                        valueText = stringResource(
+                            R.string.degrees_value,
+                            options.printableOverhangs.maximumAngle,
+                        ),
+                        value = options.printableOverhangs.maximumAngle,
+                        range = 0f..90f,
+                        steps = 89,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    precision = options.precision.copy(
+                                        printableOverhangs = options.printableOverhangs.copy(
+                                            maximumAngle = it.roundToInt().toFloat(),
+                                        ),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    val maximumHoleArea = max(1_000f, options.printableOverhangs.holeArea)
+                    SettingSlider(
+                        label = stringResource(R.string.overhang_base_hole_area),
+                        valueText = stringResource(
+                            R.string.square_millimeters_value,
+                            options.printableOverhangs.holeArea,
+                        ),
+                        value = options.printableOverhangs.holeArea,
+                        range = 0f..maximumHoleArea,
+                        steps = 999,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    precision = options.precision.copy(
+                                        printableOverhangs = options.printableOverhangs.copy(
+                                            holeArea = it.roundToInt().toFloat(),
+                                        ),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                }
+                SettingsSwitch(
                     label = stringResource(R.string.one_wall_on_top),
                     checked = options.onlyOneWallOnTop,
                     onCheckedChange = { onOptionsChanged(options.copy(onlyOneWallOnTop = it)) },

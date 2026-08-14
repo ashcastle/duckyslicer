@@ -18,12 +18,17 @@ class ProfileStoreMigrationTest {
             val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(id = "v3-printer", name = "V3 Printer")
             val filament = FilamentProfile.GENERIC_PLA.copy(id = "v3-filament", name = "V3 Filament")
             val slicing = QualityProfile.STANDARD.copy(id = "v3-slicing", name = "V3 Slicing")
+            val legacySlicing = slicing.toProfileJson().withoutProfileMetadata().apply {
+                remove("makeOverhangPrintable")
+                remove("makeOverhangPrintableAngle")
+                remove("makeOverhangPrintableHoleSize")
+            }
             file.writeText(
                 JSONObject()
                     .put("schemaVersion", 3)
                     .put("printers", JSONArray().put(printer.toProfileJson().withoutProfileMetadata()))
                     .put("filaments", JSONArray().put(filament.toProfileJson().withoutProfileMetadata()))
-                    .put("slicing", JSONArray().put(slicing.toProfileJson().withoutProfileMetadata()))
+                    .put("slicing", JSONArray().put(legacySlicing))
                     .toString(),
             )
 
@@ -38,6 +43,7 @@ class ProfileStoreMigrationTest {
             assertTrue(restoredSlicing.compatiblePrinters.isEmpty())
             assertEquals("V3 Filament", restoredFilament.name)
             assertEquals("V3 Slicing", restoredSlicing.name)
+            assertEquals(PrintableOverhangSettings(), restoredSlicing.printableOverhangs)
         } finally {
             file.delete()
         }

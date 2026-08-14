@@ -109,7 +109,7 @@ class ProjectStoreTest {
     }
 
     @Test
-    fun schemaElevenPersistsStableVolumeAndSchemaOneMigratesDeterministically() = withStore { root, store ->
+    fun schemaTwelvePersistsStableVolumeAndSchemaOneMigratesDeterministically() = withStore { root, store ->
         val modelFile = store.createModelDestination("settings.stl").apply { writeText("solid part") }
         val options = multiFilamentSettingsFixture()
         val snapshot = ProjectSnapshot(
@@ -121,7 +121,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(11, persisted.getInt("schemaVersion"))
+        assertEquals(12, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),

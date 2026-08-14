@@ -252,6 +252,9 @@ data class SliceConfig(
     @JvmField var preciseZHeight: Boolean = false
     @JvmField var minimumWallWidth: Float = 85f
     @JvmField var firstLayerMinimumWallWidth: Float = 85f
+    @JvmField var makeOverhangPrintable: Boolean = false
+    @JvmField var makeOverhangPrintableAngle: Float = 55f
+    @JvmField var makeOverhangPrintableHoleSize: Float = 0f
     @JvmField var ironingType: String = "no ironing"
     @JvmField var ironingPattern: String = "rectilinear"
     @JvmField var ironingFlow: Float = 10f

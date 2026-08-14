@@ -176,6 +176,58 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun printableOverhangsChangeRealModelGeometry() {
+        val baseOptions = SliceOptions()
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                perimeters = 2,
+                supportEnabled = false,
+                precision = PrecisionSettings(
+                    printableOverhangs = PrintableOverhangSettings(
+                        enabled = false,
+                        maximumAngle = 30f,
+                        holeArea = 0f,
+                    ),
+                ),
+            )
+        val model = supportPaintOverhangModel()
+        val plain = OnDeviceSlicer.slice(model, baseOptions)
+        val printable = OnDeviceSlicer.slice(
+            model,
+            baseOptions.copy(
+                precision = baseOptions.precision.copy(
+                    printableOverhangs = baseOptions.printableOverhangs.copy(enabled = true),
+                ),
+            ),
+        )
+        try {
+            fun outerWallLength(gcode: File): Float {
+                val preview = loadGcodePreview(gcode.absolutePath, 0, Int.MAX_VALUE)
+                var length = 0f
+                preview.segments.indices.step(GcodeLayerPreview.SEGMENT_STRIDE).forEach { offset ->
+                    if (preview.segments[offset + 5].toInt() != 0) return@forEach
+                    val dx = preview.segments[offset + 2] - preview.segments[offset]
+                    val dy = preview.segments[offset + 3] - preview.segments[offset + 1]
+                    length += sqrt(dx * dx + dy * dy)
+                }
+                return length
+            }
+
+            val printableGcode = printable.output.readText()
+            assertTrue(printableGcode.contains("; make_overhang_printable = 1"))
+            assertTrue(printableGcode.contains("; make_overhang_printable_angle = 30"))
+            assertTrue(printableGcode.contains("; make_overhang_printable_hole_size = 0"))
+            assertTrue(
+                "Printable-overhang processing must change real exterior toolpaths",
+                abs(outerWallLength(printable.output) - outerWallLength(plain.output)) > 5f,
+            )
+        } finally {
+            plain.output.delete()
+            printable.output.delete()
+        }
+    }
+
+    @Test
     fun inheritedMotionOutputChangesFirstLayerTravelAndKlipperLimits() {
         val base = SliceOptions()
             .selectPrinter(PrinterProfile.U1_04.copy(gcodeFlavor = "klipper"))
@@ -1234,6 +1286,11 @@ class NativeEngineInstrumentedTest {
                 precision = PrecisionSettings(
                     minimumWallWidth = 72f,
                     firstLayerMinimumWallWidth = 118f,
+                    printableOverhangs = PrintableOverhangSettings(
+                        enabled = true,
+                        maximumAngle = 64f,
+                        holeArea = 250f,
+                    ),
                 ),
                 minimumWallLengthFactor = 0.8f,
                 wallSequence = "outer-inner",
@@ -1457,6 +1514,10 @@ class NativeEngineInstrumentedTest {
         assertEquals(21f, restored.slicing.last().minimumFeatureSize)
         assertEquals(72f, restored.slicing.last().precision.minimumWallWidth)
         assertEquals(118f, restored.slicing.last().precision.firstLayerMinimumWallWidth)
+        assertEquals(
+            PrintableOverhangSettings(enabled = true, maximumAngle = 64f, holeArea = 250f),
+            restored.slicing.last().printableOverhangs,
+        )
         assertEquals(0.8f, restored.slicing.last().minimumWallLengthFactor)
         assertEquals("outer-inner", restored.slicing.last().wallSequence)
         assertEquals("cw", restored.slicing.last().wallDirection)
@@ -1546,7 +1607,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(39, catalog.schemaVersion)
+        assertEquals(40, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1582,6 +1643,12 @@ class NativeEngineInstrumentedTest {
             "Prime-tower process values must survive catalog normalization",
             catalog.slicing.any { it.wipeTowerEnabled && it.wipeTowerWidth != 60f },
         )
+        assertTrue(
+            "Printable-overhang process values must survive catalog normalization",
+            catalog.slicing.any { it.printableOverhangs.maximumAngle == 90f },
+        )
+        assertTrue(catalog.slicing.all { !it.printableOverhangs.enabled })
+        assertTrue(catalog.slicing.all { it.printableOverhangs.holeArea == 0f })
         assertTrue(
             "Feature filament routing must survive catalog normalization",
             catalog.slicing.any { it.featureFilaments.wipeTowerFilament != 0 },

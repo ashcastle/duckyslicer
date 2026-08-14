@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 39
+SCHEMA_VERSION = 40
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -783,6 +783,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "wallDirection": enum_value(raw.get("wall_direction"), {"auto", "ccw", "cw"}, "auto"),
         "detectThinWalls": boolean(raw.get("detect_thin_wall")),
         "detectOverhangWalls": boolean(raw.get("detect_overhang_wall"), True),
+        "makeOverhangPrintable": boolean(raw.get("make_overhang_printable")),
+        "makeOverhangPrintableAngle": number(raw.get("make_overhang_printable_angle"), 55),
+        "makeOverhangPrintableHoleSize": number(raw.get("make_overhang_printable_hole_size"), 0),
         "onlyOneWallOnTop": boolean(raw.get("only_one_wall_top")),
         "minWidthTopSurface": min_width_top_surface,
         "minWidthTopSurfacePercent": min_width_top_surface_percent,

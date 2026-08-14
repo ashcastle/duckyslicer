@@ -43,6 +43,8 @@ def valid_sources() -> dict[str, str]:
             " R.string.order_default R.string.order_as_object_list"
             " R.string.sequential_printing_clearance R.string.extruder_clearance_radius"
             " R.string.extruder_clearance_height_to_rod R.string.extruder_clearance_height_to_lid"
+            " R.string.make_overhangs_printable R.string.maximum_overhang_angle"
+            " R.string.overhang_base_hole_area"
             " R.string.support_on_build_plate_only R.string.support_base_pattern_spacing"
             " R.string.support_expansion R.string.support_interface_loop_pattern"
             " R.string.independent_support_layer_height"
@@ -106,6 +108,8 @@ def valid_sources() -> dict[str, str]:
             ' name="order_default" name="order_as_object_list"'
             ' name="sequential_printing_clearance" name="extruder_clearance_radius"'
             ' name="extruder_clearance_height_to_rod" name="extruder_clearance_height_to_lid"'
+            ' name="make_overhangs_printable" name="maximum_overhang_angle"'
+            ' name="overhang_base_hole_area"'
             ' name="support_on_build_plate_only" name="support_base_pattern_spacing"'
             ' name="support_expansion" name="support_interface_loop_pattern"'
             ' name="independent_support_layer_height"'
@@ -132,6 +136,8 @@ def valid_sources() -> dict[str, str]:
             ' name="order_default" name="order_as_object_list"'
             ' name="sequential_printing_clearance" name="extruder_clearance_radius"'
             ' name="extruder_clearance_height_to_rod" name="extruder_clearance_height_to_lid"'
+            ' name="make_overhangs_printable" name="maximum_overhang_angle"'
+            ' name="overhang_base_hole_area"'
             ' name="support_on_build_plate_only" name="support_base_pattern_spacing"'
             ' name="support_expansion" name="support_interface_loop_pattern"'
             ' name="independent_support_layer_height"'

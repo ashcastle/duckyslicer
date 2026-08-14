@@ -325,6 +325,11 @@ class SliceOptionsPersistenceTest {
                 preciseZHeight = true,
                 minimumWallWidth = 74f,
                 firstLayerMinimumWallWidth = 116f,
+                printableOverhangs = PrintableOverhangSettings(
+                    enabled = true,
+                    maximumAngle = 63f,
+                    holeArea = 240f,
+                ),
             ),
             restored.precision,
         )
@@ -341,6 +346,13 @@ class SliceOptionsPersistenceTest {
         assertEquals("close_holes", restored.toNativeConfig().slicingMode)
         assertEquals(0.125f, restored.toNativeConfig().sliceClosingRadius)
         assertEquals(true, restored.toNativeConfig().preciseZHeight)
+        assertEquals(
+            PrintableOverhangSettings(enabled = true, maximumAngle = 63f, holeArea = 240f),
+            restored.printableOverhangs,
+        )
+        assertEquals(true, restored.toNativeConfig().makeOverhangPrintable)
+        assertEquals(63f, restored.toNativeConfig().makeOverhangPrintableAngle)
+        assertEquals(240f, restored.toNativeConfig().makeOverhangPrintableHoleSize)
         assertEquals(true, restored.staggeredInnerSeams)
         assertEquals(3.5f, restored.seamGap)
         assertEquals(true, restored.seamGapPercent)
@@ -408,6 +420,25 @@ class SliceOptionsPersistenceTest {
         assertEquals(3.5f, restored.raftFirstLayerExpansion)
         assertEquals("klipper", restored.gcodeFlavor)
         assertEquals(4_600f, restored.maxAccelerationTravel)
+    }
+
+    @Test
+    fun legacyProjectDefaultsPrintableOverhangGeometrySafely() {
+        val json = SliceOptions().toProjectJson().apply {
+            put("formatVersion", 1)
+            getJSONObject("slicing").apply {
+                remove("makeOverhangPrintable")
+                remove("makeOverhangPrintableAngle")
+                remove("makeOverhangPrintableHoleSize")
+            }
+        }
+
+        val restored = requireNotNull(json.toProjectSliceOptionsOrNull())
+
+        assertEquals(PrintableOverhangSettings(), restored.printableOverhangs)
+        assertEquals(false, restored.toNativeConfig().makeOverhangPrintable)
+        assertEquals(55f, restored.toNativeConfig().makeOverhangPrintableAngle)
+        assertEquals(0f, restored.toNativeConfig().makeOverhangPrintableHoleSize)
     }
 
     @Test
@@ -673,6 +704,11 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             preciseZHeight = true,
             minimumWallWidth = 74f,
             firstLayerMinimumWallWidth = 116f,
+            printableOverhangs = PrintableOverhangSettings(
+                enabled = true,
+                maximumAngle = 63f,
+                holeArea = 240f,
+            ),
         ),
         seamPosition = "nearest",
         staggeredInnerSeams = true,
