@@ -70,6 +70,8 @@ internal object ProfileValidation {
             profile.diameter in 0.5f..4f &&
             profile.density in 0f..10f &&
             profile.costPerKilogram in 0f..1_000_000f &&
+            profile.shrinkageXyPercent in 10f..200f &&
+            profile.shrinkageZPercent in 10f..200f &&
             listOf(
                 profile.fanMinSpeed,
                 profile.fanMaxSpeed,

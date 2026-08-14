@@ -287,6 +287,8 @@ data class FilamentProfile(
     val diameter: Float = 1.75f,
     val density: Float = 1.24f,
     val costPerKilogram: Float = 0f,
+    val shrinkageXyPercent: Float = 100f,
+    val shrinkageZPercent: Float = 100f,
     val soluble: Boolean = false,
     val supportMaterial: Boolean = false,
     val minimalPurgeOnWipeTower: Float = 15f,
@@ -1010,7 +1012,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 62,
+    val schemaVersion: Int = 63,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1930,6 +1932,12 @@ data class SliceOptions(
             filamentDensities = nativeFilaments.map(FilamentProfile::density).toFloatArray(),
             filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
+            native.filamentShrinkages = nativeFilaments
+                .map(FilamentProfile::shrinkageXyPercent)
+                .toFloatArray()
+            native.filamentShrinkageCompensationZ = nativeFilaments
+                .map(FilamentProfile::shrinkageZPercent)
+                .toFloatArray()
             native.filamentSoluble = nativeFilaments.map { if (it.soluble) 1 else 0 }.toIntArray()
             native.filamentIsSupport = nativeFilaments.map { if (it.supportMaterial) 1 else 0 }.toIntArray()
             native.filamentMinimalPurgeOnWipeTower = nativeFilaments

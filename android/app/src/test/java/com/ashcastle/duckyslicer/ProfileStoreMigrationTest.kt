@@ -25,6 +25,8 @@ class ProfileStoreMigrationTest {
                 remove("diameter")
                 remove("density")
                 remove("costPerKilogram")
+                remove("shrinkageXyPercent")
+                remove("shrinkageZPercent")
                 remove("soluble")
                 remove("supportMaterial")
                 remove("minimalPurgeOnWipeTower")
@@ -103,6 +105,8 @@ class ProfileStoreMigrationTest {
             assertEquals(1.75f, restoredFilament.diameter)
             assertEquals(1.24f, restoredFilament.density)
             assertEquals(0f, restoredFilament.costPerKilogram)
+            assertEquals(100f, restoredFilament.shrinkageXyPercent)
+            assertEquals(100f, restoredFilament.shrinkageZPercent)
             assertFalse(restoredFilament.soluble)
             assertFalse(restoredFilament.supportMaterial)
             assertEquals(15f, restoredFilament.minimalPurgeOnWipeTower)
@@ -334,6 +338,8 @@ class ProfileStoreMigrationTest {
                         diameter = 2.85f,
                         density = 1.07f,
                         costPerKilogram = 42.5f,
+                        shrinkageXyPercent = 99.2f,
+                        shrinkageZPercent = 99.18f,
                         soluble = true,
                         supportMaterial = true,
                         minimalPurgeOnWipeTower = 35f,
@@ -364,6 +370,10 @@ class ProfileStoreMigrationTest {
             assertEquals(1.07f, restored.density)
             assertEquals(42.5f, saved.costPerKilogram)
             assertEquals(42.5f, restored.costPerKilogram)
+            assertEquals(99.2f, saved.shrinkageXyPercent)
+            assertEquals(99.2f, restored.shrinkageXyPercent)
+            assertEquals(99.18f, saved.shrinkageZPercent)
+            assertEquals(99.18f, restored.shrinkageZPercent)
             assertTrue(saved.soluble)
             assertTrue(restored.soluble)
             assertTrue(saved.supportMaterial)

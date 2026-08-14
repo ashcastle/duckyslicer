@@ -52,6 +52,8 @@ class ProfileBundleTest {
                         firstLayerSuperTackPlateTemp = 36,
                         graphicEffectPlateTemp = 55,
                         firstLayerGraphicEffectPlateTemp = 56,
+                        shrinkageXyPercent = 99.2f,
+                        shrinkageZPercent = 99.18f,
                     ),
                 ),
             )
@@ -109,6 +111,8 @@ class ProfileBundleTest {
             assertEquals(36, importedFilament.firstLayerSuperTackPlateTemp)
             assertEquals(55, importedFilament.graphicEffectPlateTemp)
             assertEquals(56, importedFilament.firstLayerGraphicEffectPlateTemp)
+            assertEquals(99.2f, importedFilament.shrinkageXyPercent)
+            assertEquals(99.18f, importedFilament.shrinkageZPercent)
             assertTrue(catalog.slicing.any { it.name == "Portable slicing" && !it.builtIn })
 
             val firstGeneration = destinationFile.readBytes()

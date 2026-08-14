@@ -1081,6 +1081,38 @@ private fun FilamentSettingsSheet(
                 )
             },
         )
+        QuantizedSettingSlider(
+            label = stringResource(R.string.filament_shrinkage_xy),
+            valueText = stringResource(R.string.percent_value_precise, activeProfile.shrinkageXyPercent),
+            value = activeProfile.shrinkageXyPercent,
+            minimum = 10f,
+            defaultMaximum = 200f,
+            increment = 0.1f,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(shrinkageXyPercent = it),
+                    ),
+                )
+            },
+        )
+        QuantizedSettingSlider(
+            label = stringResource(R.string.filament_shrinkage_z),
+            valueText = stringResource(R.string.percent_value_precise, activeProfile.shrinkageZPercent),
+            value = activeProfile.shrinkageZPercent,
+            minimum = 10f,
+            defaultMaximum = 200f,
+            increment = 0.1f,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(shrinkageZPercent = it),
+                    ),
+                )
+            },
+        )
         SettingsSwitch(
             label = stringResource(R.string.filament_soluble_material),
             checked = activeProfile.soluble,

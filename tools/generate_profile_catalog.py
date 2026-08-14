@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 62
+SCHEMA_VERSION = 63
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -470,6 +470,8 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "diameter": number(raw.get("filament_diameter"), 1.75),
         "density": number(raw.get("filament_density"), 1.24),
         "costPerKilogram": number(raw.get("filament_cost"), 0),
+        "shrinkageXyPercent": number(raw.get("filament_shrink"), 100),
+        "shrinkageZPercent": number(raw.get("filament_shrinkage_compensation_z"), 100),
         "soluble": boolean(raw.get("filament_soluble")),
         "supportMaterial": boolean(raw.get("filament_is_support")),
         "minimalPurgeOnWipeTower": number(raw.get("filament_minimal_purge_on_wipe_tower"), 15),
@@ -537,6 +539,8 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and 0.5 <= profile["diameter"] <= 4
         and 0 <= profile["density"] <= 10
         and 0 <= profile["costPerKilogram"] <= 1_000_000
+        and 10 <= profile["shrinkageXyPercent"] <= 200
+        and 10 <= profile["shrinkageZPercent"] <= 200
         and len(profile["filamentStartGcode"].encode("utf-8")) <= 262_144
         and len(profile["filamentEndGcode"].encode("utf-8")) <= 262_144
         and all(

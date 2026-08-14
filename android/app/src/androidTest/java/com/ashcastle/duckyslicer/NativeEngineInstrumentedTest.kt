@@ -2098,7 +2098,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(62, catalog.schemaVersion)
+        assertEquals(63, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2134,6 +2134,14 @@ class NativeEngineInstrumentedTest {
                     it.bedTemp != it.coolPlateTemp ||
                     it.texturedPlateTemp != it.engineeringPlateTemp
             },
+        )
+        assertTrue(
+            "Orca XY shrinkage compensation must survive catalog generation",
+            catalog.filaments.any { abs(it.shrinkageXyPercent - 100f) >= 0.001f },
+        )
+        assertTrue(
+            "Orca Z shrinkage compensation must survive catalog generation",
+            catalog.filaments.any { abs(it.shrinkageZPercent - 100f) >= 0.001f },
         )
         assertTrue(
             "Inherited fan continuity must survive catalog generation",
@@ -4384,6 +4392,101 @@ class NativeEngineInstrumentedTest {
             "Positive contour compensation must expand generated Y geometry",
             expanded.maxY - expanded.minY > original.maxY - original.minY + 0.4f,
         )
+    }
+
+    @Test
+    fun filamentShrinkageCompensationScalesRealXyAndZGeometry() {
+        val model = fixtureModel()
+        fun options(shrinkagePercent: Float): SliceOptions = SliceOptions()
+            .selectPrinter(PrinterProfile.CUSTOM_CARTESIAN)
+            .selectFilament(
+                FilamentProfile.GENERIC_PLA.copy(
+                    shrinkageXyPercent = shrinkagePercent,
+                    shrinkageZPercent = shrinkagePercent,
+                ),
+            )
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                skirtLoops = 0,
+                brimWidth = 0f,
+                elephantFootCompensation = 0f,
+            )
+
+        val baseline = OnDeviceSlicer.slice(model, options(100f))
+        val baselineBounds = outerWallBounds(baseline.output)
+        val compensated = OnDeviceSlicer.slice(model, options(50f))
+        try {
+            val compensatedBounds = outerWallBounds(compensated.output)
+            val baselineWidth = baselineBounds.maxX - baselineBounds.minX
+            val baselineDepth = baselineBounds.maxY - baselineBounds.minY
+            val compensatedWidth = compensatedBounds.maxX - compensatedBounds.minX
+            val compensatedDepth = compensatedBounds.maxY - compensatedBounds.minY
+            val gcode = compensated.output.readText()
+
+            assertTrue(gcode.contains("; filament_shrink = 50%"))
+            assertTrue(gcode.contains("; filament_shrinkage_compensation_z = 50%"))
+            assertTrue(
+                "50% XY shrinkage compensation must nearly double real X extrusion geometry " +
+                    "($baselineWidth -> $compensatedWidth)",
+                compensatedWidth > baselineWidth * 1.9f,
+            )
+            assertTrue(
+                "50% XY shrinkage compensation must nearly double real Y extrusion geometry " +
+                    "($baselineDepth -> $compensatedDepth)",
+                compensatedDepth > baselineDepth * 1.9f,
+            )
+            assertTrue(
+                "50% Z shrinkage compensation must nearly double the real layer stack " +
+                    "(${baseline.layers} -> ${compensated.layers})",
+                compensated.layers > baseline.layers * 1.9f,
+            )
+
+            val primary = FilamentProfile.GENERIC_PLA.copy(
+                id = "test-shrink-primary",
+                shrinkageXyPercent = 50f,
+                shrinkageZPercent = 50f,
+            )
+            val secondary = FilamentProfile.PETG.copy(
+                id = "test-shrink-secondary",
+                shrinkageXyPercent = 100f,
+                shrinkageZPercent = 100f,
+            )
+            val mismatched = OnDeviceSlicer.slice(
+                model,
+                options(50f).copy(
+                    printerProfile = PrinterProfile.CUSTOM_CARTESIAN.copy(
+                        id = "test-shrink-two-tool-printer",
+                        extruderCount = 2,
+                    ),
+                    filamentProfile = primary,
+                    filamentSlots = listOf(primary, secondary),
+                    featureFilaments = FeatureFilamentSettings(
+                        infillOverrideEnabled = true,
+                        sparseInfillFilament = 2,
+                        wallFilament = 1,
+                        solidInfillFilament = 2,
+                    ),
+                ),
+            )
+            try {
+                val mismatchedBounds = outerWallBounds(mismatched.output)
+                val mismatchedWidth = mismatchedBounds.maxX - mismatchedBounds.minX
+                val mismatchedGcode = mismatched.output.readText()
+                val shrinkageHeader = mismatchedGcode.lineSequence()
+                    .firstOrNull { it.startsWith("; filament_shrink =") }
+                assertEquals(";filament_shrink=50%,100%", shrinkageHeader?.replace(" ", ""))
+                assertTrue(
+                    "Orca must disable compensation when actually used filaments disagree " +
+                        "($baselineWidth -> $mismatchedWidth)",
+                    abs(mismatchedWidth - baselineWidth) < 0.5f,
+                )
+            } finally {
+                mismatched.output.delete()
+            }
+        } finally {
+            baseline.output.delete()
+            compensated.output.delete()
+        }
     }
 
     @Test

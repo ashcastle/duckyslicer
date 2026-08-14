@@ -74,6 +74,8 @@ def valid_sources() -> dict[str, str]:
             " R.string.filament_diameter activeProfile.copy(diameter ="
             " R.string.filament_density activeProfile.copy(density ="
             " R.string.filament_price_per_kilogram activeProfile.copy(costPerKilogram ="
+            " R.string.filament_shrinkage_xy activeProfile.copy(shrinkageXyPercent ="
+            " R.string.filament_shrinkage_z activeProfile.copy(shrinkageZPercent ="
             " R.string.filament_soluble_material activeProfile.copy(soluble ="
             " R.string.filament_support_material activeProfile.copy(supportMaterial ="
             " R.string.filament_minimal_purge_on_wipe_tower"
@@ -171,6 +173,7 @@ def valid_sources() -> dict[str, str]:
             ' name="filament_gcode" name="filament_start_gcode" name="filament_end_gcode"'
             ' name="filament_diameter"'
             ' name="filament_density" name="filament_price_per_kilogram"'
+            ' name="filament_shrinkage_xy" name="filament_shrinkage_z"'
             ' name="filament_soluble_material" name="filament_support_material"'
             ' name="filament_minimal_purge_on_wipe_tower"'
             ' name="auxiliary_part_cooling_fan" name="cubic_millimeters_suffix"'
@@ -217,6 +220,7 @@ def valid_sources() -> dict[str, str]:
             ' name="filament_gcode" name="filament_start_gcode" name="filament_end_gcode"'
             ' name="filament_diameter"'
             ' name="filament_density" name="filament_price_per_kilogram"'
+            ' name="filament_shrinkage_xy" name="filament_shrinkage_z"'
             ' name="filament_soluble_material" name="filament_support_material"'
             ' name="filament_minimal_purge_on_wipe_tower"'
             ' name="auxiliary_part_cooling_fan" name="cubic_millimeters_suffix"'

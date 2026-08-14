@@ -17,6 +17,8 @@ class SliceOptionsPersistenceTest {
             diameter = 2.85f,
             density = 1.07f,
             costPerKilogram = 42.5f,
+            shrinkageXyPercent = 99.2f,
+            shrinkageZPercent = 99.18f,
             minimalPurgeOnWipeTower = 9f,
             additionalCoolingFanSpeed = 40,
             fanCoolingLayerTime = 42f,
@@ -39,6 +41,8 @@ class SliceOptionsPersistenceTest {
             diameter = 2.85f,
             density = 1.32f,
             costPerKilogram = 75f,
+            shrinkageXyPercent = 98.4f,
+            shrinkageZPercent = 98.8f,
             soluble = true,
             supportMaterial = true,
             minimalPurgeOnWipeTower = 35f,
@@ -144,6 +148,12 @@ class SliceOptionsPersistenceTest {
         assertEquals(2.85f, native.filamentDiameter)
         assertArrayEquals(floatArrayOf(1.07f, 1.32f), native.filamentDensities, 0.001f)
         assertArrayEquals(floatArrayOf(42.5f, 75f), native.filamentCosts, 0.001f)
+        assertArrayEquals(floatArrayOf(99.2f, 98.4f), native.filamentShrinkages, 0.001f)
+        assertArrayEquals(
+            floatArrayOf(99.18f, 98.8f),
+            native.filamentShrinkageCompensationZ,
+            0.001f,
+        )
         assertEquals(listOf(0, 1), native.filamentSoluble.toList())
         assertEquals(listOf(0, 1), native.filamentIsSupport.toList())
         assertArrayEquals(floatArrayOf(9f, 35f), native.filamentMinimalPurgeOnWipeTower, 0.001f)
@@ -670,6 +680,8 @@ class SliceOptionsPersistenceTest {
             getJSONObject("filament").remove("diameter")
             getJSONObject("filament").remove("density")
             getJSONObject("filament").remove("costPerKilogram")
+            getJSONObject("filament").remove("shrinkageXyPercent")
+            getJSONObject("filament").remove("shrinkageZPercent")
             getJSONObject("filament").remove("soluble")
             getJSONObject("filament").remove("supportMaterial")
             getJSONObject("filament").remove("minimalPurgeOnWipeTower")
@@ -679,6 +691,8 @@ class SliceOptionsPersistenceTest {
             getJSONArray("filamentSlots").getJSONObject(0).remove("diameter")
             getJSONArray("filamentSlots").getJSONObject(0).remove("density")
             getJSONArray("filamentSlots").getJSONObject(0).remove("costPerKilogram")
+            getJSONArray("filamentSlots").getJSONObject(0).remove("shrinkageXyPercent")
+            getJSONArray("filamentSlots").getJSONObject(0).remove("shrinkageZPercent")
             getJSONArray("filamentSlots").getJSONObject(0).remove("soluble")
             getJSONArray("filamentSlots").getJSONObject(0).remove("supportMaterial")
             getJSONArray("filamentSlots").getJSONObject(0).remove("minimalPurgeOnWipeTower")
@@ -779,6 +793,11 @@ class SliceOptionsPersistenceTest {
         assertEquals(listOf(5), restored.toNativeConfig().filamentOverhangFanThresholds.toList())
         assertEquals(listOf(-1), restored.toNativeConfig().filamentInternalBridgeFanSpeeds.toList())
         assertEquals(listOf(-1), restored.toNativeConfig().filamentSupportInterfaceFanSpeeds.toList())
+        assertEquals(listOf(100f), restored.toNativeConfig().filamentShrinkages.toList())
+        assertEquals(
+            listOf(100f),
+            restored.toNativeConfig().filamentShrinkageCompensationZ.toList(),
+        )
         assertEquals(false, restored.toNativeConfig().auxiliaryFan)
         assertEquals(0f, restored.travelSpeedZ)
         assertEquals(0f, restored.toNativeConfig().travelSpeedZ)
@@ -813,6 +832,16 @@ class SliceOptionsPersistenceTest {
         assertFalse(
             ProfileValidation.filament(
                 FilamentProfile.GENERIC_PLA.copy(costPerKilogram = 1_000_000.1f),
+            ),
+        )
+        assertFalse(
+            ProfileValidation.filament(
+                FilamentProfile.GENERIC_PLA.copy(shrinkageXyPercent = 9.9f),
+            ),
+        )
+        assertFalse(
+            ProfileValidation.filament(
+                FilamentProfile.GENERIC_PLA.copy(shrinkageZPercent = 200.1f),
             ),
         )
         assertFalse(
@@ -869,6 +898,8 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             diameter = 2.85f,
             density = 1.07f,
             costPerKilogram = 42.5f,
+            shrinkageXyPercent = 99.2f,
+            shrinkageZPercent = 99.18f,
             minimalPurgeOnWipeTower = 9f,
             additionalCoolingFanSpeed = 40,
             fanCoolingLayerTime = 42f,

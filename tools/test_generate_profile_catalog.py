@@ -538,6 +538,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "filament_diameter": ["2.85"],
                 "filament_density": ["1.07"],
                 "filament_cost": ["42.5"],
+                "filament_shrink": ["99.2%"],
+                "filament_shrinkage_compensation_z": ["99.18%"],
                 "filament_soluble": ["1"],
                 "filament_is_support": ["1"],
                 "filament_minimal_purge_on_wipe_tower": ["35"],
@@ -566,6 +568,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(2.85, overridden["diameter"])
         self.assertEqual(1.07, overridden["density"])
         self.assertEqual(42.5, overridden["costPerKilogram"])
+        self.assertEqual(99.2, overridden["shrinkageXyPercent"])
+        self.assertEqual(99.18, overridden["shrinkageZPercent"])
         self.assertTrue(overridden["soluble"])
         self.assertTrue(overridden["supportMaterial"])
         self.assertEqual(35.0, overridden["minimalPurgeOnWipeTower"])
@@ -595,7 +599,12 @@ class GenerateProfileCatalogTest(unittest.TestCase):
             )
 
     def test_rejects_unsafe_material_statistics(self) -> None:
-        for key, value in (("filament_density", "10.01"), ("filament_cost", "1000000.01")):
+        for key, value in (
+            ("filament_density", "10.01"),
+            ("filament_cost", "1000000.01"),
+            ("filament_shrink", "9.99"),
+            ("filament_shrinkage_compensation_z", "200.01"),
+        ):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 build_filament(
                     "Example",

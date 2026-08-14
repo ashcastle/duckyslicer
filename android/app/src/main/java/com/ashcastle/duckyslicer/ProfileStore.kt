@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 63
+internal const val USER_PROFILE_SCHEMA_VERSION = 64
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -114,6 +114,8 @@ class ProfileStore private constructor(
                 diameter = options.filamentDiameter,
                 density = options.filamentProfile.density,
                 costPerKilogram = options.filamentProfile.costPerKilogram,
+                shrinkageXyPercent = options.filamentProfile.shrinkageXyPercent,
+                shrinkageZPercent = options.filamentProfile.shrinkageZPercent,
                 soluble = options.filamentProfile.soluble,
                 supportMaterial = options.filamentProfile.supportMaterial,
                 minimalPurgeOnWipeTower = options.filamentProfile.minimalPurgeOnWipeTower,
@@ -186,6 +188,8 @@ class ProfileStore private constructor(
             diameter = effective.diameter,
             density = effective.density,
             costPerKilogram = effective.costPerKilogram,
+            shrinkageXyPercent = effective.shrinkageXyPercent,
+            shrinkageZPercent = effective.shrinkageZPercent,
             soluble = effective.soluble,
             supportMaterial = effective.supportMaterial,
             minimalPurgeOnWipeTower = effective.minimalPurgeOnWipeTower,
@@ -589,6 +593,8 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("diameter", diameter)
     .put("density", density)
     .put("costPerKilogram", costPerKilogram)
+    .put("shrinkageXyPercent", shrinkageXyPercent)
+    .put("shrinkageZPercent", shrinkageZPercent)
     .put("soluble", soluble)
     .put("supportMaterial", supportMaterial)
     .put("minimalPurgeOnWipeTower", minimalPurgeOnWipeTower)
@@ -1021,6 +1027,8 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         diameter = optDouble("diameter", 1.75).toFloat(),
         density = optDouble("density", 1.24).toFloat(),
         costPerKilogram = optDouble("costPerKilogram", 0.0).toFloat(),
+        shrinkageXyPercent = optDouble("shrinkageXyPercent", 100.0).toFloat(),
+        shrinkageZPercent = optDouble("shrinkageZPercent", 100.0).toFloat(),
         soluble = optBoolean("soluble", false),
         supportMaterial = optBoolean("supportMaterial", false),
         minimalPurgeOnWipeTower = optDouble("minimalPurgeOnWipeTower", 15.0).toFloat(),

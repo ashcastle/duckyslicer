@@ -239,6 +239,8 @@
     <string name="filament_diameter">직경</string>
     <string name="filament_density">밀도</string>
     <string name="filament_price_per_kilogram">kg당 가격</string>
+    <string name="filament_shrinkage_xy">수축률(XY)</string>
+    <string name="filament_shrinkage_z">수축률(Z)</string>
     <string name="grams_per_cubic_centimeter_value">%.2f g/cm³</string>
     <string name="per_kilogram_suffix">/kg</string>
     <string name="filament_soluble_material">용해성 재료</string>
@@ -547,6 +549,7 @@
     <string name="seconds_value">%1$.0f초</string>
     <string name="celsius_value">%1$d °C</string>
     <string name="percent_value">%1$d%%</string>
+    <string name="percent_value_precise">%1$.1f%%</string>
     <string name="estimated_print_time">예상 출력 시간</string>
     <string name="filament_usage">필라멘트 사용량</string>
     <string name="duration_under_one_minute">1분 미만</string>
