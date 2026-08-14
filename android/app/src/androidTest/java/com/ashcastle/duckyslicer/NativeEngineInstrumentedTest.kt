@@ -833,6 +833,7 @@ class NativeEngineInstrumentedTest {
                     gapInfillSpeed = 132f,
                     firstLayerInfillSpeed = 62f,
                     supportInterfaceSpeed = 53f,
+                    printFlowRatio = 0.94f,
                     bridgeFlowRatio = 0.91f,
                     internalBridgeFlowRatio = 0.96f,
                     topSurfaceFlowRatio = 0.97f,
@@ -908,6 +909,7 @@ class NativeEngineInstrumentedTest {
             assertEquals(132f, restoredDocument.sliceOptions?.gapInfillSpeed)
             assertEquals(62f, restoredDocument.sliceOptions?.firstLayerInfillSpeed)
             assertEquals(53f, restoredDocument.sliceOptions?.supportInterfaceSpeed)
+            assertEquals(0.94f, restoredDocument.sliceOptions?.printFlowRatio)
             assertEquals(0.91f, restoredDocument.sliceOptions?.bridgeFlowRatio)
             assertEquals(0.8f, restoredDocument.sliceOptions?.topShellThickness)
             assertEquals(4, restoredDocument.sliceOptions?.supportInterfaceTopLayers)
@@ -1476,7 +1478,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(36, catalog.schemaVersion)
+        assertEquals(37, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1529,6 +1531,10 @@ class NativeEngineInstrumentedTest {
             },
         )
         assertTrue(catalog.slicing.all(ProfileValidation::slicing))
+        assertTrue(
+            "The catalog must retain process-wide flow calibration",
+            catalog.slicing.any { it.printFlowRatio != 1f },
+        )
         assertTrue(
             "The catalog must retain both arc-fitting policies",
             catalog.slicing.any { it.gcodeSettings.arcFitting } &&
@@ -2559,6 +2565,7 @@ class NativeEngineInstrumentedTest {
                 overhangSpeed3Percent = true,
                 overhangSpeed4 = 21f,
                 overhangSpeed4Percent = false,
+                printFlowRatio = 0.94f,
                 bridgeFlowRatio = 0.91f,
                 internalBridgeFlowRatio = 0.96f,
                 topSurfaceFlowRatio = 0.97f,
@@ -2796,6 +2803,7 @@ class NativeEngineInstrumentedTest {
         assertTrue("Top-surface speed must reach Orca", gcode.contains("; top_surface_speed = 99"))
         assertTrue("Support speed must reach Orca", gcode.contains("; support_speed = 77"))
         assertTrue("Support-interface speed must reach Orca", gcode.contains("; support_interface_speed = 57"))
+        assertTrue("Process flow ratio must reach Orca", gcode.contains("; print_flow_ratio = 0.94"))
         assertTrue("Bridge flow must reach Orca", gcode.contains("; bridge_flow = 0.91"))
         assertTrue("Internal bridge flow must reach Orca", gcode.contains("; internal_bridge_flow = 0.96"))
         assertTrue("Top surface flow must reach Orca", gcode.contains("; top_solid_infill_flow_ratio = 0.97"))

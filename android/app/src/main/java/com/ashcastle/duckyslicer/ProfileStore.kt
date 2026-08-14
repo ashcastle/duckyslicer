@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 37
+internal const val USER_PROFILE_SCHEMA_VERSION = 38
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -187,6 +187,7 @@ class ProfileStore private constructor(
             overhangSpeed3Percent = options.overhangSpeed3Percent,
             overhangSpeed4 = options.overhangSpeed4,
             overhangSpeed4Percent = options.overhangSpeed4Percent,
+            printFlowRatio = options.printFlowRatio,
             bridgeFlowRatio = options.bridgeFlowRatio,
             internalBridgeFlowRatio = options.internalBridgeFlowRatio,
             topSurfaceFlowRatio = options.topSurfaceFlowRatio,
@@ -529,6 +530,7 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("overhangSpeed2", overhangSpeed2).put("overhangSpeed2Percent", overhangSpeed2Percent)
     .put("overhangSpeed3", overhangSpeed3).put("overhangSpeed3Percent", overhangSpeed3Percent)
     .put("overhangSpeed4", overhangSpeed4).put("overhangSpeed4Percent", overhangSpeed4Percent)
+    .put("printFlowRatio", printFlowRatio)
     .put("bridgeFlowRatio", bridgeFlowRatio)
     .put("internalBridgeFlowRatio", internalBridgeFlowRatio)
     .put("topSurfaceFlowRatio", topSurfaceFlowRatio)
@@ -873,6 +875,7 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         overhangSpeed3Percent = optBoolean("overhangSpeed3Percent"),
         overhangSpeed4 = optDouble("overhangSpeed4", 10.0).toFloat(),
         overhangSpeed4Percent = optBoolean("overhangSpeed4Percent"),
+        printFlowRatio = optDouble("printFlowRatio", 1.0).toFloat(),
         bridgeFlowRatio = optDouble("bridgeFlowRatio", 1.0).toFloat(),
         internalBridgeFlowRatio = optDouble("internalBridgeFlowRatio", 1.0).toFloat(),
         topSurfaceFlowRatio = optDouble("topSurfaceFlowRatio", 1.0).toFloat(),

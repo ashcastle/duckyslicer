@@ -134,6 +134,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(52f, restored.supportInterfaceSpeed)
         assertEquals(163f, restored.internalBridgeSpeed)
         assertEquals(true, restored.internalBridgeSpeedPercent)
+        assertEquals(0.94f, restored.printFlowRatio)
+        assertEquals(0.94f, restored.toNativeConfig().printFlowRatio)
         assertEquals(false, restored.overhangSpeedEnabled)
         assertEquals(81f, restored.overhangSpeed1)
         assertEquals(true, restored.overhangSpeed1Percent)
@@ -492,6 +494,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         overhangSpeed3Percent = true,
         overhangSpeed4 = 21f,
         overhangSpeed4Percent = false,
+        printFlowRatio = 0.94f,
         bridgeFlowRatio = 0.91f,
         internalBridgeFlowRatio = 0.96f,
         topSurfaceFlowRatio = 0.97f,

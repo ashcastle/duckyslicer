@@ -47,6 +47,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "name": "Multi material",
                 "layer_height": "0.2",
                 "initial_layer_print_height": "0.2",
+                "print_flow_ratio": "0.97",
                 "support_filament": "1",
                 "support_interface_filament": "2",
                 "enable_prime_tower": "1",
@@ -93,6 +94,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         )
 
         self.assertEqual(1, profile["supportFilament"])
+        self.assertEqual(0.97, profile["printFlowRatio"])
         self.assertEqual(2, profile["supportInterfaceFilament"])
         self.assertTrue(profile["wipeTowerEnabled"])
         self.assertEqual(42.0, profile["wipeTowerWidth"])

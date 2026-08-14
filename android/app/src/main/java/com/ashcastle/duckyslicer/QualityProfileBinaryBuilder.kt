@@ -32,6 +32,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var overhangSpeed3Percent: Boolean = base.overhangSpeed3Percent
     private var overhangSpeed4: Float = base.overhangSpeed4
     private var overhangSpeed4Percent: Boolean = base.overhangSpeed4Percent
+    private var printFlowRatio: Float = base.printFlowRatio
     private var bridgeFlowRatio: Float = base.bridgeFlowRatio
     private var internalBridgeFlowRatio: Float = base.internalBridgeFlowRatio
     private var topSurfaceFlowRatio: Float = base.topSurfaceFlowRatio
@@ -315,6 +316,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         overhangSpeed3Percent = input.readCatalogBoolean()
         overhangSpeed4 = input.readFloat()
         overhangSpeed4Percent = input.readCatalogBoolean()
+        printFlowRatio = input.readFloat()
         bridgeFlowRatio = input.readFloat()
         internalBridgeFlowRatio = input.readFloat()
         topSurfaceFlowRatio = input.readFloat()
@@ -606,6 +608,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         overhangSpeed3Percent = overhangSpeed3Percent,
         overhangSpeed4 = overhangSpeed4,
         overhangSpeed4Percent = overhangSpeed4Percent,
+        printFlowRatio = printFlowRatio,
         bridgeFlowRatio = bridgeFlowRatio,
         internalBridgeFlowRatio = internalBridgeFlowRatio,
         topSurfaceFlowRatio = topSurfaceFlowRatio,
@@ -889,6 +892,7 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("overhangSpeed3Percent", BINARY_BOOL),
     BinaryField("overhangSpeed4", BINARY_FLOAT),
     BinaryField("overhangSpeed4Percent", BINARY_BOOL),
+    BinaryField("printFlowRatio", BINARY_FLOAT),
     BinaryField("bridgeFlowRatio", BINARY_FLOAT),
     BinaryField("internalBridgeFlowRatio", BINARY_FLOAT),
     BinaryField("topSurfaceFlowRatio", BINARY_FLOAT),

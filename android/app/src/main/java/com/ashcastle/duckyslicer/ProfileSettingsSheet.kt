@@ -1200,6 +1200,11 @@ private fun SlicingSettingsSheet(
             options.bottomSurfaceFlowRatio,
         ).maxOrNull() ?: 1.5f
         val flowRatioSteps = ((maximumFlowRatio - 0.5f) / 0.01f).roundToInt().coerceAtLeast(2) - 1
+        val minimumPrintFlowRatio = minOf(0.8f, options.printFlowRatio)
+        val maximumPrintFlowRatio = maxOf(1.2f, options.printFlowRatio)
+        val printFlowRatioSteps = (
+            (maximumPrintFlowRatio - minimumPrintFlowRatio) / 0.01f
+        ).roundToInt().coerceAtLeast(2) - 1
         val maximumFeatureAcceleration = listOf(
             20_000f,
             options.defaultAcceleration,
@@ -2507,6 +2512,16 @@ private fun SlicingSettingsSheet(
                     )
                 }
                 SettingsGroupTitle(stringResource(R.string.feature_flow_ratio))
+                SettingSlider(
+                    label = stringResource(R.string.flow_ratio),
+                    valueText = stringResource(R.string.flow_ratio_value, options.printFlowRatio),
+                    value = options.printFlowRatio,
+                    range = minimumPrintFlowRatio..maximumPrintFlowRatio,
+                    steps = printFlowRatioSteps,
+                    onValueChange = {
+                        onOptionsChanged(options.copy(printFlowRatio = (it * 100f).roundToInt() / 100f))
+                    },
+                )
                 SettingSlider(
                     label = stringResource(R.string.bridge_flow_ratio),
                     valueText = String.format(Locale.ROOT, "%.2f", options.bridgeFlowRatio),

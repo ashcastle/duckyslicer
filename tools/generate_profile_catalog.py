@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 36
+SCHEMA_VERSION = 37
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -584,6 +584,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "overhangSpeed3Percent": overhang_3_percent,
         "overhangSpeed4": overhang_4_speed,
         "overhangSpeed4Percent": overhang_4_percent,
+        "printFlowRatio": number(raw.get("print_flow_ratio"), 1),
         "bridgeFlowRatio": number(raw.get("bridge_flow"), 1),
         "internalBridgeFlowRatio": number(raw.get("internal_bridge_flow"), 1),
         "topSurfaceFlowRatio": number(raw.get("top_solid_infill_flow_ratio"), 1),
@@ -868,6 +869,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     if not (
         0 <= profile["fillDensity"] <= 1
         and 1 <= profile["printSpeed"] <= 2_000
+        and 0 <= profile["printFlowRatio"] <= 2
         and all(
             1 <= profile[key] <= 2_000
             for key in [

@@ -97,6 +97,7 @@ internal object ProfileValidation {
             overhangSpeedIsValid(profile.overhangSpeed2, profile.overhangSpeed2Percent) &&
             overhangSpeedIsValid(profile.overhangSpeed3, profile.overhangSpeed3Percent) &&
             overhangSpeedIsValid(profile.overhangSpeed4, profile.overhangSpeed4Percent) &&
+            profile.printFlowRatio in 0f..2f &&
             listOf(
                 profile.bridgeFlowRatio,
                 profile.internalBridgeFlowRatio,

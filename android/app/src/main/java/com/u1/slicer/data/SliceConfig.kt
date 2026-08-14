@@ -56,6 +56,7 @@ data class SliceConfig(
     @JvmField var overhangSpeed3Percent: Boolean = false,
     @JvmField var overhangSpeed4: Float = 10f,
     @JvmField var overhangSpeed4Percent: Boolean = false,
+    @JvmField var printFlowRatio: Float = 1f,
     @JvmField var bridgeFlowRatio: Float = 1f,
     @JvmField var internalBridgeFlowRatio: Float = 1f,
     @JvmField var topSurfaceFlowRatio: Float = 1f,

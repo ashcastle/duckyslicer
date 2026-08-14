@@ -76,7 +76,7 @@ diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
 index 116a4a85..6b3048bc 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -40,14 +40,97 @@ struct SliceConfig {
+@@ -40,14 +40,98 @@ struct SliceConfig {
      int perimeters = 2;
      int top_solid_layers = 5;
      int bottom_solid_layers = 4;
@@ -133,7 +133,8 @@ index 116a4a85..6b3048bc 100644
      float travel_speed = 150.0f;
      float first_layer_speed = 20.0f;
  
-+    // Feature flow ratios.
++    // Process and feature flow ratios.
++    float print_flow_ratio = 1.0f;
 +    float bridge_flow_ratio = 1.0f;
 +    float internal_bridge_flow_ratio = 1.0f;
 +    float top_surface_flow_ratio = 1.0f;
@@ -684,7 +685,7 @@ diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_
 index d93efb7d..fdf9a877 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -92,10 +92,87 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -92,10 +92,88 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.perimeters = getInt("perimeters");
      config.top_solid_layers = getInt("topSolidLayers");
      config.bottom_solid_layers = getInt("bottomSolidLayers");
@@ -737,6 +738,7 @@ index d93efb7d..fdf9a877 100644
 +    config.overhang_speed_3_percent = getBool("overhangSpeed3Percent");
 +    config.overhang_speed_4 = getFloat("overhangSpeed4");
 +    config.overhang_speed_4_percent = getBool("overhangSpeed4Percent");
++    config.print_flow_ratio = getFloat("printFlowRatio");
 +    config.bridge_flow_ratio = getFloat("bridgeFlowRatio");
 +    config.internal_bridge_flow_ratio = getFloat("internalBridgeFlowRatio");
 +    config.top_surface_flow_ratio = getFloat("topSurfaceFlowRatio");
@@ -1007,7 +1009,7 @@ index d93efb7d..fdf9a877 100644
  
      env->DeleteLocalRef(cls);
      return config;
-@@ -235,9 +477,86 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -235,9 +477,87 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setInt("perimeters", config.perimeters);
      setInt("topSolidLayers", config.top_solid_layers);
      setInt("bottomSolidLayers", config.bottom_solid_layers);
@@ -1059,6 +1061,7 @@ index d93efb7d..fdf9a877 100644
 +    setBool("overhangSpeed3Percent", config.overhang_speed_3_percent);
 +    setFloat("overhangSpeed4", config.overhang_speed_4);
 +    setBool("overhangSpeed4Percent", config.overhang_speed_4_percent);
++    setFloat("printFlowRatio", config.print_flow_ratio);
 +    setFloat("bridgeFlowRatio", config.bridge_flow_ratio);
 +    setFloat("internalBridgeFlowRatio", config.internal_bridge_flow_ratio);
 +    setFloat("topSurfaceFlowRatio", config.top_surface_flow_ratio);
@@ -1336,7 +1339,7 @@ index 8d61c9cf..f285d044 100644
  #include "libslic3r/clipper.hpp"
  
  // =============================================================================
-@@ -183,84 +186,179 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -183,84 +186,180 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
      dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
      dpc.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(config.bottom_solid_layers));
@@ -1426,6 +1429,7 @@ index 8d61c9cf..f285d044 100644
 -    }));
 +    dpc.set_key_value("initial_layer_infill_speed",new Slic3r::ConfigOptionFloat(config.first_layer_infill_speed));
 +    dpc.set_key_value("support_interface_speed",   new Slic3r::ConfigOptionFloat(config.support_interface_speed));
++    dpc.set_key_value("print_flow_ratio",          new Slic3r::ConfigOptionFloat(config.print_flow_ratio));
 +    dpc.set_key_value("bridge_flow",               new Slic3r::ConfigOptionFloat(config.bridge_flow_ratio));
 +    dpc.set_key_value("internal_bridge_flow",      new Slic3r::ConfigOptionFloat(config.internal_bridge_flow_ratio));
 +    dpc.set_key_value("top_solid_infill_flow_ratio", new Slic3r::ConfigOptionFloat(config.top_surface_flow_ratio));
