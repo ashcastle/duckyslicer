@@ -1080,6 +1080,15 @@ class NativeEngineInstrumentedTest {
                 ),
                 supportFilament = 1,
                 supportInterfaceFilament = 1,
+                featureFilaments = FeatureFilamentSettings(
+                    infillOverrideEnabled = true,
+                    baseFirstLayers = 3,
+                    baseLastLayers = 4,
+                    sparseInfillFilament = 2,
+                    wallFilament = 1,
+                    solidInfillFilament = 3,
+                    wipeTowerFilament = 1,
+                ),
                 wipeTowerEnabled = true,
                 wipeTowerWidth = 46f,
                 multiMaterial = MultiMaterialSettings(
@@ -1260,6 +1269,18 @@ class NativeEngineInstrumentedTest {
         assertEquals("concentric", restored.slicing.last().supportAdvanced.ironingPattern)
         assertEquals(1, restored.slicing.last().supportFilament)
         assertEquals(1, restored.slicing.last().supportInterfaceFilament)
+        assertEquals(
+            FeatureFilamentSettings(
+                infillOverrideEnabled = true,
+                baseFirstLayers = 3,
+                baseLastLayers = 4,
+                sparseInfillFilament = 2,
+                wallFilament = 1,
+                solidInfillFilament = 3,
+                wipeTowerFilament = 1,
+            ),
+            restored.slicing.last().featureFilaments,
+        )
         assertTrue(restored.slicing.last().wipeTowerEnabled)
         assertEquals(46f, restored.slicing.last().wipeTowerWidth)
         assertEquals(58f, restored.slicing.last().multiMaterial.primeVolume)
@@ -1478,7 +1499,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(37, catalog.schemaVersion)
+        assertEquals(38, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1513,6 +1534,10 @@ class NativeEngineInstrumentedTest {
         assertTrue(
             "Prime-tower process values must survive catalog normalization",
             catalog.slicing.any { it.wipeTowerEnabled && it.wipeTowerWidth != 60f },
+        )
+        assertTrue(
+            "Feature filament routing must survive catalog normalization",
+            catalog.slicing.any { it.featureFilaments.wipeTowerFilament != 0 },
         )
         assertTrue(
             "Inherited multi-material process values must survive catalog normalization",
@@ -2161,6 +2186,15 @@ class NativeEngineInstrumentedTest {
                 supportEnabled = true,
                 supportFilament = 1,
                 supportInterfaceFilament = 2,
+                featureFilaments = FeatureFilamentSettings(
+                    infillOverrideEnabled = true,
+                    baseFirstLayers = 3,
+                    baseLastLayers = 4,
+                    sparseInfillFilament = 2,
+                    wallFilament = 1,
+                    solidInfillFilament = 2,
+                    wipeTowerFilament = 1,
+                ),
                 wipeTowerEnabled = true,
                 wipeTowerWidth = 42f,
                 multiMaterial = MultiMaterialSettings(
@@ -2210,6 +2244,13 @@ class NativeEngineInstrumentedTest {
             "Support interface filament must reach Orca",
             gcode.contains("; support_interface_filament = 2"),
         )
+        assertTrue(gcode.contains("; enable_infill_filament_override = 1"))
+        assertTrue(gcode.contains("; infill_filament_use_base_first_layers = 3"))
+        assertTrue(gcode.contains("; infill_filament_use_base_last_layers = 4"))
+        assertTrue(gcode.contains("; sparse_infill_filament = 2"))
+        assertTrue(gcode.contains("; wall_filament = 1"))
+        assertTrue(gcode.contains("; solid_infill_filament = 2"))
+        assertTrue(gcode.contains("; wipe_tower_filament = 1"))
         assertTrue("Prime tower must remain enabled for a two-tool plate", gcode.contains("; enable_prime_tower = 1"))
         assertTrue("Prime-tower width must reach Orca", gcode.contains("; prime_tower_width = 42"))
         assertTrue("Prime volume must reach Orca", gcode.contains("; prime_volume = 61.5"))
@@ -2236,6 +2277,29 @@ class NativeEngineInstrumentedTest {
         assertTrue("Standby temperature delta must reach Orca", gcode.contains("; standby_temperature_delta = -35"))
         assertTrue("Interface shells must reach Orca", gcode.contains("; interface_shells = 1"))
         assertTrue("The second object must produce a real tool change", gcode.lineSequence().any { it == "T1" })
+
+        val featureOnlyOutcome = OnDeviceSlicer.slice(
+            listOf(
+                ProjectObject(
+                    id = "feature-routing",
+                    model = model,
+                    transform = ModelTransform(),
+                    filamentSlot = 0,
+                ),
+            ),
+            options.copy(
+                supportEnabled = false,
+                wipeTowerEnabled = false,
+                featureFilaments = options.featureFilaments.copy(
+                    baseFirstLayers = 0,
+                    baseLastLayers = 0,
+                ),
+            ),
+        )
+        assertTrue(
+            "A one-object plate must switch to the selected infill filament",
+            featureOnlyOutcome.output.readLines().any { it == "T1" },
+        )
 
         val objectFlushOutcome = OnDeviceSlicer.slice(
             listOf(

@@ -284,6 +284,37 @@ data class MultiMaterialSettings(
     val interfaceShells: Boolean = false,
 )
 
+data class FeatureFilamentSettings(
+    val infillOverrideEnabled: Boolean = false,
+    val baseFirstLayers: Int = 0,
+    val baseLastLayers: Int = 0,
+    val sparseInfillFilament: Int = 1,
+    val wallFilament: Int = 1,
+    val solidInfillFilament: Int = 1,
+    val wipeTowerFilament: Int = 0,
+)
+
+private fun FeatureFilamentSettings.boundedTo(slotCount: Int): FeatureFilamentSettings {
+    val maximum = slotCount.coerceAtLeast(1)
+    return copy(
+        baseFirstLayers = baseFirstLayers.coerceAtLeast(0),
+        baseLastLayers = baseLastLayers.coerceAtLeast(0),
+        sparseInfillFilament = sparseInfillFilament.coerceIn(1, maximum),
+        wallFilament = wallFilament.coerceIn(1, maximum),
+        solidInfillFilament = solidInfillFilament.coerceIn(1, maximum),
+        wipeTowerFilament = wipeTowerFilament.coerceIn(0, maximum),
+    )
+}
+
+internal fun FeatureFilamentSettings.nativeVolumeSlot(projectSlot: Int): Int {
+    require(projectSlot >= 0) { "Filament slot must be non-negative" }
+    if (projectSlot != 0) return projectSlot + 1
+    val routesDefaultVolumeByFeature = wallFilament != 1 ||
+        solidInfillFilament != wallFilament ||
+        (infillOverrideEnabled && sparseInfillFilament != wallFilament)
+    return if (routesDefaultVolumeByFeature) 0 else 1
+}
+
 data class GcodeSettings(
     val arcFitting: Boolean = false,
     val labelObjects: Boolean = true,
@@ -496,6 +527,7 @@ data class QualityProfile(
     val treeSupportBrimWidth: Float = 3f,
     val supportFilament: Int = 0,
     val supportInterfaceFilament: Int = 0,
+    val featureFilaments: FeatureFilamentSettings = FeatureFilamentSettings(),
     val wipeTowerEnabled: Boolean = false,
     val wipeTowerWidth: Float = 60f,
     val multiMaterial: MultiMaterialSettings = MultiMaterialSettings(),
@@ -661,7 +693,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 37,
+    val schemaVersion: Int = 38,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -813,6 +845,7 @@ data class SliceOptions(
     val treeSupportBrimWidth: Float = quality.treeSupportBrimWidth,
     val supportFilament: Int = quality.supportFilament,
     val supportInterfaceFilament: Int = quality.supportInterfaceFilament,
+    val featureFilaments: FeatureFilamentSettings = quality.featureFilaments,
     val wipeTowerEnabled: Boolean = quality.wipeTowerEnabled,
     val wipeTowerWidth: Float = quality.wipeTowerWidth,
     val multiMaterial: MultiMaterialSettings = quality.multiMaterial,
@@ -1160,6 +1193,7 @@ data class SliceOptions(
         treeSupportBrimWidth = profile.treeSupportBrimWidth,
         supportFilament = profile.supportFilament.coerceIn(0, resolvedFilamentSlots().size),
         supportInterfaceFilament = profile.supportInterfaceFilament.coerceIn(0, resolvedFilamentSlots().size),
+        featureFilaments = profile.featureFilaments.boundedTo(resolvedFilamentSlots().size),
         wipeTowerEnabled = profile.wipeTowerEnabled,
         wipeTowerWidth = profile.wipeTowerWidth,
         multiMaterial = profile.multiMaterial,
@@ -1520,6 +1554,13 @@ data class SliceOptions(
             filamentNozzleTempInitialLayers = nativeFilaments.map(FilamentProfile::firstLayerNozzleTemp).toIntArray(),
             filamentBedTempInitialLayers = nativeFilaments.map(FilamentProfile::firstLayerBedTemp).toIntArray(),
         ).also { native ->
+            native.infillFilamentOverrideEnabled = featureFilaments.infillOverrideEnabled
+            native.infillFilamentBaseFirstLayers = featureFilaments.baseFirstLayers.coerceIn(0, 1_000)
+            native.infillFilamentBaseLastLayers = featureFilaments.baseLastLayers.coerceIn(0, 1_000)
+            native.sparseInfillFilament = featureFilaments.sparseInfillFilament.coerceIn(1, nativeFilaments.size)
+            native.wallFilament = featureFilaments.wallFilament.coerceIn(1, nativeFilaments.size)
+            native.solidInfillFilament = featureFilaments.solidInfillFilament.coerceIn(1, nativeFilaments.size)
+            native.wipeTowerFilament = featureFilaments.wipeTowerFilament.coerceIn(0, nativeFilaments.size)
             native.printSequence = printSequence
             native.printOrder = printOrder
             native.extruderClearanceRadius = extruderClearanceRadius

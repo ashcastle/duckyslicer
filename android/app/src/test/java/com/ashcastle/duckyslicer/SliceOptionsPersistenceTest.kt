@@ -21,6 +21,15 @@ class SliceOptionsPersistenceTest {
                 filamentSlots = listOf(primary, secondary),
                 supportFilament = 1,
                 supportInterfaceFilament = 2,
+                featureFilaments = FeatureFilamentSettings(
+                    infillOverrideEnabled = true,
+                    baseFirstLayers = 3,
+                    baseLastLayers = 4,
+                    sparseInfillFilament = 2,
+                    wallFilament = 1,
+                    solidInfillFilament = 2,
+                    wipeTowerFilament = 1,
+                ),
                 wipeTowerEnabled = true,
                 wipeTowerWidth = 42f,
                 multiMaterial = MultiMaterialSettings(
@@ -68,6 +77,13 @@ class SliceOptionsPersistenceTest {
         assertEquals(listOf(primary.flowRatio, secondary.flowRatio), native.filamentFlowRatios.toList())
         assertEquals(1, native.supportFilament)
         assertEquals(2, native.supportInterfaceFilament)
+        assertEquals(true, native.infillFilamentOverrideEnabled)
+        assertEquals(3, native.infillFilamentBaseFirstLayers)
+        assertEquals(4, native.infillFilamentBaseLastLayers)
+        assertEquals(2, native.sparseInfillFilament)
+        assertEquals(1, native.wallFilament)
+        assertEquals(2, native.solidInfillFilament)
+        assertEquals(1, native.wipeTowerFilament)
         assertEquals(true, native.wipeTowerEnabled)
         assertEquals(42f, native.wipeTowerWidth)
         assertEquals(61.5f, native.primeVolume)
@@ -210,6 +226,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(4.6f, restored.treeSupportBrimWidth)
         assertEquals(1, restored.supportFilament)
         assertEquals(1, restored.supportInterfaceFilament)
+        assertEquals(options.featureFilaments, restored.featureFilaments)
+        assertEquals(true, restored.toNativeConfig().infillFilamentOverrideEnabled)
         assertEquals(true, restored.wipeTowerEnabled)
         assertEquals(48f, restored.wipeTowerWidth)
         assertEquals(options.multiMaterial, restored.multiMaterial)
@@ -556,6 +574,15 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         treeSupportBrimWidth = 4.6f,
         supportFilament = 1,
         supportInterfaceFilament = 1,
+        featureFilaments = FeatureFilamentSettings(
+            infillOverrideEnabled = true,
+            baseFirstLayers = 3,
+            baseLastLayers = 4,
+            sparseInfillFilament = 1,
+            wallFilament = 1,
+            solidInfillFilament = 1,
+            wipeTowerFilament = 1,
+        ),
         wipeTowerEnabled = true,
         wipeTowerWidth = 48f,
         multiMaterial = MultiMaterialSettings(

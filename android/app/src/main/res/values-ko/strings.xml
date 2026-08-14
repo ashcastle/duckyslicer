@@ -744,7 +744,16 @@
     <string name="support_filament">서포트 본체</string>
     <string name="support_interface_filament">서포트 인터페이스</string>
     <string name="filament_default">기본값</string>
+    <string name="filament_automatic">자동</string>
     <string name="extruder_number">익스트루더 %1$d</string>
+    <string name="override_infill_filament">인필 필라멘트 덮어쓰기</string>
+    <string name="sparse_infill_filament">희소 인필 필라멘트</string>
+    <string name="base_infill_first_layers">처음 인필 레이어에 기본 필라멘트 사용</string>
+    <string name="base_infill_last_layers">마지막 인필 레이어에 기본 필라멘트 사용</string>
+    <string name="filament_for_features">기능별 필라멘트</string>
+    <string name="wall_filament">벽 필라멘트</string>
+    <string name="solid_infill_filament">솔리드 인필 필라멘트</string>
+    <string name="wipe_tower_filament">와이프 타워 필라멘트</string>
     <string name="prime_tower">프라임 타워</string>
     <string name="enable_prime_tower">프라임 타워 사용</string>
     <string name="prime_tower_width">타워 너비</string>

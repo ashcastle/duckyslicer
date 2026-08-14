@@ -232,6 +232,12 @@ internal object ProfileValidation {
             profile.treeSupportBrimWidth in 0f..100f &&
             profile.supportFilament in 0..MAX_FILAMENT_SLOTS &&
             profile.supportInterfaceFilament in 0..MAX_FILAMENT_SLOTS &&
+            profile.featureFilaments.baseFirstLayers in 0..1_000 &&
+            profile.featureFilaments.baseLastLayers in 0..1_000 &&
+            profile.featureFilaments.sparseInfillFilament in 1..MAX_FILAMENT_SLOTS &&
+            profile.featureFilaments.wallFilament in 1..MAX_FILAMENT_SLOTS &&
+            profile.featureFilaments.solidInfillFilament in 1..MAX_FILAMENT_SLOTS &&
+            profile.featureFilaments.wipeTowerFilament in 0..MAX_FILAMENT_SLOTS &&
             profile.wipeTowerWidth in 10f..300f &&
             profile.multiMaterial.primeVolume in 1f..1_000f &&
             profile.multiMaterial.primeTowerBrimWidth in 0f..100f &&

@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 37
+SCHEMA_VERSION = 38
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -555,6 +555,14 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     )
     legacy_wall_order = str(scalar(raw.get("wall_infill_order"), ""))
     resolved_wall_order = raw.get("wall_sequence", legacy_wall_order)
+    wall_filament = integer(raw.get("wall_filament"), 1)
+    sparse_infill_filament = integer(raw.get("sparse_infill_filament"), 1)
+    solid_infill_filament = integer(raw.get("solid_infill_filament"), 1)
+    # Normalize the legacy zero value to the effective first tool for these
+    # otherwise strictly one-based options.
+    wall_filament = 1 if wall_filament == 0 else wall_filament
+    sparse_infill_filament = 1 if sparse_infill_filament == 0 else sparse_infill_filament
+    solid_infill_filament = 1 if solid_infill_filament == 0 else solid_infill_filament
     profile = {
         "id": stable_id("process", brand, name),
         "name": name,
@@ -797,6 +805,13 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "printOrder": enum_value(raw.get("print_order"), {"default", "as_obj_list"}, "default"),
         "supportFilament": integer(raw.get("support_filament"), 0),
         "supportInterfaceFilament": integer(raw.get("support_interface_filament"), 0),
+        "infillFilamentOverrideEnabled": boolean(raw.get("enable_infill_filament_override")),
+        "infillFilamentBaseFirstLayers": integer(raw.get("infill_filament_use_base_first_layers"), 0),
+        "infillFilamentBaseLastLayers": integer(raw.get("infill_filament_use_base_last_layers"), 0),
+        "sparseInfillFilament": sparse_infill_filament,
+        "wallFilament": wall_filament,
+        "solidInfillFilament": solid_infill_filament,
+        "wipeTowerFilament": integer(raw.get("wipe_tower_filament"), 0),
         "wipeTowerEnabled": boolean(raw.get("enable_prime_tower")),
         "wipeTowerWidth": number(raw.get("prime_tower_width"), 60),
         "primeVolume": number(raw.get("prime_volume"), 45),
@@ -937,6 +952,12 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0 <= profile["bridgeAngle"] <= 360
         and 0 <= profile["supportFilament"] <= 16
         and 0 <= profile["supportInterfaceFilament"] <= 16
+        and 0 <= profile["infillFilamentBaseFirstLayers"] <= 1_000
+        and 0 <= profile["infillFilamentBaseLastLayers"] <= 1_000
+        and all(1 <= profile[key] <= 16 for key in [
+            "sparseInfillFilament", "wallFilament", "solidInfillFilament"
+        ])
+        and 0 <= profile["wipeTowerFilament"] <= 16
         and 10 <= profile["wipeTowerWidth"] <= 300
         and 1 <= profile["primeVolume"] <= 1_000
         and 0 <= profile["primeTowerBrimWidth"] <= 100

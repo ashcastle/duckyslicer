@@ -2401,7 +2401,7 @@ class SlicerProcessService : Service() {
                     runtime.nativeSetVolumeExtruder(
                         volumeObjectIndices[volumeIndex],
                         nativeVolumeIndices[volumeIndex],
-                        slot + 1,
+                        options.featureFilaments.nativeVolumeSlot(slot),
                     ),
                 ) {
                     "Volume filament could not be applied"

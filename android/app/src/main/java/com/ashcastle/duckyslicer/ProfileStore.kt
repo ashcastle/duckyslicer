@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 38
+internal const val USER_PROFILE_SCHEMA_VERSION = 39
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -293,6 +293,7 @@ class ProfileStore private constructor(
             treeSupportBrimWidth = options.treeSupportBrimWidth,
             supportFilament = options.supportFilament,
             supportInterfaceFilament = options.supportInterfaceFilament,
+            featureFilaments = options.featureFilaments,
             wipeTowerEnabled = options.wipeTowerEnabled,
             wipeTowerWidth = options.wipeTowerWidth,
             multiMaterial = options.multiMaterial,
@@ -643,6 +644,13 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("treeSupportBrimWidth", treeSupportBrimWidth)
     .put("supportFilament", supportFilament)
     .put("supportInterfaceFilament", supportInterfaceFilament)
+    .put("infillFilamentOverrideEnabled", featureFilaments.infillOverrideEnabled)
+    .put("infillFilamentBaseFirstLayers", featureFilaments.baseFirstLayers)
+    .put("infillFilamentBaseLastLayers", featureFilaments.baseLastLayers)
+    .put("sparseInfillFilament", featureFilaments.sparseInfillFilament)
+    .put("wallFilament", featureFilaments.wallFilament)
+    .put("solidInfillFilament", featureFilaments.solidInfillFilament)
+    .put("wipeTowerFilament", featureFilaments.wipeTowerFilament)
     .put("wipeTowerEnabled", wipeTowerEnabled)
     .put("wipeTowerWidth", wipeTowerWidth)
     .put("primeVolume", multiMaterial.primeVolume)
@@ -996,6 +1004,15 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         treeSupportBrimWidth = optDouble("treeSupportBrimWidth", 3.0).toFloat(),
         supportFilament = optInt("supportFilament", 0),
         supportInterfaceFilament = optInt("supportInterfaceFilament", 0),
+        featureFilaments = FeatureFilamentSettings(
+            infillOverrideEnabled = optBoolean("infillFilamentOverrideEnabled"),
+            baseFirstLayers = optInt("infillFilamentBaseFirstLayers", 0),
+            baseLastLayers = optInt("infillFilamentBaseLastLayers", 0),
+            sparseInfillFilament = optInt("sparseInfillFilament", 1),
+            wallFilament = optInt("wallFilament", 1),
+            solidInfillFilament = optInt("solidInfillFilament", 1),
+            wipeTowerFilament = optInt("wipeTowerFilament", 0),
+        ),
         wipeTowerEnabled = optBoolean("wipeTowerEnabled"),
         wipeTowerWidth = optDouble("wipeTowerWidth", 60.0).toFloat(),
         multiMaterial = MultiMaterialSettings(

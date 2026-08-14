@@ -175,7 +175,7 @@ index 116a4a85..6b3048bc 100644
      // Temperature
      int nozzle_temp = 210;
      int bed_temp = 60;
-@@ -58,19 +141,150 @@ struct SliceConfig {
+@@ -58,19 +141,157 @@ struct SliceConfig {
  
      // Support
      bool support_enabled = false;
@@ -224,6 +224,13 @@ index 116a4a85..6b3048bc 100644
 +    float tree_support_brim_width = 3.0f;
      int support_filament = 0;            // 1-based Orca filament index; 0 = default
      int support_interface_filament = 0;  // 1-based Orca filament index; 0 = default
++    bool infill_filament_override_enabled = false;
++    int infill_filament_base_first_layers = 0;
++    int infill_filament_base_last_layers = 0;
++    int sparse_infill_filament = 1;
++    int wall_filament = 1;
++    int solid_infill_filament = 1;
++    int wipe_tower_filament = 0;
  
      // Skirt/Brim
      int skirt_loops = 0;
@@ -681,6 +688,13 @@ index 44041ca3..1e322634 100644
  }
  
  int SlicerEngine::autoOrientAll() {
+@@ -780,5 +921,5 @@ bool SlicerEngine::setVolumeExtruder(int objIdx, int volIdx, int slot) {
+     if (!f66_volIdxValid(objIdx, volIdx)) return false;
+-    if (slot < 1 || slot > 16) return false;  // sanity bound
++    if (slot < 0 || slot > 16) return false;  // zero keeps feature-level routing active
+     auto* vol = getGlobalModel().objects[objIdx]->volumes[volIdx];
+     vol->config.set_key_value("extruder", new Slic3r::ConfigOptionInt(slot));
+     // F66 — sync the static preview-extruder override cache. sapil_model.cpp's
 diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
 index d93efb7d..fdf9a877 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
@@ -774,7 +788,7 @@ index d93efb7d..fdf9a877 100644
      config.travel_speed = getFloat("travelSpeed");
      config.first_layer_speed = getFloat("firstLayerSpeed");
  
-@@ -108,15 +185,143 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -108,15 +185,150 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.support_enabled = getBool("supportEnabled");
      config.support_type = getString("supportType");
      config.support_angle = getFloat("supportAngle");
@@ -820,6 +834,13 @@ index d93efb7d..fdf9a877 100644
 +    config.tree_support_brim_width = getFloat("treeSupportBrimWidth");
      config.support_filament = getInt("supportFilament");
      config.support_interface_filament = getInt("supportInterfaceFilament");
++    config.infill_filament_override_enabled = getBool("infillFilamentOverrideEnabled");
++    config.infill_filament_base_first_layers = getInt("infillFilamentBaseFirstLayers");
++    config.infill_filament_base_last_layers = getInt("infillFilamentBaseLastLayers");
++    config.sparse_infill_filament = getInt("sparseInfillFilament");
++    config.wall_filament = getInt("wallFilament");
++    config.solid_infill_filament = getInt("solidInfillFilament");
++    config.wipe_tower_filament = getInt("wipeTowerFilament");
  
      config.skirt_loops = getInt("skirtLoops");
      config.skirt_distance = getFloat("skirtDistance");
@@ -1097,7 +1118,7 @@ index d93efb7d..fdf9a877 100644
      setFloat("travelSpeed", config.travel_speed);
      setFloat("firstLayerSpeed", config.first_layer_speed);
      setInt("nozzleTemp", config.nozzle_temp);
-@@ -247,13 +566,141 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -247,13 +566,148 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setBool("supportEnabled", config.support_enabled);
      setString("supportType", config.support_type);
      setFloat("supportAngle", config.support_angle);
@@ -1143,6 +1164,13 @@ index d93efb7d..fdf9a877 100644
 +    setFloat("treeSupportBrimWidth", config.tree_support_brim_width);
      setInt("supportFilament", config.support_filament);
      setInt("supportInterfaceFilament", config.support_interface_filament);
++    setBool("infillFilamentOverrideEnabled", config.infill_filament_override_enabled);
++    setInt("infillFilamentBaseFirstLayers", config.infill_filament_base_first_layers);
++    setInt("infillFilamentBaseLastLayers", config.infill_filament_base_last_layers);
++    setInt("sparseInfillFilament", config.sparse_infill_filament);
++    setInt("wallFilament", config.wall_filament);
++    setInt("solidInfillFilament", config.solid_infill_filament);
++    setInt("wipeTowerFilament", config.wipe_tower_filament);
      setInt("skirtLoops", config.skirt_loops);
      setFloat("skirtDistance", config.skirt_distance);
 +    setInt("skirtHeight", config.skirt_height);
@@ -1904,7 +1932,7 @@ index 8d61c9cf..f285d044 100644
          dpc.set_key_value("idle_temperature", new Slic3r::ConfigOptionInts(std::vector<int>(n_ext, 0)));
      }
  
-@@ -646,16 +884,35 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -646,16 +884,42 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      // Skirt/Brim (same key names)
      dpc.set_key_value("skirt_loops", new Slic3r::ConfigOptionInt(config.skirt_loops));
      dpc.set_key_value("skirt_distance", new Slic3r::ConfigOptionFloat(config.skirt_distance));
@@ -1943,6 +1971,13 @@ index 8d61c9cf..f285d044 100644
 +    dpc.set_key_value("wipe_tower_rib_width", new Slic3r::ConfigOptionFloat(config.wipe_tower_rib_width));
 +    dpc.set_key_value("wipe_tower_fillet_wall", new Slic3r::ConfigOptionBool(config.wipe_tower_fillet_wall));
 +    dpc.set_key_value("single_extruder_multi_material_priming", new Slic3r::ConfigOptionBool(config.single_extruder_multi_material_priming));
++    dpc.set_key_value("enable_infill_filament_override", new Slic3r::ConfigOptionBool(config.infill_filament_override_enabled));
++    dpc.set_key_value("infill_filament_use_base_first_layers", new Slic3r::ConfigOptionInt(config.infill_filament_base_first_layers));
++    dpc.set_key_value("infill_filament_use_base_last_layers", new Slic3r::ConfigOptionInt(config.infill_filament_base_last_layers));
++    dpc.set_key_value("sparse_infill_filament", new Slic3r::ConfigOptionInt(config.sparse_infill_filament));
++    dpc.set_key_value("wall_filament", new Slic3r::ConfigOptionInt(config.wall_filament));
++    dpc.set_key_value("solid_infill_filament", new Slic3r::ConfigOptionInt(config.solid_infill_filament));
++    dpc.set_key_value("wipe_tower_filament", new Slic3r::ConfigOptionInt(config.wipe_tower_filament));
      if (n_ext > 1 && config.wipe_tower_enabled) {
          dpc.set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(true));
          dpc.set_key_value("wipe_tower_x", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, config.wipe_tower_x)));

@@ -285,6 +285,13 @@ data class SliceConfig(
     @JvmField var supportIroningPattern: String = "rectilinear"
     @JvmField var supportIroningFlow: Float = 10f
     @JvmField var supportIroningSpacing: Float = 0.1f
+    @JvmField var infillFilamentOverrideEnabled: Boolean = false
+    @JvmField var infillFilamentBaseFirstLayers: Int = 0
+    @JvmField var infillFilamentBaseLastLayers: Int = 0
+    @JvmField var sparseInfillFilament: Int = 1
+    @JvmField var wallFilament: Int = 1
+    @JvmField var solidInfillFilament: Int = 1
+    @JvmField var wipeTowerFilament: Int = 0
     @JvmField var printSequence: String = "by layer"
     @JvmField var printOrder: String = "default"
     @JvmField var extruderClearanceRadius: Float = 40f

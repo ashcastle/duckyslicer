@@ -50,6 +50,13 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "print_flow_ratio": "0.97",
                 "support_filament": "1",
                 "support_interface_filament": "2",
+                "enable_infill_filament_override": "1",
+                "infill_filament_use_base_first_layers": "3",
+                "infill_filament_use_base_last_layers": "4",
+                "sparse_infill_filament": "2",
+                "wall_filament": "1",
+                "solid_infill_filament": "2",
+                "wipe_tower_filament": "1",
                 "enable_prime_tower": "1",
                 "prime_tower_width": "42",
                 "prime_volume": "61.5",
@@ -96,6 +103,13 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(1, profile["supportFilament"])
         self.assertEqual(0.97, profile["printFlowRatio"])
         self.assertEqual(2, profile["supportInterfaceFilament"])
+        self.assertTrue(profile["infillFilamentOverrideEnabled"])
+        self.assertEqual(3, profile["infillFilamentBaseFirstLayers"])
+        self.assertEqual(4, profile["infillFilamentBaseLastLayers"])
+        self.assertEqual(2, profile["sparseInfillFilament"])
+        self.assertEqual(1, profile["wallFilament"])
+        self.assertEqual(2, profile["solidInfillFilament"])
+        self.assertEqual(1, profile["wipeTowerFilament"])
         self.assertTrue(profile["wipeTowerEnabled"])
         self.assertEqual(42.0, profile["wipeTowerWidth"])
         self.assertEqual(61.5, profile["primeVolume"])
@@ -161,6 +175,24 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(profile["spiralModeMaxXySmoothingPercent"])
         self.assertEqual(0.35, profile["spiralStartingFlowRatio"])
         self.assertEqual(0.2, profile["spiralFinishingFlowRatio"])
+
+    def test_normalizes_legacy_zero_feature_filaments_to_first_tool(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "First tool routing",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "wall_filament": "0",
+                "sparse_infill_filament": "0",
+                "solid_infill_filament": "0",
+            },
+            {},
+        )
+
+        self.assertEqual(1, profile["wallFilament"])
+        self.assertEqual(1, profile["sparseInfillFilament"])
+        self.assertEqual(1, profile["solidInfillFilament"])
 
     def test_preserves_advanced_support_process_values(self) -> None:
         profile = build_process(

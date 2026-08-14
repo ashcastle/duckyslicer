@@ -127,6 +127,13 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var supportIroningSpacing: Float = base.supportAdvanced.ironingSpacing
     private var supportFilament: Int = base.supportFilament
     private var supportInterfaceFilament: Int = base.supportInterfaceFilament
+    private var infillFilamentOverrideEnabled: Boolean = base.featureFilaments.infillOverrideEnabled
+    private var infillFilamentBaseFirstLayers: Int = base.featureFilaments.baseFirstLayers
+    private var infillFilamentBaseLastLayers: Int = base.featureFilaments.baseLastLayers
+    private var sparseInfillFilament: Int = base.featureFilaments.sparseInfillFilament
+    private var wallFilament: Int = base.featureFilaments.wallFilament
+    private var solidInfillFilament: Int = base.featureFilaments.solidInfillFilament
+    private var wipeTowerFilament: Int = base.featureFilaments.wipeTowerFilament
     private var wipeTowerEnabled: Boolean = base.wipeTowerEnabled
     private var wipeTowerWidth: Float = base.wipeTowerWidth
     private var primeVolume: Float = base.multiMaterial.primeVolume
@@ -510,6 +517,13 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         printOrder = input.readCatalogString()
         supportFilament = input.readInt()
         supportInterfaceFilament = input.readInt()
+        infillFilamentOverrideEnabled = input.readCatalogBoolean()
+        infillFilamentBaseFirstLayers = input.readInt()
+        infillFilamentBaseLastLayers = input.readInt()
+        sparseInfillFilament = input.readInt()
+        wallFilament = input.readInt()
+        solidInfillFilament = input.readInt()
+        wipeTowerFilament = input.readInt()
         wipeTowerEnabled = input.readCatalogBoolean()
         wipeTowerWidth = input.readFloat()
         primeVolume = input.readFloat()
@@ -706,6 +720,15 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         ),
         supportFilament = supportFilament,
         supportInterfaceFilament = supportInterfaceFilament,
+        featureFilaments = FeatureFilamentSettings(
+            infillOverrideEnabled = infillFilamentOverrideEnabled,
+            baseFirstLayers = infillFilamentBaseFirstLayers,
+            baseLastLayers = infillFilamentBaseLastLayers,
+            sparseInfillFilament = sparseInfillFilament,
+            wallFilament = wallFilament,
+            solidInfillFilament = solidInfillFilament,
+            wipeTowerFilament = wipeTowerFilament,
+        ),
         wipeTowerEnabled = wipeTowerEnabled,
         wipeTowerWidth = wipeTowerWidth,
         multiMaterial = MultiMaterialSettings(
@@ -1065,6 +1088,13 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("printOrder", BINARY_STRING),
     BinaryField("supportFilament", BINARY_INT),
     BinaryField("supportInterfaceFilament", BINARY_INT),
+    BinaryField("infillFilamentOverrideEnabled", BINARY_BOOL),
+    BinaryField("infillFilamentBaseFirstLayers", BINARY_INT),
+    BinaryField("infillFilamentBaseLastLayers", BINARY_INT),
+    BinaryField("sparseInfillFilament", BINARY_INT),
+    BinaryField("wallFilament", BINARY_INT),
+    BinaryField("solidInfillFilament", BINARY_INT),
+    BinaryField("wipeTowerFilament", BINARY_INT),
     BinaryField("wipeTowerEnabled", BINARY_BOOL),
     BinaryField("wipeTowerWidth", BINARY_FLOAT),
     BinaryField("primeVolume", BINARY_FLOAT),

@@ -744,7 +744,16 @@
     <string name="support_filament">Support base</string>
     <string name="support_interface_filament">Support interface</string>
     <string name="filament_default">Default</string>
+    <string name="filament_automatic">Automatic</string>
     <string name="extruder_number">Extruder %1$d</string>
+    <string name="override_infill_filament">Override infill filament</string>
+    <string name="sparse_infill_filament">Sparse infill filament</string>
+    <string name="base_infill_first_layers">Base filament on first infill layers</string>
+    <string name="base_infill_last_layers">Base filament on last infill layers</string>
+    <string name="filament_for_features">Filament for features</string>
+    <string name="wall_filament">Wall filament</string>
+    <string name="solid_infill_filament">Solid infill filament</string>
+    <string name="wipe_tower_filament">Wipe tower filament</string>
     <string name="prime_tower">Prime tower</string>
     <string name="enable_prime_tower">Enable prime tower</string>
     <string name="prime_tower_width">Tower width</string>

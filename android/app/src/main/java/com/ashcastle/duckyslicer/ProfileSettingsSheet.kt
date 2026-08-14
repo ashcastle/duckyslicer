@@ -1926,6 +1926,74 @@ private fun SlicingSettingsSheet(
 
             SlicingSettingsSection.STRENGTH -> {
                 SettingsGroupTitle(stringResource(R.string.infill))
+                if (maximumFilamentSlot > 1) {
+                    SettingsSwitch(
+                        label = stringResource(R.string.override_infill_filament),
+                        checked = options.featureFilaments.infillOverrideEnabled,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    featureFilaments = options.featureFilaments.copy(
+                                        infillOverrideEnabled = it,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    if (options.featureFilaments.infillOverrideEnabled || settingsQuery.isNotBlank()) {
+                        SettingSlider(
+                            label = stringResource(R.string.sparse_infill_filament),
+                            valueText = stringResource(
+                                R.string.extruder_number,
+                                options.featureFilaments.sparseInfillFilament,
+                            ),
+                            value = options.featureFilaments.sparseInfillFilament.toFloat(),
+                            range = 1f..maximumFilamentSlot.toFloat(),
+                            steps = (maximumFilamentSlot - 2).coerceAtLeast(0),
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        featureFilaments = options.featureFilaments.copy(
+                                            sparseInfillFilament = it.roundToInt(),
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.base_infill_first_layers),
+                            valueText = options.featureFilaments.baseFirstLayers.toString(),
+                            value = options.featureFilaments.baseFirstLayers.toFloat(),
+                            range = 0f..max(100f, options.featureFilaments.baseFirstLayers.toFloat()),
+                            steps = max(100, options.featureFilaments.baseFirstLayers) - 1,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        featureFilaments = options.featureFilaments.copy(
+                                            baseFirstLayers = it.roundToInt(),
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.base_infill_last_layers),
+                            valueText = options.featureFilaments.baseLastLayers.toString(),
+                            value = options.featureFilaments.baseLastLayers.toFloat(),
+                            range = 0f..max(100f, options.featureFilaments.baseLastLayers.toFloat()),
+                            steps = max(100, options.featureFilaments.baseLastLayers) - 1,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        featureFilaments = options.featureFilaments.copy(
+                                            baseLastLayers = it.roundToInt(),
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                    }
+                }
                 SettingChoices(
                     settingLabel = stringResource(R.string.sparse_infill_pattern),
                     entries = listOf(
@@ -3756,6 +3824,70 @@ private fun SlicingSettingsSheet(
                             onOptionsChanged(
                                 options.copy(
                                     multiMaterial = options.multiMaterial.copy(flushIntoObjects = it),
+                                ),
+                            )
+                        },
+                    )
+                }
+                if (maximumFilamentSlot > 1) {
+                    SettingsGroupTitle(stringResource(R.string.filament_for_features))
+                    SettingSlider(
+                        label = stringResource(R.string.wall_filament),
+                        valueText = stringResource(
+                            R.string.extruder_number,
+                            options.featureFilaments.wallFilament,
+                        ),
+                        value = options.featureFilaments.wallFilament.toFloat(),
+                        range = 1f..maximumFilamentSlot.toFloat(),
+                        steps = (maximumFilamentSlot - 2).coerceAtLeast(0),
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    featureFilaments = options.featureFilaments.copy(
+                                        wallFilament = it.roundToInt(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.solid_infill_filament),
+                        valueText = stringResource(
+                            R.string.extruder_number,
+                            options.featureFilaments.solidInfillFilament,
+                        ),
+                        value = options.featureFilaments.solidInfillFilament.toFloat(),
+                        range = 1f..maximumFilamentSlot.toFloat(),
+                        steps = (maximumFilamentSlot - 2).coerceAtLeast(0),
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    featureFilaments = options.featureFilaments.copy(
+                                        solidInfillFilament = it.roundToInt(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.wipe_tower_filament),
+                        valueText = if (options.featureFilaments.wipeTowerFilament == 0) {
+                            stringResource(R.string.filament_automatic)
+                        } else {
+                            stringResource(
+                                R.string.extruder_number,
+                                options.featureFilaments.wipeTowerFilament,
+                            )
+                        },
+                        value = options.featureFilaments.wipeTowerFilament.toFloat(),
+                        range = 0f..maximumFilamentSlot.toFloat(),
+                        steps = (maximumFilamentSlot - 1).coerceAtLeast(0),
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    featureFilaments = options.featureFilaments.copy(
+                                        wipeTowerFilament = it.roundToInt(),
+                                    ),
                                 ),
                             )
                         },
