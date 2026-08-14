@@ -509,6 +509,35 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual("normal", overridden["zHopType"])
         self.assertFalse(overridden["wipeWhileRetracting"])
 
+    def test_preserves_first_per_filament_gcode_template(self) -> None:
+        profile = build_filament(
+            "Example",
+            {
+                "name": "Template PLA",
+                "filament_type": ["PLA"],
+                "nozzle_temperature": ["220"],
+                "hot_plate_temp": ["60"],
+                "filament_start_gcode": ["M117 SLOT_START", "M117 UNUSED_START"],
+                "filament_end_gcode": ["M117 SLOT_END", "M117 UNUSED_END"],
+            },
+        )
+
+        self.assertEqual("M117 SLOT_START", profile["filamentStartGcode"])
+        self.assertEqual("M117 SLOT_END", profile["filamentEndGcode"])
+
+    def test_rejects_oversized_utf8_filament_gcode_template(self) -> None:
+        with self.assertRaises(ValueError):
+            build_filament(
+                "Example",
+                {
+                    "name": "Unsafe template",
+                    "filament_type": ["PLA"],
+                    "nozzle_temperature": ["220"],
+                    "hot_plate_temp": ["60"],
+                    "filament_start_gcode": ["한" * 87_382],
+                },
+            )
+
     def test_preserves_advanced_support_generation_values(self) -> None:
         profile = build_process(
             "Example",

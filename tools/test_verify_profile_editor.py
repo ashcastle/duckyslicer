@@ -69,7 +69,9 @@ def valid_sources() -> dict[str, str]:
             " segmentedRegionInterlockingDepth = if (it)"
             " R.string.machine_gcode R.string.machine_start_gcode R.string.machine_end_gcode"
             " machineStartGcode = machineEndGcode = GcodeTemplateSetting("
-            " MAX_MACHINE_GCODE_LENGTH"
+            " MAX_GCODE_TEMPLATE_BYTES"
+            " R.string.filament_gcode R.string.filament_start_gcode R.string.filament_end_gcode"
+            " filamentStartGcode = filamentEndGcode ="
             " R.string.maximum_z_speed R.string.maximum_e_speed"
             " R.string.maximum_x_acceleration R.string.maximum_y_acceleration"
             " R.string.maximum_z_acceleration R.string.maximum_e_acceleration"
@@ -148,6 +150,7 @@ def valid_sources() -> dict[str, str]:
             ' name="tree_support_auto_brim" name="tree_support_brim_width"'
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="machine_gcode" name="machine_start_gcode" name="machine_end_gcode"'
+            ' name="filament_gcode" name="filament_start_gcode" name="filament_end_gcode"'
             ' name="maximum_z_speed" name="maximum_e_speed"'
             ' name="maximum_x_acceleration" name="maximum_y_acceleration"'
             ' name="maximum_z_acceleration" name="maximum_e_acceleration"'
@@ -188,6 +191,7 @@ def valid_sources() -> dict[str, str]:
             ' name="tree_support_auto_brim" name="tree_support_brim_width"'
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="machine_gcode" name="machine_start_gcode" name="machine_end_gcode"'
+            ' name="filament_gcode" name="filament_start_gcode" name="filament_end_gcode"'
             ' name="maximum_z_speed" name="maximum_e_speed"'
             ' name="maximum_x_acceleration" name="maximum_y_acceleration"'
             ' name="maximum_z_acceleration" name="maximum_e_acceleration"'

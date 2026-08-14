@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 55
+SCHEMA_VERSION = 56
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -432,6 +432,8 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "firstLayerBedTemp": first_bed,
         "flowRatio": number(raw.get("filament_flow_ratio"), 1.0),
         "maxVolumetricSpeed": number(raw.get("filament_max_volumetric_speed"), 12),
+        "filamentStartGcode": str(scalar(raw.get("filament_start_gcode"), "")),
+        "filamentEndGcode": str(scalar(raw.get("filament_end_gcode"), "")),
         "retractLength": nullable_number(raw.get("filament_retraction_length")),
         "retractSpeed": nullable_number(raw.get("filament_retraction_speed")),
         "deretractSpeed": nullable_number(raw.get("filament_deretraction_speed")),
@@ -457,6 +459,8 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     if not (
         0.5 <= profile["flowRatio"] <= 1.5
         and 0.1 <= profile["maxVolumetricSpeed"] <= 100
+        and len(profile["filamentStartGcode"].encode("utf-8")) <= 262_144
+        and len(profile["filamentEndGcode"].encode("utf-8")) <= 262_144
         and all(0 <= profile[key] <= 100 for key in ["fanMinSpeed", "fanMaxSpeed", "overhangFanSpeed"])
         and (profile["retractLength"] is None or 0 <= profile["retractLength"] <= 100)
         and (profile["retractSpeed"] is None or 0 <= profile["retractSpeed"] <= 500)

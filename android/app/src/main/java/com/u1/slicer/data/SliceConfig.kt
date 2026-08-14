@@ -230,6 +230,8 @@ data class SliceConfig(
     @JvmField var machineMaxJerkZ: Float = 3f,
     @JvmField var machineMaxJerkE: Float = 2.5f,
     @JvmField var filamentFlowRatios: FloatArray = floatArrayOf(),
+    @JvmField var filamentStartGcodes: Array<String> = arrayOf(),
+    @JvmField var filamentEndGcodes: Array<String> = arrayOf(),
     @JvmField var filamentMaxVolumetricSpeeds: FloatArray = floatArrayOf(),
     @JvmField var filamentFanMinSpeeds: IntArray = intArrayOf(),
     @JvmField var filamentFanMaxSpeeds: IntArray = intArrayOf(),

@@ -18,7 +18,15 @@ class ProfileBundleTest {
         try {
             val source = ProfileStore(sourceDirectory.resolve("user_profiles.json"))
             source.savePrinter("Portable printer", SliceOptions())
-            source.saveFilament("Portable filament", SliceOptions())
+            source.saveFilament(
+                "Portable filament",
+                SliceOptions().selectFilament(
+                    FilamentProfile.GENERIC_PLA.copy(
+                        filamentStartGcode = "M117 BUNDLE_FILAMENT_START",
+                        filamentEndGcode = "M117 BUNDLE_FILAMENT_END",
+                    ),
+                ),
+            )
             source.saveSlicing("Portable slicing", SliceOptions())
 
             val bytes = source.exportBundle()
@@ -41,7 +49,11 @@ class ProfileBundleTest {
             assertEquals(0, imported.skippedDuplicates)
             val catalog = destination.load()
             assertTrue(catalog.printers.any { it.name == "Portable printer" && !it.builtIn })
-            assertTrue(catalog.filaments.any { it.name == "Portable filament" && !it.builtIn })
+            val importedFilament = catalog.filaments.single {
+                it.name == "Portable filament" && !it.builtIn
+            }
+            assertEquals("M117 BUNDLE_FILAMENT_START", importedFilament.filamentStartGcode)
+            assertEquals("M117 BUNDLE_FILAMENT_END", importedFilament.filamentEndGcode)
             assertTrue(catalog.slicing.any { it.name == "Portable slicing" && !it.builtIn })
 
             val firstGeneration = destinationFile.readBytes()

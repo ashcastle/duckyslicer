@@ -39,8 +39,8 @@ internal object ProfileValidation {
             profile.extruderClearanceRadius in 0.1f..1_000f &&
             profile.extruderClearanceHeightToRod in 0.1f..1_500f &&
             profile.extruderClearanceHeightToLid in 0.1f..1_500f &&
-            profile.machineStartGcode.length <= MAX_GCODE_TEMPLATE_LENGTH &&
-            profile.machineEndGcode.length <= MAX_GCODE_TEMPLATE_LENGTH
+            profile.machineStartGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
+            profile.machineEndGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH
 
     fun filament(profile: FilamentProfile): Boolean =
         profile.id.isSafeLabel() &&
@@ -69,6 +69,8 @@ internal object ProfileValidation {
             profile.closeFanFirstLayers in 0..10_000 &&
             profile.fullFanSpeedLayer in 0..10_000 &&
             profile.pressureAdvance in 0f..10f &&
+            profile.filamentStartGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
+            profile.filamentEndGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
             profile.compatiblePrinters.isSafeCompatibilityList()
 
     fun slicing(profile: QualityProfile): Boolean =

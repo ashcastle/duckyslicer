@@ -994,13 +994,29 @@ internal object SlicerProcessClient {
     }
 
     private inline fun <T> withWorker(context: Context, block: (BoundWorker) -> T): T {
-        val worker = BoundWorker(context.applicationContext)
-        try {
-            worker.connect()
-            return block(worker)
-        } finally {
-            worker.close()
+        var lastConnectionFailure: SlicerServiceConnectionException? = null
+        repeat(WORKER_CONNECTION_ATTEMPTS) { attempt ->
+            val worker = BoundWorker(context.applicationContext)
+            try {
+                worker.connect()
+                return block(worker)
+            } catch (failure: SlicerServiceConnectionException) {
+                lastConnectionFailure = failure
+                if (attempt == WORKER_CONNECTION_ATTEMPTS - 1) throw failure
+            } finally {
+                worker.close()
+            }
+            try {
+                Thread.sleep(WORKER_CONNECTION_RETRY_MILLIS)
+            } catch (interrupted: InterruptedException) {
+                Thread.currentThread().interrupt()
+                throw IllegalStateException(
+                    "Slicer service connection retry was interrupted",
+                    interrupted,
+                )
+            }
         }
+        throw checkNotNull(lastConnectionFailure)
     }
 
     private fun validateOutput(context: Context, path: String?): File {
@@ -1063,11 +1079,15 @@ internal object SlicerProcessClient {
                 this,
                 Context.BIND_AUTO_CREATE,
             )
-            check(bound) { "Slicer service could not be started" }
-            check(connected.await(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                "Slicer service connection timed out"
+            if (!bound) {
+                throw SlicerServiceConnectionException("Slicer service could not be started")
             }
-            checkNotNull(binder) { "Slicer service connection failed" }
+            if (!connected.await(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                throw SlicerServiceConnectionException("Slicer service connection timed out")
+            }
+            if (binder == null) {
+                throw SlicerServiceConnectionException("Slicer service connection failed")
+            }
         }
 
         fun request(
@@ -1169,7 +1189,12 @@ internal object SlicerProcessClient {
         }
     }
 
+    private class SlicerServiceConnectionException(message: String) :
+        IllegalStateException(message)
+
     private const val CONNECTION_TIMEOUT_SECONDS = 10L
+    private const val WORKER_CONNECTION_ATTEMPTS = 2
+    private const val WORKER_CONNECTION_RETRY_MILLIS = 100L
     private const val REQUEST_CANCEL_BIND_RETRIES = 100
     private const val REQUEST_CANCEL_RETRY_MILLIS = 10L
     private const val ARRANGEMENT_TIMEOUT_SECONDS = 5L * 60L

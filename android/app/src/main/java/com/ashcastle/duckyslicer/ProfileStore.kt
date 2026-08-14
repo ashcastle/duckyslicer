@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 56
+internal const val USER_PROFILE_SCHEMA_VERSION = 57
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -131,6 +131,8 @@ class ProfileStore private constructor(
             firstLayerBedTemp = effective.firstLayerBedTemp,
             flowRatio = effective.flowRatio,
             maxVolumetricSpeed = effective.maxVolumetricSpeed,
+            filamentStartGcode = effective.filamentStartGcode,
+            filamentEndGcode = effective.filamentEndGcode,
             retractLength = effective.retractLength,
             retractSpeed = effective.retractSpeed,
             deretractSpeed = effective.deretractSpeed,
@@ -510,6 +512,7 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("nozzleTemp", nozzleTemp).put("firstLayerNozzleTemp", firstLayerNozzleTemp)
     .put("bedTemp", bedTemp).put("firstLayerBedTemp", firstLayerBedTemp)
     .put("flowRatio", flowRatio).put("maxVolumetricSpeed", maxVolumetricSpeed)
+    .put("filamentStartGcode", filamentStartGcode).put("filamentEndGcode", filamentEndGcode)
     .put("retractLength", retractLength ?: JSONObject.NULL)
     .put("retractSpeed", retractSpeed ?: JSONObject.NULL)
     .put("deretractSpeed", deretractSpeed ?: JSONObject.NULL)
@@ -904,6 +907,8 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         getDouble("flowRatio").toFloat(), getDouble("maxVolumetricSpeed").toFloat(),
         builtIn = optBoolean("builtIn"),
         brand = optionalString("brand"),
+        filamentStartGcode = optString("filamentStartGcode"),
+        filamentEndGcode = optString("filamentEndGcode"),
         retractLength = nullableFloat("retractLength"),
         retractSpeed = nullableFloat("retractSpeed"),
         deretractSpeed = nullableFloat("deretractSpeed"),

@@ -72,7 +72,7 @@ private enum class ProfileSettingsKind {
 }
 
 private val LocalSettingsQuery = compositionLocalOf { "" }
-private const val MAX_MACHINE_GCODE_LENGTH = 262_144
+private const val MAX_GCODE_TEMPLATE_BYTES = 262_144
 
 @Composable
 private fun settingMatchesQuery(label: String): Boolean {
@@ -1270,6 +1270,31 @@ private fun FilamentSettingsSheet(
                 },
             )
         }
+        SettingsGroupTitle(stringResource(R.string.filament_gcode))
+        GcodeTemplateSetting(
+            label = stringResource(R.string.filament_start_gcode),
+            value = activeProfile.filamentStartGcode,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(filamentStartGcode = it),
+                    ),
+                )
+            },
+        )
+        GcodeTemplateSetting(
+            label = stringResource(R.string.filament_end_gcode),
+            value = activeProfile.filamentEndGcode,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(filamentEndGcode = it),
+                    ),
+                )
+            },
+        )
         SaveProfileField(
             onSave = { name -> onSave(name, options, selectedSlot) },
             onDismiss = onDismiss,
@@ -5320,7 +5345,7 @@ private fun GcodeTemplateSetting(
     OutlinedTextField(
         value = value,
         onValueChange = { candidate ->
-            if (candidate.length <= MAX_MACHINE_GCODE_LENGTH) {
+            if (candidate.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_BYTES) {
                 onValueChange(candidate)
             }
         },

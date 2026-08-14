@@ -2,6 +2,7 @@ package com.ashcastle.duckyslicer
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -10,9 +11,13 @@ class SliceOptionsPersistenceTest {
     fun filamentSlotsRoundTripAndReachTheNativeExtruderConfiguration() {
         val primary = FilamentProfile.GENERIC_PLA.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_04.name),
+            filamentStartGcode = "M117 PRIMARY_START",
+            filamentEndGcode = "M117 PRIMARY_END",
         )
         val secondary = FilamentProfile.PETG.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_04.name),
+            filamentStartGcode = "M117 SECONDARY_START",
+            filamentEndGcode = "M117 SECONDARY_END",
         )
         val options = SliceOptions()
             .selectPrinter(PrinterProfile.U1_04)
@@ -99,6 +104,14 @@ class SliceOptionsPersistenceTest {
         assertEquals(listOf("PLA", "PETG"), native.filamentTypes.toList())
         assertEquals(listOf(primary.nozzleTemp, secondary.nozzleTemp), native.extruderTemps.toList())
         assertEquals(listOf(primary.flowRatio, secondary.flowRatio), native.filamentFlowRatios.toList())
+        assertEquals(
+            listOf("M117 PRIMARY_START", "M117 SECONDARY_START"),
+            native.filamentStartGcodes.toList(),
+        )
+        assertEquals(
+            listOf("M117 PRIMARY_END", "M117 SECONDARY_END"),
+            native.filamentEndGcodes.toList(),
+        )
         assertEquals(1, native.supportFilament)
         assertEquals(2, native.supportInterfaceFilament)
         assertEquals(true, native.infillFilamentOverrideEnabled)
@@ -613,6 +626,15 @@ class SliceOptionsPersistenceTest {
             .put("formatVersion", 99)
         assertNull(unknown.toProjectSliceOptionsOrNull())
     }
+
+    @Test
+    fun filamentGcodeTemplateLimitCountsUtf8Bytes() {
+        val unsafe = FilamentProfile.GENERIC_PLA.copy(
+            filamentStartGcode = "한".repeat(87_382),
+        )
+
+        assertFalse(ProfileValidation.filament(unsafe))
+    }
 }
 
 internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
@@ -620,6 +642,8 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
     .selectFilament(
         FilamentProfile.PETG.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_06.name),
+            filamentStartGcode = "M117 PRIMARY_START",
+            filamentEndGcode = "M117 PRIMARY_END",
             retractLength = 1.1f,
             retractSpeed = 37f,
             deretractSpeed = 35f,

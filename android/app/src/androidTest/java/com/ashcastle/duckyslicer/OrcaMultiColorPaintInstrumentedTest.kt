@@ -23,9 +23,13 @@ class OrcaMultiColorPaintInstrumentedTest {
             val model = inspectModel(modelFile.absolutePath)
             val primary = FilamentProfile.GENERIC_PLA.copy(
                 compatiblePrinters = listOf(PrinterProfile.U1_04.name),
+                filamentStartGcode = "M117 DUCKY_SLOT_0_START",
+                filamentEndGcode = "M117 DUCKY_SLOT_0_END",
             )
             val secondary = FilamentProfile.PETG.copy(
                 compatiblePrinters = listOf(PrinterProfile.U1_04.name),
+                filamentStartGcode = "M117 DUCKY_SLOT_1_START",
+                filamentEndGcode = "M117 DUCKY_SLOT_1_END",
             )
             val options = SliceOptions()
                 .selectPrinter(PrinterProfile.U1_04)
@@ -49,6 +53,22 @@ class OrcaMultiColorPaintInstrumentedTest {
             assertTrue("Both filament definitions must reach Orca", gcode.contains("filament_type = PLA;PETG"))
             assertTrue("Unpainted faces must retain tool 0", commands.any { it == "T0" })
             assertTrue("Painted faces must use tool 1", commands.any { it == "T1" })
+            assertTrue("Tool 0 start template must execute", commands.any { it == "M117 DUCKY_SLOT_0_START" })
+            assertTrue("Tool 0 end template must execute", commands.any { it == "M117 DUCKY_SLOT_0_END" })
+            assertTrue("Tool 1 start template must execute", commands.any { it == "M117 DUCKY_SLOT_1_START" })
+            assertTrue("Tool 1 end template must execute", commands.any { it == "M117 DUCKY_SLOT_1_END" })
+            assertTrue(
+                "The first real T0 to T1 transition must close slot 0 before opening slot 1",
+                commands.indexOf("M117 DUCKY_SLOT_0_START") <
+                    commands.indexOf("M117 DUCKY_SLOT_0_END") &&
+                    commands.indexOf("M117 DUCKY_SLOT_0_END") <
+                    commands.indexOf("M117 DUCKY_SLOT_1_START"),
+            )
+            assertTrue(
+                "The final active slot must close after it starts",
+                commands.indexOf("M117 DUCKY_SLOT_1_START") <
+                    commands.lastIndexOf("M117 DUCKY_SLOT_1_END"),
+            )
             assertTrue("The painted slice must contain extrusion", gcode.contains(";TYPE:Outer wall"))
         } finally {
             output?.delete()

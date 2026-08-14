@@ -1509,6 +1509,8 @@ class NativeEngineInstrumentedTest {
         val edited = SliceOptions()
             .selectPrinter(PrinterProfile.U1_06)
             .selectFilament(FilamentProfile.PETG.copy(
+                filamentStartGcode = "M117 SAVED_FILAMENT_START",
+                filamentEndGcode = "M117 SAVED_FILAMENT_END",
                 retractLength = 1.2f,
                 retractSpeed = 41f,
                 deretractSpeed = 36f,
@@ -1945,6 +1947,8 @@ class NativeEngineInstrumentedTest {
         assertEquals(0.07f, restored.filaments.last().retractRestartExtra)
         assertEquals(0.65f, restored.filaments.last().zHop)
         assertEquals("spiral", restored.filaments.last().zHopType)
+        assertEquals("M117 SAVED_FILAMENT_START", restored.filaments.last().filamentStartGcode)
+        assertEquals("M117 SAVED_FILAMENT_END", restored.filaments.last().filamentEndGcode)
         assertEquals(40, restored.filaments.last().fanMinSpeed)
         assertTrue(restored.filaments.last().pressureAdvanceEnabled)
         assertEquals(0.035f, restored.filaments.last().pressureAdvance)
@@ -2094,12 +2098,18 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(55, catalog.schemaVersion)
+        assertEquals(56, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include upstream filament presets", catalog.filaments.size > 3_000)
         assertTrue("The catalog must include upstream slicing presets", catalog.slicing.size > 2_000)
+        assertTrue(
+            "Inherited filament G-code templates must survive catalog generation",
+            catalog.filaments.any {
+                it.filamentStartGcode.isNotBlank() || it.filamentEndGcode.isNotBlank()
+            },
+        )
         val representativeBrands = setOf(
             "Prusa", "Creality", "Anycubic", "Elegoo", "Snapmaker", "Sovol", "Qidi",
         )
@@ -4475,9 +4485,13 @@ class NativeEngineInstrumentedTest {
             extruderClearanceHeightToRod = 29f,
             extruderClearanceHeightToLid = 119f,
         )
+        val customFilament = FilamentProfile.GENERIC_PLA.copy(
+            filamentStartGcode = "M117 DUCKY_FILAMENT_START",
+            filamentEndGcode = "M117 DUCKY_FILAMENT_END",
+        )
         val options = SliceOptions()
             .selectPrinter(customPrinter)
-            .selectFilament(FilamentProfile.GENERIC_PLA)
+            .selectFilament(customFilament)
             .selectQuality(QualityProfile.STANDARD)
         val outcome = OnDeviceSlicer.slice(model, options)
         val gcode = outcome.output.readText()
@@ -4518,6 +4532,14 @@ class NativeEngineInstrumentedTest {
         assertTrue("Custom G-code flavor must reach Orca", gcode.contains("; gcode_flavor = marlin2"))
         assertTrue("Custom start G-code must reach Orca", gcode.lineSequence().any { it == "M117 DUCKY_START" })
         assertTrue("Custom end G-code must reach Orca", gcode.lineSequence().any { it == "M117 DUCKY_END" })
+        assertTrue(
+            "Filament start G-code must reach Orca",
+            gcode.lineSequence().any { it == "M117 DUCKY_FILAMENT_START" },
+        )
+        assertTrue(
+            "Filament end G-code must reach Orca",
+            gcode.lineSequence().any { it == "M117 DUCKY_FILAMENT_END" },
+        )
         val bounds = outerWallBounds(outcome.output)
         assertTrue("Centered-machine G-code must retain negative X coordinates", bounds.minX < -1f)
         assertTrue("Centered-machine G-code must retain positive X coordinates", bounds.maxX > 1f)

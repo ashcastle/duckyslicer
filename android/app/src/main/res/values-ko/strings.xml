@@ -702,6 +702,9 @@
     <string name="machine_gcode">시작 및 종료 G-code</string>
     <string name="machine_start_gcode">시작 G-code</string>
     <string name="machine_end_gcode">종료 G-code</string>
+    <string name="filament_gcode">필라멘트 G-code</string>
+    <string name="filament_start_gcode">필라멘트 시작 G-code</string>
+    <string name="filament_end_gcode">필라멘트 종료 G-code</string>
     <string name="motion_limits">동작 한계</string>
     <string name="maximum_x_speed">최대 X 속도</string>
     <string name="maximum_y_speed">최대 Y 속도</string>
