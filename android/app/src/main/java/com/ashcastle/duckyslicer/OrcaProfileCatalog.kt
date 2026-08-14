@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v61.bin"
+private const val CATALOG_ASSET = "profile_catalog_v62.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 61) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 62) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -112,6 +112,18 @@ class OrcaProfileCatalog(private val context: Context) {
         firstLayerNozzleTemp = input.readInt(),
         bedTemp = input.readInt(),
         firstLayerBedTemp = input.readInt(),
+        texturedPlateTemp = input.readInt(),
+        firstLayerTexturedPlateTemp = input.readInt(),
+        engineeringPlateTemp = input.readInt(),
+        firstLayerEngineeringPlateTemp = input.readInt(),
+        coolPlateTemp = input.readInt(),
+        firstLayerCoolPlateTemp = input.readInt(),
+        texturedCoolPlateTemp = input.readInt(),
+        firstLayerTexturedCoolPlateTemp = input.readInt(),
+        superTackPlateTemp = input.readInt(),
+        firstLayerSuperTackPlateTemp = input.readInt(),
+        graphicEffectPlateTemp = input.readInt(),
+        firstLayerGraphicEffectPlateTemp = input.readInt(),
         flowRatio = input.readFloat(),
         maxVolumetricSpeed = input.readFloat(),
         diameter = input.readFloat(),
@@ -278,6 +290,18 @@ private val FILAMENT_BINARY_FIELDS = arrayOf(
     BinaryField("firstLayerNozzleTemp", BINARY_INT),
     BinaryField("bedTemp", BINARY_INT),
     BinaryField("firstLayerBedTemp", BINARY_INT),
+    BinaryField("texturedPlateTemp", BINARY_INT),
+    BinaryField("firstLayerTexturedPlateTemp", BINARY_INT),
+    BinaryField("engineeringPlateTemp", BINARY_INT),
+    BinaryField("firstLayerEngineeringPlateTemp", BINARY_INT),
+    BinaryField("coolPlateTemp", BINARY_INT),
+    BinaryField("firstLayerCoolPlateTemp", BINARY_INT),
+    BinaryField("texturedCoolPlateTemp", BINARY_INT),
+    BinaryField("firstLayerTexturedCoolPlateTemp", BINARY_INT),
+    BinaryField("superTackPlateTemp", BINARY_INT),
+    BinaryField("firstLayerSuperTackPlateTemp", BINARY_INT),
+    BinaryField("graphicEffectPlateTemp", BINARY_INT),
+    BinaryField("firstLayerGraphicEffectPlateTemp", BINARY_INT),
     BinaryField("flowRatio", BINARY_FLOAT),
     BinaryField("maxVolumetricSpeed", BINARY_FLOAT),
     BinaryField("diameter", BINARY_FLOAT),

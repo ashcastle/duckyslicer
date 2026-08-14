@@ -49,8 +49,22 @@ internal object ProfileValidation {
             profile.brand.isSafeOptionalLabel() &&
             profile.nozzleTemp in 150..400 &&
             profile.firstLayerNozzleTemp in 150..400 &&
-            profile.bedTemp in 0..160 &&
-            profile.firstLayerBedTemp in 0..160 &&
+            listOf(
+                profile.bedTemp,
+                profile.firstLayerBedTemp,
+                profile.texturedPlateTemp,
+                profile.firstLayerTexturedPlateTemp,
+                profile.engineeringPlateTemp,
+                profile.firstLayerEngineeringPlateTemp,
+                profile.coolPlateTemp,
+                profile.firstLayerCoolPlateTemp,
+                profile.texturedCoolPlateTemp,
+                profile.firstLayerTexturedCoolPlateTemp,
+                profile.superTackPlateTemp,
+                profile.firstLayerSuperTackPlateTemp,
+                profile.graphicEffectPlateTemp,
+                profile.firstLayerGraphicEffectPlateTemp,
+            ).all { it in 0..160 } &&
             profile.flowRatio in 0.5f..1.5f &&
             profile.maxVolumetricSpeed in 0.1f..100f &&
             profile.diameter in 0.5f..4f &&

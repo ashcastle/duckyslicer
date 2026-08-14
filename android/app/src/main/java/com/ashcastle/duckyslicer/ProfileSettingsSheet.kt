@@ -88,6 +88,16 @@ internal fun settingQueryMatches(query: String, label: String): Boolean {
     return normalized.split(' ').filter(String::isNotBlank).all(candidate::contains)
 }
 
+private fun BuildPlateType.labelResource(): Int = when (this) {
+    BuildPlateType.TEXTURED_PEI -> R.string.textured_pei_plate
+    BuildPlateType.HIGH_TEMP -> R.string.high_temp_plate
+    BuildPlateType.ENGINEERING -> R.string.engineering_plate
+    BuildPlateType.COOL -> R.string.cool_plate
+    BuildPlateType.TEXTURED_COOL -> R.string.textured_cool_plate
+    BuildPlateType.SUPER_TACK -> R.string.super_tack_plate
+    BuildPlateType.GRAPHIC_EFFECT -> R.string.graphic_effect_plate
+}
+
 internal data class ProfileEditSession(
     val opening: SliceOptions,
     val working: SliceOptions = opening,
@@ -856,6 +866,9 @@ private fun FilamentSettingsSheet(
         selectedSlot = selectedSlot.coerceIn(0, slots.lastIndex)
     }
     val activeProfile = slots.getOrElse(selectedSlot) { slots.last() }
+    val activeBedTemperature = activeProfile.bedTemperature(options.buildPlate.type)
+    val activeFirstLayerBedTemperature =
+        activeProfile.firstLayerBedTemperature(options.buildPlate.type)
     val resolvedRetraction = activeProfile.resolveRetraction(options.printerProfile)
     val inheritsPrinterRetraction = activeProfile.retractLength == null &&
         activeProfile.retractSpeed == null && activeProfile.deretractSpeed == null &&
@@ -939,27 +952,53 @@ private fun FilamentSettingsSheet(
                 )
             },
         )
-        SettingSlider(
-            label = stringResource(R.string.bed_temperature),
-            valueText = stringResource(R.string.celsius_value, activeProfile.bedTemp),
-            value = activeProfile.bedTemp.toFloat(),
-            range = 0f..120f,
-            steps = 119,
-            onValueChange = {
-                onOptionsChanged(options.updateFilamentSlot(selectedSlot, activeProfile.copy(bedTemp = it.roundToInt())))
-            },
+        SettingChoices(
+            settingLabel = stringResource(R.string.build_plate),
+            entries = BUILD_PLATE_TYPES,
+            selected = options.buildPlate.type,
+            optionLabel = { stringResource(it.labelResource()) },
+            onSelected = { onOptionsChanged(options.selectBuildPlate(it)) },
         )
         SettingSlider(
-            label = stringResource(R.string.first_layer_bed_temperature),
-            valueText = stringResource(R.string.celsius_value, activeProfile.firstLayerBedTemp),
-            value = activeProfile.firstLayerBedTemp.toFloat(),
+            label = stringResource(R.string.bed_temperature),
+            valueText = if (activeBedTemperature == 0) {
+                stringResource(R.string.plate_not_supported)
+            } else {
+                stringResource(R.string.celsius_value, activeBedTemperature)
+            },
+            value = activeBedTemperature.toFloat(),
             range = 0f..120f,
             steps = 119,
             onValueChange = {
                 onOptionsChanged(
                     options.updateFilamentSlot(
                         selectedSlot,
-                        activeProfile.copy(firstLayerBedTemp = it.roundToInt()),
+                        activeProfile.withBedTemperature(
+                            options.buildPlate.type,
+                            temperature = it.roundToInt(),
+                        ),
+                    ),
+                )
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.first_layer_bed_temperature),
+            valueText = if (activeFirstLayerBedTemperature == 0) {
+                stringResource(R.string.plate_not_supported)
+            } else {
+                stringResource(R.string.celsius_value, activeFirstLayerBedTemperature)
+            },
+            value = activeFirstLayerBedTemperature.toFloat(),
+            range = 0f..120f,
+            steps = 119,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.withBedTemperature(
+                            options.buildPlate.type,
+                            firstLayerTemperature = it.roundToInt(),
+                        ),
                     ),
                 )
             },

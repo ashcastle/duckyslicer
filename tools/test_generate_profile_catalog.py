@@ -456,6 +456,45 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(16, profile["extruderCount"])
         self.assertFalse(profile["auxiliaryFan"])
 
+    def test_preserves_all_orca_build_plate_temperatures(self) -> None:
+        profile = build_filament(
+            "Example",
+            {
+                "name": "Plate matrix PLA",
+                "filament_type": ["PLA"],
+                "nozzle_temperature": ["220"],
+                "hot_plate_temp": ["71"],
+                "hot_plate_temp_initial_layer": ["72"],
+                "textured_plate_temp": ["53"],
+                "textured_plate_temp_initial_layer": ["54"],
+                "eng_plate_temp": ["61"],
+                "eng_plate_temp_initial_layer": ["62"],
+                "cool_plate_temp": ["31"],
+                "cool_plate_temp_initial_layer": ["32"],
+                "textured_cool_plate_temp": ["33"],
+                "textured_cool_plate_temp_initial_layer": ["34"],
+                "supertack_plate_temp": ["35"],
+                "supertack_plate_temp_initial_layer": ["36"],
+                "graphic_effect_plate_temp": ["55"],
+                "graphic_effect_plate_temp_initial_layer": ["56"],
+            },
+        )
+
+        self.assertEqual(71, profile["bedTemp"])
+        self.assertEqual(72, profile["firstLayerBedTemp"])
+        self.assertEqual(53, profile["texturedPlateTemp"])
+        self.assertEqual(54, profile["firstLayerTexturedPlateTemp"])
+        self.assertEqual(61, profile["engineeringPlateTemp"])
+        self.assertEqual(62, profile["firstLayerEngineeringPlateTemp"])
+        self.assertEqual(31, profile["coolPlateTemp"])
+        self.assertEqual(32, profile["firstLayerCoolPlateTemp"])
+        self.assertEqual(33, profile["texturedCoolPlateTemp"])
+        self.assertEqual(34, profile["firstLayerTexturedCoolPlateTemp"])
+        self.assertEqual(35, profile["superTackPlateTemp"])
+        self.assertEqual(36, profile["firstLayerSuperTackPlateTemp"])
+        self.assertEqual(55, profile["graphicEffectPlateTemp"])
+        self.assertEqual(56, profile["firstLayerGraphicEffectPlateTemp"])
+
     def test_preserves_printer_retraction_and_nullable_filament_overrides(self) -> None:
         printer = build_printer(
             "Example",

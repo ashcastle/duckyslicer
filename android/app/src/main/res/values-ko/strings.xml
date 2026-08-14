@@ -225,6 +225,15 @@
     <string name="first_layer_nozzle_temperature">첫 레이어 노즐 온도</string>
     <string name="bed_temperature">베드 온도</string>
     <string name="first_layer_bed_temperature">첫 레이어 베드 온도</string>
+    <string name="build_plate">빌드 플레이트</string>
+    <string name="textured_pei_plate">텍스처 PEI 플레이트</string>
+    <string name="high_temp_plate">고온 플레이트</string>
+    <string name="engineering_plate">엔지니어링 플레이트</string>
+    <string name="cool_plate">쿨 플레이트</string>
+    <string name="textured_cool_plate">텍스처 쿨 플레이트</string>
+    <string name="super_tack_plate">SuperTack 플레이트</string>
+    <string name="graphic_effect_plate">그래픽 효과 플레이트</string>
+    <string name="plate_not_supported">지원하지 않음</string>
     <string name="flow_ratio">유량 비율</string>
     <string name="max_volumetric_speed">최대 유량</string>
     <string name="filament_diameter">직경</string>

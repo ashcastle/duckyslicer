@@ -202,6 +202,33 @@ data class PrinterProfile(
     }
 }
 
+enum class BuildPlateType(val storageValue: String, val nativeValue: Int) {
+    COOL("cool", 1),
+    ENGINEERING("engineering", 2),
+    HIGH_TEMP("high_temp", 3),
+    TEXTURED_PEI("textured_pei", 4),
+    TEXTURED_COOL("textured_cool", 5),
+    GRAPHIC_EFFECT("graphic_effect", 6),
+    SUPER_TACK("super_tack", 7),
+    ;
+
+    companion object {
+        fun fromStorage(value: String?): BuildPlateType? = entries.firstOrNull {
+            it.storageValue == value
+        }
+    }
+}
+
+internal val BUILD_PLATE_TYPES = listOf(
+    BuildPlateType.TEXTURED_PEI,
+    BuildPlateType.HIGH_TEMP,
+    BuildPlateType.ENGINEERING,
+    BuildPlateType.COOL,
+    BuildPlateType.TEXTURED_COOL,
+    BuildPlateType.SUPER_TACK,
+    BuildPlateType.GRAPHIC_EFFECT,
+)
+
 data class FilamentProfile(
     val id: String,
     val name: String,
@@ -214,6 +241,18 @@ data class FilamentProfile(
     val maxVolumetricSpeed: Float,
     val builtIn: Boolean = false,
     val brand: String? = null,
+    val texturedPlateTemp: Int = bedTemp,
+    val firstLayerTexturedPlateTemp: Int = firstLayerBedTemp,
+    val engineeringPlateTemp: Int = bedTemp,
+    val firstLayerEngineeringPlateTemp: Int = firstLayerBedTemp,
+    val coolPlateTemp: Int = bedTemp,
+    val firstLayerCoolPlateTemp: Int = firstLayerBedTemp,
+    val texturedCoolPlateTemp: Int = coolPlateTemp,
+    val firstLayerTexturedCoolPlateTemp: Int = firstLayerCoolPlateTemp,
+    val superTackPlateTemp: Int = coolPlateTemp,
+    val firstLayerSuperTackPlateTemp: Int = firstLayerCoolPlateTemp,
+    val graphicEffectPlateTemp: Int = texturedPlateTemp,
+    val firstLayerGraphicEffectPlateTemp: Int = firstLayerTexturedPlateTemp,
     val filamentStartGcode: String = "",
     val filamentEndGcode: String = "",
     val retractLength: Float? = null,
@@ -328,6 +367,80 @@ data class FilamentProfile(
             PLA, PETG, ABS, ASA, PLA_CF, PETG_CF, TPU_95A, PA_CF,
             PRUSAMENT_PLA, CREALITY_PLA, ANYCUBIC_PLA, ELEGOO_PLA,
         )
+    }
+}
+
+internal fun FilamentProfile.bedTemperature(type: BuildPlateType): Int = when (type) {
+    BuildPlateType.COOL -> coolPlateTemp
+    BuildPlateType.ENGINEERING -> engineeringPlateTemp
+    BuildPlateType.HIGH_TEMP -> bedTemp
+    BuildPlateType.TEXTURED_PEI -> texturedPlateTemp
+    BuildPlateType.TEXTURED_COOL -> texturedCoolPlateTemp
+    BuildPlateType.GRAPHIC_EFFECT -> graphicEffectPlateTemp
+    BuildPlateType.SUPER_TACK -> superTackPlateTemp
+}
+
+internal fun FilamentProfile.firstLayerBedTemperature(type: BuildPlateType): Int = when (type) {
+    BuildPlateType.COOL -> firstLayerCoolPlateTemp
+    BuildPlateType.ENGINEERING -> firstLayerEngineeringPlateTemp
+    BuildPlateType.HIGH_TEMP -> firstLayerBedTemp
+    BuildPlateType.TEXTURED_PEI -> firstLayerTexturedPlateTemp
+    BuildPlateType.TEXTURED_COOL -> firstLayerTexturedCoolPlateTemp
+    BuildPlateType.GRAPHIC_EFFECT -> firstLayerGraphicEffectPlateTemp
+    BuildPlateType.SUPER_TACK -> firstLayerSuperTackPlateTemp
+}
+
+internal fun FilamentProfile.withBedTemperature(
+    type: BuildPlateType,
+    temperature: Int = bedTemperature(type),
+    firstLayerTemperature: Int = firstLayerBedTemperature(type),
+): FilamentProfile = when (type) {
+    BuildPlateType.COOL -> copy(
+        coolPlateTemp = temperature,
+        firstLayerCoolPlateTemp = firstLayerTemperature,
+    )
+    BuildPlateType.ENGINEERING -> copy(
+        engineeringPlateTemp = temperature,
+        firstLayerEngineeringPlateTemp = firstLayerTemperature,
+    )
+    BuildPlateType.HIGH_TEMP -> copy(
+        bedTemp = temperature,
+        firstLayerBedTemp = firstLayerTemperature,
+    )
+    BuildPlateType.TEXTURED_PEI -> copy(
+        texturedPlateTemp = temperature,
+        firstLayerTexturedPlateTemp = firstLayerTemperature,
+    )
+    BuildPlateType.TEXTURED_COOL -> copy(
+        texturedCoolPlateTemp = temperature,
+        firstLayerTexturedCoolPlateTemp = firstLayerTemperature,
+    )
+    BuildPlateType.GRAPHIC_EFFECT -> copy(
+        graphicEffectPlateTemp = temperature,
+        firstLayerGraphicEffectPlateTemp = firstLayerTemperature,
+    )
+    BuildPlateType.SUPER_TACK -> copy(
+        superTackPlateTemp = temperature,
+        firstLayerSuperTackPlateTemp = firstLayerTemperature,
+    )
+}
+
+data class BuildPlateSettings(
+    val type: BuildPlateType = BuildPlateType.TEXTURED_PEI,
+    val temperature: Int = 60,
+    val firstLayerTemperature: Int = temperature,
+) {
+    fun withProfile(profile: FilamentProfile, newType: BuildPlateType = type) = BuildPlateSettings(
+        type = newType,
+        temperature = profile.bedTemperature(newType),
+        firstLayerTemperature = profile.firstLayerBedTemperature(newType),
+    )
+
+    companion object {
+        fun fromProfile(
+            profile: FilamentProfile,
+            type: BuildPlateType = BuildPlateType.TEXTURED_PEI,
+        ) = BuildPlateSettings().withProfile(profile, type)
     }
 }
 
@@ -897,7 +1010,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 61,
+    val schemaVersion: Int = 62,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -916,8 +1029,7 @@ data class SliceOptions(
     val nozzleDiameter: Float = printerProfile.nozzleDiameter,
     val nozzleTemp: Int = filamentProfile.nozzleTemp,
     val firstLayerNozzleTemp: Int = filamentProfile.firstLayerNozzleTemp,
-    val bedTemp: Int = filamentProfile.bedTemp,
-    val firstLayerBedTemp: Int = filamentProfile.firstLayerBedTemp,
+    val buildPlate: BuildPlateSettings = BuildPlateSettings.fromProfile(filamentProfile),
     val filamentDiameter: Float = 1.75f,
     val flowRatio: Float = filamentProfile.flowRatio,
     val maxVolumetricSpeed: Float = filamentProfile.maxVolumetricSpeed,
@@ -1158,6 +1270,9 @@ data class SliceOptions(
     val extruderClearanceHeightToRod: Float = printerProfile.extruderClearanceHeightToRod,
     val extruderClearanceHeightToLid: Float = printerProfile.extruderClearanceHeightToLid,
 ) {
+    val bedTemp: Int get() = buildPlate.temperature
+    val firstLayerBedTemp: Int get() = buildPlate.firstLayerTemperature
+
     val travelSpeedZ: Float get() = quality.travelSpeedZ
 
     val printableOverhangs: PrintableOverhangSettings
@@ -1237,8 +1352,7 @@ data class SliceOptions(
         }.take(printerProfile.extruderCount.coerceAtLeast(1)),
         nozzleTemp = profile.nozzleTemp,
         firstLayerNozzleTemp = profile.firstLayerNozzleTemp,
-        bedTemp = profile.bedTemp,
-        firstLayerBedTemp = profile.firstLayerBedTemp,
+        buildPlate = buildPlate.withProfile(profile),
         flowRatio = profile.flowRatio,
         maxVolumetricSpeed = profile.maxVolumetricSpeed,
         filamentDiameter = profile.diameter,
@@ -1251,6 +1365,10 @@ data class SliceOptions(
         fullFanSpeedLayer = profile.fullFanSpeedLayer,
         pressureAdvanceEnabled = profile.pressureAdvanceEnabled,
         pressureAdvance = profile.pressureAdvance,
+    )
+
+    fun selectBuildPlate(type: BuildPlateType): SliceOptions = copy(
+        buildPlate = buildPlate.withProfile(filamentProfile, type),
     )
 
     fun updatePrinterRetraction(profile: PrinterProfile): SliceOptions {
@@ -1532,11 +1650,13 @@ data class SliceOptions(
             if (index != 0) {
                 profile
             } else {
-                profile.copy(
+                profile.withBedTemperature(
+                    buildPlate.type,
+                    bedTemp,
+                    firstLayerBedTemp,
+                ).copy(
                     nozzleTemp = nozzleTemp,
                     firstLayerNozzleTemp = firstLayerNozzleTemp,
-                    bedTemp = bedTemp,
-                    firstLayerBedTemp = firstLayerBedTemp,
                     flowRatio = flowRatio,
                     maxVolumetricSpeed = maxVolumetricSpeed,
                     diameter = filamentDiameter,
@@ -1804,7 +1924,9 @@ data class SliceOptions(
             }.toIntArray(),
             filamentPressureAdvances = nativeFilaments.map(FilamentProfile::pressureAdvance).toFloatArray(),
             filamentNozzleTempInitialLayers = nativeFilaments.map(FilamentProfile::firstLayerNozzleTemp).toIntArray(),
-            filamentBedTempInitialLayers = nativeFilaments.map(FilamentProfile::firstLayerBedTemp).toIntArray(),
+            filamentBedTempInitialLayers = nativeFilaments
+                .map { it.firstLayerBedTemperature(buildPlate.type) }
+                .toIntArray(),
             filamentDensities = nativeFilaments.map(FilamentProfile::density).toFloatArray(),
             filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
@@ -1815,6 +1937,10 @@ data class SliceOptions(
                 .toFloatArray()
             native.filamentAdditionalCoolingFanSpeeds = nativeFilaments
                 .map(FilamentProfile::additionalCoolingFanSpeed)
+                .toIntArray()
+            native.bedType = buildPlate.type.nativeValue
+            native.filamentBedTemps = nativeFilaments
+                .map { it.bedTemperature(buildPlate.type) }
                 .toIntArray()
             native.filamentFanCoolingLayerTimes = nativeFilaments
                 .map(FilamentProfile::fanCoolingLayerTime)

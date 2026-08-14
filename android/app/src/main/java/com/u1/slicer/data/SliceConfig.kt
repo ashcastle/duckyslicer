@@ -256,6 +256,8 @@ data class SliceConfig(
     @JvmField var auxiliaryFan: Boolean = false
     @JvmField var filamentSoluble: IntArray = intArrayOf()
     @JvmField var filamentIsSupport: IntArray = intArrayOf()
+    @JvmField var bedType: Int = 4
+    @JvmField var filamentBedTemps: IntArray = intArrayOf()
     @JvmField var filamentFanCoolingLayerTimes: FloatArray = floatArrayOf()
     @JvmField var filamentSlowDownForLayerCooling: IntArray = intArrayOf()
     @JvmField var filamentKeepFanAlwaysOn: IntArray = intArrayOf()

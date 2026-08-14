@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 61
+SCHEMA_VERSION = 62
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -420,6 +420,28 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     )
     bed = integer(bed_value, 0)
     first_bed = integer(first_bed_value, bed)
+    textured_bed = integer(raw.get("textured_plate_temp"), bed)
+    first_textured_bed = integer(
+        raw.get("textured_plate_temp_initial_layer"), textured_bed
+    )
+    engineering_bed = integer(raw.get("eng_plate_temp"), bed)
+    first_engineering_bed = integer(
+        raw.get("eng_plate_temp_initial_layer"), engineering_bed
+    )
+    cool_bed = integer(raw.get("cool_plate_temp"), bed)
+    first_cool_bed = integer(raw.get("cool_plate_temp_initial_layer"), cool_bed)
+    textured_cool_bed = integer(raw.get("textured_cool_plate_temp"), cool_bed)
+    first_textured_cool_bed = integer(
+        raw.get("textured_cool_plate_temp_initial_layer"), textured_cool_bed
+    )
+    supertack_bed = integer(raw.get("supertack_plate_temp"), cool_bed)
+    first_supertack_bed = integer(
+        raw.get("supertack_plate_temp_initial_layer"), supertack_bed
+    )
+    graphic_effect_bed = integer(raw.get("graphic_effect_plate_temp"), textured_bed)
+    first_graphic_effect_bed = integer(
+        raw.get("graphic_effect_plate_temp_initial_layer"), graphic_effect_bed
+    )
     if not filament_type or not (150 <= nozzle <= 400 and 0 <= bed <= 160):
         raise ValueError("unsafe filament temperatures")
     profile = {
@@ -431,6 +453,18 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "firstLayerNozzleTemp": first_nozzle,
         "bedTemp": bed,
         "firstLayerBedTemp": first_bed,
+        "texturedPlateTemp": textured_bed,
+        "firstLayerTexturedPlateTemp": first_textured_bed,
+        "engineeringPlateTemp": engineering_bed,
+        "firstLayerEngineeringPlateTemp": first_engineering_bed,
+        "coolPlateTemp": cool_bed,
+        "firstLayerCoolPlateTemp": first_cool_bed,
+        "texturedCoolPlateTemp": textured_cool_bed,
+        "firstLayerTexturedCoolPlateTemp": first_textured_cool_bed,
+        "superTackPlateTemp": supertack_bed,
+        "firstLayerSuperTackPlateTemp": first_supertack_bed,
+        "graphicEffectPlateTemp": graphic_effect_bed,
+        "firstLayerGraphicEffectPlateTemp": first_graphic_effect_bed,
         "flowRatio": number(raw.get("filament_flow_ratio"), 1.0),
         "maxVolumetricSpeed": number(raw.get("filament_max_volumetric_speed"), 12),
         "diameter": number(raw.get("filament_diameter"), 1.75),
@@ -479,7 +513,26 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "compatiblePrinters": values(raw.get("compatible_printers")),
     }
     if not (
-        0.5 <= profile["flowRatio"] <= 1.5
+        all(
+            0 <= profile[key] <= 160
+            for key in [
+                "bedTemp",
+                "firstLayerBedTemp",
+                "texturedPlateTemp",
+                "firstLayerTexturedPlateTemp",
+                "engineeringPlateTemp",
+                "firstLayerEngineeringPlateTemp",
+                "coolPlateTemp",
+                "firstLayerCoolPlateTemp",
+                "texturedCoolPlateTemp",
+                "firstLayerTexturedCoolPlateTemp",
+                "superTackPlateTemp",
+                "firstLayerSuperTackPlateTemp",
+                "graphicEffectPlateTemp",
+                "firstLayerGraphicEffectPlateTemp",
+            ]
+        )
+        and 0.5 <= profile["flowRatio"] <= 1.5
         and 0.1 <= profile["maxVolumetricSpeed"] <= 100
         and 0.5 <= profile["diameter"] <= 4
         and 0 <= profile["density"] <= 10

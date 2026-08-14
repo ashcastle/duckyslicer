@@ -33,11 +33,13 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         extruderClearanceHeightToRod = extruderClearanceHeightToRod,
         extruderClearanceHeightToLid = extruderClearanceHeightToLid,
     )
-    val filament = filamentProfile.copy(
+    val filament = filamentProfile.withBedTemperature(
+        buildPlate.type,
+        bedTemp,
+        firstLayerBedTemp,
+    ).copy(
         nozzleTemp = nozzleTemp,
         firstLayerNozzleTemp = firstLayerNozzleTemp,
-        bedTemp = bedTemp,
-        firstLayerBedTemp = firstLayerBedTemp,
         flowRatio = flowRatio,
         maxVolumetricSpeed = maxVolumetricSpeed,
         diameter = filamentDiameter,
@@ -277,6 +279,7 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
     return JSONObject()
         .put("formatVersion", SLICE_OPTIONS_FORMAT_VERSION)
         .put("filamentDiameter", filamentDiameter)
+        .put("buildPlateType", buildPlate.type.storageValue)
         .put("printer", printer.toProfileJson())
         .put("filament", filament.toProfileJson())
         .put("filamentSlots", JSONArray().also { values ->
@@ -300,6 +303,11 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
     } ?: listOf(storedFilament)
     val slicing = requireNotNull(getJSONObject("slicing").toQualityProfileOrNull())
     val filamentDiameter = getDouble("filamentDiameter").toFloat()
+    val buildPlateType = if (formatVersion >= 61) {
+        requireNotNull(BuildPlateType.fromStorage(getString("buildPlateType")))
+    } else {
+        BuildPlateType.HIGH_TEMP
+    }
     val filament = if (formatVersion >= 56) {
         storedFilament
     } else {
@@ -332,10 +340,11 @@ internal fun JSONObject.toProjectSliceOptionsOrNull(): SliceOptions? = runCatchi
         filamentSlots = filaments,
         quality = slicing,
         filamentDiameter = filamentDiameter,
+        buildPlate = BuildPlateSettings.fromProfile(filament, buildPlateType),
     )
 }.getOrNull()
 
-private const val SLICE_OPTIONS_FORMAT_VERSION = 60
+private const val SLICE_OPTIONS_FORMAT_VERSION = 61
 private const val MIN_SLICE_OPTIONS_FORMAT_VERSION = 1
 private const val MIN_FILAMENT_DIAMETER = 0.5f
 private const val MAX_FILAMENT_DIAMETER = 4f

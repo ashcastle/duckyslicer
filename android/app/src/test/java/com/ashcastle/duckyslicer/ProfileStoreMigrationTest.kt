@@ -37,6 +37,18 @@ class ProfileStoreMigrationTest {
                 remove("overhangFanThreshold")
                 remove("internalBridgeFanSpeed")
                 remove("supportInterfaceFanSpeed")
+                remove("texturedPlateTemp")
+                remove("firstLayerTexturedPlateTemp")
+                remove("engineeringPlateTemp")
+                remove("firstLayerEngineeringPlateTemp")
+                remove("coolPlateTemp")
+                remove("firstLayerCoolPlateTemp")
+                remove("texturedCoolPlateTemp")
+                remove("firstLayerTexturedCoolPlateTemp")
+                remove("superTackPlateTemp")
+                remove("firstLayerSuperTackPlateTemp")
+                remove("graphicEffectPlateTemp")
+                remove("firstLayerGraphicEffectPlateTemp")
             }
             val legacySlicing = slicing.toProfileJson().withoutProfileMetadata().apply {
                 remove("makeOverhangPrintable")
@@ -103,6 +115,13 @@ class ProfileStoreMigrationTest {
             assertEquals("95%", restoredFilament.overhangFanThreshold)
             assertEquals(-1, restoredFilament.internalBridgeFanSpeed)
             assertEquals(-1, restoredFilament.supportInterfaceFanSpeed)
+            BUILD_PLATE_TYPES.forEach { plate ->
+                assertEquals(restoredFilament.bedTemp, restoredFilament.bedTemperature(plate))
+                assertEquals(
+                    restoredFilament.firstLayerBedTemp,
+                    restoredFilament.firstLayerBedTemperature(plate),
+                )
+            }
             assertEquals("V3 Slicing", restoredSlicing.name)
             assertEquals(PrintableOverhangSettings(), restoredSlicing.printableOverhangs)
             assertEquals(PolyholeSettings(), restoredSlicing.precision.polyholes)

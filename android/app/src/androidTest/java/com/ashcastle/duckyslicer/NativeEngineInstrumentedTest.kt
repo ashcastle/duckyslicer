@@ -2098,7 +2098,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(61, catalog.schemaVersion)
+        assertEquals(62, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2126,6 +2126,14 @@ class NativeEngineInstrumentedTest {
         assertTrue(
             "Inherited layer-time fan thresholds must survive catalog generation",
             catalog.filaments.any { kotlin.math.abs(it.fanCoolingLayerTime - 60f) >= 0.001f },
+        )
+        assertTrue(
+            "Orca plate-specific temperatures must survive catalog generation",
+            catalog.filaments.any {
+                it.bedTemp != it.texturedPlateTemp ||
+                    it.bedTemp != it.coolPlateTemp ||
+                    it.texturedPlateTemp != it.engineeringPlateTemp
+            },
         )
         assertTrue(
             "Inherited fan continuity must survive catalog generation",
@@ -3654,7 +3662,12 @@ class NativeEngineInstrumentedTest {
                 retractRestartExtra = 0.09f,
                 zHop = 0.6f,
                 zHopType = "spiral",
+                bedTemp = 71,
+                firstLayerBedTemp = 72,
+                coolPlateTemp = 41,
+                firstLayerCoolPlateTemp = 42,
             ))
+            .selectBuildPlate(BuildPlateType.COOL)
             .selectQuality(QualityProfile.DRAFT_06)
             .copy(
                 topSolidLayers = 6,
@@ -3892,7 +3905,13 @@ class NativeEngineInstrumentedTest {
         assertTrue("Filament type must reach G-code", gcode.contains("; filament_type = PETG"))
         assertTrue("First layer nozzle temperature must reach G-code", gcode.contains("M104 S250"))
         assertTrue("Filament nozzle temperature must reach G-code", gcode.contains("M104 S245"))
-        assertTrue("Filament bed temperature must reach G-code", gcode.contains("M190 S70"))
+        assertTrue("Selected plate must reach Orca", gcode.contains("; curr_bed_type = Cool Plate"))
+        assertTrue("Selected plate temperature must reach Orca", gcode.contains("; cool_plate_temp = 41"))
+        assertTrue(
+            "Selected first-layer plate temperature must reach Orca",
+            gcode.contains("; cool_plate_temp_initial_layer = 42"),
+        )
+        assertTrue("Selected first-layer bed temperature must reach G-code", gcode.contains("M190 S42"))
         assertTrue("Filament flow ratio must reach G-code", gcode.contains("; filament_flow_ratio = 0.95"))
         assertTrue("Maximum flow must reach G-code", gcode.contains("; filament_max_volumetric_speed = 10"))
         assertTrue("Layer height must reach G-code", gcode.contains("; layer_height = 0.4"))

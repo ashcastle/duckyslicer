@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 62
+internal const val USER_PROFILE_SCHEMA_VERSION = 63
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -102,11 +102,13 @@ class ProfileStore private constructor(
             throw IllegalArgumentException("Filament slot is unavailable")
         }
         val effective = if (slot == 0) {
-            selected.copy(
+            selected.withBedTemperature(
+                options.buildPlate.type,
+                options.bedTemp,
+                options.firstLayerBedTemp,
+            ).copy(
                 nozzleTemp = options.nozzleTemp,
                 firstLayerNozzleTemp = options.firstLayerNozzleTemp,
-                bedTemp = options.bedTemp,
-                firstLayerBedTemp = options.firstLayerBedTemp,
                 flowRatio = options.flowRatio,
                 maxVolumetricSpeed = options.maxVolumetricSpeed,
                 diameter = options.filamentDiameter,
@@ -137,6 +139,18 @@ class ProfileStore private constructor(
             firstLayerNozzleTemp = effective.firstLayerNozzleTemp,
             bedTemp = effective.bedTemp,
             firstLayerBedTemp = effective.firstLayerBedTemp,
+            texturedPlateTemp = effective.texturedPlateTemp,
+            firstLayerTexturedPlateTemp = effective.firstLayerTexturedPlateTemp,
+            engineeringPlateTemp = effective.engineeringPlateTemp,
+            firstLayerEngineeringPlateTemp = effective.firstLayerEngineeringPlateTemp,
+            coolPlateTemp = effective.coolPlateTemp,
+            firstLayerCoolPlateTemp = effective.firstLayerCoolPlateTemp,
+            texturedCoolPlateTemp = effective.texturedCoolPlateTemp,
+            firstLayerTexturedCoolPlateTemp = effective.firstLayerTexturedCoolPlateTemp,
+            superTackPlateTemp = effective.superTackPlateTemp,
+            firstLayerSuperTackPlateTemp = effective.firstLayerSuperTackPlateTemp,
+            graphicEffectPlateTemp = effective.graphicEffectPlateTemp,
+            firstLayerGraphicEffectPlateTemp = effective.firstLayerGraphicEffectPlateTemp,
             flowRatio = effective.flowRatio,
             maxVolumetricSpeed = effective.maxVolumetricSpeed,
             filamentStartGcode = effective.filamentStartGcode,
@@ -535,6 +549,18 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("id", id).put("name", name).put("nativeName", nativeName)
     .put("nozzleTemp", nozzleTemp).put("firstLayerNozzleTemp", firstLayerNozzleTemp)
     .put("bedTemp", bedTemp).put("firstLayerBedTemp", firstLayerBedTemp)
+    .put("texturedPlateTemp", texturedPlateTemp)
+    .put("firstLayerTexturedPlateTemp", firstLayerTexturedPlateTemp)
+    .put("engineeringPlateTemp", engineeringPlateTemp)
+    .put("firstLayerEngineeringPlateTemp", firstLayerEngineeringPlateTemp)
+    .put("coolPlateTemp", coolPlateTemp)
+    .put("firstLayerCoolPlateTemp", firstLayerCoolPlateTemp)
+    .put("texturedCoolPlateTemp", texturedCoolPlateTemp)
+    .put("firstLayerTexturedCoolPlateTemp", firstLayerTexturedCoolPlateTemp)
+    .put("superTackPlateTemp", superTackPlateTemp)
+    .put("firstLayerSuperTackPlateTemp", firstLayerSuperTackPlateTemp)
+    .put("graphicEffectPlateTemp", graphicEffectPlateTemp)
+    .put("firstLayerGraphicEffectPlateTemp", firstLayerGraphicEffectPlateTemp)
     .put("flowRatio", flowRatio).put("maxVolumetricSpeed", maxVolumetricSpeed)
     .put("filamentStartGcode", filamentStartGcode).put("filamentEndGcode", filamentEndGcode)
     .put("retractLength", retractLength ?: JSONObject.NULL)
@@ -940,13 +966,27 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
 }.getOrNull()
 
 internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatching {
+    val bedTemp = getInt("bedTemp")
+    val firstLayerBedTemp = optInt("firstLayerBedTemp", bedTemp)
     FilamentProfile(
         getString("id"), getString("name"), getString("nativeName"),
         getInt("nozzleTemp"), optInt("firstLayerNozzleTemp", getInt("nozzleTemp")),
-        getInt("bedTemp"), optInt("firstLayerBedTemp", getInt("bedTemp")),
+        bedTemp, firstLayerBedTemp,
         getDouble("flowRatio").toFloat(), getDouble("maxVolumetricSpeed").toFloat(),
         builtIn = optBoolean("builtIn"),
         brand = optionalString("brand"),
+        texturedPlateTemp = optInt("texturedPlateTemp", bedTemp),
+        firstLayerTexturedPlateTemp = optInt("firstLayerTexturedPlateTemp", firstLayerBedTemp),
+        engineeringPlateTemp = optInt("engineeringPlateTemp", bedTemp),
+        firstLayerEngineeringPlateTemp = optInt("firstLayerEngineeringPlateTemp", firstLayerBedTemp),
+        coolPlateTemp = optInt("coolPlateTemp", bedTemp),
+        firstLayerCoolPlateTemp = optInt("firstLayerCoolPlateTemp", firstLayerBedTemp),
+        texturedCoolPlateTemp = optInt("texturedCoolPlateTemp", bedTemp),
+        firstLayerTexturedCoolPlateTemp = optInt("firstLayerTexturedCoolPlateTemp", firstLayerBedTemp),
+        superTackPlateTemp = optInt("superTackPlateTemp", bedTemp),
+        firstLayerSuperTackPlateTemp = optInt("firstLayerSuperTackPlateTemp", firstLayerBedTemp),
+        graphicEffectPlateTemp = optInt("graphicEffectPlateTemp", bedTemp),
+        firstLayerGraphicEffectPlateTemp = optInt("firstLayerGraphicEffectPlateTemp", firstLayerBedTemp),
         filamentStartGcode = optString("filamentStartGcode"),
         filamentEndGcode = optString("filamentEndGcode"),
         retractLength = nullableFloat("retractLength"),

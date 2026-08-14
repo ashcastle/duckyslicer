@@ -38,6 +38,20 @@ class ProfileBundleTest {
                         overhangFanThreshold = "25%",
                         internalBridgeFanSpeed = 45,
                         supportInterfaceFanSpeed = 85,
+                        bedTemp = 71,
+                        firstLayerBedTemp = 72,
+                        texturedPlateTemp = 53,
+                        firstLayerTexturedPlateTemp = 54,
+                        engineeringPlateTemp = 61,
+                        firstLayerEngineeringPlateTemp = 62,
+                        coolPlateTemp = 31,
+                        firstLayerCoolPlateTemp = 32,
+                        texturedCoolPlateTemp = 33,
+                        firstLayerTexturedCoolPlateTemp = 34,
+                        superTackPlateTemp = 35,
+                        firstLayerSuperTackPlateTemp = 36,
+                        graphicEffectPlateTemp = 55,
+                        firstLayerGraphicEffectPlateTemp = 56,
                     ),
                 ),
             )
@@ -81,6 +95,20 @@ class ProfileBundleTest {
             assertEquals("25%", importedFilament.overhangFanThreshold)
             assertEquals(45, importedFilament.internalBridgeFanSpeed)
             assertEquals(85, importedFilament.supportInterfaceFanSpeed)
+            assertEquals(71, importedFilament.bedTemp)
+            assertEquals(72, importedFilament.firstLayerBedTemp)
+            assertEquals(53, importedFilament.texturedPlateTemp)
+            assertEquals(54, importedFilament.firstLayerTexturedPlateTemp)
+            assertEquals(61, importedFilament.engineeringPlateTemp)
+            assertEquals(62, importedFilament.firstLayerEngineeringPlateTemp)
+            assertEquals(31, importedFilament.coolPlateTemp)
+            assertEquals(32, importedFilament.firstLayerCoolPlateTemp)
+            assertEquals(33, importedFilament.texturedCoolPlateTemp)
+            assertEquals(34, importedFilament.firstLayerTexturedCoolPlateTemp)
+            assertEquals(35, importedFilament.superTackPlateTemp)
+            assertEquals(36, importedFilament.firstLayerSuperTackPlateTemp)
+            assertEquals(55, importedFilament.graphicEffectPlateTemp)
+            assertEquals(56, importedFilament.firstLayerGraphicEffectPlateTemp)
             assertTrue(catalog.slicing.any { it.name == "Portable slicing" && !it.builtIn })
 
             val firstGeneration = destinationFile.readBytes()

@@ -27,6 +27,10 @@ class SliceOptionsPersistenceTest {
             overhangFanThreshold = "25%",
             internalBridgeFanSpeed = 45,
             supportInterfaceFanSpeed = 85,
+            bedTemp = 71,
+            firstLayerBedTemp = 72,
+            texturedPlateTemp = 53,
+            firstLayerTexturedPlateTemp = 54,
         )
         val secondary = FilamentProfile.PETG.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_04.name),
@@ -47,10 +51,15 @@ class SliceOptionsPersistenceTest {
             overhangFanThreshold = "75%",
             internalBridgeFanSpeed = -1,
             supportInterfaceFanSpeed = 65,
+            bedTemp = 81,
+            firstLayerBedTemp = 82,
+            texturedPlateTemp = 63,
+            firstLayerTexturedPlateTemp = 64,
         )
         val options = SliceOptions()
             .selectPrinter(PrinterProfile.U1_04.copy(auxiliaryFan = true))
             .selectFilament(primary)
+            .selectBuildPlate(BuildPlateType.TEXTURED_PEI)
             .copy(
                 filamentSlots = listOf(primary, secondary),
                 supportFilament = 1,
@@ -147,6 +156,9 @@ class SliceOptionsPersistenceTest {
         assertEquals(listOf(2, 4), native.filamentOverhangFanThresholds.toList())
         assertEquals(listOf(45, -1), native.filamentInternalBridgeFanSpeeds.toList())
         assertEquals(listOf(85, 65), native.filamentSupportInterfaceFanSpeeds.toList())
+        assertEquals(BuildPlateType.TEXTURED_PEI.nativeValue, native.bedType)
+        assertEquals(listOf(53, 63), native.filamentBedTemps.toList())
+        assertEquals(listOf(54, 64), native.filamentBedTempInitialLayers.toList())
         assertEquals(true, native.auxiliaryFan)
         assertEquals(listOf("PLA", "PETG"), native.filamentTypes.toList())
         assertEquals(listOf(primary.nozzleTemp, secondary.nozzleTemp), native.extruderTemps.toList())
@@ -212,6 +224,36 @@ class SliceOptionsPersistenceTest {
         assertEquals(4, native.slowDownLayers)
         assertEquals(false, native.accelToDecelEnabled)
         assertEquals(27f, native.accelToDecelFactor)
+    }
+
+    @Test
+    fun selectedBuildPlateAndTemperaturesRoundTripWhileLegacyProjectsKeepHighTempSemantics() {
+        val filament = FilamentProfile.GENERIC_PLA.copy(
+            bedTemp = 71,
+            firstLayerBedTemp = 72,
+            coolPlateTemp = 31,
+            firstLayerCoolPlateTemp = 32,
+        )
+        val options = SliceOptions().selectFilament(filament).selectBuildPlate(BuildPlateType.COOL)
+        val stored = options.toProjectJson()
+        val restored = requireNotNull(stored.toProjectSliceOptionsOrNull())
+
+        assertEquals("cool", stored.getString("buildPlateType"))
+        assertEquals(BuildPlateType.COOL, restored.buildPlate.type)
+        assertEquals(31, restored.bedTemp)
+        assertEquals(32, restored.firstLayerBedTemp)
+        assertEquals(BuildPlateType.COOL.nativeValue, restored.toNativeConfig().bedType)
+        assertEquals(listOf(31), restored.toNativeConfig().filamentBedTemps.toList())
+        assertEquals(listOf(32), restored.toNativeConfig().filamentBedTempInitialLayers.toList())
+
+        val legacy = JSONObject(stored.toString()).apply {
+            put("formatVersion", 60)
+            remove("buildPlateType")
+        }
+        val migrated = requireNotNull(legacy.toProjectSliceOptionsOrNull())
+        assertEquals(BuildPlateType.HIGH_TEMP, migrated.buildPlate.type)
+        assertEquals(71, migrated.bedTemp)
+        assertEquals(72, migrated.firstLayerBedTemp)
     }
 
     @Test
@@ -867,8 +909,11 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         extruderClearanceHeightToLid = 117f,
         nozzleTemp = 248,
         firstLayerNozzleTemp = 252,
-        bedTemp = 74,
-        firstLayerBedTemp = 78,
+        buildPlate = BuildPlateSettings(
+            type = BuildPlateType.HIGH_TEMP,
+            temperature = 74,
+            firstLayerTemperature = 78,
+        ),
         flowRatio = 0.97f,
         maxVolumetricSpeed = 11f,
         fanMinSpeed = 35,
