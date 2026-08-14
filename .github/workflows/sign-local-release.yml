@@ -170,6 +170,8 @@ jobs:
     environment: release
     permissions:
       actions: read
+    outputs:
+      signing_cert_sha256: ${{ steps.sign_apk.outputs.signing_cert_sha256 }}
     env:
       UNSIGNED_ASSET: ${{ inputs.unsigned_asset }}
       UNSIGNED_SHA256: ${{ inputs.unsigned_sha256 }}
@@ -188,6 +190,7 @@ jobs:
           path: unsigned
 
       - name: Sign and verify local release APK
+        id: sign_apk
         env:
           DUCKYSLICER_KEYSTORE_BASE64: ${{ secrets.DUCKYSLICER_KEYSTORE_BASE64 }}
           DUCKYSLICER_STORE_PASSWORD: ${{ secrets.DUCKYSLICER_STORE_PASSWORD }}
@@ -242,6 +245,7 @@ jobs:
             echo "Release signing certificate does not match the pinned fingerprint" >&2
             exit 1
           fi
+          echo "signing_cert_sha256=$actual_fingerprint" >> "$GITHUB_OUTPUT"
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$signed_apk"
           sha256sum "$signed_apk"
 
@@ -266,7 +270,7 @@ jobs:
       SOURCE_COMMIT: ${{ inputs.source_commit }}
       DUCKYSLICER_RELEASE_VERSION: ${{ needs.validate.outputs.release_version }}
       RELEASE_NOTES_SHA256: ${{ needs.validate.outputs.release_notes_sha256 }}
-      DUCKYSLICER_SIGNING_CERT_SHA256: ${{ vars.DUCKYSLICER_SIGNING_CERT_SHA256 }}
+      DUCKYSLICER_SIGNING_CERT_SHA256: ${{ needs.sign.outputs.signing_cert_sha256 }}
     steps:
       - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
         with:
