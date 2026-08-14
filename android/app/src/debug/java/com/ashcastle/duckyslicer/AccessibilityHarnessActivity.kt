@@ -134,7 +134,15 @@ class AccessibilityHarnessActivity : ComponentActivity() {
 
 @Composable
 private fun ProfileSettingsAccessibilityHarness() {
-    var options by remember { mutableStateOf(SliceOptions()) }
+    var options by remember {
+        mutableStateOf(
+            SliceOptions().copy(
+                filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+                supportEnabled = true,
+                supportInterfaceTopLayers = 3,
+            ),
+        )
+    }
     Column(Modifier.padding(16.dp)) {
         ProfileSettings(
             options = options,

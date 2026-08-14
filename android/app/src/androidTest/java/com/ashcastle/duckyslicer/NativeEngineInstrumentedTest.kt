@@ -2790,6 +2790,35 @@ class NativeEngineInstrumentedTest {
             featureOnlyOutcome.output.readLines().any { it == "T1" },
         )
 
+        val supportModel = inspectModel(supportPaintOverhangModel().absolutePath)
+        val dualSupportOutcome = OnDeviceSlicer.slice(
+            listOf(ProjectObject(id = "dual-support", model = supportModel)),
+            options.copy(
+                supportEnabled = true,
+                supportType = "normal(auto)",
+                supportFilament = 1,
+                supportInterfaceFilament = 2,
+                supportInterfaceTopLayers = 3,
+                supportInterfaceBottomLayers = 0,
+                featureFilaments = FeatureFilamentSettings(),
+                wipeTowerEnabled = false,
+            ),
+        )
+        val dualSupportPreview = loadGcodePreview(
+            dualSupportOutcome.output.absolutePath,
+            0,
+            Int.MAX_VALUE,
+        )
+        val dualSupportGcode = dualSupportOutcome.output.readText()
+        assertTrue(
+            "The overhang fixture must create real support paths",
+            dualSupportPreview.roleSegmentCounts[5] > 0,
+        )
+        assertTrue(
+            "A single-model dual-support slice must switch to the interface filament",
+            dualSupportGcode.lineSequence().any { it == "T1" },
+        )
+
         val objectFlushOutcome = OnDeviceSlicer.slice(
             listOf(
                 ProjectObject(

@@ -481,6 +481,60 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun multiMaterialSupportUsesNamedFilamentPickersInsteadOfNumericSliders() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val slicingProfile = context.getString(R.string.slicing_profile)
+        val supports = context.getString(R.string.supports)
+        val supportBody = context.getString(R.string.support_filament)
+        val supportInterface = context.getString(R.string.support_interface_filament)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE_PROFILES).use {
+            tapCenter(waitForNode(slicingProfile) { it.isClickable })
+            tapCenter(waitForNode(supports) { it.isClickable })
+
+            val bodyPicker = scrollUntilClickable(
+                supportBody,
+                scrollAnchorLabel = supports,
+                timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
+            )
+            assertTrue(
+                "Support body material must be a named picker, not a numeric seek bar",
+                bodyPicker.className?.toString() != SEEK_BAR_CLASS,
+            )
+            assertTrue(bodyPicker.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val secondBodyMaterial = waitForNode("T2") {
+                it.isClickable && it.isCheckable && it.effectiveLabel().contains("PETG")
+            }
+            assertTrue(secondBodyMaterial.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+
+            val interfacePicker = scrollUntilClickable(
+                supportInterface,
+                scrollAnchorLabel = supportBody,
+                timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
+            )
+            assertTrue(
+                "Support interface material must be independently selectable",
+                interfacePicker.className?.toString() != SEEK_BAR_CLASS,
+            )
+            assertTrue(interfacePicker.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val secondInterfaceMaterial = waitForNode("T2") {
+                it.isClickable && it.isCheckable && it.effectiveLabel().contains("PETG")
+            }
+            assertTrue(secondInterfaceMaterial.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+
+            val selectedInterface = scrollUntilClickable(
+                supportInterface,
+                scrollAnchorLabel = supportBody,
+                timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
+            )
+            assertTrue(
+                "The selected support interface must expose its tool and filament name",
+                selectedInterface.effectiveLabel().contains("T2") &&
+                    selectedInterface.effectiveLabel().contains("PETG"),
+            )
+        }
+    }
+
+    @Test
     fun objectSettingsExposeOrcaCategoriesAndStickyThirtySeventyActions() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val title = context.getString(R.string.object_process_settings)

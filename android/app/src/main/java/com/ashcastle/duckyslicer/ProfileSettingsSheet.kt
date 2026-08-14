@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
@@ -736,6 +737,17 @@ private fun FilamentSettingsSheet(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(stringResource(R.string.add_filament_slot))
+            }
+        }
+        if (slots.size > 1 && selectedSlot == slots.lastIndex) {
+            OutlinedButton(
+                onClick = {
+                    onOptionsChanged(options.removeLastFilamentSlot())
+                    selectedSlot = (selectedSlot - 1).coerceAtLeast(0)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.remove_filament_slot, selectedSlot + 1))
             }
         }
         SettingSlider(
@@ -2073,20 +2085,15 @@ private fun SlicingSettingsSheet(
                         },
                     )
                     if (options.featureFilaments.infillOverrideEnabled || settingsQuery.isNotBlank()) {
-                        SettingSlider(
+                        FilamentSlotSetting(
                             label = stringResource(R.string.sparse_infill_filament),
-                            valueText = stringResource(
-                                R.string.extruder_number,
-                                options.featureFilaments.sparseInfillFilament,
-                            ),
-                            value = options.featureFilaments.sparseInfillFilament.toFloat(),
-                            range = 1f..maximumFilamentSlot.toFloat(),
-                            steps = (maximumFilamentSlot - 2).coerceAtLeast(0),
-                            onValueChange = {
+                            filaments = options.resolvedFilamentSlots(),
+                            selectedSlot = options.featureFilaments.sparseInfillFilament,
+                            onSelected = {
                                 onOptionsChanged(
                                     options.copy(
                                         featureFilaments = options.featureFilaments.copy(
-                                            sparseInfillFilament = it.roundToInt(),
+                                            sparseInfillFilament = it,
                                         ),
                                     ),
                                 )
@@ -3449,37 +3456,26 @@ private fun SlicingSettingsSheet(
                         )
                     }
                     SettingsGroupTitle(stringResource(R.string.support_filament_routing))
-                    SettingSlider(
+                    FilamentSlotSetting(
                         label = stringResource(R.string.support_filament),
-                        valueText = if (options.supportFilament == 0) {
-                            stringResource(R.string.filament_default)
-                        } else {
-                            stringResource(R.string.extruder_number, options.supportFilament)
-                        },
-                        value = options.supportFilament.toFloat().coerceAtMost(maximumFilamentSlot.toFloat()),
-                        range = 0f..maximumFilamentSlot.toFloat(),
-                        steps = (maximumFilamentSlot - 1).coerceAtLeast(0),
-                        onValueChange = {
-                            onOptionsChanged(options.copy(supportFilament = it.roundToInt()))
+                        filaments = options.resolvedFilamentSlots(),
+                        selectedSlot = options.supportFilament,
+                        defaultLabel = stringResource(R.string.filament_default),
+                        onSelected = {
+                            onOptionsChanged(options.copy(supportFilament = it))
                         },
                     )
                     if (
                         (supportAvailability.haveSupportMaterial && supportAvailability.haveInterface) ||
                         isSearchingSettings
                     ) {
-                        SettingSlider(
+                        FilamentSlotSetting(
                             label = stringResource(R.string.support_interface_filament),
-                            valueText = if (options.supportInterfaceFilament == 0) {
-                                stringResource(R.string.filament_default)
-                            } else {
-                                stringResource(R.string.extruder_number, options.supportInterfaceFilament)
-                            },
-                            value = options.supportInterfaceFilament.toFloat()
-                                .coerceAtMost(maximumFilamentSlot.toFloat()),
-                            range = 0f..maximumFilamentSlot.toFloat(),
-                            steps = (maximumFilamentSlot - 1).coerceAtLeast(0),
-                            onValueChange = {
-                                onOptionsChanged(options.copy(supportInterfaceFilament = it.roundToInt()))
+                            filaments = options.resolvedFilamentSlots(),
+                            selectedSlot = options.supportInterfaceFilament,
+                            defaultLabel = stringResource(R.string.filament_default),
+                            onSelected = {
+                                onOptionsChanged(options.copy(supportInterfaceFilament = it))
                             },
                         )
                     }
@@ -4317,62 +4313,44 @@ private fun SlicingSettingsSheet(
                 }
                 if (maximumFilamentSlot > 1) {
                     SettingsGroupTitle(stringResource(R.string.filament_for_features))
-                    SettingSlider(
+                    FilamentSlotSetting(
                         label = stringResource(R.string.wall_filament),
-                        valueText = stringResource(
-                            R.string.extruder_number,
-                            options.featureFilaments.wallFilament,
-                        ),
-                        value = options.featureFilaments.wallFilament.toFloat(),
-                        range = 1f..maximumFilamentSlot.toFloat(),
-                        steps = (maximumFilamentSlot - 2).coerceAtLeast(0),
-                        onValueChange = {
+                        filaments = options.resolvedFilamentSlots(),
+                        selectedSlot = options.featureFilaments.wallFilament,
+                        onSelected = {
                             onOptionsChanged(
                                 options.copy(
                                     featureFilaments = options.featureFilaments.copy(
-                                        wallFilament = it.roundToInt(),
+                                        wallFilament = it,
                                     ),
                                 ),
                             )
                         },
                     )
-                    SettingSlider(
+                    FilamentSlotSetting(
                         label = stringResource(R.string.solid_infill_filament),
-                        valueText = stringResource(
-                            R.string.extruder_number,
-                            options.featureFilaments.solidInfillFilament,
-                        ),
-                        value = options.featureFilaments.solidInfillFilament.toFloat(),
-                        range = 1f..maximumFilamentSlot.toFloat(),
-                        steps = (maximumFilamentSlot - 2).coerceAtLeast(0),
-                        onValueChange = {
+                        filaments = options.resolvedFilamentSlots(),
+                        selectedSlot = options.featureFilaments.solidInfillFilament,
+                        onSelected = {
                             onOptionsChanged(
                                 options.copy(
                                     featureFilaments = options.featureFilaments.copy(
-                                        solidInfillFilament = it.roundToInt(),
+                                        solidInfillFilament = it,
                                     ),
                                 ),
                             )
                         },
                     )
-                    SettingSlider(
+                    FilamentSlotSetting(
                         label = stringResource(R.string.wipe_tower_filament),
-                        valueText = if (options.featureFilaments.wipeTowerFilament == 0) {
-                            stringResource(R.string.filament_automatic)
-                        } else {
-                            stringResource(
-                                R.string.extruder_number,
-                                options.featureFilaments.wipeTowerFilament,
-                            )
-                        },
-                        value = options.featureFilaments.wipeTowerFilament.toFloat(),
-                        range = 0f..maximumFilamentSlot.toFloat(),
-                        steps = (maximumFilamentSlot - 1).coerceAtLeast(0),
-                        onValueChange = {
+                        filaments = options.resolvedFilamentSlots(),
+                        selectedSlot = options.featureFilaments.wipeTowerFilament,
+                        defaultLabel = stringResource(R.string.filament_automatic),
+                        onSelected = {
                             onOptionsChanged(
                                 options.copy(
                                     featureFilaments = options.featureFilaments.copy(
-                                        wipeTowerFilament = it.roundToInt(),
+                                        wipeTowerFilament = it,
                                     ),
                                 ),
                             )
@@ -4974,6 +4952,130 @@ private fun <T> SettingChoices(
         label = optionLabel,
         onSelected = onSelected,
     )
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun FilamentSlotSetting(
+    label: String,
+    filaments: List<FilamentProfile>,
+    selectedSlot: Int,
+    defaultLabel: String? = null,
+    onSelected: (Int) -> Unit,
+) {
+    if (!settingMatchesQuery(label)) return
+    var pickerOpen by remember { mutableStateOf(false) }
+    val boundedSlot = selectedSlot.coerceIn(if (defaultLabel == null) 1 else 0, filaments.size)
+    val valueLabel = if (boundedSlot == 0) {
+        requireNotNull(defaultLabel)
+    } else {
+        val filament = filaments[boundedSlot - 1]
+        stringResource(R.string.filament_tool_summary, boundedSlot, profileLabel(filament))
+    }
+    Surface(
+        onClick = { pickerOpen = true },
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+        color = Color.Transparent,
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (boundedSlot > 0) {
+                Surface(
+                    modifier = Modifier.size(14.dp),
+                    color = filamentSlotColor(boundedSlot - 1),
+                    shape = MaterialTheme.shapes.extraSmall,
+                ) {}
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = if (boundedSlot > 0) 12.dp else 0.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(label, fontWeight = FontWeight.SemiBold)
+                Text(valueLabel, color = Color(0xFFC8C9C2), style = MaterialTheme.typography.bodySmall)
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = null)
+        }
+    }
+    if (pickerOpen) {
+        ModalBottomSheet(
+            onDismissRequest = { pickerOpen = false },
+            containerColor = Color(0xFF282925),
+            contentColor = Color(0xFFF4F4EE),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 680.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    label,
+                    modifier = Modifier.padding(bottom = 8.dp).semantics { heading() },
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                if (defaultLabel != null) {
+                    FilamentSlotChoice(
+                        label = defaultLabel,
+                        color = null,
+                        selected = boundedSlot == 0,
+                        onClick = {
+                            onSelected(0)
+                            pickerOpen = false
+                        },
+                    )
+                }
+                filaments.forEachIndexed { index, filament ->
+                    val slot = index + 1
+                    FilamentSlotChoice(
+                        label = stringResource(
+                            R.string.filament_tool_summary,
+                            slot,
+                            profileLabel(filament),
+                        ),
+                        color = filamentSlotColor(index),
+                        selected = boundedSlot == slot,
+                        onClick = {
+                            onSelected(slot)
+                            pickerOpen = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilamentSlotChoice(
+    label: String,
+    color: Color?,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(
+            selected = selected,
+            onClick = null,
+            colors = color?.let {
+                RadioButtonDefaults.colors(selectedColor = it, unselectedColor = it.copy(alpha = 0.72f))
+            } ?: RadioButtonDefaults.colors(),
+        )
+        Text(label)
+    }
 }
 
 @Composable

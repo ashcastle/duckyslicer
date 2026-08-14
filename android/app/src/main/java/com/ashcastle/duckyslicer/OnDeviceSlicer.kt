@@ -1129,7 +1129,7 @@ data class SliceOptions(
             extruderClearanceRadius = profile.extruderClearanceRadius,
             extruderClearanceHeightToRod = profile.extruderClearanceHeightToRod,
             extruderClearanceHeightToLid = profile.extruderClearanceHeightToLid,
-        )
+        ).boundedToFilamentSlots(retainedFilaments.size)
         return if (nozzleMatches) {
             updated
         } else {
@@ -1193,6 +1193,21 @@ data class SliceOptions(
             "No filament slot is available"
         }
         return copy(filamentSlots = current + profile)
+    }
+
+    fun removeLastFilamentSlot(): SliceOptions {
+        val current = resolvedFilamentSlots()
+        require(current.size > 1) { "The primary filament slot cannot be removed" }
+        return copy(filamentSlots = current.dropLast(1)).boundedToFilamentSlots(current.size - 1)
+    }
+
+    private fun boundedToFilamentSlots(slotCount: Int): SliceOptions {
+        val maximum = slotCount.coerceIn(1, MAX_FILAMENT_SLOTS)
+        return copy(
+            supportFilament = supportFilament.coerceIn(0, maximum),
+            supportInterfaceFilament = supportInterfaceFilament.coerceIn(0, maximum),
+            featureFilaments = featureFilaments.boundedTo(maximum),
+        )
     }
 
     fun selectQuality(profile: QualityProfile) = copy(

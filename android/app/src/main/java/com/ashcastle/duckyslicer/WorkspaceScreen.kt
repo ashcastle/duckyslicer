@@ -4838,10 +4838,11 @@ private fun MultiColorPaintPalette(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 filaments.forEachIndexed { index, filament ->
+                    val filamentLabel = profileLabel(filament)
                     TextButton(
                         onClick = { onSlotSelected(index) },
                         modifier = Modifier.widthIn(min = 72.dp).semantics {
-                            contentDescription = "T${index + 1} · ${filament.nativeName}"
+                            contentDescription = "T${index + 1} · $filamentLabel"
                             selected = selectedSlot == index
                         },
                         colors = ButtonDefaults.textButtonColors(
@@ -4859,7 +4860,13 @@ private fun MultiColorPaintPalette(
                             shape = RoundedCornerShape(50),
                         ) {}
                         Spacer(Modifier.width(6.dp))
-                        Text("T${index + 1}")
+                        Text(
+                            stringResource(
+                                R.string.filament_tool_summary,
+                                index + 1,
+                                filamentLabel,
+                            ),
+                        )
                     }
                 }
                 TextButton(
