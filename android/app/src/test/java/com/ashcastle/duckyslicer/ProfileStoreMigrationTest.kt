@@ -18,6 +18,11 @@ class ProfileStoreMigrationTest {
             val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(id = "v3-printer", name = "V3 Printer")
             val filament = FilamentProfile.GENERIC_PLA.copy(id = "v3-filament", name = "V3 Filament")
             val slicing = QualityProfile.STANDARD.copy(id = "v3-slicing", name = "V3 Slicing")
+            val legacyFilament = filament.toProfileJson().withoutProfileMetadata().apply {
+                remove("diameter")
+                remove("density")
+                remove("costPerKilogram")
+            }
             val legacySlicing = slicing.toProfileJson().withoutProfileMetadata().apply {
                 remove("makeOverhangPrintable")
                 remove("makeOverhangPrintableAngle")
@@ -51,7 +56,7 @@ class ProfileStoreMigrationTest {
                 JSONObject()
                     .put("schemaVersion", 3)
                     .put("printers", JSONArray().put(printer.toProfileJson().withoutProfileMetadata()))
-                    .put("filaments", JSONArray().put(filament.toProfileJson().withoutProfileMetadata()))
+                    .put("filaments", JSONArray().put(legacyFilament))
                     .put("slicing", JSONArray().put(legacySlicing))
                     .toString(),
             )
@@ -67,6 +72,9 @@ class ProfileStoreMigrationTest {
             assertTrue(restoredFilament.compatiblePrinters.isEmpty())
             assertTrue(restoredSlicing.compatiblePrinters.isEmpty())
             assertEquals("V3 Filament", restoredFilament.name)
+            assertEquals(1.75f, restoredFilament.diameter)
+            assertEquals(1.24f, restoredFilament.density)
+            assertEquals(0f, restoredFilament.costPerKilogram)
             assertEquals("V3 Slicing", restoredSlicing.name)
             assertEquals(PrintableOverhangSettings(), restoredSlicing.printableOverhangs)
             assertEquals(PolyholeSettings(), restoredSlicing.precision.polyholes)
@@ -272,7 +280,13 @@ class ProfileStoreMigrationTest {
             )
             val options = SliceOptions()
                 .selectPrinter(printer)
-                .selectFilament(FilamentProfile.GENERIC_PLA.copy(diameter = 2.85f))
+                .selectFilament(
+                    FilamentProfile.GENERIC_PLA.copy(
+                        diameter = 2.85f,
+                        density = 1.07f,
+                        costPerKilogram = 42.5f,
+                    ),
+                )
 
             val saved = ProfileStore(file).saveFilament("Inherited PLA", options)
             val restored = ProfileStore(file).load().filaments.single { it.id == saved.id }
@@ -285,6 +299,10 @@ class ProfileStoreMigrationTest {
             assertEquals("spiral", restored.resolveRetraction(printer).zHopType)
             assertEquals(2.85f, saved.diameter)
             assertEquals(2.85f, restored.diameter)
+            assertEquals(1.07f, saved.density)
+            assertEquals(1.07f, restored.density)
+            assertEquals(42.5f, saved.costPerKilogram)
+            assertEquals(42.5f, restored.costPerKilogram)
         } finally {
             directory.deleteRecursively()
         }

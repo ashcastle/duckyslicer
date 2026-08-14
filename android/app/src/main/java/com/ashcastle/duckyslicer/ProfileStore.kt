@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 58
+internal const val USER_PROFILE_SCHEMA_VERSION = 59
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -109,6 +109,8 @@ class ProfileStore private constructor(
                 flowRatio = options.flowRatio,
                 maxVolumetricSpeed = options.maxVolumetricSpeed,
                 diameter = options.filamentDiameter,
+                density = options.filamentProfile.density,
+                costPerKilogram = options.filamentProfile.costPerKilogram,
                 fanMinSpeed = options.fanMinSpeed,
                 fanMaxSpeed = options.fanMaxSpeed,
                 overhangFanSpeed = options.overhangFanSpeed,
@@ -155,6 +157,8 @@ class ProfileStore private constructor(
             pressureAdvanceEnabled = effective.pressureAdvanceEnabled,
             pressureAdvance = effective.pressureAdvance,
             diameter = effective.diameter,
+            density = effective.density,
+            costPerKilogram = effective.costPerKilogram,
         )
         require(ProfileValidation.filament(profile)) { "Filament profile contains unsafe values" }
         append("filaments", profile.toProfileJson())
@@ -531,6 +535,8 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("closeFanFirstLayers", closeFanFirstLayers).put("fullFanSpeedLayer", fullFanSpeedLayer)
     .put("pressureAdvanceEnabled", pressureAdvanceEnabled).put("pressureAdvance", pressureAdvance)
     .put("diameter", diameter)
+    .put("density", density)
+    .put("costPerKilogram", costPerKilogram)
     .put("builtIn", builtIn)
     .put("brand", brand ?: JSONObject.NULL)
     .put("compatiblePrinters", JSONArray(compatiblePrinters))
@@ -934,6 +940,8 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         pressureAdvance = optDouble("pressureAdvance", 0.0).toFloat(),
         compatiblePrinters = stringList("compatiblePrinters"),
         diameter = optDouble("diameter", 1.75).toFloat(),
+        density = optDouble("density", 1.24).toFloat(),
+        costPerKilogram = optDouble("costPerKilogram", 0.0).toFloat(),
     )
 }.getOrNull()
 

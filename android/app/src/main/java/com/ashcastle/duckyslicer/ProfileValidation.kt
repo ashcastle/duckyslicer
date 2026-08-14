@@ -54,6 +54,8 @@ internal object ProfileValidation {
             profile.flowRatio in 0.5f..1.5f &&
             profile.maxVolumetricSpeed in 0.1f..100f &&
             profile.diameter in 0.5f..4f &&
+            profile.density in 0f..10f &&
+            profile.costPerKilogram in 0f..1_000_000f &&
             listOf(profile.fanMinSpeed, profile.fanMaxSpeed, profile.overhangFanSpeed)
                 .all { it in 0..100 } &&
             profile.retractLength.isNullOrIn(0f..100f) &&

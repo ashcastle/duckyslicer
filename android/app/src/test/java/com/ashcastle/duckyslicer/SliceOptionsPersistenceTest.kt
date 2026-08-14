@@ -1,6 +1,7 @@
 package com.ashcastle.duckyslicer
 
 import org.json.JSONObject
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -14,12 +15,16 @@ class SliceOptionsPersistenceTest {
             filamentStartGcode = "M117 PRIMARY_START",
             filamentEndGcode = "M117 PRIMARY_END",
             diameter = 2.85f,
+            density = 1.07f,
+            costPerKilogram = 42.5f,
         )
         val secondary = FilamentProfile.PETG.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_04.name),
             filamentStartGcode = "M117 SECONDARY_START",
             filamentEndGcode = "M117 SECONDARY_END",
             diameter = 2.85f,
+            density = 1.32f,
+            costPerKilogram = 75f,
         )
         val options = SliceOptions()
             .selectPrinter(PrinterProfile.U1_04)
@@ -106,6 +111,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(2.85f, restored.filamentDiameter)
         assertEquals(2.85f, restored.filamentProfile.diameter)
         assertEquals(2.85f, native.filamentDiameter)
+        assertArrayEquals(floatArrayOf(1.07f, 1.32f), native.filamentDensities, 0.001f)
+        assertArrayEquals(floatArrayOf(42.5f, 75f), native.filamentCosts, 0.001f)
         assertEquals(listOf("PLA", "PETG"), native.filamentTypes.toList())
         assertEquals(listOf(primary.nozzleTemp, secondary.nozzleTemp), native.extruderTemps.toList())
         assertEquals(listOf(primary.flowRatio, secondary.flowRatio), native.filamentFlowRatios.toList())
@@ -584,7 +591,11 @@ class SliceOptionsPersistenceTest {
             put("formatVersion", 1)
             put("filamentDiameter", 2.85)
             getJSONObject("filament").remove("diameter")
+            getJSONObject("filament").remove("density")
+            getJSONObject("filament").remove("costPerKilogram")
             getJSONArray("filamentSlots").getJSONObject(0).remove("diameter")
+            getJSONArray("filamentSlots").getJSONObject(0).remove("density")
+            getJSONArray("filamentSlots").getJSONObject(0).remove("costPerKilogram")
             getJSONObject("slicing").apply {
                 remove("makeOverhangPrintable")
                 remove("makeOverhangPrintableAngle")
@@ -650,7 +661,11 @@ class SliceOptionsPersistenceTest {
         assertEquals(0.4f, restored.toNativeConfig().infillShiftStep)
         assertEquals(false, restored.toNativeConfig().symmetricInfillYAxis)
         assertEquals(2.85f, restored.filamentProfile.diameter)
+        assertEquals(1.24f, restored.filamentProfile.density)
+        assertEquals(0f, restored.filamentProfile.costPerKilogram)
         assertEquals(2.85f, restored.toNativeConfig().filamentDiameter)
+        assertEquals(listOf(1.24f), restored.toNativeConfig().filamentDensities.toList())
+        assertEquals(listOf(0f), restored.toNativeConfig().filamentCosts.toList())
         assertEquals(0f, restored.travelSpeedZ)
         assertEquals(0f, restored.toNativeConfig().travelSpeedZ)
         assertEquals(emptyList<Float>(), restored.multiMaterial.purgeVolumes)
@@ -678,6 +693,14 @@ class SliceOptionsPersistenceTest {
         assertFalse(
             ProfileValidation.filament(FilamentProfile.GENERIC_PLA.copy(diameter = 4.01f)),
         )
+        assertFalse(
+            ProfileValidation.filament(FilamentProfile.GENERIC_PLA.copy(density = 10.01f)),
+        )
+        assertFalse(
+            ProfileValidation.filament(
+                FilamentProfile.GENERIC_PLA.copy(costPerKilogram = 1_000_000.1f),
+            ),
+        )
     }
 }
 
@@ -689,6 +712,8 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             filamentStartGcode = "M117 PRIMARY_START",
             filamentEndGcode = "M117 PRIMARY_END",
             diameter = 2.85f,
+            density = 1.07f,
+            costPerKilogram = 42.5f,
             retractLength = 1.1f,
             retractSpeed = 37f,
             deretractSpeed = 35f,

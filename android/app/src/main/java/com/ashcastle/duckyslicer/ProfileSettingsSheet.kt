@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
@@ -58,6 +59,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.max
@@ -996,6 +998,39 @@ private fun FilamentSettingsSheet(
                 },
             )
         }
+        QuantizedSettingSlider(
+            label = stringResource(R.string.filament_density),
+            valueText = stringResource(
+                R.string.grams_per_cubic_centimeter_value,
+                activeProfile.density,
+            ),
+            value = activeProfile.density,
+            minimum = 0f,
+            defaultMaximum = 3f,
+            increment = 0.01f,
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(density = it),
+                    ),
+                )
+            },
+        )
+        DecimalSettingField(
+            label = stringResource(R.string.filament_price_per_kilogram),
+            value = activeProfile.costPerKilogram,
+            maximum = 1_000_000f,
+            suffix = stringResource(R.string.per_kilogram_suffix),
+            onValueChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(costPerKilogram = it),
+                    ),
+                )
+            },
+        )
         SettingsGroupTitle(stringResource(R.string.retraction))
         SettingsSwitch(
             label = stringResource(R.string.use_printer_retraction_defaults),
@@ -1336,7 +1371,14 @@ private fun FilamentSettingsSheet(
             brand = { it.brand },
             builtIn = { it.builtIn },
             searchTerms = {
-                listOf(it.name, it.brand.orEmpty(), it.nativeName, it.diameter.toString())
+                listOf(
+                    it.name,
+                    it.brand.orEmpty(),
+                    it.nativeName,
+                    it.diameter.toString(),
+                    it.density.toString(),
+                    it.costPerKilogram.toString(),
+                )
             },
             onSelected = {
                 onOptionsChanged(options.updateFilamentSlot(selectedSlot, it))
@@ -5382,6 +5424,50 @@ private fun GcodeTemplateSetting(
         modifier = Modifier.fillMaxWidth(),
     )
 }
+
+@Composable
+private fun DecimalSettingField(
+    label: String,
+    value: Float,
+    maximum: Float,
+    suffix: String,
+    onValueChange: (Float) -> Unit,
+) {
+    if (!settingMatchesQuery(label)) return
+    var input by remember { mutableStateOf(editableDecimal(value)) }
+    var lastApplied by remember { mutableStateOf(value) }
+    LaunchedEffect(value) {
+        if (abs(value - lastApplied) >= 0.001f) {
+            input = editableDecimal(value)
+            lastApplied = value
+        }
+    }
+    OutlinedTextField(
+        value = input,
+        onValueChange = { candidate ->
+            if (candidate.length <= 12 && candidate.matches(DECIMAL_INPUT)) {
+                input = candidate
+                candidate.replace(',', '.').toFloatOrNull()
+                    ?.takeIf { it.isFinite() && it in 0f..maximum }
+                    ?.let { parsed ->
+                        lastApplied = parsed
+                        onValueChange(parsed)
+                    }
+            }
+        },
+        label = { Text(label) },
+        suffix = { Text(suffix) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        isError = input.replace(',', '.').toFloatOrNull()?.let { it !in 0f..maximum } ?: true,
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+private fun editableDecimal(value: Float): String =
+    if (value == value.roundToInt().toFloat()) value.roundToInt().toString() else value.toString()
+
+private val DECIMAL_INPUT = Regex("[0-9]{0,7}([.,][0-9]{0,2})?")
 
 @Composable
 private fun OverhangSpeedSetting(

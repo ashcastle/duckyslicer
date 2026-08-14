@@ -246,6 +246,7 @@ data class SliceConfig(
     @JvmField var filamentMinimalPurgeOnWipeTower: FloatArray = floatArrayOf(),
     @JvmField var filamentNozzleTempInitialLayers: IntArray = intArrayOf(),
     @JvmField var filamentBedTempInitialLayers: IntArray = intArrayOf(),
+    @JvmField var filamentDensities: FloatArray = floatArrayOf(),
     @JvmField var filamentCosts: FloatArray = floatArrayOf(),
     @JvmField var mixedFilamentDefinitions: String = "",
     /** Process-local safety ceiling applied before Orca writes G-code. */

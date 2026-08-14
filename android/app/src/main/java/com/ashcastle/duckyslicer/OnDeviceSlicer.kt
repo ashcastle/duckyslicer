@@ -237,6 +237,8 @@ data class FilamentProfile(
     val pressureAdvance: Float = 0f,
     val compatiblePrinters: List<String> = emptyList(),
     val diameter: Float = 1.75f,
+    val density: Float = 1.24f,
+    val costPerKilogram: Float = 0f,
 ) {
     companion object {
         // Curated from the included Snapmaker U1 filament catalog.
@@ -1789,6 +1791,8 @@ data class SliceOptions(
             filamentPressureAdvances = nativeFilaments.map(FilamentProfile::pressureAdvance).toFloatArray(),
             filamentNozzleTempInitialLayers = nativeFilaments.map(FilamentProfile::firstLayerNozzleTemp).toIntArray(),
             filamentBedTempInitialLayers = nativeFilaments.map(FilamentProfile::firstLayerBedTemp).toIntArray(),
+            filamentDensities = nativeFilaments.map(FilamentProfile::density).toFloatArray(),
+            filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
             native.topSurfaceDensity = quality.surfaceDensity.topPercent
             native.bottomSurfaceDensity = quality.surfaceDensity.bottomPercent

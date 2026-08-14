@@ -138,7 +138,7 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(28, manifest.getInt("schemaVersion"))
+            assertEquals(29, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(
@@ -227,6 +227,14 @@ class ProjectArchiveTest {
             assertEquals(
                 listOf(2.85f, 2.85f),
                 imported.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::diameter),
+            )
+            assertEquals(
+                listOf(1.07f, 1.32f),
+                imported.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::density),
+            )
+            assertEquals(
+                listOf(42.5f, 75f),
+                imported.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::costPerKilogram),
             )
             assertEquals("solid duck\nendsolid duck\n", File(imported.snapshot.objects[0].model.localPath).readText())
 

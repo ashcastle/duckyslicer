@@ -228,6 +228,10 @@
     <string name="flow_ratio">유량 비율</string>
     <string name="max_volumetric_speed">최대 유량</string>
     <string name="filament_diameter">직경</string>
+    <string name="filament_density">밀도</string>
+    <string name="filament_price_per_kilogram">kg당 가격</string>
+    <string name="grams_per_cubic_centimeter_value">%.2f g/cm³</string>
+    <string name="per_kilogram_suffix">/kg</string>
     <string name="retraction">리트랙션</string>
     <string name="retraction_defaults">리트랙션 기본값</string>
     <string name="retraction_length">리트랙션 길이</string>

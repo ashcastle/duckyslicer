@@ -2098,7 +2098,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(57, catalog.schemaVersion)
+        assertEquals(58, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2139,6 +2139,14 @@ class NativeEngineInstrumentedTest {
         assertTrue(
             "Inherited non-standard filament diameters must survive catalog generation",
             catalog.filaments.any { kotlin.math.abs(it.diameter - 1.75f) >= 0.001f },
+        )
+        assertTrue(
+            "Inherited material densities must survive catalog generation",
+            catalog.filaments.any { kotlin.math.abs(it.density - 1.24f) >= 0.001f },
+        )
+        assertTrue(
+            "Inherited material prices must survive catalog generation",
+            catalog.filaments.any { it.costPerKilogram > 0f },
         )
         assertTrue(
             "Prime-tower process values must survive catalog normalization",

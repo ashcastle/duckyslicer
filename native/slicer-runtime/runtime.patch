@@ -492,12 +492,13 @@ index 116a4a85..97124ae3 100644
  
      // F91 (2026-05-25): per-extruder filament tuning sourced from the user's filament
      // library on the Kotlin side at slice time. Empty vector = "user has not set this
-@@ -106,6 +448,8 @@ struct SliceConfig {
+@@ -106,6 +448,9 @@ struct SliceConfig {
      // both the embed value and the hardware default. This makes the library reach STL
      // slices too (which bypass ProfileEmbedder entirely on the Kotlin side).
      std::vector<float> filament_flow_ratios;
 +    std::vector<std::string> filament_start_gcodes;
 +    std::vector<std::string> filament_end_gcodes;
++    std::vector<float> filament_densities;
      std::vector<float> filament_max_volumetric_speeds;
      std::vector<int>   filament_fan_min_speeds;
      std::vector<int>   filament_fan_max_speeds;
@@ -1162,8 +1163,9 @@ index d93efb7d..47399bd0 100644
      config.filament_max_volumetric_speeds = getFloatArray("filamentMaxVolumetricSpeeds");
      config.filament_fan_min_speeds = getIntArray("filamentFanMinSpeeds");
      config.filament_fan_max_speeds = getIntArray("filamentFanMaxSpeeds");
-@@ -156,6 +491,10 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -156,6 +491,11 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.filament_bed_temp_initial_layers = getIntArray("filamentBedTempInitialLayers");
++    config.filament_densities = getFloatArray("filamentDensities");
      config.filament_costs = getFloatArray("filamentCosts");
      config.mixed_filament_definitions = getString("mixedFilamentDefinitions");
 +    const int maximum_gcode_bytes = getInt("maximumGcodeBytes");
@@ -2536,9 +2538,14 @@ index 8d61c9cf..0ea4284d 100644
      if (!config.filament_pressure_advances.empty()) {
          std::vector<double> v(config.filament_pressure_advances.begin(), config.filament_pressure_advances.end());
          while ((int)v.size() < n_ext) v.push_back(v.back());
-@@ -568,31 +861,124 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -568,31 +861,129 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          dpc.set_key_value("filament_cost", new Slic3r::ConfigOptionFloats(std::move(v)));
      }
++    if (!config.filament_densities.empty()) {
++        std::vector<double> v(config.filament_densities.begin(), config.filament_densities.end());
++        while ((int)v.size() < n_ext) v.push_back(v.back());
++        dpc.set_key_value("filament_density", new Slic3r::ConfigOptionFloats(std::move(v)));
++    }
  
 -    // Support speeds — OrcaSlicer defaults to 80mm/s which is fine today, but pin to
 -    // Snapmaker profile values so future OrcaSlicer changes don't silently regress.

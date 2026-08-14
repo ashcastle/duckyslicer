@@ -2386,7 +2386,14 @@ private fun FilamentAssignmentSheet(
                 brand = FilamentProfile::brand,
                 builtIn = FilamentProfile::builtIn,
                 searchTerms = {
-                    listOf(it.name, it.nativeName, it.brand.orEmpty(), it.diameter.toString())
+                    listOf(
+                        it.name,
+                        it.nativeName,
+                        it.brand.orEmpty(),
+                        it.diameter.toString(),
+                        it.density.toString(),
+                        it.costPerKilogram.toString(),
+                    )
                 },
                 onSelected = onSelected,
             )
