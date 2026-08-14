@@ -1031,6 +1031,30 @@ private fun FilamentSettingsSheet(
                 )
             },
         )
+        SettingsSwitch(
+            label = stringResource(R.string.filament_soluble_material),
+            checked = activeProfile.soluble,
+            onCheckedChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(soluble = it),
+                    ),
+                )
+            },
+        )
+        SettingsSwitch(
+            label = stringResource(R.string.filament_support_material),
+            checked = activeProfile.supportMaterial,
+            onCheckedChange = {
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(supportMaterial = it),
+                    ),
+                )
+            },
+        )
         SettingsGroupTitle(stringResource(R.string.retraction))
         SettingsSwitch(
             label = stringResource(R.string.use_printer_retraction_defaults),

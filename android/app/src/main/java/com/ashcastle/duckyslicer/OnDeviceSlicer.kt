@@ -239,6 +239,8 @@ data class FilamentProfile(
     val diameter: Float = 1.75f,
     val density: Float = 1.24f,
     val costPerKilogram: Float = 0f,
+    val soluble: Boolean = false,
+    val supportMaterial: Boolean = false,
 ) {
     companion object {
         // Curated from the included Snapmaker U1 filament catalog.
@@ -1794,6 +1796,8 @@ data class SliceOptions(
             filamentDensities = nativeFilaments.map(FilamentProfile::density).toFloatArray(),
             filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
+            native.filamentSoluble = nativeFilaments.map { if (it.soluble) 1 else 0 }.toIntArray()
+            native.filamentIsSupport = nativeFilaments.map { if (it.supportMaterial) 1 else 0 }.toIntArray()
             native.topSurfaceDensity = quality.surfaceDensity.topPercent
             native.bottomSurfaceDensity = quality.surfaceDensity.bottomPercent
             native.skeletonInfillDensity = quality.skeletonInfillDensity

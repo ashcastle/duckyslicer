@@ -22,6 +22,8 @@ class ProfileStoreMigrationTest {
                 remove("diameter")
                 remove("density")
                 remove("costPerKilogram")
+                remove("soluble")
+                remove("supportMaterial")
             }
             val legacySlicing = slicing.toProfileJson().withoutProfileMetadata().apply {
                 remove("makeOverhangPrintable")
@@ -75,6 +77,8 @@ class ProfileStoreMigrationTest {
             assertEquals(1.75f, restoredFilament.diameter)
             assertEquals(1.24f, restoredFilament.density)
             assertEquals(0f, restoredFilament.costPerKilogram)
+            assertFalse(restoredFilament.soluble)
+            assertFalse(restoredFilament.supportMaterial)
             assertEquals("V3 Slicing", restoredSlicing.name)
             assertEquals(PrintableOverhangSettings(), restoredSlicing.printableOverhangs)
             assertEquals(PolyholeSettings(), restoredSlicing.precision.polyholes)
@@ -285,6 +289,8 @@ class ProfileStoreMigrationTest {
                         diameter = 2.85f,
                         density = 1.07f,
                         costPerKilogram = 42.5f,
+                        soluble = true,
+                        supportMaterial = true,
                     ),
                 )
 
@@ -303,6 +309,10 @@ class ProfileStoreMigrationTest {
             assertEquals(1.07f, restored.density)
             assertEquals(42.5f, saved.costPerKilogram)
             assertEquals(42.5f, restored.costPerKilogram)
+            assertTrue(saved.soluble)
+            assertTrue(restored.soluble)
+            assertTrue(saved.supportMaterial)
+            assertTrue(restored.supportMaterial)
         } finally {
             directory.deleteRecursively()
         }

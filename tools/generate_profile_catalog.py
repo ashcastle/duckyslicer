@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 58
+SCHEMA_VERSION = 59
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -435,6 +435,8 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "diameter": number(raw.get("filament_diameter"), 1.75),
         "density": number(raw.get("filament_density"), 1.24),
         "costPerKilogram": number(raw.get("filament_cost"), 0),
+        "soluble": boolean(raw.get("filament_soluble")),
+        "supportMaterial": boolean(raw.get("filament_is_support")),
         "filamentStartGcode": str(scalar(raw.get("filament_start_gcode"), "")),
         "filamentEndGcode": str(scalar(raw.get("filament_end_gcode"), "")),
         "retractLength": nullable_number(raw.get("filament_retraction_length")),

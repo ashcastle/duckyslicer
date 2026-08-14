@@ -2098,7 +2098,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(58, catalog.schemaVersion)
+        assertEquals(59, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2109,6 +2109,11 @@ class NativeEngineInstrumentedTest {
             catalog.filaments.any {
                 it.filamentStartGcode.isNotBlank() || it.filamentEndGcode.isNotBlank()
             },
+        )
+        assertTrue("Soluble material semantics must survive catalog generation", catalog.filaments.any { it.soluble })
+        assertTrue(
+            "Dedicated support material semantics must survive catalog generation",
+            catalog.filaments.any { it.supportMaterial },
         )
         val representativeBrands = setOf(
             "Prusa", "Creality", "Anycubic", "Elegoo", "Snapmaker", "Sovol", "Qidi",
@@ -3209,6 +3214,82 @@ class NativeEngineInstrumentedTest {
         } finally {
             low.output.delete()
             high.output.delete()
+        }
+    }
+
+    @Test
+    fun solubleAndDedicatedSupportFilamentsReachRealPurging() {
+        val model = inspectModel(fixtureModel().absolutePath)
+        val objects = listOf(
+            ProjectObject(
+                id = "material-primary",
+                model = model,
+                transform = ModelTransform(offsetXmm = -20f),
+                filamentSlot = 0,
+            ),
+            ProjectObject(
+                id = "material-secondary",
+                model = model,
+                transform = ModelTransform(offsetXmm = 20f),
+                filamentSlot = 1,
+            ),
+        )
+        val primary = FilamentProfile.PLA.copy(soluble = false, supportMaterial = false)
+        val secondary = FilamentProfile.PETG.copy(soluble = false, supportMaterial = false)
+        val base = SliceOptions()
+            .selectPrinter(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(
+                    id = "test-material-semm-04",
+                    name = "Test material SEMM · 0.4 mm",
+                    singleExtruderMultiMaterial = true,
+                    extruderCount = 2,
+                ),
+            )
+            .selectFilament(primary)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                filamentSlots = listOf(primary, secondary),
+                wipeTowerEnabled = true,
+                multiMaterial = MultiMaterialSettings(
+                    purgeVolumes = listOf(0f, 260f, 260f, 0f),
+                    singleExtruderMultiMaterialPriming = true,
+                    flushIntoInfill = true,
+                ),
+            )
+
+        val regular = OnDeviceSlicer.slice(objects, base)
+        val soluble = OnDeviceSlicer.slice(
+            objects,
+            base.selectFilament(primary.copy(soluble = true)),
+        )
+        val support = OnDeviceSlicer.slice(
+            objects,
+            base.copy(filamentSlots = listOf(primary, secondary.copy(supportMaterial = true))),
+        )
+        try {
+            val regularGcode = regular.output.readText()
+            val solubleGcode = soluble.output.readText()
+            val supportGcode = support.output.readText()
+            assertTrue(regularGcode.contains("; filament_soluble = 0,0"))
+            assertTrue(
+                "Unexpected soluble header: " + solubleGcode.lineSequence()
+                    .firstOrNull { it.contains("filament_soluble") },
+                solubleGcode.contains("; filament_soluble = 1,0"),
+            )
+            assertTrue(regularGcode.contains("; filament_is_support = 0,0"))
+            assertTrue(supportGcode.contains("; filament_is_support = 0,1"))
+            assertTrue(
+                "Soluble material must keep purge out of arbitrary model infill",
+                wipeTowerExtrusion(solubleGcode) > wipeTowerExtrusion(regularGcode) + 10f,
+            )
+            assertTrue(
+                "Dedicated support material must keep purge out of arbitrary model infill",
+                wipeTowerExtrusion(supportGcode) > wipeTowerExtrusion(regularGcode) + 10f,
+            )
+        } finally {
+            regular.output.delete()
+            soluble.output.delete()
+            support.output.delete()
         }
     }
 

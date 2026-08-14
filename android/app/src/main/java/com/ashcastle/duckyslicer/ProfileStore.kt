@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 59
+internal const val USER_PROFILE_SCHEMA_VERSION = 60
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -111,6 +111,8 @@ class ProfileStore private constructor(
                 diameter = options.filamentDiameter,
                 density = options.filamentProfile.density,
                 costPerKilogram = options.filamentProfile.costPerKilogram,
+                soluble = options.filamentProfile.soluble,
+                supportMaterial = options.filamentProfile.supportMaterial,
                 fanMinSpeed = options.fanMinSpeed,
                 fanMaxSpeed = options.fanMaxSpeed,
                 overhangFanSpeed = options.overhangFanSpeed,
@@ -159,6 +161,8 @@ class ProfileStore private constructor(
             diameter = effective.diameter,
             density = effective.density,
             costPerKilogram = effective.costPerKilogram,
+            soluble = effective.soluble,
+            supportMaterial = effective.supportMaterial,
         )
         require(ProfileValidation.filament(profile)) { "Filament profile contains unsafe values" }
         append("filaments", profile.toProfileJson())
@@ -537,6 +541,8 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("diameter", diameter)
     .put("density", density)
     .put("costPerKilogram", costPerKilogram)
+    .put("soluble", soluble)
+    .put("supportMaterial", supportMaterial)
     .put("builtIn", builtIn)
     .put("brand", brand ?: JSONObject.NULL)
     .put("compatiblePrinters", JSONArray(compatiblePrinters))
@@ -942,6 +948,8 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         diameter = optDouble("diameter", 1.75).toFloat(),
         density = optDouble("density", 1.24).toFloat(),
         costPerKilogram = optDouble("costPerKilogram", 0.0).toFloat(),
+        soluble = optBoolean("soluble", false),
+        supportMaterial = optBoolean("supportMaterial", false),
     )
 }.getOrNull()
 

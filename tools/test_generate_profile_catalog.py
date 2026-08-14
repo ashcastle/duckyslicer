@@ -496,6 +496,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "filament_diameter": ["2.85"],
                 "filament_density": ["1.07"],
                 "filament_cost": ["42.5"],
+                "filament_soluble": ["1"],
+                "filament_is_support": ["1"],
                 "filament_z_hop_types": ["Normal Lift"],
                 "filament_wipe": ["0"],
             },
@@ -512,6 +514,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(2.85, overridden["diameter"])
         self.assertEqual(1.07, overridden["density"])
         self.assertEqual(42.5, overridden["costPerKilogram"])
+        self.assertTrue(overridden["soluble"])
+        self.assertTrue(overridden["supportMaterial"])
         self.assertEqual("normal", overridden["zHopType"])
         self.assertFalse(overridden["wipeWhileRetracting"])
 

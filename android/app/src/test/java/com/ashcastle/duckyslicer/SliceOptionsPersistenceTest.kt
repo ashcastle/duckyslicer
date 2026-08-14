@@ -25,6 +25,8 @@ class SliceOptionsPersistenceTest {
             diameter = 2.85f,
             density = 1.32f,
             costPerKilogram = 75f,
+            soluble = true,
+            supportMaterial = true,
         )
         val options = SliceOptions()
             .selectPrinter(PrinterProfile.U1_04)
@@ -113,6 +115,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(2.85f, native.filamentDiameter)
         assertArrayEquals(floatArrayOf(1.07f, 1.32f), native.filamentDensities, 0.001f)
         assertArrayEquals(floatArrayOf(42.5f, 75f), native.filamentCosts, 0.001f)
+        assertEquals(listOf(0, 1), native.filamentSoluble.toList())
+        assertEquals(listOf(0, 1), native.filamentIsSupport.toList())
         assertEquals(listOf("PLA", "PETG"), native.filamentTypes.toList())
         assertEquals(listOf(primary.nozzleTemp, secondary.nozzleTemp), native.extruderTemps.toList())
         assertEquals(listOf(primary.flowRatio, secondary.flowRatio), native.filamentFlowRatios.toList())
@@ -593,9 +597,13 @@ class SliceOptionsPersistenceTest {
             getJSONObject("filament").remove("diameter")
             getJSONObject("filament").remove("density")
             getJSONObject("filament").remove("costPerKilogram")
+            getJSONObject("filament").remove("soluble")
+            getJSONObject("filament").remove("supportMaterial")
             getJSONArray("filamentSlots").getJSONObject(0).remove("diameter")
             getJSONArray("filamentSlots").getJSONObject(0).remove("density")
             getJSONArray("filamentSlots").getJSONObject(0).remove("costPerKilogram")
+            getJSONArray("filamentSlots").getJSONObject(0).remove("soluble")
+            getJSONArray("filamentSlots").getJSONObject(0).remove("supportMaterial")
             getJSONObject("slicing").apply {
                 remove("makeOverhangPrintable")
                 remove("makeOverhangPrintableAngle")
@@ -663,9 +671,13 @@ class SliceOptionsPersistenceTest {
         assertEquals(2.85f, restored.filamentProfile.diameter)
         assertEquals(1.24f, restored.filamentProfile.density)
         assertEquals(0f, restored.filamentProfile.costPerKilogram)
+        assertEquals(false, restored.filamentProfile.soluble)
+        assertEquals(false, restored.filamentProfile.supportMaterial)
         assertEquals(2.85f, restored.toNativeConfig().filamentDiameter)
         assertEquals(listOf(1.24f), restored.toNativeConfig().filamentDensities.toList())
         assertEquals(listOf(0f), restored.toNativeConfig().filamentCosts.toList())
+        assertEquals(listOf(0), restored.toNativeConfig().filamentSoluble.toList())
+        assertEquals(listOf(0), restored.toNativeConfig().filamentIsSupport.toList())
         assertEquals(0f, restored.travelSpeedZ)
         assertEquals(0f, restored.toNativeConfig().travelSpeedZ)
         assertEquals(emptyList<Float>(), restored.multiMaterial.purgeVolumes)

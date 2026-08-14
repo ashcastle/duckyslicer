@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v58.bin"
+private const val CATALOG_ASSET = "profile_catalog_v59.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 58) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 59) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -116,6 +116,8 @@ class OrcaProfileCatalog(private val context: Context) {
         diameter = input.readFloat(),
         density = input.readFloat(),
         costPerKilogram = input.readFloat(),
+        soluble = input.readBoolean(),
+        supportMaterial = input.readBoolean(),
         filamentStartGcode = input.readCatalogString(),
         filamentEndGcode = input.readCatalogString(),
         retractLength = input.readCatalogNullableFloat(),
@@ -269,6 +271,8 @@ private val FILAMENT_BINARY_FIELDS = arrayOf(
     BinaryField("diameter", BINARY_FLOAT),
     BinaryField("density", BINARY_FLOAT),
     BinaryField("costPerKilogram", BINARY_FLOAT),
+    BinaryField("soluble", BINARY_BOOL),
+    BinaryField("supportMaterial", BINARY_BOOL),
     BinaryField("filamentStartGcode", BINARY_STRING),
     BinaryField("filamentEndGcode", BINARY_STRING),
     BinaryField("retractLength", BINARY_NULLABLE_FLOAT),

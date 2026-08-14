@@ -232,6 +232,8 @@
     <string name="filament_price_per_kilogram">kg당 가격</string>
     <string name="grams_per_cubic_centimeter_value">%.2f g/cm³</string>
     <string name="per_kilogram_suffix">/kg</string>
+    <string name="filament_soluble_material">용해성 재료</string>
+    <string name="filament_support_material">서포트 재료</string>
     <string name="retraction">리트랙션</string>
     <string name="retraction_defaults">리트랙션 기본값</string>
     <string name="retraction_length">리트랙션 길이</string>

@@ -232,6 +232,8 @@
     <string name="filament_price_per_kilogram">Price per kilogram</string>
     <string name="grams_per_cubic_centimeter_value">%.2f g/cm³</string>
     <string name="per_kilogram_suffix">/kg</string>
+    <string name="filament_soluble_material">Soluble material</string>
+    <string name="filament_support_material">Support material</string>
     <string name="retraction">Retraction</string>
     <string name="retraction_defaults">Retraction defaults</string>
     <string name="retraction_length">Retraction length</string>

@@ -121,7 +121,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(31, persisted.getInt("schemaVersion"))
+        assertEquals(32, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),
@@ -180,6 +180,14 @@ class ProjectStoreTest {
         assertEquals(
             listOf(42.5f, 75f),
             restored.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::costPerKilogram),
+        )
+        assertEquals(
+            listOf(false, true),
+            restored.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::soluble),
+        )
+        assertEquals(
+            listOf(false, true),
+            restored.sliceOptions?.resolvedFilamentSlots()?.map(FilamentProfile::supportMaterial),
         )
 
         val legacyTransform = JSONObject(persistedObject.getJSONObject("transform").toString()).apply {
@@ -456,6 +464,8 @@ internal fun multiFilamentSettingsFixture(): SliceOptions {
         diameter = options.filamentDiameter,
         density = 1.32f,
         costPerKilogram = 75f,
+        soluble = true,
+        supportMaterial = true,
     )
     return options.copy(filamentSlots = listOf(options.filamentProfile, secondary))
 }

@@ -74,6 +74,8 @@ def valid_sources() -> dict[str, str]:
             " R.string.filament_diameter activeProfile.copy(diameter ="
             " R.string.filament_density activeProfile.copy(density ="
             " R.string.filament_price_per_kilogram activeProfile.copy(costPerKilogram ="
+            " R.string.filament_soluble_material activeProfile.copy(soluble ="
+            " R.string.filament_support_material activeProfile.copy(supportMaterial ="
             " filamentStartGcode = filamentEndGcode ="
             " R.string.maximum_z_speed R.string.maximum_e_speed"
             " R.string.maximum_x_acceleration R.string.maximum_y_acceleration"
@@ -156,6 +158,7 @@ def valid_sources() -> dict[str, str]:
             ' name="filament_gcode" name="filament_start_gcode" name="filament_end_gcode"'
             ' name="filament_diameter"'
             ' name="filament_density" name="filament_price_per_kilogram"'
+            ' name="filament_soluble_material" name="filament_support_material"'
             ' name="maximum_z_speed" name="maximum_e_speed"'
             ' name="maximum_x_acceleration" name="maximum_y_acceleration"'
             ' name="maximum_z_acceleration" name="maximum_e_acceleration"'
@@ -199,6 +202,7 @@ def valid_sources() -> dict[str, str]:
             ' name="filament_gcode" name="filament_start_gcode" name="filament_end_gcode"'
             ' name="filament_diameter"'
             ' name="filament_density" name="filament_price_per_kilogram"'
+            ' name="filament_soluble_material" name="filament_support_material"'
             ' name="maximum_z_speed" name="maximum_e_speed"'
             ' name="maximum_x_acceleration" name="maximum_y_acceleration"'
             ' name="maximum_z_acceleration" name="maximum_e_acceleration"'
