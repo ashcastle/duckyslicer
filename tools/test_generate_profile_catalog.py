@@ -273,6 +273,25 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(73.0, profile["minimumWallWidth"])
         self.assertEqual(112.0, profile["firstLayerMinimumWallWidth"])
 
+    def test_preserves_polyhole_geometry_settings(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Polyhole tuned",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "hole_to_polyhole": "1",
+                "hole_to_polyhole_threshold": "7%",
+                "hole_to_polyhole_twisted": "0",
+            },
+            {},
+        )
+
+        self.assertTrue(profile["holeToPolyhole"])
+        self.assertEqual(7.0, profile["holeToPolyholeThreshold"])
+        self.assertTrue(profile["holeToPolyholeThresholdPercent"])
+        self.assertFalse(profile["holeToPolyholeTwisted"])
+
     def test_preserves_ironing_inset_and_angle(self) -> None:
         profile = build_process(
             "Example",

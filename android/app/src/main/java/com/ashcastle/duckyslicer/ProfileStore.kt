@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 45
+internal const val USER_PROFILE_SCHEMA_VERSION = 46
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -722,6 +722,10 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("slicingMode", precision.mode)
     .put("sliceClosingRadius", precision.closingRadius)
     .put("preciseZHeight", precision.preciseZHeight)
+    .put("holeToPolyhole", precision.polyholes.enabled)
+    .put("holeToPolyholeThreshold", precision.polyholes.detectionMargin)
+    .put("holeToPolyholeThresholdPercent", precision.polyholes.detectionMarginPercent)
+    .put("holeToPolyholeTwisted", precision.polyholes.twist)
     .put("seamPosition", seamPosition)
     .put("staggeredInnerSeams", staggeredInnerSeams)
     .put("seamGap", seamGap)
@@ -1117,6 +1121,12 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
             mode = optString("slicingMode", "regular"),
             closingRadius = optDouble("sliceClosingRadius", 0.049).toFloat(),
             preciseZHeight = optBoolean("preciseZHeight"),
+            polyholes = PolyholeSettings(
+                enabled = optBoolean("holeToPolyhole"),
+                detectionMargin = optDouble("holeToPolyholeThreshold", 0.01).toFloat(),
+                detectionMarginPercent = optBoolean("holeToPolyholeThresholdPercent"),
+                twist = optBoolean("holeToPolyholeTwisted", true),
+            ),
             minimumWallWidth = optDouble("minimumWallWidth", 85.0).toFloat(),
             firstLayerMinimumWallWidth = optDouble("firstLayerMinimumWallWidth", 85.0).toFloat(),
             printableOverhangs = PrintableOverhangSettings(

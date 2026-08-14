@@ -147,6 +147,7 @@ internal object ProfileValidation {
             profile.resolution in 0.001f..100f &&
             profile.precision.mode in setOf("regular", "even_odd", "close_holes") &&
             profile.precision.closingRadius in 0f..10f &&
+            profile.precision.polyholes.detectionMargin in 0f..10f &&
             profile.seamGap in 0f..1_000f &&
             optionalFeatureSpeedIsValid(profile.wipeSpeed, profile.wipeSpeedPercent) &&
             listOf(

@@ -405,6 +405,13 @@ data class BrimEarSettings(
     val detectionRadius: Float = 1f,
 )
 
+data class PolyholeSettings(
+    val enabled: Boolean = false,
+    val detectionMargin: Float = 0.01f,
+    val detectionMarginPercent: Boolean = false,
+    val twist: Boolean = true,
+)
+
 data class ScarfSeamSettings(
     val type: String = "none",
     val conditional: Boolean = false,
@@ -425,6 +432,7 @@ data class PrecisionSettings(
     val mode: String = "regular",
     val closingRadius: Float = 0.049f,
     val preciseZHeight: Boolean = false,
+    val polyholes: PolyholeSettings = PolyholeSettings(),
     val minimumWallWidth: Float = 85f,
     val firstLayerMinimumWallWidth: Float = 85f,
     val printableOverhangs: PrintableOverhangSettings = PrintableOverhangSettings(),
@@ -797,7 +805,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 44,
+    val schemaVersion: Int = 45,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1744,6 +1752,10 @@ data class SliceOptions(
             native.slicingMode = precision.mode
             native.sliceClosingRadius = precision.closingRadius
             native.preciseZHeight = precision.preciseZHeight
+            native.holeToPolyhole = precision.polyholes.enabled
+            native.holeToPolyholeThreshold = precision.polyholes.detectionMargin
+            native.holeToPolyholeThresholdPercent = precision.polyholes.detectionMarginPercent
+            native.holeToPolyholeTwisted = precision.polyholes.twist
             native.minimumWallWidth = precision.minimumWallWidth
             native.firstLayerMinimumWallWidth = precision.firstLayerMinimumWallWidth
             native.makeOverhangPrintable = printableOverhangs.enabled

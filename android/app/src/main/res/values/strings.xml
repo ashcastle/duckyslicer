@@ -414,6 +414,9 @@
     <string name="slice_gap_closing_radius">Slice gap closing radius</string>
     <string name="precise_z_height">Precise Z height</string>
     <string name="arc_fitting">Arc fitting</string>
+    <string name="hole_to_polyhole">Convert holes to polyholes</string>
+    <string name="hole_to_polyhole_threshold">Polyhole detection margin</string>
+    <string name="hole_to_polyhole_twisted">Polyhole twist</string>
     <string name="overhang_speed">Slow down overhangs</string>
     <string name="overhang_speed_1">Slight overhang</string>
     <string name="overhang_speed_2">Moderate overhang</string>

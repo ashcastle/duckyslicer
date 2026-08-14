@@ -206,6 +206,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var slicingMode: String = base.precision.mode
     private var sliceClosingRadius: Float = base.precision.closingRadius
     private var preciseZHeight: Boolean = base.precision.preciseZHeight
+    private var holeToPolyhole: Boolean = base.precision.polyholes.enabled
+    private var holeToPolyholeThreshold: Float = base.precision.polyholes.detectionMargin
+    private var holeToPolyholeThresholdPercent: Boolean = base.precision.polyholes.detectionMarginPercent
+    private var holeToPolyholeTwisted: Boolean = base.precision.polyholes.twist
     private var seamPosition: String = base.seamPosition
     private var staggeredInnerSeams: Boolean = base.staggeredInnerSeams
     private var seamGap: Float = base.seamGap
@@ -473,6 +477,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         slicingMode = input.readCatalogString()
         sliceClosingRadius = input.readFloat()
         preciseZHeight = input.readCatalogBoolean()
+        holeToPolyhole = input.readCatalogBoolean()
+        holeToPolyholeThreshold = input.readFloat()
+        holeToPolyholeThresholdPercent = input.readCatalogBoolean()
+        holeToPolyholeTwisted = input.readCatalogBoolean()
         seamPosition = input.readCatalogString()
         staggeredInnerSeams = input.readCatalogBoolean()
         seamGap = input.readFloat()
@@ -857,6 +865,12 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             mode = slicingMode,
             closingRadius = sliceClosingRadius,
             preciseZHeight = preciseZHeight,
+            polyholes = PolyholeSettings(
+                enabled = holeToPolyhole,
+                detectionMargin = holeToPolyholeThreshold,
+                detectionMarginPercent = holeToPolyholeThresholdPercent,
+                twist = holeToPolyholeTwisted,
+            ),
             minimumWallWidth = minimumWallWidth,
             firstLayerMinimumWallWidth = firstLayerMinimumWallWidth,
             printableOverhangs = PrintableOverhangSettings(
@@ -1107,6 +1121,10 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("slicingMode", BINARY_STRING),
     BinaryField("sliceClosingRadius", BINARY_FLOAT),
     BinaryField("preciseZHeight", BINARY_BOOL),
+    BinaryField("holeToPolyhole", BINARY_BOOL),
+    BinaryField("holeToPolyholeThreshold", BINARY_FLOAT),
+    BinaryField("holeToPolyholeThresholdPercent", BINARY_BOOL),
+    BinaryField("holeToPolyholeTwisted", BINARY_BOOL),
     BinaryField("seamPosition", BINARY_STRING),
     BinaryField("staggeredInnerSeams", BINARY_BOOL),
     BinaryField("seamGap", BINARY_FLOAT),

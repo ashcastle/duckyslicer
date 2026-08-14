@@ -203,7 +203,7 @@ index 116a4a85..6b3048bc 100644
      // Temperature
      int nozzle_temp = 210;
      int bed_temp = 60;
-@@ -58,19 +141,162 @@ struct SliceConfig {
+@@ -58,19 +141,166 @@ struct SliceConfig {
  
      // Support
      bool support_enabled = false;
@@ -297,6 +297,10 @@ index 116a4a85..6b3048bc 100644
 +    std::string slicing_mode = "regular";
 +    float slice_closing_radius = 0.049f;
 +    bool precise_z_height = false;
++    bool hole_to_polyhole = false;
++    float hole_to_polyhole_threshold = 0.01f;
++    bool hole_to_polyhole_threshold_percent = false;
++    bool hole_to_polyhole_twisted = true;
 +    bool make_overhang_printable = false;
 +    float make_overhang_printable_angle = 55.0f;
 +    float make_overhang_printable_hole_size = 0.0f;
@@ -840,7 +844,7 @@ index d93efb7d..fdf9a877 100644
      config.travel_speed = getFloat("travelSpeed");
      config.first_layer_speed = getFloat("firstLayerSpeed");
  
-@@ -108,15 +185,155 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -108,15 +185,159 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.support_enabled = getBool("supportEnabled");
      config.support_type = getString("supportType");
      config.support_angle = getFloat("supportAngle");
@@ -925,6 +929,10 @@ index d93efb7d..fdf9a877 100644
 +    config.slicing_mode = getString("slicingMode");
 +    config.slice_closing_radius = getFloat("sliceClosingRadius");
 +    config.precise_z_height = getBool("preciseZHeight");
++    config.hole_to_polyhole = getBool("holeToPolyhole");
++    config.hole_to_polyhole_threshold = getFloat("holeToPolyholeThreshold");
++    config.hole_to_polyhole_threshold_percent = getBool("holeToPolyholeThresholdPercent");
++    config.hole_to_polyhole_twisted = getBool("holeToPolyholeTwisted");
 +    config.make_overhang_printable = getBool("makeOverhangPrintable");
 +    config.make_overhang_printable_angle = getFloat("makeOverhangPrintableAngle");
 +    config.make_overhang_printable_hole_size = getFloat("makeOverhangPrintableHoleSize");
@@ -1194,7 +1202,7 @@ index d93efb7d..fdf9a877 100644
      setFloat("travelSpeed", config.travel_speed);
      setFloat("firstLayerSpeed", config.first_layer_speed);
      setInt("nozzleTemp", config.nozzle_temp);
-@@ -247,13 +568,153 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -247,13 +568,157 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setBool("supportEnabled", config.support_enabled);
      setString("supportType", config.support_type);
      setFloat("supportAngle", config.support_angle);
@@ -1278,6 +1286,10 @@ index d93efb7d..fdf9a877 100644
 +    setString("slicingMode", config.slicing_mode);
 +    setFloat("sliceClosingRadius", config.slice_closing_radius);
 +    setBool("preciseZHeight", config.precise_z_height);
++    setBool("holeToPolyhole", config.hole_to_polyhole);
++    setFloat("holeToPolyholeThreshold", config.hole_to_polyhole_threshold);
++    setBool("holeToPolyholeThresholdPercent", config.hole_to_polyhole_threshold_percent);
++    setBool("holeToPolyholeTwisted", config.hole_to_polyhole_twisted);
 +    setBool("makeOverhangPrintable", config.make_overhang_printable);
 +    setFloat("makeOverhangPrintableAngle", config.make_overhang_printable_angle);
 +    setFloat("makeOverhangPrintableHoleSize", config.make_overhang_printable_hole_size);
@@ -1791,7 +1803,7 @@ index 8d61c9cf..f285d044 100644
  
      // Line widths — must be set explicitly.
      // When left at 0 (absolute), MultiMaterialSegmentation calls
-@@ -480,32 +610,108 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -480,32 +610,112 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      // the literal 0, not the auto-resolved value, causing Flow::rounded_rectangle_extrusion_spacing()
      // to throw FlowErrorNegativeSpacing on multi-color models.
      double nd = config.nozzle_diameter;
@@ -1848,6 +1860,10 @@ index 8d61c9cf..f285d044 100644
 +    dpc.set_deserialize_strict("slicing_mode", config.slicing_mode);
 +    dpc.set_key_value("slice_closing_radius", new Slic3r::ConfigOptionFloat(config.slice_closing_radius));
 +    dpc.set_key_value("precise_z_height", new Slic3r::ConfigOptionBool(config.precise_z_height));
++    dpc.set_key_value("hole_to_polyhole", new Slic3r::ConfigOptionBool(config.hole_to_polyhole));
++    dpc.set_key_value("hole_to_polyhole_threshold", new Slic3r::ConfigOptionFloatOrPercent(
++        config.hole_to_polyhole_threshold, config.hole_to_polyhole_threshold_percent));
++    dpc.set_key_value("hole_to_polyhole_twisted", new Slic3r::ConfigOptionBool(config.hole_to_polyhole_twisted));
 +    dpc.set_key_value("make_overhang_printable", new Slic3r::ConfigOptionBool(config.make_overhang_printable));
 +    dpc.set_key_value("make_overhang_printable_angle", new Slic3r::ConfigOptionFloat(config.make_overhang_printable_angle));
 +    dpc.set_key_value("make_overhang_printable_hole_size", new Slic3r::ConfigOptionFloat(config.make_overhang_printable_hole_size));

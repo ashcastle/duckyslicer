@@ -228,6 +228,52 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun polyholeSettingsChangeRealHoleGeometry() {
+        val baseOptions = SliceOptions()
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                wallGenerator = "classic",
+                perimeters = 2,
+                fillDensity = 0f,
+                topSolidLayers = 0,
+                bottomSolidLayers = 0,
+                precision = PrecisionSettings(
+                    polyholes = PolyholeSettings(
+                        enabled = false,
+                        detectionMargin = 0.1f,
+                        detectionMarginPercent = false,
+                        twist = false,
+                    ),
+                ),
+            )
+        val model = polyholeModel()
+        val plain = OnDeviceSlicer.slice(model, baseOptions)
+        val converted = OnDeviceSlicer.slice(
+            model,
+            baseOptions.copy(
+                precision = baseOptions.precision.copy(
+                    polyholes = baseOptions.precision.polyholes.copy(enabled = true),
+                ),
+            ),
+        )
+        try {
+            val gcode = converted.output.readText()
+            assertTrue(gcode.contains("; hole_to_polyhole = 1"))
+            assertTrue(gcode.contains("; hole_to_polyhole_threshold = 0.1"))
+            assertTrue(gcode.contains("; hole_to_polyhole_twisted = 0"))
+            val plainPreview = loadGcodePreview(plain.output.absolutePath, 0, Int.MAX_VALUE)
+            val convertedPreview = loadGcodePreview(converted.output.absolutePath, 0, Int.MAX_VALUE)
+            assertTrue(
+                "Polyhole conversion must change real extrusion geometry, not only profile metadata",
+                !plainPreview.segments.contentEquals(convertedPreview.segments),
+            )
+        } finally {
+            plain.output.delete()
+            converted.output.delete()
+        }
+    }
+
+    @Test
     fun automaticBrimEarGeometryReachesTheRealEngine() {
         val base = SliceOptions()
             .selectQuality(QualityProfile.DRAFT)
@@ -816,6 +862,52 @@ class NativeEngineInstrumentedTest {
         return destination
     }
 
+    private fun polyholeModel(): File {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val destination = File(context.cacheDir, "polyhole-ring.stl")
+        val facets = mutableListOf<List<TestVertex>>()
+        val segments = 32
+        val outerRadius = 18f
+        val innerRadius = 6f
+        val height = 8f
+
+        fun ring(radius: Float, z: Float) = Array(segments) { index ->
+            val angle = 2.0 * Math.PI * index / segments
+            TestVertex((cos(angle) * radius).toFloat(), (sin(angle) * radius).toFloat(), z)
+        }
+
+        val outerBottom = ring(outerRadius, 0f)
+        val outerTop = ring(outerRadius, height)
+        val innerBottom = ring(innerRadius, 0f)
+        val innerTop = ring(innerRadius, height)
+        repeat(segments) { index ->
+            val next = (index + 1) % segments
+            facets += listOf(outerBottom[index], outerBottom[next], outerTop[next])
+            facets += listOf(outerBottom[index], outerTop[next], outerTop[index])
+            facets += listOf(innerBottom[index], innerTop[next], innerBottom[next])
+            facets += listOf(innerBottom[index], innerTop[index], innerTop[next])
+            facets += listOf(outerTop[index], outerTop[next], innerTop[next])
+            facets += listOf(outerTop[index], innerTop[next], innerTop[index])
+            facets += listOf(outerBottom[index], innerBottom[next], outerBottom[next])
+            facets += listOf(outerBottom[index], innerBottom[index], innerBottom[next])
+        }
+
+        destination.bufferedWriter().use { writer ->
+            writer.appendLine("solid polyhole_ring")
+            facets.forEach { triangle ->
+                writer.appendLine("facet normal 0 0 0")
+                writer.appendLine("outer loop")
+                triangle.forEach { point ->
+                    writer.appendLine("vertex ${point.x} ${point.y} ${point.z}")
+                }
+                writer.appendLine("endloop")
+                writer.appendLine("endfacet")
+            }
+            writer.appendLine("endsolid polyhole_ring")
+        }
+        return destination
+    }
+
     private fun cylinderModel(): File {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val destination = File(context.cacheDir, "scarf-seam-cylinder.stl")
@@ -1400,6 +1492,12 @@ class NativeEngineInstrumentedTest {
                 wallDistributionCount = 3,
                 minimumFeatureSize = 21f,
                 precision = PrecisionSettings(
+                    polyholes = PolyholeSettings(
+                        enabled = true,
+                        detectionMargin = 7f,
+                        detectionMarginPercent = true,
+                        twist = false,
+                    ),
                     minimumWallWidth = 72f,
                     firstLayerMinimumWallWidth = 118f,
                     printableOverhangs = PrintableOverhangSettings(
@@ -1639,6 +1737,10 @@ class NativeEngineInstrumentedTest {
         assertEquals(23f, restored.slicing.last().wallTransitionAngle)
         assertEquals(3, restored.slicing.last().wallDistributionCount)
         assertEquals(21f, restored.slicing.last().minimumFeatureSize)
+        assertEquals(
+            PolyholeSettings(enabled = true, detectionMargin = 7f, detectionMarginPercent = true, twist = false),
+            restored.slicing.last().precision.polyholes,
+        )
         assertEquals(72f, restored.slicing.last().precision.minimumWallWidth)
         assertEquals(118f, restored.slicing.last().precision.firstLayerMinimumWallWidth)
         assertEquals(
@@ -1736,7 +1838,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(44, catalog.schemaVersion)
+        assertEquals(45, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)

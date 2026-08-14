@@ -1908,6 +1908,62 @@ private fun SlicingSettingsSheet(
                         )
                     },
                 )
+                SettingsSwitch(
+                    label = stringResource(R.string.hole_to_polyhole),
+                    checked = options.precision.polyholes.enabled,
+                    onCheckedChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                precision = options.precision.copy(
+                                    polyholes = options.precision.polyholes.copy(enabled = it),
+                                ),
+                            ),
+                        )
+                    },
+                )
+                if (options.precision.polyholes.enabled || settingsQuery.isNotBlank()) {
+                    LengthOrPercentSetting(
+                        label = stringResource(R.string.hole_to_polyhole_threshold),
+                        value = options.precision.polyholes.detectionMargin,
+                        percent = options.precision.polyholes.detectionMarginPercent,
+                        maximumAbsolute = 10f,
+                        maximumPercent = 10f,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    precision = options.precision.copy(
+                                        polyholes = options.precision.polyholes.copy(detectionMargin = it),
+                                    ),
+                                ),
+                            )
+                        },
+                        onPercentChange = { selectedPercent, adjustedValue ->
+                            onOptionsChanged(
+                                options.copy(
+                                    precision = options.precision.copy(
+                                        polyholes = options.precision.polyholes.copy(
+                                            detectionMargin = adjustedValue,
+                                            detectionMarginPercent = selectedPercent,
+                                        ),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingsSwitch(
+                        label = stringResource(R.string.hole_to_polyhole_twisted),
+                        checked = options.precision.polyholes.twist,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    precision = options.precision.copy(
+                                        polyholes = options.precision.polyholes.copy(twist = it),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                }
                 SettingChoices(
                     settingLabel = stringResource(R.string.ensure_vertical_shell_thickness),
                     entries = listOf("none", "ensure_critical_only", "ensure_moderate", "ensure_all"),

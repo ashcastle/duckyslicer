@@ -343,6 +343,12 @@ class SliceOptionsPersistenceTest {
                 mode = "close_holes",
                 closingRadius = 0.125f,
                 preciseZHeight = true,
+                polyholes = PolyholeSettings(
+                    enabled = true,
+                    detectionMargin = 6.5f,
+                    detectionMarginPercent = true,
+                    twist = false,
+                ),
                 minimumWallWidth = 74f,
                 firstLayerMinimumWallWidth = 116f,
                 printableOverhangs = PrintableOverhangSettings(
@@ -367,6 +373,10 @@ class SliceOptionsPersistenceTest {
         assertEquals("close_holes", restored.toNativeConfig().slicingMode)
         assertEquals(0.125f, restored.toNativeConfig().sliceClosingRadius)
         assertEquals(true, restored.toNativeConfig().preciseZHeight)
+        assertEquals(true, restored.toNativeConfig().holeToPolyhole)
+        assertEquals(6.5f, restored.toNativeConfig().holeToPolyholeThreshold)
+        assertEquals(true, restored.toNativeConfig().holeToPolyholeThresholdPercent)
+        assertEquals(false, restored.toNativeConfig().holeToPolyholeTwisted)
         assertEquals(
             PrintableOverhangSettings(enabled = true, maximumAngle = 63f, holeArea = 240f),
             restored.printableOverhangs,
@@ -453,6 +463,10 @@ class SliceOptionsPersistenceTest {
                 remove("makeOverhangPrintable")
                 remove("makeOverhangPrintableAngle")
                 remove("makeOverhangPrintableHoleSize")
+                remove("holeToPolyhole")
+                remove("holeToPolyholeThreshold")
+                remove("holeToPolyholeThresholdPercent")
+                remove("holeToPolyholeTwisted")
                 remove("slowDownLayers")
             }
         }
@@ -463,6 +477,11 @@ class SliceOptionsPersistenceTest {
         assertEquals(false, restored.toNativeConfig().makeOverhangPrintable)
         assertEquals(55f, restored.toNativeConfig().makeOverhangPrintableAngle)
         assertEquals(0f, restored.toNativeConfig().makeOverhangPrintableHoleSize)
+        assertEquals(PolyholeSettings(), restored.precision.polyholes)
+        assertEquals(false, restored.toNativeConfig().holeToPolyhole)
+        assertEquals(0.01f, restored.toNativeConfig().holeToPolyholeThreshold)
+        assertEquals(false, restored.toNativeConfig().holeToPolyholeThresholdPercent)
+        assertEquals(true, restored.toNativeConfig().holeToPolyholeTwisted)
         assertEquals(0, restored.gcodeSettings.slowDownLayers)
         assertEquals(0, restored.toNativeConfig().slowDownLayers)
     }
@@ -738,6 +757,12 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             mode = "close_holes",
             closingRadius = 0.125f,
             preciseZHeight = true,
+            polyholes = PolyholeSettings(
+                enabled = true,
+                detectionMargin = 6.5f,
+                detectionMarginPercent = true,
+                twist = false,
+            ),
             minimumWallWidth = 74f,
             firstLayerMinimumWallWidth = 116f,
             printableOverhangs = PrintableOverhangSettings(

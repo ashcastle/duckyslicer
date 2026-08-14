@@ -252,6 +252,10 @@ data class SliceConfig(
     @JvmField var slicingMode: String = "regular"
     @JvmField var sliceClosingRadius: Float = 0.049f
     @JvmField var preciseZHeight: Boolean = false
+    @JvmField var holeToPolyhole: Boolean = false
+    @JvmField var holeToPolyholeThreshold: Float = 0.01f
+    @JvmField var holeToPolyholeThresholdPercent: Boolean = false
+    @JvmField var holeToPolyholeTwisted: Boolean = true
     @JvmField var minimumWallWidth: Float = 85f
     @JvmField var firstLayerMinimumWallWidth: Float = 85f
     @JvmField var makeOverhangPrintable: Boolean = false

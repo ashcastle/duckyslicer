@@ -22,6 +22,10 @@ class ProfileStoreMigrationTest {
                 remove("makeOverhangPrintable")
                 remove("makeOverhangPrintableAngle")
                 remove("makeOverhangPrintableHoleSize")
+                remove("holeToPolyhole")
+                remove("holeToPolyholeThreshold")
+                remove("holeToPolyholeThresholdPercent")
+                remove("holeToPolyholeTwisted")
                 remove("slowDownLayers")
             }
             file.writeText(
@@ -45,6 +49,7 @@ class ProfileStoreMigrationTest {
             assertEquals("V3 Filament", restoredFilament.name)
             assertEquals("V3 Slicing", restoredSlicing.name)
             assertEquals(PrintableOverhangSettings(), restoredSlicing.printableOverhangs)
+            assertEquals(PolyholeSettings(), restoredSlicing.precision.polyholes)
             assertEquals(0, restoredSlicing.gcodeSettings.slowDownLayers)
             assertEquals(BrimEarSettings(), restoredSlicing.precision.brimEars)
         } finally {

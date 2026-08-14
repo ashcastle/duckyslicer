@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 44
+SCHEMA_VERSION = 45
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -562,6 +562,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     support_threshold_overlap, support_threshold_overlap_percent = float_or_percent(
         raw.get("support_threshold_overlap"), "50%"
     )
+    hole_to_polyhole_threshold, hole_to_polyhole_threshold_percent = float_or_percent(
+        raw.get("hole_to_polyhole_threshold"), 0.01
+    )
     legacy_wall_order = str(scalar(raw.get("wall_infill_order"), ""))
     resolved_wall_order = raw.get("wall_sequence", legacy_wall_order)
     wall_filament = integer(raw.get("wall_filament"), 1)
@@ -737,6 +740,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         ),
         "sliceClosingRadius": number(raw.get("slice_closing_radius"), 0.049),
         "preciseZHeight": boolean(raw.get("precise_z_height")),
+        "holeToPolyhole": boolean(raw.get("hole_to_polyhole")),
+        "holeToPolyholeThreshold": hole_to_polyhole_threshold,
+        "holeToPolyholeThresholdPercent": hole_to_polyhole_threshold_percent,
+        "holeToPolyholeTwisted": boolean(raw.get("hole_to_polyhole_twisted"), True),
         "seamPosition": enum_value(
             raw.get("seam_position"), {"nearest", "aligned", "aligned_back", "back", "random"}, "aligned"
         ),
@@ -1022,6 +1029,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0.001 <= profile["resolution"] <= 100
         and profile["slicingMode"] in {"regular", "even_odd", "close_holes"}
         and 0 <= profile["sliceClosingRadius"] <= 10
+        and 0 <= profile["holeToPolyholeThreshold"] <= 10
         and 0 <= profile["seamGap"] <= 1_000
         and profile["scarfSeamType"] in {"none", "external", "all"}
         and 0 <= profile["scarfAngleThreshold"] <= 180
