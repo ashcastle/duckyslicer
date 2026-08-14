@@ -2974,9 +2974,35 @@ private fun SlicingSettingsSheet(
                     )
                     SettingsSwitch(
                         label = stringResource(R.string.support_on_build_plate_only),
-                        checked = options.supportOnBuildPlateOnly,
+                        checked = options.supportCoverage.onBuildPlateOnly,
                         onCheckedChange = {
-                            onOptionsChanged(options.copy(supportOnBuildPlateOnly = it))
+                            onOptionsChanged(
+                                options.copy(
+                                    supportCoverage = options.supportCoverage.copy(onBuildPlateOnly = it),
+                                ),
+                            )
+                        },
+                    )
+                    SettingsSwitch(
+                        label = stringResource(R.string.support_critical_regions_only),
+                        checked = options.supportCoverage.criticalRegionsOnly,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    supportCoverage = options.supportCoverage.copy(criticalRegionsOnly = it),
+                                ),
+                            )
+                        },
+                    )
+                    SettingsSwitch(
+                        label = stringResource(R.string.support_remove_small_overhangs),
+                        checked = options.supportCoverage.removeSmallOverhangs,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    supportCoverage = options.supportCoverage.copy(removeSmallOverhangs = it),
+                                ),
+                            )
                         },
                     )
                     SettingsSwitch(

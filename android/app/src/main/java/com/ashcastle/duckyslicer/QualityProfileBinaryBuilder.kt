@@ -222,7 +222,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var spiralModeMaxXySmoothingPercent: Boolean = base.spiralModeMaxXySmoothingPercent
     private var spiralStartingFlowRatio: Float = base.spiralStartingFlowRatio
     private var spiralFinishingFlowRatio: Float = base.spiralFinishingFlowRatio
-    private var supportOnBuildPlateOnly: Boolean = base.supportOnBuildPlateOnly
+    private var supportOnBuildPlateOnly: Boolean = base.supportCoverage.onBuildPlateOnly
+    private var supportCriticalRegionsOnly: Boolean = base.supportCoverage.criticalRegionsOnly
+    private var supportRemoveSmallOverhangs: Boolean = base.supportCoverage.removeSmallOverhangs
     private var supportBasePatternSpacing: Float = base.supportBasePatternSpacing
     private var supportExpansion: Float = base.supportExpansion
     private var supportInterfaceLoopPattern: Boolean = base.supportInterfaceLoopPattern
@@ -495,6 +497,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         spiralStartingFlowRatio = input.readFloat()
         spiralFinishingFlowRatio = input.readFloat()
         supportOnBuildPlateOnly = input.readCatalogBoolean()
+        supportCriticalRegionsOnly = input.readCatalogBoolean()
+        supportRemoveSmallOverhangs = input.readCatalogBoolean()
         supportBasePatternSpacing = input.readFloat()
         supportExpansion = input.readFloat()
         supportInterfaceLoopPattern = input.readCatalogBoolean()
@@ -756,7 +760,11 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         spiralModeMaxXySmoothingPercent = spiralModeMaxXySmoothingPercent,
         spiralStartingFlowRatio = spiralStartingFlowRatio,
         spiralFinishingFlowRatio = spiralFinishingFlowRatio,
-        supportOnBuildPlateOnly = supportOnBuildPlateOnly,
+        supportCoverage = SupportCoverageSettings(
+            onBuildPlateOnly = supportOnBuildPlateOnly,
+            criticalRegionsOnly = supportCriticalRegionsOnly,
+            removeSmallOverhangs = supportRemoveSmallOverhangs,
+        ),
         supportBasePatternSpacing = supportBasePatternSpacing,
         supportExpansion = supportExpansion,
         supportInterfaceLoopPattern = supportInterfaceLoopPattern,
@@ -994,6 +1002,8 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("spiralStartingFlowRatio", BINARY_FLOAT),
     BinaryField("spiralFinishingFlowRatio", BINARY_FLOAT),
     BinaryField("supportOnBuildPlateOnly", BINARY_BOOL),
+    BinaryField("supportCriticalRegionsOnly", BINARY_BOOL),
+    BinaryField("supportRemoveSmallOverhangs", BINARY_BOOL),
     BinaryField("supportBasePatternSpacing", BINARY_FLOAT),
     BinaryField("supportExpansion", BINARY_FLOAT),
     BinaryField("supportInterfaceLoopPattern", BINARY_BOOL),

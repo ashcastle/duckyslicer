@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 33
+internal const val USER_PROFILE_SCHEMA_VERSION = 34
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -270,7 +270,7 @@ class ProfileStore private constructor(
             supportBasePattern = options.supportBasePattern,
             supportInterfacePattern = options.supportInterfacePattern,
             supportStyle = options.supportStyle,
-            supportOnBuildPlateOnly = options.supportOnBuildPlateOnly,
+            supportCoverage = options.supportCoverage,
             supportBasePatternSpacing = options.supportBasePatternSpacing,
             supportExpansion = options.supportExpansion,
             supportInterfaceLoopPattern = options.supportInterfaceLoopPattern,
@@ -608,7 +608,9 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("supportBasePattern", supportBasePattern)
     .put("supportInterfacePattern", supportInterfacePattern)
     .put("supportStyle", supportStyle)
-    .put("supportOnBuildPlateOnly", supportOnBuildPlateOnly)
+    .put("supportOnBuildPlateOnly", supportCoverage.onBuildPlateOnly)
+    .put("supportCriticalRegionsOnly", supportCoverage.criticalRegionsOnly)
+    .put("supportRemoveSmallOverhangs", supportCoverage.removeSmallOverhangs)
     .put("supportBasePatternSpacing", supportBasePatternSpacing)
     .put("supportExpansion", supportExpansion)
     .put("supportInterfaceLoopPattern", supportInterfaceLoopPattern)
@@ -931,7 +933,11 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         supportBasePattern = optString("supportBasePattern", "default"),
         supportInterfacePattern = optString("supportInterfacePattern", "auto"),
         supportStyle = optString("supportStyle", "default"),
-        supportOnBuildPlateOnly = optBoolean("supportOnBuildPlateOnly"),
+        supportCoverage = SupportCoverageSettings(
+            onBuildPlateOnly = optBoolean("supportOnBuildPlateOnly"),
+            criticalRegionsOnly = optBoolean("supportCriticalRegionsOnly"),
+            removeSmallOverhangs = optBoolean("supportRemoveSmallOverhangs", true),
+        ),
         supportBasePatternSpacing = optDouble("supportBasePatternSpacing", 2.5).toFloat(),
         supportExpansion = optDouble("supportExpansion", 0.0).toFloat(),
         supportInterfaceLoopPattern = optBoolean("supportInterfaceLoopPattern"),

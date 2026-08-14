@@ -424,6 +424,8 @@
     <string name="ironing_angle">아이러닝 각도</string>
     <string name="support_style">서포트 형태</string>
     <string name="support_on_build_plate_only">빌드 플레이트에만 생성</string>
+    <string name="support_critical_regions_only">핵심 영역에만 서포트 생성</string>
+    <string name="support_remove_small_overhangs">작은 오버행 무시</string>
     <string name="support_base_pattern_spacing">베이스 패턴 간격</string>
     <string name="support_expansion">일반 서포트 확장</string>
     <string name="support_interface_loop_pattern">인터페이스 루프 패턴</string>

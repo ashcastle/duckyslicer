@@ -314,6 +314,12 @@ data class IroningSettings(
     val angle: Float = -1f,
 )
 
+data class SupportCoverageSettings(
+    val onBuildPlateOnly: Boolean = false,
+    val criticalRegionsOnly: Boolean = false,
+    val removeSmallOverhangs: Boolean = true,
+)
+
 internal fun FilamentProfile.resolveRetraction(printer: PrinterProfile) = RetractionSettings(
     length = retractLength ?: printer.retractLength,
     speed = retractSpeed ?: printer.retractSpeed,
@@ -441,7 +447,7 @@ data class QualityProfile(
     val supportBasePattern: String = "default",
     val supportInterfacePattern: String = "auto",
     val supportStyle: String = "default",
-    val supportOnBuildPlateOnly: Boolean = false,
+    val supportCoverage: SupportCoverageSettings = SupportCoverageSettings(),
     val supportBasePatternSpacing: Float = 2.5f,
     val supportExpansion: Float = 0f,
     val supportInterfaceLoopPattern: Boolean = false,
@@ -627,7 +633,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 32,
+    val schemaVersion: Int = 33,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -756,7 +762,7 @@ data class SliceOptions(
     val supportBasePattern: String = quality.supportBasePattern,
     val supportInterfacePattern: String = quality.supportInterfacePattern,
     val supportStyle: String = quality.supportStyle,
-    val supportOnBuildPlateOnly: Boolean = quality.supportOnBuildPlateOnly,
+    val supportCoverage: SupportCoverageSettings = quality.supportCoverage,
     val supportBasePatternSpacing: Float = quality.supportBasePatternSpacing,
     val supportExpansion: Float = quality.supportExpansion,
     val supportInterfaceLoopPattern: Boolean = quality.supportInterfaceLoopPattern,
@@ -1101,7 +1107,7 @@ data class SliceOptions(
         supportBasePattern = profile.supportBasePattern,
         supportInterfacePattern = profile.supportInterfacePattern,
         supportStyle = profile.supportStyle,
-        supportOnBuildPlateOnly = profile.supportOnBuildPlateOnly,
+        supportCoverage = profile.supportCoverage,
         supportBasePatternSpacing = profile.supportBasePatternSpacing,
         supportExpansion = profile.supportExpansion,
         supportInterfaceLoopPattern = profile.supportInterfaceLoopPattern,
@@ -1342,7 +1348,6 @@ data class SliceOptions(
             supportBasePattern = supportBasePattern,
             supportInterfacePattern = supportInterfacePattern,
             supportStyle = supportStyle,
-            supportOnBuildPlateOnly = supportOnBuildPlateOnly,
             supportBasePatternSpacing = supportBasePatternSpacing,
             supportExpansion = supportExpansion,
             supportInterfaceLoopPattern = supportInterfaceLoopPattern,
@@ -1533,6 +1538,9 @@ data class SliceOptions(
             native.ironingInset = ironing.inset
             native.ironingSpeed = ironing.speed
             native.ironingAngle = ironing.angle
+            native.supportOnBuildPlateOnly = supportCoverage.onBuildPlateOnly
+            native.supportCriticalRegionsOnly = supportCoverage.criticalRegionsOnly
+            native.supportRemoveSmallOverhangs = supportCoverage.removeSmallOverhangs
             native.gcodeLabelObjects = gcodeSettings.labelObjects
             native.excludeObject = gcodeSettings.excludeObjects
             native.initialLayerTravelSpeed = gcodeSettings.initialLayerTravelSpeed

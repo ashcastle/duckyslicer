@@ -1060,6 +1060,11 @@ class NativeEngineInstrumentedTest {
                 supportBasePattern = "rectilinear-grid",
                 supportInterfacePattern = "rectilinear_interlaced",
                 supportStyle = "snug",
+                supportCoverage = SupportCoverageSettings(
+                    onBuildPlateOnly = true,
+                    criticalRegionsOnly = true,
+                    removeSmallOverhangs = false,
+                ),
                 supportFilament = 1,
                 supportInterfaceFilament = 1,
                 wipeTowerEnabled = true,
@@ -1213,6 +1218,14 @@ class NativeEngineInstrumentedTest {
         assertEquals("rectilinear-grid", restored.slicing.last().supportBasePattern)
         assertEquals("rectilinear_interlaced", restored.slicing.last().supportInterfacePattern)
         assertEquals("snug", restored.slicing.last().supportStyle)
+        assertEquals(
+            SupportCoverageSettings(
+                onBuildPlateOnly = true,
+                criticalRegionsOnly = true,
+                removeSmallOverhangs = false,
+            ),
+            restored.slicing.last().supportCoverage,
+        )
         assertEquals(1, restored.slicing.last().supportFilament)
         assertEquals(1, restored.slicing.last().supportInterfaceFilament)
         assertTrue(restored.slicing.last().wipeTowerEnabled)
@@ -1419,7 +1432,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(32, catalog.schemaVersion)
+        assertEquals(33, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1508,7 +1521,9 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.ironing.inset != 0f })
         assertTrue(catalog.slicing.all { it.ironing.angle in -1f..359f })
         assertTrue(catalog.slicing.any { it.supportBasePattern == "rectilinear-grid" })
-        assertTrue(catalog.slicing.any { it.supportOnBuildPlateOnly })
+        assertTrue(catalog.slicing.any { it.supportCoverage.onBuildPlateOnly })
+        assertTrue(catalog.slicing.any { it.supportCoverage.criticalRegionsOnly })
+        assertTrue(catalog.slicing.any { it.supportCoverage.removeSmallOverhangs })
         assertTrue(catalog.slicing.any { it.supportBasePatternSpacing != 2.5f })
         assertTrue(catalog.slicing.any { it.supportExpansion != 0f })
         assertTrue(catalog.slicing.any { it.supportInterfaceLoopPattern })
@@ -2446,7 +2461,11 @@ class NativeEngineInstrumentedTest {
                 supportBasePattern = "rectilinear-grid",
                 supportInterfacePattern = "rectilinear_interlaced",
                 supportStyle = "snug",
-                supportOnBuildPlateOnly = true,
+                supportCoverage = SupportCoverageSettings(
+                    onBuildPlateOnly = true,
+                    criticalRegionsOnly = true,
+                    removeSmallOverhangs = false,
+                ),
                 supportBasePatternSpacing = 3.2f,
                 supportExpansion = -0.4f,
                 supportInterfaceLoopPattern = true,
@@ -2667,6 +2686,8 @@ class NativeEngineInstrumentedTest {
         assertTrue("Support interface pattern must reach Orca", gcode.contains("; support_interface_pattern = rectilinear_interlaced"))
         assertTrue("Support style must reach Orca", gcode.contains("; support_style = snug"))
         assertTrue("Build-plate-only support must reach Orca", gcode.contains("; support_on_build_plate_only = 1"))
+        assertTrue("Critical-region support must reach Orca", gcode.contains("; support_critical_regions_only = 1"))
+        assertTrue("Small-overhang filtering must reach Orca", gcode.contains("; support_remove_small_overhang = 0"))
         assertTrue("Support base spacing must reach Orca", gcode.contains("; support_base_pattern_spacing = 3.2"))
         assertTrue("Support expansion must reach Orca", gcode.contains("; support_expansion = -0.4"))
         assertTrue("Support interface loops must reach Orca", gcode.contains("; support_interface_loop_pattern = 1"))

@@ -100,7 +100,6 @@ data class SliceConfig(
     @JvmField var supportBasePattern: String = "default",
     @JvmField var supportInterfacePattern: String = "auto",
     @JvmField var supportStyle: String = "default",
-    @JvmField var supportOnBuildPlateOnly: Boolean = false,
     @JvmField var supportBasePatternSpacing: Float = 2.5f,
     @JvmField var supportExpansion: Float = 0f,
     @JvmField var supportInterfaceLoopPattern: Boolean = false,
@@ -259,6 +258,9 @@ data class SliceConfig(
     @JvmField var ironingInset: Float = 0f
     @JvmField var ironingSpeed: Float = 20f
     @JvmField var ironingAngle: Float = -1f
+    @JvmField var supportOnBuildPlateOnly: Boolean = false
+    @JvmField var supportCriticalRegionsOnly: Boolean = false
+    @JvmField var supportRemoveSmallOverhangs: Boolean = true
     @JvmField var printSequence: String = "by layer"
     @JvmField var printOrder: String = "default"
     @JvmField var extruderClearanceRadius: Float = 40f

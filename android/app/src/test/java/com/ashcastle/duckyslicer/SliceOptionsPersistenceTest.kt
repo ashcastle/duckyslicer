@@ -137,7 +137,16 @@ class SliceOptionsPersistenceTest {
         assertEquals("rectilinear-grid", restored.supportBasePattern)
         assertEquals("rectilinear_interlaced", restored.supportInterfacePattern)
         assertEquals("snug", restored.supportStyle)
-        assertEquals(true, restored.supportOnBuildPlateOnly)
+        assertEquals(
+            SupportCoverageSettings(
+                onBuildPlateOnly = true,
+                criticalRegionsOnly = true,
+                removeSmallOverhangs = false,
+            ),
+            restored.supportCoverage,
+        )
+        assertEquals(true, restored.toNativeConfig().supportCriticalRegionsOnly)
+        assertEquals(false, restored.toNativeConfig().supportRemoveSmallOverhangs)
         assertEquals(3.2f, restored.supportBasePatternSpacing)
         assertEquals(-0.4f, restored.supportExpansion)
         assertEquals(true, restored.supportInterfaceLoopPattern)
@@ -464,7 +473,11 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         supportBasePattern = "rectilinear-grid",
         supportInterfacePattern = "rectilinear_interlaced",
         supportStyle = "snug",
-        supportOnBuildPlateOnly = true,
+        supportCoverage = SupportCoverageSettings(
+            onBuildPlateOnly = true,
+            criticalRegionsOnly = true,
+            removeSmallOverhangs = false,
+        ),
         supportBasePatternSpacing = 3.2f,
         supportExpansion = -0.4f,
         supportInterfaceLoopPattern = true,

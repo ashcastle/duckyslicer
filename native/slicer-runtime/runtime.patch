@@ -174,7 +174,7 @@ index 116a4a85..6b3048bc 100644
      // Temperature
      int nozzle_temp = 210;
      int bed_temp = 60;
-@@ -58,19 +141,139 @@ struct SliceConfig {
+@@ -58,19 +141,141 @@ struct SliceConfig {
  
      // Support
      bool support_enabled = false;
@@ -192,6 +192,8 @@ index 116a4a85..6b3048bc 100644
 +    std::string support_interface_pattern = "auto";
 +    std::string support_style = "default";
 +    bool support_on_build_plate_only = false;
++    bool support_critical_regions_only = false;
++    bool support_remove_small_overhangs = true;
 +    float support_base_pattern_spacing = 2.5f;
 +    float support_expansion = 0.0f;
 +    bool support_interface_loop_pattern = false;
@@ -747,7 +749,7 @@ index d93efb7d..fdf9a877 100644
      config.travel_speed = getFloat("travelSpeed");
      config.first_layer_speed = getFloat("firstLayerSpeed");
  
-@@ -108,15 +185,132 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -108,15 +185,134 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.support_enabled = getBool("supportEnabled");
      config.support_type = getString("supportType");
      config.support_angle = getFloat("supportAngle");
@@ -762,6 +764,8 @@ index d93efb7d..fdf9a877 100644
 +    config.support_interface_pattern = getString("supportInterfacePattern");
 +    config.support_style = getString("supportStyle");
 +    config.support_on_build_plate_only = getBool("supportOnBuildPlateOnly");
++    config.support_critical_regions_only = getBool("supportCriticalRegionsOnly");
++    config.support_remove_small_overhangs = getBool("supportRemoveSmallOverhangs");
 +    config.support_base_pattern_spacing = getFloat("supportBasePatternSpacing");
 +    config.support_expansion = getFloat("supportExpansion");
 +    config.support_interface_loop_pattern = getBool("supportInterfaceLoopPattern");
@@ -1044,7 +1048,7 @@ index d93efb7d..fdf9a877 100644
      setFloat("travelSpeed", config.travel_speed);
      setFloat("firstLayerSpeed", config.first_layer_speed);
      setInt("nozzleTemp", config.nozzle_temp);
-@@ -247,13 +566,130 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -247,13 +566,132 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setBool("supportEnabled", config.support_enabled);
      setString("supportType", config.support_type);
      setFloat("supportAngle", config.support_angle);
@@ -1059,6 +1063,8 @@ index d93efb7d..fdf9a877 100644
 +    setString("supportInterfacePattern", config.support_interface_pattern);
 +    setString("supportStyle", config.support_style);
 +    setBool("supportOnBuildPlateOnly", config.support_on_build_plate_only);
++    setBool("supportCriticalRegionsOnly", config.support_critical_regions_only);
++    setBool("supportRemoveSmallOverhangs", config.support_remove_small_overhangs);
 +    setFloat("supportBasePatternSpacing", config.support_base_pattern_spacing);
 +    setFloat("supportExpansion", config.support_expansion);
 +    setBool("supportInterfaceLoopPattern", config.support_interface_loop_pattern);
@@ -1714,7 +1720,7 @@ index 8d61c9cf..f285d044 100644
      // F91 (2026-05-25) — SliceConfig user overrides for the per-filament tuning keys
      // that applyConfigToPrusa doesn't otherwise touch. When the user sets a value via the
      // Filament Library, populate dpc here so the slicer picks it up. When unset, the
-@@ -568,31 +764,73 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -568,31 +764,75 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          dpc.set_key_value("filament_cost", new Slic3r::ConfigOptionFloats(std::move(v)));
      }
  
@@ -1753,6 +1759,8 @@ index 8d61c9cf..f285d044 100644
 +    dpc.set_deserialize_strict("support_interface_pattern", config.support_interface_pattern);
 +    dpc.set_deserialize_strict("support_style", config.support_style);
 +    dpc.set_key_value("support_on_build_plate_only", new Slic3r::ConfigOptionBool(config.support_on_build_plate_only));
++    dpc.set_key_value("support_critical_regions_only", new Slic3r::ConfigOptionBool(config.support_critical_regions_only));
++    dpc.set_key_value("support_remove_small_overhang", new Slic3r::ConfigOptionBool(config.support_remove_small_overhangs));
 +    dpc.set_key_value("support_base_pattern_spacing", new Slic3r::ConfigOptionFloat(config.support_base_pattern_spacing));
 +    dpc.set_key_value("support_expansion", new Slic3r::ConfigOptionFloat(config.support_expansion));
 +    dpc.set_key_value("support_interface_loop_pattern", new Slic3r::ConfigOptionBool(config.support_interface_loop_pattern));
