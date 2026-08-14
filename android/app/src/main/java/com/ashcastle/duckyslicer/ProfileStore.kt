@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 49
+internal const val USER_PROFILE_SCHEMA_VERSION = 50
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -254,6 +254,14 @@ class ProfileStore private constructor(
             infillAnchorPercent = options.infillAnchorPercent,
             infillAnchorMax = options.infillAnchorMax,
             infillAnchorMaxPercent = options.infillAnchorMaxPercent,
+            skeletonInfillDensity = options.quality.skeletonInfillDensity,
+            skinInfillDensity = options.quality.skinInfillDensity,
+            skinInfillDepth = options.quality.skinInfillDepth,
+            infillLockDepth = options.quality.infillLockDepth,
+            skinInfillLineWidth = options.quality.skinInfillLineWidth,
+            skinInfillLineWidthPercent = options.quality.skinInfillLineWidthPercent,
+            skeletonInfillLineWidth = options.quality.skeletonInfillLineWidth,
+            skeletonInfillLineWidthPercent = options.quality.skeletonInfillLineWidthPercent,
             gapFillTarget = options.gapFillTarget,
             filterOutGapFill = options.filterOutGapFill,
             reduceCrossingWall = options.reduceCrossingWall,
@@ -612,6 +620,14 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("infillAnchorPercent", infillAnchorPercent)
     .put("infillAnchorMax", infillAnchorMax)
     .put("infillAnchorMaxPercent", infillAnchorMaxPercent)
+    .put("skeletonInfillDensity", skeletonInfillDensity)
+    .put("skinInfillDensity", skinInfillDensity)
+    .put("skinInfillDepth", skinInfillDepth)
+    .put("infillLockDepth", infillLockDepth)
+    .put("skinInfillLineWidth", skinInfillLineWidth)
+    .put("skinInfillLineWidthPercent", skinInfillLineWidthPercent)
+    .put("skeletonInfillLineWidth", skeletonInfillLineWidth)
+    .put("skeletonInfillLineWidthPercent", skeletonInfillLineWidthPercent)
     .put("gapFillTarget", gapFillTarget)
     .put("filterOutGapFill", filterOutGapFill)
     .put("reduceCrossingWall", reduceCrossingWall)
@@ -1003,6 +1019,14 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         infillAnchorPercent = optBoolean("infillAnchorPercent", true),
         infillAnchorMax = optDouble("infillAnchorMax", 20.0).toFloat(),
         infillAnchorMaxPercent = optBoolean("infillAnchorMaxPercent"),
+        skeletonInfillDensity = optDouble("skeletonInfillDensity", 25.0).toFloat(),
+        skinInfillDensity = optDouble("skinInfillDensity", 25.0).toFloat(),
+        skinInfillDepth = optDouble("skinInfillDepth", 2.0).toFloat(),
+        infillLockDepth = optDouble("infillLockDepth", 1.0).toFloat(),
+        skinInfillLineWidth = optDouble("skinInfillLineWidth", 100.0).toFloat(),
+        skinInfillLineWidthPercent = optBoolean("skinInfillLineWidthPercent", true),
+        skeletonInfillLineWidth = optDouble("skeletonInfillLineWidth", 100.0).toFloat(),
+        skeletonInfillLineWidthPercent = optBoolean("skeletonInfillLineWidthPercent", true),
         gapFillTarget = optString("gapFillTarget", "nowhere"),
         filterOutGapFill = optDouble("filterOutGapFill", 0.0).toFloat(),
         reduceCrossingWall = optBoolean("reduceCrossingWall"),

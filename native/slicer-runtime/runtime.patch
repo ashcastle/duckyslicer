@@ -93,7 +93,7 @@ diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
 index 116a4a85..6b3048bc 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -40,14 +40,110 @@ struct SliceConfig {
+@@ -40,14 +40,118 @@ struct SliceConfig {
      int perimeters = 2;
      int top_solid_layers = 5;
      int bottom_solid_layers = 4;
@@ -118,6 +118,14 @@ index 116a4a85..6b3048bc 100644
 +    bool infill_anchor_percent = true;
 +    float infill_anchor_max = 20.0f;
 +    bool infill_anchor_max_percent = false;
++    float skeleton_infill_density = 25.0f;
++    float skin_infill_density = 25.0f;
++    float skin_infill_depth = 2.0f;
++    float infill_lock_depth = 1.0f;
++    float skin_infill_line_width = 100.0f;
++    bool skin_infill_line_width_percent = true;
++    float skeleton_infill_line_width = 100.0f;
++    bool skeleton_infill_line_width_percent = true;
 +    std::string gap_fill_target = "nowhere";
 +    float filter_out_gap_fill = 0.0f;
 +    bool reduce_crossing_wall = false;
@@ -204,7 +212,7 @@ index 116a4a85..6b3048bc 100644
      // Temperature
      int nozzle_temp = 210;
      int bed_temp = 60;
-@@ -58,19 +141,166 @@ struct SliceConfig {
+@@ -58,19 +149,166 @@ struct SliceConfig {
  
      // Support
      bool support_enabled = false;
@@ -374,7 +382,7 @@ index 116a4a85..6b3048bc 100644
      float max_print_height = 270.0f;
  
      // Nozzle
-@@ -86,18 +282,99 @@ struct SliceConfig {
+@@ -86,18 +290,99 @@ struct SliceConfig {
      std::vector<int> extruder_temps;           // per-extruder nozzle temps
      std::vector<float> extruder_retract_length; // per-extruder retraction
      std::vector<float> extruder_retract_speed;  // per-extruder retraction speed
@@ -474,7 +482,7 @@ index 116a4a85..6b3048bc 100644
  
      // F91 (2026-05-25): per-extruder filament tuning sourced from the user's filament
      // library on the Kotlin side at slice time. Empty vector = "user has not set this
-@@ -124,6 +371,9 @@ struct SliceConfig {
+@@ -124,6 +379,9 @@ struct SliceConfig {
  
      // Full-spectrum mixed-filament recipe (stage 2; serialized MixedFilamentManager output)
      std::string mixed_filament_definitions = "";
@@ -484,7 +492,7 @@ index 116a4a85..6b3048bc 100644
  };
  
  // ---- Model Info ----
-@@ -259,6 +509,12 @@ public:
+@@ -259,6 +517,12 @@ public:
      // positions.size() / 2 must equal g_model.objects.size().
      bool setObjectPositions(const std::vector<std::pair<float, float>>& positions);
  
@@ -497,7 +505,7 @@ index 116a4a85..6b3048bc 100644
      // F66 — returns flat [minX0, minY0, minX1, minY1, ...] world-space AABB
      // min for each object, computed from instance[0]'s full transform applied
      // to each model-part volume's mesh bounding box. The values are exactly
-@@ -285,6 +541,12 @@ public:
+@@ -285,6 +549,12 @@ public:
      struct SplitResult { int removedIdx; int addedCount; };
      std::optional<SplitResult> splitObject(int objIdx);
  
@@ -753,7 +761,7 @@ diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_
 index d93efb7d..fdf9a877 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -92,10 +92,98 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -92,10 +92,106 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.perimeters = getInt("perimeters");
      config.top_solid_layers = getInt("topSolidLayers");
      config.bottom_solid_layers = getInt("bottomSolidLayers");
@@ -778,6 +786,14 @@ index d93efb7d..fdf9a877 100644
 +    config.infill_anchor_percent = getBool("infillAnchorPercent");
 +    config.infill_anchor_max = getFloat("infillAnchorMax");
 +    config.infill_anchor_max_percent = getBool("infillAnchorMaxPercent");
++    config.skeleton_infill_density = getFloat("skeletonInfillDensity");
++    config.skin_infill_density = getFloat("skinInfillDensity");
++    config.skin_infill_depth = getFloat("skinInfillDepth");
++    config.infill_lock_depth = getFloat("infillLockDepth");
++    config.skin_infill_line_width = getFloat("skinInfillLineWidth");
++    config.skin_infill_line_width_percent = getBool("skinInfillLineWidthPercent");
++    config.skeleton_infill_line_width = getFloat("skeletonInfillLineWidth");
++    config.skeleton_infill_line_width_percent = getBool("skeletonInfillLineWidthPercent");
 +    config.gap_fill_target = getString("gapFillTarget");
 +    config.filter_out_gap_fill = getFloat("filterOutGapFill");
 +    config.reduce_crossing_wall = getBool("reduceCrossingWall");
@@ -852,7 +868,7 @@ index d93efb7d..fdf9a877 100644
 +    config.travel_speed_z = getFloat("travelSpeedZ");
      config.first_layer_speed = getFloat("firstLayerSpeed");
  
-@@ -108,15 +185,159 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -108,15 +193,159 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.support_enabled = getBool("supportEnabled");
      config.support_type = getString("supportType");
      config.support_angle = getFloat("supportAngle");
@@ -1012,7 +1028,7 @@ index d93efb7d..fdf9a877 100644
      config.max_print_height = getFloat("maxPrintHeight");
  
      config.nozzle_diameter = getFloat("nozzleDiameter");
-@@ -129,14 +316,97 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -129,14 +324,97 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.extruder_temps = getIntArray("extruderTemps");
      config.extruder_retract_length = getFloatArray("extruderRetractLength");
      config.extruder_retract_speed = getFloatArray("extruderRetractSpeed");
@@ -1110,7 +1126,7 @@ index d93efb7d..fdf9a877 100644
  
      // F91: per-extruder filament tuning from the user's filament library.
      config.filament_flow_ratios = getFloatArray("filamentFlowRatios");
-@@ -156,6 +394,10 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -156,6 +402,10 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.filament_bed_temp_initial_layers = getIntArray("filamentBedTempInitialLayers");
      config.filament_costs = getFloatArray("filamentCosts");
      config.mixed_filament_definitions = getString("mixedFilamentDefinitions");
@@ -1121,7 +1137,7 @@ index d93efb7d..fdf9a877 100644
  
      env->DeleteLocalRef(cls);
      return config;
-@@ -235,9 +477,97 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -235,9 +485,105 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setInt("perimeters", config.perimeters);
      setInt("topSolidLayers", config.top_solid_layers);
      setInt("bottomSolidLayers", config.bottom_solid_layers);
@@ -1146,6 +1162,14 @@ index d93efb7d..fdf9a877 100644
 +    setBool("infillAnchorPercent", config.infill_anchor_percent);
 +    setFloat("infillAnchorMax", config.infill_anchor_max);
 +    setBool("infillAnchorMaxPercent", config.infill_anchor_max_percent);
++    setFloat("skeletonInfillDensity", config.skeleton_infill_density);
++    setFloat("skinInfillDensity", config.skin_infill_density);
++    setFloat("skinInfillDepth", config.skin_infill_depth);
++    setFloat("infillLockDepth", config.infill_lock_depth);
++    setFloat("skinInfillLineWidth", config.skin_infill_line_width);
++    setBool("skinInfillLineWidthPercent", config.skin_infill_line_width_percent);
++    setFloat("skeletonInfillLineWidth", config.skeleton_infill_line_width);
++    setBool("skeletonInfillLineWidthPercent", config.skeleton_infill_line_width_percent);
 +    setString("gapFillTarget", config.gap_fill_target);
 +    setFloat("filterOutGapFill", config.filter_out_gap_fill);
 +    setBool("reduceCrossingWall", config.reduce_crossing_wall);
@@ -1219,7 +1243,7 @@ index d93efb7d..fdf9a877 100644
 +    setFloat("travelSpeedZ", config.travel_speed_z);
      setFloat("firstLayerSpeed", config.first_layer_speed);
      setInt("nozzleTemp", config.nozzle_temp);
-@@ -247,13 +568,157 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -247,13 +584,157 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setBool("supportEnabled", config.support_enabled);
      setString("supportType", config.support_type);
      setFloat("supportAngle", config.support_angle);
@@ -1377,7 +1401,7 @@ index d93efb7d..fdf9a877 100644
      setFloat("maxPrintHeight", config.max_print_height);
      setFloat("nozzleDiameter", config.nozzle_diameter);
      setFloat("filamentDiameter", config.filament_diameter);
-@@ -265,12 +694,98 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -265,12 +710,98 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setIntArray("extruderTemps", config.extruder_temps);
      setFloatArray("extruderRetractLength", config.extruder_retract_length);
      setFloatArray("extruderRetractSpeed", config.extruder_retract_speed);
@@ -1504,7 +1528,7 @@ index 8d61c9cf..f285d044 100644
  #include "libslic3r/clipper.hpp"
  
  // =============================================================================
-@@ -183,84 +186,190 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -183,84 +186,198 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
      dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
      dpc.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(config.bottom_solid_layers));
@@ -1552,6 +1576,14 @@ index 8d61c9cf..f285d044 100644
 +        config.infill_anchor, config.infill_anchor_percent));
 +    dpc.set_key_value("infill_anchor_max", new Slic3r::ConfigOptionFloatOrPercent(
 +        config.infill_anchor_max, config.infill_anchor_max_percent));
++    dpc.set_key_value("skeleton_infill_density", new Slic3r::ConfigOptionPercent(config.skeleton_infill_density));
++    dpc.set_key_value("skin_infill_density", new Slic3r::ConfigOptionPercent(config.skin_infill_density));
++    dpc.set_key_value("skin_infill_depth", new Slic3r::ConfigOptionFloat(config.skin_infill_depth));
++    dpc.set_key_value("infill_lock_depth", new Slic3r::ConfigOptionFloat(config.infill_lock_depth));
++    dpc.set_key_value("skin_infill_line_width", new Slic3r::ConfigOptionFloatOrPercent(
++        config.skin_infill_line_width, config.skin_infill_line_width_percent));
++    dpc.set_key_value("skeleton_infill_line_width", new Slic3r::ConfigOptionFloatOrPercent(
++        config.skeleton_infill_line_width, config.skeleton_infill_line_width_percent));
 +    dpc.set_deserialize_strict("gap_fill_target", config.gap_fill_target);
 +    dpc.set_key_value("filter_out_gap_fill", new Slic3r::ConfigOptionFloat(config.filter_out_gap_fill));
 +    dpc.set_key_value("reduce_crossing_wall", new Slic3r::ConfigOptionBool(config.reduce_crossing_wall));
@@ -1761,7 +1793,7 @@ index 8d61c9cf..f285d044 100644
  
      // Multi-extruder setup
      int n_ext = std::max(1, config.extruder_count);
-@@ -274,6 +372,33 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -274,6 +380,33 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      std::vector<int> bed_temps(n_ext, config.bed_temp);
      std::vector<double> retract_len(n_ext, config.retract_length);
      std::vector<double> retract_spd(n_ext, config.retract_speed);
@@ -1795,7 +1827,7 @@ index 8d61c9cf..f285d044 100644
  
      // Override with per-extruder values if provided.
      // When the array covers all extruders, use ALL values (including 0 for unused slots)
-@@ -333,36 +458,48 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -333,36 +466,48 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      // ship 10mm bowden defaults that cause heat-creep clogs.
      dpc.set_key_value("retraction_length", new Slic3r::ConfigOptionFloats(retract_len));
      dpc.set_key_value("retraction_speed", new Slic3r::ConfigOptionFloats(retract_spd));
@@ -1869,7 +1901,7 @@ index 8d61c9cf..f285d044 100644
  
      // Nozzle/filament diameter (per-extruder — same key names)
      dpc.set_key_value("nozzle_diameter", new Slic3r::ConfigOptionFloats(nozzle_diameters));
-@@ -408,6 +560,26 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -408,6 +568,26 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          }
      }
  
@@ -1896,7 +1928,7 @@ index 8d61c9cf..f285d044 100644
      // Extruder offsets — all (0,0) for Snapmaker U1 (firmware handles offsets).
      // MUST be sized to match extruder count; the default is a single entry, and
      // WipeTowerIntegration copies the raw vector then indexes by tool ID — OOB
-@@ -461,18 +600,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -461,18 +608,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      applyPerExtFloats("slow_down_layer_time",    config.filament_slow_down_layer_times, 4.0);
      applyPerExtFloats("slow_down_min_speed",     config.filament_slow_down_min_speeds, 20.0);
  
@@ -1918,7 +1950,7 @@ index 8d61c9cf..f285d044 100644
  
      // Line widths — must be set explicitly.
      // When left at 0 (absolute), MultiMaterialSegmentation calls
-@@ -480,32 +610,112 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -480,32 +618,112 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      // the literal 0, not the auto-resolved value, causing Flow::rounded_rectangle_extrusion_spacing()
      // to throw FlowErrorNegativeSpacing on multi-color models.
      double nd = config.nozzle_diameter;
@@ -2055,7 +2087,7 @@ index 8d61c9cf..f285d044 100644
      // F91 (2026-05-25) — SliceConfig user overrides for the per-filament tuning keys
      // that applyConfigToPrusa doesn't otherwise touch. When the user sets a value via the
      // Filament Library, populate dpc here so the slicer picks it up. When unset, the
-@@ -568,31 +764,110 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -568,31 +772,110 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          dpc.set_key_value("filament_cost", new Slic3r::ConfigOptionFloats(std::move(v)));
      }
  
@@ -2190,7 +2222,7 @@ index 8d61c9cf..f285d044 100644
          dpc.set_key_value("idle_temperature", new Slic3r::ConfigOptionInts(std::vector<int>(n_ext, 0)));
      }
  
-@@ -646,16 +884,46 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -646,16 +892,46 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      // Skirt/Brim (same key names)
      dpc.set_key_value("skirt_loops", new Slic3r::ConfigOptionInt(config.skirt_loops));
      dpc.set_key_value("skirt_distance", new Slic3r::ConfigOptionFloat(config.skirt_distance));
@@ -2243,7 +2275,7 @@ index 8d61c9cf..f285d044 100644
      if (n_ext > 1 && config.wipe_tower_enabled) {
          dpc.set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(true));
          dpc.set_key_value("wipe_tower_x", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, config.wipe_tower_x)));
-@@ -680,11 +926,6 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -680,11 +934,6 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          }
      }
  
@@ -2255,7 +2287,7 @@ index 8d61c9cf..f285d044 100644
      // Full-spectrum mixed-filament (stage 2): when the caller passed a
      // recipe via SliceConfig.mixed_filament_definitions, write it into
      // the engine's config key. Empty (default) is a no-op — engine
-@@ -905,6 +1146,12 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -905,6 +1154,12 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
                      "sparse_infill_pattern",
                      // Wall generator type (classic vs arachne variable-width)
                      "wall_generator",
@@ -2268,7 +2300,7 @@ index 8d61c9cf..f285d044 100644
                      // Retraction reduction for infill moves
                      "reduce_infill_retraction",
                      // Line widths (from embedded profile)
-@@ -1124,8 +1371,17 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -1124,8 +1379,17 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
                  pad_floats("filament_toolchange_delay");
  
                  // Retraction arrays (set by applyConfigToPrusa from JNI config)
@@ -2288,7 +2320,7 @@ index 8d61c9cf..f285d044 100644
                  pad_floats("retract_length_toolchange");
  
                  // Extruder offsets
-@@ -1191,7 +1447,7 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -1191,7 +1455,7 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
              obj->ensure_on_bed();
          }
  
@@ -2297,7 +2329,7 @@ index 8d61c9cf..f285d044 100644
          // This is a safety net for cases where setModelInstances was not called
          // (e.g. direct native API use, integration tests).  The ViewModel always
          // calls setModelInstances before slicing, so for normal app use this is
-@@ -1205,7 +1461,10 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -1205,7 +1469,10 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
          // 2 mm absorbs that without losing the safety property: a model
          // that is genuinely off-bed will be off by tens of millimetres.
          {
@@ -2309,7 +2341,7 @@ index 8d61c9cf..f285d044 100644
              const double EDGE_TOL = 2.0;
              Slic3r::BoundingBoxf3 worldBB;
              for (auto* obj : model.objects) {
-@@ -1214,12 +1473,14 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -1214,12 +1481,14 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
              if (worldBB.defined) {
                  double xMin = worldBB.min.x(), xMax = worldBB.max.x();
                  double yMin = worldBB.min.y(), yMax = worldBB.max.y();
@@ -2328,7 +2360,7 @@ index 8d61c9cf..f285d044 100644
                      for (auto* obj : model.objects) {
                          for (auto* inst : obj->instances) {
                              auto offset = inst->get_offset();
-@@ -1308,6 +1569,12 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -1308,6 +1577,12 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
              auto validation = print.validate();
              if (!validation.string.empty()) {
                  SAPIL_LOGW("Print validation: %s", validation.string.c_str());
@@ -2341,7 +2373,7 @@ index 8d61c9cf..f285d044 100644
              } else {
                  SAPIL_LOGI("Print validation: OK");
              }
-@@ -1375,6 +1642,28 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -1375,6 +1650,28 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
          // Generate G-code — use the same directory as the loaded model
          extern std::string getFilesDir();
          std::string output_path = getFilesDir() + "/output.gcode";
@@ -2370,7 +2402,7 @@ index 8d61c9cf..f285d044 100644
          // OrcaSlicer dereferences result without null check, so provide a real object
          Slic3r::GCodeProcessorResult gcode_result;
          g_active_print.store(&print, std::memory_order_release);
-@@ -1383,12 +1672,15 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -1383,12 +1680,15 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
  
          if (progress) progress(95, "Reading results");
  

@@ -316,6 +316,14 @@
     <string name="infill_honeycomb">Honeycomb</string>
     <string name="infill_rectilinear">Rectilinear</string>
     <string name="infill_aligned_rectilinear">Aligned rectilinear</string>
+    <string name="infill_locked_zag">Locked Zig Zag</string>
+    <string name="locked_zag_infill">Locked Zig Zag</string>
+    <string name="skin_infill_density">Skin infill density</string>
+    <string name="skeleton_infill_density">Skeleton infill density</string>
+    <string name="skin_infill_depth">Skin infill depth</string>
+    <string name="infill_lock_depth">Infill lock depth</string>
+    <string name="skin_infill_line_width">Skin line width</string>
+    <string name="skeleton_infill_line_width">Skeleton line width</string>
     <string name="speed">Speed</string>
     <string name="print_speed">Outer wall speed</string>
     <string name="inner_wall_speed">Inner wall speed</string>

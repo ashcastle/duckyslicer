@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 48
+SCHEMA_VERSION = 49
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -543,6 +543,12 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     infill_anchor_max, infill_anchor_max_percent = float_or_percent(
         first_present(raw, ["infill_anchor_max", "sparse_infill_anchor_max"], 20), 20
     )
+    skin_infill_line_width, skin_infill_line_width_percent = float_or_percent(
+        raw.get("skin_infill_line_width"), "100%"
+    )
+    skeleton_infill_line_width, skeleton_infill_line_width_percent = float_or_percent(
+        raw.get("skeleton_infill_line_width"), "100%"
+    )
     max_travel_detour_distance, max_travel_detour_distance_percent = float_or_percent(
         raw.get("max_travel_detour_distance"), 0
     )
@@ -672,6 +678,14 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "infillAnchorPercent": infill_anchor_percent,
         "infillAnchorMax": infill_anchor_max,
         "infillAnchorMaxPercent": infill_anchor_max_percent,
+        "skeletonInfillDensity": number(raw.get("skeleton_infill_density"), 25),
+        "skinInfillDensity": number(raw.get("skin_infill_density"), 25),
+        "skinInfillDepth": number(raw.get("skin_infill_depth"), 2),
+        "infillLockDepth": number(raw.get("infill_lock_depth"), 1),
+        "skinInfillLineWidth": skin_infill_line_width,
+        "skinInfillLineWidthPercent": skin_infill_line_width_percent,
+        "skeletonInfillLineWidth": skeleton_infill_line_width,
+        "skeletonInfillLineWidthPercent": skeleton_infill_line_width_percent,
         "gapFillTarget": enum_value(
             raw.get("gap_fill_target"), {"everywhere", "topbottom", "nowhere"}, "nowhere"
         ),
@@ -1065,6 +1079,16 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and all(
             0 <= profile[key] <= 1_000
             for key in ["infillAnchor", "infillAnchorMax"]
+        )
+        and all(
+            0 <= profile[key] <= 100
+            for key in ["skeletonInfillDensity", "skinInfillDensity", "skinInfillDepth", "infillLockDepth"]
+        )
+        and 0 <= profile["skinInfillLineWidth"] <= (
+            1_000 if profile["skinInfillLineWidthPercent"] else 10
+        )
+        and 0 <= profile["skeletonInfillLineWidth"] <= (
+            1_000 if profile["skeletonInfillLineWidthPercent"] else 10
         )
         and all(abs(profile[key]) <= 2 for key in ["xyHoleCompensation", "xyContourCompensation"])
         and 0 <= profile["elephantFootCompensation"] <= 2

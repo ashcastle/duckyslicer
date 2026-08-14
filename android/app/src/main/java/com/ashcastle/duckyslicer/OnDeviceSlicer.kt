@@ -641,6 +641,14 @@ data class QualityProfile(
     val infillAnchorPercent: Boolean = true,
     val infillAnchorMax: Float = 20f,
     val infillAnchorMaxPercent: Boolean = false,
+    val skeletonInfillDensity: Float = 25f,
+    val skinInfillDensity: Float = 25f,
+    val skinInfillDepth: Float = 2f,
+    val infillLockDepth: Float = 1f,
+    val skinInfillLineWidth: Float = 100f,
+    val skinInfillLineWidthPercent: Boolean = true,
+    val skeletonInfillLineWidth: Float = 100f,
+    val skeletonInfillLineWidthPercent: Boolean = true,
     val gapFillTarget: String = "nowhere",
     val filterOutGapFill: Float = 0f,
     val reduceCrossingWall: Boolean = false,
@@ -853,7 +861,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 48,
+    val schemaVersion: Int = 49,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1740,6 +1748,14 @@ data class SliceOptions(
             filamentNozzleTempInitialLayers = nativeFilaments.map(FilamentProfile::firstLayerNozzleTemp).toIntArray(),
             filamentBedTempInitialLayers = nativeFilaments.map(FilamentProfile::firstLayerBedTemp).toIntArray(),
         ).also { native ->
+            native.skeletonInfillDensity = quality.skeletonInfillDensity
+            native.skinInfillDensity = quality.skinInfillDensity
+            native.skinInfillDepth = quality.skinInfillDepth
+            native.infillLockDepth = quality.infillLockDepth
+            native.skinInfillLineWidth = quality.skinInfillLineWidth
+            native.skinInfillLineWidthPercent = quality.skinInfillLineWidthPercent
+            native.skeletonInfillLineWidth = quality.skeletonInfillLineWidth
+            native.skeletonInfillLineWidthPercent = quality.skeletonInfillLineWidthPercent
             native.fuzzySkinType = fuzzySkin.type
             native.fuzzySkinFirstLayer = fuzzySkin.firstLayer
             native.fuzzySkinPointDistance = fuzzySkin.pointDistance

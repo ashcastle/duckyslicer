@@ -198,6 +198,12 @@ internal object ProfileValidation {
             profile.minimumSparseInfillArea in 0f..1_000_000f &&
             profile.infillAnchor in 0f..1_000f &&
             profile.infillAnchorMax in 0f..1_000f &&
+            profile.skeletonInfillDensity in 0f..100f &&
+            profile.skinInfillDensity in 0f..100f &&
+            profile.skinInfillDepth in 0f..100f &&
+            profile.infillLockDepth in 0f..100f &&
+            lineWidthIsValid(profile.skinInfillLineWidth, profile.skinInfillLineWidthPercent) &&
+            lineWidthIsValid(profile.skeletonInfillLineWidth, profile.skeletonInfillLineWidthPercent) &&
             profile.gapFillTarget in setOf("everywhere", "topbottom", "nowhere") &&
             profile.filterOutGapFill in 0f..1_000_000f &&
             profile.supportType in setOf(
@@ -351,6 +357,9 @@ internal object ProfileValidation {
         value in 0f..(if (percent) 1_000f else 100_000f)
 
     private fun combinationHeightIsValid(value: Float, percent: Boolean): Boolean =
+        value in 0f..(if (percent) 1_000f else 10f)
+
+    private fun lineWidthIsValid(value: Float, percent: Boolean): Boolean =
         value in 0f..(if (percent) 1_000f else 10f)
 
     private fun Float?.isNullOrIn(range: ClosedFloatingPointRange<Float>): Boolean =

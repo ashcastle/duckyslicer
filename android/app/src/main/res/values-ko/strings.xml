@@ -316,6 +316,14 @@
     <string name="infill_honeycomb">허니컴</string>
     <string name="infill_rectilinear">직선</string>
     <string name="infill_aligned_rectilinear">정렬 직선</string>
+    <string name="infill_locked_zag">잠금 지그재그</string>
+    <string name="locked_zag_infill">잠금 지그재그</string>
+    <string name="skin_infill_density">외곽 인필 밀도</string>
+    <string name="skeleton_infill_density">내부 인필 밀도</string>
+    <string name="skin_infill_depth">외곽 인필 깊이</string>
+    <string name="infill_lock_depth">외곽·내부 겹침 깊이</string>
+    <string name="skin_infill_line_width">외곽 인필 선 너비</string>
+    <string name="skeleton_infill_line_width">내부 인필 선 너비</string>
     <string name="speed">속도</string>
     <string name="print_speed">외벽 속도</string>
     <string name="inner_wall_speed">내벽 속도</string>

@@ -327,6 +327,14 @@ class SliceOptionsPersistenceTest {
         assertEquals(true, restored.infillAnchorPercent)
         assertEquals(17.5f, restored.infillAnchorMax)
         assertEquals(false, restored.infillAnchorMaxPercent)
+        assertEquals(31f, restored.quality.skeletonInfillDensity)
+        assertEquals(47f, restored.quality.skinInfillDensity)
+        assertEquals(3.5f, restored.quality.skinInfillDepth)
+        assertEquals(1.25f, restored.quality.infillLockDepth)
+        assertEquals(135f, restored.quality.skinInfillLineWidth)
+        assertEquals(true, restored.quality.skinInfillLineWidthPercent)
+        assertEquals(0.62f, restored.quality.skeletonInfillLineWidth)
+        assertEquals(false, restored.quality.skeletonInfillLineWidthPercent)
         assertEquals("everywhere", restored.gapFillTarget)
         assertEquals(0.9f, restored.filterOutGapFill)
         assertEquals(true, restored.reduceCrossingWall)
@@ -517,6 +525,14 @@ class SliceOptionsPersistenceTest {
                 remove("extrusionRateSmoothingExternalOnly")
                 remove("travelSpeedZ")
                 remove("purgeVolumes")
+                remove("skeletonInfillDensity")
+                remove("skinInfillDensity")
+                remove("skinInfillDepth")
+                remove("infillLockDepth")
+                remove("skinInfillLineWidth")
+                remove("skinInfillLineWidthPercent")
+                remove("skeletonInfillLineWidth")
+                remove("skeletonInfillLineWidthPercent")
             }
         }
 
@@ -534,6 +550,14 @@ class SliceOptionsPersistenceTest {
         assertEquals(0, restored.gcodeSettings.slowDownLayers)
         assertEquals(0, restored.toNativeConfig().slowDownLayers)
         assertEquals(ExtrusionRateSmoothingSettings(), restored.quality.extrusionRateSmoothing)
+        assertEquals(25f, restored.quality.skeletonInfillDensity)
+        assertEquals(25f, restored.quality.skinInfillDensity)
+        assertEquals(2f, restored.quality.skinInfillDepth)
+        assertEquals(1f, restored.quality.infillLockDepth)
+        assertEquals(100f, restored.quality.skinInfillLineWidth)
+        assertEquals(true, restored.quality.skinInfillLineWidthPercent)
+        assertEquals(100f, restored.quality.skeletonInfillLineWidth)
+        assertEquals(true, restored.quality.skeletonInfillLineWidthPercent)
         assertEquals(0f, restored.travelSpeedZ)
         assertEquals(0f, restored.toNativeConfig().travelSpeedZ)
         assertEquals(emptyList<Float>(), restored.multiMaterial.purgeVolumes)
@@ -615,6 +639,14 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         quality = QualityProfile.FINE_06.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_06.name),
             travelSpeedZ = 17f,
+            skeletonInfillDensity = 31f,
+            skinInfillDensity = 47f,
+            skinInfillDepth = 3.5f,
+            infillLockDepth = 1.25f,
+            skinInfillLineWidth = 135f,
+            skinInfillLineWidthPercent = true,
+            skeletonInfillLineWidth = 0.62f,
+            skeletonInfillLineWidthPercent = false,
         ),
         firstLayerSpeed = 32f,
         supportEnabled = true,

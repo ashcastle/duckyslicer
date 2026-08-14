@@ -2162,12 +2162,91 @@ private fun SlicingSettingsSheet(
                     settingLabel = stringResource(R.string.sparse_infill_pattern),
                     entries = listOf(
                         "crosshatch", "grid", "rectilinear", "gyroid", "cubic",
-                        "alignedrectilinear", "triangles", "lightning",
+                        "alignedrectilinear", "lockedzag", "triangles", "lightning",
                     ),
                     selected = options.fillPattern,
                     optionLabel = { fillPatternLabel(it) },
                     onSelected = { onOptionsChanged(options.copy(fillPattern = it)) },
                 )
+                if (options.fillPattern == "lockedzag" || settingsQuery.isNotBlank()) {
+                    SettingsGroupTitle(stringResource(R.string.locked_zag_infill))
+                    SettingSlider(
+                        label = stringResource(R.string.skin_infill_density),
+                        valueText = stringResource(R.string.percent_value, options.quality.skinInfillDensity.roundToInt()),
+                        value = options.quality.skinInfillDensity,
+                        range = 0f..100f,
+                        steps = 99,
+                        onValueChange = {
+                            onOptionsChanged(options.copy(quality = options.quality.copy(skinInfillDensity = it.roundToInt().toFloat())))
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.skeleton_infill_density),
+                        valueText = stringResource(R.string.percent_value, options.quality.skeletonInfillDensity.roundToInt()),
+                        value = options.quality.skeletonInfillDensity,
+                        range = 0f..100f,
+                        steps = 99,
+                        onValueChange = {
+                            onOptionsChanged(options.copy(quality = options.quality.copy(skeletonInfillDensity = it.roundToInt().toFloat())))
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.skin_infill_depth),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.quality.skinInfillDepth),
+                        value = options.quality.skinInfillDepth,
+                        range = 0f..100f,
+                        steps = 999,
+                        onValueChange = {
+                            onOptionsChanged(options.copy(quality = options.quality.copy(skinInfillDepth = (it * 10f).roundToInt() / 10f)))
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.infill_lock_depth),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.quality.infillLockDepth),
+                        value = options.quality.infillLockDepth,
+                        range = 0f..100f,
+                        steps = 999,
+                        onValueChange = {
+                            onOptionsChanged(options.copy(quality = options.quality.copy(infillLockDepth = (it * 10f).roundToInt() / 10f)))
+                        },
+                    )
+                    LengthOrPercentSetting(
+                        label = stringResource(R.string.skin_infill_line_width),
+                        value = options.quality.skinInfillLineWidth,
+                        percent = options.quality.skinInfillLineWidthPercent,
+                        maximumAbsolute = 10f,
+                        maximumPercent = 1_000f,
+                        onValueChange = { onOptionsChanged(options.copy(quality = options.quality.copy(skinInfillLineWidth = it))) },
+                        onPercentChange = { selectedPercent, adjustedValue ->
+                            onOptionsChanged(
+                                options.copy(
+                                    quality = options.quality.copy(
+                                        skinInfillLineWidth = adjustedValue,
+                                        skinInfillLineWidthPercent = selectedPercent,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    LengthOrPercentSetting(
+                        label = stringResource(R.string.skeleton_infill_line_width),
+                        value = options.quality.skeletonInfillLineWidth,
+                        percent = options.quality.skeletonInfillLineWidthPercent,
+                        maximumAbsolute = 10f,
+                        maximumPercent = 1_000f,
+                        onValueChange = { onOptionsChanged(options.copy(quality = options.quality.copy(skeletonInfillLineWidth = it))) },
+                        onPercentChange = { selectedPercent, adjustedValue ->
+                            onOptionsChanged(
+                                options.copy(
+                                    quality = options.quality.copy(
+                                        skeletonInfillLineWidth = adjustedValue,
+                                        skeletonInfillLineWidthPercent = selectedPercent,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                }
                 SettingChoices(
                     settingLabel = stringResource(R.string.top_surface_pattern),
                     entries = listOf("monotonicline", "monotonic", "rectilinear", "concentric"),
@@ -5231,6 +5310,7 @@ private fun fillPatternLabel(value: String): String = when (value) {
     "honeycomb" -> stringResource(R.string.infill_honeycomb)
     "rectilinear" -> stringResource(R.string.infill_rectilinear)
     "alignedrectilinear" -> stringResource(R.string.infill_aligned_rectilinear)
+    "lockedzag" -> stringResource(R.string.infill_locked_zag)
     "gyroid" -> stringResource(R.string.infill_gyroid)
     else -> enumLabel(value)
 }

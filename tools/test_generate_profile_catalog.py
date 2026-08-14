@@ -202,6 +202,34 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(0.35, profile["spiralStartingFlowRatio"])
         self.assertEqual(0.2, profile["spiralFinishingFlowRatio"])
 
+    def test_preserves_locked_zag_process_values(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Locked Zag",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "sparse_infill_pattern": "lockedzag",
+                "skeleton_infill_density": "31%",
+                "skin_infill_density": "47%",
+                "skin_infill_depth": "3.5",
+                "infill_lock_depth": "1.25",
+                "skin_infill_line_width": "135%",
+                "skeleton_infill_line_width": "0.62",
+            },
+            {},
+        )
+
+        self.assertEqual("lockedzag", profile["fillPattern"])
+        self.assertEqual(31.0, profile["skeletonInfillDensity"])
+        self.assertEqual(47.0, profile["skinInfillDensity"])
+        self.assertEqual(3.5, profile["skinInfillDepth"])
+        self.assertEqual(1.25, profile["infillLockDepth"])
+        self.assertEqual(135.0, profile["skinInfillLineWidth"])
+        self.assertTrue(profile["skinInfillLineWidthPercent"])
+        self.assertEqual(0.62, profile["skeletonInfillLineWidth"])
+        self.assertFalse(profile["skeletonInfillLineWidthPercent"])
+
     def test_normalizes_legacy_zero_feature_filaments_to_first_tool(self) -> None:
         profile = build_process(
             "Example",

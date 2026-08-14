@@ -107,6 +107,14 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var infillAnchorPercent: Boolean = base.infillAnchorPercent
     private var infillAnchorMax: Float = base.infillAnchorMax
     private var infillAnchorMaxPercent: Boolean = base.infillAnchorMaxPercent
+    private var skeletonInfillDensity: Float = base.skeletonInfillDensity
+    private var skinInfillDensity: Float = base.skinInfillDensity
+    private var skinInfillDepth: Float = base.skinInfillDepth
+    private var infillLockDepth: Float = base.infillLockDepth
+    private var skinInfillLineWidth: Float = base.skinInfillLineWidth
+    private var skinInfillLineWidthPercent: Boolean = base.skinInfillLineWidthPercent
+    private var skeletonInfillLineWidth: Float = base.skeletonInfillLineWidth
+    private var skeletonInfillLineWidthPercent: Boolean = base.skeletonInfillLineWidthPercent
     private var gapFillTarget: String = base.gapFillTarget
     private var filterOutGapFill: Float = base.filterOutGapFill
     private var reduceCrossingWall: Boolean = base.reduceCrossingWall
@@ -418,6 +426,14 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         infillAnchorPercent = input.readCatalogBoolean()
         infillAnchorMax = input.readFloat()
         infillAnchorMaxPercent = input.readCatalogBoolean()
+        skeletonInfillDensity = input.readFloat()
+        skinInfillDensity = input.readFloat()
+        skinInfillDepth = input.readFloat()
+        infillLockDepth = input.readFloat()
+        skinInfillLineWidth = input.readFloat()
+        skinInfillLineWidthPercent = input.readCatalogBoolean()
+        skeletonInfillLineWidth = input.readFloat()
+        skeletonInfillLineWidthPercent = input.readCatalogBoolean()
     }
 
     private fun readGroup4(input: DataInputStream) {
@@ -767,6 +783,14 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         infillAnchorPercent = infillAnchorPercent,
         infillAnchorMax = infillAnchorMax,
         infillAnchorMaxPercent = infillAnchorMaxPercent,
+        skeletonInfillDensity = skeletonInfillDensity,
+        skinInfillDensity = skinInfillDensity,
+        skinInfillDepth = skinInfillDepth,
+        infillLockDepth = infillLockDepth,
+        skinInfillLineWidth = skinInfillLineWidth,
+        skinInfillLineWidthPercent = skinInfillLineWidthPercent,
+        skeletonInfillLineWidth = skeletonInfillLineWidth,
+        skeletonInfillLineWidthPercent = skeletonInfillLineWidthPercent,
         gapFillTarget = gapFillTarget,
         filterOutGapFill = filterOutGapFill,
         reduceCrossingWall = reduceCrossingWall,
@@ -1081,6 +1105,14 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("infillAnchorPercent", BINARY_BOOL),
     BinaryField("infillAnchorMax", BINARY_FLOAT),
     BinaryField("infillAnchorMaxPercent", BINARY_BOOL),
+    BinaryField("skeletonInfillDensity", BINARY_FLOAT),
+    BinaryField("skinInfillDensity", BINARY_FLOAT),
+    BinaryField("skinInfillDepth", BINARY_FLOAT),
+    BinaryField("infillLockDepth", BINARY_FLOAT),
+    BinaryField("skinInfillLineWidth", BINARY_FLOAT),
+    BinaryField("skinInfillLineWidthPercent", BINARY_BOOL),
+    BinaryField("skeletonInfillLineWidth", BINARY_FLOAT),
+    BinaryField("skeletonInfillLineWidthPercent", BINARY_BOOL),
     BinaryField("gapFillTarget", BINARY_STRING),
     BinaryField("filterOutGapFill", BINARY_FLOAT),
     BinaryField("reduceCrossingWall", BINARY_BOOL),

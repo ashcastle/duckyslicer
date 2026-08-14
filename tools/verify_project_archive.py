@@ -107,7 +107,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
             'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
             "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-            "PROJECT_ARCHIVE_SCHEMA_VERSION = 18",
+            "PROJECT_ARCHIVE_SCHEMA_VERSION = 19",
             "ArchivedProjectPlate",
             "ArchivedProjectVolume",
             'getJSONArray("plates")',

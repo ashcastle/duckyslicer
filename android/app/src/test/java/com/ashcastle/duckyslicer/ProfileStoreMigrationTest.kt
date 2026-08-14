@@ -32,6 +32,14 @@ class ProfileStoreMigrationTest {
                 remove("extrusionRateSmoothingExternalOnly")
                 remove("travelSpeedZ")
                 remove("purgeVolumes")
+                remove("skeletonInfillDensity")
+                remove("skinInfillDensity")
+                remove("skinInfillDepth")
+                remove("infillLockDepth")
+                remove("skinInfillLineWidth")
+                remove("skinInfillLineWidthPercent")
+                remove("skeletonInfillLineWidth")
+                remove("skeletonInfillLineWidthPercent")
             }
             file.writeText(
                 JSONObject()
@@ -61,6 +69,14 @@ class ProfileStoreMigrationTest {
             assertEquals(0f, restoredSlicing.travelSpeedZ)
             assertEquals(emptyList<Float>(), restoredSlicing.multiMaterial.purgeVolumes)
             assertEquals(BrimEarSettings(), restoredSlicing.precision.brimEars)
+            assertEquals(25f, restoredSlicing.skeletonInfillDensity)
+            assertEquals(25f, restoredSlicing.skinInfillDensity)
+            assertEquals(2f, restoredSlicing.skinInfillDepth)
+            assertEquals(1f, restoredSlicing.infillLockDepth)
+            assertEquals(100f, restoredSlicing.skinInfillLineWidth)
+            assertTrue(restoredSlicing.skinInfillLineWidthPercent)
+            assertEquals(100f, restoredSlicing.skeletonInfillLineWidth)
+            assertTrue(restoredSlicing.skeletonInfillLineWidthPercent)
         } finally {
             file.delete()
         }
@@ -174,6 +190,42 @@ class ProfileStoreMigrationTest {
             assertEquals(5.5f, restored.firstLayerJerk)
             assertEquals(12.5f, restored.travelJerk)
             assertEquals(options.scarfSeam, restored.scarfSeam)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun lockedZagSettingsPersistInUserSlicingProfiles() {
+        val directory = Files.createTempDirectory("duckyslicer-profile-locked-zag-").toFile()
+        val file = directory.resolve("user_profiles.json")
+        try {
+            val options = SliceOptions().copy(
+                fillPattern = "lockedzag",
+                quality = QualityProfile.STANDARD.copy(
+                    skeletonInfillDensity = 31f,
+                    skinInfillDensity = 47f,
+                    skinInfillDepth = 3.5f,
+                    infillLockDepth = 1.25f,
+                    skinInfillLineWidth = 135f,
+                    skinInfillLineWidthPercent = true,
+                    skeletonInfillLineWidth = 0.62f,
+                    skeletonInfillLineWidthPercent = false,
+                ),
+            )
+
+            val saved = ProfileStore(file).saveSlicing("Locked Zag tuned", options)
+            val restored = ProfileStore(file).load().slicing.single { it.id == saved.id }
+
+            assertEquals("lockedzag", restored.fillPattern)
+            assertEquals(31f, restored.skeletonInfillDensity)
+            assertEquals(47f, restored.skinInfillDensity)
+            assertEquals(3.5f, restored.skinInfillDepth)
+            assertEquals(1.25f, restored.infillLockDepth)
+            assertEquals(135f, restored.skinInfillLineWidth)
+            assertEquals(true, restored.skinInfillLineWidthPercent)
+            assertEquals(0.62f, restored.skeletonInfillLineWidth)
+            assertEquals(false, restored.skeletonInfillLineWidthPercent)
         } finally {
             directory.deleteRecursively()
         }

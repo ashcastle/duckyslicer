@@ -230,6 +230,72 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun lockedZagDensityControlsChangeRealSparseInfillGeometry() {
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.U1_04)
+            .selectFilament(FilamentProfile.PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                fillPattern = "lockedzag",
+                fillDensity = 0.28f,
+                topSolidLayers = 2,
+                bottomSolidLayers = 2,
+                perimeters = 2,
+            )
+        val sparse = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.copy(
+                quality = base.quality.copy(
+                    skeletonInfillDensity = 12f,
+                    skinInfillDensity = 18f,
+                    skinInfillDepth = 1f,
+                    infillLockDepth = 0.5f,
+                ),
+            ),
+        )
+        val dense = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.copy(
+                quality = base.quality.copy(
+                    skeletonInfillDensity = 62f,
+                    skinInfillDensity = 78f,
+                    skinInfillDepth = 4f,
+                    infillLockDepth = 2f,
+                ),
+            ),
+        )
+        try {
+            fun sparseInfillExtrusionMotion(gcode: String): List<String> {
+                var sparseInfill = false
+                return gcode.lineSequence().mapNotNull { line ->
+                    if (line.startsWith(";TYPE:")) sparseInfill = line == ";TYPE:Sparse infill"
+                    line.substringBefore(';').trimEnd().takeIf {
+                        sparseInfill && it.startsWith("G1 ") && it.contains(" E") &&
+                            (it.contains(" X") || it.contains(" Y"))
+                    }
+                }.toList()
+            }
+
+            val sparseGcode = sparse.output.readText()
+            val denseGcode = dense.output.readText()
+            val sparseMotion = sparseInfillExtrusionMotion(sparseGcode)
+            val denseMotion = sparseInfillExtrusionMotion(denseGcode)
+            assertTrue(sparseGcode.contains("; sparse_infill_pattern = lockedzag"))
+            assertTrue(denseGcode.contains("; sparse_infill_pattern = lockedzag"))
+            assertTrue("Locked Zag must generate real sparse-infill extrusion", sparseMotion.isNotEmpty())
+            assertTrue("Locked Zag must generate real sparse-infill extrusion", denseMotion.isNotEmpty())
+            assertNotEquals(
+                "Locked Zag density/depth controls must change extrusion geometry, not only metadata",
+                sparseMotion,
+                denseMotion,
+            )
+        } finally {
+            sparse.output.delete()
+            dense.output.delete()
+        }
+    }
+
+    @Test
     fun printableOverhangsChangeRealModelGeometry() {
         val baseOptions = SliceOptions()
             .selectQuality(QualityProfile.DRAFT)
@@ -1934,7 +2000,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(48, catalog.schemaVersion)
+        assertEquals(49, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -3355,6 +3421,16 @@ class NativeEngineInstrumentedTest {
                 infillAnchorPercent = true,
                 infillAnchorMax = 17.5f,
                 infillAnchorMaxPercent = false,
+                quality = QualityProfile.DRAFT_06.copy(
+                    skeletonInfillDensity = 31f,
+                    skinInfillDensity = 47f,
+                    skinInfillDepth = 3.5f,
+                    infillLockDepth = 1.25f,
+                    skinInfillLineWidth = 135f,
+                    skinInfillLineWidthPercent = true,
+                    skeletonInfillLineWidth = 0.62f,
+                    skeletonInfillLineWidthPercent = false,
+                ),
                 gapFillTarget = "everywhere",
                 filterOutGapFill = 0.9f,
                 reduceCrossingWall = true,
@@ -3598,6 +3674,12 @@ class NativeEngineInstrumentedTest {
         assertTrue("Sparse-area threshold must reach Orca", gcode.contains("; minimum_sparse_infill_area = 42"))
         assertTrue("Infill anchor must preserve percent units", gcode.contains("; infill_anchor = 321%"))
         assertTrue("Maximum infill anchor must preserve absolute units", gcode.contains("; infill_anchor_max = 17.5"))
+        assertTrue("Locked Zag skeleton density must reach Orca", gcode.contains("; skeleton_infill_density = 31%"))
+        assertTrue("Locked Zag skin density must reach Orca", gcode.contains("; skin_infill_density = 47%"))
+        assertTrue("Locked Zag skin depth must reach Orca", gcode.contains("; skin_infill_depth = 3.5"))
+        assertTrue("Locked Zag lock depth must reach Orca", gcode.contains("; infill_lock_depth = 1.25"))
+        assertTrue("Locked Zag skin width must preserve percent units", gcode.contains("; skin_infill_line_width = 135%"))
+        assertTrue("Locked Zag skeleton width must preserve absolute units", gcode.contains("; skeleton_infill_line_width = 0.62"))
         assertTrue("Gap-fill surface policy must reach Orca", gcode.contains("; gap_fill_target = everywhere"))
         assertTrue("Tiny-gap filter must reach Orca", gcode.contains("; filter_out_gap_fill = 0.9"))
         assertTrue("Wall-crossing avoidance must reach Orca", gcode.contains("; reduce_crossing_wall = 1"))

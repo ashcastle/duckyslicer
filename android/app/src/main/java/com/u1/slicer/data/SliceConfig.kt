@@ -250,6 +250,14 @@ data class SliceConfig(
     @JvmField var maximumGcodeBytes: Int = 1_073_741_824,
 ) {
     // Keep newly added JNI fields out of the already large generated constructor signature.
+    @JvmField var skeletonInfillDensity: Float = 25f
+    @JvmField var skinInfillDensity: Float = 25f
+    @JvmField var skinInfillDepth: Float = 2f
+    @JvmField var infillLockDepth: Float = 1f
+    @JvmField var skinInfillLineWidth: Float = 100f
+    @JvmField var skinInfillLineWidthPercent: Boolean = true
+    @JvmField var skeletonInfillLineWidth: Float = 100f
+    @JvmField var skeletonInfillLineWidthPercent: Boolean = true
     @JvmField var slicingMode: String = "regular"
     @JvmField var sliceClosingRadius: Float = 0.049f
     @JvmField var preciseZHeight: Boolean = false
