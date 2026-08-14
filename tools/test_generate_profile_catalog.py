@@ -54,6 +54,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "prime_volume": "61.5",
                 "prime_tower_brim_width": "4.5",
                 "wipe_tower_no_sparse_layers": "1",
+                "flush_into_infill": "1",
+                "flush_into_support": "0",
+                "flush_into_objects": "1",
                 "ooze_prevention": "1",
                 "standby_temperature_delta": "-35",
                 "interface_shells": "1",
@@ -85,6 +88,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(61.5, profile["primeVolume"])
         self.assertEqual(4.5, profile["primeTowerBrimWidth"])
         self.assertTrue(profile["wipeTowerNoSparseLayers"])
+        self.assertTrue(profile["flushIntoInfill"])
+        self.assertFalse(profile["flushIntoSupport"])
+        self.assertTrue(profile["flushIntoObjects"])
         self.assertTrue(profile["oozePrevention"])
         self.assertEqual(-35, profile["standbyTemperatureDelta"])
         self.assertTrue(profile["interfaceShells"])

@@ -261,6 +261,9 @@ data class SliceConfig(
     @JvmField var supportOnBuildPlateOnly: Boolean = false
     @JvmField var supportCriticalRegionsOnly: Boolean = false
     @JvmField var supportRemoveSmallOverhangs: Boolean = true
+    @JvmField var flushIntoInfill: Boolean = false
+    @JvmField var flushIntoSupport: Boolean = true
+    @JvmField var flushIntoObjects: Boolean = false
     @JvmField var printSequence: String = "by layer"
     @JvmField var printOrder: String = "default"
     @JvmField var extruderClearanceRadius: Float = 40f

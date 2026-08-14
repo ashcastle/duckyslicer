@@ -3359,6 +3359,40 @@ private fun SlicingSettingsSheet(
                             )
                         },
                     )
+                    SettingsGroupTitle(stringResource(R.string.flush_options))
+                    SettingsSwitch(
+                        label = stringResource(R.string.flush_into_infill),
+                        checked = options.multiMaterial.flushIntoInfill,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(flushIntoInfill = it),
+                                ),
+                            )
+                        },
+                    )
+                    SettingsSwitch(
+                        label = stringResource(R.string.flush_into_support),
+                        checked = options.multiMaterial.flushIntoSupport,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(flushIntoSupport = it),
+                                ),
+                            )
+                        },
+                    )
+                    SettingsSwitch(
+                        label = stringResource(R.string.flush_into_objects),
+                        checked = options.multiMaterial.flushIntoObjects,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(flushIntoObjects = it),
+                                ),
+                            )
+                        },
+                    )
                 }
                 SettingsGroupTitle(stringResource(R.string.ooze_prevention))
                 SettingsSwitch(

@@ -265,6 +265,9 @@ data class MultiMaterialSettings(
     val primeVolume: Float = 45f,
     val primeTowerBrimWidth: Float = 3f,
     val wipeTowerNoSparseLayers: Boolean = false,
+    val flushIntoInfill: Boolean = false,
+    val flushIntoSupport: Boolean = true,
+    val flushIntoObjects: Boolean = false,
     val oozePrevention: Boolean = false,
     val standbyTemperatureDelta: Int = -5,
     val interfaceShells: Boolean = false,
@@ -633,7 +636,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 33,
+    val schemaVersion: Int = 34,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1522,6 +1525,9 @@ data class SliceOptions(
             native.primeVolume = multiMaterial.primeVolume
             native.primeTowerBrimWidth = multiMaterial.primeTowerBrimWidth
             native.wipeTowerNoSparseLayers = multiMaterial.wipeTowerNoSparseLayers
+            native.flushIntoInfill = multiMaterial.flushIntoInfill
+            native.flushIntoSupport = multiMaterial.flushIntoSupport
+            native.flushIntoObjects = multiMaterial.flushIntoObjects
             native.oozePrevention = multiMaterial.oozePrevention
             native.standbyTemperatureDelta = multiMaterial.standbyTemperatureDelta
             native.interfaceShells = multiMaterial.interfaceShells

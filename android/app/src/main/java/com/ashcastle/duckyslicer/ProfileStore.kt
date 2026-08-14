@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 34
+internal const val USER_PROFILE_SCHEMA_VERSION = 35
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -636,6 +636,9 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("primeVolume", multiMaterial.primeVolume)
     .put("primeTowerBrimWidth", multiMaterial.primeTowerBrimWidth)
     .put("wipeTowerNoSparseLayers", multiMaterial.wipeTowerNoSparseLayers)
+    .put("flushIntoInfill", multiMaterial.flushIntoInfill)
+    .put("flushIntoSupport", multiMaterial.flushIntoSupport)
+    .put("flushIntoObjects", multiMaterial.flushIntoObjects)
     .put("oozePrevention", multiMaterial.oozePrevention)
     .put("standbyTemperatureDelta", multiMaterial.standbyTemperatureDelta)
     .put("interfaceShells", multiMaterial.interfaceShells)
@@ -964,6 +967,9 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
             primeVolume = optDouble("primeVolume", 45.0).toFloat(),
             primeTowerBrimWidth = optDouble("primeTowerBrimWidth", 3.0).toFloat(),
             wipeTowerNoSparseLayers = optBoolean("wipeTowerNoSparseLayers"),
+            flushIntoInfill = optBoolean("flushIntoInfill"),
+            flushIntoSupport = optBoolean("flushIntoSupport", true),
+            flushIntoObjects = optBoolean("flushIntoObjects"),
             oozePrevention = optBoolean("oozePrevention"),
             standbyTemperatureDelta = optInt("standbyTemperatureDelta", -5),
             interfaceShells = optBoolean("interfaceShells"),

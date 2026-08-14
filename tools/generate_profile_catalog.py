@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 33
+SCHEMA_VERSION = 34
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -787,6 +787,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "primeVolume": number(raw.get("prime_volume"), 45),
         "primeTowerBrimWidth": number(raw.get("prime_tower_brim_width"), 3),
         "wipeTowerNoSparseLayers": boolean(raw.get("wipe_tower_no_sparse_layers")),
+        "flushIntoInfill": boolean(raw.get("flush_into_infill")),
+        "flushIntoSupport": boolean(raw.get("flush_into_support"), True),
+        "flushIntoObjects": boolean(raw.get("flush_into_objects")),
         "oozePrevention": boolean(raw.get("ooze_prevention")),
         "standbyTemperatureDelta": integer(raw.get("standby_temperature_delta"), -5),
         "interfaceShells": boolean(raw.get("interface_shells")),

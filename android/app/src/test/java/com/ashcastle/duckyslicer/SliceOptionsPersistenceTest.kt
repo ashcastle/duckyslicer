@@ -27,6 +27,9 @@ class SliceOptionsPersistenceTest {
                     primeVolume = 61.5f,
                     primeTowerBrimWidth = 4.5f,
                     wipeTowerNoSparseLayers = true,
+                    flushIntoInfill = true,
+                    flushIntoSupport = false,
+                    flushIntoObjects = true,
                     oozePrevention = true,
                     standbyTemperatureDelta = -35,
                     interfaceShells = true,
@@ -170,6 +173,9 @@ class SliceOptionsPersistenceTest {
         assertEquals(true, restored.wipeTowerEnabled)
         assertEquals(48f, restored.wipeTowerWidth)
         assertEquals(options.multiMaterial, restored.multiMaterial)
+        assertEquals(true, restored.toNativeConfig().flushIntoInfill)
+        assertEquals(false, restored.toNativeConfig().flushIntoSupport)
+        assertEquals(true, restored.toNativeConfig().flushIntoObjects)
         assertEquals(options.gcodeSettings, restored.gcodeSettings)
         assertEquals(true, restored.infillFirst)
         assertEquals(19f, restored.infillWallOverlap)
@@ -504,6 +510,9 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             primeVolume = 58f,
             primeTowerBrimWidth = 5.5f,
             wipeTowerNoSparseLayers = true,
+            flushIntoInfill = true,
+            flushIntoSupport = false,
+            flushIntoObjects = true,
             oozePrevention = true,
             standbyTemperatureDelta = -42,
             interfaceShells = true,

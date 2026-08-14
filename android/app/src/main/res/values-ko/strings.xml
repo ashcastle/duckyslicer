@@ -741,6 +741,10 @@
     <string name="cubic_millimeters_value">%1$.1f mm³</string>
     <string name="prime_tower_brim_width">타워 브림 너비</string>
     <string name="wipe_tower_no_sparse_layers">빈 타워 레이어 생략</string>
+    <string name="flush_options">버리기 옵션</string>
+    <string name="flush_into_infill">객체의 채우기에서 버리기</string>
+    <string name="flush_into_support">객체의 서포트에서 버리기</string>
+    <string name="flush_into_objects">객체에서 버리기</string>
     <string name="ooze_prevention">흘러내림 방지</string>
     <string name="standby_temperature_delta">대기 온도 차이</string>
     <string name="interface_shells">소재 경계 쉘</string>

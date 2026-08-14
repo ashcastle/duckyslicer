@@ -319,7 +319,7 @@ index 116a4a85..6b3048bc 100644
      float max_print_height = 270.0f;
  
      // Nozzle
-@@ -86,18 +282,69 @@ struct SliceConfig {
+@@ -86,18 +282,72 @@ struct SliceConfig {
      std::vector<int> extruder_temps;           // per-extruder nozzle temps
      std::vector<float> extruder_retract_length; // per-extruder retraction
      std::vector<float> extruder_retract_speed;  // per-extruder retraction speed
@@ -341,6 +341,9 @@ index 116a4a85..6b3048bc 100644
 +    float prime_volume = 45.0f;
 +    float prime_tower_brim_width = 3.0f;
 +    bool wipe_tower_no_sparse_layers = false;
++    bool flush_into_infill = false;
++    bool flush_into_support = true;
++    bool flush_into_objects = false;
 +    bool ooze_prevention = false;
 +    int standby_temperature_delta = -5;
 +    bool interface_shells = false;
@@ -884,7 +887,7 @@ index d93efb7d..fdf9a877 100644
      config.max_print_height = getFloat("maxPrintHeight");
  
      config.nozzle_diameter = getFloat("nozzleDiameter");
-@@ -129,14 +316,65 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -129,14 +316,68 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.extruder_temps = getIntArray("extruderTemps");
      config.extruder_retract_length = getFloatArray("extruderRetractLength");
      config.extruder_retract_speed = getFloatArray("extruderRetractSpeed");
@@ -904,6 +907,9 @@ index d93efb7d..fdf9a877 100644
 +    config.prime_volume = getFloat("primeVolume");
 +    config.prime_tower_brim_width = getFloat("primeTowerBrimWidth");
 +    config.wipe_tower_no_sparse_layers = getBool("wipeTowerNoSparseLayers");
++    config.flush_into_infill = getBool("flushIntoInfill");
++    config.flush_into_support = getBool("flushIntoSupport");
++    config.flush_into_objects = getBool("flushIntoObjects");
 +    config.ooze_prevention = getBool("oozePrevention");
 +    config.standby_temperature_delta = getInt("standbyTemperatureDelta");
 +    config.interface_shells = getBool("interfaceShells");
@@ -1181,7 +1187,7 @@ index d93efb7d..fdf9a877 100644
      setFloat("maxPrintHeight", config.max_print_height);
      setFloat("nozzleDiameter", config.nozzle_diameter);
      setFloat("filamentDiameter", config.filament_diameter);
-@@ -265,12 +694,64 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -265,12 +694,67 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setIntArray("extruderTemps", config.extruder_temps);
      setFloatArray("extruderRetractLength", config.extruder_retract_length);
      setFloatArray("extruderRetractSpeed", config.extruder_retract_speed);
@@ -1201,6 +1207,9 @@ index d93efb7d..fdf9a877 100644
 +    setFloat("primeVolume", config.prime_volume);
 +    setFloat("primeTowerBrimWidth", config.prime_tower_brim_width);
 +    setBool("wipeTowerNoSparseLayers", config.wipe_tower_no_sparse_layers);
++    setBool("flushIntoInfill", config.flush_into_infill);
++    setBool("flushIntoSupport", config.flush_into_support);
++    setBool("flushIntoObjects", config.flush_into_objects);
 +    setBool("oozePrevention", config.ooze_prevention);
 +    setInt("standbyTemperatureDelta", config.standby_temperature_delta);
 +    setBool("interfaceShells", config.interface_shells);
@@ -1720,7 +1729,7 @@ index 8d61c9cf..f285d044 100644
      // F91 (2026-05-25) — SliceConfig user overrides for the per-filament tuning keys
      // that applyConfigToPrusa doesn't otherwise touch. When the user sets a value via the
      // Filament Library, populate dpc here so the slicer picks it up. When unset, the
-@@ -568,31 +764,75 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -568,31 +764,78 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          dpc.set_key_value("filament_cost", new Slic3r::ConfigOptionFloats(std::move(v)));
      }
  
@@ -1790,6 +1799,9 @@ index 8d61c9cf..f285d044 100644
 +
 +    // Preserve the selected Orca process semantics instead of silently substituting a
 +    // machine-specific standby policy. A zero idle temperature delegates to the delta.
++    dpc.set_key_value("flush_into_infill", new Slic3r::ConfigOptionBool(config.flush_into_infill));
++    dpc.set_key_value("flush_into_support", new Slic3r::ConfigOptionBool(config.flush_into_support));
++    dpc.set_key_value("flush_into_objects", new Slic3r::ConfigOptionBool(config.flush_into_objects));
 +    dpc.set_key_value("ooze_prevention", new Slic3r::ConfigOptionBool(config.ooze_prevention));
 +    dpc.set_key_value("standby_temperature_delta", new Slic3r::ConfigOptionInt(config.standby_temperature_delta));
 +    dpc.set_key_value("interface_shells", new Slic3r::ConfigOptionBool(config.interface_shells));

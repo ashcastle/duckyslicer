@@ -741,6 +741,10 @@
     <string name="cubic_millimeters_value">%1$.1f mm³</string>
     <string name="prime_tower_brim_width">Tower brim width</string>
     <string name="wipe_tower_no_sparse_layers">No sparse tower layers</string>
+    <string name="flush_options">Flush options</string>
+    <string name="flush_into_infill">Flush into objects\' infill</string>
+    <string name="flush_into_support">Flush into objects\' support</string>
+    <string name="flush_into_objects">Flush into this object</string>
     <string name="ooze_prevention">Ooze prevention</string>
     <string name="standby_temperature_delta">Standby temperature difference</string>
     <string name="interface_shells">Interface shells</string>

@@ -1073,6 +1073,9 @@ class NativeEngineInstrumentedTest {
                     primeVolume = 58f,
                     primeTowerBrimWidth = 5.5f,
                     wipeTowerNoSparseLayers = true,
+                    flushIntoInfill = true,
+                    flushIntoSupport = false,
+                    flushIntoObjects = true,
                     oozePrevention = true,
                     standbyTemperatureDelta = -42,
                     interfaceShells = true,
@@ -1233,6 +1236,9 @@ class NativeEngineInstrumentedTest {
         assertEquals(58f, restored.slicing.last().multiMaterial.primeVolume)
         assertEquals(5.5f, restored.slicing.last().multiMaterial.primeTowerBrimWidth)
         assertTrue(restored.slicing.last().multiMaterial.wipeTowerNoSparseLayers)
+        assertTrue(restored.slicing.last().multiMaterial.flushIntoInfill)
+        assertFalse(restored.slicing.last().multiMaterial.flushIntoSupport)
+        assertTrue(restored.slicing.last().multiMaterial.flushIntoObjects)
         assertTrue(restored.slicing.last().multiMaterial.oozePrevention)
         assertEquals(-42, restored.slicing.last().multiMaterial.standbyTemperatureDelta)
         assertTrue(restored.slicing.last().multiMaterial.interfaceShells)
@@ -1432,7 +1438,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(33, catalog.schemaVersion)
+        assertEquals(34, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1474,6 +1480,7 @@ class NativeEngineInstrumentedTest {
                 it.multiMaterial.primeVolume != 45f ||
                     it.multiMaterial.primeTowerBrimWidth != 3f ||
                     it.multiMaterial.wipeTowerNoSparseLayers ||
+                    !it.multiMaterial.flushIntoSupport ||
                     it.multiMaterial.oozePrevention ||
                     it.multiMaterial.interfaceShells
             },
@@ -2110,6 +2117,9 @@ class NativeEngineInstrumentedTest {
                     primeVolume = 61.5f,
                     primeTowerBrimWidth = 4.5f,
                     wipeTowerNoSparseLayers = true,
+                    flushIntoInfill = true,
+                    flushIntoSupport = false,
+                    flushIntoObjects = false,
                     oozePrevention = true,
                     standbyTemperatureDelta = -35,
                     interfaceShells = true,
@@ -2144,10 +2154,37 @@ class NativeEngineInstrumentedTest {
         assertTrue("Prime volume must reach Orca", gcode.contains("; prime_volume = 61.5"))
         assertTrue("Tower brim width must reach Orca", gcode.contains("; prime_tower_brim_width = 4.5"))
         assertTrue("Sparse tower layers must remain disabled", gcode.contains("; wipe_tower_no_sparse_layers = 1"))
+        assertTrue("Infill flushing must reach Orca", gcode.contains("; flush_into_infill = 1"))
+        assertTrue("Support flushing must reach Orca", gcode.contains("; flush_into_support = 0"))
+        assertTrue("Object flushing must remain disabled", gcode.contains("; flush_into_objects = 0"))
         assertTrue("Ooze prevention must reach Orca", gcode.contains("; ooze_prevention = 1"))
         assertTrue("Standby temperature delta must reach Orca", gcode.contains("; standby_temperature_delta = -35"))
         assertTrue("Interface shells must reach Orca", gcode.contains("; interface_shells = 1"))
         assertTrue("The second object must produce a real tool change", gcode.lineSequence().any { it == "T1" })
+
+        val objectFlushOutcome = OnDeviceSlicer.slice(
+            listOf(
+                ProjectObject(
+                    id = "object-flush-primary",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = -20f),
+                    filamentSlot = 0,
+                ),
+                ProjectObject(
+                    id = "object-flush-secondary",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = 20f),
+                    filamentSlot = 1,
+                ),
+            ),
+            options.copy(
+                multiMaterial = options.multiMaterial.copy(flushIntoObjects = true),
+            ),
+        )
+        assertTrue(
+            "Object flushing must reach Orca when explicitly enabled",
+            objectFlushOutcome.output.readText().contains("; flush_into_objects = 1"),
+        )
 
         val defaultsOutcome = OnDeviceSlicer.slice(
             listOf(
@@ -2170,6 +2207,9 @@ class NativeEngineInstrumentedTest {
             ),
         )
         val defaultsGcode = defaultsOutcome.output.readText()
+        assertTrue("Infill flushing must default off", defaultsGcode.contains("; flush_into_infill = 0"))
+        assertTrue("Support flushing must default on", defaultsGcode.contains("; flush_into_support = 1"))
+        assertTrue("Object flushing must default off", defaultsGcode.contains("; flush_into_objects = 0"))
         assertTrue("Ooze prevention must not be forced on", defaultsGcode.contains("; ooze_prevention = 0"))
         assertTrue("The inherited standby delta must remain intact", defaultsGcode.contains("; standby_temperature_delta = -5"))
         assertTrue("Interface shells must not be forced on", defaultsGcode.contains("; interface_shells = 0"))

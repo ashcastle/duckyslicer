@@ -122,6 +122,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var primeVolume: Float = base.multiMaterial.primeVolume
     private var primeTowerBrimWidth: Float = base.multiMaterial.primeTowerBrimWidth
     private var wipeTowerNoSparseLayers: Boolean = base.multiMaterial.wipeTowerNoSparseLayers
+    private var flushIntoInfill: Boolean = base.multiMaterial.flushIntoInfill
+    private var flushIntoSupport: Boolean = base.multiMaterial.flushIntoSupport
+    private var flushIntoObjects: Boolean = base.multiMaterial.flushIntoObjects
     private var oozePrevention: Boolean = base.multiMaterial.oozePrevention
     private var standbyTemperatureDelta: Int = base.multiMaterial.standbyTemperatureDelta
     private var interfaceShells: Boolean = base.multiMaterial.interfaceShells
@@ -480,6 +483,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         primeVolume = input.readFloat()
         primeTowerBrimWidth = input.readFloat()
         wipeTowerNoSparseLayers = input.readCatalogBoolean()
+        flushIntoInfill = input.readCatalogBoolean()
+        flushIntoSupport = input.readCatalogBoolean()
+        flushIntoObjects = input.readCatalogBoolean()
         oozePrevention = input.readCatalogBoolean()
         standbyTemperatureDelta = input.readInt()
         interfaceShells = input.readCatalogBoolean()
@@ -651,6 +657,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             primeVolume = primeVolume,
             primeTowerBrimWidth = primeTowerBrimWidth,
             wipeTowerNoSparseLayers = wipeTowerNoSparseLayers,
+            flushIntoInfill = flushIntoInfill,
+            flushIntoSupport = flushIntoSupport,
+            flushIntoObjects = flushIntoObjects,
             oozePrevention = oozePrevention,
             standbyTemperatureDelta = standbyTemperatureDelta,
             interfaceShells = interfaceShells,
@@ -985,6 +994,9 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("primeVolume", BINARY_FLOAT),
     BinaryField("primeTowerBrimWidth", BINARY_FLOAT),
     BinaryField("wipeTowerNoSparseLayers", BINARY_BOOL),
+    BinaryField("flushIntoInfill", BINARY_BOOL),
+    BinaryField("flushIntoSupport", BINARY_BOOL),
+    BinaryField("flushIntoObjects", BINARY_BOOL),
     BinaryField("oozePrevention", BINARY_BOOL),
     BinaryField("standbyTemperatureDelta", BINARY_INT),
     BinaryField("interfaceShells", BINARY_BOOL),
