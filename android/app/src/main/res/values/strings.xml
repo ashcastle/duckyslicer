@@ -306,6 +306,8 @@
     <string name="bottom_shell_layers">Bottom shell layers</string>
     <string name="top_shell_thickness">Minimum top thickness</string>
     <string name="bottom_shell_thickness">Minimum bottom thickness</string>
+    <string name="top_surface_density">Top surface density</string>
+    <string name="bottom_surface_density">Bottom surface density</string>
     <string name="dimensional_accuracy">Dimensional accuracy</string>
     <string name="xy_hole_compensation">X–Y hole compensation</string>
     <string name="xy_contour_compensation">X–Y contour compensation</string>

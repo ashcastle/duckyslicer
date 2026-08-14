@@ -42,6 +42,8 @@ class ProfileStoreMigrationTest {
                 remove("skeletonInfillLineWidthPercent")
                 remove("skirtStartAngle")
                 remove("gcodeComments")
+                remove("topSurfaceDensity")
+                remove("bottomSurfaceDensity")
             }
             file.writeText(
                 JSONObject()
@@ -81,6 +83,7 @@ class ProfileStoreMigrationTest {
             assertTrue(restoredSlicing.skeletonInfillLineWidthPercent)
             assertEquals(-135f, restoredSlicing.skirtStartAngle)
             assertEquals(false, restoredSlicing.gcodeSettings.verboseComments)
+            assertEquals(SurfaceDensitySettings(), restoredSlicing.surfaceDensity)
         } finally {
             file.delete()
         }
@@ -208,6 +211,7 @@ class ProfileStoreMigrationTest {
                 fillPattern = "lockedzag",
                 gcodeSettings = GcodeSettings(verboseComments = true),
                 quality = QualityProfile.STANDARD.copy(
+                    surfaceDensity = SurfaceDensitySettings(topPercent = 42f, bottomPercent = 68f),
                     skeletonInfillDensity = 31f,
                     skinInfillDensity = 47f,
                     skinInfillDepth = 3.5f,
@@ -234,6 +238,8 @@ class ProfileStoreMigrationTest {
             assertEquals(false, restored.skeletonInfillLineWidthPercent)
             assertEquals(-25f, restored.skirtStartAngle)
             assertEquals(true, restored.gcodeSettings.verboseComments)
+            assertEquals(42f, restored.surfaceDensity.topPercent)
+            assertEquals(68f, restored.surfaceDensity.bottomPercent)
         } finally {
             directory.deleteRecursively()
         }

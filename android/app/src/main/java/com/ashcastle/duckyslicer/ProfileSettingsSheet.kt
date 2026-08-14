@@ -2056,6 +2056,42 @@ private fun SlicingSettingsSheet(
                     steps = (max(5f, options.bottomShellThickness) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
                     onValueChange = { onOptionsChanged(options.copy(bottomShellThickness = (it / 0.05f).roundToInt() * 0.05f)) },
                 )
+                SettingSlider(
+                    label = stringResource(R.string.top_surface_density),
+                    valueText = stringResource(R.string.percent_value, options.quality.surfaceDensity.topPercent.roundToInt()),
+                    value = options.quality.surfaceDensity.topPercent,
+                    range = 0f..100f,
+                    steps = 99,
+                    onValueChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                quality = options.quality.copy(
+                                    surfaceDensity = options.quality.surfaceDensity.copy(
+                                        topPercent = it.roundToInt().toFloat(),
+                                    ),
+                                ),
+                            ),
+                        )
+                    },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.bottom_surface_density),
+                    valueText = stringResource(R.string.percent_value, options.quality.surfaceDensity.bottomPercent.roundToInt()),
+                    value = options.quality.surfaceDensity.bottomPercent,
+                    range = 10f..100f,
+                    steps = 89,
+                    onValueChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                quality = options.quality.copy(
+                                    surfaceDensity = options.quality.surfaceDensity.copy(
+                                        bottomPercent = it.roundToInt().toFloat(),
+                                    ),
+                                ),
+                            ),
+                        )
+                    },
+                )
                 SettingsGroupTitle(stringResource(R.string.dimensional_accuracy))
                 SettingSlider(
                     label = stringResource(R.string.xy_hole_compensation),

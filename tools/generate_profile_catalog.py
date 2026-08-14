@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 51
+SCHEMA_VERSION = 52
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -660,6 +660,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "bottomSolidLayers": integer(raw.get("bottom_shell_layers"), 4),
         "topShellThickness": number(raw.get("top_shell_thickness"), 0),
         "bottomShellThickness": number(raw.get("bottom_shell_thickness"), 0),
+        "topSurfaceDensity": number(raw.get("top_surface_density"), 100),
+        "bottomSurfaceDensity": number(raw.get("bottom_surface_density"), 100),
         "fillPattern": infill_pattern(raw.get("sparse_infill_pattern"), "gyroid"),
         "topSurfacePattern": infill_pattern(raw.get("top_surface_pattern"), "monotonicline"),
         "bottomSurfacePattern": infill_pattern(raw.get("bottom_surface_pattern"), "monotonic"),
@@ -1132,6 +1134,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         )
         and 0 <= profile["topShellThickness"] <= 100
         and 0 <= profile["bottomShellThickness"] <= 100
+        and 0 <= profile["topSurfaceDensity"] <= 100
+        and 10 <= profile["bottomSurfaceDensity"] <= 100
         and 0 <= profile["supportInterfaceTopLayers"] <= 20
         and -1 <= profile["supportInterfaceBottomLayers"] <= 20
         and 0 <= profile["supportInterfaceSpacing"] <= 20

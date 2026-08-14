@@ -183,6 +183,8 @@ internal object ProfileValidation {
             profile.bottomSolidLayers in 0..100 &&
             profile.topShellThickness in 0f..100f &&
             profile.bottomShellThickness in 0f..100f &&
+            profile.surfaceDensity.topPercent in 0f..100f &&
+            profile.surfaceDensity.bottomPercent in 10f..100f &&
             profile.fillPattern in INFILL_PATTERNS &&
             profile.topSurfacePattern in INFILL_PATTERNS &&
             profile.bottomSurfacePattern in INFILL_PATTERNS &&

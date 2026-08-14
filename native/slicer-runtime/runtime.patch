@@ -93,12 +93,14 @@ diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
 index 116a4a85..6b3048bc 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -40,14 +40,118 @@ struct SliceConfig {
+@@ -40,14 +40,120 @@ struct SliceConfig {
      int perimeters = 2;
      int top_solid_layers = 5;
      int bottom_solid_layers = 4;
 +    float top_shell_thickness = 0.0f;
 +    float bottom_shell_thickness = 0.0f;
++    float top_surface_density = 100.0f;
++    float bottom_surface_density = 100.0f;
      float fill_density = 0.15f;  // 0.0 - 1.0
      std::string fill_pattern = "gyroid";
 +    std::string top_surface_pattern = "monotonicline";
@@ -763,12 +765,14 @@ diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_
 index d93efb7d..fdf9a877 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -92,10 +92,106 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -92,10 +92,108 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.perimeters = getInt("perimeters");
      config.top_solid_layers = getInt("topSolidLayers");
      config.bottom_solid_layers = getInt("bottomSolidLayers");
 +    config.top_shell_thickness = getFloat("topShellThickness");
 +    config.bottom_shell_thickness = getFloat("bottomShellThickness");
++    config.top_surface_density = getFloat("topSurfaceDensity");
++    config.bottom_surface_density = getFloat("bottomSurfaceDensity");
      config.fill_density = getFloat("fillDensity");
      config.fill_pattern = getString("fillPattern");
 +    config.top_surface_pattern = getString("topSurfacePattern");
@@ -1141,12 +1145,14 @@ index d93efb7d..fdf9a877 100644
  
      env->DeleteLocalRef(cls);
      return config;
-@@ -235,9 +487,105 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -235,9 +487,107 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setInt("perimeters", config.perimeters);
      setInt("topSolidLayers", config.top_solid_layers);
      setInt("bottomSolidLayers", config.bottom_solid_layers);
 +    setFloat("topShellThickness", config.top_shell_thickness);
 +    setFloat("bottomShellThickness", config.bottom_shell_thickness);
++    setFloat("topSurfaceDensity", config.top_surface_density);
++    setFloat("bottomSurfaceDensity", config.bottom_surface_density);
      setFloat("fillDensity", config.fill_density);
      setString("fillPattern", config.fill_pattern);
 +    setString("topSurfacePattern", config.top_surface_pattern);
@@ -1534,7 +1540,7 @@ index 8d61c9cf..f285d044 100644
  #include "libslic3r/clipper.hpp"
  
  // =============================================================================
-@@ -183,84 +186,198 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -183,84 +186,200 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
      dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
      dpc.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(config.bottom_solid_layers));
@@ -1558,6 +1564,8 @@ index 8d61c9cf..f285d044 100644
 -    }
 +    dpc.set_key_value("top_shell_thickness", new Slic3r::ConfigOptionFloat(config.top_shell_thickness));
 +    dpc.set_key_value("bottom_shell_thickness", new Slic3r::ConfigOptionFloat(config.bottom_shell_thickness));
++    dpc.set_key_value("top_surface_density", new Slic3r::ConfigOptionPercent(config.top_surface_density));
++    dpc.set_key_value("bottom_surface_density", new Slic3r::ConfigOptionPercent(config.bottom_surface_density));
 +
 +    // Preserve Orca's complete enum vocabulary. The old hand-written mapping silently
 +    // turned unsupported values (notably crosshatch) into gyroid and made distinct

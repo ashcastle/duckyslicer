@@ -95,6 +95,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "gcode_label_objects": "0",
                 "exclude_object": "1",
                 "gcode_comments": "1",
+                "top_surface_density": "42%",
+                "bottom_surface_density": "68%",
                 "travel_speed_z": "17",
                 "initial_layer_travel_speed": "35%",
                 "accel_to_decel_enable": "0",
@@ -162,6 +164,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertFalse(profile["gcodeLabelObjects"])
         self.assertTrue(profile["excludeObject"])
         self.assertTrue(profile["gcodeComments"])
+        self.assertEqual(42.0, profile["topSurfaceDensity"])
+        self.assertEqual(68.0, profile["bottomSurfaceDensity"])
         self.assertEqual(17.0, profile["travelSpeedZ"])
         self.assertEqual(35.0, profile["initialLayerTravelSpeed"])
         self.assertTrue(profile["initialLayerTravelSpeedPercent"])

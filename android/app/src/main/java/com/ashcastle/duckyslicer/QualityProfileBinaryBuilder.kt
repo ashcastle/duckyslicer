@@ -89,6 +89,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var bottomSolidLayers: Int = base.bottomSolidLayers
     private var topShellThickness: Float = base.topShellThickness
     private var bottomShellThickness: Float = base.bottomShellThickness
+    private var topSurfaceDensity: Float = base.surfaceDensity.topPercent
+    private var bottomSurfaceDensity: Float = base.surfaceDensity.bottomPercent
     private var fillPattern: String = base.fillPattern
     private var topSurfacePattern: String = base.topSurfacePattern
     private var bottomSurfacePattern: String = base.bottomSurfacePattern
@@ -410,6 +412,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private fun readGroup3(input: DataInputStream) {
         topShellThickness = input.readFloat()
         bottomShellThickness = input.readFloat()
+        topSurfaceDensity = input.readFloat()
+        bottomSurfaceDensity = input.readFloat()
         fillPattern = input.readCatalogString()
         topSurfacePattern = input.readCatalogString()
         bottomSurfacePattern = input.readCatalogString()
@@ -769,6 +773,10 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         bottomSolidLayers = bottomSolidLayers,
         topShellThickness = topShellThickness,
         bottomShellThickness = bottomShellThickness,
+        surfaceDensity = SurfaceDensitySettings(
+            topPercent = topSurfaceDensity,
+            bottomPercent = bottomSurfaceDensity,
+        ),
         fillPattern = fillPattern,
         topSurfacePattern = topSurfacePattern,
         bottomSurfacePattern = bottomSurfacePattern,
@@ -1093,6 +1101,8 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("bottomSolidLayers", BINARY_INT),
     BinaryField("topShellThickness", BINARY_FLOAT),
     BinaryField("bottomShellThickness", BINARY_FLOAT),
+    BinaryField("topSurfaceDensity", BINARY_FLOAT),
+    BinaryField("bottomSurfaceDensity", BINARY_FLOAT),
     BinaryField("fillPattern", BINARY_STRING),
     BinaryField("topSurfacePattern", BINARY_STRING),
     BinaryField("bottomSurfacePattern", BINARY_STRING),

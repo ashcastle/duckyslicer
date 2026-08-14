@@ -2000,7 +2000,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(51, catalog.schemaVersion)
+        assertEquals(52, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -3423,6 +3423,7 @@ class NativeEngineInstrumentedTest {
                 infillAnchorMax = 17.5f,
                 infillAnchorMaxPercent = false,
                 quality = QualityProfile.DRAFT_06.copy(
+                    surfaceDensity = SurfaceDensitySettings(topPercent = 42f, bottomPercent = 68f),
                     skeletonInfillDensity = 31f,
                     skinInfillDensity = 47f,
                     skinInfillDepth = 3.5f,
@@ -3541,6 +3542,8 @@ class NativeEngineInstrumentedTest {
         assertTrue("Sparse pattern must preserve Orca crosshatch", gcode.contains("; sparse_infill_pattern = crosshatch"))
         assertTrue("Top surface pattern must remain distinct", gcode.contains("; top_surface_pattern = monotonic"))
         assertTrue("Bottom surface pattern must remain distinct", gcode.contains("; bottom_surface_pattern = concentric"))
+        assertTrue("Top surface density must reach Orca", gcode.contains("; top_surface_density = 42%"))
+        assertTrue("Bottom surface density must reach Orca", gcode.contains("; bottom_surface_density = 68%"))
         assertTrue("Internal solid pattern must remain distinct", gcode.contains("; internal_solid_infill_pattern = rectilinear"))
         assertTrue("Travel speed must reach G-code", gcode.contains("; travel_speed = 420"))
         assertTrue("First layer speed must reach G-code", gcode.contains("; initial_layer_speed = 35"))
@@ -4070,6 +4073,67 @@ class NativeEngineInstrumentedTest {
             "Verbose output must add real per-command descriptions",
             describedCommands(verbose) > describedCommands(compact),
         )
+    }
+
+    @Test
+    fun topSurfaceDensityChangesRealSurfaceExtrusion() {
+        val model = fixtureModel()
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.CUSTOM_CARTESIAN)
+            .selectFilament(FilamentProfile.GENERIC_PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                topSolidLayers = 1,
+                bottomSolidLayers = 1,
+                skirtLoops = 0,
+                brimWidth = 0f,
+            )
+
+        fun slice(topPercent: Float): SliceOutcome = OnDeviceSlicer.slice(
+            model,
+            base.copy(
+                quality = base.quality.copy(
+                    surfaceDensity = SurfaceDensitySettings(
+                        topPercent = topPercent,
+                        bottomPercent = 68f,
+                    ),
+                ),
+            ),
+        )
+
+        fun topSurfaceMotion(gcode: String): List<String> {
+            var topSurface = false
+            return gcode.lineSequence().mapNotNull { line ->
+                if (line.startsWith(";TYPE:")) topSurface = line == ";TYPE:Top surface"
+                line.substringBefore(';').trimEnd().takeIf {
+                    topSurface && it.startsWith("G1 ") && it.contains(" E") &&
+                        (it.contains(" X") || it.contains(" Y"))
+                }
+            }.toList()
+        }
+
+        val sparse = slice(25f)
+        val dense = slice(100f)
+        try {
+            val sparseGcode = sparse.output.readText()
+            val denseGcode = dense.output.readText()
+            val sparseMotion = topSurfaceMotion(sparseGcode)
+            val denseMotion = topSurfaceMotion(denseGcode)
+
+            assertTrue(sparseGcode.contains("; top_surface_density = 25%"))
+            assertTrue(sparseGcode.contains("; bottom_surface_density = 68%"))
+            assertTrue(denseGcode.contains("; top_surface_density = 100%"))
+            assertTrue("Sparse top surface must retain physical extrusion", sparseMotion.isNotEmpty())
+            assertTrue("Dense top surface must retain physical extrusion", denseMotion.isNotEmpty())
+            assertNotEquals(
+                "Top surface density must change physical surface motion, not only metadata",
+                sparseMotion,
+                denseMotion,
+            )
+        } finally {
+            sparse.output.delete()
+            dense.output.delete()
+        }
     }
 
     @Test

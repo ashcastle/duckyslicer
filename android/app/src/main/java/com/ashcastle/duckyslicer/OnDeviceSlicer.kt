@@ -441,6 +441,11 @@ data class GcodeSettings(
     val accelToDecelFactor: Float = 50f,
 )
 
+data class SurfaceDensitySettings(
+    val topPercent: Float = 100f,
+    val bottomPercent: Float = 100f,
+)
+
 data class ExtrusionRateSmoothingSettings(
     val maximumSlope: Float = 0f,
     val segmentLength: Float = 3f,
@@ -624,6 +629,7 @@ data class QualityProfile(
     val bottomSolidLayers: Int = 4,
     val topShellThickness: Float = 0f,
     val bottomShellThickness: Float = 0f,
+    val surfaceDensity: SurfaceDensitySettings = SurfaceDensitySettings(),
     val fillPattern: String = "gyroid",
     val topSurfacePattern: String = "monotonicline",
     val bottomSurfacePattern: String = "monotonic",
@@ -863,7 +869,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 51,
+    val schemaVersion: Int = 52,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1750,6 +1756,8 @@ data class SliceOptions(
             filamentNozzleTempInitialLayers = nativeFilaments.map(FilamentProfile::firstLayerNozzleTemp).toIntArray(),
             filamentBedTempInitialLayers = nativeFilaments.map(FilamentProfile::firstLayerBedTemp).toIntArray(),
         ).also { native ->
+            native.topSurfaceDensity = quality.surfaceDensity.topPercent
+            native.bottomSurfaceDensity = quality.surfaceDensity.bottomPercent
             native.skeletonInfillDensity = quality.skeletonInfillDensity
             native.skinInfillDensity = quality.skinInfillDensity
             native.skinInfillDepth = quality.skinInfillDepth

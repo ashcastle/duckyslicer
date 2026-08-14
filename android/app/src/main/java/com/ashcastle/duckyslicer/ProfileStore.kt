@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 52
+internal const val USER_PROFILE_SCHEMA_VERSION = 53
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -236,6 +236,7 @@ class ProfileStore private constructor(
             bottomSolidLayers = options.bottomSolidLayers,
             topShellThickness = options.topShellThickness,
             bottomShellThickness = options.bottomShellThickness,
+            surfaceDensity = options.quality.surfaceDensity,
             fillPattern = options.fillPattern,
             topSurfacePattern = options.topSurfacePattern,
             bottomSurfacePattern = options.bottomSurfacePattern,
@@ -603,6 +604,8 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("raftFirstLayerExpansion", raftFirstLayerExpansion)
     .put("topSolidLayers", topSolidLayers).put("bottomSolidLayers", bottomSolidLayers)
     .put("topShellThickness", topShellThickness).put("bottomShellThickness", bottomShellThickness)
+    .put("topSurfaceDensity", surfaceDensity.topPercent)
+    .put("bottomSurfaceDensity", surfaceDensity.bottomPercent)
     .put("fillPattern", fillPattern)
     .put("topSurfacePattern", topSurfacePattern)
     .put("bottomSurfacePattern", bottomSurfacePattern)
@@ -1004,6 +1007,10 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         bottomSolidLayers = optInt("bottomSolidLayers", 4),
         topShellThickness = optDouble("topShellThickness", 0.0).toFloat(),
         bottomShellThickness = optDouble("bottomShellThickness", 0.0).toFloat(),
+        surfaceDensity = SurfaceDensitySettings(
+            topPercent = optDouble("topSurfaceDensity", 100.0).toFloat(),
+            bottomPercent = optDouble("bottomSurfaceDensity", 100.0).toFloat(),
+        ),
         fillPattern = optString("fillPattern", "gyroid"),
         topSurfacePattern = optString("topSurfacePattern", "monotonicline"),
         bottomSurfacePattern = optString("bottomSurfacePattern", "monotonic"),

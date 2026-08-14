@@ -306,6 +306,8 @@
     <string name="bottom_shell_layers">하단 솔리드 레이어</string>
     <string name="top_shell_thickness">최소 상단 두께</string>
     <string name="bottom_shell_thickness">최소 하단 두께</string>
+    <string name="top_surface_density">상단 표면 밀도</string>
+    <string name="bottom_surface_density">하단 표면 밀도</string>
     <string name="dimensional_accuracy">치수 정확도</string>
     <string name="xy_hole_compensation">X–Y 구멍 보정</string>
     <string name="xy_contour_compensation">X–Y 외곽 보정</string>

@@ -76,6 +76,7 @@ class SliceOptionsPersistenceTest {
                     accelToDecelFactor = 27f,
                 ),
                 quality = QualityProfile.STANDARD.copy(
+                    surfaceDensity = SurfaceDensitySettings(topPercent = 44f, bottomPercent = 71f),
                     extrusionRateSmoothing = ExtrusionRateSmoothingSettings(
                         maximumSlope = 20f,
                         segmentLength = 5f,
@@ -357,6 +358,10 @@ class SliceOptionsPersistenceTest {
         assertEquals(0.98f, restored.bottomSurfaceFlowRatio)
         assertEquals(0.8f, restored.topShellThickness)
         assertEquals(0.7f, restored.bottomShellThickness)
+        assertEquals(44f, restored.quality.surfaceDensity.topPercent)
+        assertEquals(71f, restored.quality.surfaceDensity.bottomPercent)
+        assertEquals(44f, restored.toNativeConfig().topSurfaceDensity)
+        assertEquals(71f, restored.toNativeConfig().bottomSurfaceDensity)
         assertEquals(4, restored.supportInterfaceTopLayers)
         assertEquals(2, restored.supportInterfaceBottomLayers)
         assertEquals(0.24f, restored.supportInterfaceSpacing)
@@ -538,6 +543,8 @@ class SliceOptionsPersistenceTest {
                 remove("skeletonInfillLineWidthPercent")
                 remove("skirtStartAngle")
                 remove("gcodeComments")
+                remove("topSurfaceDensity")
+                remove("bottomSurfaceDensity")
             }
         }
 
@@ -567,6 +574,9 @@ class SliceOptionsPersistenceTest {
         assertEquals(-135f, restored.toNativeConfig().skirtStartAngle)
         assertEquals(false, restored.gcodeSettings.verboseComments)
         assertEquals(false, restored.toNativeConfig().gcodeComments)
+        assertEquals(SurfaceDensitySettings(), restored.quality.surfaceDensity)
+        assertEquals(100f, restored.toNativeConfig().topSurfaceDensity)
+        assertEquals(100f, restored.toNativeConfig().bottomSurfaceDensity)
         assertEquals(0f, restored.travelSpeedZ)
         assertEquals(0f, restored.toNativeConfig().travelSpeedZ)
         assertEquals(emptyList<Float>(), restored.multiMaterial.purgeVolumes)
@@ -647,6 +657,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         travelSpeed = 410f,
         quality = QualityProfile.FINE_06.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_06.name),
+            surfaceDensity = SurfaceDensitySettings(topPercent = 44f, bottomPercent = 71f),
             travelSpeedZ = 17f,
             skeletonInfillDensity = 31f,
             skinInfillDensity = 47f,
