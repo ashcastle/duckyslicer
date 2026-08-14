@@ -1227,6 +1227,21 @@ private fun SlicingSettingsSheet(
         ).maxOrNull() ?: 30f
         val featureJerkSteps = (maximumFeatureJerk / 0.5f).roundToInt().coerceAtLeast(2) - 1
         val maximumFilamentSlot = options.resolvedFilamentSlots().size.coerceIn(1, MAX_FILAMENT_SLOTS)
+        val supportAvailability = options.supportSettingsAvailability()
+        val isSearchingSettings = settingsQuery.isNotBlank()
+        val minimumOrganicTipDiameter = minimumOrganicTreeTipDiameter(options.supportLineWidth)
+        val minimumOrganicBranchDiameter = minimumOrganicTreeBranchDiameter(
+            options.supportLineWidth,
+            options.treeSupportTipDiameter,
+        )
+        val maximumOrganicTipDiameter = max(
+            10f,
+            max(options.treeSupportTipDiameter, minimumOrganicTipDiameter),
+        )
+        val maximumOrganicBranchDiameter = max(
+            10f,
+            max(options.treeSupportOrganicBranchDiameter, minimumOrganicBranchDiameter),
+        )
         if (settingsQuery.isBlank()) {
             SlicingSettingsTabs(
                 selected = selectedSection,
@@ -2418,14 +2433,16 @@ private fun SlicingSettingsSheet(
                     )
                 }
                 SettingsGroupTitle(stringResource(R.string.bridges))
-                SettingSlider(
-                    label = stringResource(R.string.maximum_unsupported_bridge_length),
-                    valueText = stringResource(R.string.millimeters_value, options.maxBridgeLength),
-                    value = options.maxBridgeLength,
-                    range = 0f..max(100f, options.maxBridgeLength),
-                    steps = max(100f, options.maxBridgeLength).roundToInt().coerceAtLeast(2) - 1,
-                    onValueChange = { onOptionsChanged(options.copy(maxBridgeLength = it.roundToInt().toFloat())) },
-                )
+                if (supportAvailability.treeKind == TreeSupportSettingsKind.BRANCHED || isSearchingSettings) {
+                    SettingSlider(
+                        label = stringResource(R.string.maximum_unsupported_bridge_length),
+                        valueText = stringResource(R.string.millimeters_value, options.maxBridgeLength),
+                        value = options.maxBridgeLength,
+                        range = 0f..max(100f, options.maxBridgeLength),
+                        steps = max(100f, options.maxBridgeLength).roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = { onOptionsChanged(options.copy(maxBridgeLength = it.roundToInt().toFloat())) },
+                    )
+                }
                 SettingSlider(
                     label = stringResource(R.string.external_bridge_density),
                     valueText = stringResource(R.string.percent_value, options.bridgeDensity.roundToInt()),
@@ -2504,11 +2521,13 @@ private fun SlicingSettingsSheet(
                     },
                     onSelected = { onOptionsChanged(options.copy(counterboreHoleBridging = it)) },
                 )
-                SettingsSwitch(
-                    label = stringResource(R.string.do_not_support_bridges),
-                    checked = options.bridgeNoSupport,
-                    onCheckedChange = { onOptionsChanged(options.copy(bridgeNoSupport = it)) },
-                )
+                if (supportAvailability.treeKind != TreeSupportSettingsKind.BRANCHED || isSearchingSettings) {
+                    SettingsSwitch(
+                        label = stringResource(R.string.do_not_support_bridges),
+                        checked = options.bridgeNoSupport,
+                        onCheckedChange = { onOptionsChanged(options.copy(bridgeNoSupport = it)) },
+                    )
+                }
                 SettingsSwitch(
                     label = stringResource(R.string.thick_external_bridges),
                     checked = options.thickBridges,
@@ -2807,7 +2826,7 @@ private fun SlicingSettingsSheet(
                     checked = options.supportEnabled,
                     onCheckedChange = { onOptionsChanged(options.copy(supportEnabled = it)) },
                 )
-                if (options.supportEnabled || settingsQuery.isNotBlank()) {
+                if (supportAvailability.haveSupportMaterial || isSearchingSettings) {
                     SettingSlider(
                         label = stringResource(R.string.support_speed),
                         valueText = stringResource(R.string.print_speed_value, options.supportSpeed),
@@ -2816,21 +2835,44 @@ private fun SlicingSettingsSheet(
                         steps = featureSpeedSteps,
                         onValueChange = { onOptionsChanged(options.copy(supportSpeed = (it / 5f).roundToInt() * 5f)) },
                     )
-                    SettingSlider(
-                        label = stringResource(R.string.support_interface_speed),
-                        valueText = stringResource(R.string.print_speed_value, options.supportInterfaceSpeed),
-                        value = options.supportInterfaceSpeed,
-                        range = 10f..maximumFeatureSpeed,
-                        steps = featureSpeedSteps,
-                        onValueChange = { onOptionsChanged(options.copy(supportInterfaceSpeed = (it / 5f).roundToInt() * 5f)) },
-                    )
+                    if (
+                        (supportAvailability.haveSupportMaterial && supportAvailability.haveInterface) ||
+                        isSearchingSettings
+                    ) {
+                        SettingSlider(
+                            label = stringResource(R.string.support_interface_speed),
+                            valueText = stringResource(R.string.print_speed_value, options.supportInterfaceSpeed),
+                            value = options.supportInterfaceSpeed,
+                            range = 10f..maximumFeatureSpeed,
+                            steps = featureSpeedSteps,
+                            onValueChange = {
+                                onOptionsChanged(options.copy(supportInterfaceSpeed = (it / 5f).roundToInt() * 5f))
+                            },
+                        )
+                    }
                     SettingSlider(
                         label = stringResource(R.string.support_line_width),
                         valueText = stringResource(R.string.millimeters_value_precise, options.supportLineWidth),
                         value = options.supportLineWidth,
                         range = minimumLineWidth..maximumLineWidth,
                         steps = lineWidthSteps,
-                        onValueChange = { onOptionsChanged(options.copy(supportLineWidth = it)) },
+                        onValueChange = { lineWidth ->
+                            if (supportAvailability.treeKind == TreeSupportSettingsKind.ORGANIC) {
+                                val tipDiameter = max(options.treeSupportTipDiameter, lineWidth)
+                                onOptionsChanged(
+                                    options.copy(
+                                        supportLineWidth = lineWidth,
+                                        treeSupportTipDiameter = tipDiameter,
+                                        treeSupportOrganicBranchDiameter = max(
+                                            options.treeSupportOrganicBranchDiameter,
+                                            minimumOrganicTreeBranchDiameter(lineWidth, tipDiameter),
+                                        ),
+                                    ),
+                                )
+                            } else {
+                                onOptionsChanged(options.copy(supportLineWidth = lineWidth))
+                            }
+                        },
                     )
                     SettingChoices(
                         settingLabel = stringResource(R.string.support_type),
@@ -2853,48 +2895,63 @@ private fun SlicingSettingsSheet(
                             )
                         },
                     )
-                    if (options.supportType.isTreeSupportType() || settingsQuery.isNotBlank()) {
+                    SettingChoices(
+                        settingLabel = stringResource(R.string.support_style),
+                        entries = compatibleSupportStyles(options.supportType),
+                        selected = normalizedSupportStyle(options.supportType, options.supportStyle),
+                        optionLabel = { enumLabel(it) },
+                        onSelected = {
+                            onOptionsChanged(
+                                options.copy(
+                                    supportStyle = normalizedSupportStyle(options.supportType, it),
+                                ),
+                            )
+                        },
+                    )
+                    if (supportAvailability.treeKind != TreeSupportSettingsKind.NONE || isSearchingSettings) {
                         SettingsGroupTitle(stringResource(R.string.tree_support))
-                        SettingSlider(
-                            label = stringResource(R.string.tree_support_branch_angle),
-                            valueText = stringResource(R.string.degrees_value, options.treeSupportBranchAngle),
-                            value = options.treeSupportBranchAngle,
-                            range = 0f..60f,
-                            steps = 59,
-                            onValueChange = {
-                                onOptionsChanged(options.copy(treeSupportBranchAngle = it.roundToInt().toFloat()))
-                            },
-                        )
-                        SettingSlider(
-                            label = stringResource(R.string.tree_support_branch_distance),
-                            valueText = stringResource(
-                                R.string.millimeters_value_precise,
-                                options.treeSupportBranchDistance,
-                            ),
-                            value = options.treeSupportBranchDistance,
-                            range = 1f..10f,
-                            steps = 89,
-                            onValueChange = {
-                                onOptionsChanged(
-                                    options.copy(treeSupportBranchDistance = (it * 10f).roundToInt() / 10f),
-                                )
-                            },
-                        )
-                        SettingSlider(
-                            label = stringResource(R.string.tree_support_branch_diameter),
-                            valueText = stringResource(
-                                R.string.millimeters_value_precise,
-                                options.treeSupportBranchDiameter,
-                            ),
-                            value = options.treeSupportBranchDiameter,
-                            range = 1f..10f,
-                            steps = 89,
-                            onValueChange = {
-                                onOptionsChanged(
-                                    options.copy(treeSupportBranchDiameter = (it * 10f).roundToInt() / 10f),
-                                )
-                            },
-                        )
+                        if (supportAvailability.treeKind == TreeSupportSettingsKind.BRANCHED || isSearchingSettings) {
+                            SettingSlider(
+                                label = stringResource(R.string.tree_support_branch_angle),
+                                valueText = stringResource(R.string.degrees_value, options.treeSupportBranchAngle),
+                                value = options.treeSupportBranchAngle,
+                                range = 0f..60f,
+                                steps = 59,
+                                onValueChange = {
+                                    onOptionsChanged(options.copy(treeSupportBranchAngle = it.roundToInt().toFloat()))
+                                },
+                            )
+                            SettingSlider(
+                                label = stringResource(R.string.tree_support_branch_distance),
+                                valueText = stringResource(
+                                    R.string.millimeters_value_precise,
+                                    options.treeSupportBranchDistance,
+                                ),
+                                value = options.treeSupportBranchDistance,
+                                range = 1f..10f,
+                                steps = 89,
+                                onValueChange = {
+                                    onOptionsChanged(
+                                        options.copy(treeSupportBranchDistance = (it * 10f).roundToInt() / 10f),
+                                    )
+                                },
+                            )
+                            SettingSlider(
+                                label = stringResource(R.string.tree_support_branch_diameter),
+                                valueText = stringResource(
+                                    R.string.millimeters_value_precise,
+                                    options.treeSupportBranchDiameter,
+                                ),
+                                value = options.treeSupportBranchDiameter,
+                                range = 1f..10f,
+                                steps = 89,
+                                onValueChange = {
+                                    onOptionsChanged(
+                                        options.copy(treeSupportBranchDiameter = (it * 10f).roundToInt() / 10f),
+                                    )
+                                },
+                            )
+                        }
                         SettingSlider(
                             label = stringResource(R.string.tree_support_wall_count),
                             valueText = options.treeSupportWallCount.toString(),
@@ -2905,139 +2962,152 @@ private fun SlicingSettingsSheet(
                                 onOptionsChanged(options.copy(treeSupportWallCount = it.roundToInt()))
                             },
                         )
-                        SettingSlider(
-                            label = stringResource(R.string.tree_support_tip_diameter),
-                            valueText = stringResource(
-                                R.string.millimeters_value_precise,
-                                options.treeSupportTipDiameter,
-                            ),
-                            value = options.treeSupportTipDiameter,
-                            range = 0.1f..max(10f, options.treeSupportTipDiameter),
-                            steps = ((max(10f, options.treeSupportTipDiameter) - 0.1f) * 10f)
-                                .roundToInt() - 1,
-                            onValueChange = {
-                                val tipDiameter = (it * 10f).roundToInt() / 10f
-                                onOptionsChanged(
-                                    options.copy(
-                                        treeSupportTipDiameter = tipDiameter,
-                                        treeSupportOrganicBranchDiameter = max(
-                                            options.treeSupportOrganicBranchDiameter,
-                                            tipDiameter,
+                        if (supportAvailability.treeKind == TreeSupportSettingsKind.ORGANIC || isSearchingSettings) {
+                            SettingSlider(
+                                label = stringResource(R.string.tree_support_tip_diameter),
+                                valueText = stringResource(
+                                    R.string.millimeters_value_precise,
+                                    options.treeSupportTipDiameter,
+                                ),
+                                value = options.treeSupportTipDiameter.coerceAtLeast(minimumOrganicTipDiameter),
+                                range = minimumOrganicTipDiameter..maximumOrganicTipDiameter,
+                                steps = ((maximumOrganicTipDiameter - minimumOrganicTipDiameter) * 10f)
+                                    .roundToInt().coerceAtLeast(2) - 1,
+                                onValueChange = {
+                                    val tipDiameter = (it * 10f).roundToInt() / 10f
+                                    onOptionsChanged(
+                                        options.copy(
+                                            treeSupportTipDiameter = tipDiameter,
+                                            treeSupportOrganicBranchDiameter = max(
+                                                options.treeSupportOrganicBranchDiameter,
+                                                minimumOrganicTreeBranchDiameter(
+                                                    options.supportLineWidth,
+                                                    tipDiameter,
+                                                ),
+                                            ),
                                         ),
-                                    ),
-                                )
-                            },
-                        )
-                        SettingSlider(
-                            label = stringResource(R.string.tree_support_organic_branch_angle),
-                            valueText = stringResource(
-                                R.string.degrees_value,
-                                options.treeSupportOrganicBranchAngle,
-                            ),
-                            value = options.treeSupportOrganicBranchAngle,
-                            range = 0f..60f,
-                            steps = 59,
-                            onValueChange = {
-                                onOptionsChanged(
-                                    options.copy(treeSupportOrganicBranchAngle = it.roundToInt().toFloat()),
-                                )
-                            },
-                        )
-                        SettingSlider(
-                            label = stringResource(R.string.tree_support_organic_branch_distance),
-                            valueText = stringResource(
-                                R.string.millimeters_value_precise,
-                                options.treeSupportOrganicBranchDistance,
-                            ),
-                            value = options.treeSupportOrganicBranchDistance,
-                            range = 1f..10f,
-                            steps = 89,
-                            onValueChange = {
-                                onOptionsChanged(
-                                    options.copy(
-                                        treeSupportOrganicBranchDistance = (it * 10f).roundToInt() / 10f,
-                                    ),
-                                )
-                            },
-                        )
-                        SettingSlider(
-                            label = stringResource(R.string.tree_support_organic_branch_diameter),
-                            valueText = stringResource(
-                                R.string.millimeters_value_precise,
-                                options.treeSupportOrganicBranchDiameter,
-                            ),
-                            value = options.treeSupportOrganicBranchDiameter,
-                            range = options.treeSupportTipDiameter.coerceIn(1f, 10f)..10f,
-                            steps = (
-                                ((10f - options.treeSupportTipDiameter.coerceIn(1f, 10f)) * 10f)
-                                    .roundToInt() - 1
-                                ).coerceAtLeast(0),
-                            onValueChange = {
-                                onOptionsChanged(
-                                    options.copy(
-                                        treeSupportOrganicBranchDiameter = (it * 10f).roundToInt() / 10f,
-                                    ),
-                                )
-                            },
-                        )
-                        SettingSlider(
-                            label = stringResource(R.string.tree_support_branch_diameter_angle),
-                            valueText = stringResource(
-                                R.string.degrees_value,
-                                options.treeSupportBranchDiameterAngle,
-                            ),
-                            value = options.treeSupportBranchDiameterAngle,
-                            range = 0f..15f,
-                            steps = 14,
-                            onValueChange = {
-                                onOptionsChanged(
-                                    options.copy(treeSupportBranchDiameterAngle = it.roundToInt().toFloat()),
-                                )
-                            },
-                        )
-                        SettingSlider(
-                            label = stringResource(R.string.tree_support_preferred_branch_angle),
-                            valueText = stringResource(
-                                R.string.degrees_value,
-                                options.treeSupportPreferredBranchAngle,
-                            ),
-                            value = options.treeSupportPreferredBranchAngle,
-                            range = 10f..85f,
-                            steps = 74,
-                            onValueChange = {
-                                onOptionsChanged(
-                                    options.copy(treeSupportPreferredBranchAngle = it.roundToInt().toFloat()),
-                                )
-                            },
-                        )
-                        SettingSlider(
-                            label = stringResource(R.string.tree_support_branch_density),
-                            valueText = stringResource(
-                                R.string.percent_value,
-                                options.treeSupportBranchDensity.roundToInt(),
-                            ),
-                            value = options.treeSupportBranchDensity,
-                            range = 5f..max(35f, options.treeSupportBranchDensity),
-                            steps = (max(35f, options.treeSupportBranchDensity) - 5f).roundToInt() - 1,
-                            onValueChange = {
-                                onOptionsChanged(options.copy(treeSupportBranchDensity = it.roundToInt().toFloat()))
-                            },
-                        )
-                        SettingsSwitch(
-                            label = stringResource(R.string.tree_support_adaptive_layer_height),
-                            checked = options.treeSupportAdaptiveLayerHeight,
-                            onCheckedChange = {
-                                onOptionsChanged(options.copy(treeSupportAdaptiveLayerHeight = it))
-                            },
-                        )
-                        SettingsSwitch(
-                            label = stringResource(R.string.tree_support_auto_brim),
-                            checked = options.treeSupportAutoBrim,
-                            onCheckedChange = {
-                                onOptionsChanged(options.copy(treeSupportAutoBrim = it))
-                            },
-                        )
-                        if (!options.treeSupportAutoBrim || settingsQuery.isNotBlank()) {
+                                    )
+                                },
+                            )
+                            SettingSlider(
+                                label = stringResource(R.string.tree_support_organic_branch_angle),
+                                valueText = stringResource(
+                                    R.string.degrees_value,
+                                    options.treeSupportOrganicBranchAngle,
+                                ),
+                                value = options.treeSupportOrganicBranchAngle,
+                                range = 0f..60f,
+                                steps = 59,
+                                onValueChange = {
+                                    onOptionsChanged(
+                                        options.copy(treeSupportOrganicBranchAngle = it.roundToInt().toFloat()),
+                                    )
+                                },
+                            )
+                            SettingSlider(
+                                label = stringResource(R.string.tree_support_organic_branch_distance),
+                                valueText = stringResource(
+                                    R.string.millimeters_value_precise,
+                                    options.treeSupportOrganicBranchDistance,
+                                ),
+                                value = options.treeSupportOrganicBranchDistance,
+                                range = 1f..10f,
+                                steps = 89,
+                                onValueChange = {
+                                    onOptionsChanged(
+                                        options.copy(
+                                            treeSupportOrganicBranchDistance = (it * 10f).roundToInt() / 10f,
+                                        ),
+                                    )
+                                },
+                            )
+                            SettingSlider(
+                                label = stringResource(R.string.tree_support_organic_branch_diameter),
+                                valueText = stringResource(
+                                    R.string.millimeters_value_precise,
+                                    options.treeSupportOrganicBranchDiameter,
+                                ),
+                                value = options.treeSupportOrganicBranchDiameter.coerceAtLeast(
+                                    minimumOrganicBranchDiameter,
+                                ),
+                                range = minimumOrganicBranchDiameter..maximumOrganicBranchDiameter,
+                                steps = ((maximumOrganicBranchDiameter - minimumOrganicBranchDiameter) * 10f)
+                                    .roundToInt().coerceAtLeast(1) - 1,
+                                onValueChange = {
+                                    onOptionsChanged(
+                                        options.copy(
+                                            treeSupportOrganicBranchDiameter = (it * 10f).roundToInt() / 10f,
+                                        ),
+                                    )
+                                },
+                            )
+                            SettingSlider(
+                                label = stringResource(R.string.tree_support_branch_diameter_angle),
+                                valueText = stringResource(
+                                    R.string.degrees_value,
+                                    options.treeSupportBranchDiameterAngle,
+                                ),
+                                value = options.treeSupportBranchDiameterAngle,
+                                range = 0f..15f,
+                                steps = 14,
+                                onValueChange = {
+                                    onOptionsChanged(
+                                        options.copy(treeSupportBranchDiameterAngle = it.roundToInt().toFloat()),
+                                    )
+                                },
+                            )
+                            SettingSlider(
+                                label = stringResource(R.string.tree_support_preferred_branch_angle),
+                                valueText = stringResource(
+                                    R.string.degrees_value,
+                                    options.treeSupportPreferredBranchAngle,
+                                ),
+                                value = options.treeSupportPreferredBranchAngle,
+                                range = 10f..85f,
+                                steps = 74,
+                                onValueChange = {
+                                    onOptionsChanged(
+                                        options.copy(treeSupportPreferredBranchAngle = it.roundToInt().toFloat()),
+                                    )
+                                },
+                            )
+                            SettingSlider(
+                                label = stringResource(R.string.tree_support_branch_density),
+                                valueText = stringResource(
+                                    R.string.percent_value,
+                                    options.treeSupportBranchDensity.roundToInt(),
+                                ),
+                                value = options.treeSupportBranchDensity,
+                                range = 5f..max(35f, options.treeSupportBranchDensity),
+                                steps = (max(35f, options.treeSupportBranchDensity) - 5f).roundToInt() - 1,
+                                onValueChange = {
+                                    onOptionsChanged(options.copy(treeSupportBranchDensity = it.roundToInt().toFloat()))
+                                },
+                            )
+                        }
+                        if (supportAvailability.treeKind == TreeSupportSettingsKind.BRANCHED || isSearchingSettings) {
+                            SettingsSwitch(
+                                label = stringResource(R.string.tree_support_adaptive_layer_height),
+                                checked = options.treeSupportAdaptiveLayerHeight,
+                                onCheckedChange = {
+                                    onOptionsChanged(options.copy(treeSupportAdaptiveLayerHeight = it))
+                                },
+                            )
+                            SettingsSwitch(
+                                label = stringResource(R.string.tree_support_auto_brim),
+                                checked = options.treeSupportAutoBrim,
+                                onCheckedChange = {
+                                    onOptionsChanged(options.copy(treeSupportAutoBrim = it))
+                                },
+                            )
+                        }
+                        if (
+                            (
+                                supportAvailability.treeKind == TreeSupportSettingsKind.BRANCHED &&
+                                    !options.treeSupportAutoBrim
+                                ) ||
+                            isSearchingSettings
+                        ) {
                             SettingSlider(
                                 label = stringResource(R.string.tree_support_brim_width),
                                 valueText = stringResource(
@@ -3055,19 +3125,6 @@ private fun SlicingSettingsSheet(
                             )
                         }
                     }
-                    SettingChoices(
-                        settingLabel = stringResource(R.string.support_style),
-                        entries = compatibleSupportStyles(options.supportType),
-                        selected = normalizedSupportStyle(options.supportType, options.supportStyle),
-                        optionLabel = { enumLabel(it) },
-                        onSelected = {
-                            onOptionsChanged(
-                                options.copy(
-                                    supportStyle = normalizedSupportStyle(options.supportType, it),
-                                ),
-                            )
-                        },
-                    )
                     SettingsSwitch(
                         label = stringResource(R.string.support_on_build_plate_only),
                         checked = options.supportCoverage.onBuildPlateOnly,
@@ -3079,17 +3136,25 @@ private fun SlicingSettingsSheet(
                             )
                         },
                     )
-                    SettingsSwitch(
-                        label = stringResource(R.string.support_critical_regions_only),
-                        checked = options.supportCoverage.criticalRegionsOnly,
-                        onCheckedChange = {
-                            onOptionsChanged(
-                                options.copy(
-                                    supportCoverage = options.supportCoverage.copy(criticalRegionsOnly = it),
-                                ),
-                            )
-                        },
-                    )
+                    if (
+                        (
+                            supportAvailability.automatic &&
+                                supportAvailability.treeKind != TreeSupportSettingsKind.NONE
+                            ) ||
+                        isSearchingSettings
+                    ) {
+                        SettingsSwitch(
+                            label = stringResource(R.string.support_critical_regions_only),
+                            checked = options.supportCoverage.criticalRegionsOnly,
+                            onCheckedChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        supportCoverage = options.supportCoverage.copy(criticalRegionsOnly = it),
+                                    ),
+                                )
+                            },
+                        )
+                    }
                     SettingsSwitch(
                         label = stringResource(R.string.support_remove_small_overhangs),
                         checked = options.supportCoverage.removeSmallOverhangs,
@@ -3169,13 +3234,18 @@ private fun SlicingSettingsSheet(
                         optionLabel = { enumLabel(it) },
                         onSelected = { onOptionsChanged(options.copy(supportInterfacePattern = it)) },
                     )
-                    SettingsSwitch(
-                        label = stringResource(R.string.support_interface_loop_pattern),
-                        checked = options.supportInterfaceLoopPattern,
-                        onCheckedChange = {
-                            onOptionsChanged(options.copy(supportInterfaceLoopPattern = it))
-                        },
-                    )
+                    if (
+                        (supportAvailability.haveSupportMaterial && supportAvailability.haveInterface) ||
+                        isSearchingSettings
+                    ) {
+                        SettingsSwitch(
+                            label = stringResource(R.string.support_interface_loop_pattern),
+                            checked = options.supportInterfaceLoopPattern,
+                            onCheckedChange = {
+                                onOptionsChanged(options.copy(supportInterfaceLoopPattern = it))
+                            },
+                        )
+                    }
                     SettingsGroupTitle(stringResource(R.string.support_filament_routing))
                     SettingSlider(
                         label = stringResource(R.string.support_filament),
@@ -3191,21 +3261,26 @@ private fun SlicingSettingsSheet(
                             onOptionsChanged(options.copy(supportFilament = it.roundToInt()))
                         },
                     )
-                    SettingSlider(
-                        label = stringResource(R.string.support_interface_filament),
-                        valueText = if (options.supportInterfaceFilament == 0) {
-                            stringResource(R.string.filament_default)
-                        } else {
-                            stringResource(R.string.extruder_number, options.supportInterfaceFilament)
-                        },
-                        value = options.supportInterfaceFilament.toFloat()
-                            .coerceAtMost(maximumFilamentSlot.toFloat()),
-                        range = 0f..maximumFilamentSlot.toFloat(),
-                        steps = (maximumFilamentSlot - 1).coerceAtLeast(0),
-                        onValueChange = {
-                            onOptionsChanged(options.copy(supportInterfaceFilament = it.roundToInt()))
-                        },
-                    )
+                    if (
+                        (supportAvailability.haveSupportMaterial && supportAvailability.haveInterface) ||
+                        isSearchingSettings
+                    ) {
+                        SettingSlider(
+                            label = stringResource(R.string.support_interface_filament),
+                            valueText = if (options.supportInterfaceFilament == 0) {
+                                stringResource(R.string.filament_default)
+                            } else {
+                                stringResource(R.string.extruder_number, options.supportInterfaceFilament)
+                            },
+                            value = options.supportInterfaceFilament.toFloat()
+                                .coerceAtMost(maximumFilamentSlot.toFloat()),
+                            range = 0f..maximumFilamentSlot.toFloat(),
+                            steps = (maximumFilamentSlot - 1).coerceAtLeast(0),
+                            onValueChange = {
+                                onOptionsChanged(options.copy(supportInterfaceFilament = it.roundToInt()))
+                            },
+                        )
+                    }
                     SettingsSwitch(
                         label = stringResource(R.string.avoid_interface_filament_for_base),
                         checked = options.supportAdvanced.avoidInterfaceFilamentForBase,
@@ -3217,54 +3292,75 @@ private fun SlicingSettingsSheet(
                             )
                         },
                     )
-                    SettingSlider(
-                        label = stringResource(R.string.support_threshold_angle),
-                        valueText = stringResource(R.string.degrees_value, options.supportAngle),
-                        value = options.supportAngle,
-                        range = 10f..80f,
-                        steps = 69,
-                        onValueChange = { onOptionsChanged(options.copy(supportAngle = it.roundToInt().toFloat())) },
-                    )
-                    SettingChoices(
-                        settingLabel = stringResource(R.string.support_threshold_overlap_unit),
-                        entries = listOf("percent", "millimeters"),
-                        selected = if (options.supportAdvanced.thresholdOverlapPercent) "percent" else "millimeters",
-                        optionLabel = {
-                            stringResource(if (it == "percent") R.string.percent_unit else R.string.millimeters_unit)
-                        },
-                        onSelected = {
-                            val asPercent = it == "percent"
-                            onOptionsChanged(
-                                options.copy(
-                                    supportAdvanced = options.supportAdvanced.copy(
-                                        thresholdOverlap = if (asPercent) 50f else 0.2f,
-                                        thresholdOverlapPercent = asPercent,
-                                    ),
-                                ),
-                            )
-                        },
-                    )
-                    SettingSlider(
-                        label = stringResource(R.string.support_threshold_overlap),
-                        valueText = if (options.supportAdvanced.thresholdOverlapPercent) {
-                            stringResource(R.string.percent_value, options.supportAdvanced.thresholdOverlap.roundToInt())
-                        } else {
-                            stringResource(R.string.millimeters_value_precise, options.supportAdvanced.thresholdOverlap)
-                        },
-                        value = options.supportAdvanced.thresholdOverlap,
-                        range = if (options.supportAdvanced.thresholdOverlapPercent) 0f..100f else 0f..0.5f,
-                        steps = if (options.supportAdvanced.thresholdOverlapPercent) 99 else 49,
-                        onValueChange = {
-                            val value = if (options.supportAdvanced.thresholdOverlapPercent) {
-                                it.roundToInt().toFloat()
+                    if (supportAvailability.automatic || isSearchingSettings) {
+                        SettingSlider(
+                            label = stringResource(R.string.support_threshold_angle),
+                            valueText = stringResource(R.string.degrees_value, options.supportAngle),
+                            value = options.supportAngle,
+                            range = 0f..90f,
+                            steps = 89,
+                            onValueChange = {
+                                onOptionsChanged(options.copy(supportAngle = it.roundToInt().toFloat()))
+                            },
+                        )
+                    }
+                    if (
+                        (supportAvailability.automatic && options.supportAngle.roundToInt() == 0) ||
+                        isSearchingSettings
+                    ) {
+                        SettingChoices(
+                            settingLabel = stringResource(R.string.support_threshold_overlap_unit),
+                            entries = listOf("percent", "millimeters"),
+                            selected = if (options.supportAdvanced.thresholdOverlapPercent) {
+                                "percent"
                             } else {
-                                (it * 100f).roundToInt() / 100f
-                            }
-                            onOptionsChanged(
-                                options.copy(supportAdvanced = options.supportAdvanced.copy(thresholdOverlap = value)),
-                            )
-                        },
-                    )
+                                "millimeters"
+                            },
+                            optionLabel = {
+                                stringResource(if (it == "percent") R.string.percent_unit else R.string.millimeters_unit)
+                            },
+                            onSelected = {
+                                val asPercent = it == "percent"
+                                onOptionsChanged(
+                                    options.copy(
+                                        supportAdvanced = options.supportAdvanced.copy(
+                                            thresholdOverlap = if (asPercent) 50f else 0.2f,
+                                            thresholdOverlapPercent = asPercent,
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                        SettingSlider(
+                            label = stringResource(R.string.support_threshold_overlap),
+                            valueText = if (options.supportAdvanced.thresholdOverlapPercent) {
+                                stringResource(
+                                    R.string.percent_value,
+                                    options.supportAdvanced.thresholdOverlap.roundToInt(),
+                                )
+                            } else {
+                                stringResource(
+                                    R.string.millimeters_value_precise,
+                                    options.supportAdvanced.thresholdOverlap,
+                                )
+                            },
+                            value = options.supportAdvanced.thresholdOverlap,
+                            range = if (options.supportAdvanced.thresholdOverlapPercent) 0f..100f else 0f..0.5f,
+                            steps = if (options.supportAdvanced.thresholdOverlapPercent) 99 else 49,
+                            onValueChange = {
+                                val value = if (options.supportAdvanced.thresholdOverlapPercent) {
+                                    it.roundToInt().toFloat()
+                                } else {
+                                    (it * 100f).roundToInt() / 100f
+                                }
+                                onOptionsChanged(
+                                    options.copy(
+                                        supportAdvanced = options.supportAdvanced.copy(thresholdOverlap = value),
+                                    ),
+                                )
+                            },
+                        )
+                    }
                     SettingSlider(
                         label = stringResource(R.string.support_top_interface_layers),
                         valueText = options.supportInterfaceTopLayers.toString(),
@@ -3285,22 +3381,56 @@ private fun SlicingSettingsSheet(
                         steps = 20,
                         onValueChange = { onOptionsChanged(options.copy(supportInterfaceBottomLayers = it.roundToInt())) },
                     )
-                    SettingSlider(
-                        label = stringResource(R.string.support_interface_spacing),
-                        valueText = stringResource(R.string.millimeters_value_precise, options.supportInterfaceSpacing),
-                        value = options.supportInterfaceSpacing,
-                        range = 0f..max(2f, options.supportInterfaceSpacing),
-                        steps = (max(2f, options.supportInterfaceSpacing) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
-                        onValueChange = { onOptionsChanged(options.copy(supportInterfaceSpacing = (it / 0.05f).roundToInt() * 0.05f)) },
-                    )
-                    SettingSlider(
-                        label = stringResource(R.string.support_bottom_interface_spacing),
-                        valueText = stringResource(R.string.millimeters_value_precise, options.supportBottomInterfaceSpacing),
-                        value = options.supportBottomInterfaceSpacing,
-                        range = 0f..max(2f, options.supportBottomInterfaceSpacing),
-                        steps = (max(2f, options.supportBottomInterfaceSpacing) / 0.05f).roundToInt().coerceAtLeast(2) - 1,
-                        onValueChange = { onOptionsChanged(options.copy(supportBottomInterfaceSpacing = (it / 0.05f).roundToInt() * 0.05f)) },
-                    )
+                    if (
+                        (
+                            supportAvailability.haveSupportMaterial &&
+                                supportAvailability.haveInterface &&
+                                !supportAvailability.ironingActive
+                            ) ||
+                        isSearchingSettings
+                    ) {
+                        SettingSlider(
+                            label = stringResource(R.string.support_interface_spacing),
+                            valueText = stringResource(
+                                R.string.millimeters_value_precise,
+                                options.supportInterfaceSpacing,
+                            ),
+                            value = options.supportInterfaceSpacing,
+                            range = 0f..max(2f, options.supportInterfaceSpacing),
+                            steps = (max(2f, options.supportInterfaceSpacing) / 0.05f)
+                                .roundToInt().coerceAtLeast(2) - 1,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        supportInterfaceSpacing = (it / 0.05f).roundToInt() * 0.05f,
+                                    ),
+                                )
+                            },
+                        )
+                    }
+                    if (
+                        (supportAvailability.haveSupportMaterial && supportAvailability.haveInterface) ||
+                        isSearchingSettings
+                    ) {
+                        SettingSlider(
+                            label = stringResource(R.string.support_bottom_interface_spacing),
+                            valueText = stringResource(
+                                R.string.millimeters_value_precise,
+                                options.supportBottomInterfaceSpacing,
+                            ),
+                            value = options.supportBottomInterfaceSpacing,
+                            range = 0f..max(2f, options.supportBottomInterfaceSpacing),
+                            steps = (max(2f, options.supportBottomInterfaceSpacing) / 0.05f)
+                                .roundToInt().coerceAtLeast(2) - 1,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        supportBottomInterfaceSpacing = (it / 0.05f).roundToInt() * 0.05f,
+                                    ),
+                                )
+                            },
+                        )
+                    }
                     SettingSlider(
                         label = stringResource(R.string.support_top_z_distance),
                         valueText = stringResource(R.string.millimeters_value_precise, options.supportTopZDistance),
@@ -3345,17 +3475,19 @@ private fun SlicingSettingsSheet(
                             )
                         },
                     )
-                    SettingsGroupTitle(stringResource(R.string.support_ironing))
-                    SettingsSwitch(
-                        label = stringResource(R.string.support_ironing),
-                        checked = options.supportAdvanced.ironingEnabled,
-                        onCheckedChange = {
-                            onOptionsChanged(
-                                options.copy(supportAdvanced = options.supportAdvanced.copy(ironingEnabled = it)),
-                            )
-                        },
-                    )
-                    if (options.supportAdvanced.ironingEnabled || settingsQuery.isNotBlank()) {
+                    if (supportAvailability.canIron || isSearchingSettings) {
+                        SettingsGroupTitle(stringResource(R.string.support_ironing))
+                        SettingsSwitch(
+                            label = stringResource(R.string.support_ironing),
+                            checked = options.supportAdvanced.ironingEnabled,
+                            onCheckedChange = {
+                                onOptionsChanged(
+                                    options.copy(supportAdvanced = options.supportAdvanced.copy(ironingEnabled = it)),
+                                )
+                            },
+                        )
+                    }
+                    if (supportAvailability.ironingActive || isSearchingSettings) {
                         SettingChoices(
                             settingLabel = stringResource(R.string.support_ironing_pattern),
                             entries = listOf("rectilinear", "concentric"),

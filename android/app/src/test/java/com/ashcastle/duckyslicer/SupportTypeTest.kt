@@ -35,6 +35,75 @@ class SupportTypeTest {
     }
 
     @Test
+    fun supportSettingFamiliesFollowTypeStyleAndEnabledState() {
+        assertTrue("normal(auto)".isAutomaticSupportType())
+        assertTrue("tree(auto)".isAutomaticSupportType())
+        assertFalse("tree(manual)".isAutomaticSupportType())
+        assertEquals(
+            TreeSupportSettingsKind.NONE,
+            treeSupportSettingsKind(false, "tree(auto)", "organic"),
+        )
+        assertEquals(
+            TreeSupportSettingsKind.ORGANIC,
+            treeSupportSettingsKind(true, "tree(auto)", "default"),
+        )
+        assertEquals(
+            TreeSupportSettingsKind.ORGANIC,
+            treeSupportSettingsKind(true, "tree(manual)", "organic"),
+        )
+        assertEquals(
+            TreeSupportSettingsKind.BRANCHED,
+            treeSupportSettingsKind(true, "tree(auto)", "tree_slim"),
+        )
+        assertEquals(
+            TreeSupportSettingsKind.BRANCHED,
+            treeSupportSettingsKind(true, "tree(auto)", "tree_hybrid"),
+        )
+        assertEquals(
+            TreeSupportSettingsKind.NONE,
+            treeSupportSettingsKind(true, "normal(auto)", "grid"),
+        )
+    }
+
+    @Test
+    fun supportMaterialInterfaceAndIroningAvailabilityMatchesTheEngine() {
+        val disabled = SliceOptions().supportSettingsAvailability()
+        assertFalse(disabled.haveSupportMaterial)
+        assertFalse(disabled.canIron)
+
+        val raftOnly = SliceOptions(
+            raftLayers = 2,
+            supportEnabled = false,
+            supportInterfaceTopLayers = 0,
+        ).supportSettingsAvailability()
+        assertTrue(raftOnly.haveSupportMaterial)
+        assertTrue(raftOnly.canIron)
+        assertEquals(TreeSupportSettingsKind.NONE, raftOnly.treeKind)
+
+        val supportedInterface = SliceOptions(
+            supportEnabled = true,
+            supportType = "tree(auto)",
+            supportStyle = "organic",
+            supportInterfaceTopLayers = 2,
+            supportAdvanced = SupportAdvancedSettings(ironingEnabled = true),
+        ).supportSettingsAvailability()
+        assertTrue(supportedInterface.automatic)
+        assertTrue(supportedInterface.haveInterface)
+        assertTrue(supportedInterface.canIron)
+        assertTrue(supportedInterface.ironingActive)
+        assertEquals(TreeSupportSettingsKind.ORGANIC, supportedInterface.treeKind)
+    }
+
+    @Test
+    fun organicTreeDiametersRespectTheActiveSupportExtrusionWidth() {
+        assertEquals(0.4f, minimumOrganicTreeTipDiameter(0.4f))
+        assertEquals(0.1f, minimumOrganicTreeTipDiameter(0f))
+        assertEquals(1f, minimumOrganicTreeBranchDiameter(0.4f, 0.4f))
+        assertEquals(1.2f, minimumOrganicTreeBranchDiameter(0.6f, 0.6f))
+        assertEquals(1.5f, minimumOrganicTreeBranchDiameter(0.4f, 1.5f))
+    }
+
+    @Test
     fun fuzzySkinSettingsReachTheNativeContractAndRespectWallGeneratorCompatibility() {
         val fuzzy = FuzzySkinSettings(
             type = "allwalls",

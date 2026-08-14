@@ -40,6 +40,10 @@ internal fun String.isTreeSupportType(): Boolean = normalizedSupportType(this).l
     normalized == "tree(auto)" || normalized == "tree(manual)"
 }
 
+internal fun String.isAutomaticSupportType(): Boolean = normalizedSupportType(this).let { normalized ->
+    normalized == "normal(auto)" || normalized == "tree(auto)"
+}
+
 internal fun compatibleSupportStyles(supportType: String): List<String> =
     if (supportType.isTreeSupportType()) {
         listOf("default", "organic", "tree_slim", "tree_strong", "tree_hybrid")
@@ -50,6 +54,55 @@ internal fun compatibleSupportStyles(supportType: String): List<String> =
 internal fun normalizedSupportStyle(supportType: String, supportStyle: String): String {
     val candidate = supportStyle.trim().lowercase()
     return candidate.takeIf { it in compatibleSupportStyles(supportType) } ?: "default"
+}
+
+internal enum class TreeSupportSettingsKind {
+    NONE,
+    ORGANIC,
+    BRANCHED,
+}
+
+internal fun treeSupportSettingsKind(
+    supportEnabled: Boolean,
+    supportType: String,
+    supportStyle: String,
+): TreeSupportSettingsKind {
+    if (!supportEnabled || !supportType.isTreeSupportType()) return TreeSupportSettingsKind.NONE
+    return when (normalizedSupportStyle(supportType, supportStyle)) {
+        "tree_slim", "tree_strong", "tree_hybrid" -> TreeSupportSettingsKind.BRANCHED
+        else -> TreeSupportSettingsKind.ORGANIC
+    }
+}
+
+internal fun minimumOrganicTreeTipDiameter(supportLineWidth: Float): Float =
+    supportLineWidth.coerceAtLeast(0.1f)
+
+internal fun minimumOrganicTreeBranchDiameter(
+    supportLineWidth: Float,
+    tipDiameter: Float,
+): Float = maxOf(1f, supportLineWidth * 2f, tipDiameter)
+
+internal data class SupportSettingsAvailability(
+    val haveSupportMaterial: Boolean,
+    val automatic: Boolean,
+    val treeKind: TreeSupportSettingsKind,
+    val haveInterface: Boolean,
+    val canIron: Boolean,
+    val ironingActive: Boolean,
+)
+
+internal fun SliceOptions.supportSettingsAvailability(): SupportSettingsAvailability {
+    val haveSupportMaterial = supportEnabled || raftLayers > 0
+    val haveInterface = supportInterfaceTopLayers > 0 || supportInterfaceBottomLayers > 0
+    val canIron = raftLayers > 0 || (haveSupportMaterial && supportInterfaceTopLayers > 0)
+    return SupportSettingsAvailability(
+        haveSupportMaterial = haveSupportMaterial,
+        automatic = supportType.isAutomaticSupportType(),
+        treeKind = treeSupportSettingsKind(supportEnabled, supportType, supportStyle),
+        haveInterface = haveInterface,
+        canIron = canIron,
+        ironingActive = canIron && supportAdvanced.ironingEnabled,
+    )
 }
 
 data class PrinterProfile(
