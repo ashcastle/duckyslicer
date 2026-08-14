@@ -144,8 +144,8 @@ internal object ProfileValidation {
             optionalFeatureSpeedIsValid(profile.smallPerimeterSpeed, profile.smallPerimeterSpeedPercent) &&
             profile.smallPerimeterThreshold in 0f..1_000_000f &&
             profile.resolution in 0.001f..100f &&
-            profile.meshSlicing.mode in setOf("regular", "even_odd", "close_holes") &&
-            profile.meshSlicing.closingRadius in 0f..10f &&
+            profile.precision.mode in setOf("regular", "even_odd", "close_holes") &&
+            profile.precision.closingRadius in 0f..10f &&
             profile.seamGap in 0f..1_000f &&
             optionalFeatureSpeedIsValid(profile.wipeSpeed, profile.wipeSpeedPercent) &&
             listOf(
@@ -163,6 +163,8 @@ internal object ProfileValidation {
             profile.wallTransitionAngle in 1f..59f &&
             profile.wallDistributionCount in 1..100 &&
             profile.minimumFeatureSize in 0f..10_000f &&
+            profile.precision.minimumWallWidth in 0f..1_000f &&
+            profile.precision.firstLayerMinimumWallWidth in 0f..1_000f &&
             profile.minimumWallLengthFactor in 0f..100f &&
             profile.wallSequence in setOf("inner-outer", "outer-inner", "inner-outer-inner") &&
             profile.wallDirection in setOf("auto", "ccw", "cw") &&

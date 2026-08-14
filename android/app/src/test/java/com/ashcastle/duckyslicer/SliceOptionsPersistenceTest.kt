@@ -222,6 +222,18 @@ class SliceOptionsPersistenceTest {
         assertEquals(24f, restored.wallTransitionAngle)
         assertEquals(3, restored.wallDistributionCount)
         assertEquals(22f, restored.minimumFeatureSize)
+        assertEquals(
+            PrecisionSettings(
+                mode = "close_holes",
+                closingRadius = 0.125f,
+                preciseZHeight = true,
+                minimumWallWidth = 74f,
+                firstLayerMinimumWallWidth = 116f,
+            ),
+            restored.precision,
+        )
+        assertEquals(74f, restored.toNativeConfig().minimumWallWidth)
+        assertEquals(116f, restored.toNativeConfig().firstLayerMinimumWallWidth)
         assertEquals(0.75f, restored.minimumWallLengthFactor)
         assertEquals("outer-inner", restored.wallSequence)
         assertEquals("cw", restored.wallDirection)
@@ -230,14 +242,6 @@ class SliceOptionsPersistenceTest {
         assertEquals(6.5f, restored.smallPerimeterThreshold)
         assertEquals(false, restored.slowdownForCurledPerimeters)
         assertEquals(0.023f, restored.resolution)
-        assertEquals(
-            MeshSlicingSettings(
-                mode = "close_holes",
-                closingRadius = 0.125f,
-                preciseZHeight = true,
-            ),
-            restored.meshSlicing,
-        )
         assertEquals("close_holes", restored.toNativeConfig().slicingMode)
         assertEquals(0.125f, restored.toNativeConfig().sliceClosingRadius)
         assertEquals(true, restored.toNativeConfig().preciseZHeight)
@@ -517,10 +521,12 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         smallPerimeterThreshold = 6.5f,
         slowdownForCurledPerimeters = false,
         resolution = 0.023f,
-        meshSlicing = MeshSlicingSettings(
+        precision = PrecisionSettings(
             mode = "close_holes",
             closingRadius = 0.125f,
             preciseZHeight = true,
+            minimumWallWidth = 74f,
+            firstLayerMinimumWallWidth = 116f,
         ),
         seamPosition = "nearest",
         staggeredInnerSeams = true,

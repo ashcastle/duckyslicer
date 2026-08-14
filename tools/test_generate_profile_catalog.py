@@ -148,6 +148,22 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual("by object", profile["printSequence"])
         self.assertEqual("as_obj_list", profile["printOrder"])
 
+    def test_preserves_arachne_minimum_wall_widths(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Arachne width tuned",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "min_bead_width": "73%",
+                "initial_layer_min_bead_width": "112%",
+            },
+            {},
+        )
+
+        self.assertEqual(73.0, profile["minimumWallWidth"])
+        self.assertEqual(112.0, profile["firstLayerMinimumWallWidth"])
+
     def test_preserves_per_feature_jerk_values(self) -> None:
         profile = build_process(
             "Example",

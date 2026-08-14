@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 30
+SCHEMA_VERSION = 31
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -746,6 +746,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "wallTransitionAngle": number(raw.get("wall_transition_angle"), 10),
         "wallDistributionCount": integer(raw.get("wall_distribution_count"), 1),
         "minimumFeatureSize": number(raw.get("min_feature_size"), 25),
+        "minimumWallWidth": number(raw.get("min_bead_width"), 85),
+        "firstLayerMinimumWallWidth": number(raw.get("initial_layer_min_bead_width"), 85),
         "minimumWallLengthFactor": number(raw.get("min_length_factor"), 0.5),
         "wallSequence": wall_sequence(resolved_wall_order),
         "wallDirection": enum_value(raw.get("wall_direction"), {"auto", "ccw", "cw"}, "auto"),
@@ -1009,6 +1011,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 1 <= profile["wallTransitionAngle"] <= 59
         and 1 <= profile["wallDistributionCount"] <= 100
         and 0 <= profile["minimumFeatureSize"] <= 10_000
+        and 0 <= profile["minimumWallWidth"] <= 1_000
+        and 0 <= profile["firstLayerMinimumWallWidth"] <= 1_000
         and 0 <= profile["minimumWallLengthFactor"] <= 100
     ):
         raise ValueError("unsafe process limits")

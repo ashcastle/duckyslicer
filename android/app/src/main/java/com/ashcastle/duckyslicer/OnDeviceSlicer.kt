@@ -296,10 +296,12 @@ data class ScarfSeamSettings(
     val innerWalls: Boolean = false,
 )
 
-data class MeshSlicingSettings(
+data class PrecisionSettings(
     val mode: String = "regular",
     val closingRadius: Float = 0.049f,
     val preciseZHeight: Boolean = false,
+    val minimumWallWidth: Float = 85f,
+    val firstLayerMinimumWallWidth: Float = 85f,
 )
 
 internal fun FilamentProfile.resolveRetraction(printer: PrinterProfile) = RetractionSettings(
@@ -472,7 +474,7 @@ data class QualityProfile(
     val smallPerimeterThreshold: Float = 0f,
     val slowdownForCurledPerimeters: Boolean = true,
     val resolution: Float = 0.01f,
-    val meshSlicing: MeshSlicingSettings = MeshSlicingSettings(),
+    val precision: PrecisionSettings = PrecisionSettings(),
     val seamPosition: String = "aligned",
     val staggeredInnerSeams: Boolean = false,
     val seamGap: Float = 10f,
@@ -619,7 +621,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 30,
+    val schemaVersion: Int = 31,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -806,7 +808,7 @@ data class SliceOptions(
     val smallPerimeterThreshold: Float = quality.smallPerimeterThreshold,
     val slowdownForCurledPerimeters: Boolean = quality.slowdownForCurledPerimeters,
     val resolution: Float = quality.resolution,
-    val meshSlicing: MeshSlicingSettings = quality.meshSlicing,
+    val precision: PrecisionSettings = quality.precision,
     val seamPosition: String = quality.seamPosition,
     val staggeredInnerSeams: Boolean = quality.staggeredInnerSeams,
     val seamGap: Float = quality.seamGap,
@@ -1155,7 +1157,7 @@ data class SliceOptions(
         smallPerimeterThreshold = profile.smallPerimeterThreshold,
         slowdownForCurledPerimeters = profile.slowdownForCurledPerimeters,
         resolution = profile.resolution,
-        meshSlicing = profile.meshSlicing,
+        precision = profile.precision,
         seamPosition = profile.seamPosition,
         staggeredInnerSeams = profile.staggeredInnerSeams,
         seamGap = profile.seamGap,
@@ -1526,9 +1528,11 @@ data class SliceOptions(
             native.standbyTemperatureDelta = multiMaterial.standbyTemperatureDelta
             native.interfaceShells = multiMaterial.interfaceShells
             native.enableArcFitting = gcodeSettings.arcFitting
-            native.slicingMode = meshSlicing.mode
-            native.sliceClosingRadius = meshSlicing.closingRadius
-            native.preciseZHeight = meshSlicing.preciseZHeight
+            native.slicingMode = precision.mode
+            native.sliceClosingRadius = precision.closingRadius
+            native.preciseZHeight = precision.preciseZHeight
+            native.minimumWallWidth = precision.minimumWallWidth
+            native.firstLayerMinimumWallWidth = precision.firstLayerMinimumWallWidth
             native.gcodeLabelObjects = gcodeSettings.labelObjects
             native.excludeObject = gcodeSettings.excludeObjects
             native.initialLayerTravelSpeed = gcodeSettings.initialLayerTravelSpeed

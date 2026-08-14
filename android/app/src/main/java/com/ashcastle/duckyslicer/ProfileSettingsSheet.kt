@@ -1355,6 +1355,44 @@ private fun SlicingSettingsSheet(
                         onValueChange = { onOptionsChanged(options.copy(minimumFeatureSize = it.roundToInt().toFloat())) },
                     )
                     SettingSlider(
+                        label = stringResource(R.string.minimum_wall_width),
+                        valueText = stringResource(
+                            R.string.percent_value,
+                            options.precision.minimumWallWidth.roundToInt(),
+                        ),
+                        value = options.precision.minimumWallWidth,
+                        range = 0f..200f,
+                        steps = 199,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    precision = options.precision.copy(
+                                        minimumWallWidth = it.roundToInt().toFloat(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.first_layer_minimum_wall_width),
+                        valueText = stringResource(
+                            R.string.percent_value,
+                            options.precision.firstLayerMinimumWallWidth.roundToInt(),
+                        ),
+                        value = options.precision.firstLayerMinimumWallWidth,
+                        range = 0f..200f,
+                        steps = 199,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    precision = options.precision.copy(
+                                        firstLayerMinimumWallWidth = it.roundToInt().toFloat(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
                         label = stringResource(R.string.minimum_wall_length),
                         valueText = stringResource(R.string.flow_ratio_value, options.minimumWallLengthFactor),
                         value = options.minimumWallLengthFactor,
@@ -1734,7 +1772,7 @@ private fun SlicingSettingsSheet(
                 SettingChoices(
                     settingLabel = stringResource(R.string.slicing_mode),
                     entries = listOf("regular", "even_odd", "close_holes"),
-                    selected = options.meshSlicing.mode,
+                    selected = options.precision.mode,
                     optionLabel = {
                         stringResource(
                             when (it) {
@@ -1746,7 +1784,7 @@ private fun SlicingSettingsSheet(
                     },
                     onSelected = {
                         onOptionsChanged(
-                            options.copy(meshSlicing = options.meshSlicing.copy(mode = it)),
+                            options.copy(precision = options.precision.copy(mode = it)),
                         )
                     },
                 )
@@ -1754,15 +1792,15 @@ private fun SlicingSettingsSheet(
                     label = stringResource(R.string.slice_gap_closing_radius),
                     valueText = stringResource(
                         R.string.millimeters_value_fine,
-                        options.meshSlicing.closingRadius,
+                        options.precision.closingRadius,
                     ),
-                    value = options.meshSlicing.closingRadius,
-                    range = 0f..max(1f, options.meshSlicing.closingRadius),
+                    value = options.precision.closingRadius,
+                    range = 0f..max(1f, options.precision.closingRadius),
                     steps = 999,
                     onValueChange = {
                         onOptionsChanged(
                             options.copy(
-                                meshSlicing = options.meshSlicing.copy(
+                                precision = options.precision.copy(
                                     closingRadius = (it * 1_000f).roundToInt() / 1_000f,
                                 ),
                             ),
@@ -1771,11 +1809,11 @@ private fun SlicingSettingsSheet(
                 )
                 SettingsSwitch(
                     label = stringResource(R.string.precise_z_height),
-                    checked = options.meshSlicing.preciseZHeight,
+                    checked = options.precision.preciseZHeight,
                     onCheckedChange = {
                         onOptionsChanged(
                             options.copy(
-                                meshSlicing = options.meshSlicing.copy(preciseZHeight = it),
+                                precision = options.precision.copy(preciseZHeight = it),
                             ),
                         )
                     },

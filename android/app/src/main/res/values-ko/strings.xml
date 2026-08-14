@@ -278,6 +278,8 @@
     <string name="wall_transition_angle">벽 전환 각도</string>
     <string name="wall_distribution_count">벽 폭 분배 개수</string>
     <string name="minimum_feature_size">최소 형상 크기</string>
+    <string name="minimum_wall_width">최소 벽 너비</string>
+    <string name="first_layer_minimum_wall_width">첫 레이어 최소 벽 너비</string>
     <string name="minimum_wall_length">최소 벽 길이</string>
     <string name="detect_thin_walls">얇은 벽 채우기</string>
     <string name="detect_overhang_walls">오버행 벽 감지</string>

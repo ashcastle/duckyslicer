@@ -278,6 +278,8 @@
     <string name="wall_transition_angle">Wall transition angle</string>
     <string name="wall_distribution_count">Wall distribution count</string>
     <string name="minimum_feature_size">Minimum feature size</string>
+    <string name="minimum_wall_width">Minimum wall width</string>
+    <string name="first_layer_minimum_wall_width">First layer minimum wall width</string>
     <string name="minimum_wall_length">Minimum wall length</string>
     <string name="detect_thin_walls">Fill thin walls</string>
     <string name="detect_overhang_walls">Detect overhang walls</string>

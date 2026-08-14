@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 31
+internal const val USER_PROFILE_SCHEMA_VERSION = 32
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -313,6 +313,7 @@ class ProfileStore private constructor(
             smallPerimeterThreshold = options.smallPerimeterThreshold,
             slowdownForCurledPerimeters = options.slowdownForCurledPerimeters,
             resolution = options.resolution,
+            precision = options.precision,
             seamPosition = options.seamPosition,
             staggeredInnerSeams = options.staggeredInnerSeams,
             seamGap = options.seamGap,
@@ -664,9 +665,9 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("smallPerimeterThreshold", smallPerimeterThreshold)
     .put("slowdownForCurledPerimeters", slowdownForCurledPerimeters)
     .put("resolution", resolution)
-    .put("slicingMode", meshSlicing.mode)
-    .put("sliceClosingRadius", meshSlicing.closingRadius)
-    .put("preciseZHeight", meshSlicing.preciseZHeight)
+    .put("slicingMode", precision.mode)
+    .put("sliceClosingRadius", precision.closingRadius)
+    .put("preciseZHeight", precision.preciseZHeight)
     .put("seamPosition", seamPosition)
     .put("staggeredInnerSeams", staggeredInnerSeams)
     .put("seamGap", seamGap)
@@ -700,6 +701,8 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("wallTransitionAngle", wallTransitionAngle)
     .put("wallDistributionCount", wallDistributionCount)
     .put("minimumFeatureSize", minimumFeatureSize)
+    .put("minimumWallWidth", precision.minimumWallWidth)
+    .put("firstLayerMinimumWallWidth", precision.firstLayerMinimumWallWidth)
     .put("minimumWallLengthFactor", minimumWallLengthFactor)
     .put("wallSequence", wallSequence)
     .put("wallDirection", wallDirection)
@@ -988,10 +991,12 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         smallPerimeterThreshold = optDouble("smallPerimeterThreshold", 0.0).toFloat(),
         slowdownForCurledPerimeters = optBoolean("slowdownForCurledPerimeters", true),
         resolution = optDouble("resolution", 0.01).toFloat(),
-        meshSlicing = MeshSlicingSettings(
+        precision = PrecisionSettings(
             mode = optString("slicingMode", "regular"),
             closingRadius = optDouble("sliceClosingRadius", 0.049).toFloat(),
             preciseZHeight = optBoolean("preciseZHeight"),
+            minimumWallWidth = optDouble("minimumWallWidth", 85.0).toFloat(),
+            firstLayerMinimumWallWidth = optDouble("firstLayerMinimumWallWidth", 85.0).toFloat(),
         ),
         seamPosition = optString("seamPosition", "aligned"),
         staggeredInnerSeams = optBoolean("staggeredInnerSeams"),

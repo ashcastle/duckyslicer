@@ -1139,6 +1139,10 @@ class NativeEngineInstrumentedTest {
                 wallTransitionAngle = 23f,
                 wallDistributionCount = 3,
                 minimumFeatureSize = 21f,
+                precision = PrecisionSettings(
+                    minimumWallWidth = 72f,
+                    firstLayerMinimumWallWidth = 118f,
+                ),
                 minimumWallLengthFactor = 0.8f,
                 wallSequence = "outer-inner",
                 wallDirection = "cw",
@@ -1313,6 +1317,8 @@ class NativeEngineInstrumentedTest {
         assertEquals(23f, restored.slicing.last().wallTransitionAngle)
         assertEquals(3, restored.slicing.last().wallDistributionCount)
         assertEquals(21f, restored.slicing.last().minimumFeatureSize)
+        assertEquals(72f, restored.slicing.last().precision.minimumWallWidth)
+        assertEquals(118f, restored.slicing.last().precision.firstLayerMinimumWallWidth)
         assertEquals(0.8f, restored.slicing.last().minimumWallLengthFactor)
         assertEquals("outer-inner", restored.slicing.last().wallSequence)
         assertEquals("cw", restored.slicing.last().wallDirection)
@@ -1402,7 +1408,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(30, catalog.schemaVersion)
+        assertEquals(31, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1536,9 +1542,11 @@ class NativeEngineInstrumentedTest {
         assertTrue(catalog.slicing.any { it.wipeOnLoops })
         assertTrue(catalog.slicing.any { !it.roleBasedWipeSpeed })
         assertTrue(catalog.slicing.any { it.resolution == 0.012f })
-        assertTrue(catalog.slicing.all { it.meshSlicing.mode in setOf("regular", "even_odd", "close_holes") })
-        assertTrue(catalog.slicing.all { it.meshSlicing.closingRadius >= 0f })
-        assertTrue(catalog.slicing.any { it.meshSlicing.preciseZHeight })
+        assertTrue(catalog.slicing.any { it.precision.minimumWallWidth != 85f })
+        assertTrue(catalog.slicing.any { it.precision.firstLayerMinimumWallWidth != 85f })
+        assertTrue(catalog.slicing.all { it.precision.mode in setOf("regular", "even_odd", "close_holes") })
+        assertTrue(catalog.slicing.all { it.precision.closingRadius >= 0f })
+        assertTrue(catalog.slicing.any { it.precision.preciseZHeight })
         assertTrue(catalog.slicing.any { it.overhangReverse })
         assertTrue(catalog.slicing.any { it.minWidthTopSurface != 300f })
         assertTrue(catalog.slicing.any { it.internalBridgeFilter == "limited" })
@@ -2471,10 +2479,12 @@ class NativeEngineInstrumentedTest {
                 smallPerimeterThreshold = 7.5f,
                 slowdownForCurledPerimeters = false,
                 resolution = 0.021f,
-                meshSlicing = MeshSlicingSettings(
+                precision = PrecisionSettings(
                     mode = "even_odd",
                     closingRadius = 0.123f,
                     preciseZHeight = true,
+                    minimumWallWidth = 71f,
+                    firstLayerMinimumWallWidth = 119f,
                 ),
                 seamPosition = "nearest",
                 staggeredInnerSeams = true,
@@ -2700,6 +2710,11 @@ class NativeEngineInstrumentedTest {
         assertTrue("Arachne transition angle must reach Orca", gcode.contains("; wall_transition_angle = 26"))
         assertTrue("Arachne wall distribution must reach Orca", gcode.contains("; wall_distribution_count = 4"))
         assertTrue("Arachne minimum feature size must reach Orca", gcode.contains("; min_feature_size = 19%"))
+        assertTrue("Arachne minimum wall width must reach Orca", gcode.contains("; min_bead_width = 71%"))
+        assertTrue(
+            "Arachne first-layer minimum wall width must reach Orca",
+            gcode.contains("; initial_layer_min_bead_width = 119%"),
+        )
         assertTrue("Arachne minimum wall length must reach Orca", gcode.contains("; min_length_factor = 0.85"))
         assertTrue("Wall order must reach Orca", gcode.contains("; wall_sequence = outer wall/inner wall"))
         assertTrue("Wall direction must reach Orca", gcode.contains("; wall_direction = cw"))

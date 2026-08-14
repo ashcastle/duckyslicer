@@ -255,6 +255,8 @@ data class SliceConfig(
     @JvmField var slicingMode: String = "regular"
     @JvmField var sliceClosingRadius: Float = 0.049f
     @JvmField var preciseZHeight: Boolean = false
+    @JvmField var minimumWallWidth: Float = 85f
+    @JvmField var firstLayerMinimumWallWidth: Float = 85f
     @JvmField var printSequence: String = "by layer"
     @JvmField var printOrder: String = "default"
     @JvmField var extruderClearanceRadius: Float = 40f

@@ -150,9 +150,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var smallPerimeterThreshold: Float = base.smallPerimeterThreshold
     private var slowdownForCurledPerimeters: Boolean = base.slowdownForCurledPerimeters
     private var resolution: Float = base.resolution
-    private var slicingMode: String = base.meshSlicing.mode
-    private var sliceClosingRadius: Float = base.meshSlicing.closingRadius
-    private var preciseZHeight: Boolean = base.meshSlicing.preciseZHeight
+    private var slicingMode: String = base.precision.mode
+    private var sliceClosingRadius: Float = base.precision.closingRadius
+    private var preciseZHeight: Boolean = base.precision.preciseZHeight
     private var seamPosition: String = base.seamPosition
     private var staggeredInnerSeams: Boolean = base.staggeredInnerSeams
     private var seamGap: Float = base.seamGap
@@ -186,6 +186,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var wallTransitionAngle: Float = base.wallTransitionAngle
     private var wallDistributionCount: Int = base.wallDistributionCount
     private var minimumFeatureSize: Float = base.minimumFeatureSize
+    private var minimumWallWidth: Float = base.precision.minimumWallWidth
+    private var firstLayerMinimumWallWidth: Float = base.precision.firstLayerMinimumWallWidth
     private var minimumWallLengthFactor: Float = base.minimumWallLengthFactor
     private var wallSequence: String = base.wallSequence
     private var wallDirection: String = base.wallDirection
@@ -434,6 +436,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         wallTransitionAngle = input.readFloat()
         wallDistributionCount = input.readInt()
         minimumFeatureSize = input.readFloat()
+        minimumWallWidth = input.readFloat()
+        firstLayerMinimumWallWidth = input.readFloat()
         minimumWallLengthFactor = input.readFloat()
         wallSequence = input.readCatalogString()
         wallDirection = input.readCatalogString()
@@ -670,10 +674,12 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         smallPerimeterThreshold = smallPerimeterThreshold,
         slowdownForCurledPerimeters = slowdownForCurledPerimeters,
         resolution = resolution,
-        meshSlicing = MeshSlicingSettings(
+        precision = PrecisionSettings(
             mode = slicingMode,
             closingRadius = sliceClosingRadius,
             preciseZHeight = preciseZHeight,
+            minimumWallWidth = minimumWallWidth,
+            firstLayerMinimumWallWidth = firstLayerMinimumWallWidth,
         ),
         seamPosition = seamPosition,
         staggeredInnerSeams = staggeredInnerSeams,
@@ -926,6 +932,8 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("wallTransitionAngle", BINARY_FLOAT),
     BinaryField("wallDistributionCount", BINARY_INT),
     BinaryField("minimumFeatureSize", BINARY_FLOAT),
+    BinaryField("minimumWallWidth", BINARY_FLOAT),
+    BinaryField("firstLayerMinimumWallWidth", BINARY_FLOAT),
     BinaryField("minimumWallLengthFactor", BINARY_FLOAT),
     BinaryField("wallSequence", BINARY_STRING),
     BinaryField("wallDirection", BINARY_STRING),
