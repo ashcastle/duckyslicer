@@ -179,7 +179,21 @@ class SliceOptionsPersistenceTest {
         assertEquals("as_obj_list", restored.printOrder)
         assertEquals("rectilinear-grid", restored.supportBasePattern)
         assertEquals("rectilinear_interlaced", restored.supportInterfacePattern)
-        assertEquals("snug", restored.supportStyle)
+        assertEquals("tree_strong", restored.supportStyle)
+        assertEquals(
+            FuzzySkinSettings(
+                type = "allwalls",
+                firstLayer = true,
+                pointDistance = 0.65f,
+                thickness = 0.28f,
+                mode = "combined",
+                noiseType = "billow",
+                scale = 3.5f,
+                octaves = 6,
+                persistence = 0.7f,
+            ),
+            restored.fuzzySkin,
+        )
         assertEquals(
             SupportCoverageSettings(
                 onBuildPlateOnly = true,
@@ -537,7 +551,18 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         supportObjectXYDistance = 0.4f,
         supportBasePattern = "rectilinear-grid",
         supportInterfacePattern = "rectilinear_interlaced",
-        supportStyle = "snug",
+        supportStyle = "tree_strong",
+        fuzzySkin = FuzzySkinSettings(
+            type = "allwalls",
+            firstLayer = true,
+            pointDistance = 0.65f,
+            thickness = 0.28f,
+            mode = "combined",
+            noiseType = "billow",
+            scale = 3.5f,
+            octaves = 6,
+            persistence = 0.7f,
+        ),
         supportCoverage = SupportCoverageSettings(
             onBuildPlateOnly = true,
             criticalRegionsOnly = true,

@@ -782,4 +782,18 @@
     <string name="ooze_prevention">Ooze prevention</string>
     <string name="standby_temperature_delta">Standby temperature difference</string>
     <string name="interface_shells">Interface shells</string>
+    <string name="fuzzy_skin">Fuzzy skin</string>
+    <string name="fuzzy_skin_type">Surface coverage</string>
+    <string name="fuzzy_skin_none">Off</string>
+    <string name="fuzzy_skin_external">Outside walls</string>
+    <string name="fuzzy_skin_all">All perimeter walls</string>
+    <string name="fuzzy_skin_all_walls">All walls</string>
+    <string name="fuzzy_skin_first_layer">Include first layer</string>
+    <string name="fuzzy_skin_point_distance">Point distance</string>
+    <string name="fuzzy_skin_thickness">Thickness</string>
+    <string name="fuzzy_skin_mode">Application mode</string>
+    <string name="fuzzy_skin_noise">Texture pattern</string>
+    <string name="fuzzy_skin_scale">Pattern scale</string>
+    <string name="fuzzy_skin_octaves">Pattern detail</string>
+    <string name="fuzzy_skin_persistence">Detail strength</string>
 </resources>

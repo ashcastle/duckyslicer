@@ -782,4 +782,18 @@
     <string name="ooze_prevention">흘러내림 방지</string>
     <string name="standby_temperature_delta">대기 온도 차이</string>
     <string name="interface_shells">소재 경계 쉘</string>
+    <string name="fuzzy_skin">퍼지 스킨</string>
+    <string name="fuzzy_skin_type">적용 표면</string>
+    <string name="fuzzy_skin_none">사용 안 함</string>
+    <string name="fuzzy_skin_external">외벽</string>
+    <string name="fuzzy_skin_all">모든 둘레 벽</string>
+    <string name="fuzzy_skin_all_walls">모든 벽</string>
+    <string name="fuzzy_skin_first_layer">첫 레이어 포함</string>
+    <string name="fuzzy_skin_point_distance">점 간격</string>
+    <string name="fuzzy_skin_thickness">두께</string>
+    <string name="fuzzy_skin_mode">적용 방식</string>
+    <string name="fuzzy_skin_noise">질감 패턴</string>
+    <string name="fuzzy_skin_scale">패턴 크기</string>
+    <string name="fuzzy_skin_octaves">패턴 디테일</string>
+    <string name="fuzzy_skin_persistence">디테일 강도</string>
 </resources>

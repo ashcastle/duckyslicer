@@ -2844,7 +2844,14 @@ private fun SlicingSettingsSheet(
                                 else -> stringResource(R.string.normal_support_auto)
                             }
                         },
-                        onSelected = { onOptionsChanged(options.copy(supportType = it)) },
+                        onSelected = {
+                            onOptionsChanged(
+                                options.copy(
+                                    supportType = it,
+                                    supportStyle = normalizedSupportStyle(it, options.supportStyle),
+                                ),
+                            )
+                        },
                     )
                     if (options.supportType.isTreeSupportType() || settingsQuery.isNotBlank()) {
                         SettingsGroupTitle(stringResource(R.string.tree_support))
@@ -3050,10 +3057,16 @@ private fun SlicingSettingsSheet(
                     }
                     SettingChoices(
                         settingLabel = stringResource(R.string.support_style),
-                        entries = listOf("default", "grid", "snug", "organic", "tree_hybrid", "tree_slim"),
-                        selected = options.supportStyle,
+                        entries = compatibleSupportStyles(options.supportType),
+                        selected = normalizedSupportStyle(options.supportType, options.supportStyle),
                         optionLabel = { enumLabel(it) },
-                        onSelected = { onOptionsChanged(options.copy(supportStyle = it)) },
+                        onSelected = {
+                            onOptionsChanged(
+                                options.copy(
+                                    supportStyle = normalizedSupportStyle(options.supportType, it),
+                                ),
+                            )
+                        },
                     )
                     SettingsSwitch(
                         label = stringResource(R.string.support_on_build_plate_only),
@@ -3397,6 +3410,145 @@ private fun SlicingSettingsSheet(
             }
 
             SlicingSettingsSection.OTHERS -> {
+                SettingsGroupTitle(stringResource(R.string.fuzzy_skin))
+                SettingChoices(
+                    settingLabel = stringResource(R.string.fuzzy_skin_type),
+                    entries = listOf("none", "external", "all", "allwalls"),
+                    selected = options.fuzzySkin.type,
+                    optionLabel = {
+                        stringResource(
+                            when (it) {
+                                "external" -> R.string.fuzzy_skin_external
+                                "all" -> R.string.fuzzy_skin_all
+                                "allwalls" -> R.string.fuzzy_skin_all_walls
+                                else -> R.string.fuzzy_skin_none
+                            },
+                        )
+                    },
+                    onSelected = {
+                        onOptionsChanged(options.copy(fuzzySkin = options.fuzzySkin.copy(type = it)))
+                    },
+                )
+                if (options.fuzzySkin.type != "none" || settingsQuery.isNotBlank()) {
+                    SettingsSwitch(
+                        label = stringResource(R.string.fuzzy_skin_first_layer),
+                        checked = options.fuzzySkin.firstLayer,
+                        onCheckedChange = {
+                            onOptionsChanged(options.copy(fuzzySkin = options.fuzzySkin.copy(firstLayer = it)))
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.fuzzy_skin_point_distance),
+                        valueText = stringResource(
+                            R.string.millimeters_value_precise,
+                            options.fuzzySkin.pointDistance,
+                        ),
+                        value = options.fuzzySkin.pointDistance,
+                        range = 0f..5f,
+                        steps = 499,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    fuzzySkin = options.fuzzySkin.copy(
+                                        pointDistance = (it * 100f).roundToInt() / 100f,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.fuzzy_skin_thickness),
+                        valueText = stringResource(R.string.millimeters_value_precise, options.fuzzySkin.thickness),
+                        value = options.fuzzySkin.thickness,
+                        range = 0f..1f,
+                        steps = 99,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    fuzzySkin = options.fuzzySkin.copy(
+                                        thickness = (it * 100f).roundToInt() / 100f,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingChoices(
+                        settingLabel = stringResource(R.string.fuzzy_skin_mode),
+                        entries = if (options.wallGenerator == "arachne") {
+                            listOf("displacement", "extrusion", "combined")
+                        } else {
+                            listOf("displacement")
+                        },
+                        selected = if (options.wallGenerator == "arachne") {
+                            options.fuzzySkin.mode
+                        } else {
+                            "displacement"
+                        },
+                        optionLabel = { enumLabel(it) },
+                        onSelected = {
+                            onOptionsChanged(options.copy(fuzzySkin = options.fuzzySkin.copy(mode = it)))
+                        },
+                    )
+                    SettingChoices(
+                        settingLabel = stringResource(R.string.fuzzy_skin_noise),
+                        entries = listOf("classic", "perlin", "billow", "ridgedmulti", "voronoi"),
+                        selected = options.fuzzySkin.noiseType,
+                        optionLabel = { enumLabel(it) },
+                        onSelected = {
+                            onOptionsChanged(options.copy(fuzzySkin = options.fuzzySkin.copy(noiseType = it)))
+                        },
+                    )
+                    if (options.fuzzySkin.noiseType != "classic" || settingsQuery.isNotBlank()) {
+                        SettingSlider(
+                            label = stringResource(R.string.fuzzy_skin_scale),
+                            valueText = String.format(Locale.US, "%.1f", options.fuzzySkin.scale),
+                            value = options.fuzzySkin.scale,
+                            range = 0.1f..max(20f, options.fuzzySkin.scale),
+                            steps = ((max(20f, options.fuzzySkin.scale) - 0.1f) * 10f).roundToInt() - 1,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        fuzzySkin = options.fuzzySkin.copy(
+                                            scale = (it * 10f).roundToInt() / 10f,
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                    }
+                    if (options.fuzzySkin.noiseType !in setOf("classic", "voronoi") || settingsQuery.isNotBlank()) {
+                        SettingSlider(
+                            label = stringResource(R.string.fuzzy_skin_octaves),
+                            valueText = options.fuzzySkin.octaves.toString(),
+                            value = options.fuzzySkin.octaves.toFloat(),
+                            range = 1f..10f,
+                            steps = 8,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(fuzzySkin = options.fuzzySkin.copy(octaves = it.roundToInt())),
+                                )
+                            },
+                        )
+                    }
+                    if (options.fuzzySkin.noiseType in setOf("perlin", "billow") || settingsQuery.isNotBlank()) {
+                        SettingSlider(
+                            label = stringResource(R.string.fuzzy_skin_persistence),
+                            valueText = String.format(Locale.US, "%.2f", options.fuzzySkin.persistence),
+                            value = options.fuzzySkin.persistence,
+                            range = 0.01f..1f,
+                            steps = 98,
+                            onValueChange = {
+                                onOptionsChanged(
+                                    options.copy(
+                                        fuzzySkin = options.fuzzySkin.copy(
+                                            persistence = (it * 100f).roundToInt() / 100f,
+                                        ),
+                                    ),
+                                )
+                            },
+                        )
+                    }
+                }
                 SettingsGroupTitle(stringResource(R.string.print_sequence))
                 SettingChoices(
                     settingLabel = stringResource(R.string.print_sequence),

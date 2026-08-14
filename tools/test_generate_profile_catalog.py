@@ -440,6 +440,63 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertFalse(profile["treeSupportAutoBrim"])
         self.assertEqual(4.6, profile["treeSupportBrimWidth"])
 
+    def test_normalizes_support_style_for_the_selected_algorithm(self) -> None:
+        normal = build_process(
+            "Example",
+            {
+                "name": "Normal support",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "support_type": "normal(auto)",
+                "support_style": "organic",
+            },
+            {},
+        )
+        tree = build_process(
+            "Example",
+            {
+                "name": "Tree support",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "support_type": "tree(auto)",
+                "support_style": "tree_strong",
+            },
+            {},
+        )
+
+        self.assertEqual("default", normal["supportStyle"])
+        self.assertEqual("tree_strong", tree["supportStyle"])
+
+    def test_preserves_fuzzy_skin_engine_settings(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Textured surface",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "fuzzy_skin": "allwalls",
+                "fuzzy_skin_first_layer": "1",
+                "fuzzy_skin_point_distance": "0.65",
+                "fuzzy_skin_thickness": "0.28",
+                "fuzzy_skin_mode": "combined",
+                "fuzzy_skin_noise_type": "billow",
+                "fuzzy_skin_scale": "3.5",
+                "fuzzy_skin_octaves": "6",
+                "fuzzy_skin_persistence": "0.7",
+            },
+            {},
+        )
+
+        self.assertEqual("allwalls", profile["fuzzySkinType"])
+        self.assertTrue(profile["fuzzySkinFirstLayer"])
+        self.assertEqual(0.65, profile["fuzzySkinPointDistance"])
+        self.assertEqual(0.28, profile["fuzzySkinThickness"])
+        self.assertEqual("combined", profile["fuzzySkinMode"])
+        self.assertEqual("billow", profile["fuzzySkinNoiseType"])
+        self.assertEqual(3.5, profile["fuzzySkinScale"])
+        self.assertEqual(6, profile["fuzzySkinOctaves"])
+        self.assertEqual(0.7, profile["fuzzySkinPersistence"])
+
 
 if __name__ == "__main__":
     unittest.main()

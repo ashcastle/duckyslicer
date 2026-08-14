@@ -343,4 +343,13 @@ data class SliceConfig(
     @JvmField var scarfLength: Float = 20f
     @JvmField var scarfSteps: Int = 10
     @JvmField var scarfInnerWalls: Boolean = false
+    @JvmField var fuzzySkinType: String = "none"
+    @JvmField var fuzzySkinFirstLayer: Boolean = false
+    @JvmField var fuzzySkinPointDistance: Float = 0.3f
+    @JvmField var fuzzySkinThickness: Float = 0.2f
+    @JvmField var fuzzySkinMode: String = "displacement"
+    @JvmField var fuzzySkinNoiseType: String = "classic"
+    @JvmField var fuzzySkinScale: Float = 1f
+    @JvmField var fuzzySkinOctaves: Int = 4
+    @JvmField var fuzzySkinPersistence: Float = 0.5f
 }

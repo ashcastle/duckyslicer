@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 39
+internal const val USER_PROFILE_SCHEMA_VERSION = 40
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -220,6 +220,7 @@ class ProfileStore private constructor(
             infillJerk = options.infillJerk,
             firstLayerJerk = options.firstLayerJerk,
             travelJerk = options.travelJerk,
+            fuzzySkin = options.fuzzySkin,
             supportEnabled = options.supportEnabled,
             brimType = options.brimType,
             brimWidth = options.brimWidth,
@@ -270,7 +271,7 @@ class ProfileStore private constructor(
             supportObjectXYDistance = options.supportObjectXYDistance,
             supportBasePattern = options.supportBasePattern,
             supportInterfacePattern = options.supportInterfacePattern,
-            supportStyle = options.supportStyle,
+            supportStyle = normalizedSupportStyle(options.supportType, options.supportStyle),
             supportCoverage = options.supportCoverage,
             supportAdvanced = options.supportAdvanced,
             supportBasePatternSpacing = options.supportBasePatternSpacing,
@@ -564,6 +565,15 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("infillJerk", infillJerk)
     .put("firstLayerJerk", firstLayerJerk)
     .put("travelJerk", travelJerk)
+    .put("fuzzySkinType", fuzzySkin.type)
+    .put("fuzzySkinFirstLayer", fuzzySkin.firstLayer)
+    .put("fuzzySkinPointDistance", fuzzySkin.pointDistance)
+    .put("fuzzySkinThickness", fuzzySkin.thickness)
+    .put("fuzzySkinMode", fuzzySkin.mode)
+    .put("fuzzySkinNoiseType", fuzzySkin.noiseType)
+    .put("fuzzySkinScale", fuzzySkin.scale)
+    .put("fuzzySkinOctaves", fuzzySkin.octaves)
+    .put("fuzzySkinPersistence", fuzzySkin.persistence)
     .put("supportEnabled", supportEnabled)
     .put("brimType", brimType)
     .put("brimWidth", brimWidth)
@@ -611,7 +621,7 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("supportObjectXYDistance", supportObjectXYDistance)
     .put("supportBasePattern", supportBasePattern)
     .put("supportInterfacePattern", supportInterfacePattern)
-    .put("supportStyle", supportStyle)
+    .put("supportStyle", normalizedSupportStyle(supportType, supportStyle))
     .put("supportOnBuildPlateOnly", supportCoverage.onBuildPlateOnly)
     .put("supportCriticalRegionsOnly", supportCoverage.criticalRegionsOnly)
     .put("supportRemoveSmallOverhangs", supportCoverage.removeSmallOverhangs)
@@ -916,6 +926,17 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         infillJerk = optDouble("infillJerk", 9.0).toFloat(),
         firstLayerJerk = optDouble("firstLayerJerk", 9.0).toFloat(),
         travelJerk = optDouble("travelJerk", 12.0).toFloat(),
+        fuzzySkin = FuzzySkinSettings(
+            type = optString("fuzzySkinType", "none"),
+            firstLayer = optBoolean("fuzzySkinFirstLayer"),
+            pointDistance = optDouble("fuzzySkinPointDistance", 0.3).toFloat(),
+            thickness = optDouble("fuzzySkinThickness", 0.2).toFloat(),
+            mode = optString("fuzzySkinMode", "displacement"),
+            noiseType = optString("fuzzySkinNoiseType", "classic"),
+            scale = optDouble("fuzzySkinScale", 1.0).toFloat(),
+            octaves = optInt("fuzzySkinOctaves", 4),
+            persistence = optDouble("fuzzySkinPersistence", 0.5).toFloat(),
+        ),
         supportEnabled = optBoolean("supportEnabled"),
         brimType = optString("brimType", "no_brim"),
         brimWidth = optDouble("brimWidth", 0.0).toFloat(),
@@ -967,7 +988,10 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         supportObjectXYDistance = optDouble("supportObjectXYDistance", 0.35).toFloat(),
         supportBasePattern = optString("supportBasePattern", "default"),
         supportInterfacePattern = optString("supportInterfacePattern", "auto"),
-        supportStyle = optString("supportStyle", "default"),
+        supportStyle = normalizedSupportStyle(
+            optString("supportType", "normal(auto)"),
+            optString("supportStyle", "default"),
+        ),
         supportCoverage = SupportCoverageSettings(
             onBuildPlateOnly = optBoolean("supportOnBuildPlateOnly"),
             criticalRegionsOnly = optBoolean("supportCriticalRegionsOnly"),

@@ -53,6 +53,19 @@ GIT_COMPONENTS = (
 
 ARCHIVE_COMPONENTS = (
     (NativePolicy("BOOST_ARCHIVE", "Boost", "BSL-1.0", ("build/native-slicer/dependency-sources/boost-android/boost_1_84_0/LICENSE_1_0.txt",)), "1.84.0"),
+    (
+        NativePolicy(
+            "LIBNOISE",
+            "libnoise",
+            "LGPL-2.1-or-later",
+            (
+                "build/native-slicer/source/app/src/main/cpp/extern/libnoise/share/doc/libnoise/README.md",
+                "build/native-slicer/source/app/src/main/cpp/extern/libnoise/share/doc/libnoise/noise.h",
+                "build/native-slicer/source/app/src/main/cpp/extern/libnoise/share/doc/libnoise/COPYING.LGPL",
+            ),
+        ),
+        "1.0",
+    ),
     (NativePolicy("CGAL", "CGAL", "GPL-3.0-or-later OR LGPL-3.0-or-later", ("build/native-slicer/build/cgal-source/LICENSE*",)), "5.6"),
     (NativePolicy("GMP", "GMP", "GPL-2.0-or-later OR LGPL-3.0-or-later", ("build/native-slicer/build/gmp-source/COPYING*",)), "6.3.0"),
     (NativePolicy("MPFR", "MPFR", "LGPL-3.0-or-later", ("build/native-slicer/build/mpfr-source/COPYING*",)), "4.2.1"),

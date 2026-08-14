@@ -12,7 +12,7 @@ index 963808df..1173b0ae 100644
  
      # --- nowide (from OrcaSlicer's bundled boost/nowide) ---
      add_library(nowide INTERFACE)
-@@ -486,16 +489,29 @@ endif()
+@@ -486,16 +489,36 @@ endif()
  
  # LibBGCode — stub (binary G-code not needed)
  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/extern/libbgcode_stub/include)
@@ -38,6 +38,13 @@ index 963808df..1173b0ae 100644
 +    IMPORTED_LOCATION "${JPEG_ROOT}/lib/libjpeg.a"
 +    INTERFACE_INCLUDE_DIRECTORIES "${JPEG_ROOT}/include"
 +)
++
++set(LIBNOISE_ROOT "${EXTERN_DIR}/libnoise")
++add_library(noise STATIC IMPORTED)
++set_target_properties(noise PROPERTIES
++    IMPORTED_LOCATION "${LIBNOISE_ROOT}/lib/liblibnoise_static.a"
++    INTERFACE_INCLUDE_DIRECTORIES "${LIBNOISE_ROOT}/include"
++)
  
 -# PNG/JPEG — stubs (not needed for headless slicing)
 +# PNGReadWrite is excluded from the headless source list. The remaining PNG
@@ -47,12 +54,22 @@ index 963808df..1173b0ae 100644
  
  if(SLICER_BACKEND STREQUAL "orca")
      # OpenCV — stub (image analysis features not needed on Android)
-@@ -1075,6 +1091,8 @@ if(SLICER_BACKEND STREQUAL "orca")
+@@ -764,7 +780,7 @@ if(SLICER_BACKEND STREQUAL "orca")
+         ${LIBSLIC3R_DIR}/calib.cpp
+         ${LIBSLIC3R_DIR}/Feature/Interlocking/InterlockingGenerator.cpp
+         ${LIBSLIC3R_DIR}/Feature/Interlocking/VoxelUtils.cpp
+-        # FuzzySkin/FuzzySkin.cpp excluded — requires libnoise (not available on Android)
++        ${LIBSLIC3R_DIR}/Feature/FuzzySkin/FuzzySkin.cpp
+     )
+ else()
+     # PrusaSlicer source list (unchanged from original)
+@@ -1075,6 +1091,9 @@ if(SLICER_BACKEND STREQUAL "orca")
          Clipper2
          z
          expat
 +        NLopt
 +        jpeg
++        noise
      )
  else()
      target_link_libraries(libslic3r PRIVATE
@@ -76,7 +93,7 @@ diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
 index 116a4a85..6b3048bc 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -40,14 +40,98 @@ struct SliceConfig {
+@@ -40,14 +40,109 @@ struct SliceConfig {
      int perimeters = 2;
      int top_solid_layers = 5;
      int bottom_solid_layers = 4;
@@ -171,6 +188,17 @@ index 116a4a85..6b3048bc 100644
 +    float infill_jerk = 9.0f;
 +    float first_layer_jerk = 9.0f;
 +    float travel_jerk = 12.0f;
++
++    // Fuzzy-skin texture generation.
++    std::string fuzzy_skin_type = "none";
++    bool fuzzy_skin_first_layer = false;
++    float fuzzy_skin_point_distance = 0.3f;
++    float fuzzy_skin_thickness = 0.2f;
++    std::string fuzzy_skin_mode = "displacement";
++    std::string fuzzy_skin_noise_type = "classic";
++    float fuzzy_skin_scale = 1.0f;
++    int fuzzy_skin_octaves = 4;
++    float fuzzy_skin_persistence = 0.5f;
 +
      // Temperature
      int nozzle_temp = 210;
@@ -460,31 +488,31 @@ diff --git a/app/src/main/cpp/src/orca_stubs.cpp b/app/src/main/cpp/src/orca_stu
 index 51a2f8fb..f5cdd410 100644
 --- a/app/src/main/cpp/src/orca_stubs.cpp
 +++ b/app/src/main/cpp/src/orca_stubs.cpp
-@@ -5,6 +5,7 @@
- // Include path has extern/libslic3r_android first, so "Format/STEP.hpp" picks
- // up our stub before the real OCCT-dependent header.
- #include "Format/STEP.hpp"
-+#include "Polygon.hpp"
- #include <string>
- #include <vector>
- #include <functional>
-@@ -12,7 +13,6 @@
+@@ -12,24 +12,14 @@
  namespace Slic3r {
- class PerimeterGenerator;
- namespace Arachne { struct ExtrusionLine; }
+-class PerimeterGenerator;
+-namespace Arachne { struct ExtrusionLine; }
 -class Polygon;
  
  // STEP — excluded (needs OCCT). Implement Step class methods declared in stub header.
  Step::Step(std::string, ImportStepProgressFn, StepIsUtf8Fn) {}
-@@ -28,7 +28,7 @@ bool load_step(const char*, Model*, bool&,
- // FuzzySkin — excluded (needs libnoise)
- namespace Feature { namespace FuzzySkin {
- void apply_fuzzy_skin(Arachne::ExtrusionLine*, const PerimeterGenerator&, bool) {}
--void apply_fuzzy_skin(const Polygon&, const PerimeterGenerator&, unsigned long, bool) {}
-+Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator&, size_t, bool) { return polygon; }
- void group_region_by_fuzzify(PerimeterGenerator&) {}
- } } // namespace Feature::FuzzySkin
+ bool Step::load() { return false; }
  
+ bool load_step(const char*, Model*, bool&,
+                double, double, bool,
+                ImportStepProgressFn, StepIsUtf8Fn,
+                long&) {
+     return false;
+ }
+ 
+-// FuzzySkin — excluded (needs libnoise)
+-namespace Feature { namespace FuzzySkin {
+-void apply_fuzzy_skin(Arachne::ExtrusionLine*, const PerimeterGenerator&, bool) {}
+-void apply_fuzzy_skin(const Polygon&, const PerimeterGenerator&, unsigned long, bool) {}
+-void group_region_by_fuzzify(PerimeterGenerator&) {}
+-} } // namespace Feature::FuzzySkin
+-
+ // SVG loading — excluded (needs OCCT 7.6)
 diff --git a/app/src/main/cpp/src/sapil_arrange.cpp b/app/src/main/cpp/src/sapil_arrange.cpp
 index 44041ca3..1e322634 100644
 --- a/app/src/main/cpp/src/sapil_arrange.cpp
@@ -699,7 +727,7 @@ diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_
 index d93efb7d..fdf9a877 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -92,10 +92,88 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -92,10 +92,97 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.perimeters = getInt("perimeters");
      config.top_solid_layers = getInt("topSolidLayers");
      config.bottom_solid_layers = getInt("bottomSolidLayers");
@@ -785,6 +813,15 @@ index d93efb7d..fdf9a877 100644
 +    config.infill_jerk = getFloat("infillJerk");
 +    config.first_layer_jerk = getFloat("firstLayerJerk");
 +    config.travel_jerk = getFloat("travelJerk");
++    config.fuzzy_skin_type = getString("fuzzySkinType");
++    config.fuzzy_skin_first_layer = getBool("fuzzySkinFirstLayer");
++    config.fuzzy_skin_point_distance = getFloat("fuzzySkinPointDistance");
++    config.fuzzy_skin_thickness = getFloat("fuzzySkinThickness");
++    config.fuzzy_skin_mode = getString("fuzzySkinMode");
++    config.fuzzy_skin_noise_type = getString("fuzzySkinNoiseType");
++    config.fuzzy_skin_scale = getFloat("fuzzySkinScale");
++    config.fuzzy_skin_octaves = getInt("fuzzySkinOctaves");
++    config.fuzzy_skin_persistence = getFloat("fuzzySkinPersistence");
      config.travel_speed = getFloat("travelSpeed");
      config.first_layer_speed = getFloat("firstLayerSpeed");
  
@@ -1030,7 +1067,7 @@ index d93efb7d..fdf9a877 100644
  
      env->DeleteLocalRef(cls);
      return config;
-@@ -235,9 +477,87 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -235,9 +477,96 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setInt("perimeters", config.perimeters);
      setInt("topSolidLayers", config.top_solid_layers);
      setInt("bottomSolidLayers", config.bottom_solid_layers);
@@ -1115,6 +1152,15 @@ index d93efb7d..fdf9a877 100644
 +    setFloat("infillJerk", config.infill_jerk);
 +    setFloat("firstLayerJerk", config.first_layer_jerk);
 +    setFloat("travelJerk", config.travel_jerk);
++    setString("fuzzySkinType", config.fuzzy_skin_type);
++    setBool("fuzzySkinFirstLayer", config.fuzzy_skin_first_layer);
++    setFloat("fuzzySkinPointDistance", config.fuzzy_skin_point_distance);
++    setFloat("fuzzySkinThickness", config.fuzzy_skin_thickness);
++    setString("fuzzySkinMode", config.fuzzy_skin_mode);
++    setString("fuzzySkinNoiseType", config.fuzzy_skin_noise_type);
++    setFloat("fuzzySkinScale", config.fuzzy_skin_scale);
++    setInt("fuzzySkinOctaves", config.fuzzy_skin_octaves);
++    setFloat("fuzzySkinPersistence", config.fuzzy_skin_persistence);
      setFloat("travelSpeed", config.travel_speed);
      setFloat("firstLayerSpeed", config.first_layer_speed);
      setInt("nozzleTemp", config.nozzle_temp);
@@ -1367,7 +1413,7 @@ index 8d61c9cf..f285d044 100644
  #include "libslic3r/clipper.hpp"
  
  // =============================================================================
-@@ -183,84 +186,180 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -183,84 +186,189 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
      dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
      dpc.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(config.bottom_solid_layers));
@@ -1611,6 +1657,15 @@ index 8d61c9cf..f285d044 100644
 +    dpc.set_key_value("infill_jerk",              new Slic3r::ConfigOptionFloat(config.infill_jerk));
 +    dpc.set_key_value("initial_layer_jerk",       new Slic3r::ConfigOptionFloat(config.first_layer_jerk));
 +    dpc.set_key_value("travel_jerk",              new Slic3r::ConfigOptionFloat(config.travel_jerk));
++    dpc.set_deserialize_strict("fuzzy_skin", config.fuzzy_skin_type);
++    dpc.set_key_value("fuzzy_skin_first_layer", new Slic3r::ConfigOptionBool(config.fuzzy_skin_first_layer));
++    dpc.set_key_value("fuzzy_skin_point_distance", new Slic3r::ConfigOptionFloat(config.fuzzy_skin_point_distance));
++    dpc.set_key_value("fuzzy_skin_thickness", new Slic3r::ConfigOptionFloat(config.fuzzy_skin_thickness));
++    dpc.set_deserialize_strict("fuzzy_skin_mode", config.fuzzy_skin_mode);
++    dpc.set_deserialize_strict("fuzzy_skin_noise_type", config.fuzzy_skin_noise_type);
++    dpc.set_key_value("fuzzy_skin_scale", new Slic3r::ConfigOptionFloat(config.fuzzy_skin_scale));
++    dpc.set_key_value("fuzzy_skin_octaves", new Slic3r::ConfigOptionInt(config.fuzzy_skin_octaves));
++    dpc.set_key_value("fuzzy_skin_persistence", new Slic3r::ConfigOptionFloat(config.fuzzy_skin_persistence));
  
      // Multi-extruder setup
      int n_ext = std::max(1, config.extruder_count);

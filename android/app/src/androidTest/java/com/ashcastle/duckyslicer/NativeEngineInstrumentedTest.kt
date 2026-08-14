@@ -129,6 +129,53 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun fuzzySkinChangesRealOuterWallGeometry() {
+        val baseOptions = SliceOptions()
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                wallGenerator = "classic",
+                perimeters = 2,
+                fuzzySkin = FuzzySkinSettings(
+                    type = "external",
+                    firstLayer = true,
+                    pointDistance = 0.5f,
+                    thickness = 0.25f,
+                    mode = "displacement",
+                    noiseType = "classic",
+                ),
+            )
+        val plain = OnDeviceSlicer.slice(
+            fixtureModel(),
+            baseOptions.copy(fuzzySkin = baseOptions.fuzzySkin.copy(type = "none")),
+        )
+        val fuzzy = OnDeviceSlicer.slice(fixtureModel(), baseOptions)
+        try {
+            fun outerWallExtrusionMoveCount(gcode: String): Int {
+                var outerWall = false
+                return gcode.lineSequence().count { line ->
+                    if (line.startsWith(";TYPE:")) outerWall = line == ";TYPE:Outer wall"
+                    outerWall && line.startsWith("G1 ") && line.contains(" E") &&
+                        (line.contains(" X") || line.contains(" Y"))
+                }
+            }
+
+            val plainGcode = plain.output.readText()
+            val fuzzyGcode = fuzzy.output.readText()
+            assertTrue(fuzzyGcode.contains("; fuzzy_skin = external"))
+            assertTrue(fuzzyGcode.contains("; fuzzy_skin_first_layer = 1"))
+            assertTrue(fuzzyGcode.contains("; fuzzy_skin_point_distance = 0.5"))
+            assertTrue(fuzzyGcode.contains("; fuzzy_skin_thickness = 0.25"))
+            assertTrue(
+                "Fuzzy skin must add real points to exterior perimeter paths",
+                outerWallExtrusionMoveCount(fuzzyGcode) > outerWallExtrusionMoveCount(plainGcode),
+            )
+        } finally {
+            plain.output.delete()
+            fuzzy.output.delete()
+        }
+    }
+
+    @Test
     fun inheritedMotionOutputChangesFirstLayerTravelAndKlipperLimits() {
         val base = SliceOptions()
             .selectPrinter(PrinterProfile.U1_04.copy(gcodeFlavor = "klipper"))
@@ -1499,7 +1546,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(38, catalog.schemaVersion)
+        assertEquals(39, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2654,7 +2701,7 @@ class NativeEngineInstrumentedTest {
                 supportObjectXYDistance = 0.41f,
                 supportBasePattern = "rectilinear-grid",
                 supportInterfacePattern = "rectilinear_interlaced",
-                supportStyle = "snug",
+                supportStyle = "tree_strong",
                 supportCoverage = SupportCoverageSettings(
                     onBuildPlateOnly = true,
                     criticalRegionsOnly = true,
@@ -2890,7 +2937,7 @@ class NativeEngineInstrumentedTest {
         assertTrue("Support XY distance must reach Orca", gcode.contains("; support_object_xy_distance = 0.41"))
         assertTrue("Support base pattern must reach Orca", gcode.contains("; support_base_pattern = rectilinear-grid"))
         assertTrue("Support interface pattern must reach Orca", gcode.contains("; support_interface_pattern = rectilinear_interlaced"))
-        assertTrue("Support style must reach Orca", gcode.contains("; support_style = snug"))
+        assertTrue("Support style must reach Orca", gcode.contains("; support_style = tree_strong"))
         assertTrue("Build-plate-only support must reach Orca", gcode.contains("; support_on_build_plate_only = 1"))
         assertTrue("Critical-region support must reach Orca", gcode.contains("; support_critical_regions_only = 1"))
         assertTrue("Small-overhang filtering must reach Orca", gcode.contains("; support_remove_small_overhang = 0"))

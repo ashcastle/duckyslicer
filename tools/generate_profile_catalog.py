@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 38
+SCHEMA_VERSION = 39
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -348,6 +348,15 @@ def support_type(value: Any) -> str:
         "normal(manual)": "normal(manual)",
         "tree(manual)": "tree(manual)",
     }.get(candidate, "normal(auto)")
+
+
+def support_style(value: Any, normalized_support_type: str) -> str:
+    allowed = (
+        {"default", "organic", "tree_slim", "tree_strong", "tree_hybrid"}
+        if normalized_support_type.startswith("tree(")
+        else {"default", "grid", "snug"}
+    )
+    return enum_value(value, allowed, "default")
 
 
 def wall_sequence(value: Any) -> str:
@@ -686,11 +695,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
             {"auto", "rectilinear", "concentric", "rectilinear_interlaced", "grid"},
             "auto",
         ),
-        "supportStyle": enum_value(
-            raw.get("support_style"),
-            {"default", "grid", "snug", "organic", "tree_slim", "tree_strong", "tree_hybrid"},
-            "default",
-        ),
+        "supportStyle": support_style(raw.get("support_style"), normalized_support_type),
         "supportPatternAngle": number(raw.get("support_angle"), 0),
         "supportThresholdOverlap": support_threshold_overlap,
         "supportThresholdOverlapPercent": support_threshold_overlap_percent,
@@ -880,6 +885,23 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "infillJerk": number(raw.get("infill_jerk"), 9),
         "firstLayerJerk": number(raw.get("initial_layer_jerk"), 9),
         "travelJerk": number(raw.get("travel_jerk"), 12),
+        "fuzzySkinType": enum_value(
+            raw.get("fuzzy_skin"), {"none", "external", "all", "allwalls"}, "none"
+        ),
+        "fuzzySkinFirstLayer": boolean(raw.get("fuzzy_skin_first_layer")),
+        "fuzzySkinPointDistance": number(raw.get("fuzzy_skin_point_distance"), 0.3),
+        "fuzzySkinThickness": number(raw.get("fuzzy_skin_thickness"), 0.2),
+        "fuzzySkinMode": enum_value(
+            raw.get("fuzzy_skin_mode"), {"displacement", "extrusion", "combined"}, "displacement"
+        ),
+        "fuzzySkinNoiseType": enum_value(
+            raw.get("fuzzy_skin_noise_type"),
+            {"classic", "perlin", "billow", "ridgedmulti", "voronoi"},
+            "classic",
+        ),
+        "fuzzySkinScale": number(raw.get("fuzzy_skin_scale"), 1),
+        "fuzzySkinOctaves": integer(raw.get("fuzzy_skin_octaves"), 4),
+        "fuzzySkinPersistence": number(raw.get("fuzzy_skin_persistence"), 0.5),
     }
     if not (
         0 <= profile["fillDensity"] <= 1
@@ -950,6 +972,11 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 10 <= profile["bridgeDensity"] <= 100
         and 10 <= profile["internalBridgeDensity"] <= 100
         and 0 <= profile["bridgeAngle"] <= 360
+        and 0 <= profile["fuzzySkinThickness"] <= 1
+        and 0 <= profile["fuzzySkinPointDistance"] <= 5
+        and 0.1 <= profile["fuzzySkinScale"] <= 500
+        and 1 <= profile["fuzzySkinOctaves"] <= 10
+        and 0.01 <= profile["fuzzySkinPersistence"] <= 1
         and 0 <= profile["supportFilament"] <= 16
         and 0 <= profile["supportInterfaceFilament"] <= 16
         and 0 <= profile["infillFilamentBaseFirstLayers"] <= 1_000

@@ -146,6 +146,8 @@ prepare_dependency_sources() {
 
     download_checked "$BOOST_ARCHIVE_URL" "$BOOST_ARCHIVE_SHA256" \
         "$DEPENDENCY_SOURCE_ROOT/boost-android/boost_1_84_0.tar.bz2"
+    download_checked "$LIBNOISE_URL" "$LIBNOISE_SHA256" \
+        "$DEPENDENCY_SOURCE_ROOT/libnoise-1.0.zip"
     download_checked "$CGAL_URL" "$CGAL_SHA256" "$DEPENDENCY_SOURCE_ROOT/CGAL-5.6.tar.xz"
     download_checked "$GMP_URL" "$GMP_SHA256" "$DEPENDENCY_SOURCE_ROOT/gmp-6.3.0.tar.xz"
     download_checked "$MPFR_URL" "$MPFR_SHA256" "$DEPENDENCY_SOURCE_ROOT/mpfr-4.2.1.tar.xz"
@@ -170,7 +172,7 @@ build_dependencies() {
     rm -rf "$EXTERN_ROOT/boost" "$EXTERN_ROOT/cereal" "$EXTERN_ROOT/cgal" \
         "$EXTERN_ROOT/clipper2" "$EXTERN_ROOT/eigen" "$EXTERN_ROOT/expat" \
         "$EXTERN_ROOT/gmp" "$EXTERN_ROOT/jpeg" "$EXTERN_ROOT/mpfr" \
-        "$EXTERN_ROOT/nlohmann" "$EXTERN_ROOT/nlopt" "$EXTERN_ROOT/occt" \
+        "$EXTERN_ROOT/libnoise" "$EXTERN_ROOT/nlohmann" "$EXTERN_ROOT/nlopt" "$EXTERN_ROOT/occt" \
         "$EXTERN_ROOT/tbb" "$EXTERN_ROOT/zlib"
     mkdir -p "$EXTERN_ROOT"
 
@@ -216,6 +218,7 @@ build_dependencies() {
 
     build_nlopt
     build_jpeg
+    build_libnoise
 
     printf '%s\n' "$lock_sha" > "$EXTERN_ROOT/.duckyslicer-dependencies"
 }
@@ -235,6 +238,24 @@ build_jpeg() {
         -DCMAKE_INSTALL_LIBDIR="$EXTERN_ROOT/jpeg/lib" \
         -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DWITH_SIMD=OFF -DWITH_JAVA=OFF
     cmake --install "$BUILD_ROOT/jpeg"
+}
+
+build_libnoise() {
+    local extract_root source_root
+    extract_root="$BUILD_ROOT/libnoise-extract"
+    source_root="$extract_root/Orca-deps-libnoise-1.0"
+    rm -rf "$extract_root" "$BUILD_ROOT/libnoise" "$EXTERN_ROOT/libnoise"
+    mkdir -p "$extract_root"
+    unzip -q "$DEPENDENCY_SOURCE_ROOT/libnoise-1.0.zip" -d "$extract_root"
+    [ -f "$source_root/CMakeLists.txt" ] || die "unexpected libnoise archive layout"
+    cmake_android "$source_root" "$BUILD_ROOT/libnoise" \
+        -DCMAKE_INSTALL_PREFIX="$EXTERN_ROOT/libnoise" \
+        -DCMAKE_INSTALL_LIBDIR=lib
+    cmake --install "$BUILD_ROOT/libnoise"
+    mkdir -p "$EXTERN_ROOT/libnoise/share/doc/libnoise"
+    cp "$source_root/README.md" "$source_root/src/noise.h" \
+        "$DEPENDENCY_SOURCE_ROOT/eigen/COPYING.LGPL" \
+        "$EXTERN_ROOT/libnoise/share/doc/libnoise/"
 }
 
 build_gmp_and_mpfr() {
@@ -348,6 +369,7 @@ main() {
     require_command ninja
     require_command curl
     require_command tar
+    require_command unzip
     require_command make
     require_command cmp
 

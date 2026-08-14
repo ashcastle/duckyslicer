@@ -65,6 +65,15 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var infillJerk: Float = base.infillJerk
     private var firstLayerJerk: Float = base.firstLayerJerk
     private var travelJerk: Float = base.travelJerk
+    private var fuzzySkinType: String = base.fuzzySkin.type
+    private var fuzzySkinFirstLayer: Boolean = base.fuzzySkin.firstLayer
+    private var fuzzySkinPointDistance: Float = base.fuzzySkin.pointDistance
+    private var fuzzySkinThickness: Float = base.fuzzySkin.thickness
+    private var fuzzySkinMode: String = base.fuzzySkin.mode
+    private var fuzzySkinNoiseType: String = base.fuzzySkin.noiseType
+    private var fuzzySkinScale: Float = base.fuzzySkin.scale
+    private var fuzzySkinOctaves: Int = base.fuzzySkin.octaves
+    private var fuzzySkinPersistence: Float = base.fuzzySkin.persistence
     private var supportEnabled: Boolean = base.supportEnabled
     private var brimType: String = base.brimType
     private var brimWidth: Float = base.brimWidth
@@ -289,6 +298,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         readGroup7(input)
         readGroup8(input)
         readGroup9(input)
+        readGroup10(input)
     }
 
     private fun readGroup0(input: DataInputStream) {
@@ -593,6 +603,18 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         travelJerk = input.readFloat()
     }
 
+    private fun readGroup10(input: DataInputStream) {
+        fuzzySkinType = input.readCatalogString()
+        fuzzySkinFirstLayer = input.readCatalogBoolean()
+        fuzzySkinPointDistance = input.readFloat()
+        fuzzySkinThickness = input.readFloat()
+        fuzzySkinMode = input.readCatalogString()
+        fuzzySkinNoiseType = input.readCatalogString()
+        fuzzySkinScale = input.readFloat()
+        fuzzySkinOctaves = input.readInt()
+        fuzzySkinPersistence = input.readFloat()
+    }
+
     fun build(): QualityProfile = QualityProfile(
         id = id,
         name = name,
@@ -655,6 +677,17 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         infillJerk = infillJerk,
         firstLayerJerk = firstLayerJerk,
         travelJerk = travelJerk,
+        fuzzySkin = FuzzySkinSettings(
+            type = fuzzySkinType,
+            firstLayer = fuzzySkinFirstLayer,
+            pointDistance = fuzzySkinPointDistance,
+            thickness = fuzzySkinThickness,
+            mode = fuzzySkinMode,
+            noiseType = fuzzySkinNoiseType,
+            scale = fuzzySkinScale,
+            octaves = fuzzySkinOctaves,
+            persistence = fuzzySkinPersistence,
+        ),
         supportEnabled = supportEnabled,
         brimType = brimType,
         brimWidth = brimWidth,
@@ -1159,4 +1192,13 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("infillJerk", BINARY_FLOAT),
     BinaryField("firstLayerJerk", BINARY_FLOAT),
     BinaryField("travelJerk", BINARY_FLOAT),
+    BinaryField("fuzzySkinType", BINARY_STRING),
+    BinaryField("fuzzySkinFirstLayer", BINARY_BOOL),
+    BinaryField("fuzzySkinPointDistance", BINARY_FLOAT),
+    BinaryField("fuzzySkinThickness", BINARY_FLOAT),
+    BinaryField("fuzzySkinMode", BINARY_STRING),
+    BinaryField("fuzzySkinNoiseType", BINARY_STRING),
+    BinaryField("fuzzySkinScale", BINARY_FLOAT),
+    BinaryField("fuzzySkinOctaves", BINARY_INT),
+    BinaryField("fuzzySkinPersistence", BINARY_FLOAT),
 )

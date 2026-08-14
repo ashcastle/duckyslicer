@@ -53,6 +53,7 @@ are packaged in the APK's offline third-party license bundle.
 | Open CASCADE Technology | LGPL-2.1 with OCCT exception |
 | NLopt compiled library | LGPL-2.1-or-later |
 | libjpeg-turbo | IJG, BSD-3-Clause, and zlib licenses |
+| libnoise 1.0 | LGPL-2.1-or-later |
 | CGAL 5.6 headers | GPL-3.0-or-later, LGPL-3.0-or-later, and component-specific licenses |
 | GMP 6.3.0 | GPL-2.0-or-later or LGPL-3.0-or-later |
 | MPFR 4.2.1 | LGPL-3.0-or-later |

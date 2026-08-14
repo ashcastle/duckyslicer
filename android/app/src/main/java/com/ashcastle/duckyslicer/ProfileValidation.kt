@@ -207,6 +207,15 @@ internal object ProfileValidation {
             profile.supportBasePattern in SUPPORT_BASE_PATTERNS &&
             profile.supportInterfacePattern in SUPPORT_INTERFACE_PATTERNS &&
             profile.supportStyle in SUPPORT_STYLES &&
+            profile.supportStyle in compatibleSupportStyles(profile.supportType) &&
+            profile.fuzzySkin.type in setOf("none", "external", "all", "allwalls") &&
+            profile.fuzzySkin.pointDistance in 0f..5f &&
+            profile.fuzzySkin.thickness in 0f..1f &&
+            profile.fuzzySkin.mode in setOf("displacement", "extrusion", "combined") &&
+            profile.fuzzySkin.noiseType in setOf("classic", "perlin", "billow", "ridgedmulti", "voronoi") &&
+            profile.fuzzySkin.scale in 0.1f..500f &&
+            profile.fuzzySkin.octaves in 1..10 &&
+            profile.fuzzySkin.persistence in 0.01f..1f &&
             profile.supportAdvanced.patternAngle in 0f..359f &&
             profile.supportAdvanced.thresholdOverlap in 0f..(
                 if (profile.supportAdvanced.thresholdOverlapPercent) 100f else 0.5f
@@ -344,7 +353,7 @@ internal object ProfileValidation {
         "auto", "rectilinear", "rectilinear_interlaced", "concentric", "grid",
     )
     private val SUPPORT_STYLES = setOf(
-        "default", "grid", "snug", "organic", "tree_hybrid", "tree_slim",
+        "default", "grid", "snug", "organic", "tree_hybrid", "tree_slim", "tree_strong",
     )
     private val SEAM_POSITIONS = setOf("aligned", "nearest", "back", "random")
     private val SCARF_TYPES = setOf("none", "external", "all")

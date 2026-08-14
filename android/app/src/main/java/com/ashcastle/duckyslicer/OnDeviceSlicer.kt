@@ -40,6 +40,18 @@ internal fun String.isTreeSupportType(): Boolean = normalizedSupportType(this).l
     normalized == "tree(auto)" || normalized == "tree(manual)"
 }
 
+internal fun compatibleSupportStyles(supportType: String): List<String> =
+    if (supportType.isTreeSupportType()) {
+        listOf("default", "organic", "tree_slim", "tree_strong", "tree_hybrid")
+    } else {
+        listOf("default", "grid", "snug")
+    }
+
+internal fun normalizedSupportStyle(supportType: String, supportStyle: String): String {
+    val candidate = supportStyle.trim().lowercase()
+    return candidate.takeIf { it in compatibleSupportStyles(supportType) } ?: "default"
+}
+
 data class PrinterProfile(
     val id: String,
     val name: String,
@@ -377,6 +389,18 @@ data class SupportAdvancedSettings(
     val ironingSpacing: Float = 0.1f,
 )
 
+data class FuzzySkinSettings(
+    val type: String = "none",
+    val firstLayer: Boolean = false,
+    val pointDistance: Float = 0.3f,
+    val thickness: Float = 0.2f,
+    val mode: String = "displacement",
+    val noiseType: String = "classic",
+    val scale: Float = 1f,
+    val octaves: Int = 4,
+    val persistence: Float = 0.5f,
+)
+
 internal fun FilamentProfile.resolveRetraction(printer: PrinterProfile) = RetractionSettings(
     length = retractLength ?: printer.retractLength,
     speed = retractSpeed ?: printer.retractSpeed,
@@ -453,6 +477,7 @@ data class QualityProfile(
     val infillJerk: Float = 9f,
     val firstLayerJerk: Float = 9f,
     val travelJerk: Float = 12f,
+    val fuzzySkin: FuzzySkinSettings = FuzzySkinSettings(),
     val supportEnabled: Boolean = false,
     val brimType: String = "no_brim",
     val brimWidth: Float = 0f,
@@ -693,7 +718,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 38,
+    val schemaVersion: Int = 39,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -780,6 +805,7 @@ data class SliceOptions(
     val internalSolidInfillAcceleration: Float = quality.internalSolidInfillAcceleration,
     val internalSolidInfillAccelerationPercent: Boolean = quality.internalSolidInfillAccelerationPercent,
     val jerk: JerkSettings = quality.jerkSettings(),
+    val fuzzySkin: FuzzySkinSettings = quality.fuzzySkin,
     val topSolidLayers: Int = quality.topSolidLayers,
     val bottomSolidLayers: Int = quality.bottomSolidLayers,
     val topShellThickness: Float = quality.topShellThickness,
@@ -1128,6 +1154,7 @@ data class SliceOptions(
         internalSolidInfillAcceleration = profile.internalSolidInfillAcceleration,
         internalSolidInfillAccelerationPercent = profile.internalSolidInfillAccelerationPercent,
         jerk = profile.jerkSettings(),
+        fuzzySkin = profile.fuzzySkin,
         topSolidLayers = profile.topSolidLayers,
         bottomSolidLayers = profile.bottomSolidLayers,
         topShellThickness = profile.topShellThickness,
@@ -1414,7 +1441,7 @@ data class SliceOptions(
             supportObjectXYDistance = supportObjectXYDistance,
             supportBasePattern = supportBasePattern,
             supportInterfacePattern = supportInterfacePattern,
-            supportStyle = supportStyle,
+            supportStyle = normalizedSupportStyle(supportType, supportStyle),
             supportBasePatternSpacing = supportBasePatternSpacing,
             supportExpansion = supportExpansion,
             supportInterfaceLoopPattern = supportInterfaceLoopPattern,
@@ -1554,6 +1581,15 @@ data class SliceOptions(
             filamentNozzleTempInitialLayers = nativeFilaments.map(FilamentProfile::firstLayerNozzleTemp).toIntArray(),
             filamentBedTempInitialLayers = nativeFilaments.map(FilamentProfile::firstLayerBedTemp).toIntArray(),
         ).also { native ->
+            native.fuzzySkinType = fuzzySkin.type
+            native.fuzzySkinFirstLayer = fuzzySkin.firstLayer
+            native.fuzzySkinPointDistance = fuzzySkin.pointDistance
+            native.fuzzySkinThickness = fuzzySkin.thickness
+            native.fuzzySkinMode = fuzzySkin.mode.takeIf { wallGenerator == "arachne" } ?: "displacement"
+            native.fuzzySkinNoiseType = fuzzySkin.noiseType
+            native.fuzzySkinScale = fuzzySkin.scale
+            native.fuzzySkinOctaves = fuzzySkin.octaves
+            native.fuzzySkinPersistence = fuzzySkin.persistence
             native.infillFilamentOverrideEnabled = featureFilaments.infillOverrideEnabled
             native.infillFilamentBaseFirstLayers = featureFilaments.baseFirstLayers.coerceIn(0, 1_000)
             native.infillFilamentBaseLastLayers = featureFilaments.baseLastLayers.coerceIn(0, 1_000)
