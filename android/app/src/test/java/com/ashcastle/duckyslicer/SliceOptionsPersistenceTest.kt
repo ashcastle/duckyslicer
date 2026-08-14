@@ -53,6 +53,12 @@ class SliceOptionsPersistenceTest {
                     oozePrevention = true,
                     standbyTemperatureDelta = -35,
                     interfaceShells = true,
+                    interlockingBeam = true,
+                    interlockingBeamWidth = 1.25f,
+                    interlockingOrientation = 67.5f,
+                    interlockingBeamLayerCount = 3,
+                    interlockingDepth = 4,
+                    interlockingBoundaryAvoidance = 1,
                 ),
                 gcodeSettings = GcodeSettings(
                     arcFitting = true,
@@ -104,6 +110,12 @@ class SliceOptionsPersistenceTest {
         assertEquals(true, native.oozePrevention)
         assertEquals(-35, native.standbyTemperatureDelta)
         assertEquals(true, native.interfaceShells)
+        assertEquals(true, native.interlockingBeam)
+        assertEquals(1.25f, native.interlockingBeamWidth)
+        assertEquals(67.5f, native.interlockingOrientation)
+        assertEquals(3, native.interlockingBeamLayerCount)
+        assertEquals(4, native.interlockingDepth)
+        assertEquals(1, native.interlockingBoundaryAvoidance)
         assertEquals(true, native.enableArcFitting)
         assertEquals(false, native.gcodeLabelObjects)
         assertEquals(true, native.excludeObject)
@@ -670,6 +682,12 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             oozePrevention = true,
             standbyTemperatureDelta = -42,
             interfaceShells = true,
+            interlockingBeam = true,
+            interlockingBeamWidth = 1.25f,
+            interlockingOrientation = 67.5f,
+            interlockingBeamLayerCount = 3,
+            interlockingDepth = 4,
+            interlockingBoundaryAvoidance = 1,
         ),
         gcodeSettings = GcodeSettings(
             arcFitting = true,

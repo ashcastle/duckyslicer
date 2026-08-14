@@ -263,6 +263,11 @@ internal object ProfileValidation {
             profile.multiMaterial.wipeTowerExtraRibLength in -1_000f..300f &&
             profile.multiMaterial.wipeTowerRibWidth in 0f..1_000f &&
             profile.multiMaterial.standbyTemperatureDelta in -500..500 &&
+            profile.multiMaterial.interlockingBeamWidth in 0.01f..1_000f &&
+            profile.multiMaterial.interlockingOrientation in 0f..360f &&
+            profile.multiMaterial.interlockingBeamLayerCount in 1..1_000 &&
+            profile.multiMaterial.interlockingDepth in 1..1_000 &&
+            profile.multiMaterial.interlockingBoundaryAvoidance in 0..1_000 &&
             profile.brimType in setOf(
                 "auto_brim", "brim_ears", "outer_only", "inner_only", "outer_and_inner", "no_brim",
             ) &&

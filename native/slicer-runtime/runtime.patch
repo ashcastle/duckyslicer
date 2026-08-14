@@ -369,7 +369,7 @@ index 116a4a85..6b3048bc 100644
      float max_print_height = 270.0f;
  
      // Nozzle
-@@ -86,18 +282,84 @@ struct SliceConfig {
+@@ -86,18 +282,90 @@ struct SliceConfig {
      std::vector<int> extruder_temps;           // per-extruder nozzle temps
      std::vector<float> extruder_retract_length; // per-extruder retraction
      std::vector<float> extruder_retract_speed;  // per-extruder retraction speed
@@ -408,6 +408,12 @@ index 116a4a85..6b3048bc 100644
 +    bool ooze_prevention = false;
 +    int standby_temperature_delta = -5;
 +    bool interface_shells = false;
++    bool interlocking_beam = false;
++    float interlocking_beam_width = 0.8f;
++    float interlocking_orientation = 22.5f;
++    int interlocking_beam_layer_count = 2;
++    int interlocking_depth = 2;
++    int interlocking_boundary_avoidance = 2;
 +    bool enable_arc_fitting = false;
 +    bool gcode_label_objects = true;
 +    bool exclude_object = false;
@@ -987,7 +993,7 @@ index d93efb7d..fdf9a877 100644
      config.max_print_height = getFloat("maxPrintHeight");
  
      config.nozzle_diameter = getFloat("nozzleDiameter");
-@@ -129,14 +316,80 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -129,14 +316,86 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.extruder_temps = getIntArray("extruderTemps");
      config.extruder_retract_length = getFloatArray("extruderRetractLength");
      config.extruder_retract_speed = getFloatArray("extruderRetractSpeed");
@@ -1024,6 +1030,12 @@ index d93efb7d..fdf9a877 100644
 +    config.ooze_prevention = getBool("oozePrevention");
 +    config.standby_temperature_delta = getInt("standbyTemperatureDelta");
 +    config.interface_shells = getBool("interfaceShells");
++    config.interlocking_beam = getBool("interlockingBeam");
++    config.interlocking_beam_width = getFloat("interlockingBeamWidth");
++    config.interlocking_orientation = getFloat("interlockingOrientation");
++    config.interlocking_beam_layer_count = getInt("interlockingBeamLayerCount");
++    config.interlocking_depth = getInt("interlockingDepth");
++    config.interlocking_boundary_avoidance = getInt("interlockingBoundaryAvoidance");
 +    config.enable_arc_fitting = getBool("enableArcFitting");
 +    config.gcode_label_objects = getBool("gcodeLabelObjects");
 +    config.exclude_object = getBool("excludeObject");
@@ -1330,7 +1342,7 @@ index d93efb7d..fdf9a877 100644
      setFloat("maxPrintHeight", config.max_print_height);
      setFloat("nozzleDiameter", config.nozzle_diameter);
      setFloat("filamentDiameter", config.filament_diameter);
-@@ -265,12 +694,79 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -265,12 +694,85 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setIntArray("extruderTemps", config.extruder_temps);
      setFloatArray("extruderRetractLength", config.extruder_retract_length);
      setFloatArray("extruderRetractSpeed", config.extruder_retract_speed);
@@ -1367,6 +1379,12 @@ index d93efb7d..fdf9a877 100644
 +    setBool("oozePrevention", config.ooze_prevention);
 +    setInt("standbyTemperatureDelta", config.standby_temperature_delta);
 +    setBool("interfaceShells", config.interface_shells);
++    setBool("interlockingBeam", config.interlocking_beam);
++    setFloat("interlockingBeamWidth", config.interlocking_beam_width);
++    setFloat("interlockingOrientation", config.interlocking_orientation);
++    setInt("interlockingBeamLayerCount", config.interlocking_beam_layer_count);
++    setInt("interlockingDepth", config.interlocking_depth);
++    setInt("interlockingBoundaryAvoidance", config.interlocking_boundary_avoidance);
 +    setBool("enableArcFitting", config.enable_arc_fitting);
 +    setBool("gcodeLabelObjects", config.gcode_label_objects);
 +    setBool("excludeObject", config.exclude_object);
@@ -1897,7 +1915,7 @@ index 8d61c9cf..f285d044 100644
      // F91 (2026-05-25) — SliceConfig user overrides for the per-filament tuning keys
      // that applyConfigToPrusa doesn't otherwise touch. When the user sets a value via the
      // Filament Library, populate dpc here so the slicer picks it up. When unset, the
-@@ -568,31 +764,87 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -568,31 +764,95 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          dpc.set_key_value("filament_cost", new Slic3r::ConfigOptionFloats(std::move(v)));
      }
  
@@ -1981,6 +1999,14 @@ index 8d61c9cf..f285d044 100644
 +    dpc.set_key_value("ooze_prevention", new Slic3r::ConfigOptionBool(config.ooze_prevention));
 +    dpc.set_key_value("standby_temperature_delta", new Slic3r::ConfigOptionInt(config.standby_temperature_delta));
 +    dpc.set_key_value("interface_shells", new Slic3r::ConfigOptionBool(config.interface_shells));
++    dpc.set_key_value("interlocking_beam", new Slic3r::ConfigOptionBool(config.interlocking_beam));
++    dpc.set_key_value("interlocking_beam_width", new Slic3r::ConfigOptionFloat(config.interlocking_beam_width));
++    dpc.set_key_value("interlocking_orientation", new Slic3r::ConfigOptionFloat(config.interlocking_orientation));
++    dpc.set_key_value("interlocking_beam_layer_count", new Slic3r::ConfigOptionInt(config.interlocking_beam_layer_count));
++    dpc.set_key_value("interlocking_depth", new Slic3r::ConfigOptionInt(config.interlocking_depth));
++    dpc.set_key_value(
++        "interlocking_boundary_avoidance",
++        new Slic3r::ConfigOptionInt(config.interlocking_boundary_avoidance));
 +    dpc.set_key_value("enable_arc_fitting", new Slic3r::ConfigOptionBool(config.enable_arc_fitting));
 +    dpc.set_key_value("gcode_label_objects", new Slic3r::ConfigOptionBool(config.gcode_label_objects));
 +    dpc.set_key_value("exclude_object", new Slic3r::ConfigOptionBool(config.exclude_object));

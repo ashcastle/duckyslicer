@@ -328,6 +328,12 @@ data class SliceConfig(
     @JvmField var oozePrevention: Boolean = false
     @JvmField var standbyTemperatureDelta: Int = -5
     @JvmField var interfaceShells: Boolean = false
+    @JvmField var interlockingBeam: Boolean = false
+    @JvmField var interlockingBeamWidth: Float = 0.8f
+    @JvmField var interlockingOrientation: Float = 22.5f
+    @JvmField var interlockingBeamLayerCount: Int = 2
+    @JvmField var interlockingDepth: Int = 2
+    @JvmField var interlockingBoundaryAvoidance: Int = 2
     @JvmField var enableArcFitting: Boolean = false
     @JvmField var gcodeLabelObjects: Boolean = true
     @JvmField var excludeObject: Boolean = false

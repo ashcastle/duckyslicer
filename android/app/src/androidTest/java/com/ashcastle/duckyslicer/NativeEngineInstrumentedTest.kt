@@ -891,6 +891,44 @@ class NativeEngineInstrumentedTest {
         return destination
     }
 
+    private fun interlockingVolumeModel(name: String, x0: Float, x1: Float): File {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val destination = File(context.cacheDir, "interlocking-$name.stl")
+        val facets = mutableListOf<List<TestVertex>>()
+
+        fun vertex(x: Float, y: Float, z: Float) = TestVertex(x, y, z)
+        fun quad(a: TestVertex, b: TestVertex, c: TestVertex, d: TestVertex) {
+            facets += listOf(a, b, c)
+            facets += listOf(a, c, d)
+        }
+
+        val y0 = -10f
+        val y1 = 10f
+        val z0 = 0f
+        val z1 = 20f
+        quad(vertex(x0, y0, z0), vertex(x1, y0, z0), vertex(x1, y0, z1), vertex(x0, y0, z1))
+        quad(vertex(x1, y0, z0), vertex(x1, y1, z0), vertex(x1, y1, z1), vertex(x1, y0, z1))
+        quad(vertex(x1, y1, z0), vertex(x0, y1, z0), vertex(x0, y1, z1), vertex(x1, y1, z1))
+        quad(vertex(x0, y1, z0), vertex(x0, y0, z0), vertex(x0, y0, z1), vertex(x0, y1, z1))
+        quad(vertex(x0, y0, z1), vertex(x1, y0, z1), vertex(x1, y1, z1), vertex(x0, y1, z1))
+        quad(vertex(x0, y1, z0), vertex(x1, y1, z0), vertex(x1, y0, z0), vertex(x0, y0, z0))
+
+        destination.bufferedWriter().use { writer ->
+            writer.appendLine("solid interlocking_$name")
+            facets.forEach { triangle ->
+                writer.appendLine("facet normal 0 0 0")
+                writer.appendLine("outer loop")
+                triangle.forEach { point ->
+                    writer.appendLine("vertex ${point.x} ${point.y} ${point.z}")
+                }
+                writer.appendLine("endloop")
+                writer.appendLine("endfacet")
+            }
+            writer.appendLine("endsolid interlocking_$name")
+        }
+        return destination
+    }
+
     private fun meshCorpus(): List<MeshCorpusEntry> {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
 
@@ -1279,6 +1317,12 @@ class NativeEngineInstrumentedTest {
                     oozePrevention = true,
                     standbyTemperatureDelta = -42,
                     interfaceShells = true,
+                    interlockingBeam = true,
+                    interlockingBeamWidth = 1.25f,
+                    interlockingOrientation = 67.5f,
+                    interlockingBeamLayerCount = 3,
+                    interlockingDepth = 4,
+                    interlockingBoundaryAvoidance = 1,
                 ),
                 gcodeSettings = GcodeSettings(
                     arcFitting = true,
@@ -1477,6 +1521,12 @@ class NativeEngineInstrumentedTest {
         assertTrue(restored.slicing.last().multiMaterial.oozePrevention)
         assertEquals(-42, restored.slicing.last().multiMaterial.standbyTemperatureDelta)
         assertTrue(restored.slicing.last().multiMaterial.interfaceShells)
+        assertTrue(restored.slicing.last().multiMaterial.interlockingBeam)
+        assertEquals(1.25f, restored.slicing.last().multiMaterial.interlockingBeamWidth)
+        assertEquals(67.5f, restored.slicing.last().multiMaterial.interlockingOrientation)
+        assertEquals(3, restored.slicing.last().multiMaterial.interlockingBeamLayerCount)
+        assertEquals(4, restored.slicing.last().multiMaterial.interlockingDepth)
+        assertEquals(1, restored.slicing.last().multiMaterial.interlockingBoundaryAvoidance)
         assertTrue(restored.slicing.last().gcodeSettings.arcFitting)
         assertFalse(restored.slicing.last().gcodeSettings.labelObjects)
         assertTrue(restored.slicing.last().gcodeSettings.excludeObjects)
@@ -1680,7 +1730,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(42, catalog.schemaVersion)
+        assertEquals(43, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -1739,7 +1789,8 @@ class NativeEngineInstrumentedTest {
                     it.multiMaterial.singleExtruderMultiMaterialPriming ||
                     !it.multiMaterial.flushIntoSupport ||
                     it.multiMaterial.oozePrevention ||
-                    it.multiMaterial.interfaceShells
+                    it.multiMaterial.interfaceShells ||
+                    it.multiMaterial.interlockingBeam
             },
         )
         assertTrue(catalog.slicing.all(ProfileValidation::slicing))
@@ -2305,6 +2356,54 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun interlockingBeamsChangeTouchingMultiMaterialVolumeToolpaths() {
+        val left = inspectModel(interlockingVolumeModel("left", -20f, 0f).absolutePath)
+        val right = inspectModel(interlockingVolumeModel("right", 0f, 20f).absolutePath)
+        val primary = FilamentProfile.PLA
+        val secondary = FilamentProfile.PETG
+        val projectObject = ProjectObject(
+            id = "interlocking-object",
+            volumes = listOf(
+                ProjectVolume("interlocking-left", left, filamentSlot = 0),
+                ProjectVolume("interlocking-right", right, filamentSlot = 1),
+            ),
+        )
+        val baselineOptions = SliceOptions()
+            .selectPrinter(PrinterProfile.U1_04)
+            .selectFilament(primary)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                filamentSlots = listOf(primary, secondary),
+                wipeTowerEnabled = false,
+                multiMaterial = MultiMaterialSettings(interlockingBeam = false),
+            )
+        val baseline = OnDeviceSlicer.slice(listOf(projectObject), baselineOptions)
+        val interlocked = OnDeviceSlicer.slice(
+            listOf(projectObject),
+            baselineOptions.copy(
+                multiMaterial = MultiMaterialSettings(
+                    interlockingBeam = true,
+                    interlockingBeamWidth = 1.2f,
+                    interlockingOrientation = 45f,
+                    interlockingBeamLayerCount = 2,
+                    interlockingDepth = 3,
+                    interlockingBoundaryAvoidance = 1,
+                ),
+            ),
+        )
+        val baselinePreview = loadGcodePreview(baseline.output.absolutePath, 0, Int.MAX_VALUE)
+        val interlockedPreview = loadGcodePreview(interlocked.output.absolutePath, 0, Int.MAX_VALUE)
+        val interlockedGcode = interlocked.output.readText()
+
+        assertTrue("Touching volumes must use both materials", interlockedGcode.lineSequence().any { it == "T1" })
+        assertTrue("Interlocking must be active in Orca", interlockedGcode.contains("; interlocking_beam = 1"))
+        assertFalse(
+            "Interlocking must change real extrusion geometry, not only profile metadata",
+            baselinePreview.segments.contentEquals(interlockedPreview.segments),
+        )
+    }
+
+    @Test
     fun automaticTreeSupportRetainsItsModeAndCreatesSupportToolpaths() {
         val model = inspectModel(supportPaintOverhangModel().absolutePath)
         val options = SliceOptions()
@@ -2411,6 +2510,12 @@ class NativeEngineInstrumentedTest {
                     oozePrevention = true,
                     standbyTemperatureDelta = -35,
                     interfaceShells = true,
+                    interlockingBeam = true,
+                    interlockingBeamWidth = 1.25f,
+                    interlockingOrientation = 67.5f,
+                    interlockingBeamLayerCount = 3,
+                    interlockingDepth = 4,
+                    interlockingBoundaryAvoidance = 1,
                 ),
             )
         val outcome = OnDeviceSlicer.slice(
@@ -2469,6 +2574,15 @@ class NativeEngineInstrumentedTest {
         assertTrue("Ooze prevention must reach Orca", gcode.contains("; ooze_prevention = 1"))
         assertTrue("Standby temperature delta must reach Orca", gcode.contains("; standby_temperature_delta = -35"))
         assertTrue("Interface shells must reach Orca", gcode.contains("; interface_shells = 1"))
+        assertTrue("Interlocking must reach Orca", gcode.contains("; interlocking_beam = 1"))
+        assertTrue("Interlocking width must reach Orca", gcode.contains("; interlocking_beam_width = 1.25"))
+        assertTrue("Interlocking direction must reach Orca", gcode.contains("; interlocking_orientation = 67.5"))
+        assertTrue("Interlocking layers must reach Orca", gcode.contains("; interlocking_beam_layer_count = 3"))
+        assertTrue("Interlocking depth must reach Orca", gcode.contains("; interlocking_depth = 4"))
+        assertTrue(
+            "Interlocking boundary clearance must reach Orca",
+            gcode.contains("; interlocking_boundary_avoidance = 1"),
+        )
         assertTrue("The second object must produce a real tool change", gcode.lineSequence().any { it == "T1" })
 
         val featureOnlyOutcome = OnDeviceSlicer.slice(
@@ -2559,6 +2673,15 @@ class NativeEngineInstrumentedTest {
         assertTrue("Ooze prevention must not be forced on", defaultsGcode.contains("; ooze_prevention = 0"))
         assertTrue("The inherited standby delta must remain intact", defaultsGcode.contains("; standby_temperature_delta = -5"))
         assertTrue("Interface shells must not be forced on", defaultsGcode.contains("; interface_shells = 0"))
+        assertTrue("Interlocking must default off", defaultsGcode.contains("; interlocking_beam = 0"))
+        assertTrue("Interlocking width must retain Orca's default", defaultsGcode.contains("; interlocking_beam_width = 0.8"))
+        assertTrue("Interlocking direction must retain Orca's default", defaultsGcode.contains("; interlocking_orientation = 22.5"))
+        assertTrue("Interlocking layers must retain Orca's default", defaultsGcode.contains("; interlocking_beam_layer_count = 2"))
+        assertTrue("Interlocking depth must retain Orca's default", defaultsGcode.contains("; interlocking_depth = 2"))
+        assertTrue(
+            "Interlocking boundary clearance must retain Orca's default",
+            defaultsGcode.contains("; interlocking_boundary_avoidance = 2"),
+        )
     }
 
     @Test

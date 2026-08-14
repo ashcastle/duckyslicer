@@ -347,6 +347,12 @@ data class MultiMaterialSettings(
     val oozePrevention: Boolean = false,
     val standbyTemperatureDelta: Int = -5,
     val interfaceShells: Boolean = false,
+    val interlockingBeam: Boolean = false,
+    val interlockingBeamWidth: Float = 0.8f,
+    val interlockingOrientation: Float = 22.5f,
+    val interlockingBeamLayerCount: Int = 2,
+    val interlockingDepth: Int = 2,
+    val interlockingBoundaryAvoidance: Int = 2,
 )
 
 data class FeatureFilamentSettings(
@@ -788,7 +794,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 42,
+    val schemaVersion: Int = 43,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1722,6 +1728,12 @@ data class SliceOptions(
             native.oozePrevention = multiMaterial.oozePrevention
             native.standbyTemperatureDelta = multiMaterial.standbyTemperatureDelta
             native.interfaceShells = multiMaterial.interfaceShells
+            native.interlockingBeam = multiMaterial.interlockingBeam
+            native.interlockingBeamWidth = multiMaterial.interlockingBeamWidth
+            native.interlockingOrientation = multiMaterial.interlockingOrientation
+            native.interlockingBeamLayerCount = multiMaterial.interlockingBeamLayerCount
+            native.interlockingDepth = multiMaterial.interlockingDepth
+            native.interlockingBoundaryAvoidance = multiMaterial.interlockingBoundaryAvoidance
             native.enableArcFitting = gcodeSettings.arcFitting
             native.slicingMode = precision.mode
             native.sliceClosingRadius = precision.closingRadius

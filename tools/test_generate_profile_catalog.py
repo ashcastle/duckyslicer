@@ -79,6 +79,12 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "ooze_prevention": "1",
                 "standby_temperature_delta": "-35",
                 "interface_shells": "1",
+                "interlocking_beam": "1",
+                "interlocking_beam_width": "1.25",
+                "interlocking_orientation": "67.5",
+                "interlocking_beam_layer_count": "3",
+                "interlocking_depth": "4",
+                "interlocking_boundary_avoidance": "1",
                 "enable_arc_fitting": "1",
                 "gcode_label_objects": "0",
                 "exclude_object": "1",
@@ -132,6 +138,12 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(profile["oozePrevention"])
         self.assertEqual(-35, profile["standbyTemperatureDelta"])
         self.assertTrue(profile["interfaceShells"])
+        self.assertTrue(profile["interlockingBeam"])
+        self.assertEqual(1.25, profile["interlockingBeamWidth"])
+        self.assertEqual(67.5, profile["interlockingOrientation"])
+        self.assertEqual(3, profile["interlockingBeamLayerCount"])
+        self.assertEqual(4, profile["interlockingDepth"])
+        self.assertEqual(1, profile["interlockingBoundaryAvoidance"])
         self.assertTrue(profile["enableArcFitting"])
         self.assertFalse(profile["gcodeLabelObjects"])
         self.assertTrue(profile["excludeObject"])

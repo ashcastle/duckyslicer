@@ -4298,6 +4298,110 @@ private fun SlicingSettingsSheet(
                         )
                     },
                 )
+                SettingsGroupTitle(stringResource(R.string.material_interlocking))
+                SettingsSwitch(
+                    label = stringResource(R.string.interlocking_beam),
+                    checked = options.multiMaterial.interlockingBeam,
+                    onCheckedChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                multiMaterial = options.multiMaterial.copy(interlockingBeam = it),
+                            ),
+                        )
+                    },
+                )
+                if (options.multiMaterial.interlockingBeam || settingsQuery.isNotBlank()) {
+                    val beamWidthMaximum = max(10f, options.multiMaterial.interlockingBeamWidth)
+                    SettingSlider(
+                        label = stringResource(R.string.interlocking_beam_width),
+                        valueText = stringResource(
+                            R.string.millimeters_value_precise,
+                            options.multiMaterial.interlockingBeamWidth,
+                        ),
+                        value = options.multiMaterial.interlockingBeamWidth,
+                        range = 0.01f..beamWidthMaximum,
+                        steps = ((beamWidthMaximum - 0.01f) / 0.01f).roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        interlockingBeamWidth = (it * 100f).roundToInt() / 100f,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.interlocking_orientation),
+                        valueText = stringResource(
+                            R.string.degrees_value,
+                            options.multiMaterial.interlockingOrientation,
+                        ),
+                        value = options.multiMaterial.interlockingOrientation.coerceIn(0f, 360f),
+                        range = 0f..360f,
+                        steps = 719,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        interlockingOrientation = (it * 2f).roundToInt() / 2f,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    val layerMaximum = max(20, options.multiMaterial.interlockingBeamLayerCount)
+                    SettingSlider(
+                        label = stringResource(R.string.interlocking_beam_layer_count),
+                        valueText = options.multiMaterial.interlockingBeamLayerCount.toString(),
+                        value = options.multiMaterial.interlockingBeamLayerCount.toFloat(),
+                        range = 1f..layerMaximum.toFloat(),
+                        steps = (layerMaximum - 2).coerceAtLeast(0),
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        interlockingBeamLayerCount = it.roundToInt(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    val depthMaximum = max(20, options.multiMaterial.interlockingDepth)
+                    SettingSlider(
+                        label = stringResource(R.string.interlocking_depth),
+                        valueText = options.multiMaterial.interlockingDepth.toString(),
+                        value = options.multiMaterial.interlockingDepth.toFloat(),
+                        range = 1f..depthMaximum.toFloat(),
+                        steps = (depthMaximum - 2).coerceAtLeast(0),
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        interlockingDepth = it.roundToInt(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    val avoidanceMaximum = max(20, options.multiMaterial.interlockingBoundaryAvoidance)
+                    SettingSlider(
+                        label = stringResource(R.string.interlocking_boundary_avoidance),
+                        valueText = options.multiMaterial.interlockingBoundaryAvoidance.toString(),
+                        value = options.multiMaterial.interlockingBoundaryAvoidance.toFloat(),
+                        range = 0f..avoidanceMaximum.toFloat(),
+                        steps = (avoidanceMaximum - 1).coerceAtLeast(0),
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        interlockingBoundaryAvoidance = it.roundToInt(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                }
                 SettingsGroupTitle(stringResource(R.string.bed_adhesion))
                 SettingSlider(
                     label = stringResource(R.string.skirt_loops),

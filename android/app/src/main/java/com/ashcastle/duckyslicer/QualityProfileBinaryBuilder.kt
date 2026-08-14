@@ -168,6 +168,12 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var oozePrevention: Boolean = base.multiMaterial.oozePrevention
     private var standbyTemperatureDelta: Int = base.multiMaterial.standbyTemperatureDelta
     private var interfaceShells: Boolean = base.multiMaterial.interfaceShells
+    private var interlockingBeam: Boolean = base.multiMaterial.interlockingBeam
+    private var interlockingBeamWidth: Float = base.multiMaterial.interlockingBeamWidth
+    private var interlockingOrientation: Float = base.multiMaterial.interlockingOrientation
+    private var interlockingBeamLayerCount: Int = base.multiMaterial.interlockingBeamLayerCount
+    private var interlockingDepth: Int = base.multiMaterial.interlockingDepth
+    private var interlockingBoundaryAvoidance: Int = base.multiMaterial.interlockingBoundaryAvoidance
     private var enableArcFitting: Boolean = base.gcodeSettings.arcFitting
     private var gcodeLabelObjects: Boolean = base.gcodeSettings.labelObjects
     private var excludeObject: Boolean = base.gcodeSettings.excludeObjects
@@ -567,6 +573,12 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         oozePrevention = input.readCatalogBoolean()
         standbyTemperatureDelta = input.readInt()
         interfaceShells = input.readCatalogBoolean()
+        interlockingBeam = input.readCatalogBoolean()
+        interlockingBeamWidth = input.readFloat()
+        interlockingOrientation = input.readFloat()
+        interlockingBeamLayerCount = input.readInt()
+        interlockingDepth = input.readInt()
+        interlockingBoundaryAvoidance = input.readInt()
         enableArcFitting = input.readCatalogBoolean()
         gcodeLabelObjects = input.readCatalogBoolean()
         excludeObject = input.readCatalogBoolean()
@@ -797,6 +809,12 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             oozePrevention = oozePrevention,
             standbyTemperatureDelta = standbyTemperatureDelta,
             interfaceShells = interfaceShells,
+            interlockingBeam = interlockingBeam,
+            interlockingBeamWidth = interlockingBeamWidth,
+            interlockingOrientation = interlockingOrientation,
+            interlockingBeamLayerCount = interlockingBeamLayerCount,
+            interlockingDepth = interlockingDepth,
+            interlockingBoundaryAvoidance = interlockingBoundaryAvoidance,
         ),
         gcodeSettings = GcodeSettings(
             arcFitting = enableArcFitting,
@@ -1177,6 +1195,12 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("oozePrevention", BINARY_BOOL),
     BinaryField("standbyTemperatureDelta", BINARY_INT),
     BinaryField("interfaceShells", BINARY_BOOL),
+    BinaryField("interlockingBeam", BINARY_BOOL),
+    BinaryField("interlockingBeamWidth", BINARY_FLOAT),
+    BinaryField("interlockingOrientation", BINARY_FLOAT),
+    BinaryField("interlockingBeamLayerCount", BINARY_INT),
+    BinaryField("interlockingDepth", BINARY_INT),
+    BinaryField("interlockingBoundaryAvoidance", BINARY_INT),
     BinaryField("enableArcFitting", BINARY_BOOL),
     BinaryField("gcodeLabelObjects", BINARY_BOOL),
     BinaryField("excludeObject", BINARY_BOOL),

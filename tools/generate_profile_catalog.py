@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 42
+SCHEMA_VERSION = 43
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -848,6 +848,12 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "oozePrevention": boolean(raw.get("ooze_prevention")),
         "standbyTemperatureDelta": integer(raw.get("standby_temperature_delta"), -5),
         "interfaceShells": boolean(raw.get("interface_shells")),
+        "interlockingBeam": boolean(raw.get("interlocking_beam")),
+        "interlockingBeamWidth": number(raw.get("interlocking_beam_width"), 0.8),
+        "interlockingOrientation": number(raw.get("interlocking_orientation"), 22.5),
+        "interlockingBeamLayerCount": integer(raw.get("interlocking_beam_layer_count"), 2),
+        "interlockingDepth": integer(raw.get("interlocking_depth"), 2),
+        "interlockingBoundaryAvoidance": integer(raw.get("interlocking_boundary_avoidance"), 2),
         "enableArcFitting": boolean(raw.get("enable_arc_fitting")),
         "gcodeLabelObjects": boolean(raw.get("gcode_label_objects"), True),
         "excludeObject": boolean(raw.get("exclude_object")),
@@ -1093,6 +1099,11 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0 <= profile["brimObjectGap"] <= 20
         and 0 <= profile["brimEarsMaxAngle"] <= 180
         and 0 <= profile["brimEarsDetectionLength"] <= 1_000
+        and 0.01 <= profile["interlockingBeamWidth"] <= 1_000
+        and 0 <= profile["interlockingOrientation"] <= 360
+        and 1 <= profile["interlockingBeamLayerCount"] <= 1_000
+        and 1 <= profile["interlockingDepth"] <= 1_000
+        and 0 <= profile["interlockingBoundaryAvoidance"] <= 1_000
         and 0 <= profile["skirtHeight"] <= 10_000
         and 0 <= profile["skirtSpeed"] <= 2_000
         and 0 <= profile["minimumSkirtLength"] <= 1_000_000

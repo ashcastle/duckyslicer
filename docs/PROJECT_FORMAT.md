@@ -16,7 +16,7 @@ models/001.stl
 ```
 
 `manifest.json` identifies the format as `com.ashcastle.duckyslicer.project`, declares
-schema version `12`, and stores the selected plate plus a bounded `plates` list. Each plate
+schema version `13`, and stores the selected plate plus a bounded `plates` list. Each plate
 owns its stable identity, selected object, objects, and resolved printer, filament, and
 slicing settings. Each object owns a stable, bounded `volumes` list. The object owns its
 transform (including independent X, Y, and Z scale), variable layer-height ranges, and
