@@ -235,6 +235,7 @@
     <string name="timelapse">Timelapse</string>
     <string name="timelapse_traditional">Traditional</string>
     <string name="timelapse_smooth">Smooth</string>
+    <string name="scan_first_layer">Scan first layer</string>
     <string name="filename_format">Filename format</string>
     <string name="filename_format_hint">The model, material, printer, layer height, and print time can be included.</string>
     <string name="filename_format_invalid">Enter a file name format.</string>

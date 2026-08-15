@@ -726,6 +726,17 @@ private fun PrinterSettingsSheet(
     )
     SettingsGroupTitle(stringResource(R.string.gcode_output))
     SettingsSwitch(
+        label = stringResource(R.string.scan_first_layer),
+        checked = options.printerProfile.scanFirstLayer,
+        onCheckedChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(scanFirstLayer = it),
+                ),
+            )
+        },
+    )
+    SettingsSwitch(
         label = stringResource(R.string.use_relative_e_distances),
         checked = options.printerProfile.useRelativeEDistances,
         onCheckedChange = {

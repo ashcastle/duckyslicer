@@ -364,6 +364,7 @@ data class SliceConfig(
     @JvmField var inputFilenameBase: String = "model"
     @JvmField var printerModel: String = "DuckySlicer"
     @JvmField var isBambuPrinter: Boolean = false
+    @JvmField var scanFirstLayer: Boolean = false
     @JvmField var skirtType: String = "combined"
     @JvmField var singleLoopDraftShield: Boolean = false
     @JvmField var lateralLatticeAngle1: Float = -45f

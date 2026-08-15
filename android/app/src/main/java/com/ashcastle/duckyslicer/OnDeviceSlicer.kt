@@ -258,6 +258,7 @@ data class PrinterProfile(
     val fanKickstart: Float = 0f,
     val supportsChamberTemperatureControl: Boolean = false,
     val supportsAirFiltration: Boolean = false,
+    val scanFirstLayer: Boolean = false,
     val defaultPrintProfile: String = "",
     val defaultFilamentProfiles: List<String> = emptyList(),
 ) {
@@ -1231,7 +1232,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 87,
+    val schemaVersion: Int = 88,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -2229,6 +2230,7 @@ data class SliceOptions(
             native.filenameFormat = gcodeSettings.filenameFormat
             native.printerModel = printerProfile.name
             native.isBambuPrinter = printerProfile.brand == "BBL"
+            native.scanFirstLayer = printerProfile.scanFirstLayer
             native.skirtType = quality.skirtType
             native.singleLoopDraftShield = quality.singleLoopDraftShield
             native.lateralLatticeAngle1 = quality.lateralInfill.firstAngle

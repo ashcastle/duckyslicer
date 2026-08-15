@@ -16,6 +16,32 @@ from tools.generate_profile_catalog import (
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_preserves_first_layer_inspection(self) -> None:
+        enabled = build_printer(
+            "Example",
+            {
+                "name": "Camera printer",
+                "printable_area": ["0x0", "220x0", "220x220", "0x220"],
+                "printable_height": "250",
+                "nozzle_diameter": ["0.4"],
+                "gcode_flavor": "marlin",
+                "scan_first_layer": "1",
+            },
+        )
+        disabled = build_printer(
+            "Example",
+            {
+                "name": "Plain printer",
+                "printable_area": ["0x0", "220x0", "220x220", "0x220"],
+                "printable_height": "250",
+                "nozzle_diameter": ["0.4"],
+                "gcode_flavor": "marlin",
+            },
+        )
+
+        self.assertTrue(enabled["scanFirstLayer"])
+        self.assertFalse(disabled["scanFirstLayer"])
+
     def test_preserves_orca_timelapse_mode_and_rejects_smooth_by_object(self) -> None:
         self.assertEqual("traditional", timelapse_type(None))
         self.assertEqual("traditional", timelapse_type("0"))

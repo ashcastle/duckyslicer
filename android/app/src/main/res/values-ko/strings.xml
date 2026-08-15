@@ -215,6 +215,7 @@
     <string name="timelapse">타임랩스</string>
     <string name="timelapse_traditional">일반</string>
     <string name="timelapse_smooth">스무스</string>
+    <string name="scan_first_layer">첫 레이어 검사</string>
     <string name="filename_format">파일 이름 형식</string>
     <string name="filename_format_hint">모델, 필라멘트, 프린터, 레이어 높이와 출력 시간을 포함할 수 있습니다.</string>
     <string name="filename_format_invalid">파일 이름 형식을 입력하세요.</string>

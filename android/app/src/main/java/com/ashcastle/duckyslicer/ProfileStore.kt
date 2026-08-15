@@ -7,7 +7,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 88
+internal const val USER_PROFILE_SCHEMA_VERSION = 89
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -133,6 +133,7 @@ class ProfileStore private constructor(
             fanKickstart = options.printerProfile.fanKickstart,
             supportsChamberTemperatureControl = options.printerProfile.supportsChamberTemperatureControl,
             supportsAirFiltration = options.printerProfile.supportsAirFiltration,
+            scanFirstLayer = options.printerProfile.scanFirstLayer,
             defaultPrintProfile = options.quality.name,
             defaultFilamentProfiles = options.resolvedFilamentSlots().map(FilamentProfile::name),
         )
@@ -685,6 +686,7 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("fanKickstart", fanKickstart)
     .put("supportsChamberTemperatureControl", supportsChamberTemperatureControl)
     .put("supportsAirFiltration", supportsAirFiltration)
+    .put("scanFirstLayer", scanFirstLayer)
     .put("defaultPrintProfile", defaultPrintProfile)
     .put("defaultFilamentProfiles", JSONArray(defaultFilamentProfiles))
     .put("builtIn", builtIn)
@@ -1212,6 +1214,7 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         fanKickstart = optDouble("fanKickstart", 0.0).toFloat(),
         supportsChamberTemperatureControl = optBoolean("supportsChamberTemperatureControl"),
         supportsAirFiltration = optBoolean("supportsAirFiltration"),
+        scanFirstLayer = optBoolean("scanFirstLayer"),
         defaultPrintProfile = optString("defaultPrintProfile", ""),
         defaultFilamentProfiles = stringList("defaultFilamentProfiles"),
     )

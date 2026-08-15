@@ -2394,7 +2394,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(87, catalog.schemaVersion)
+        assertEquals(88, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -4054,6 +4054,38 @@ class NativeEngineInstrumentedTest {
                 smoothTowerExtrusion > traditionalTowerExtrusion ||
                 !traditionalPreview.segments.contentEquals(smoothPreview.segments),
         )
+    }
+
+    @Test
+    fun firstLayerInspectionChangesTheBundledMachineOutput() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val printer = OrcaProfileCatalog(context).load().printers.single {
+            it.name == "Bambu Lab X1 0.4 nozzle"
+        }
+        val model = inspectModel(fixtureModel().absolutePath)
+        val objects = listOf(ProjectObject(id = "inspection-object", model = model))
+        val base = SliceOptions()
+            .selectPrinter(printer)
+            .selectFilament(FilamentProfile.PLA)
+            .selectQuality(QualityProfile.DRAFT)
+
+        assertTrue("The bundled X1 profile must retain inspection", printer.scanFirstLayer)
+        assertTrue(base.toNativeConfig().scanFirstLayer)
+
+        val enabled = OnDeviceSlicer.slice(objects, base).output.readText()
+        val disabled = OnDeviceSlicer.slice(
+            objects,
+            base.copy(printerProfile = printer.copy(scanFirstLayer = false)),
+        ).output.readText()
+
+        assertTrue(enabled.contains("; scan_first_layer = 1"))
+        assertTrue(disabled.contains("; scan_first_layer = 0"))
+        val scanRegistration = "M977 S1 P60"
+        val secondLayerScan = "M976 S1 P1 ; scan model before printing 2nd layer"
+        assertTrue(enabled.lineSequence().any { it.trim() == scanRegistration })
+        assertFalse(disabled.lineSequence().any { it.trim() == scanRegistration })
+        assertTrue(enabled.lineSequence().any { it.trim() == secondLayerScan })
+        assertFalse(disabled.lineSequence().any { it.trim() == secondLayerScan })
     }
 
     @Test

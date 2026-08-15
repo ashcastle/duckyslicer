@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v87.bin"
+private const val CATALOG_ASSET = "profile_catalog_v88.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 87) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 88) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -83,6 +83,7 @@ class OrcaProfileCatalog(private val context: Context) {
         fanKickstart = input.readFloat(),
         supportsChamberTemperatureControl = input.readCatalogBoolean(),
         supportsAirFiltration = input.readCatalogBoolean(),
+        scanFirstLayer = input.readCatalogBoolean(),
         machineStartGcode = input.readCatalogString(),
         machineEndGcode = input.readCatalogString(),
         machinePauseGcode = input.readCatalogString(),
@@ -339,6 +340,7 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("fanKickstart", BINARY_FLOAT),
     BinaryField("supportsChamberTemperatureControl", BINARY_BOOL),
     BinaryField("supportsAirFiltration", BINARY_BOOL),
+    BinaryField("scanFirstLayer", BINARY_BOOL),
     BinaryField("machineStartGcode", BINARY_STRING),
     BinaryField("machineEndGcode", BINARY_STRING),
     BinaryField("machinePauseGcode", BINARY_STRING),

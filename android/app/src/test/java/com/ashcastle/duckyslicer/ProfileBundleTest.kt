@@ -47,6 +47,7 @@ class ProfileBundleTest {
                         highCurrentOnFilamentSwap = true,
                         supportsChamberTemperatureControl = true,
                         supportsAirFiltration = true,
+                        scanFirstLayer = true,
                         toolChangeRetractLengths = listOf(1.2f, 2.3f),
                         toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
                     ),
@@ -166,6 +167,7 @@ class ProfileBundleTest {
                         !it.enableFilamentRamming && !it.purgeInPrimeTower &&
                         it.highCurrentOnFilamentSwap &&
                         it.supportsChamberTemperatureControl && it.supportsAirFiltration &&
+                        it.scanFirstLayer &&
                         it.toolChangeRetractLengths == listOf(1.2f, 2.3f) &&
                         it.toolChangeRetractRestartExtras == listOf(-0.1f, 0.2f)
                 },

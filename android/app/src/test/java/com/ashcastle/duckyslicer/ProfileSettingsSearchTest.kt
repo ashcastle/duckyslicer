@@ -27,6 +27,8 @@ class ProfileSettingsSearchTest {
         assertTrue(settingQueryMatches("flow compensation", "Flow compensation model"))
         assertTrue(settingQueryMatches("timelapse", "Timelapse"))
         assertTrue(settingQueryMatches("타임랩스", "타임랩스"))
+        assertTrue(settingQueryMatches("first layer", "Scan first layer"))
+        assertTrue(settingQueryMatches("레이어 검사", "첫 레이어 검사"))
         assertFalse(settingQueryMatches("Z distance", "0.20 mm Standard"))
     }
 

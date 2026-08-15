@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 87
+SCHEMA_VERSION = 88
 MAX_FILAMENT_SLOTS = 16
 DEFAULT_GCODE_FILENAME_FORMAT = (
     "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
@@ -431,6 +431,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
             raw.get("support_chamber_temp_control")
         ),
         "supportsAirFiltration": boolean(raw.get("support_air_filtration")),
+        "scanFirstLayer": boolean(raw.get("scan_first_layer")),
         "machineStartGcode": str(raw.get("machine_start_gcode", "")),
         "machineEndGcode": str(raw.get("machine_end_gcode", "")),
         "machinePauseGcode": str(raw.get("machine_pause_gcode", "")),
