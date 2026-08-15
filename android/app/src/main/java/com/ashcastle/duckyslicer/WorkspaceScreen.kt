@@ -5186,6 +5186,13 @@ private fun PreviewSheet(
                 loading = loading,
                 onToggle = { onExpandedChanged(!expanded) },
             )
+            if (SliceWarningCode.NOZZLE_HARDNESS in outcome.warnings) {
+                Text(
+                    stringResource(R.string.nozzle_hardness_warning),
+                    color = Color(0xFFFFCC4D),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             if (error != null) Text(error, color = Color(0xFFFF8A80))
             if (expanded) {
                 Column(

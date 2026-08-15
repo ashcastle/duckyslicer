@@ -34,6 +34,7 @@ internal object ProfileValidation {
             (profile.defaultPrintProfile.isEmpty() || profile.defaultPrintProfile.isSafeLabel()) &&
             profile.defaultFilamentProfiles.size <= MAX_FILAMENT_SLOTS &&
             profile.defaultFilamentProfiles.all { it.isSafeLabel() } &&
+            profile.nozzleHrc in 0..500 &&
             profile.gcodeFlavor in setOf("marlin", "marlin2", "klipper") &&
             listOf(
                 profile.machineLoadFilamentTime,
@@ -183,6 +184,7 @@ internal object ProfileValidation {
             profile.closeFanFirstLayers in 0..10_000 &&
             profile.fullFanSpeedLayer in 0..10_000 &&
             profile.pressureAdvance in 0f..10f &&
+            profile.requiredNozzleHrc in 0..500 &&
             profile.adaptivePressureAdvance.bridge in 0f..2f &&
             profile.adaptivePressureAdvance.model.toByteArray(Charsets.UTF_8).size <=
                 MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_BYTES &&

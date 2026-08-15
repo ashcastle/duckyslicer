@@ -468,6 +468,51 @@ private fun PrinterSettingsSheet(
             )
         },
     )
+    SettingChoices(
+        settingLabel = stringResource(R.string.nozzle_material),
+        entries = NozzleMaterial.entries,
+        selected = options.printerProfile.nozzleMaterial,
+        optionLabel = { material ->
+            stringResource(
+                when (material) {
+                    NozzleMaterial.UNDEFINED -> R.string.nozzle_material_unspecified
+                    NozzleMaterial.HARDENED_STEEL -> R.string.nozzle_material_hardened_steel
+                    NozzleMaterial.STAINLESS_STEEL -> R.string.nozzle_material_stainless_steel
+                    NozzleMaterial.BRASS -> R.string.nozzle_material_brass
+                },
+            )
+        },
+        onSelected = { material ->
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(nozzleMaterial = material),
+                ),
+            )
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.nozzle_hardness),
+        valueText = if (options.printerProfile.nozzleHrc > 0) {
+            stringResource(R.string.hrc_value, options.printerProfile.nozzleHrc)
+        } else if (options.printerProfile.nozzleMaterial.fallbackHrc > 0) {
+            stringResource(
+                R.string.nozzle_hardness_automatic_value,
+                options.printerProfile.nozzleMaterial.fallbackHrc,
+            )
+        } else {
+            stringResource(R.string.nozzle_hardness_not_set)
+        },
+        value = options.printerProfile.nozzleHrc.toFloat(),
+        range = 0f..500f,
+        steps = 499,
+        onValueChange = { value ->
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(nozzleHrc = value.roundToInt()),
+                ),
+            )
+        },
+    )
     QuantizedSettingSlider(
         label = stringResource(R.string.minimum_layer_height),
         valueText = stringResource(
@@ -1917,6 +1962,25 @@ private fun FilamentSettingsSheet(
             },
         )
         SettingsGroupTitle(stringResource(R.string.filament_material_environment))
+        SettingSlider(
+            label = stringResource(R.string.required_nozzle_hardness),
+            valueText = if (activeProfile.requiredNozzleHrc > 0) {
+                stringResource(R.string.hrc_value, activeProfile.requiredNozzleHrc)
+            } else {
+                stringResource(R.string.nozzle_hardness_no_requirement)
+            },
+            value = activeProfile.requiredNozzleHrc.toFloat(),
+            range = 0f..500f,
+            steps = 499,
+            onValueChange = { value ->
+                onOptionsChanged(
+                    options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(requiredNozzleHrc = value.roundToInt()),
+                    ),
+                )
+            },
+        )
         SettingSlider(
             label = stringResource(R.string.filament_softening_temperature),
             valueText = stringResource(R.string.celsius_value, activeProfile.softeningTemperature),

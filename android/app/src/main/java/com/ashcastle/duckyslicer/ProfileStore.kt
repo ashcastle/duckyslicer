@@ -7,7 +7,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 92
+internal const val USER_PROFILE_SCHEMA_VERSION = 93
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -57,6 +57,8 @@ class ProfileStore private constructor(
             bedExcludeArea = options.bedExcludeArea,
             maxPrintHeight = options.maxPrintHeight,
             nozzleDiameter = options.nozzleDiameter,
+            nozzleMaterial = options.printerProfile.nozzleMaterial,
+            nozzleHrc = options.printerProfile.nozzleHrc,
             minLayerHeight = options.printerProfile.minLayerHeight,
             maxLayerHeight = options.printerProfile.maxLayerHeight,
             machineStartGcode = options.printerProfile.machineStartGcode,
@@ -260,6 +262,7 @@ class ProfileStore private constructor(
             pressureAdvanceEnabled = effective.pressureAdvanceEnabled,
             pressureAdvance = effective.pressureAdvance,
             adaptivePressureAdvance = effective.adaptivePressureAdvance,
+            requiredNozzleHrc = effective.requiredNozzleHrc,
             diameter = effective.diameter,
             density = effective.density,
             costPerKilogram = effective.costPerKilogram,
@@ -631,6 +634,7 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("bedPolygon", JSONArray(bedPolygon))
     .put("bedExcludeArea", JSONArray(bedExcludeArea))
     .put("maxPrintHeight", maxPrintHeight).put("nozzleDiameter", nozzleDiameter)
+    .put("nozzleMaterial", nozzleMaterial.storageValue).put("nozzleHrc", nozzleHrc)
     .put("minLayerHeight", minLayerHeight).put("maxLayerHeight", maxLayerHeight)
     .put("machineStartGcode", machineStartGcode).put("machineEndGcode", machineEndGcode)
     .put("machinePauseGcode", machinePauseGcode)
@@ -760,6 +764,7 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("adaptivePressureAdvanceModel", adaptivePressureAdvance.model)
     .put("adaptivePressureAdvanceOverhangs", adaptivePressureAdvance.overhangs)
     .put("adaptivePressureAdvanceBridge", adaptivePressureAdvance.bridge)
+    .put("requiredNozzleHrc", requiredNozzleHrc)
     .put("diameter", diameter)
     .put("density", density)
     .put("costPerKilogram", costPerKilogram)
@@ -1145,6 +1150,10 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         maxLayerHeight = optDouble("maxLayerHeight", nozzleDiameter * 0.7).toFloat(),
         builtIn = optBoolean("builtIn"),
         brand = optionalString("brand"),
+        nozzleMaterial = requireNotNull(
+            NozzleMaterial.fromStorage(optString("nozzleMaterial", "undefine")),
+        ),
+        nozzleHrc = optInt("nozzleHrc", 0),
         machineStartGcode = optString("machineStartGcode"),
         machineEndGcode = optString("machineEndGcode"),
         machinePauseGcode = optString("machinePauseGcode"),
@@ -1316,6 +1325,7 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
             overhangs = optBoolean("adaptivePressureAdvanceOverhangs"),
             bridge = optDouble("adaptivePressureAdvanceBridge", 0.0).toFloat(),
         ),
+        requiredNozzleHrc = optInt("requiredNozzleHrc", 0),
         compatiblePrinters = stringList("compatiblePrinters"),
         diameter = optDouble("diameter", 1.75).toFloat(),
         density = optDouble("density", 1.24).toFloat(),

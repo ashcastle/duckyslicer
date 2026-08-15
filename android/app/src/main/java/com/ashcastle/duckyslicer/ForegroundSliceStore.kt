@@ -9,6 +9,7 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.UUID
+import org.json.JSONArray
 import org.json.JSONObject
 
 internal enum class ForegroundSlicePhase {
@@ -160,6 +161,7 @@ internal object ForegroundSliceStore {
             put("filamentMm", outcome.filamentMm.toDouble())
             put("filamentGrams", outcome.filamentGrams.toDouble())
             put("suggestedName", outcome.suggestedName)
+            put("warningCodes", JSONArray(outcome.warnings.map(SliceWarningCode::storageValue)))
         }
     }.toString()
 
@@ -188,6 +190,19 @@ internal object ForegroundSliceStore {
                     safeGcodeFileName(value.getString("suggestedName"))
                 } else {
                     "model.gcode"
+                },
+                warnings = if (version >= 4) {
+                    val warningCodes = requireNotNull(value.optJSONArray("warningCodes")) {
+                        "Slice warnings are unavailable"
+                    }
+                    require(warningCodes.length() <= MAX_SLICE_WARNING_CODES) {
+                        "Too many slice warnings"
+                    }
+                    parseSliceWarningCodes(
+                        List(warningCodes.length(), warningCodes::getString),
+                    )
+                } else {
+                    emptySet()
                 },
             ).also {
                 require(it.isRestorableFrom(context.filesDir)) {
@@ -220,7 +235,7 @@ internal object ForegroundSliceStore {
     private fun sessionFile(context: Context) = File(context.filesDir, SESSION_FILE_NAME)
 
     private const val MIN_RECORD_VERSION = 1
-    private const val RECORD_VERSION = 3
+    private const val RECORD_VERSION = 4
     private const val SESSION_FILE_NAME = "foreground-slice.session"
     private const val LOCK_FILE_NAME = "foreground-slice.lock"
     private const val MAX_RECORD_BYTES = 4 * 1_024

@@ -10,6 +10,7 @@ from tools.generate_profile_catalog import (
     build_printer,
     build_process,
     coordinate_pair,
+    nozzle_material,
     printable_geometry,
     small_area_flow_compensation_model,
     support_type,
@@ -18,6 +19,52 @@ from tools.generate_profile_catalog import (
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_preserves_and_validates_nozzle_hardness_contract(self) -> None:
+        self.assertEqual("undefine", nozzle_material(None))
+        self.assertEqual("hardened_steel", nozzle_material(["HARDENED_STEEL"]))
+        with self.assertRaises(ValueError):
+            nozzle_material("ruby")
+
+        printer = build_printer(
+            "Example",
+            {
+                "name": "Hardened printer",
+                "printable_area": ["0x0", "220x0", "220x220", "0x220"],
+                "printable_height": "250",
+                "nozzle_diameter": ["0.4"],
+                "nozzle_type": "hardened_steel",
+                "nozzle_hrc": "62",
+                "gcode_flavor": "marlin",
+            },
+        )
+        self.assertEqual("hardened_steel", printer["nozzleMaterial"])
+        self.assertEqual(62, printer["nozzleHrc"])
+
+        filament = build_filament(
+            "Example",
+            {
+                "name": "Abrasive filament",
+                "filament_type": ["PA-CF"],
+                "nozzle_temperature": ["280"],
+                "hot_plate_temp": ["100"],
+                "required_nozzle_HRC": ["40"],
+            },
+        )
+        self.assertEqual(40, filament["requiredNozzleHrc"])
+
+        with self.assertRaises(ValueError):
+            build_printer(
+                "Example",
+                {
+                    "name": "Invalid HRC printer",
+                    "printable_area": ["0x0", "220x0", "220x220", "0x220"],
+                    "printable_height": "250",
+                    "nozzle_diameter": ["0.4"],
+                    "nozzle_hrc": "501",
+                    "gcode_flavor": "marlin",
+                },
+            )
+
     def test_validates_adaptive_pressure_advance_models(self) -> None:
         model = "0.06,2,1000\n0.04,12,1000\n0.07,2,5000\n0.05,12,5000"
         self.assertEqual(model, adaptive_pressure_advance_model(model, True))

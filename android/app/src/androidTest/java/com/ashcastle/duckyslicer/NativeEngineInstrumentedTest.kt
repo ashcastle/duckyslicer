@@ -241,6 +241,47 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun nozzleHardnessWarningComesFromTheNativeOrcaSafetyCheck() {
+        val abrasive = FilamentProfile.GENERIC_PLA.copy(
+            id = "instrumented-abrasive-filament",
+            name = "Instrumented abrasive filament",
+            requiredNozzleHrc = 40,
+        )
+        fun options(material: NozzleMaterial) = SliceOptions()
+            .selectPrinter(
+                PrinterProfile.U1_04.copy(
+                    nozzleMaterial = material,
+                    nozzleHrc = 0,
+                ),
+            )
+            .selectFilament(abrasive)
+            .selectQuality(QualityProfile.DRAFT)
+
+        val brass = OnDeviceSlicer.slice(fixtureModel(), options(NozzleMaterial.BRASS))
+        val hardened = OnDeviceSlicer.slice(
+            fixtureModel(),
+            options(NozzleMaterial.HARDENED_STEEL),
+        )
+        try {
+            assertTrue(
+                "Orca must warn when the active filament requires a harder nozzle",
+                SliceWarningCode.NOZZLE_HARDNESS in brass.warnings,
+            )
+            assertFalse(
+                "A compatible hardened-steel nozzle must not receive the warning",
+                SliceWarningCode.NOZZLE_HARDNESS in hardened.warnings,
+            )
+            val brassGcode = brass.output.readText()
+            assertTrue(brassGcode.contains("; nozzle_type = brass"))
+            assertTrue(brassGcode.contains("; nozzle_hrc = 0"))
+            assertTrue(brassGcode.contains("; required_nozzle_HRC = 40"))
+        } finally {
+            brass.output.delete()
+            hardened.output.delete()
+        }
+    }
+
+    @Test
     fun extrusionRateSmoothingChangesRealExtrusionMotion() {
         val baseQuality = QualityProfile.DRAFT.copy(
             extrusionRateSmoothing = ExtrusionRateSmoothingSettings(),
@@ -2472,12 +2513,25 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(91, catalog.schemaVersion)
+        assertEquals(92, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include upstream filament presets", catalog.filaments.size > 3_000)
         assertTrue("The catalog must include upstream slicing presets", catalog.slicing.size > 2_000)
+        assertEquals(
+            mapOf(
+                NozzleMaterial.UNDEFINED to 345,
+                NozzleMaterial.HARDENED_STEEL to 265,
+                NozzleMaterial.STAINLESS_STEEL to 40,
+                NozzleMaterial.BRASS to 140,
+            ),
+            catalog.printers.groupingBy(PrinterProfile::nozzleMaterial).eachCount(),
+        )
+        assertEquals(
+            mapOf(0 to 1_781, 3 to 1_323, 40 to 218),
+            catalog.filaments.groupingBy(FilamentProfile::requiredNozzleHrc).eachCount(),
+        )
         val generatedU1 = catalog.printers.single { it.name == "Snapmaker U1 (0.4 nozzle)" }
         assertEquals(
             "0.20 Standard @Snapmaker U1 (0.4 nozzle)",

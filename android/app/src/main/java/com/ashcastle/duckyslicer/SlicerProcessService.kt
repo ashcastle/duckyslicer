@@ -1106,6 +1106,9 @@ internal object SlicerProcessClient {
                 response.getString(SlicerProcessContract.KEY_SUGGESTED_FILENAME).orEmpty(),
                 "model",
             ),
+            warnings = parseSliceWarningCodes(
+                response.getStringArrayList(SlicerProcessContract.KEY_WARNING_CODES).orEmpty(),
+            ),
         ).also {
             check(it.isRestorableFrom(context.filesDir)) { "Slicer result is invalid" }
         }
@@ -1888,6 +1891,11 @@ class SlicerProcessService : Service() {
                         ),
                         suggestedName = safeGcodeFileName(
                             result.getString(SlicerProcessContract.KEY_SUGGESTED_FILENAME).orEmpty(),
+                        ),
+                        warnings = parseSliceWarningCodes(
+                            result.getStringArrayList(
+                                SlicerProcessContract.KEY_WARNING_CODES,
+                            ).orEmpty(),
                         ),
                     ),
                 )
@@ -2679,6 +2687,7 @@ class SlicerProcessService : Service() {
                     result.suggestedFilename,
                     inputFilenameBase,
                 ),
+                warnings = parseSliceWarningCodes(result.warningCodes.toList()),
             )
         } finally {
             runtime.clearModel()
@@ -3000,6 +3009,10 @@ class SlicerProcessService : Service() {
         putFloat(SlicerProcessContract.KEY_FILAMENT_MM, outcome.filamentMm)
         putFloat(SlicerProcessContract.KEY_FILAMENT_GRAMS, outcome.filamentGrams)
         putString(SlicerProcessContract.KEY_SUGGESTED_FILENAME, outcome.suggestedName)
+        putStringArrayList(
+            SlicerProcessContract.KEY_WARNING_CODES,
+            ArrayList(outcome.warnings.map(SliceWarningCode::storageValue)),
+        )
     }
 
     private fun failure(message: String) = Bundle().apply {
@@ -3167,6 +3180,7 @@ private object SlicerProcessContract {
     const val KEY_FILAMENT_MM = "filamentMm"
     const val KEY_FILAMENT_GRAMS = "filamentGrams"
     const val KEY_SUGGESTED_FILENAME = "suggestedFilename"
+    const val KEY_WARNING_CODES = "warningCodes"
     const val KEY_ROTATION_RADIANS = "rotationRadians"
     const val KEY_BED_SIZE_X = "bedSizeX"
     const val KEY_BED_SIZE_Y = "bedSizeY"

@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 91
+SCHEMA_VERSION = 92
 MAX_FILAMENT_SLOTS = 16
 DEFAULT_GCODE_FILENAME_FORMAT = (
     "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
@@ -25,6 +25,7 @@ DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL = (
 MAX_GCODE_FILENAME_FORMAT_BYTES = 1_024
 MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_BYTES = 16_384
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
+NOZZLE_MATERIALS = {"undefine", "hardened_steel", "stainless_steel", "brass"}
 INFILL_PATTERNS = {
     "monotonic", "monotonicline", "rectilinear", "alignedrectilinear",
     "zigzag", "crosszag", "lockedzag", "line", "grid", "triangles",
@@ -63,6 +64,13 @@ def number(value: Any, default: float) -> float:
 
 def integer(value: Any, default: int) -> int:
     return round(number(value, float(default)))
+
+
+def nozzle_material(value: Any) -> str:
+    candidate = str(scalar(value, "undefine")).strip().lower()
+    if candidate not in NOZZLE_MATERIALS:
+        raise ValueError("unsupported nozzle material")
+    return candidate
 
 
 def boolean(value: Any, default: bool = False) -> bool:
@@ -474,6 +482,8 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "bedExcludeArea": bed_exclude_area,
         "maxPrintHeight": height,
         "nozzleDiameter": nozzle,
+        "nozzleMaterial": nozzle_material(raw.get("nozzle_type")),
+        "nozzleHrc": integer(raw.get("nozzle_hrc"), 0),
         "minLayerHeight": min_layer_height,
         "maxLayerHeight": max_layer_height,
         "singleExtruderMultiMaterial": supports_multi_material,
@@ -578,6 +588,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
                 "maxAccelerationTravel",
             ]
         )
+        and 0 <= profile["nozzleHrc"] <= 500
         and 0.1 <= profile["extruderClearanceRadius"] <= 1_000
         and 0.1 <= profile["extruderClearanceHeightToRod"] <= 1_500
         and 0.1 <= profile["extruderClearanceHeightToLid"] <= 1_500
@@ -917,6 +928,7 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "adaptivePressureAdvanceBridge": number(
             raw.get("adaptive_pressure_advance_bridges"), 0
         ),
+        "requiredNozzleHrc": integer(raw.get("required_nozzle_HRC"), 0),
         "compatiblePrinters": values(raw.get("compatible_printers")),
     }
     if not (
@@ -997,6 +1009,7 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and (profile["retractionDistanceWhenCut"] is None or
              10 <= profile["retractionDistanceWhenCut"] <= 18)
         and 0 <= profile["pressureAdvance"] <= 10
+        and 0 <= profile["requiredNozzleHrc"] <= 500
         and 0 <= profile["adaptivePressureAdvanceBridge"] <= 2
         and len(profile["adaptivePressureAdvanceModel"].encode("utf-8")) <=
             MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_BYTES

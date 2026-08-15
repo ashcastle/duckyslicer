@@ -72,7 +72,7 @@ outcome.isRestorableFrom(context.filesDir)
 plateId
 put("suggestedName", outcome.suggestedName)
 safeGcodeFileName(value.getString("suggestedName"))
-RECORD_VERSION = 3
+RECORD_VERSION = 4
 synchronized(localLock)
 channel.lock()
 loadUnlocked(context)

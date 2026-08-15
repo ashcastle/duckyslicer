@@ -1,0 +1,195 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -514,6 +514,8 @@ struct SliceConfig {
+     float machine_max_jerk_z = 3.0f;
+     float machine_max_jerk_e = 2.5f;
+     float machine_max_junction_deviation = 0.0f;
++    int nozzle_material = 0;
++    int nozzle_hrc = 0;
+     std::vector<float> minimum_layer_heights;
+     std::vector<float> maximum_layer_heights;
+     std::vector<float> extruder_offsets_x;
+@@ -580,6 +582,7 @@ struct SliceConfig {
+     std::vector<std::string> filament_adaptive_pressure_advance_models;
+     std::vector<int>   filament_adaptive_pressure_advance_overhangs;
+     std::vector<float> filament_adaptive_pressure_advance_bridges;
++    std::vector<int>   filament_required_nozzle_hrc;
+     std::vector<float> filament_minimal_purge_on_wipe_tower;
+     std::vector<int>   filament_nozzle_temp_initial_layers;
+     std::vector<int>   filament_bed_temps;
+@@ -623,6 +626,7 @@ struct SliceResult {
+     float estimated_filament_mm = 0;
+     float estimated_filament_grams = 0;
+     std::string suggested_filename;
++    std::vector<std::string> warning_codes;
+ };
+ 
+ // ---- Core API ----
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -547,6 +547,8 @@ SliceConfig sliceConfigFromJava(JNIEnv* env, jobject jconfig) {
+     config.machine_max_jerk_z = getFloat("machineMaxJerkZ");
+     config.machine_max_jerk_e = getFloat("machineMaxJerkE");
+     config.machine_max_junction_deviation = getFloat("machineMaxJunctionDeviation");
++    config.nozzle_material = getInt("nozzleMaterial");
++    config.nozzle_hrc = getInt("nozzleHrc");
+     config.minimum_layer_heights = getFloatArray("minimumLayerHeights");
+     config.maximum_layer_heights = getFloatArray("maximumLayerHeights");
+     config.extruder_offsets_x = getFloatArray("extruderOffsetsX");
+@@ -606,6 +608,7 @@ SliceConfig sliceConfigFromJava(JNIEnv* env, jobject jconfig) {
+         getIntArray("filamentAdaptivePressureAdvanceOverhangs");
+     config.filament_adaptive_pressure_advance_bridges =
+         getFloatArray("filamentAdaptivePressureAdvanceBridges");
++    config.filament_required_nozzle_hrc = getIntArray("filamentRequiredNozzleHrc");
+     config.filament_minimal_purge_on_wipe_tower = getFloatArray("filamentMinimalPurgeOnWipeTower");
+     config.filament_nozzle_temp_initial_layers = getIntArray("filamentNozzleTempInitialLayers");
+     config.filament_bed_temps = getIntArray("filamentBedTemps");
+@@ -1163,6 +1166,8 @@ void updateJavaSliceConfig(JNIEnv* env, jobject jconfig, const SliceConfig& confi
+     setFloat("machineMaxJerkZ", config.machine_max_jerk_z);
+     setFloat("machineMaxJerkE", config.machine_max_jerk_e);
+     setFloat("machineMaxJunctionDeviation", config.machine_max_junction_deviation);
++    setInt("nozzleMaterial", config.nozzle_material);
++    setInt("nozzleHrc", config.nozzle_hrc);
+     setStringArray("filamentStartGcodes", config.filament_start_gcodes);
+     setStringArray("filamentEndGcodes", config.filament_end_gcodes);
+     setIntArray("filamentAdaptivePressureAdvance", config.filament_adaptive_pressure_advance);
+@@ -1175,6 +1180,7 @@ void updateJavaSliceConfig(JNIEnv* env, jobject jconfig, const SliceConfig& confi
+     setFloatArray(
+         "filamentAdaptivePressureAdvanceBridges",
+         config.filament_adaptive_pressure_advance_bridges);
++    setIntArray("filamentRequiredNozzleHrc", config.filament_required_nozzle_hrc);
+     setFloatArray("filamentLoadingSpeeds", config.filament_loading_speeds);
+     setFloatArray("filamentLoadingSpeedStarts", config.filament_loading_speed_starts);
+     setFloatArray("filamentUnloadingSpeeds", config.filament_unloading_speeds);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -554,6 +554,15 @@ static void applyConfigToPrusa(const SliceConfig& config, Slic3r::DynamicPrintCo
+     dpc.set_key_value(
+         "machine_max_junction_deviation",
+         machine_modes(config.machine_max_junction_deviation));
++    if (config.nozzle_material < 0 || config.nozzle_material >= Slic3r::NozzleType::ntCount ||
++        config.nozzle_hrc < 0 || config.nozzle_hrc > 500) {
++        throw std::invalid_argument("Invalid nozzle hardness configuration");
++    }
++    dpc.set_key_value(
++        "nozzle_type",
++        new Slic3r::ConfigOptionEnum<Slic3r::NozzleType>(
++            static_cast<Slic3r::NozzleType>(config.nozzle_material)));
++    dpc.set_key_value("nozzle_hrc", new Slic3r::ConfigOptionInt(config.nozzle_hrc));
+     dpc.set_key_value("machine_max_acceleration_extruding", machine_modes(max_acceleration_extruding));
+     dpc.set_key_value("machine_max_acceleration_retracting", machine_modes(positive(config.machine_max_acceleration_retracting, 5000.0)));
+     dpc.set_key_value("machine_max_acceleration_travel", machine_modes(max_acceleration_travel));
+@@ -1524,6 +1533,17 @@ static void applyConfigToPrusa(const SliceConfig& config, Slic3r::DynamicPrintCo
+             "adaptive_pressure_advance_bridges",
+             new Slic3r::ConfigOptionFloats(std::move(bridges)));
+     }
++    if (!config.filament_required_nozzle_hrc.empty()) {
++        std::vector<int> required = config.filament_required_nozzle_hrc;
++        if (std::any_of(required.begin(), required.end(), [](int value) {
++                return value < 0 || value > 500;
++            })) {
++            throw std::invalid_argument("Invalid required nozzle hardness");
++        }
++        while (static_cast<int>(required.size()) < n_ext) required.push_back(required.back());
++        required.resize(n_ext);
++        dpc.set_key_value("required_nozzle_HRC", new Slic3r::ConfigOptionInts(std::move(required)));
++    }
+     if (!config.filament_additional_cooling_fan_speeds.empty()) {
+         std::vector<int> v = config.filament_additional_cooling_fan_speeds;
+         while ((int)v.size() < n_ext) v.push_back(v.back());
+@@ -2073,6 +2093,8 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+                     "machine_max_jerk_z",
+                     "machine_max_jerk_e",
+                     "machine_max_junction_deviation",
++                    "nozzle_type",
++                    "nozzle_hrc",
+                     "min_layer_height",
+                     "max_layer_height",
+                     // M204 acceleration values (used by GCodeProcessor for time estimation
+@@ -2273,6 +2295,7 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+                     "adaptive_pressure_advance_model",
+                     "adaptive_pressure_advance_overhangs",
+                     "adaptive_pressure_advance_bridges",
++                    "required_nozzle_HRC",
+                     // Wipe tower purge volumes.  flush_volumes_matrix is an NxN matrix of
+                     // mm³ per filament-combo transition; flush_multiplier scales it.
+                     // Native Snapmaker profiles calibrate these carefully (0–800mm³).
+@@ -2483,6 +2506,7 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+                 pad_strings("adaptive_pressure_advance_model");
+                 pad_bools("adaptive_pressure_advance_overhangs");
+                 pad_floats("adaptive_pressure_advance_bridges");
++                pad_ints("required_nozzle_HRC");
+                 pad_floats("filament_minimal_purge_on_wipe_tower");
+                 pad_floats("filament_tower_interface_pre_extrusion_dist");
+                 pad_floats("filament_tower_interface_pre_extrusion_length");
+@@ -2772,6 +2796,13 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+         print.export_gcode(output_path, &gcode_result, nullptr);
+         g_active_print.store(nullptr, std::memory_order_release);
+ 
++        for (const auto& warning : gcode_result.warnings) {
++            if (warning.error_code == "1000C002") {
++                result.warning_codes.emplace_back("nozzle_hardness");
++                break;
++            }
++        }
++
+         if (progress) progress(95, "Reading results");
+ 
+         // Retain only a bounded compatibility preview. Android's real preview
+diff --git a/app/src/main/cpp/src/sapil_progress.cpp b/app/src/main/cpp/src/sapil_progress.cpp
+--- a/app/src/main/cpp/src/sapil_progress.cpp
++++ b/app/src/main/cpp/src/sapil_progress.cpp
+@@ -14,7 +14,7 @@ jobject sliceResultToJava(JNIEnv* env, const SliceResult& result) {
+     }
+ 
+     jmethodID constructor = env->GetMethodID(cls, "<init>",
+-        "(ZZLjava/lang/String;Ljava/lang/String;IFFFLjava/lang/String;)V");
++        "(ZZLjava/lang/String;Ljava/lang/String;IFFFLjava/lang/String;[Ljava/lang/String;)V");
+     if (!constructor) {
+         SAPIL_LOGE("SliceResult constructor not found");
+         return nullptr;
+@@ -23,10 +23,25 @@ jobject sliceResultToJava(JNIEnv* env, const SliceResult& result) {
+     jstring jerror = env->NewStringUTF(result.error_message.c_str());
+     jstring jgcode_path = env->NewStringUTF(result.gcode_path.c_str());
+     jstring jsuggested_filename = env->NewStringUTF(result.suggested_filename.c_str());
++    jclass string_class = env->FindClass("java/lang/String");
++    if (!string_class || result.warning_codes.size() > 16) {
++        env->DeleteLocalRef(jerror);
++        env->DeleteLocalRef(jgcode_path);
++        env->DeleteLocalRef(jsuggested_filename);
++        env->DeleteLocalRef(cls);
++        return nullptr;
++    }
++    jobjectArray jwarnings = env->NewObjectArray(
++        static_cast<jsize>(result.warning_codes.size()), string_class, nullptr);
++    for (jsize index = 0; index < static_cast<jsize>(result.warning_codes.size()); ++index) {
++        jstring warning = env->NewStringUTF(result.warning_codes[static_cast<size_t>(index)].c_str());
++        env->SetObjectArrayElement(jwarnings, index, warning);
++        env->DeleteLocalRef(warning);
++    }
+ 
+     // Use NewObjectA (jvalue array) to avoid C++ float→double and bool→int
+     // promotions in varargs, which cause argument misalignment in JNI calls.
+-    jvalue args[9];
++    jvalue args[10];
+     args[0].z = result.success ? JNI_TRUE : JNI_FALSE;
+     args[1].z = result.cancelled ? JNI_TRUE : JNI_FALSE;
+     args[2].l = jerror;
+@@ -36,11 +51,14 @@ jobject sliceResultToJava(JNIEnv* env, const SliceResult& result) {
+     args[6].f = result.estimated_filament_mm;
+     args[7].f = result.estimated_filament_grams;
+     args[8].l = jsuggested_filename;
++    args[9].l = jwarnings;
+     jobject obj = env->NewObjectA(cls, constructor, args);
+ 
+     env->DeleteLocalRef(jerror);
+     env->DeleteLocalRef(jgcode_path);
+     env->DeleteLocalRef(jsuggested_filename);
++    env->DeleteLocalRef(jwarnings);
++    env->DeleteLocalRef(string_class);
+     env->DeleteLocalRef(cls);
+     return obj;
+ }

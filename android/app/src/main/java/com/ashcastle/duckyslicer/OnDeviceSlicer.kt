@@ -16,7 +16,28 @@ data class SliceOutcome(
     val filamentMm: Float,
     val filamentGrams: Float,
     val suggestedName: String = "model.gcode",
+    val warnings: Set<SliceWarningCode> = emptySet(),
 ) : Serializable
+
+enum class SliceWarningCode(val storageValue: String) {
+    NOZZLE_HARDNESS("nozzle_hardness"),
+    ;
+
+    companion object {
+        fun fromStorage(value: String): SliceWarningCode? = entries.firstOrNull {
+            it.storageValue == value
+        }
+    }
+}
+
+internal fun parseSliceWarningCodes(values: Collection<String>): Set<SliceWarningCode> {
+    require(values.size <= MAX_SLICE_WARNING_CODES) { "Too many slice warnings" }
+    val parsed = values.map { value ->
+        requireNotNull(SliceWarningCode.fromStorage(value)) { "Unknown slice warning" }
+    }.toSet()
+    require(parsed.size == values.size) { "Duplicate slice warning" }
+    return parsed
+}
 
 internal fun SliceOutcome.isRestorableFrom(filesRoot: File): Boolean = runCatching {
     val canonicalOutput = output.canonicalFile
@@ -28,8 +49,11 @@ internal fun SliceOutcome.isRestorableFrom(filesRoot: File): Boolean = runCatchi
         estimatedSeconds.isFinite() && estimatedSeconds >= 0f &&
         filamentMm.isFinite() && filamentMm >= 0f &&
         filamentGrams.isFinite() && filamentGrams >= 0f &&
+        warnings.size <= MAX_SLICE_WARNING_CODES &&
         suggestedName == safeGcodeFileName(suggestedName)
 }.getOrDefault(false)
+
+internal const val MAX_SLICE_WARNING_CODES = 16
 
 internal fun safeGcodeFileName(candidate: String, fallbackBase: String = "model"): String {
     fun clean(value: String): String = boundedUtf8(
@@ -169,6 +193,24 @@ internal fun SliceOptions.supportSettingsAvailability(): SupportSettingsAvailabi
     )
 }
 
+enum class NozzleMaterial(
+    val storageValue: String,
+    val nativeValue: Int,
+    val fallbackHrc: Int,
+) {
+    UNDEFINED("undefine", 0, 0),
+    HARDENED_STEEL("hardened_steel", 1, 55),
+    STAINLESS_STEEL("stainless_steel", 2, 20),
+    BRASS("brass", 3, 2),
+    ;
+
+    companion object {
+        fun fromStorage(value: String?): NozzleMaterial? = entries.firstOrNull {
+            it.storageValue == value
+        }
+    }
+}
+
 data class PrinterProfile(
     val id: String,
     val name: String,
@@ -178,6 +220,8 @@ data class PrinterProfile(
     val nozzleDiameter: Float,
     val builtIn: Boolean = false,
     val brand: String? = null,
+    val nozzleMaterial: NozzleMaterial = NozzleMaterial.UNDEFINED,
+    val nozzleHrc: Int = 0,
     val minLayerHeight: Float = 0.04f,
     val maxLayerHeight: Float = nozzleDiameter * 0.7f,
     val machineStartGcode: String = "",
@@ -270,6 +314,8 @@ data class PrinterProfile(
     val defaultPrintProfile: String = "",
     val defaultFilamentProfiles: List<String> = emptyList(),
 ) {
+    fun effectiveNozzleHrc(): Int = nozzleHrc.takeIf { it > 0 } ?: nozzleMaterial.fallbackHrc
+
     fun resolvedExtruderOffsetsX(count: Int = extruderCount): List<Float> =
         extruderOffsetsX.resizedExtruderValues(count, 0f)
 
@@ -432,6 +478,7 @@ data class FilamentProfile(
     val pressureAdvance: Float = 0f,
     val adaptivePressureAdvance: AdaptivePressureAdvanceSettings =
         AdaptivePressureAdvanceSettings(),
+    val requiredNozzleHrc: Int = 0,
     val compatiblePrinters: List<String> = emptyList(),
     val diameter: Float = 1.75f,
     val density: Float = 1.24f,
@@ -1251,7 +1298,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 91,
+    val schemaVersion: Int = 92,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -2278,6 +2325,8 @@ data class SliceOptions(
             filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
             native.machineMaxJunctionDeviation = maxJunctionDeviation
+            native.nozzleMaterial = printerProfile.nozzleMaterial.nativeValue
+            native.nozzleHrc = printerProfile.nozzleHrc
             native.fillMultiline = fillMultilineForPattern(fillPattern, quality.fillMultiline)
             native.filenameFormat = gcodeSettings.filenameFormat
             native.printerModel = printerProfile.name
@@ -2320,6 +2369,9 @@ data class SliceOptions(
             native.filamentAdaptivePressureAdvanceBridges = nativeFilaments
                 .map { it.adaptivePressureAdvance.bridge }
                 .toFloatArray()
+            native.filamentRequiredNozzleHrc = nativeFilaments
+                .map(FilamentProfile::requiredNozzleHrc)
+                .toIntArray()
             native.bedExcludeArea = bedExcludeArea.toFloatArray()
             native.machineLoadFilamentTime = printerProfile.machineLoadFilamentTime
             native.machineUnloadFilamentTime = printerProfile.machineUnloadFilamentTime

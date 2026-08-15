@@ -51,6 +51,44 @@ class SliceLifecycleInstrumentedTest {
     }
 
     @Test
+    fun completedSliceCheckpointPreservesSafetyWarnings() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        ForegroundSliceStore.load(context)?.let { record ->
+            ForegroundSliceStore.remove(context, record.requestId)
+        }
+        val requestId = UUID.randomUUID().toString()
+        val output = File(context.filesDir, SliceArtifactStore.OUTPUT_DIRECTORY)
+            .apply(File::mkdirs)
+            .resolve("checkpoint-warning.gcode")
+            .apply { writeText("G28\n") }
+        try {
+            ForegroundSliceStore.begin(context, requestId, legacyProjectPlateId())
+            ForegroundSliceStore.complete(
+                context,
+                requestId,
+                SliceOutcome(
+                    output = output,
+                    layers = 1,
+                    estimatedSeconds = 1f,
+                    filamentMm = 1f,
+                    filamentGrams = 1f,
+                    warnings = setOf(SliceWarningCode.NOZZLE_HARDNESS),
+                ),
+            )
+
+            val restored = requireNotNull(ForegroundSliceStore.load(context))
+            assertEquals(ForegroundSlicePhase.COMPLETED, restored.phase)
+            assertEquals(
+                setOf(SliceWarningCode.NOZZLE_HARDNESS),
+                requireNotNull(restored.outcome).warnings,
+            )
+        } finally {
+            ForegroundSliceStore.remove(context, requestId)
+            output.delete()
+        }
+    }
+
+    @Test
     fun clearingFinalActiveSliceOwnerCancelsItsExactSessionAndRecovers() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

@@ -265,6 +265,9 @@ data class SliceConfig(
 ) {
     // Keep newly added JNI fields out of the already large generated constructor signature.
     @JvmField var machineMaxJunctionDeviation: Float = 0f
+    @JvmField var nozzleMaterial: Int = 0
+    @JvmField var nozzleHrc: Int = 0
+    @JvmField var filamentRequiredNozzleHrc: IntArray = intArrayOf()
     @JvmField var filamentAdaptivePressureAdvance: IntArray = intArrayOf()
     @JvmField var filamentAdaptivePressureAdvanceModels: Array<String> = arrayOf()
     @JvmField var filamentAdaptivePressureAdvanceOverhangs: IntArray = intArrayOf()
