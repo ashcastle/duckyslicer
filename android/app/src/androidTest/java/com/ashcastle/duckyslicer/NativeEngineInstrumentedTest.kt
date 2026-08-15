@@ -2202,7 +2202,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(75, catalog.schemaVersion)
+        assertEquals(76, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -3070,6 +3070,44 @@ class NativeEngineInstrumentedTest {
             "Painted enforcer facets must create real Orca support toolpaths",
             paintedPreview.roleSegmentCounts[5] > 0,
         )
+    }
+
+    @Test
+    fun enforcedFirstLayersCreateRealSupportWithAutomaticSupportDisabled() {
+        val model = inspectModel(supportPaintOverhangModel().absolutePath)
+        val options = SliceOptions()
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                supportEnabled = false,
+                supportCoverage = SupportCoverageSettings(enforcedLayers = 0),
+                supportType = "normal(auto)",
+            )
+        val baseline = OnDeviceSlicer.slice(
+            listOf(ProjectObject("enforced-support-baseline", model)),
+            options,
+        )
+        val enforced = OnDeviceSlicer.slice(
+            listOf(ProjectObject("enforced-support-enabled", model)),
+            options.copy(supportCoverage = options.supportCoverage.copy(enforcedLayers = 120)),
+        )
+        try {
+            val baselinePreview = loadGcodePreview(baseline.output.absolutePath, 0, Int.MAX_VALUE)
+            val enforcedPreview = loadGcodePreview(enforced.output.absolutePath, 0, Int.MAX_VALUE)
+            assertTrue(baseline.output.readText().contains("; enforce_support_layers = 0"))
+            assertTrue(enforced.output.readText().contains("; enforce_support_layers = 120"))
+            assertEquals(
+                "Support-disabled baseline must not create support",
+                0,
+                baselinePreview.roleSegmentCounts[5],
+            )
+            assertTrue(
+                "Enforced layers must create real Orca support toolpaths",
+                enforcedPreview.roleSegmentCounts[5] > 0,
+            )
+        } finally {
+            baseline.output.delete()
+            enforced.output.delete()
+        }
     }
 
     @Test
@@ -4550,6 +4588,7 @@ class NativeEngineInstrumentedTest {
                     onBuildPlateOnly = true,
                     criticalRegionsOnly = true,
                     removeSmallOverhangs = false,
+                    enforcedLayers = 7,
                 ),
                 supportAdvanced = SupportAdvancedSettings(
                     patternAngle = 73f,
@@ -4806,6 +4845,7 @@ class NativeEngineInstrumentedTest {
         assertTrue("Internal bridge filtering must reach Orca", gcode.contains("; dont_filter_internal_bridges = nofilter"))
         assertTrue("Top support interface layers must reach Orca", gcode.contains("; support_interface_top_layers = 4"))
         assertTrue("Bottom support interface layers must reach Orca", gcode.contains("; support_interface_bottom_layers = 2"))
+        assertTrue("Enforced support layers must reach Orca", gcode.contains("; enforce_support_layers = 7"))
         assertTrue("Top support interface spacing must reach Orca", gcode.contains("; support_interface_spacing = 0.23"))
         assertTrue("Bottom support interface spacing must reach Orca", gcode.contains("; support_bottom_interface_spacing = 0.27"))
         assertTrue("Support top Z distance must reach Orca", gcode.contains("; support_top_z_distance = 0.18"))

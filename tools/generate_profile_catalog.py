@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 75
+SCHEMA_VERSION = 76
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -983,6 +983,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "internalSolidInfillAccelerationPercent": internal_solid_infill_acceleration_percent,
         "nozzleDiameter": nozzle,
         "supportEnabled": boolean(raw.get("enable_support")),
+        "enforceSupportLayers": integer(raw.get("enforce_support_layers"), 0),
         "brimType": enum_value(
             raw.get("brim_type"),
             {"auto_brim", "brim_ears", "outer_only", "inner_only", "outer_and_inner", "no_brim"},
@@ -1381,6 +1382,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0.01 <= profile["fuzzySkinPersistence"] <= 1
         and 0 <= profile["supportFilament"] <= 16
         and 0 <= profile["supportInterfaceFilament"] <= 16
+        and 0 <= profile["enforceSupportLayers"] <= 5_000
         and 0 <= profile["infillFilamentBaseFirstLayers"] <= 1_000
         and 0 <= profile["infillFilamentBaseLastLayers"] <= 1_000
         and all(1 <= profile[key] <= 16 for key in [

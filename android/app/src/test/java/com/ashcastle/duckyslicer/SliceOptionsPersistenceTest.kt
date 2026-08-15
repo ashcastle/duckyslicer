@@ -596,11 +596,14 @@ class SliceOptionsPersistenceTest {
                 onBuildPlateOnly = true,
                 criticalRegionsOnly = true,
                 removeSmallOverhangs = false,
+                enforcedLayers = 7,
             ),
             restored.supportCoverage,
         )
         assertEquals(true, restored.toNativeConfig().supportCriticalRegionsOnly)
         assertEquals(false, restored.toNativeConfig().supportRemoveSmallOverhangs)
+        assertEquals(7, restored.supportCoverage.enforcedLayers)
+        assertEquals(7, restored.toNativeConfig().enforceSupportLayers)
         assertEquals(
             SupportAdvancedSettings(
                 patternAngle = 73f,
@@ -1355,6 +1358,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             onBuildPlateOnly = true,
             criticalRegionsOnly = true,
             removeSmallOverhangs = false,
+            enforcedLayers = 7,
         ),
         supportAdvanced = SupportAdvancedSettings(
             patternAngle = 73f,

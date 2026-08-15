@@ -75,6 +75,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var fuzzySkinOctaves: Int = base.fuzzySkin.octaves
     private var fuzzySkinPersistence: Float = base.fuzzySkin.persistence
     private var supportEnabled: Boolean = base.supportEnabled
+    private var enforceSupportLayers: Int = base.supportCoverage.enforcedLayers
     private var brimType: String = base.brimType
     private var brimWidth: Float = base.brimWidth
     private var brimObjectGap: Float = base.brimObjectGap
@@ -406,6 +407,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         internalSolidInfillAccelerationPercent = input.readCatalogBoolean()
         nozzleDiameter = input.readFloat()
         supportEnabled = input.readCatalogBoolean()
+        enforceSupportLayers = input.readInt()
         brimType = input.readCatalogString()
         brimWidth = input.readFloat()
         brimObjectGap = input.readFloat()
@@ -1029,6 +1031,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             onBuildPlateOnly = supportOnBuildPlateOnly,
             criticalRegionsOnly = supportCriticalRegionsOnly,
             removeSmallOverhangs = supportRemoveSmallOverhangs,
+            enforcedLayers = enforceSupportLayers,
         ),
         supportBasePatternSpacing = supportBasePatternSpacing,
         supportExpansion = supportExpansion,
@@ -1110,6 +1113,7 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("internalSolidInfillAccelerationPercent", BINARY_BOOL),
     BinaryField("nozzleDiameter", BINARY_FLOAT),
     BinaryField("supportEnabled", BINARY_BOOL),
+    BinaryField("enforceSupportLayers", BINARY_INT),
     BinaryField("brimType", BINARY_STRING),
     BinaryField("brimWidth", BINARY_FLOAT),
     BinaryField("brimObjectGap", BINARY_FLOAT),

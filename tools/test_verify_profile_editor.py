@@ -52,7 +52,8 @@ def valid_sources() -> dict[str, str]:
             " R.string.sparse_infill_rotation_template R.string.solid_infill_rotation_template"
             " RotationTemplateSetting("
             " infillShiftStep = (it * 10f) symmetricInfillYAxis = it"
-            " R.string.support_on_build_plate_only R.string.support_base_pattern_spacing"
+            " R.string.support_on_build_plate_only R.string.enforce_support_layers"
+            " R.string.support_base_pattern_spacing"
             " R.string.support_expansion R.string.support_interface_loop_pattern"
             " R.string.independent_support_layer_height"
             " R.string.normal_support_auto R.string.tree_support_auto"
@@ -208,7 +209,8 @@ def valid_sources() -> dict[str, str]:
             ' name="brim_ear_maximum_angle" name="brim_ear_detection_radius"'
             ' name="top_surface_density" name="bottom_surface_density"'
             ' name="infill_shift_step" name="symmetric_infill_y_axis"'
-            ' name="support_on_build_plate_only" name="support_base_pattern_spacing"'
+            ' name="support_on_build_plate_only" name="enforce_support_layers"'
+            ' name="support_base_pattern_spacing"'
             ' name="support_expansion" name="support_interface_loop_pattern"'
             ' name="independent_support_layer_height"'
             ' name="normal_support_auto" name="tree_support_auto"'
@@ -261,7 +263,8 @@ def valid_sources() -> dict[str, str]:
             ' name="brim_ear_maximum_angle" name="brim_ear_detection_radius"'
             ' name="top_surface_density" name="bottom_surface_density"'
             ' name="infill_shift_step" name="symmetric_infill_y_axis"'
-            ' name="support_on_build_plate_only" name="support_base_pattern_spacing"'
+            ' name="support_on_build_plate_only" name="enforce_support_layers"'
+            ' name="support_base_pattern_spacing"'
             ' name="support_expansion" name="support_interface_loop_pattern"'
             ' name="independent_support_layer_height"'
             ' name="normal_support_auto" name="tree_support_auto"'

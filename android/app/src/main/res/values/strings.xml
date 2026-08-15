@@ -520,6 +520,8 @@
     <string name="support_base_pattern">Support base pattern</string>
     <string name="support_interface_pattern">Support interface pattern</string>
     <string name="enable_supports">Enable supports</string>
+    <string name="enforce_support_layers">Force support for first layers</string>
+    <string name="enforce_support_layers_hint">Enter 0 to turn this off.</string>
     <string name="normal_support">Normal</string>
     <string name="tree_support">Tree</string>
     <string name="normal_support_auto">Normal (auto)</string>

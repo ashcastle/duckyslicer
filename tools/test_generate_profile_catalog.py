@@ -861,6 +861,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "support_on_build_plate_only": "1",
                 "support_critical_regions_only": "1",
                 "support_remove_small_overhang": "0",
+                "enforce_support_layers": "7",
                 "support_base_pattern_spacing": "3.2",
                 "support_expansion": "-0.4",
                 "support_interface_loop_pattern": "1",
@@ -872,6 +873,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(profile["supportOnBuildPlateOnly"])
         self.assertTrue(profile["supportCriticalRegionsOnly"])
         self.assertFalse(profile["supportRemoveSmallOverhangs"])
+        self.assertEqual(7, profile["enforceSupportLayers"])
         self.assertEqual(3.2, profile["supportBasePatternSpacing"])
         self.assertEqual(-0.4, profile["supportExpansion"])
         self.assertTrue(profile["supportInterfaceLoopPattern"])

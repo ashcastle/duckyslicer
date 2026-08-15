@@ -193,6 +193,7 @@ class ProfileStoreMigrationTest {
             assertEquals("", restoredSlicing.solidInfillRotationTemplate)
             assertEquals(0f, restoredSlicing.multiMaterial.segmentedRegionMaxWidth)
             assertEquals(0f, restoredSlicing.multiMaterial.segmentedRegionInterlockingDepth)
+            assertEquals(0, restoredSlicing.supportCoverage.enforcedLayers)
         } finally {
             file.delete()
         }
@@ -296,6 +297,7 @@ class ProfileStoreMigrationTest {
         val file = directory.resolve("user_profiles.json")
         try {
             val options = SliceOptions().copy(
+                supportCoverage = SupportCoverageSettings(enforcedLayers = 7),
                 jerk = JerkSettings(
                     defaultJerk = 8.5f,
                     outerWallJerk = 7.5f,
@@ -333,6 +335,7 @@ class ProfileStoreMigrationTest {
             assertEquals(5.5f, restored.firstLayerJerk)
             assertEquals(12.5f, restored.travelJerk)
             assertEquals(options.scarfSeam, restored.scarfSeam)
+            assertEquals(7, restored.supportCoverage.enforcedLayers)
         } finally {
             directory.deleteRecursively()
         }

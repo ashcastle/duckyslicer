@@ -80,6 +80,15 @@ class SupportTypeTest {
         assertTrue(raftOnly.canIron)
         assertEquals(TreeSupportSettingsKind.NONE, raftOnly.treeKind)
 
+        val forcedTree = SliceOptions(
+            supportEnabled = false,
+            supportCoverage = SupportCoverageSettings(enforcedLayers = 3),
+            supportType = "tree(auto)",
+            supportStyle = "organic",
+        ).supportSettingsAvailability()
+        assertTrue(forcedTree.haveSupportMaterial)
+        assertEquals(TreeSupportSettingsKind.ORGANIC, forcedTree.treeKind)
+
         val supportedInterface = SliceOptions(
             supportEnabled = true,
             supportType = "tree(auto)",

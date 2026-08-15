@@ -4626,6 +4626,20 @@ private fun SlicingSettingsSheet(
                     checked = options.supportEnabled,
                     onCheckedChange = { onOptionsChanged(options.copy(supportEnabled = it)) },
                 )
+                IntegerSettingField(
+                    label = stringResource(R.string.enforce_support_layers),
+                    value = options.supportCoverage.enforcedLayers,
+                    maximum = 5_000,
+                    suffix = stringResource(R.string.layers),
+                    supportingText = stringResource(R.string.enforce_support_layers_hint),
+                    onValueChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                supportCoverage = options.supportCoverage.copy(enforcedLayers = it),
+                            ),
+                        )
+                    },
+                )
                 if (supportAvailability.haveSupportMaterial || isSearchingSettings) {
                     SettingSlider(
                         label = stringResource(R.string.support_speed),
@@ -6688,6 +6702,48 @@ private fun editableDecimal(value: Float): String =
     if (value == value.roundToInt().toFloat()) value.roundToInt().toString() else value.toString()
 
 private val DECIMAL_INPUT = Regex("[0-9]{0,7}([.,][0-9]{0,2})?")
+
+@Composable
+private fun IntegerSettingField(
+    label: String,
+    value: Int,
+    maximum: Int,
+    suffix: String,
+    supportingText: String,
+    onValueChange: (Int) -> Unit,
+) {
+    if (!settingMatchesQuery(label)) return
+    var input by remember { mutableStateOf(value.toString()) }
+    var lastApplied by remember { mutableStateOf(value) }
+    LaunchedEffect(value) {
+        if (value != lastApplied) {
+            input = value.toString()
+            lastApplied = value
+        }
+    }
+    val parsed = input.toIntOrNull()
+    OutlinedTextField(
+        value = input,
+        onValueChange = { candidate ->
+            if (candidate.length <= maximum.toString().length && candidate.all(Char::isDigit)) {
+                input = candidate
+                candidate.toIntOrNull()
+                    ?.takeIf { it in 0..maximum }
+                    ?.let { newValue ->
+                        lastApplied = newValue
+                        onValueChange(newValue)
+                    }
+            }
+        },
+        label = { Text(label) },
+        suffix = { Text(suffix) },
+        supportingText = { Text(supportingText) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        isError = parsed == null || parsed !in 0..maximum,
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
 
 @Composable
 private fun OverhangSpeedSetting(

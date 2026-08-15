@@ -337,6 +337,7 @@ internal object ProfileValidation {
             profile.treeSupportBranchAngle in 0f..60f &&
             profile.treeSupportBranchDistance in 1f..10f &&
             profile.treeSupportBranchDiameter in 1f..10f &&
+            profile.supportCoverage.enforcedLayers in 0..5_000 &&
             profile.treeSupportWallCount in 0..2 &&
             profile.treeSupportTipDiameter in 0.1f..100f &&
             profile.treeSupportPreferredBranchAngle in 10f..85f &&

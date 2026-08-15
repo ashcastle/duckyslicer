@@ -473,4 +473,5 @@ data class SliceConfig(
     @JvmField var fuzzySkinScale: Float = 1f
     @JvmField var fuzzySkinOctaves: Int = 4
     @JvmField var fuzzySkinPersistence: Float = 0.5f
+    @JvmField var enforceSupportLayers: Int = 0
 }

@@ -520,6 +520,8 @@
     <string name="support_base_pattern">서포트 기본 패턴</string>
     <string name="support_interface_pattern">서포트 인터페이스 패턴</string>
     <string name="enable_supports">서포트 사용</string>
+    <string name="enforce_support_layers">첫 레이어부터 서포트 강제</string>
+    <string name="enforce_support_layers_hint">사용하지 않으려면 0을 입력하세요.</string>
     <string name="normal_support">일반</string>
     <string name="tree_support">트리</string>
     <string name="normal_support_auto">일반 (자동)</string>

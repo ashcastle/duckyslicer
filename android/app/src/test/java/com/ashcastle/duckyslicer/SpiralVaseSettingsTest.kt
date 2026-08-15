@@ -13,6 +13,7 @@ class SpiralVaseSettingsTest {
             fillDensity = 0.24f,
             topSolidLayers = 6,
             supportEnabled = true,
+            supportCoverage = SupportCoverageSettings(enforcedLayers = 8),
         ).withSpiralMode(true)
 
         assertTrue(enabled.spiralMode)
@@ -20,6 +21,7 @@ class SpiralVaseSettingsTest {
         assertEquals(0f, enabled.fillDensity)
         assertEquals(0, enabled.topSolidLayers)
         assertFalse(enabled.supportEnabled)
+        assertEquals(0, enabled.supportCoverage.enforcedLayers)
     }
 
     @Test

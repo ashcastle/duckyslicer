@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 76
+internal const val USER_PROFILE_SCHEMA_VERSION = 77
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -813,6 +813,7 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("fuzzySkinOctaves", fuzzySkin.octaves)
     .put("fuzzySkinPersistence", fuzzySkin.persistence)
     .put("supportEnabled", supportEnabled)
+    .put("enforceSupportLayers", supportCoverage.enforcedLayers)
     .put("brimType", brimType)
     .put("brimWidth", brimWidth)
     .put("brimObjectGap", brimObjectGap)
@@ -1406,6 +1407,7 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
             onBuildPlateOnly = optBoolean("supportOnBuildPlateOnly"),
             criticalRegionsOnly = optBoolean("supportCriticalRegionsOnly"),
             removeSmallOverhangs = optBoolean("supportRemoveSmallOverhangs", true),
+            enforcedLayers = optInt("enforceSupportLayers", 0),
         ),
         supportAdvanced = SupportAdvancedSettings(
             patternAngle = optDouble("supportPatternAngle", 0.0).toFloat(),

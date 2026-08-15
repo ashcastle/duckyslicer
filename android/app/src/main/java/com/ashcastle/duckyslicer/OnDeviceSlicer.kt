@@ -92,13 +92,14 @@ internal data class SupportSettingsAvailability(
 )
 
 internal fun SliceOptions.supportSettingsAvailability(): SupportSettingsAvailability {
-    val haveSupportMaterial = supportEnabled || raftLayers > 0
+    val supportGenerationActive = supportEnabled || supportCoverage.enforcedLayers > 0
+    val haveSupportMaterial = supportGenerationActive || raftLayers > 0
     val haveInterface = supportInterfaceTopLayers > 0 || supportInterfaceBottomLayers > 0
     val canIron = raftLayers > 0 || (haveSupportMaterial && supportInterfaceTopLayers > 0)
     return SupportSettingsAvailability(
         haveSupportMaterial = haveSupportMaterial,
         automatic = supportType.isAutomaticSupportType(),
-        treeKind = treeSupportSettingsKind(supportEnabled, supportType, supportStyle),
+        treeKind = treeSupportSettingsKind(supportGenerationActive, supportType, supportStyle),
         haveInterface = haveInterface,
         canIron = canIron,
         ironingActive = canIron && supportAdvanced.ironingEnabled,
@@ -742,6 +743,7 @@ data class SupportCoverageSettings(
     val onBuildPlateOnly: Boolean = false,
     val criticalRegionsOnly: Boolean = false,
     val removeSmallOverhangs: Boolean = true,
+    val enforcedLayers: Int = 0,
 )
 
 data class SupportAdvancedSettings(
@@ -2038,6 +2040,7 @@ data class SliceOptions(
             filamentDensities = nativeFilaments.map(FilamentProfile::density).toFloatArray(),
             filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
+            native.enforceSupportLayers = supportCoverage.enforcedLayers
             native.beforeLayerChangeGcode = printerProfile.beforeLayerChangeGcode
             native.layerChangeGcode = printerProfile.layerChangeGcode
             native.changeFilamentGcode = printerProfile.changeFilamentGcode
@@ -2362,6 +2365,7 @@ internal fun SliceOptions.withSpiralMode(enabled: Boolean): SliceOptions =
             fillDensity = 0f,
             topSolidLayers = 0,
             supportEnabled = false,
+            supportCoverage = supportCoverage.copy(enforcedLayers = 0),
         )
     } else {
         copy(spiralMode = false)
@@ -2412,7 +2416,8 @@ object OnDeviceSlicer {
                 options.perimeters == 1 &&
                     options.fillDensity == 0f &&
                     options.topSolidLayers == 0 &&
-                    !options.supportEnabled,
+                    !options.supportEnabled &&
+                    options.supportCoverage.enforcedLayers == 0,
             ) { "Spiral vase requires one wall, no infill, no top layers, and no supports" }
             val usedFilamentSlots = buildSet {
                 objects.single().volumes.forEach { volume ->
