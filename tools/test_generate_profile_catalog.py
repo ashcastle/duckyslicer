@@ -550,6 +550,11 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "before_layer_change_gcode": "; DUCKY_BEFORE_LAYER",
                 "layer_change_gcode": "; DUCKY_AFTER_LAYER",
                 "change_filament_gcode": "T[next_extruder] ; DUCKY_CHANGE_FILAMENT",
+                "printing_by_object_gcode": "; DUCKY_BETWEEN_OBJECTS",
+                "use_relative_e_distances": "0",
+                "emit_machine_limits_to_gcode": "0",
+                "manual_filament_change": "1",
+                "disable_m73": "1",
             },
         )
         inherited = build_filament(
@@ -603,6 +608,11 @@ class GenerateProfileCatalogTest(unittest.TestCase):
             "T[next_extruder] ; DUCKY_CHANGE_FILAMENT",
             printer["changeFilamentGcode"],
         )
+        self.assertEqual("; DUCKY_BETWEEN_OBJECTS", printer["printingByObjectGcode"])
+        self.assertFalse(printer["useRelativeEDistances"])
+        self.assertFalse(printer["emitMachineLimitsToGcode"])
+        self.assertTrue(printer["manualFilamentChange"])
+        self.assertTrue(printer["disableM73"])
         self.assertIsNone(inherited["retractLength"])
         self.assertIsNone(inherited["zHopType"])
         self.assertEqual(0.55, overridden["retractLength"])

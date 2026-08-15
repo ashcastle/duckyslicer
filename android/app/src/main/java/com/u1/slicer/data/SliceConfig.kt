@@ -256,6 +256,11 @@ data class SliceConfig(
     @JvmField var beforeLayerChangeGcode: String = ""
     @JvmField var layerChangeGcode: String = ""
     @JvmField var changeFilamentGcode: String = ""
+    @JvmField var printingByObjectGcode: String = ""
+    @JvmField var useRelativeEDistances: Boolean = true
+    @JvmField var emitMachineLimitsToGcode: Boolean = true
+    @JvmField var manualFilamentChange: Boolean = false
+    @JvmField var disableM73: Boolean = false
     @JvmField var auxiliaryFan: Boolean = false
     @JvmField var filamentSoluble: IntArray = intArrayOf()
     @JvmField var filamentIsSupport: IntArray = intArrayOf()

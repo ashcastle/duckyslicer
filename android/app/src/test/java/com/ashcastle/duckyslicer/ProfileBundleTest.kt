@@ -29,6 +29,11 @@ class ProfileBundleTest {
                         beforeLayerChangeGcode = "; BUNDLE_BEFORE_LAYER",
                         layerChangeGcode = "; BUNDLE_AFTER_LAYER",
                         changeFilamentGcode = "T[next_extruder] ; BUNDLE_TOOL_CHANGE",
+                        printingByObjectGcode = "; BUNDLE_BETWEEN_OBJECTS",
+                        useRelativeEDistances = false,
+                        emitMachineLimitsToGcode = false,
+                        manualFilamentChange = true,
+                        disableM73 = true,
                         toolChangeRetractLengths = listOf(1.2f, 2.3f),
                         toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
                     ),
@@ -98,6 +103,9 @@ class ProfileBundleTest {
                         it.beforeLayerChangeGcode == "; BUNDLE_BEFORE_LAYER" &&
                         it.layerChangeGcode == "; BUNDLE_AFTER_LAYER" &&
                         it.changeFilamentGcode == "T[next_extruder] ; BUNDLE_TOOL_CHANGE" &&
+                        it.printingByObjectGcode == "; BUNDLE_BETWEEN_OBJECTS" &&
+                        !it.useRelativeEDistances && !it.emitMachineLimitsToGcode &&
+                        it.manualFilamentChange && it.disableM73 &&
                         it.toolChangeRetractLengths == listOf(1.2f, 2.3f) &&
                         it.toolChangeRetractRestartExtras == listOf(-0.1f, 0.2f)
                 },

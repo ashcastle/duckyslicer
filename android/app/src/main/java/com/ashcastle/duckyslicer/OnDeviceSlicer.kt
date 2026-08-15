@@ -121,6 +121,11 @@ data class PrinterProfile(
     val beforeLayerChangeGcode: String = "",
     val layerChangeGcode: String = "",
     val changeFilamentGcode: String = "",
+    val printingByObjectGcode: String = "",
+    val useRelativeEDistances: Boolean = true,
+    val emitMachineLimitsToGcode: Boolean = true,
+    val manualFilamentChange: Boolean = false,
+    val disableM73: Boolean = false,
     val gcodeFlavor: String = "marlin",
     val maxSpeedX: Float = 500f,
     val maxSpeedY: Float = 500f,
@@ -1960,6 +1965,11 @@ data class SliceOptions(
             native.beforeLayerChangeGcode = printerProfile.beforeLayerChangeGcode
             native.layerChangeGcode = printerProfile.layerChangeGcode
             native.changeFilamentGcode = printerProfile.changeFilamentGcode
+            native.printingByObjectGcode = printerProfile.printingByObjectGcode
+            native.useRelativeEDistances = printerProfile.useRelativeEDistances
+            native.emitMachineLimitsToGcode = printerProfile.emitMachineLimitsToGcode
+            native.manualFilamentChange = printerProfile.manualFilamentChange
+            native.disableM73 = printerProfile.disableM73
             native.minimumLayerHeights = FloatArray(nativeFilaments.size) {
                 printerProfile.minLayerHeight
             }

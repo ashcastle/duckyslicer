@@ -138,7 +138,7 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(38, manifest.getInt("schemaVersion"))
+            assertEquals(39, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(
@@ -279,6 +279,14 @@ class ProjectArchiveTest {
                 "T[next_extruder] ; FIXTURE_TOOL_CHANGE",
                 imported.sliceOptions?.printerProfile?.changeFilamentGcode,
             )
+            assertEquals(
+                "; FIXTURE_BETWEEN_OBJECTS",
+                imported.sliceOptions?.printerProfile?.printingByObjectGcode,
+            )
+            assertEquals(false, imported.sliceOptions?.printerProfile?.useRelativeEDistances)
+            assertEquals(false, imported.sliceOptions?.printerProfile?.emitMachineLimitsToGcode)
+            assertEquals(true, imported.sliceOptions?.printerProfile?.manualFilamentChange)
+            assertEquals(true, imported.sliceOptions?.printerProfile?.disableM73)
             assertEquals(
                 listOf(1.4f, 2.6f),
                 imported.sliceOptions?.printerProfile?.toolChangeRetractLengths,

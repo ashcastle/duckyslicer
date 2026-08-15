@@ -737,6 +737,11 @@
     <string name="before_layer_change_gcode">레이어 변경 전 G-code</string>
     <string name="layer_change_gcode">레이어 변경 후 G-code</string>
     <string name="change_filament_gcode">필라멘트 변경 G-code</string>
+    <string name="printing_by_object_gcode">객체별 출력 전환 G-code</string>
+    <string name="use_relative_e_distances">상대 E 거리 사용</string>
+    <string name="emit_machine_limits_to_gcode">기계 한계를 G-code에 출력</string>
+    <string name="manual_filament_change">수동 필라멘트 교체</string>
+    <string name="disable_m73">남은 시간 명령 비활성화</string>
     <string name="filament_gcode">필라멘트 G-code</string>
     <string name="filament_start_gcode">필라멘트 시작 G-code</string>
     <string name="filament_end_gcode">필라멘트 종료 G-code</string>

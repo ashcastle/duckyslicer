@@ -1793,6 +1793,11 @@ class NativeEngineInstrumentedTest {
                     beforeLayerChangeGcode = "; SAVED_BEFORE_LAYER",
                     layerChangeGcode = "; SAVED_AFTER_LAYER",
                     changeFilamentGcode = "T[next_extruder] ; SAVED_TOOL_CHANGE",
+                    printingByObjectGcode = "; SAVED_BETWEEN_OBJECTS",
+                    useRelativeEDistances = false,
+                    emitMachineLimitsToGcode = false,
+                    manualFilamentChange = true,
+                    disableM73 = true,
                 ),
             )
 
@@ -2073,6 +2078,11 @@ class NativeEngineInstrumentedTest {
             "T[next_extruder] ; SAVED_TOOL_CHANGE",
             restored.printers.last().changeFilamentGcode,
         )
+        assertEquals("; SAVED_BETWEEN_OBJECTS", restored.printers.last().printingByObjectGcode)
+        assertFalse(restored.printers.last().useRelativeEDistances)
+        assertFalse(restored.printers.last().emitMachineLimitsToGcode)
+        assertTrue(restored.printers.last().manualFilamentChange)
+        assertTrue(restored.printers.last().disableM73)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
         assertEquals(USER_PROFILE_SCHEMA_VERSION, JSONObject(file.readText()).getInt("schemaVersion"))
@@ -2107,7 +2117,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(67, catalog.schemaVersion)
+        assertEquals(68, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2123,6 +2133,21 @@ class NativeEngineInstrumentedTest {
         assertEquals(listOf(2f), inheritedOffset.extruderOffsetsY)
         assertTrue(inheritedOffset.layerChangeGcode.contains("M73 L{layer_num+1}"))
         assertTrue(inheritedOffset.changeFilamentGcode.contains("M620 S[next_extruder]A"))
+        val absoluteOutput = catalog.printers.single {
+            it.name == "Anycubic Kobra 2 Max 0.4 nozzle"
+        }
+        assertFalse(absoluteOutput.useRelativeEDistances)
+        assertTrue(absoluteOutput.disableM73)
+        val limitsDisabled = catalog.printers.single {
+            it.name == "Artillery Sidewinder X3 Plus 0.4 nozzle"
+        }
+        assertFalse(limitsDisabled.emitMachineLimitsToGcode)
+        val manualChange = catalog.printers.single { it.name == "Anker M5 0.4 nozzle" }
+        assertTrue(manualChange.manualFilamentChange)
+        val betweenObjects = catalog.printers.single {
+            it.name == "RatRig V-Core 4 300 0.4 nozzle"
+        }
+        assertEquals(";BETWEEN_OBJECTS\nG92 E0", betweenObjects.printingByObjectGcode)
         val divergentToolChange = catalog.printers.single { it.name == "iQ TiQ2 0.4 Nozzle" }
         assertEquals(listOf(10f, 12f), divergentToolChange.toolChangeRetractLengths)
         assertTrue(
@@ -2891,10 +2916,17 @@ class NativeEngineInstrumentedTest {
                 ),
             ),
         )
+        val manual = OnDeviceSlicer.slice(
+            listOf(projectObject),
+            baselineOptions.copy(
+                printerProfile = baselineOptions.printerProfile.copy(manualFilamentChange = true),
+            ),
+        )
         val baselinePreview = loadGcodePreview(baseline.output.absolutePath, 0, Int.MAX_VALUE)
         val interlockedPreview = loadGcodePreview(interlocked.output.absolutePath, 0, Int.MAX_VALUE)
         val interlockedGcode = interlocked.output.readText()
         val offsetGcode = offset.output.readText()
+        val manualGcode = manual.output.readText()
 
         assertTrue("Touching volumes must use both materials", interlockedGcode.lineSequence().any { it == "T1" })
         assertTrue(
@@ -2920,6 +2952,16 @@ class NativeEngineInstrumentedTest {
         assertTrue(
             "Per-tool XY offsets must reach Orca",
             offsetGcode.contains("; extruder_offset = 0x0,12.5x-3.25"),
+        )
+        assertTrue(manualGcode.contains("; manual_filament_change = 1"))
+        assertTrue(
+            "Manual filament mode must replace firmware tool commands with Orca's manual marker",
+            manualGcode.lineSequence().any { it.contains("MANUAL_TOOL_CHANGE T1") },
+        )
+        assertTrue(
+            "Manual filament mode must skip the first custom change template invocation",
+            manualGcode.lineSequence().count { it == "; DUCKY_CHANGE_FILAMENT" } <
+                interlockedGcode.lineSequence().count { it == "; DUCKY_CHANGE_FILAMENT" },
         )
         val baselineToolMove = firstXyMoveAfterToolOne(baseline.output.readText())
         val offsetToolMove = firstXyMoveAfterToolOne(offsetGcode)
@@ -4870,7 +4912,11 @@ class NativeEngineInstrumentedTest {
             ProjectObject("second", model, ModelTransform(offsetXmm = 60f)),
         )
         val base = SliceOptions()
-            .selectPrinter(PrinterProfile.U1_04)
+            .selectPrinter(
+                PrinterProfile.U1_04.copy(
+                    printingByObjectGcode = "M117 DUCKY_BETWEEN_OBJECTS",
+                ),
+            )
             .selectFilament(FilamentProfile.PLA)
             .selectQuality(QualityProfile.DRAFT)
             .copy(brimWidth = 0f, skirtLoops = 0)
@@ -4899,6 +4945,12 @@ class NativeEngineInstrumentedTest {
             objectName(layeredStarts.first()).contains("slicer-input-0-"),
         )
         assertTrue(sequential.contains("; print_sequence = by object"))
+        assertFalse(layered.lineSequence().any { it == "M117 DUCKY_BETWEEN_OBJECTS" })
+        assertEquals(
+            "The selected printer's between-object template must run exactly once",
+            1,
+            sequential.lineSequence().count { it == "M117 DUCKY_BETWEEN_OBJECTS" },
+        )
         assertTrue(sequential.contains("; print_order = default"))
         assertTrue(
             "By-object output must finish an object instead of alternating objects every layer",
@@ -4918,6 +4970,62 @@ class NativeEngineInstrumentedTest {
         assertTrue(
             "By-object mode must retain Orca's print-head clearance rejection",
             unsafeSequential.isFailure,
+        )
+    }
+
+    @Test
+    fun machineOutputModesControlRealGcode() {
+        val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(
+            gcodeFlavor = "marlin2",
+            machineStartGcode = "",
+            machineEndGcode = "",
+            maxSpeedX = 241f,
+            maxSpeedY = 242f,
+            maxSpeedZ = 23f,
+            maxSpeedE = 84f,
+            maxAccelerationX = 4_210f,
+            maxAccelerationY = 4_220f,
+            maxAccelerationZ = 630f,
+            maxAccelerationE = 6_410f,
+        )
+        val base = SliceOptions()
+            .selectPrinter(printer)
+            .selectQuality(QualityProfile.DRAFT)
+        val enabled = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.selectPrinter(
+                printer.copy(
+                    useRelativeEDistances = true,
+                    emitMachineLimitsToGcode = true,
+                    disableM73 = false,
+                ),
+            ),
+        ).output.readText()
+        val disabled = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.selectPrinter(
+                printer.copy(
+                    useRelativeEDistances = false,
+                    emitMachineLimitsToGcode = false,
+                    disableM73 = true,
+                ),
+            ),
+        ).output.readText()
+
+        assertTrue(enabled.lineSequence().any { it == "M83 ; use relative distances for extrusion" })
+        assertTrue(disabled.lineSequence().any { it == "M82 ; use absolute distances for extrusion" })
+        assertTrue(enabled.contains("; use_relative_e_distances = 1"))
+        assertTrue(disabled.contains("; use_relative_e_distances = 0"))
+        assertTrue(enabled.contains("; emit_machine_limits_to_gcode = 1"))
+        assertTrue(disabled.contains("; emit_machine_limits_to_gcode = 0"))
+        assertTrue(enabled.lineSequence().any { it.startsWith("M201 ") })
+        assertFalse(disabled.lineSequence().any { it.startsWith("M201 ") })
+        assertTrue(enabled.contains("; disable_m73 = 0"))
+        assertTrue(disabled.contains("; disable_m73 = 1"))
+        assertTrue("Enabled remaining-time output must contain M73", enabled.contains("M73"))
+        assertFalse(
+            "Disabling remaining-time output must remove generated M73 commands",
+            disabled.lineSequence().any { it.startsWith("M73 ") },
         )
     }
 

@@ -70,8 +70,13 @@ def valid_sources() -> dict[str, str]:
             " R.string.machine_gcode R.string.machine_start_gcode R.string.machine_end_gcode"
             " R.string.before_layer_change_gcode R.string.layer_change_gcode"
             " R.string.change_filament_gcode"
+            " R.string.printing_by_object_gcode R.string.use_relative_e_distances"
+            " R.string.emit_machine_limits_to_gcode R.string.manual_filament_change"
+            " R.string.disable_m73"
             " machineStartGcode = machineEndGcode = beforeLayerChangeGcode ="
-            " layerChangeGcode = changeFilamentGcode = GcodeTemplateSetting("
+            " layerChangeGcode = changeFilamentGcode = printingByObjectGcode ="
+            " useRelativeEDistances = emitMachineLimitsToGcode ="
+            " manualFilamentChange = disableM73 = GcodeTemplateSetting("
             " MAX_GCODE_TEMPLATE_BYTES"
             " R.string.filament_gcode R.string.filament_start_gcode R.string.filament_end_gcode"
             " R.string.filament_diameter activeProfile.copy(diameter ="
@@ -182,6 +187,9 @@ def valid_sources() -> dict[str, str]:
             ' name="tree_support_auto_brim" name="tree_support_brim_width"'
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="machine_gcode" name="machine_start_gcode" name="machine_end_gcode"'
+            ' name="printing_by_object_gcode" name="use_relative_e_distances"'
+            ' name="emit_machine_limits_to_gcode" name="manual_filament_change"'
+            ' name="disable_m73"'
             ' name="minimum_layer_height" name="maximum_layer_height"'
             ' name="tool_change_retraction" name="tool_change_retraction_length"'
             ' name="tool_change_retract_restart_extra"'

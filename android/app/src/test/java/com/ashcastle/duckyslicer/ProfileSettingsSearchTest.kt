@@ -16,6 +16,9 @@ class ProfileSettingsSearchTest {
         assertTrue(settingQueryMatches("tool change", "Tool change retraction length"))
         assertTrue(settingQueryMatches("layer change", "Before layer change G-code"))
         assertTrue(settingQueryMatches("filament", "Change filament G-code"))
+        assertTrue(settingQueryMatches("relative E", "Use relative E distances"))
+        assertTrue(settingQueryMatches("machine limits", "Emit machine limits to G-code"))
+        assertTrue(settingQueryMatches("printing object", "Printing by object G-code"))
         assertFalse(settingQueryMatches("Z distance", "0.20 mm Standard"))
     }
 

@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v67.bin"
+private const val CATALOG_ASSET = "profile_catalog_v68.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 67) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 68) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -75,6 +75,11 @@ class OrcaProfileCatalog(private val context: Context) {
         beforeLayerChangeGcode = input.readCatalogString(),
         layerChangeGcode = input.readCatalogString(),
         changeFilamentGcode = input.readCatalogString(),
+        printingByObjectGcode = input.readCatalogString(),
+        useRelativeEDistances = input.readCatalogBoolean(),
+        emitMachineLimitsToGcode = input.readCatalogBoolean(),
+        manualFilamentChange = input.readCatalogBoolean(),
+        disableM73 = input.readCatalogBoolean(),
         gcodeFlavor = input.readCatalogString(),
         maxSpeedX = input.readFloat(),
         maxSpeedY = input.readFloat(),
@@ -263,6 +268,11 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("beforeLayerChangeGcode", BINARY_STRING),
     BinaryField("layerChangeGcode", BINARY_STRING),
     BinaryField("changeFilamentGcode", BINARY_STRING),
+    BinaryField("printingByObjectGcode", BINARY_STRING),
+    BinaryField("useRelativeEDistances", BINARY_BOOL),
+    BinaryField("emitMachineLimitsToGcode", BINARY_BOOL),
+    BinaryField("manualFilamentChange", BINARY_BOOL),
+    BinaryField("disableM73", BINARY_BOOL),
     BinaryField("gcodeFlavor", BINARY_STRING),
     BinaryField("maxSpeedX", BINARY_FLOAT),
     BinaryField("maxSpeedY", BINARY_FLOAT),

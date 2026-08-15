@@ -532,6 +532,51 @@ private fun PrinterSettingsSheet(
         },
         onSelected = { onOptionsChanged(options.copy(gcodeFlavor = it)) },
     )
+    SettingsGroupTitle(stringResource(R.string.gcode_output))
+    SettingsSwitch(
+        label = stringResource(R.string.use_relative_e_distances),
+        checked = options.printerProfile.useRelativeEDistances,
+        onCheckedChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(useRelativeEDistances = it),
+                ),
+            )
+        },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.emit_machine_limits_to_gcode),
+        checked = options.printerProfile.emitMachineLimitsToGcode,
+        onCheckedChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(emitMachineLimitsToGcode = it),
+                ),
+            )
+        },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.manual_filament_change),
+        checked = options.printerProfile.manualFilamentChange,
+        onCheckedChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(manualFilamentChange = it),
+                ),
+            )
+        },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.disable_m73),
+        checked = options.printerProfile.disableM73,
+        onCheckedChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(disableM73 = it),
+                ),
+            )
+        },
+    )
     SettingsGroupTitle(stringResource(R.string.machine_gcode))
     GcodeTemplateSetting(
         label = stringResource(R.string.machine_start_gcode),
@@ -584,6 +629,17 @@ private fun PrinterSettingsSheet(
             onOptionsChanged(
                 options.copy(
                     printerProfile = options.printerProfile.copy(changeFilamentGcode = it),
+                ),
+            )
+        },
+    )
+    GcodeTemplateSetting(
+        label = stringResource(R.string.printing_by_object_gcode),
+        value = options.printerProfile.printingByObjectGcode,
+        onValueChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(printingByObjectGcode = it),
                 ),
             )
         },

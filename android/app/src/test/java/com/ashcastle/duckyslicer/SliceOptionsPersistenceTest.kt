@@ -5,6 +5,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SliceOptionsPersistenceTest {
@@ -69,6 +70,11 @@ class SliceOptionsPersistenceTest {
                     beforeLayerChangeGcode = "; PERSISTED_BEFORE_LAYER",
                     layerChangeGcode = "; PERSISTED_AFTER_LAYER",
                     changeFilamentGcode = "T[next_extruder] ; PERSISTED_TOOL_CHANGE",
+                    printingByObjectGcode = "; PERSISTED_BETWEEN_OBJECTS",
+                    useRelativeEDistances = false,
+                    emitMachineLimitsToGcode = false,
+                    manualFilamentChange = true,
+                    disableM73 = true,
                     toolChangeRetractLengths = listOf(1.2f, 2.3f),
                     toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
                 ),
@@ -163,6 +169,11 @@ class SliceOptionsPersistenceTest {
         assertEquals("; PERSISTED_BEFORE_LAYER", native.beforeLayerChangeGcode)
         assertEquals("; PERSISTED_AFTER_LAYER", native.layerChangeGcode)
         assertEquals("T[next_extruder] ; PERSISTED_TOOL_CHANGE", native.changeFilamentGcode)
+        assertEquals("; PERSISTED_BETWEEN_OBJECTS", native.printingByObjectGcode)
+        assertFalse(native.useRelativeEDistances)
+        assertFalse(native.emitMachineLimitsToGcode)
+        assertTrue(native.manualFilamentChange)
+        assertTrue(native.disableM73)
         assertArrayEquals(floatArrayOf(1.2f, 2.3f), native.toolChangeRetractLengths, 0.001f)
         assertArrayEquals(floatArrayOf(-0.1f, 0.2f), native.toolChangeRetractRestartExtras, 0.001f)
         assertEquals(2.85f, restored.filamentDiameter)
@@ -717,6 +728,11 @@ class SliceOptionsPersistenceTest {
             getJSONObject("printer").remove("beforeLayerChangeGcode")
             getJSONObject("printer").remove("layerChangeGcode")
             getJSONObject("printer").remove("changeFilamentGcode")
+            getJSONObject("printer").remove("printingByObjectGcode")
+            getJSONObject("printer").remove("useRelativeEDistances")
+            getJSONObject("printer").remove("emitMachineLimitsToGcode")
+            getJSONObject("printer").remove("manualFilamentChange")
+            getJSONObject("printer").remove("disableM73")
             getJSONObject("printer").remove("toolChangeRetractLengths")
             getJSONObject("printer").remove("toolChangeRetractRestartExtras")
             getJSONArray("filamentSlots").getJSONObject(0).remove("diameter")
@@ -816,6 +832,11 @@ class SliceOptionsPersistenceTest {
         assertEquals("", restored.printerProfile.beforeLayerChangeGcode)
         assertEquals("", restored.printerProfile.layerChangeGcode)
         assertEquals("", restored.printerProfile.changeFilamentGcode)
+        assertEquals("", restored.printerProfile.printingByObjectGcode)
+        assertTrue(restored.printerProfile.useRelativeEDistances)
+        assertTrue(restored.printerProfile.emitMachineLimitsToGcode)
+        assertFalse(restored.printerProfile.manualFilamentChange)
+        assertFalse(restored.printerProfile.disableM73)
         assertEquals(listOf(0.8f), restored.printerProfile.toolChangeRetractLengths)
         assertEquals(listOf(0f), restored.printerProfile.toolChangeRetractRestartExtras)
         assertEquals(2.85f, restored.toNativeConfig().filamentDiameter)
@@ -943,6 +964,13 @@ class SliceOptionsPersistenceTest {
                 ),
             ),
         )
+        assertFalse(
+            ProfileValidation.printer(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(
+                    printingByObjectGcode = "한".repeat(87_382),
+                ),
+            ),
+        )
     }
 }
 
@@ -966,6 +994,11 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             beforeLayerChangeGcode = "; FIXTURE_BEFORE_LAYER",
             layerChangeGcode = "; FIXTURE_AFTER_LAYER",
             changeFilamentGcode = "T[next_extruder] ; FIXTURE_TOOL_CHANGE",
+            printingByObjectGcode = "; FIXTURE_BETWEEN_OBJECTS",
+            useRelativeEDistances = false,
+            emitMachineLimitsToGcode = false,
+            manualFilamentChange = true,
+            disableM73 = true,
             toolChangeRetractLengths = listOf(1.4f, 2.6f),
             toolChangeRetractRestartExtras = listOf(-0.2f, 0.3f),
         ),

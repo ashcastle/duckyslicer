@@ -121,7 +121,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(40, persisted.getInt("schemaVersion"))
+        assertEquals(41, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),
@@ -224,6 +224,14 @@ class ProjectStoreTest {
             "T[next_extruder] ; FIXTURE_TOOL_CHANGE",
             restored.sliceOptions?.printerProfile?.changeFilamentGcode,
         )
+        assertEquals(
+            "; FIXTURE_BETWEEN_OBJECTS",
+            restored.sliceOptions?.printerProfile?.printingByObjectGcode,
+        )
+        assertEquals(false, restored.sliceOptions?.printerProfile?.useRelativeEDistances)
+        assertEquals(false, restored.sliceOptions?.printerProfile?.emitMachineLimitsToGcode)
+        assertEquals(true, restored.sliceOptions?.printerProfile?.manualFilamentChange)
+        assertEquals(true, restored.sliceOptions?.printerProfile?.disableM73)
         assertEquals(
             listOf(1.4f, 2.6f),
             restored.sliceOptions?.printerProfile?.toolChangeRetractLengths,

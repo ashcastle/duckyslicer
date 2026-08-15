@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 68
+internal const val USER_PROFILE_SCHEMA_VERSION = 69
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -62,6 +62,11 @@ class ProfileStore private constructor(
             beforeLayerChangeGcode = options.printerProfile.beforeLayerChangeGcode,
             layerChangeGcode = options.printerProfile.layerChangeGcode,
             changeFilamentGcode = options.printerProfile.changeFilamentGcode,
+            printingByObjectGcode = options.printerProfile.printingByObjectGcode,
+            useRelativeEDistances = options.printerProfile.useRelativeEDistances,
+            emitMachineLimitsToGcode = options.printerProfile.emitMachineLimitsToGcode,
+            manualFilamentChange = options.printerProfile.manualFilamentChange,
+            disableM73 = options.printerProfile.disableM73,
             gcodeFlavor = options.gcodeFlavor,
             maxSpeedX = options.maxSpeedX,
             maxSpeedY = options.maxSpeedY,
@@ -536,6 +541,11 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("beforeLayerChangeGcode", beforeLayerChangeGcode)
     .put("layerChangeGcode", layerChangeGcode)
     .put("changeFilamentGcode", changeFilamentGcode)
+    .put("printingByObjectGcode", printingByObjectGcode)
+    .put("useRelativeEDistances", useRelativeEDistances)
+    .put("emitMachineLimitsToGcode", emitMachineLimitsToGcode)
+    .put("manualFilamentChange", manualFilamentChange)
+    .put("disableM73", disableM73)
     .put("gcodeFlavor", gcodeFlavor)
     .put("maxSpeedX", maxSpeedX).put("maxSpeedY", maxSpeedY)
     .put("maxSpeedZ", maxSpeedZ).put("maxSpeedE", maxSpeedE)
@@ -953,6 +963,11 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         beforeLayerChangeGcode = optString("beforeLayerChangeGcode"),
         layerChangeGcode = optString("layerChangeGcode"),
         changeFilamentGcode = optString("changeFilamentGcode"),
+        printingByObjectGcode = optString("printingByObjectGcode"),
+        useRelativeEDistances = optBoolean("useRelativeEDistances", true),
+        emitMachineLimitsToGcode = optBoolean("emitMachineLimitsToGcode", true),
+        manualFilamentChange = optBoolean("manualFilamentChange"),
+        disableM73 = optBoolean("disableM73"),
         gcodeFlavor = optString("gcodeFlavor", "marlin"),
         maxSpeedX = optDouble("maxSpeedX", 500.0).toFloat(),
         maxSpeedY = optDouble("maxSpeedY", 500.0).toFloat(),

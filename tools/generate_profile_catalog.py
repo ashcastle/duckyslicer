@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 67
+SCHEMA_VERSION = 68
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -267,6 +267,11 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "beforeLayerChangeGcode": str(raw.get("before_layer_change_gcode", "")),
         "layerChangeGcode": str(raw.get("layer_change_gcode", "")),
         "changeFilamentGcode": str(raw.get("change_filament_gcode", "")),
+        "printingByObjectGcode": str(raw.get("printing_by_object_gcode", "")),
+        "useRelativeEDistances": boolean(raw.get("use_relative_e_distances"), True),
+        "emitMachineLimitsToGcode": boolean(raw.get("emit_machine_limits_to_gcode"), True),
+        "manualFilamentChange": boolean(raw.get("manual_filament_change")),
+        "disableM73": boolean(raw.get("disable_m73")),
         "gcodeFlavor": flavor,
         "maxSpeedX": motion("machine_max_speed_x", 300),
         "maxSpeedY": motion("machine_max_speed_y", 300),
@@ -326,6 +331,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and 0 <= profile["wipeDistance"] <= 100
         and 0 <= profile["retractBeforeWipe"] <= 100
         and -100 <= profile["retractRestartExtra"] <= 100
+        and len(profile["printingByObjectGcode"].encode("utf-8")) <= 262_144
         and 1 <= len(profile["extruderOffsetsX"]) <= MAX_FILAMENT_SLOTS
         and all(-1_000 <= value <= 1_000 for value in profile["extruderOffsetsX"])
         and 1 <= len(profile["extruderOffsetsY"]) <= MAX_FILAMENT_SLOTS
