@@ -647,6 +647,44 @@ private fun PrinterSettingsSheet(
             )
         },
     )
+    SettingsGroupTitle(stringResource(R.string.cooling))
+    DecimalSettingField(
+        label = stringResource(R.string.fan_speedup_time),
+        value = options.printerProfile.fanSpeedupTime,
+        maximum = 60f,
+        suffix = stringResource(R.string.seconds_suffix),
+        onValueChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(fanSpeedupTime = it),
+                ),
+            )
+        },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.fan_speedup_overhangs),
+        checked = options.printerProfile.fanSpeedupOverhangs,
+        onCheckedChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(fanSpeedupOverhangs = it),
+                ),
+            )
+        },
+    )
+    DecimalSettingField(
+        label = stringResource(R.string.fan_kickstart),
+        value = options.printerProfile.fanKickstart,
+        maximum = 60f,
+        suffix = stringResource(R.string.seconds_suffix),
+        onValueChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(fanKickstart = it),
+                ),
+            )
+        },
+    )
     SettingsGroupTitle(stringResource(R.string.printer_environment_capabilities))
     SettingsSwitch(
         label = stringResource(R.string.supports_chamber_temperature_control),

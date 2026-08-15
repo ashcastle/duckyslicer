@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 82
+SCHEMA_VERSION = 83
 MAX_FILAMENT_SLOTS = 16
 DEFAULT_GCODE_FILENAME_FORMAT = (
     "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
@@ -359,6 +359,9 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "highCurrentOnFilamentSwap": boolean(raw.get("high_current_on_filament_swap")),
         "extruderCount": extruder_count,
         "auxiliaryFan": boolean(raw.get("auxiliary_fan")),
+        "fanSpeedupTime": number(raw.get("fan_speedup_time"), 0),
+        "fanSpeedupOverhangs": boolean(raw.get("fan_speedup_overhangs"), True),
+        "fanKickstart": number(raw.get("fan_kickstart"), 0),
         "supportsChamberTemperatureControl": boolean(
             raw.get("support_chamber_temp_control")
         ),
@@ -471,6 +474,8 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and all(0 <= profile[key] <= 3_600 for key in [
             "machineLoadFilamentTime", "machineUnloadFilamentTime", "machineToolChangeTime"
         ])
+        and 0 <= profile["fanSpeedupTime"] <= 60
+        and 0 <= profile["fanKickstart"] <= 60
         and 0.01 <= profile["minLayerHeight"] <= profile["maxLayerHeight"] <= 2
     ):
         raise ValueError("unsafe motion limits")

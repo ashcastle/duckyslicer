@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 83
+internal const val USER_PROFILE_SCHEMA_VERSION = 84
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -127,6 +127,9 @@ class ProfileStore private constructor(
             highCurrentOnFilamentSwap = options.printerProfile.highCurrentOnFilamentSwap,
             extruderCount = options.printerProfile.extruderCount,
             auxiliaryFan = options.printerProfile.auxiliaryFan,
+            fanSpeedupTime = options.printerProfile.fanSpeedupTime,
+            fanSpeedupOverhangs = options.printerProfile.fanSpeedupOverhangs,
+            fanKickstart = options.printerProfile.fanKickstart,
             supportsChamberTemperatureControl = options.printerProfile.supportsChamberTemperatureControl,
             supportsAirFiltration = options.printerProfile.supportsAirFiltration,
         )
@@ -667,6 +670,9 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("highCurrentOnFilamentSwap", highCurrentOnFilamentSwap)
     .put("extruderCount", extruderCount)
     .put("auxiliaryFan", auxiliaryFan)
+    .put("fanSpeedupTime", fanSpeedupTime)
+    .put("fanSpeedupOverhangs", fanSpeedupOverhangs)
+    .put("fanKickstart", fanKickstart)
     .put("supportsChamberTemperatureControl", supportsChamberTemperatureControl)
     .put("supportsAirFiltration", supportsAirFiltration)
     .put("builtIn", builtIn)
@@ -1175,6 +1181,9 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         highCurrentOnFilamentSwap = optBoolean("highCurrentOnFilamentSwap"),
         extruderCount = extruderCount,
         auxiliaryFan = optBoolean("auxiliaryFan", false),
+        fanSpeedupTime = optDouble("fanSpeedupTime", 0.0).toFloat(),
+        fanSpeedupOverhangs = optBoolean("fanSpeedupOverhangs", true),
+        fanKickstart = optDouble("fanKickstart", 0.0).toFloat(),
         supportsChamberTemperatureControl = optBoolean("supportsChamberTemperatureControl"),
         supportsAirFiltration = optBoolean("supportsAirFiltration"),
     )

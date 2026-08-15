@@ -260,6 +260,9 @@
     <string name="filament_support_material">Support material</string>
     <string name="filament_minimal_purge_on_wipe_tower">Minimal purge on wipe tower</string>
     <string name="auxiliary_part_cooling_fan">Auxiliary part cooling fan</string>
+    <string name="fan_speedup_time">Fan speed-up time</string>
+    <string name="fan_speedup_overhangs">Only overhangs</string>
+    <string name="fan_kickstart">Fan kick-start time</string>
     <string name="cubic_millimeters_suffix">mm³</string>
     <string name="retraction">Retraction</string>
     <string name="retraction_defaults">Retraction defaults</string>

@@ -252,6 +252,9 @@ data class PrinterProfile(
     val highCurrentOnFilamentSwap: Boolean = false,
     val extruderCount: Int = 1,
     val auxiliaryFan: Boolean = false,
+    val fanSpeedupTime: Float = 0f,
+    val fanSpeedupOverhangs: Boolean = true,
+    val fanKickstart: Float = 0f,
     val supportsChamberTemperatureControl: Boolean = false,
     val supportsAirFiltration: Boolean = false,
 ) {
@@ -1211,7 +1214,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 82,
+    val schemaVersion: Int = 83,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -2250,6 +2253,9 @@ data class SliceOptions(
             native.filamentMultitoolRammingFlows = nativeFilaments
                 .map(FilamentProfile::multitoolRammingFlow).toFloatArray()
             native.auxiliaryFan = printerProfile.auxiliaryFan
+            native.fanSpeedupTime = printerProfile.fanSpeedupTime
+            native.fanSpeedupOverhangs = printerProfile.fanSpeedupOverhangs
+            native.fanKickstart = printerProfile.fanKickstart
             native.supportsChamberTemperatureControl = printerProfile.supportsChamberTemperatureControl
             native.supportsAirFiltration = printerProfile.supportsAirFiltration
             native.filamentSofteningTemperatures = nativeFilaments

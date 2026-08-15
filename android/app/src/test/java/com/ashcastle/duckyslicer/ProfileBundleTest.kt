@@ -22,6 +22,9 @@ class ProfileBundleTest {
                 SliceOptions().selectPrinter(
                     PrinterProfile.CUSTOM_CARTESIAN.copy(
                         auxiliaryFan = true,
+                        fanSpeedupTime = 0.7f,
+                        fanSpeedupOverhangs = false,
+                        fanKickstart = 0.25f,
                         minLayerHeight = 0.09f,
                         maxLayerHeight = 0.31f,
                         extruderOffsetsX = listOf(0f, 12.5f),
@@ -124,6 +127,8 @@ class ProfileBundleTest {
             assertTrue(
                 catalog.printers.any {
                         it.name == "Portable printer" && !it.builtIn && it.auxiliaryFan &&
+                        it.fanSpeedupTime == 0.7f && !it.fanSpeedupOverhangs &&
+                        it.fanKickstart == 0.25f &&
                         it.minLayerHeight == 0.09f && it.maxLayerHeight == 0.31f &&
                         it.extruderOffsetsX == listOf(0f, 12.5f) &&
                         it.extruderOffsetsY == listOf(0f, -3.25f) &&

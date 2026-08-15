@@ -276,6 +276,9 @@ data class SliceConfig(
     @JvmField var enableFilamentRamming: Boolean = true
     @JvmField var highCurrentOnFilamentSwap: Boolean = false
     @JvmField var auxiliaryFan: Boolean = false
+    @JvmField var fanSpeedupTime: Float = 0f
+    @JvmField var fanSpeedupOverhangs: Boolean = true
+    @JvmField var fanKickstart: Float = 0f
     @JvmField var supportsChamberTemperatureControl: Boolean = false
     @JvmField var supportsAirFiltration: Boolean = false
     @JvmField var filamentSoluble: IntArray = intArrayOf()

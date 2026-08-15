@@ -16,6 +16,8 @@ internal object ProfileValidation {
             profile.minLayerHeight in 0.01f..2f &&
             profile.maxLayerHeight in profile.minLayerHeight..2f &&
             profile.extruderCount in 1..MAX_FILAMENT_SLOTS &&
+            profile.fanSpeedupTime in 0f..60f &&
+            profile.fanKickstart in 0f..60f &&
             profile.gcodeFlavor in setOf("marlin", "marlin2", "klipper") &&
             listOf(
                 profile.machineLoadFilamentTime,

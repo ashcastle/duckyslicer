@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v82.bin"
+private const val CATALOG_ASSET = "profile_catalog_v83.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 82) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 83) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -78,6 +78,9 @@ class OrcaProfileCatalog(private val context: Context) {
         highCurrentOnFilamentSwap = input.readCatalogBoolean(),
         extruderCount = input.readInt(),
         auxiliaryFan = input.readCatalogBoolean(),
+        fanSpeedupTime = input.readFloat(),
+        fanSpeedupOverhangs = input.readCatalogBoolean(),
+        fanKickstart = input.readFloat(),
         supportsChamberTemperatureControl = input.readCatalogBoolean(),
         supportsAirFiltration = input.readCatalogBoolean(),
         machineStartGcode = input.readCatalogString(),
@@ -324,6 +327,9 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("highCurrentOnFilamentSwap", BINARY_BOOL),
     BinaryField("extruderCount", BINARY_INT),
     BinaryField("auxiliaryFan", BINARY_BOOL),
+    BinaryField("fanSpeedupTime", BINARY_FLOAT),
+    BinaryField("fanSpeedupOverhangs", BINARY_BOOL),
+    BinaryField("fanKickstart", BINARY_FLOAT),
     BinaryField("supportsChamberTemperatureControl", BINARY_BOOL),
     BinaryField("supportsAirFiltration", BINARY_BOOL),
     BinaryField("machineStartGcode", BINARY_STRING),

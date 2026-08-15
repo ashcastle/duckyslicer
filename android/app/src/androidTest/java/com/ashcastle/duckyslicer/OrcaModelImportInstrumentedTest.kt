@@ -16,6 +16,79 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class OrcaModelImportInstrumentedTest {
     @Test
+    fun printerFanResponseTimingUsesOrcaFanMover() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val archive = File(context.cacheDir, "fan-response.3mf")
+        val native = NativeLibrary()
+        archive.delete()
+        try {
+            writeStandard3mf(archive)
+            val filament = FilamentProfile.PLA.copy(
+                fanMinSpeed = 30,
+                fanMaxSpeed = 30,
+                closeFanFirstLayers = 0,
+                fullFanSpeedLayer = 1,
+                keepFanAlwaysOn = true,
+            )
+
+            fun sliceWith(fanSpeedupTime: Float, fanKickstart: Float): String {
+                assertTrue("The fan response fixture must load through Orca", native.loadModel(archive.absolutePath))
+                val config = SliceOptions()
+                    .selectPrinter(
+                        PrinterProfile.CUSTOM_CARTESIAN.copy(
+                            fanSpeedupTime = fanSpeedupTime,
+                            fanSpeedupOverhangs = false,
+                            fanKickstart = fanKickstart,
+                        ),
+                    )
+                    .selectFilament(filament)
+                    .toNativeConfig()
+                val result = requireNotNull(native.slice(config))
+                assertTrue(result.errorMessage, result.success)
+                val output = File(result.gcodePath)
+                return try {
+                    output.readText()
+                } finally {
+                    output.delete()
+                    native.clearModel()
+                }
+            }
+
+            val baseline = sliceWith(fanSpeedupTime = 0f, fanKickstart = 0f)
+            val tuned = sliceWith(fanSpeedupTime = 2f, fanKickstart = 0.5f)
+            val baselinePhysical = baseline.lineSequence()
+                .map(String::trim)
+                .filter { it.startsWith("G0 ") || it.startsWith("G1 ") || it.startsWith("M106 ") }
+                .toList()
+            val tunedPhysical = tuned.lineSequence()
+                .map(String::trim)
+                .filter { it.startsWith("G0 ") || it.startsWith("G1 ") || it.startsWith("M106 ") }
+                .toList()
+
+            assertTrue(baseline.contains("; fan_speedup_time = 0"))
+            assertTrue(tuned.contains("; fan_speedup_time = 2"))
+            assertTrue(tuned.contains("; fan_speedup_overhangs = 0"))
+            assertTrue(tuned.contains("; fan_kickstart = 0.5"))
+            val baselineFullSpeedPulses = baselinePhysical.count { it.startsWith("M106 S255") }
+            val tunedFullSpeedPulses = tunedPhysical.count { it.startsWith("M106 S255") }
+            assertTrue(
+                "FanMover kick-start must add full-speed pulses ($baselineFullSpeedPulses -> $tunedFullSpeedPulses)",
+                tunedFullSpeedPulses > baselineFullSpeedPulses,
+            )
+            val kickstartIndex = tunedPhysical.indexOfFirst { it.startsWith("M106 S255") }
+            assertTrue("FanMover must emit a full-speed kick-start pulse", kickstartIndex >= 0)
+            assertTrue(
+                "FanMover must return from the pulse to the configured 30% fan speed",
+                tunedPhysical.drop(kickstartIndex + 1).any { it.startsWith("M106 S76") },
+            )
+            assertTrue("FanMover must change the physical command stream", baselinePhysical != tunedPhysical)
+        } finally {
+            native.clearModel()
+            archive.delete()
+        }
+    }
+
+    @Test
     fun selectedPrinterTimelapseCommandIsExpandedForEveryLayer() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val archive = File(context.cacheDir, "timelapse-command.3mf")

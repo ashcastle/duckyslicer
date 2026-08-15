@@ -114,6 +114,9 @@ class SliceOptionsPersistenceTest {
             .selectPrinter(
                 PrinterProfile.U1_04.copy(
                     auxiliaryFan = true,
+                    fanSpeedupTime = 0.7f,
+                    fanSpeedupOverhangs = false,
+                    fanKickstart = 0.25f,
                     extruderOffsetsX = listOf(0f, 12.5f),
                     extruderOffsetsY = listOf(0f, -3.25f),
                     beforeLayerChangeGcode = "; PERSISTED_BEFORE_LAYER",
@@ -321,6 +324,9 @@ class SliceOptionsPersistenceTest {
         assertEquals(listOf(53, 63), native.filamentBedTemps.toList())
         assertEquals(listOf(54, 64), native.filamentBedTempInitialLayers.toList())
         assertEquals(true, native.auxiliaryFan)
+        assertEquals(0.7f, native.fanSpeedupTime)
+        assertEquals(false, native.fanSpeedupOverhangs)
+        assertEquals(0.25f, native.fanKickstart)
         assertEquals(listOf("PLA", "PETG"), native.filamentTypes.toList())
         assertEquals(listOf(primary.nozzleTemp, secondary.nozzleTemp), native.extruderTemps.toList())
         assertEquals(listOf(primary.flowRatio, secondary.flowRatio), native.filamentFlowRatios.toList())
@@ -893,6 +899,9 @@ class SliceOptionsPersistenceTest {
             getJSONObject("filament").remove("additionalCoolingFanSpeed")
             getJSONObject("filament").removeCoolingParityFields()
             getJSONObject("printer").remove("auxiliaryFan")
+            getJSONObject("printer").remove("fanSpeedupTime")
+            getJSONObject("printer").remove("fanSpeedupOverhangs")
+            getJSONObject("printer").remove("fanKickstart")
             getJSONObject("printer").remove("minLayerHeight")
             getJSONObject("printer").remove("maxLayerHeight")
             getJSONObject("printer").remove("extruderOffsetsX")
@@ -1006,6 +1015,9 @@ class SliceOptionsPersistenceTest {
         assertEquals(-1, restored.filamentProfile.internalBridgeFanSpeed)
         assertEquals(-1, restored.filamentProfile.supportInterfaceFanSpeed)
         assertEquals(false, restored.printerProfile.auxiliaryFan)
+        assertEquals(0f, restored.printerProfile.fanSpeedupTime)
+        assertEquals(true, restored.printerProfile.fanSpeedupOverhangs)
+        assertEquals(0f, restored.printerProfile.fanKickstart)
         assertEquals(0.04f, restored.printerProfile.minLayerHeight)
         assertEquals(0.28f, restored.printerProfile.maxLayerHeight)
         assertEquals(listOf(0f), restored.printerProfile.extruderOffsetsX)
@@ -1048,6 +1060,9 @@ class SliceOptionsPersistenceTest {
             restored.toNativeConfig().filamentShrinkageCompensationZ.toList(),
         )
         assertEquals(false, restored.toNativeConfig().auxiliaryFan)
+        assertEquals(0f, restored.toNativeConfig().fanSpeedupTime)
+        assertEquals(true, restored.toNativeConfig().fanSpeedupOverhangs)
+        assertEquals(0f, restored.toNativeConfig().fanKickstart)
         assertEquals(listOf(0.04f), restored.toNativeConfig().minimumLayerHeights.toList())
         assertEquals(listOf(0.28f), restored.toNativeConfig().maximumLayerHeights.toList())
         assertEquals(listOf(0f), restored.toNativeConfig().extruderOffsetsX.toList())
@@ -1140,6 +1155,16 @@ class SliceOptionsPersistenceTest {
         assertFalse(ProfileValidation.printer(unsafe))
         assertFalse(
             ProfileValidation.printer(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(fanSpeedupTime = 60.1f),
+            ),
+        )
+        assertFalse(
+            ProfileValidation.printer(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(fanKickstart = Float.NaN),
+            ),
+        )
+        assertFalse(
+            ProfileValidation.printer(
                 PrinterProfile.CUSTOM_CARTESIAN.copy(
                     timeLapseGcode = "한".repeat(87_382),
                 ),
@@ -1184,6 +1209,9 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
     .selectPrinter(
         PrinterProfile.U1_06.copy(
             auxiliaryFan = true,
+            fanSpeedupTime = 0.7f,
+            fanSpeedupOverhangs = false,
+            fanKickstart = 0.25f,
             extruderOffsetsX = listOf(0f, 10.5f),
             extruderOffsetsY = listOf(0f, -2.5f),
             timeLapseGcode = "; FIXTURE_TIMELAPSE",

@@ -560,6 +560,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "machine_pause_gcode": "M25 ; PROFILE_PAUSE",
                 "time_lapse_gcode": "; DUCKY_TIMELAPSE",
                 "auxiliary_fan": "1",
+                "fan_speedup_time": "0.5",
+                "fan_speedup_overhangs": "0",
+                "fan_kickstart": "0.2",
                 "extruder_clearance_radius": "71.5",
                 "extruder_clearance_height_to_rod": "28.5",
                 "extruder_clearance_height_to_lid": "118",
@@ -575,6 +578,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertFalse(profile["singleExtruderMultiMaterial"])
         self.assertEqual(2, profile["extruderCount"])
         self.assertTrue(profile["auxiliaryFan"])
+        self.assertEqual(0.5, profile["fanSpeedupTime"])
+        self.assertFalse(profile["fanSpeedupOverhangs"])
+        self.assertEqual(0.2, profile["fanKickstart"])
         self.assertEqual("M25 ; PROFILE_PAUSE", profile["machinePauseGcode"])
         self.assertEqual("; DUCKY_TIMELAPSE", profile["timeLapseGcode"])
         self.assertEqual(0.08, profile["minLayerHeight"])

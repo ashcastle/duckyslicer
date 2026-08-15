@@ -2042,6 +2042,9 @@ class NativeEngineInstrumentedTest {
                     enableFilamentRamming = false,
                     purgeInPrimeTower = false,
                     highCurrentOnFilamentSwap = true,
+                    fanSpeedupTime = 0.7f,
+                    fanSpeedupOverhangs = false,
+                    fanKickstart = 0.25f,
                     supportsChamberTemperatureControl = true,
                     supportsAirFiltration = true,
                 ),
@@ -2351,6 +2354,9 @@ class NativeEngineInstrumentedTest {
         assertFalse(restored.printers.last().enableFilamentRamming)
         assertFalse(restored.printers.last().purgeInPrimeTower)
         assertTrue(restored.printers.last().highCurrentOnFilamentSwap)
+        assertEquals(0.7f, restored.printers.last().fanSpeedupTime)
+        assertFalse(restored.printers.last().fanSpeedupOverhangs)
+        assertEquals(0.25f, restored.printers.last().fanKickstart)
         assertTrue(restored.printers.last().supportsChamberTemperatureControl)
         assertTrue(restored.printers.last().supportsAirFiltration)
         assertEquals(null, restored.printers.last().brand)
@@ -2387,7 +2393,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(82, catalog.schemaVersion)
+        assertEquals(83, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2405,6 +2411,10 @@ class NativeEngineInstrumentedTest {
             "TIMELAPSE_TAKE_FRAME",
             catalog.printers.single { it.name == "Artillery M1 Pro 0.4 nozzle" }.timeLapseGcode,
         )
+        val fanResponse = catalog.printers.single { it.name == "Sovol SV07 Plus 0.4 nozzle" }
+        assertEquals(0.5f, fanResponse.fanSpeedupTime)
+        assertFalse(fanResponse.fanSpeedupOverhangs)
+        assertEquals(0.2f, fanResponse.fanKickstart)
         val boundedLift = catalog.printers.single { it.name == "Anycubic Kobra 2 Neo 0.4 nozzle" }
         assertEquals(0.3f, boundedLift.retractLiftAbove)
         assertEquals(258f, boundedLift.retractLiftBelow)
