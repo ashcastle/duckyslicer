@@ -3,7 +3,14 @@ from __future__ import annotations
 import math
 import unittest
 
-from tools.generate_profile_catalog import build_filament, build_printer, build_process, printable_geometry, support_type
+from tools.generate_profile_catalog import (
+    bed_exclude_geometry,
+    build_filament,
+    build_printer,
+    build_process,
+    printable_geometry,
+    support_type,
+)
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
@@ -39,6 +46,24 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         ):
             with self.assertRaises(ValueError):
                 printable_geometry(area)
+
+    def test_preserves_bed_exclusion_geometry_and_offset_sentinel(self) -> None:
+        self.assertEqual(
+            [0.0, 0.0, 18.0, 0.0, 18.0, 28.0, 0.0, 28.0],
+            bed_exclude_geometry(
+                ["-10x-20", "8x-20", "8x8", "-10x8"],
+                -10.0,
+                -20.0,
+                200.0,
+                200.0,
+            ),
+        )
+        self.assertEqual(
+            [0.0, 0.0],
+            bed_exclude_geometry(["0x0"], -10.0, -20.0, 200.0, 200.0),
+        )
+        with self.assertRaises(ValueError):
+            bed_exclude_geometry(["0x0", "220x0", "220x10"], 0.0, 0.0, 200.0, 200.0)
 
     def test_preserves_support_routing_and_prime_tower_process_values(self) -> None:
         profile = build_process(
@@ -422,6 +447,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
             {
                 "name": "Safe sequential printer",
                 "printable_area": ["0x0", "200x0", "200x200", "0x200"],
+                "bed_exclude_area": ["0x0", "18x0", "18x28", "0x28"],
                 "printable_height": "220",
                 "nozzle_diameter": ["0.4", "0.4"],
                 "min_layer_height": ["0.08"],
@@ -449,6 +475,10 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual([0.0, -3.25], profile["extruderOffsetsY"])
         self.assertEqual([1.5, 2.5], profile["toolChangeRetractLengths"])
         self.assertEqual([-0.1, 0.2], profile["toolChangeRetractRestartExtras"])
+        self.assertEqual(
+            [0.0, 0.0, 18.0, 0.0, 18.0, 28.0, 0.0, 28.0],
+            profile["bedExcludeArea"],
+        )
 
     def test_resolves_orca_layer_height_sentinels_and_rejects_inverted_limits(self) -> None:
         base = {

@@ -32,6 +32,35 @@ class BedGeometryTest {
             listOf(0f, -50f, 50f, 0f, 0f, 50f, -50f, 0f),
             machineBedPolygon(diamond, -50f, -50f),
         )
+        assertEquals(
+            listOf(-50f, -50f, -32f, -50f, -32f, -22f, -50f, -22f),
+            machineBedExcludeArea(
+                listOf(0f, 0f, 18f, 0f, 18f, 28f, 0f, 28f),
+                -50f,
+                -50f,
+            ),
+        )
+    }
+
+    @Test
+    fun validatesAndScalesBedExclusionGeometry() {
+        val excluded = listOf(0f, 0f, 18f, 0f, 18f, 28f, 0f, 28f)
+        assertTrue(bedExcludeAreaIsValid(excluded, 200f, 200f))
+        assertTrue(bedExcludeAreaIsValid(listOf(0f, 0f), 200f, 200f))
+        assertFalse(bedExcludeAreaIsValid(listOf(1f, 1f), 200f, 200f))
+        assertFalse(
+            bedExcludeAreaIsValid(
+                listOf(0f, 0f, 220f, 0f, 220f, 10f),
+                200f,
+                200f,
+            ),
+        )
+        assertEquals(
+            listOf(0f, 0f, 36f, 0f, 36f, 56f, 0f, 56f),
+            scaledBedExcludeArea(excluded, 200f, 200f, 400f, 400f),
+        )
+        assertEquals(excluded, parseBedExcludeArea("0,0; 18,0; 18,28; 0,28", 200f, 200f))
+        assertEquals("0,0; 18,0; 18,28; 0,28", formatBedExcludeArea(excluded))
     }
 
     @Test

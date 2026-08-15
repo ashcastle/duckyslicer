@@ -262,6 +262,7 @@ data class SliceConfig(
     @JvmField var manualFilamentChange: Boolean = false
     @JvmField var disableM73: Boolean = false
     @JvmField var filamentIdleTemperatures: IntArray = intArrayOf()
+    @JvmField var bedExcludeArea: FloatArray = floatArrayOf(0f, 0f)
     @JvmField var machineLoadFilamentTime: Float = 0f
     @JvmField var machineUnloadFilamentTime: Float = 0f
     @JvmField var machineToolChangeTime: Float = 0f

@@ -125,7 +125,7 @@ def valid_sources() -> dict[str, str]:
         ),
         "PrepareModelPreviewView.kt": (
             "PrepareModelTopologyKey( filamentSlot = volume.filamentSlot "
-            "withContext(Dispatchers.Default) PrepareModelSceneBuilder.build(projectObjects "
+            "withContext(Dispatchers.Default) PrepareModelSceneBuilder.build(\n                    projectObjects, "
             "PrepareModelSceneBuilder.build(\n                    emptyList() "
             "overlays.takeIf { sceneLoad.complete }.orEmpty() PrepareModelOverlayKey( "
             "overlays = withContext(Dispatchers.Default) "

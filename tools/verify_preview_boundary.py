@@ -270,7 +270,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "PrepareModelTopologyKey(",
         "filamentSlot = volume.filamentSlot",
         "withContext(Dispatchers.Default)",
-        "PrepareModelSceneBuilder.build(projectObjects",
+        "PrepareModelSceneBuilder.build(\n                    projectObjects,",
         "PrepareModelSceneBuilder.build(\n                    emptyList()",
         "overlays.takeIf { sceneLoad.complete }.orEmpty()",
         "PrepareModelOverlayKey(",

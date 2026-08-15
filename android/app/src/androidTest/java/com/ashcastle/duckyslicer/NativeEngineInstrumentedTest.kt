@@ -2202,7 +2202,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(74, catalog.schemaVersion)
+        assertEquals(75, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2238,6 +2238,10 @@ class NativeEngineInstrumentedTest {
         assertEquals(2, inheritedOffset.longRetractionWhenCutLevel)
         assertFalse(inheritedOffset.longRetractionWhenCut)
         assertEquals(18f, inheritedOffset.retractionDistanceWhenCut)
+        assertEquals(
+            listOf(0f, 0f, 18f, 0f, 18f, 28f, 0f, 28f),
+            inheritedOffset.bedExcludeArea,
+        )
         assertTrue(inheritedOffset.layerChangeGcode.contains("M73 L{layer_num+1}"))
         assertTrue(inheritedOffset.changeFilamentGcode.contains("M620 S[next_extruder]A"))
         val filamentCutOverride = catalog.filaments.single {
@@ -2996,6 +3000,26 @@ class NativeEngineInstrumentedTest {
                 "horizontal=$horizontalGap, vertical=$verticalGap",
             measuredGap >= 5.8f,
         )
+
+        val reservedOptions = options.copy(
+            bedSizeX = 150f,
+            bedSizeY = 100f,
+            bedOriginX = 0f,
+            bedOriginY = 0f,
+            bedPolygon = rectangularBedPolygon(150f, 100f),
+            bedExcludeArea = listOf(0f, 0f, 50f, 0f, 50f, 100f, 0f, 100f),
+        )
+        val reservedArrangement = OnDeviceSlicer.arrange(
+            objects,
+            reservedOptions,
+            minimumGap = 2f,
+        )
+        repeat(reservedArrangement.objectCount) { index ->
+            assertTrue(
+                "Orca arrangement must keep objects out of the printer's unavailable bed area",
+                reservedArrangement.lowerLeftMm[index * 2] >= 49.95f,
+            )
+        }
 
         val noFit = runCatching {
             OnDeviceSlicer.arrange(
@@ -5757,6 +5781,7 @@ class NativeEngineInstrumentedTest {
             bedOriginX = -90f,
             bedOriginY = -95f,
             bedPolygon = listOf(90f, 0f, 180f, 95f, 90f, 190f, 0f, 95f),
+            bedExcludeArea = listOf(0f, 0f, 18f, 0f, 18f, 28f, 0f, 28f),
             maxPrintHeight = 180f,
             machineStartGcode = "M117 DUCKY_START",
             machineEndGcode = "M117 DUCKY_END",
@@ -5791,11 +5816,16 @@ class NativeEngineInstrumentedTest {
         val outcome = OnDeviceSlicer.slice(model, options)
         val gcode = outcome.output.readText()
         val printableArea = gcode.lineSequence().firstOrNull { it.startsWith("; printable_area =") }.orEmpty()
+        val excludedArea = gcode.lineSequence()
+            .firstOrNull { it.startsWith("; bed_exclude_area =") }
+            .orEmpty()
 
         assertTrue("The original negative X origin must reach Orca", printableArea.contains("-90x0"))
         assertTrue("The original negative Y origin must reach Orca", printableArea.contains("0x-95"))
         assertTrue("Custom bed width must reach Orca", printableArea.contains("90x0"))
         assertTrue("Custom bed depth must reach Orca", printableArea.contains("0x95"))
+        assertTrue("Custom unavailable bed X must reach Orca", excludedArea.contains("-72x-95"))
+        assertTrue("Custom unavailable bed Y must reach Orca", excludedArea.contains("-90x-67"))
         assertTrue("Custom height must reach Orca", gcode.contains("; printable_height = 180"))
         assertTrue("Custom X speed must reach Orca", gcode.contains("; machine_max_speed_x = 240,240"))
         assertTrue("Custom Y speed must reach Orca", gcode.contains("; machine_max_speed_y = 250,250"))

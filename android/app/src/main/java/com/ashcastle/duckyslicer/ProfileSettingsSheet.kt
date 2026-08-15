@@ -400,6 +400,13 @@ private fun PrinterSettingsSheet(
                         width,
                         options.bedSizeY,
                     ),
+                    bedExcludeArea = scaledBedExcludeArea(
+                        options.bedExcludeArea,
+                        options.bedSizeX,
+                        options.bedSizeY,
+                        width,
+                        options.bedSizeY,
+                    ),
                 ),
             )
         },
@@ -423,6 +430,13 @@ private fun PrinterSettingsSheet(
                         options.bedSizeX,
                         depth,
                     ),
+                    bedExcludeArea = scaledBedExcludeArea(
+                        options.bedExcludeArea,
+                        options.bedSizeX,
+                        options.bedSizeY,
+                        options.bedSizeX,
+                        depth,
+                    ),
                 ),
             )
         },
@@ -434,6 +448,12 @@ private fun PrinterSettingsSheet(
         range = 100f..600f,
         steps = 499,
         onValueChange = { onOptionsChanged(options.copy(maxPrintHeight = it.roundToInt().toFloat())) },
+    )
+    BedExcludeAreaSetting(
+        value = options.bedExcludeArea,
+        bedSizeX = options.bedSizeX,
+        bedSizeY = options.bedSizeY,
+        onValueChange = { onOptionsChanged(options.copy(bedExcludeArea = it)) },
     )
     SettingChoices(
         settingLabel = stringResource(R.string.nozzle_diameter),
@@ -6533,6 +6553,75 @@ private fun RotationTemplateSetting(
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+@Composable
+private fun BedExcludeAreaSetting(
+    value: List<Float>,
+    bedSizeX: Float,
+    bedSizeY: Float,
+    onValueChange: (List<Float>) -> Unit,
+) {
+    val label = stringResource(R.string.bed_exclude_area)
+    if (!settingMatchesQuery(label)) return
+    var input by remember { mutableStateOf(formatBedExcludeArea(value)) }
+    var lastApplied by remember { mutableStateOf(value) }
+    LaunchedEffect(value) {
+        if (value != lastApplied) {
+            input = formatBedExcludeArea(value)
+            lastApplied = value
+        }
+    }
+    val parsed = parseBedExcludeArea(input, bedSizeX, bedSizeY)
+    OutlinedTextField(
+        value = input,
+        onValueChange = { candidate ->
+            if (candidate.length <= 4_096 && candidate.all {
+                    it.isDigit() || it in "-+.,; \n\t"
+                }
+            ) {
+                input = candidate
+                parseBedExcludeArea(candidate, bedSizeX, bedSizeY)?.let { geometry ->
+                    lastApplied = geometry
+                    onValueChange(geometry)
+                }
+            }
+        },
+        label = { Text(label) },
+        placeholder = { Text(stringResource(R.string.bed_exclude_area_example)) },
+        supportingText = {
+            Text(
+                stringResource(
+                    if (parsed != null) R.string.bed_exclude_area_hint
+                    else R.string.bed_exclude_area_invalid,
+                ),
+            )
+        },
+        isError = parsed == null,
+        minLines = 2,
+        maxLines = 4,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+internal fun parseBedExcludeArea(value: String, bedSizeX: Float, bedSizeY: Float): List<Float>? {
+    if (value.isBlank()) return listOf(0f, 0f)
+    val coordinates = value.split(';', '\n')
+        .map(String::trim)
+        .filter(String::isNotEmpty)
+        .flatMap { pair ->
+            val values = pair.split(',').map(String::trim)
+            if (values.size != 2) return null
+            values.map { it.replace(',', '.').toFloatOrNull() ?: return null }
+        }
+    return coordinates.takeIf { bedExcludeAreaIsValid(it, bedSizeX, bedSizeY) }
+}
+
+internal fun formatBedExcludeArea(value: List<Float>): String {
+    if (value.size == 2 && value.all { abs(it) <= 0.001f }) return ""
+    return value.chunked(2).joinToString("; ") { pair ->
+        "${editableDecimal(pair[0])},${editableDecimal(pair[1])}"
+    }
 }
 
 @Composable

@@ -176,6 +176,7 @@ data class PrinterProfile(
     val bedOriginX: Float = 0f,
     val bedOriginY: Float = 0f,
     val bedPolygon: List<Float> = rectangularBedPolygon(bedSizeX, bedSizeY),
+    val bedExcludeArea: List<Float> = listOf(0f, 0f),
     val singleExtruderMultiMaterial: Boolean = false,
     val coolingTubeRetraction: Float = 91.5f,
     val coolingTubeLength: Float = 5f,
@@ -1130,6 +1131,7 @@ data class SliceOptions(
     val bedOriginX: Float = printerProfile.bedOriginX,
     val bedOriginY: Float = printerProfile.bedOriginY,
     val bedPolygon: List<Float> = printerProfile.bedPolygon,
+    val bedExcludeArea: List<Float> = printerProfile.bedExcludeArea,
     val maxPrintHeight: Float = printerProfile.maxPrintHeight,
     val nozzleDiameter: Float = printerProfile.nozzleDiameter,
     val nozzleTemp: Int = filamentProfile.nozzleTemp,
@@ -1415,6 +1417,7 @@ data class SliceOptions(
             bedOriginX = profile.bedOriginX,
             bedOriginY = profile.bedOriginY,
             bedPolygon = profile.bedPolygon,
+            bedExcludeArea = profile.bedExcludeArea,
             maxPrintHeight = profile.maxPrintHeight,
             nozzleDiameter = profile.nozzleDiameter,
             gcodeFlavor = profile.gcodeFlavor,
@@ -2045,6 +2048,7 @@ data class SliceOptions(
             native.disableM73 = printerProfile.disableM73
             native.filamentIdleTemperatures = nativeFilaments
                 .map(FilamentProfile::idleTemperature).toIntArray()
+            native.bedExcludeArea = bedExcludeArea.toFloatArray()
             native.machineLoadFilamentTime = printerProfile.machineLoadFilamentTime
             native.machineUnloadFilamentTime = printerProfile.machineUnloadFilamentTime
             native.machineToolChangeTime = printerProfile.machineToolChangeTime
@@ -2591,6 +2595,7 @@ object OnDeviceSlicer {
                 bedOriginX = options.bedOriginX,
                 bedOriginY = options.bedOriginY,
                 bedPolygon = options.bedPolygon,
+                bedExcludeArea = options.bedExcludeArea,
                 objectVolumeCounts = objects.map { it.modelPartVolumes.size }.toIntArray(),
                 minimumGap = minimumGap,
                 requestId = requestId,

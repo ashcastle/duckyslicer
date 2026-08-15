@@ -48,6 +48,7 @@ internal fun DepthTestedToolpathScene(
     bedOriginX: Float,
     bedOriginY: Float,
     bedPolygon: List<Float>,
+    bedExcludeArea: List<Float>,
     opacity: Float,
     depthContrast: Float,
     visibleRoles: Set<Int>,
@@ -68,6 +69,7 @@ internal fun DepthTestedToolpathScene(
                 bedOriginX,
                 bedOriginY,
                 bedPolygon,
+                bedExcludeArea,
                 opacity,
                 depthContrast,
                 visibleRoles,
@@ -149,6 +151,7 @@ internal class ToolpathSurfaceView(
         bedOriginX: Float,
         bedOriginY: Float,
         bedPolygon: List<Float>,
+        bedExcludeArea: List<Float> = listOf(0f, 0f),
         opacity: Float,
         depthContrast: Float,
         visibleRoles: Set<Int>,
@@ -164,6 +167,7 @@ internal class ToolpathSurfaceView(
             bedOriginX = bedOriginX,
             bedOriginY = bedOriginY,
             bedPolygon = bedPolygon,
+            bedExcludeArea = bedExcludeArea,
             opacity = opacity,
             depthContrast = depthContrast,
             detail = detail,
@@ -429,6 +433,7 @@ internal data class ToolpathScene(
     val detail: PreviewDetail,
     val visibleRoles: Set<Int> = (0 until GcodeLayerPreview.ROLE_COUNT).toSet(),
     val bedPolygon: List<Float> = rectangularBedPolygon(bedSizeX, bedSizeY),
+    val bedExcludeArea: List<Float> = listOf(0f, 0f),
     val bedOriginX: Float = 0f,
     val bedOriginY: Float = 0f,
     val segmentBudgetOverride: Int? = null,
@@ -449,6 +454,7 @@ internal data class ToolpathScene(
             detail == other.detail &&
             visibleRoles == other.visibleRoles &&
             bedPolygon == other.bedPolygon &&
+            bedExcludeArea == other.bedExcludeArea &&
             bedOriginX.toBits() == other.bedOriginX.toBits() &&
             bedOriginY.toBits() == other.bedOriginY.toBits() &&
             segmentBudgetOverride == other.segmentBudgetOverride &&
@@ -464,6 +470,7 @@ internal data class ToolpathScene(
         result = 31 * result + detail.hashCode()
         result = 31 * result + visibleRoles.hashCode()
         result = 31 * result + bedPolygon.hashCode()
+        result = 31 * result + bedExcludeArea.hashCode()
         result = 31 * result + bedOriginX.hashCode()
         result = 31 * result + bedOriginY.hashCode()
         result = 31 * result + (segmentBudgetOverride ?: 0)
@@ -480,6 +487,7 @@ internal fun ToolpathScene.canReuseGeometryWhileBuilding(requested: ToolpathScen
         depthContrast.toBits() == requested.depthContrast.toBits() &&
         visibleRoles == requested.visibleRoles &&
         bedPolygon == requested.bedPolygon &&
+        bedExcludeArea == requested.bedExcludeArea &&
         bedOriginX.toBits() == requested.bedOriginX.toBits() &&
         bedOriginY.toBits() == requested.bedOriginY.toBits()
 
@@ -1395,7 +1403,13 @@ internal object ToolpathMeshBuilder {
         } else {
             null
         }
-        addBed(bedBuilder, scene.bedSizeX, scene.bedSizeY, scene.bedPolygon)
+        addBed(
+            bedBuilder,
+            scene.bedSizeX,
+            scene.bedSizeY,
+            scene.bedPolygon,
+            scene.bedExcludeArea,
+        )
         val zSpan = (scene.preview.maxZMm - scene.preview.minZMm).coerceAtLeast(0.001f)
         // Preview G-code is layer ordered. For the normal near-opaque view, upload high
         // layers first so depth testing rejects covered internal fragments before shading.
@@ -1557,7 +1571,13 @@ internal object ToolpathMeshBuilder {
     private fun colorInt(value: Float): Int =
         (value.coerceIn(0f, 1f) * 255f).roundToInt()
 
-    private fun addBed(builder: FloatBuilder, width: Float, depth: Float, bedPolygon: List<Float>) {
+    private fun addBed(
+        builder: FloatBuilder,
+        width: Float,
+        depth: Float,
+        bedPolygon: List<Float>,
+        bedExcludeArea: List<Float>,
+    ) {
         val polygon = bedPolygon.takeIf { bedPolygonIsValid(it, width, depth) }
             ?: rectangularBedPolygon(width, depth)
         val bedColor = floatArrayOf(0.15f, 0.16f, 0.145f)
@@ -1607,6 +1627,29 @@ internal object ToolpathMeshBuilder {
                 floatArrayOf(0.96f, 0.75f, 0.18f),
                 0.9f,
             )
+        }
+        if (bedExcludeAreaIsValid(bedExcludeArea, width, depth) && bedExcludeArea.size >= 6) {
+            repeat(bedExcludeArea.size / 2) { index ->
+                val next = (index + 1) % (bedExcludeArea.size / 2)
+                val x1 = bedExcludeArea[index * 2]
+                val y1 = bedExcludeArea[index * 2 + 1]
+                val x2 = bedExcludeArea[next * 2]
+                val y2 = bedExcludeArea[next * 2 + 1]
+                val length = hypot(x2 - x1, y2 - y1).coerceAtLeast(0.001f)
+                addRibbon(
+                    builder,
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    -0.02f,
+                    -(y2 - y1) / length,
+                    (x2 - x1) / length,
+                    0.5f,
+                    floatArrayOf(0.95f, 0.25f, 0.18f),
+                    0.95f,
+                )
+            }
         }
     }
 

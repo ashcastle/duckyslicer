@@ -38,6 +38,13 @@ class ToolpathMeshBuilderTest {
         assertFalse(current.canReuseGeometryWhileBuilding(current.copy(opacity = 0.5f)))
         assertFalse(current.canReuseGeometryWhileBuilding(current.copy(preview = twoLayerPreview())))
         assertFalse(current.canReuseGeometryWhileBuilding(current.copy(visibleRoles = setOf(0))))
+        assertFalse(
+            current.canReuseGeometryWhileBuilding(
+                current.copy(
+                    bedExcludeArea = listOf(0f, 0f, 18f, 0f, 18f, 28f, 0f, 28f),
+                ),
+            ),
+        )
     }
 
     @Test

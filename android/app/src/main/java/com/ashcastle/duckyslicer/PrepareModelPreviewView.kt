@@ -42,6 +42,7 @@ internal fun DepthTestedPrepareModelScene(
     bedSizeX: Float,
     bedSizeY: Float,
     bedPolygon: List<Float>,
+    bedExcludeArea: List<Float>,
     yawDegrees: Float,
     pitchDegrees: Float,
     zoom: Float,
@@ -64,7 +65,7 @@ internal fun DepthTestedPrepareModelScene(
             )
         }
     }
-    var sceneLoad by remember(topology, bedSizeX, bedSizeY, bedPolygon) {
+    var sceneLoad by remember(topology, bedSizeX, bedSizeY, bedPolygon, bedExcludeArea) {
         mutableStateOf(
             PrepareModelSceneLoad(
                 geometry = PrepareModelSceneBuilder.build(
@@ -72,15 +73,22 @@ internal fun DepthTestedPrepareModelScene(
                     bedSizeX,
                     bedSizeY,
                     bedPolygon,
+                    bedExcludeArea,
                 ),
                 complete = projectObjects.isEmpty(),
             ),
         )
     }
-    LaunchedEffect(topology, bedSizeX, bedSizeY, bedPolygon) {
+    LaunchedEffect(topology, bedSizeX, bedSizeY, bedPolygon, bedExcludeArea) {
         if (projectObjects.isNotEmpty()) {
             val geometry = withContext(Dispatchers.Default) {
-                PrepareModelSceneBuilder.build(projectObjects, bedSizeX, bedSizeY, bedPolygon)
+                PrepareModelSceneBuilder.build(
+                    projectObjects,
+                    bedSizeX,
+                    bedSizeY,
+                    bedPolygon,
+                    bedExcludeArea,
+                )
             }
             sceneLoad = PrepareModelSceneLoad(geometry, complete = true)
         }
@@ -192,6 +200,7 @@ internal data class PrepareModelSceneGeometry(
     val bedFill: FloatArray,
     val bedGrid: FloatArray,
     val bedOutline: FloatArray,
+    val bedExcludeOutline: FloatArray,
     val meshes: List<PrepareModelMeshData>,
 )
 
@@ -204,6 +213,7 @@ internal object PrepareModelSceneBuilder {
         bedSizeX: Float,
         bedSizeY: Float,
         requestedBedPolygon: List<Float>,
+        requestedBedExcludeArea: List<Float> = listOf(0f, 0f),
     ): PrepareModelSceneGeometry {
         require(bedSizeX.isFinite() && bedSizeX > 0f && bedSizeY.isFinite() && bedSizeY > 0f)
         val bedPolygon = requestedBedPolygon.takeIf {
@@ -243,6 +253,23 @@ internal object PrepareModelSceneBuilder {
                 PREPARE_BED_OUTLINE_Z,
             )
         }
+        val bedExcludeOutline = ArrayList<Float>()
+        val bedExcludeArea = requestedBedExcludeArea.takeIf {
+            bedExcludeAreaIsValid(it, bedSizeX, bedSizeY) && it.size >= 6
+        }
+        bedExcludeArea?.let { points ->
+            repeat(points.size / 2) { index ->
+                val next = (index + 1) % (points.size / 2)
+                addLine(
+                    bedExcludeOutline,
+                    points[index * 2],
+                    points[index * 2 + 1],
+                    points[next * 2],
+                    points[next * 2 + 1],
+                    PREPARE_BED_EXCLUDE_Z,
+                )
+            }
+        }
         val meshes = projectObjects.flatMap { projectObject ->
             val center = projectObject.geometry().center
             projectObject.volumes.map { volume ->
@@ -267,6 +294,7 @@ internal object PrepareModelSceneBuilder {
             bedFill = bedFill.toFloatArray(),
             bedGrid = bedGrid.toFloatArray(),
             bedOutline = bedOutline.toFloatArray(),
+            bedExcludeOutline = bedExcludeOutline.toFloatArray(),
             meshes = meshes,
         )
     }
@@ -694,6 +722,7 @@ internal class PrepareModelRenderer(
     private var bedFillBuffer = 0
     private var bedGridBuffer = 0
     private var bedOutlineBuffer = 0
+    private var bedExcludeOutlineBuffer = 0
     private val meshBuffers = ArrayList<Int>()
     private val detailMeshBuffers = ArrayList<Int>()
     private val overlayBuffers = ArrayList<PrepareOverlayGpuBuffers>()
@@ -845,6 +874,7 @@ internal class PrepareModelRenderer(
             if (bedFillBuffer != 0) add(bedFillBuffer)
             if (bedGridBuffer != 0) add(bedGridBuffer)
             if (bedOutlineBuffer != 0) add(bedOutlineBuffer)
+            if (bedExcludeOutlineBuffer != 0) add(bedExcludeOutlineBuffer)
             addAll(meshBuffers)
             addAll(detailMeshBuffers)
             overlayBuffers.forEach { buffers ->
@@ -856,6 +886,7 @@ internal class PrepareModelRenderer(
         bedFillBuffer = 0
         bedGridBuffer = 0
         bedOutlineBuffer = 0
+        bedExcludeOutlineBuffer = 0
         meshBuffers.clear()
         detailMeshBuffers.clear()
         overlayBuffers.clear()
@@ -868,7 +899,7 @@ internal class PrepareModelRenderer(
         val detailBufferCount = geometry.meshes.count { mesh ->
             mesh.detailVertices !== mesh.vertices
         }
-        val bufferCount = 3 + geometry.meshes.size + detailBufferCount
+        val bufferCount = 4 + geometry.meshes.size + detailBufferCount
         val buffers = IntArray(bufferCount)
         GLES30.glGenBuffers(bufferCount, buffers, 0)
         if (buffers.any { it == 0 }) {
@@ -879,15 +910,17 @@ internal class PrepareModelRenderer(
         bedFillBuffer = buffers[0]
         bedGridBuffer = buffers[1]
         bedOutlineBuffer = buffers[2]
-        meshBuffers += buffers.drop(3)
+        bedExcludeOutlineBuffer = buffers[3]
+        meshBuffers += buffers.drop(4)
             .take(geometry.meshes.size)
         uploadBuffer(bedFillBuffer, geometry.bedFill)
         uploadBuffer(bedGridBuffer, geometry.bedGrid)
         uploadBuffer(bedOutlineBuffer, geometry.bedOutline)
+        uploadBuffer(bedExcludeOutlineBuffer, geometry.bedExcludeOutline)
         geometry.meshes.forEachIndexed { index, mesh ->
             uploadBuffer(meshBuffers[index], mesh.vertices)
         }
-        var nextDetailBuffer = 3 + geometry.meshes.size
+        var nextDetailBuffer = 4 + geometry.meshes.size
         geometry.meshes.forEachIndexed { index, mesh ->
             if (mesh.detailVertices === mesh.vertices) {
                 detailMeshBuffers += meshBuffers[index]
@@ -1019,6 +1052,12 @@ internal class PrepareModelRenderer(
             geometry.bedOutline.size / PREPARE_VERTEX_FLOATS,
             GLES30.GL_LINE_LOOP,
             floatArrayOf(0.965f, 0.788f, 0.271f),
+        )
+        drawBuffer(
+            bedExcludeOutlineBuffer,
+            geometry.bedExcludeOutline.size / PREPARE_VERTEX_FLOATS,
+            GLES30.GL_LINES,
+            floatArrayOf(0.95f, 0.25f, 0.18f),
         )
     }
 
@@ -1254,6 +1293,7 @@ private const val PREPARE_VERTEX_STRIDE_BYTES = PREPARE_VERTEX_FLOATS * Float.SI
 private const val PREPARE_BED_FILL_Z = -0.08f
 private const val PREPARE_BED_GRID_Z = -0.06f
 private const val PREPARE_BED_OUTLINE_Z = -0.04f
+private const val PREPARE_BED_EXCLUDE_Z = -0.02f
 private const val PREPARE_RENDERER_STARTUP_TIMEOUT_MS = 5_000L
 private const val PREPARE_RENDERER_RELEASE_TIMEOUT_MS = 1_000L
 private const val PREPARE_RENDERER_LOG_TAG = "DuckyPrepareRenderer"

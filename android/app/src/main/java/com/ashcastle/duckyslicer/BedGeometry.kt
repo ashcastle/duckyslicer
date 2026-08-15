@@ -70,6 +70,26 @@ internal fun bedPolygonIsValid(
     return true
 }
 
+internal fun bedExcludeAreaIsValid(
+    points: List<Float>,
+    width: Float,
+    depth: Float,
+): Boolean {
+    if (!width.isFinite() || !depth.isFinite() || width <= 0f || depth <= 0f) return false
+    if (points.isEmpty()) return true
+    if (points.size > MAX_BED_POLYGON_COORDINATES || points.size % 2 != 0) return false
+    if (points.size == 2) {
+        return abs(points[0]) <= BED_GEOMETRY_TOLERANCE_MM &&
+            abs(points[1]) <= BED_GEOMETRY_TOLERANCE_MM
+    }
+    if (points.size < 6 || points.any { !it.isFinite() }) return false
+    return points.indices.all { index ->
+        val coordinate = points[index]
+        coordinate >= -BED_GEOMETRY_TOLERANCE_MM &&
+            coordinate <= (if (index % 2 == 0) width else depth) + BED_GEOMETRY_TOLERANCE_MM
+    }
+}
+
 internal fun scaledBedPolygon(
     polygon: List<Float>,
     oldWidth: Float,
@@ -81,6 +101,24 @@ internal fun scaledBedPolygon(
         return rectangularBedPolygon(newWidth, newDepth)
     }
     return polygon.mapIndexed { index, coordinate ->
+        if (index % 2 == 0) coordinate * newWidth / oldWidth else coordinate * newDepth / oldDepth
+    }
+}
+
+internal fun scaledBedExcludeArea(
+    points: List<Float>,
+    oldWidth: Float,
+    oldDepth: Float,
+    newWidth: Float,
+    newDepth: Float,
+): List<Float> {
+    if (
+        !bedExcludeAreaIsValid(points, oldWidth, oldDepth) ||
+        newWidth <= 0f || newDepth <= 0f
+    ) {
+        return listOf(0f, 0f)
+    }
+    return points.mapIndexed { index, coordinate ->
         if (index % 2 == 0) coordinate * newWidth / oldWidth else coordinate * newDepth / oldDepth
     }
 }
@@ -97,6 +135,14 @@ internal fun machineBedPolygon(
     originX: Float,
     originY: Float,
 ): List<Float> = polygon.mapIndexed { index, coordinate ->
+    coordinate + if (index % 2 == 0) originX else originY
+}
+
+internal fun machineBedExcludeArea(
+    points: List<Float>,
+    originX: Float,
+    originY: Float,
+): List<Float> = points.mapIndexed { index, coordinate ->
     coordinate + if (index % 2 == 0) originX else originY
 }
 

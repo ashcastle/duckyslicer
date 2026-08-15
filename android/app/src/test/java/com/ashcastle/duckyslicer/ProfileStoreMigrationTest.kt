@@ -236,6 +236,7 @@ class ProfileStoreMigrationTest {
                     bedOriginX = -110f,
                     bedOriginY = -110f,
                     bedPolygon = polygon,
+                    bedExcludeArea = listOf(0f, 0f, 18f, 0f, 18f, 28f, 0f, 28f),
                     singleExtruderMultiMaterial = true,
                     extruderCount = 2,
                     auxiliaryFan = true,
@@ -251,8 +252,16 @@ class ProfileStoreMigrationTest {
             )
             val saved = ProfileStore(file).savePrinter("Delta bed", options)
             assertEquals(polygon, saved.bedPolygon)
+            assertEquals(
+                listOf(0f, 0f, 18f, 0f, 18f, 28f, 0f, 28f),
+                saved.bedExcludeArea,
+            )
             val restored = ProfileStore(file).load().printers.single { it.id == saved.id }
             assertEquals(polygon, restored.bedPolygon)
+            assertEquals(
+                listOf(0f, 0f, 18f, 0f, 18f, 28f, 0f, 28f),
+                restored.bedExcludeArea,
+            )
             assertEquals(-110f, restored.bedOriginX)
             assertEquals(-110f, restored.bedOriginY)
             assertTrue(restored.singleExtruderMultiMaterial)

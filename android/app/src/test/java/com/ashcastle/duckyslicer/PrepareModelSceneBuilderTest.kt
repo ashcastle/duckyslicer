@@ -41,6 +41,7 @@ class PrepareModelSceneBuilderTest {
             bedSizeX = 100f,
             bedSizeY = 80f,
             requestedBedPolygon = rectangularBedPolygon(100f, 80f),
+            requestedBedExcludeArea = listOf(0f, 0f, 18f, 0f, 18f, 28f, 0f, 28f),
         )
 
         assertEquals(1, scene.meshes.size)
@@ -62,5 +63,6 @@ class PrepareModelSceneBuilderTest {
         assertTrue(scene.bedFill.isNotEmpty())
         assertTrue(scene.bedGrid.isNotEmpty())
         assertEquals(4, scene.bedOutline.size / 3)
+        assertEquals(8, scene.bedExcludeOutline.size / 3)
     }
 }

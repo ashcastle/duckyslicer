@@ -194,6 +194,10 @@
     <string name="quality_fine_06">0.20 mm Fine</string>
     <string name="bed_width">Bed width</string>
     <string name="bed_depth">Bed depth</string>
+    <string name="bed_exclude_area">Unavailable bed area</string>
+    <string name="bed_exclude_area_example">0,0; 18,0; 18,28; 0,28</string>
+    <string name="bed_exclude_area_hint">Enter each corner as x,y and separate corners with semicolons. Leave blank when the whole bed is available.</string>
+    <string name="bed_exclude_area_invalid">Enter at least three corners that stay inside the bed.</string>
     <string name="max_print_height">Maximum height</string>
     <string name="build_volume_summary">Build volume · %1$d × %2$d × %3$d mm</string>
     <string name="build_volume">Build volume</string>

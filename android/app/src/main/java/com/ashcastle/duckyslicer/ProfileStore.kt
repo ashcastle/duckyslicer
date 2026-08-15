@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 75
+internal const val USER_PROFILE_SCHEMA_VERSION = 76
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -53,6 +53,7 @@ class ProfileStore private constructor(
             bedOriginX = options.bedOriginX,
             bedOriginY = options.bedOriginY,
             bedPolygon = options.bedPolygon,
+            bedExcludeArea = options.bedExcludeArea,
             maxPrintHeight = options.maxPrintHeight,
             nozzleDiameter = options.nozzleDiameter,
             minLayerHeight = options.printerProfile.minLayerHeight,
@@ -599,6 +600,7 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("bedSizeX", bedSizeX).put("bedSizeY", bedSizeY)
     .put("bedOriginX", bedOriginX).put("bedOriginY", bedOriginY)
     .put("bedPolygon", JSONArray(bedPolygon))
+    .put("bedExcludeArea", JSONArray(bedExcludeArea))
     .put("maxPrintHeight", maxPrintHeight).put("nozzleDiameter", nozzleDiameter)
     .put("minLayerHeight", minLayerHeight).put("maxLayerHeight", maxLayerHeight)
     .put("machineStartGcode", machineStartGcode).put("machineEndGcode", machineEndGcode)
@@ -1138,6 +1140,13 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         } else {
             rectangularBedPolygon(bedSizeX, bedSizeY)
         },
+        bedExcludeArea = if (has("bedExcludeArea")) {
+            requireNotNull(bedExcludeFloatList("bedExcludeArea")) {
+                "Invalid bed exclusion geometry"
+            }
+        } else {
+            listOf(0f, 0f)
+        },
         singleExtruderMultiMaterial = optBoolean("singleExtruderMultiMaterial"),
         coolingTubeRetraction = optDouble("coolingTubeRetraction", 91.5).toFloat(),
         coolingTubeLength = optDouble("coolingTubeLength", 5.0).toFloat(),
@@ -1632,6 +1641,17 @@ private fun JSONObject.floatList(key: String): List<Float>? = optJSONArray(key)?
     if (values.length() !in 6..512 || values.length() % 2 != 0) return null
     List(values.length()) { index -> values.getDouble(index).toFloat() }
 }
+
+private fun JSONObject.bedExcludeFloatList(key: String): List<Float>? =
+    optJSONArray(key)?.let { values ->
+        if (
+            values.length() > 512 || values.length() % 2 != 0 ||
+            values.length() !in setOf(0, 2) && values.length() < 6
+        ) {
+            return null
+        }
+        List(values.length()) { index -> values.getDouble(index).toFloat() }
+    }
 
 private fun JSONObject.extruderFloatList(key: String): List<Float>? = optJSONArray(key)?.let { values ->
     if (values.length() !in 1..MAX_FILAMENT_SLOTS) return null

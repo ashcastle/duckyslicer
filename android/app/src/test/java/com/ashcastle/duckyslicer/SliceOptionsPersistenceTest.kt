@@ -518,6 +518,7 @@ class SliceOptionsPersistenceTest {
         assertEquals(options.bedOriginX, restored.bedOriginX)
         assertEquals(options.bedOriginY, restored.bedOriginY)
         assertEquals(options.bedPolygon, restored.bedPolygon)
+        assertEquals(options.bedExcludeArea, restored.bedExcludeArea)
         assertEquals(73f, restored.extruderClearanceRadius)
         assertEquals(29f, restored.extruderClearanceHeightToRod)
         assertEquals(117f, restored.extruderClearanceHeightToLid)
@@ -1216,6 +1217,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         bedOriginX = -139f,
         bedOriginY = -141f,
         bedPolygon = listOf(139f, 0f, 278f, 141f, 139f, 282f, 0f, 141f),
+        bedExcludeArea = listOf(0f, 0f, 18f, 0f, 18f, 28f, 0f, 28f),
         maxPrintHeight = 290f,
         extruderClearanceRadius = 73f,
         extruderClearanceHeightToRod = 29f,

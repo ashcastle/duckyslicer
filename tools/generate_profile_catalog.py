@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 74
+SCHEMA_VERSION = 75
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -169,6 +169,36 @@ def point_values(value: Any) -> tuple[list[float], list[float]]:
     return [point[0] for point in points], [point[1] for point in points]
 
 
+def bed_exclude_geometry(
+    value: Any,
+    origin_x: float,
+    origin_y: float,
+    width: float,
+    depth: float,
+) -> list[float]:
+    xs, ys = point_values(value)
+    # Orca uses a single machine-space 0x0 point as the cross-profile sentinel
+    # for "no excluded area", including beds whose printable origin is offset.
+    if len(xs) == 1 and abs(xs[0]) <= 0.05 and abs(ys[0]) <= 0.05:
+        return [0.0, 0.0]
+    normalized = [
+        coordinate
+        for x, y in zip(xs, ys)
+        for coordinate in (x - origin_x, y - origin_y)
+    ]
+    if len(normalized) > 512 or len(normalized) % 2:
+        raise ValueError("oversized bed exclusion area")
+    if len(normalized) == 2:
+        raise ValueError("invalid bed exclusion point")
+    if len(normalized) < 6:
+        raise ValueError("invalid bed exclusion area")
+    for index, coordinate in enumerate(normalized):
+        maximum = width if index % 2 == 0 else depth
+        if not math.isfinite(coordinate) or coordinate < -0.05 or coordinate > maximum + 0.05:
+            raise ValueError("bed exclusion area lies outside the printable bounds")
+    return normalized
+
+
 def stable_id(kind: str, brand: str, name: str) -> str:
     digest = hashlib.sha256(f"{kind}\0{brand}\0{name}".encode()).hexdigest()[:20]
     return f"orca-{kind}-{digest}"
@@ -255,6 +285,9 @@ def printable_geometry(area: Any) -> tuple[float, float, float, float, list[floa
 def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     name = str(raw["name"])
     width, depth, bed_origin_x, bed_origin_y, bed_polygon = printable_geometry(raw.get("printable_area"))
+    bed_exclude_area = bed_exclude_geometry(
+        raw.get("bed_exclude_area"), bed_origin_x, bed_origin_y, width, depth
+    )
     height = number(raw.get("printable_height"), 0)
     nozzle = number(raw.get("nozzle_diameter"), 0)
     configured_min_layer_height = number(raw.get("min_layer_height"), 0)
@@ -295,6 +328,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "bedOriginX": bed_origin_x,
         "bedOriginY": bed_origin_y,
         "bedPolygon": bed_polygon,
+        "bedExcludeArea": bed_exclude_area,
         "maxPrintHeight": height,
         "nozzleDiameter": nozzle,
         "minLayerHeight": min_layer_height,

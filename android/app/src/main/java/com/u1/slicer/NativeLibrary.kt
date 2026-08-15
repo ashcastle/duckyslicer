@@ -23,6 +23,7 @@ class NativeLibrary(
     external fun nativeAutoOrientObject(objectIndex: Int): DoubleArray?
     external fun nativeAutoArrangeObjects(
         bedPolygon: FloatArray,
+        bedExcludeArea: FloatArray,
         minimumGap: Float,
     ): FloatArray?
     external fun nativeSplitObject(objectIndex: Int): IntArray?

@@ -652,6 +652,7 @@ internal fun WorkspaceScreen(
                     bedOriginX = sliceOptions.bedOriginX,
                     bedOriginY = sliceOptions.bedOriginY,
                     bedPolygon = sliceOptions.bedPolygon,
+                    bedExcludeArea = sliceOptions.bedExcludeArea,
                     toolpathOpacity = appSettings.toolpathOpacity,
                     toolpathDepthContrast = appSettings.toolpathDepthContrast,
                     visibleToolpathRoles = visibleToolpathRoles,
@@ -2915,6 +2916,7 @@ private fun BedScene(
     bedOriginX: Float,
     bedOriginY: Float,
     bedPolygon: List<Float>,
+    bedExcludeArea: List<Float>,
     toolpathOpacity: Float,
     toolpathDepthContrast: Float,
     visibleToolpathRoles: Set<Int>,
@@ -2972,6 +2974,7 @@ private fun BedScene(
             bedOriginX = bedOriginX,
             bedOriginY = bedOriginY,
             bedPolygon = bedPolygon,
+            bedExcludeArea = bedExcludeArea,
             opacity = toolpathOpacity,
             depthContrast = toolpathDepthContrast,
             visibleRoles = visibleToolpathRoles,
@@ -3175,6 +3178,7 @@ private fun BedScene(
                 bedSizeX = bedSizeX,
                 bedSizeY = bedSizeY,
                 bedPolygon = effectiveBedPolygon,
+                bedExcludeArea = bedExcludeArea,
                 yawDegrees = yaw,
                 pitchDegrees = pitch,
                 zoom = zoom,
@@ -3830,6 +3834,22 @@ private fun BedScene(
             color = if (preview == null) WorkspaceYellow.copy(alpha = 0.75f) else Color(0xFF9A9D94),
             style = Stroke(2.dp.toPx()),
         )
+        if (bedExcludeAreaIsValid(bedExcludeArea, bedSizeX, bedSizeY) && bedExcludeArea.size >= 6) {
+            val excluded = Path().apply {
+                val first = project(bedExcludeArea[0], bedExcludeArea[1])
+                moveTo(first.x, first.y)
+                for (index in 2 until bedExcludeArea.size step 2) {
+                    val point = project(bedExcludeArea[index], bedExcludeArea[index + 1])
+                    lineTo(point.x, point.y)
+                }
+                close()
+            }
+            drawPath(
+                excluded,
+                color = Color(0xFFF24038).copy(alpha = 0.95f),
+                style = Stroke(3.dp.toPx()),
+            )
+        }
 
         if (preview != null) {
             previewPaths.forEach { bandPaths -> bandPaths.forEach(Path::reset) }
