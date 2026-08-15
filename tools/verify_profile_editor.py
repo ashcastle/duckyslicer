@@ -74,6 +74,12 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
     ):
         if marker not in editor:
             raise VerificationError(f"separate profile and setting search is missing: {marker}")
+    for field in ("firstAngle", "secondAngle", "overhangAngle"):
+        marker = f"stringResource(R.string.degrees_value, settings.{field})"
+        if marker not in editor:
+            raise VerificationError(
+                f"lateral infill angle must keep the floating-point degrees format: {field}"
+            )
     if editor.count("ProfileChooserSheet(") < 4:
         raise VerificationError("printer, filament, and slicing editors need separate profile lists")
     if editor.count("SettingChoices(") < 20:
@@ -105,6 +111,13 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "R.string.bottom_surface_density",
         "R.string.infill_shift_step",
         "R.string.symmetric_infill_y_axis",
+        "R.string.infill_lateral_honeycomb",
+        "R.string.infill_lateral_lattice",
+        "R.string.lateral_lattice_angle_1",
+        "R.string.lateral_lattice_angle_2",
+        "R.string.infill_overhang_angle",
+        "LateralInfillGeometrySettings(",
+        "quality = options.quality.copy(lateralInfill = it)",
         "R.string.sparse_infill_rotation_template",
         "R.string.solid_infill_rotation_template",
         "RotationTemplateSetting(",
@@ -433,6 +446,11 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
             'name="bottom_surface_density"',
             'name="infill_shift_step"',
             'name="symmetric_infill_y_axis"',
+            'name="infill_lateral_honeycomb"',
+            'name="infill_lateral_lattice"',
+            'name="lateral_lattice_angle_1"',
+            'name="lateral_lattice_angle_2"',
+            'name="infill_overhang_angle"',
             'name="support_on_build_plate_only"',
             'name="enforce_support_layers"',
             'name="support_base_pattern_spacing"',

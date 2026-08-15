@@ -93,6 +93,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var topSurfaceDensity: Float = base.surfaceDensity.topPercent
     private var bottomSurfaceDensity: Float = base.surfaceDensity.bottomPercent
     private var fillPattern: String = base.fillPattern
+    private var lateralLatticeAngle1: Float = base.lateralInfill.firstAngle
+    private var lateralLatticeAngle2: Float = base.lateralInfill.secondAngle
+    private var infillOverhangAngle: Float = base.lateralInfill.overhangAngle
     private var topSurfacePattern: String = base.topSurfacePattern
     private var bottomSurfacePattern: String = base.bottomSurfacePattern
     private var internalSolidInfillPattern: String = base.internalSolidInfillPattern
@@ -423,6 +426,9 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         topSurfaceDensity = input.readFloat()
         bottomSurfaceDensity = input.readFloat()
         fillPattern = input.readCatalogString()
+        lateralLatticeAngle1 = input.readFloat()
+        lateralLatticeAngle2 = input.readFloat()
+        infillOverhangAngle = input.readFloat()
         topSurfacePattern = input.readCatalogString()
         bottomSurfacePattern = input.readCatalogString()
         internalSolidInfillPattern = input.readCatalogString()
@@ -792,6 +798,11 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             bottomPercent = bottomSurfaceDensity,
         ),
         fillPattern = fillPattern,
+        lateralInfill = LateralInfillSettings(
+            firstAngle = lateralLatticeAngle1,
+            secondAngle = lateralLatticeAngle2,
+            overhangAngle = infillOverhangAngle,
+        ),
         topSurfacePattern = topSurfacePattern,
         bottomSurfacePattern = bottomSurfacePattern,
         internalSolidInfillPattern = internalSolidInfillPattern,
@@ -1126,6 +1137,9 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("topSurfaceDensity", BINARY_FLOAT),
     BinaryField("bottomSurfaceDensity", BINARY_FLOAT),
     BinaryField("fillPattern", BINARY_STRING),
+    BinaryField("lateralLatticeAngle1", BINARY_FLOAT),
+    BinaryField("lateralLatticeAngle2", BINARY_FLOAT),
+    BinaryField("infillOverhangAngle", BINARY_FLOAT),
     BinaryField("topSurfacePattern", BINARY_STRING),
     BinaryField("bottomSurfacePattern", BINARY_STRING),
     BinaryField("internalSolidInfillPattern", BINARY_STRING),

@@ -3569,89 +3569,31 @@ private fun SlicingSettingsSheet(
                     entries = listOf(
                         "crosshatch", "grid", "rectilinear", "gyroid", "cubic",
                         "alignedrectilinear", "zigzag", "crosszag", "lockedzag",
-                        "triangles", "lightning",
+                        "triangles", "lightning", "lateral-honeycomb", "lateral-lattice",
                     ),
                     selected = options.fillPattern,
                     optionLabel = { fillPatternLabel(it) },
                     onSelected = { onOptionsChanged(options.copy(fillPattern = it)) },
                 )
+                if (
+                    options.fillPattern in setOf("lateral-honeycomb", "lateral-lattice") ||
+                    settingsQuery.isNotBlank()
+                ) {
+                    LateralInfillGeometrySettings(
+                        settings = options.quality.lateralInfill,
+                        onSettingsChanged = {
+                            onOptionsChanged(
+                                options.copy(
+                                    quality = options.quality.copy(lateralInfill = it),
+                                ),
+                            )
+                        },
+                    )
+                }
                 if (options.fillPattern == "lockedzag" || settingsQuery.isNotBlank()) {
-                    SettingsGroupTitle(stringResource(R.string.locked_zag_infill))
-                    SettingSlider(
-                        label = stringResource(R.string.skin_infill_density),
-                        valueText = stringResource(R.string.percent_value, options.quality.skinInfillDensity.roundToInt()),
-                        value = options.quality.skinInfillDensity,
-                        range = 0f..100f,
-                        steps = 99,
-                        onValueChange = {
-                            onOptionsChanged(options.copy(quality = options.quality.copy(skinInfillDensity = it.roundToInt().toFloat())))
-                        },
-                    )
-                    SettingSlider(
-                        label = stringResource(R.string.skeleton_infill_density),
-                        valueText = stringResource(R.string.percent_value, options.quality.skeletonInfillDensity.roundToInt()),
-                        value = options.quality.skeletonInfillDensity,
-                        range = 0f..100f,
-                        steps = 99,
-                        onValueChange = {
-                            onOptionsChanged(options.copy(quality = options.quality.copy(skeletonInfillDensity = it.roundToInt().toFloat())))
-                        },
-                    )
-                    SettingSlider(
-                        label = stringResource(R.string.skin_infill_depth),
-                        valueText = stringResource(R.string.millimeters_value_precise, options.quality.skinInfillDepth),
-                        value = options.quality.skinInfillDepth,
-                        range = 0f..100f,
-                        steps = 999,
-                        onValueChange = {
-                            onOptionsChanged(options.copy(quality = options.quality.copy(skinInfillDepth = (it * 10f).roundToInt() / 10f)))
-                        },
-                    )
-                    SettingSlider(
-                        label = stringResource(R.string.infill_lock_depth),
-                        valueText = stringResource(R.string.millimeters_value_precise, options.quality.infillLockDepth),
-                        value = options.quality.infillLockDepth,
-                        range = 0f..100f,
-                        steps = 999,
-                        onValueChange = {
-                            onOptionsChanged(options.copy(quality = options.quality.copy(infillLockDepth = (it * 10f).roundToInt() / 10f)))
-                        },
-                    )
-                    LengthOrPercentSetting(
-                        label = stringResource(R.string.skin_infill_line_width),
-                        value = options.quality.skinInfillLineWidth,
-                        percent = options.quality.skinInfillLineWidthPercent,
-                        maximumAbsolute = 10f,
-                        maximumPercent = 1_000f,
-                        onValueChange = { onOptionsChanged(options.copy(quality = options.quality.copy(skinInfillLineWidth = it))) },
-                        onPercentChange = { selectedPercent, adjustedValue ->
-                            onOptionsChanged(
-                                options.copy(
-                                    quality = options.quality.copy(
-                                        skinInfillLineWidth = adjustedValue,
-                                        skinInfillLineWidthPercent = selectedPercent,
-                                    ),
-                                ),
-                            )
-                        },
-                    )
-                    LengthOrPercentSetting(
-                        label = stringResource(R.string.skeleton_infill_line_width),
-                        value = options.quality.skeletonInfillLineWidth,
-                        percent = options.quality.skeletonInfillLineWidthPercent,
-                        maximumAbsolute = 10f,
-                        maximumPercent = 1_000f,
-                        onValueChange = { onOptionsChanged(options.copy(quality = options.quality.copy(skeletonInfillLineWidth = it))) },
-                        onPercentChange = { selectedPercent, adjustedValue ->
-                            onOptionsChanged(
-                                options.copy(
-                                    quality = options.quality.copy(
-                                        skeletonInfillLineWidth = adjustedValue,
-                                        skeletonInfillLineWidthPercent = selectedPercent,
-                                    ),
-                                ),
-                            )
-                        },
+                    LockedZagInfillSettings(
+                        quality = options.quality,
+                        onQualityChanged = { onOptionsChanged(options.copy(quality = it)) },
                     )
                 }
                 if (options.fillPattern in setOf("crosszag", "lockedzag") || settingsQuery.isNotBlank()) {
@@ -7088,9 +7030,125 @@ private fun <T> CompactChoices(
 }
 
 @Composable
+private fun LockedZagInfillSettings(
+    quality: QualityProfile,
+    onQualityChanged: (QualityProfile) -> Unit,
+) {
+    SettingsGroupTitle(stringResource(R.string.locked_zag_infill))
+    SettingSlider(
+        label = stringResource(R.string.skin_infill_density),
+        valueText = stringResource(R.string.percent_value, quality.skinInfillDensity.roundToInt()),
+        value = quality.skinInfillDensity,
+        range = 0f..100f,
+        steps = 99,
+        onValueChange = { onQualityChanged(quality.copy(skinInfillDensity = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.skeleton_infill_density),
+        valueText = stringResource(R.string.percent_value, quality.skeletonInfillDensity.roundToInt()),
+        value = quality.skeletonInfillDensity,
+        range = 0f..100f,
+        steps = 99,
+        onValueChange = { onQualityChanged(quality.copy(skeletonInfillDensity = it.roundToInt().toFloat())) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.skin_infill_depth),
+        valueText = stringResource(R.string.millimeters_value_precise, quality.skinInfillDepth),
+        value = quality.skinInfillDepth,
+        range = 0f..100f,
+        steps = 999,
+        onValueChange = {
+            onQualityChanged(quality.copy(skinInfillDepth = (it * 10f).roundToInt() / 10f))
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.infill_lock_depth),
+        valueText = stringResource(R.string.millimeters_value_precise, quality.infillLockDepth),
+        value = quality.infillLockDepth,
+        range = 0f..100f,
+        steps = 999,
+        onValueChange = {
+            onQualityChanged(quality.copy(infillLockDepth = (it * 10f).roundToInt() / 10f))
+        },
+    )
+    LengthOrPercentSetting(
+        label = stringResource(R.string.skin_infill_line_width),
+        value = quality.skinInfillLineWidth,
+        percent = quality.skinInfillLineWidthPercent,
+        maximumAbsolute = 10f,
+        maximumPercent = 1_000f,
+        onValueChange = { onQualityChanged(quality.copy(skinInfillLineWidth = it)) },
+        onPercentChange = { selectedPercent, adjustedValue ->
+            onQualityChanged(
+                quality.copy(
+                    skinInfillLineWidth = adjustedValue,
+                    skinInfillLineWidthPercent = selectedPercent,
+                ),
+            )
+        },
+    )
+    LengthOrPercentSetting(
+        label = stringResource(R.string.skeleton_infill_line_width),
+        value = quality.skeletonInfillLineWidth,
+        percent = quality.skeletonInfillLineWidthPercent,
+        maximumAbsolute = 10f,
+        maximumPercent = 1_000f,
+        onValueChange = { onQualityChanged(quality.copy(skeletonInfillLineWidth = it)) },
+        onPercentChange = { selectedPercent, adjustedValue ->
+            onQualityChanged(
+                quality.copy(
+                    skeletonInfillLineWidth = adjustedValue,
+                    skeletonInfillLineWidthPercent = selectedPercent,
+                ),
+            )
+        },
+    )
+}
+
+@Composable
+private fun LateralInfillGeometrySettings(
+    settings: LateralInfillSettings,
+    onSettingsChanged: (LateralInfillSettings) -> Unit,
+) {
+    SettingsGroupTitle(stringResource(R.string.lateral_infill_geometry))
+    SettingSlider(
+        label = stringResource(R.string.lateral_lattice_angle_1),
+        valueText = stringResource(R.string.degrees_value, settings.firstAngle),
+        value = settings.firstAngle,
+        range = -75f..75f,
+        steps = 149,
+        onValueChange = {
+            onSettingsChanged(settings.copy(firstAngle = it.roundToInt().toFloat()))
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.lateral_lattice_angle_2),
+        valueText = stringResource(R.string.degrees_value, settings.secondAngle),
+        value = settings.secondAngle,
+        range = -75f..75f,
+        steps = 149,
+        onValueChange = {
+            onSettingsChanged(settings.copy(secondAngle = it.roundToInt().toFloat()))
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.infill_overhang_angle),
+        valueText = stringResource(R.string.degrees_value, settings.overhangAngle),
+        value = settings.overhangAngle,
+        range = 15f..75f,
+        steps = 59,
+        onValueChange = {
+            onSettingsChanged(settings.copy(overhangAngle = it.roundToInt().toFloat()))
+        },
+    )
+}
+
+@Composable
 private fun fillPatternLabel(value: String): String = when (value) {
     "grid" -> stringResource(R.string.infill_grid)
     "honeycomb" -> stringResource(R.string.infill_honeycomb)
+    "lateral-honeycomb" -> stringResource(R.string.infill_lateral_honeycomb)
+    "lateral-lattice" -> stringResource(R.string.infill_lateral_lattice)
     "rectilinear" -> stringResource(R.string.infill_rectilinear)
     "alignedrectilinear" -> stringResource(R.string.infill_aligned_rectilinear)
     "zigzag" -> stringResource(R.string.infill_zig_zag)

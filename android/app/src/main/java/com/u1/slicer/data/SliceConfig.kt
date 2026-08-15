@@ -334,6 +334,9 @@ data class SliceConfig(
     @JvmField var symmetricInfillYAxis: Boolean = false
     @JvmField var sparseInfillRotationTemplate: String = ""
     @JvmField var solidInfillRotationTemplate: String = ""
+    @JvmField var lateralLatticeAngle1: Float = -45f
+    @JvmField var lateralLatticeAngle2: Float = 45f
+    @JvmField var infillOverhangAngle: Float = 60f
     @JvmField var slicingMode: String = "regular"
     @JvmField var sliceClosingRadius: Float = 0.049f
     @JvmField var preciseZHeight: Boolean = false

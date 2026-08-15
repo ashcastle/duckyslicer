@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 77
+internal const val USER_PROFILE_SCHEMA_VERSION = 78
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -360,6 +360,7 @@ class ProfileStore private constructor(
             bottomShellThickness = options.bottomShellThickness,
             surfaceDensity = options.quality.surfaceDensity,
             fillPattern = options.fillPattern,
+            lateralInfill = options.quality.lateralInfill,
             topSurfacePattern = options.topSurfacePattern,
             bottomSurfacePattern = options.bottomSurfacePattern,
             internalSolidInfillPattern = options.internalSolidInfillPattern,
@@ -829,6 +830,9 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("topSurfaceDensity", surfaceDensity.topPercent)
     .put("bottomSurfaceDensity", surfaceDensity.bottomPercent)
     .put("fillPattern", fillPattern)
+    .put("lateralLatticeAngle1", lateralInfill.firstAngle)
+    .put("lateralLatticeAngle2", lateralInfill.secondAngle)
+    .put("infillOverhangAngle", lateralInfill.overhangAngle)
     .put("topSurfacePattern", topSurfacePattern)
     .put("bottomSurfacePattern", bottomSurfacePattern)
     .put("internalSolidInfillPattern", internalSolidInfillPattern)
@@ -1350,6 +1354,11 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
             bottomPercent = optDouble("bottomSurfaceDensity", 100.0).toFloat(),
         ),
         fillPattern = optString("fillPattern", "gyroid"),
+        lateralInfill = LateralInfillSettings(
+            firstAngle = optDouble("lateralLatticeAngle1", -45.0).toFloat(),
+            secondAngle = optDouble("lateralLatticeAngle2", 45.0).toFloat(),
+            overhangAngle = optDouble("infillOverhangAngle", 60.0).toFloat(),
+        ),
         topSurfacePattern = optString("topSurfacePattern", "monotonicline"),
         bottomSurfacePattern = optString("bottomSurfacePattern", "monotonic"),
         internalSolidInfillPattern = optString("internalSolidInfillPattern", "monotonic"),

@@ -678,6 +678,12 @@ data class SurfaceDensitySettings(
     val bottomPercent: Float = 100f,
 )
 
+data class LateralInfillSettings(
+    val firstAngle: Float = -45f,
+    val secondAngle: Float = 45f,
+    val overhangAngle: Float = 60f,
+)
+
 data class ExtrusionRateSmoothingSettings(
     val maximumSlope: Float = 0f,
     val segmentLength: Float = 3f,
@@ -876,6 +882,7 @@ data class QualityProfile(
     val bottomShellThickness: Float = 0f,
     val surfaceDensity: SurfaceDensitySettings = SurfaceDensitySettings(),
     val fillPattern: String = "gyroid",
+    val lateralInfill: LateralInfillSettings = LateralInfillSettings(),
     val topSurfacePattern: String = "monotonicline",
     val bottomSurfacePattern: String = "monotonic",
     val internalSolidInfillPattern: String = "monotonic",
@@ -2040,6 +2047,9 @@ data class SliceOptions(
             filamentDensities = nativeFilaments.map(FilamentProfile::density).toFloatArray(),
             filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
+            native.lateralLatticeAngle1 = quality.lateralInfill.firstAngle
+            native.lateralLatticeAngle2 = quality.lateralInfill.secondAngle
+            native.infillOverhangAngle = quality.lateralInfill.overhangAngle
             native.enforceSupportLayers = supportCoverage.enforcedLayers
             native.beforeLayerChangeGcode = printerProfile.beforeLayerChangeGcode
             native.layerChangeGcode = printerProfile.layerChangeGcode

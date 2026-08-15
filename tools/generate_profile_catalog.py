@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 76
+SCHEMA_VERSION = 77
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -1000,6 +1000,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "topSurfaceDensity": number(raw.get("top_surface_density"), 100),
         "bottomSurfaceDensity": number(raw.get("bottom_surface_density"), 100),
         "fillPattern": infill_pattern(raw.get("sparse_infill_pattern"), "gyroid"),
+        "lateralLatticeAngle1": number(raw.get("lateral_lattice_angle_1"), -45),
+        "lateralLatticeAngle2": number(raw.get("lateral_lattice_angle_2"), 45),
+        "infillOverhangAngle": number(raw.get("infill_overhang_angle"), 60),
         "topSurfacePattern": infill_pattern(raw.get("top_surface_pattern"), "monotonicline"),
         "bottomSurfacePattern": infill_pattern(raw.get("bottom_surface_pattern"), "monotonic"),
         "internalSolidInfillPattern": infill_pattern(raw.get("internal_solid_infill_pattern"), "monotonic"),
@@ -1400,6 +1403,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
             1_000 if profile["infillCombinationMaxLayerHeightPercent"] else 10
         )
         and all(0 <= profile[key] <= 360 for key in ["infillDirection", "solidInfillDirection"])
+        and -75 <= profile["lateralLatticeAngle1"] <= 75
+        and -75 <= profile["lateralLatticeAngle2"] <= 75
+        and 15 <= profile["infillOverhangAngle"] <= 75
         and 0 <= profile["minimumSparseInfillArea"] <= 1_000_000
         and 0 <= profile["filterOutGapFill"] <= 1_000_000
         and 0 <= profile["maxTravelDetourDistance"] <= 1_000

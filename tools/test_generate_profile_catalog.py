@@ -263,6 +263,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "layer_height": "0.2",
                 "initial_layer_print_height": "0.2",
                 "sparse_infill_pattern": "lockedzag",
+                "lateral_lattice_angle_1": "-32",
+                "lateral_lattice_angle_2": "57",
+                "infill_overhang_angle": "68",
                 "skeleton_infill_density": "31%",
                 "skin_infill_density": "47%",
                 "skin_infill_depth": "3.5",
@@ -276,6 +279,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         )
 
         self.assertEqual("lockedzag", profile["fillPattern"])
+        self.assertEqual(-32.0, profile["lateralLatticeAngle1"])
+        self.assertEqual(57.0, profile["lateralLatticeAngle2"])
+        self.assertEqual(68.0, profile["infillOverhangAngle"])
         self.assertEqual(31.0, profile["skeletonInfillDensity"])
         self.assertEqual(47.0, profile["skinInfillDensity"])
         self.assertEqual(3.5, profile["skinInfillDepth"])

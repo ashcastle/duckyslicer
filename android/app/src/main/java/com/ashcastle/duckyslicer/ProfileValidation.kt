@@ -299,6 +299,9 @@ internal object ProfileValidation {
             profile.infillShiftStep in 0f..10f &&
             lineWidthIsValid(profile.skinInfillLineWidth, profile.skinInfillLineWidthPercent) &&
             lineWidthIsValid(profile.skeletonInfillLineWidth, profile.skeletonInfillLineWidthPercent) &&
+            profile.lateralInfill.firstAngle in -75f..75f &&
+            profile.lateralInfill.secondAngle in -75f..75f &&
+            profile.lateralInfill.overhangAngle in 15f..75f &&
             profile.gapFillTarget in setOf("everywhere", "topbottom", "nowhere") &&
             profile.filterOutGapFill in 0f..1_000_000f &&
             profile.supportType in setOf(

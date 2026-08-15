@@ -356,6 +356,79 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun lateralInfillAnglesChangeRealSparseInfillGeometry() {
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.U1_04)
+            .selectFilament(FilamentProfile.PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                fillPattern = "lateral-lattice",
+                fillDensity = 0.28f,
+                topSolidLayers = 2,
+                bottomSolidLayers = 2,
+                perimeters = 2,
+            )
+
+        fun slice(pattern: String, settings: LateralInfillSettings): SliceOutcome =
+            OnDeviceSlicer.slice(
+                fixtureModel(),
+                base.copy(
+                    fillPattern = pattern,
+                    quality = base.quality.copy(lateralInfill = settings),
+                ),
+            )
+
+        fun sparseInfillMotion(gcode: String): List<String> {
+            var sparseInfill = false
+            return gcode.lineSequence().mapNotNull { line ->
+                if (line.startsWith(";TYPE:")) sparseInfill = line == ";TYPE:Sparse infill"
+                line.substringBefore(';').trimEnd().takeIf {
+                    sparseInfill && it.startsWith("G1 ") && it.contains(" E") &&
+                        (it.contains(" X") || it.contains(" Y"))
+                }
+            }.toList()
+        }
+
+        val defaults = slice("lateral-lattice", LateralInfillSettings())
+        val angled = slice("lateral-lattice", LateralInfillSettings(-20f, 70f, 35f))
+        val honeycomb = slice("lateral-honeycomb", LateralInfillSettings(-20f, 70f, 35f))
+        try {
+            val defaultsGcode = defaults.output.readText()
+            val angledGcode = angled.output.readText()
+            val honeycombGcode = honeycomb.output.readText()
+            val defaultsMotion = sparseInfillMotion(defaultsGcode)
+            val angledMotion = sparseInfillMotion(angledGcode)
+            val honeycombMotion = sparseInfillMotion(honeycombGcode)
+
+            assertTrue(defaultsGcode.contains("; sparse_infill_pattern = lateral-lattice"))
+            assertTrue(defaultsGcode.contains("; lateral_lattice_angle_1 = -45"))
+            assertTrue(defaultsGcode.contains("; lateral_lattice_angle_2 = 45"))
+            assertTrue(defaultsGcode.contains("; infill_overhang_angle = 60"))
+            assertTrue(angledGcode.contains("; lateral_lattice_angle_1 = -20"))
+            assertTrue(angledGcode.contains("; lateral_lattice_angle_2 = 70"))
+            assertTrue(angledGcode.contains("; infill_overhang_angle = 35"))
+            assertTrue(honeycombGcode.contains("; sparse_infill_pattern = lateral-honeycomb"))
+            assertTrue("Lateral Lattice must generate sparse infill", defaultsMotion.isNotEmpty())
+            assertTrue("Angled Lateral Lattice must generate sparse infill", angledMotion.isNotEmpty())
+            assertTrue("Lateral Honeycomb must generate sparse infill", honeycombMotion.isNotEmpty())
+            assertNotEquals(
+                "Lateral infill angles must change extrusion geometry, not only metadata",
+                defaultsMotion,
+                angledMotion,
+            )
+            assertNotEquals(
+                "Lateral Honeycomb and Lattice must remain distinct compiled patterns",
+                angledMotion,
+                honeycombMotion,
+            )
+        } finally {
+            defaults.output.delete()
+            angled.output.delete()
+            honeycomb.output.delete()
+        }
+    }
+
+    @Test
     fun printableOverhangsChangeRealModelGeometry() {
         val baseOptions = SliceOptions()
             .selectQuality(QualityProfile.DRAFT)
@@ -2202,7 +2275,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(76, catalog.schemaVersion)
+        assertEquals(77, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -4636,6 +4709,7 @@ class NativeEngineInstrumentedTest {
                 infillAnchorMaxPercent = false,
                 quality = QualityProfile.DRAFT_06.copy(
                     surfaceDensity = SurfaceDensitySettings(topPercent = 42f, bottomPercent = 68f),
+                    lateralInfill = LateralInfillSettings(-32f, 57f, 68f),
                     skeletonInfillDensity = 31f,
                     skinInfillDensity = 47f,
                     skinInfillDepth = 3.5f,
@@ -4903,6 +4977,9 @@ class NativeEngineInstrumentedTest {
         assertTrue("Combined infill height must preserve absolute units", gcode.contains("; infill_combination_max_layer_height = 0.48"))
         assertTrue("Sparse infill direction must reach Orca", gcode.contains("; infill_direction = 37"))
         assertTrue("Solid infill direction must reach Orca", gcode.contains("; solid_infill_direction = 123"))
+        assertTrue("First lateral lattice angle must reach Orca", gcode.contains("; lateral_lattice_angle_1 = -32"))
+        assertTrue("Second lateral lattice angle must reach Orca", gcode.contains("; lateral_lattice_angle_2 = 57"))
+        assertTrue("Infill overhang angle must reach Orca", gcode.contains("; infill_overhang_angle = 68"))
         assertTrue("Model-relative infill must reach Orca", gcode.contains("; align_infill_direction_to_model = 1"))
         assertTrue("Sparse-area threshold must reach Orca", gcode.contains("; minimum_sparse_infill_area = 42"))
         assertTrue("Infill anchor must preserve percent units", gcode.contains("; infill_anchor = 321%"))

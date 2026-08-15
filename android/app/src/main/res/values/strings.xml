@@ -374,6 +374,12 @@
     <string name="infill_gyroid">Gyroid</string>
     <string name="infill_grid">Grid</string>
     <string name="infill_honeycomb">Honeycomb</string>
+    <string name="infill_lateral_honeycomb">Lateral Honeycomb</string>
+    <string name="infill_lateral_lattice">Lateral Lattice</string>
+    <string name="lateral_infill_geometry">Lateral infill geometry</string>
+    <string name="lateral_lattice_angle_1">First lattice angle</string>
+    <string name="lateral_lattice_angle_2">Second lattice angle</string>
+    <string name="infill_overhang_angle">Infill overhang angle</string>
     <string name="infill_rectilinear">Rectilinear</string>
     <string name="infill_aligned_rectilinear">Aligned rectilinear</string>
     <string name="infill_locked_zag">Locked Zig Zag</string>

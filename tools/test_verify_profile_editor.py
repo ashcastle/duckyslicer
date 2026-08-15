@@ -49,6 +49,13 @@ def valid_sources() -> dict[str, str]:
             " R.string.brim_ear_maximum_angle R.string.brim_ear_detection_radius"
             " R.string.top_surface_density R.string.bottom_surface_density"
             " R.string.infill_shift_step R.string.symmetric_infill_y_axis"
+            " R.string.infill_lateral_honeycomb R.string.infill_lateral_lattice"
+            " R.string.lateral_lattice_angle_1 R.string.lateral_lattice_angle_2"
+            " R.string.infill_overhang_angle LateralInfillGeometrySettings("
+            " quality = options.quality.copy(lateralInfill = it)"
+            " stringResource(R.string.degrees_value, settings.firstAngle)"
+            " stringResource(R.string.degrees_value, settings.secondAngle)"
+            " stringResource(R.string.degrees_value, settings.overhangAngle)"
             " R.string.sparse_infill_rotation_template R.string.solid_infill_rotation_template"
             " RotationTemplateSetting("
             " infillShiftStep = (it * 10f) symmetricInfillYAxis = it"
@@ -209,6 +216,9 @@ def valid_sources() -> dict[str, str]:
             ' name="brim_ear_maximum_angle" name="brim_ear_detection_radius"'
             ' name="top_surface_density" name="bottom_surface_density"'
             ' name="infill_shift_step" name="symmetric_infill_y_axis"'
+            ' name="infill_lateral_honeycomb" name="infill_lateral_lattice"'
+            ' name="lateral_lattice_angle_1" name="lateral_lattice_angle_2"'
+            ' name="infill_overhang_angle"'
             ' name="support_on_build_plate_only" name="enforce_support_layers"'
             ' name="support_base_pattern_spacing"'
             ' name="support_expansion" name="support_interface_loop_pattern"'
@@ -263,6 +273,9 @@ def valid_sources() -> dict[str, str]:
             ' name="brim_ear_maximum_angle" name="brim_ear_detection_radius"'
             ' name="top_surface_density" name="bottom_surface_density"'
             ' name="infill_shift_step" name="symmetric_infill_y_axis"'
+            ' name="infill_lateral_honeycomb" name="infill_lateral_lattice"'
+            ' name="lateral_lattice_angle_1" name="lateral_lattice_angle_2"'
+            ' name="infill_overhang_angle"'
             ' name="support_on_build_plate_only" name="enforce_support_layers"'
             ' name="support_base_pattern_spacing"'
             ' name="support_expansion" name="support_interface_loop_pattern"'
@@ -319,6 +332,15 @@ class VerifyProfileEditorTest(unittest.TestCase):
             "SecondaryScrollableTabRow(", "Row("
         )
         with self.assertRaisesRegex(VerificationError, "SecondaryScrollableTabRow"):
+            verify_profile_editor(sources)
+
+    def test_rejects_integer_argument_for_floating_point_degree_format(self) -> None:
+        sources = valid_sources()
+        sources["ProfileSettingsSheet.kt"] = sources["ProfileSettingsSheet.kt"].replace(
+            "stringResource(R.string.degrees_value, settings.firstAngle)",
+            "stringResource(R.string.degrees_value, settings.firstAngle.roundToInt())",
+        )
+        with self.assertRaisesRegex(VerificationError, "floating-point degrees format"):
             verify_profile_editor(sources)
 
     def test_rejects_missing_korean_title(self) -> None:

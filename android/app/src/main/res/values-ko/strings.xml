@@ -374,6 +374,12 @@
     <string name="infill_gyroid">자이로이드</string>
     <string name="infill_grid">그리드</string>
     <string name="infill_honeycomb">허니컴</string>
+    <string name="infill_lateral_honeycomb">수직 허니컴</string>
+    <string name="infill_lateral_lattice">수직 격자</string>
+    <string name="lateral_infill_geometry">수직 인필 형상</string>
+    <string name="lateral_lattice_angle_1">첫 번째 격자 각도</string>
+    <string name="lateral_lattice_angle_2">두 번째 격자 각도</string>
+    <string name="infill_overhang_angle">인필 오버행 각도</string>
     <string name="infill_rectilinear">직선</string>
     <string name="infill_aligned_rectilinear">정렬 직선</string>
     <string name="infill_locked_zag">잠금 지그재그</string>

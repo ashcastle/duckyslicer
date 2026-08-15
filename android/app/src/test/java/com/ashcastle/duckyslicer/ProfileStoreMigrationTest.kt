@@ -194,6 +194,7 @@ class ProfileStoreMigrationTest {
             assertEquals(0f, restoredSlicing.multiMaterial.segmentedRegionMaxWidth)
             assertEquals(0f, restoredSlicing.multiMaterial.segmentedRegionInterlockingDepth)
             assertEquals(0, restoredSlicing.supportCoverage.enforcedLayers)
+            assertEquals(LateralInfillSettings(), restoredSlicing.lateralInfill)
         } finally {
             file.delete()
         }
@@ -351,6 +352,7 @@ class ProfileStoreMigrationTest {
                 gcodeSettings = GcodeSettings(verboseComments = true),
                 quality = QualityProfile.STANDARD.copy(
                     surfaceDensity = SurfaceDensitySettings(topPercent = 42f, bottomPercent = 68f),
+                    lateralInfill = LateralInfillSettings(-32f, 57f, 68f),
                     skeletonInfillDensity = 31f,
                     skinInfillDensity = 47f,
                     skinInfillDepth = 3.5f,
@@ -383,6 +385,7 @@ class ProfileStoreMigrationTest {
             assertEquals(true, restored.gcodeSettings.verboseComments)
             assertEquals(42f, restored.surfaceDensity.topPercent)
             assertEquals(68f, restored.surfaceDensity.bottomPercent)
+            assertEquals(LateralInfillSettings(-32f, 57f, 68f), restored.lateralInfill)
             assertEquals(1.7f, restored.infillShiftStep)
             assertEquals(true, restored.symmetricInfillYAxis)
             assertEquals("0,60,120", restored.sparseInfillRotationTemplate)
