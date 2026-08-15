@@ -362,6 +362,15 @@ internal val BUILD_PLATE_TYPES = listOf(
     BuildPlateType.GRAPHIC_EFFECT,
 )
 
+data class AdaptivePressureAdvanceSettings(
+    val enabled: Boolean = false,
+    val model: String = DEFAULT_ADAPTIVE_PRESSURE_ADVANCE_MODEL,
+    val overhangs: Boolean = false,
+    val bridge: Float = 0f,
+)
+
+internal const val DEFAULT_ADAPTIVE_PRESSURE_ADVANCE_MODEL = "0,0,0\n0,0,0"
+
 data class FilamentProfile(
     val id: String,
     val name: String,
@@ -421,6 +430,8 @@ data class FilamentProfile(
     val fullFanSpeedLayer: Int = 3,
     val pressureAdvanceEnabled: Boolean = false,
     val pressureAdvance: Float = 0f,
+    val adaptivePressureAdvance: AdaptivePressureAdvanceSettings =
+        AdaptivePressureAdvanceSettings(),
     val compatiblePrinters: List<String> = emptyList(),
     val diameter: Float = 1.75f,
     val density: Float = 1.24f,
@@ -1240,7 +1251,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 90,
+    val schemaVersion: Int = 91,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -2015,6 +2026,9 @@ data class SliceOptions(
                 )
             }
         }
+        require(nativeFilaments.all(ProfileValidation::filament)) {
+            "Filament profile contains unsafe values"
+        }
         require(nativeFilaments.all { it.hasCompatibleDiameter(nativeFilaments.first()) }) {
             "Filament slots must use the same diameter"
         }
@@ -2294,6 +2308,18 @@ data class SliceOptions(
             native.disableM73 = printerProfile.disableM73
             native.filamentIdleTemperatures = nativeFilaments
                 .map(FilamentProfile::idleTemperature).toIntArray()
+            native.filamentAdaptivePressureAdvance = nativeFilaments
+                .map { if (it.adaptivePressureAdvance.enabled) 1 else 0 }
+                .toIntArray()
+            native.filamentAdaptivePressureAdvanceModels = nativeFilaments
+                .map { it.adaptivePressureAdvance.model }
+                .toTypedArray()
+            native.filamentAdaptivePressureAdvanceOverhangs = nativeFilaments
+                .map { if (it.adaptivePressureAdvance.overhangs) 1 else 0 }
+                .toIntArray()
+            native.filamentAdaptivePressureAdvanceBridges = nativeFilaments
+                .map { it.adaptivePressureAdvance.bridge }
+                .toFloatArray()
             native.bedExcludeArea = bedExcludeArea.toFloatArray()
             native.machineLoadFilamentTime = printerProfile.machineLoadFilamentTime
             native.machineUnloadFilamentTime = printerProfile.machineUnloadFilamentTime

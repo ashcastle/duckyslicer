@@ -324,6 +324,12 @@
     <string name="full_fan_layer">최대 팬 시작 레이어</string>
     <string name="pressure_advance">Pressure advance</string>
     <string name="pressure_advance_value">Pressure advance 값</string>
+    <string name="adaptive_pressure_advance">적응형 Pressure advance</string>
+    <string name="adaptive_pressure_advance_model">보정 측정값</string>
+    <string name="adaptive_pressure_advance_model_hint">각 줄에 Pressure advance, 유량, 가속도를 입력하세요.</string>
+    <string name="adaptive_pressure_advance_model_invalid">가속도별로 증가하는 유량 측정값을 두 개 이상 입력하세요.</string>
+    <string name="adaptive_pressure_advance_overhangs">오버행 내부에서도 조정</string>
+    <string name="adaptive_pressure_advance_bridge">브리지 Pressure advance</string>
     <string name="layer_height">레이어 높이</string>
     <string name="first_layer_height">첫 레이어 높이</string>
     <string name="walls">벽</string>

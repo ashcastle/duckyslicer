@@ -324,6 +324,12 @@
     <string name="full_fan_layer">Full fan at layer</string>
     <string name="pressure_advance">Pressure advance</string>
     <string name="pressure_advance_value">Pressure advance value</string>
+    <string name="adaptive_pressure_advance">Adaptive pressure advance</string>
+    <string name="adaptive_pressure_advance_model">Calibration measurements</string>
+    <string name="adaptive_pressure_advance_model_hint">One row per measurement: pressure advance, flow, acceleration.</string>
+    <string name="adaptive_pressure_advance_model_invalid">Add at least two increasing flow measurements for each acceleration.</string>
+    <string name="adaptive_pressure_advance_overhangs">Adjust within overhangs</string>
+    <string name="adaptive_pressure_advance_bridge">Bridge pressure advance</string>
     <string name="layer_height">Layer height</string>
     <string name="first_layer_height">First layer height</string>
     <string name="walls">Walls</string>

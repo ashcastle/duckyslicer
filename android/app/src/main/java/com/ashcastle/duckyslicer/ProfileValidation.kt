@@ -183,6 +183,12 @@ internal object ProfileValidation {
             profile.closeFanFirstLayers in 0..10_000 &&
             profile.fullFanSpeedLayer in 0..10_000 &&
             profile.pressureAdvance in 0f..10f &&
+            profile.adaptivePressureAdvance.bridge in 0f..2f &&
+            profile.adaptivePressureAdvance.model.toByteArray(Charsets.UTF_8).size <=
+                MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_BYTES &&
+            (!profile.adaptivePressureAdvance.enabled ||
+                (profile.pressureAdvanceEnabled &&
+                    adaptivePressureAdvanceModelIsValid(profile.adaptivePressureAdvance.model))) &&
             profile.filamentStartGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
             profile.filamentEndGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
             profile.compatiblePrinters.isSafeCompatibilityList()
@@ -591,6 +597,36 @@ internal fun smallAreaFlowCompensationModelIsValid(value: String): Boolean {
     return kotlin.math.abs(finalFactor - 1.0) <= 1e-6
 }
 
+internal fun adaptivePressureAdvanceModelIsValid(value: String): Boolean {
+    if (value.toByteArray(Charsets.UTF_8).size > MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_BYTES) {
+        return false
+    }
+    val points = value.split('\n')
+        .map(String::trim)
+        .filter(String::isNotEmpty)
+    if (points.size !in 2..MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_POINTS) return false
+
+    val flowByAcceleration = mutableMapOf<Double, Pair<Int, Double>>()
+    for (point in points) {
+        val coordinates = point.split(',').map(String::trim)
+        if (coordinates.size != 3) return false
+        val pressureAdvance = coordinates[0].toDoubleOrNull() ?: return false
+        val flow = coordinates[1].toDoubleOrNull() ?: return false
+        val acceleration = coordinates[2].toDoubleOrNull() ?: return false
+        if (
+            !pressureAdvance.isFinite() || pressureAdvance !in 0.0..2.0 ||
+            !flow.isFinite() || flow !in 0.001..1_000.0 ||
+            !acceleration.isFinite() || acceleration !in 1.0..1_000_000.0
+        ) {
+            return false
+        }
+        val previous = flowByAcceleration[acceleration]
+        if (previous != null && flow <= previous.second) return false
+        flowByAcceleration[acceleration] = (previous?.first ?: 0) + 1 to flow
+    }
+    return flowByAcceleration.isNotEmpty() && flowByAcceleration.values.all { it.first >= 2 }
+}
+
 internal fun filenameFormatIsValid(value: String): Boolean =
     value.isNotBlank() &&
         value.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_FILENAME_FORMAT_BYTES &&
@@ -598,4 +634,6 @@ internal fun filenameFormatIsValid(value: String): Boolean =
 
 internal const val MAX_GCODE_FILENAME_FORMAT_BYTES = 1_024
 internal const val MAX_SMALL_AREA_FLOW_MODEL_BYTES = 16_384
+internal const val MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_BYTES = 16_384
 private const val MAX_SMALL_AREA_FLOW_MODEL_POINTS = 256
+private const val MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_POINTS = 256

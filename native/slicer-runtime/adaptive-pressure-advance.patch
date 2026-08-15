@@ -1,0 +1,222 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -576,6 +576,10 @@ struct SliceConfig {
+     std::vector<int>   filament_full_fan_speed_layers;
+     std::vector<int>   filament_enable_pressure_advance;   // 0 = unset/off, 1 = on
+     std::vector<float> filament_pressure_advances;
++    std::vector<int>   filament_adaptive_pressure_advance;
++    std::vector<std::string> filament_adaptive_pressure_advance_models;
++    std::vector<int>   filament_adaptive_pressure_advance_overhangs;
++    std::vector<float> filament_adaptive_pressure_advance_bridges;
+     std::vector<float> filament_minimal_purge_on_wipe_tower;
+     std::vector<int>   filament_nozzle_temp_initial_layers;
+     std::vector<int>   filament_bed_temps;
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -599,6 +599,13 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.filament_full_fan_speed_layers = getIntArray("filamentFullFanSpeedLayers");
+     config.filament_enable_pressure_advance = getIntArray("filamentEnablePressureAdvance");
+     config.filament_pressure_advances = getFloatArray("filamentPressureAdvances");
++    config.filament_adaptive_pressure_advance = getIntArray("filamentAdaptivePressureAdvance");
++    config.filament_adaptive_pressure_advance_models =
++        getStringArray("filamentAdaptivePressureAdvanceModels");
++    config.filament_adaptive_pressure_advance_overhangs =
++        getIntArray("filamentAdaptivePressureAdvanceOverhangs");
++    config.filament_adaptive_pressure_advance_bridges =
++        getFloatArray("filamentAdaptivePressureAdvanceBridges");
+     config.filament_minimal_purge_on_wipe_tower = getFloatArray("filamentMinimalPurgeOnWipeTower");
+     config.filament_nozzle_temp_initial_layers = getIntArray("filamentNozzleTempInitialLayers");
+     config.filament_bed_temps = getIntArray("filamentBedTemps");
+@@ -1158,6 +1165,16 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setFloat("machineMaxJunctionDeviation", config.machine_max_junction_deviation);
+     setStringArray("filamentStartGcodes", config.filament_start_gcodes);
+     setStringArray("filamentEndGcodes", config.filament_end_gcodes);
++    setIntArray("filamentAdaptivePressureAdvance", config.filament_adaptive_pressure_advance);
++    setStringArray(
++        "filamentAdaptivePressureAdvanceModels",
++        config.filament_adaptive_pressure_advance_models);
++    setIntArray(
++        "filamentAdaptivePressureAdvanceOverhangs",
++        config.filament_adaptive_pressure_advance_overhangs);
++    setFloatArray(
++        "filamentAdaptivePressureAdvanceBridges",
++        config.filament_adaptive_pressure_advance_bridges);
+     setFloatArray("filamentLoadingSpeeds", config.filament_loading_speeds);
+     setFloatArray("filamentLoadingSpeedStarts", config.filament_loading_speed_starts);
+     setFloatArray("filamentUnloadingSpeeds", config.filament_unloading_speeds);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -8,6 +8,7 @@
+ #include <cmath>
+ #include <fstream>
+ #include <limits>
++#include <map>
+ #include <sstream>
+ #include <stdexcept>
+ #include <sys/resource.h>
+@@ -117,6 +118,71 @@ static std::vector<std::string> parseSmallAreaFlowCompensationModel(const std::s
+     return points;
+ }
+ 
++static void validateAdaptivePressureAdvanceModel(const std::string& value) {
++    if (value.empty() || value.size() > 16384) {
++        throw std::invalid_argument("Invalid adaptive pressure-advance model size");
++    }
++    std::stringstream stream(value);
++    std::string line;
++    std::map<double, std::pair<int, double>> flow_by_acceleration;
++    int point_count = 0;
++    while (std::getline(stream, line)) {
++        const auto first = line.find_first_not_of(" \t\r");
++        const auto last = line.find_last_not_of(" \t\r");
++        if (first == std::string::npos) continue;
++        if (++point_count > 256) {
++            throw std::invalid_argument("Too many adaptive pressure-advance points");
++        }
++        const std::string trimmed = line.substr(first, last - first + 1);
++        std::stringstream point(trimmed);
++        std::string token;
++        double values[3] = {};
++        for (int index = 0; index < 3; ++index) {
++            if (!std::getline(point, token, ',')) {
++                throw std::invalid_argument("Invalid adaptive pressure-advance point");
++            }
++            const auto token_first = token.find_first_not_of(" \t");
++            const auto token_last = token.find_last_not_of(" \t");
++            if (token_first == std::string::npos) {
++                throw std::invalid_argument("Invalid adaptive pressure-advance number");
++            }
++            const std::string number = token.substr(token_first, token_last - token_first + 1);
++            std::size_t parsed = 0;
++            try {
++                values[index] = std::stod(number, &parsed);
++            } catch (const std::exception&) {
++                throw std::invalid_argument("Invalid adaptive pressure-advance number");
++            }
++            if (parsed != number.size() || !std::isfinite(values[index])) {
++                throw std::invalid_argument("Invalid adaptive pressure-advance number");
++            }
++        }
++        if (std::getline(point, token, ',')) {
++            throw std::invalid_argument("Invalid adaptive pressure-advance point");
++        }
++        const double pressure_advance = values[0];
++        const double flow = values[1];
++        const double acceleration = values[2];
++        if (pressure_advance < 0.0 || pressure_advance > 2.0 ||
++            flow < 0.001 || flow > 1000.0 ||
++            acceleration < 1.0 || acceleration > 1000000.0) {
++            throw std::invalid_argument("Unsafe adaptive pressure-advance model");
++        }
++        auto& state = flow_by_acceleration[acceleration];
++        if (state.first > 0 && flow <= state.second) {
++            throw std::invalid_argument("Adaptive pressure-advance flow values must increase");
++        }
++        state = {state.first + 1, flow};
++    }
++    if (point_count < 2 || flow_by_acceleration.empty() ||
++        std::any_of(
++            flow_by_acceleration.begin(),
++            flow_by_acceleration.end(),
++            [](const auto& entry) { return entry.second.first < 2; })) {
++        throw std::invalid_argument("Adaptive pressure-advance model needs two flow points");
++    }
++}
++
+ void SlicerEngine::cancelSlice() {
+     g_slice_cancel.store(true, std::memory_order_release);
+     auto* print = g_active_print.load(std::memory_order_acquire);
+@@ -1396,6 +1462,68 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+         }
+         dpc.set_key_value("enable_pressure_advance", new Slic3r::ConfigOptionBools(std::move(v)));
+     }
++    if (!config.filament_adaptive_pressure_advance.empty()) {
++        std::vector<unsigned char> enabled;
++        std::vector<unsigned char> overhangs;
++        std::vector<double> bridges;
++        std::vector<std::string> models;
++        enabled.reserve(n_ext);
++        overhangs.reserve(n_ext);
++        bridges.reserve(n_ext);
++        models.reserve(n_ext);
++        for (int index = 0; index < n_ext; ++index) {
++            const auto source_index = static_cast<size_t>(index);
++            const int enabled_value = source_index < config.filament_adaptive_pressure_advance.size()
++                ? config.filament_adaptive_pressure_advance[source_index]
++                : config.filament_adaptive_pressure_advance.back();
++            const bool adaptive_enabled = enabled_value != 0;
++            const bool regular_enabled = !config.filament_enable_pressure_advance.empty() &&
++                (source_index < config.filament_enable_pressure_advance.size()
++                    ? config.filament_enable_pressure_advance[source_index]
++                    : config.filament_enable_pressure_advance.back()) != 0;
++            if (adaptive_enabled && !regular_enabled) {
++                throw std::invalid_argument("Adaptive pressure advance requires pressure advance");
++            }
++            const std::string model = config.filament_adaptive_pressure_advance_models.empty()
++                ? "0,0,0\n0,0,0"
++                : (source_index < config.filament_adaptive_pressure_advance_models.size()
++                    ? config.filament_adaptive_pressure_advance_models[source_index]
++                    : config.filament_adaptive_pressure_advance_models.back());
++            if (model.size() > 16384) {
++                throw std::invalid_argument("Invalid adaptive pressure-advance model size");
++            }
++            if (adaptive_enabled) validateAdaptivePressureAdvanceModel(model);
++            const int overhang_value = config.filament_adaptive_pressure_advance_overhangs.empty()
++                ? 0
++                : (source_index < config.filament_adaptive_pressure_advance_overhangs.size()
++                    ? config.filament_adaptive_pressure_advance_overhangs[source_index]
++                    : config.filament_adaptive_pressure_advance_overhangs.back());
++            const float bridge_value = config.filament_adaptive_pressure_advance_bridges.empty()
++                ? 0.0f
++                : (source_index < config.filament_adaptive_pressure_advance_bridges.size()
++                    ? config.filament_adaptive_pressure_advance_bridges[source_index]
++                    : config.filament_adaptive_pressure_advance_bridges.back());
++            if (!std::isfinite(bridge_value) || bridge_value < 0.0f || bridge_value > 2.0f) {
++                throw std::invalid_argument("Invalid bridge pressure advance");
++            }
++            enabled.push_back(adaptive_enabled ? 1 : 0);
++            models.push_back(model);
++            overhangs.push_back(overhang_value ? 1 : 0);
++            bridges.push_back(bridge_value);
++        }
++        dpc.set_key_value(
++            "adaptive_pressure_advance",
++            new Slic3r::ConfigOptionBools(std::move(enabled)));
++        dpc.set_key_value(
++            "adaptive_pressure_advance_model",
++            new Slic3r::ConfigOptionStrings(std::move(models)));
++        dpc.set_key_value(
++            "adaptive_pressure_advance_overhangs",
++            new Slic3r::ConfigOptionBools(std::move(overhangs)));
++        dpc.set_key_value(
++            "adaptive_pressure_advance_bridges",
++            new Slic3r::ConfigOptionFloats(std::move(bridges)));
++    }
+     if (!config.filament_additional_cooling_fan_speeds.empty()) {
+         std::vector<int> v = config.filament_additional_cooling_fan_speeds;
+         while ((int)v.size() < n_ext) v.push_back(v.back());
+@@ -2141,6 +2269,10 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+                     // gcode_flavor=klipper.  enable_pressure_advance is ConfigOptionBools.
+                     "enable_pressure_advance",
+                     "pressure_advance",
++                    "adaptive_pressure_advance",
++                    "adaptive_pressure_advance_model",
++                    "adaptive_pressure_advance_overhangs",
++                    "adaptive_pressure_advance_bridges",
+                     // Wipe tower purge volumes.  flush_volumes_matrix is an NxN matrix of
+                     // mm³ per filament-combo transition; flush_multiplier scales it.
+                     // Native Snapmaker profiles calibrate these carefully (0–800mm³).
+@@ -2347,6 +2479,10 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+                 pad_strings("filament_end_gcode");
+                 pad_bools("enable_pressure_advance");
+                 pad_floats("pressure_advance");
++                pad_bools("adaptive_pressure_advance");
++                pad_strings("adaptive_pressure_advance_model");
++                pad_bools("adaptive_pressure_advance_overhangs");
++                pad_floats("adaptive_pressure_advance_bridges");
+                 pad_floats("filament_minimal_purge_on_wipe_tower");
+                 pad_floats("filament_tower_interface_pre_extrusion_dist");
+                 pad_floats("filament_tower_interface_pre_extrusion_length");

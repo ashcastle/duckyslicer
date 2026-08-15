@@ -169,6 +169,78 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun adaptivePressureAdvanceChangesRealKlipperCommands() {
+        val model = "0.20,0.001,1000\n0.80,1000,1000"
+        val filament = FilamentProfile.GENERIC_PLA.copy(
+            pressureAdvanceEnabled = true,
+            pressureAdvance = 0.04f,
+            adaptivePressureAdvance = AdaptivePressureAdvanceSettings(
+                enabled = true,
+                model = model,
+                overhangs = true,
+                bridge = 0.065f,
+            ),
+        )
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.U1_04)
+            .selectFilament(filament)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                gcodeFlavor = "klipper",
+                pressureAdvanceEnabled = true,
+                pressureAdvance = 0.04f,
+                perimeters = 3,
+                fillDensity = 0.25f,
+                gcodeSettings = GcodeSettings(verboseComments = true),
+            )
+        val enabled = OnDeviceSlicer.slice(fixtureModel(), base)
+        val disabled = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.selectFilament(
+                filament.copy(
+                    adaptivePressureAdvance = filament.adaptivePressureAdvance.copy(enabled = false),
+                ),
+            ).copy(pressureAdvanceEnabled = true, pressureAdvance = 0.04f),
+        )
+        try {
+            fun pressureAdvanceValues(gcode: String): List<Double> = gcode.lineSequence()
+                .mapNotNull { line ->
+                    Regex("^SET_PRESSURE_ADVANCE ADVANCE=([0-9.]+);")
+                        .find(line)
+                        ?.groupValues
+                        ?.get(1)
+                        ?.toDoubleOrNull()
+                }
+                .toList()
+
+            val enabledGcode = enabled.output.readText()
+            val disabledGcode = disabled.output.readText()
+            val enabledValues = pressureAdvanceValues(enabledGcode)
+            val disabledValues = pressureAdvanceValues(disabledGcode)
+
+            assertTrue(enabledGcode.contains("; adaptive_pressure_advance = 1"))
+            assertTrue(enabledGcode.contains("; adaptive_pressure_advance_overhangs = 1"))
+            assertTrue(enabledGcode.contains("; adaptive_pressure_advance_bridges = 0.065"))
+            assertTrue(enabledGcode.contains("; PA_CHANGE:"))
+            assertTrue("Regular PA must still initialize Klipper", enabledValues.contains(0.04))
+            assertTrue(
+                "Adaptive PA must emit an interpolated command distinct from the fallback value",
+                enabledValues.any { abs(it - 0.04) > 0.001 },
+            )
+            assertTrue(disabledGcode.contains("; adaptive_pressure_advance = 0"))
+            assertFalse(disabledGcode.contains("; PA_CHANGE:"))
+            assertTrue("Disabled adaptive PA must retain regular PA", disabledValues.contains(0.04))
+            assertTrue(
+                "Disabled adaptive PA must not emit interpolated values",
+                disabledValues.all { abs(it - 0.04) <= 0.001 },
+            )
+        } finally {
+            enabled.output.delete()
+            disabled.output.delete()
+        }
+    }
+
+    @Test
     fun extrusionRateSmoothingChangesRealExtrusionMotion() {
         val baseQuality = QualityProfile.DRAFT.copy(
             extrusionRateSmoothing = ExtrusionRateSmoothingSettings(),
@@ -2400,7 +2472,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(90, catalog.schemaVersion)
+        assertEquals(91, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2431,6 +2503,16 @@ class NativeEngineInstrumentedTest {
             it.name == "Cubicon xCeler-I 0.4 nozzle"
         }
         assertEquals(0f, junctionDeviationPrinter.maxJunctionDeviation)
+        val adaptivePressureAdvanceModels = catalog.filaments.filter {
+            it.adaptivePressureAdvance.model != DEFAULT_ADAPTIVE_PRESSURE_ADVANCE_MODEL
+        }
+        assertEquals(2, adaptivePressureAdvanceModels.size)
+        adaptivePressureAdvanceModels.forEach { filament ->
+            assertTrue(filament.pressureAdvanceEnabled)
+            assertFalse(filament.adaptivePressureAdvance.enabled)
+            assertTrue(adaptivePressureAdvanceModelIsValid(filament.adaptivePressureAdvance.model))
+            assertEquals(17, filament.adaptivePressureAdvance.model.lineSequence().count())
+        }
         val coreOne = catalog.printers.single { it.name == "Prusa CORE One 0.4 nozzle" }
         val incompatible = SliceOptions()
             .selectFilament(

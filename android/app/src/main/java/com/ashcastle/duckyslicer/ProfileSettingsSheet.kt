@@ -2644,7 +2644,14 @@ private fun FilamentSettingsSheet(
                 onOptionsChanged(
                     options.updateFilamentSlot(
                         selectedSlot,
-                        activeProfile.copy(pressureAdvanceEnabled = it),
+                        activeProfile.copy(
+                            pressureAdvanceEnabled = it,
+                            adaptivePressureAdvance = if (it) {
+                                activeProfile.adaptivePressureAdvance
+                            } else {
+                                activeProfile.adaptivePressureAdvance.copy(enabled = false)
+                            },
+                        ),
                     ),
                 )
             },
@@ -2662,6 +2669,80 @@ private fun FilamentSettingsSheet(
                     )
                 },
             )
+            SettingsSwitch(
+                label = stringResource(R.string.adaptive_pressure_advance),
+                checked = activeProfile.adaptivePressureAdvance.enabled,
+                onCheckedChange = { enabled ->
+                    onOptionsChanged(
+                        options.updateFilamentSlot(
+                            selectedSlot,
+                            activeProfile.copy(
+                                pressureAdvanceEnabled =
+                                    activeProfile.pressureAdvanceEnabled || enabled,
+                                adaptivePressureAdvance = activeProfile.adaptivePressureAdvance.copy(
+                                    enabled = enabled,
+                                ),
+                            ),
+                        ),
+                    )
+                },
+            )
+            if (activeProfile.adaptivePressureAdvance.enabled || settingsQuery.isNotBlank()) {
+                AdaptivePressureAdvanceModelSetting(
+                    value = activeProfile.adaptivePressureAdvance.model,
+                    onValueChange = { model ->
+                        onOptionsChanged(
+                            options.updateFilamentSlot(
+                                selectedSlot,
+                                activeProfile.copy(
+                                    adaptivePressureAdvance = activeProfile.adaptivePressureAdvance.copy(
+                                        model = model,
+                                    ),
+                                ),
+                            ),
+                        )
+                    },
+                )
+                SettingsSwitch(
+                    label = stringResource(R.string.adaptive_pressure_advance_overhangs),
+                    checked = activeProfile.adaptivePressureAdvance.overhangs,
+                    onCheckedChange = { enabled ->
+                        onOptionsChanged(
+                            options.updateFilamentSlot(
+                                selectedSlot,
+                                activeProfile.copy(
+                                    adaptivePressureAdvance = activeProfile.adaptivePressureAdvance.copy(
+                                        overhangs = enabled,
+                                    ),
+                                ),
+                            ),
+                        )
+                    },
+                )
+                SettingSlider(
+                    label = stringResource(R.string.adaptive_pressure_advance_bridge),
+                    valueText = String.format(
+                        Locale.ROOT,
+                        "%.3f",
+                        activeProfile.adaptivePressureAdvance.bridge,
+                    ),
+                    value = activeProfile.adaptivePressureAdvance.bridge,
+                    range = 0f..2f,
+                    steps = 1_999,
+                    onValueChange = { bridge ->
+                        onOptionsChanged(
+                            options.updateFilamentSlot(
+                                selectedSlot,
+                                activeProfile.copy(
+                                    adaptivePressureAdvance = activeProfile.adaptivePressureAdvance.copy(
+                                        bridge = bridge,
+                                    ),
+                                ),
+                            ),
+                        )
+                    },
+                )
+            }
         }
         SettingsGroupTitle(stringResource(R.string.filament_gcode))
         GcodeTemplateSetting(
@@ -6760,6 +6841,37 @@ private fun SmallAreaFlowCompensationModelSetting(
         },
         isError = !valid,
         minLines = 5,
+        maxLines = 10,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun AdaptivePressureAdvanceModelSetting(
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    val label = stringResource(R.string.adaptive_pressure_advance_model)
+    if (!settingMatchesQuery(label)) return
+    val valid = adaptivePressureAdvanceModelIsValid(value)
+    OutlinedTextField(
+        value = value,
+        onValueChange = { candidate ->
+            if (candidate.toByteArray(Charsets.UTF_8).size <= MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_BYTES) {
+                onValueChange(candidate)
+            }
+        },
+        label = { Text(label) },
+        supportingText = {
+            Text(
+                stringResource(
+                    if (valid) R.string.adaptive_pressure_advance_model_hint
+                    else R.string.adaptive_pressure_advance_model_invalid,
+                ),
+            )
+        },
+        isError = !valid,
+        minLines = 4,
         maxLines = 10,
         modifier = Modifier.fillMaxWidth(),
     )

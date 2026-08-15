@@ -4,6 +4,7 @@ import math
 import unittest
 
 from tools.generate_profile_catalog import (
+    adaptive_pressure_advance_model,
     bed_exclude_geometry,
     build_filament,
     build_printer,
@@ -17,6 +18,59 @@ from tools.generate_profile_catalog import (
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_validates_adaptive_pressure_advance_models(self) -> None:
+        model = "0.06,2,1000\n0.04,12,1000\n0.07,2,5000\n0.05,12,5000"
+        self.assertEqual(model, adaptive_pressure_advance_model(model, True))
+        self.assertEqual("0,0,0\n0,0,0", adaptive_pressure_advance_model(None, False))
+
+        for invalid in (
+            "0.06,2,1000",
+            "0.06,2,1000\n0.04,2,1000",
+            "0.06,12,1000\n0.04,2,1000",
+            "0.06,2,1000\n0.04,12,2000",
+            "nan,2,1000\n0.04,12,1000",
+            "0.06,0,1000\n0.04,12,1000",
+        ):
+            with self.assertRaises(ValueError):
+                adaptive_pressure_advance_model(invalid, True)
+
+    def test_preserves_adaptive_pressure_advance_filament_fields(self) -> None:
+        model = "0.06,2,1000\n0.04,12,1000"
+        profile = build_filament(
+            "Example",
+            {
+                "name": "Adaptive PLA",
+                "filament_type": ["PLA"],
+                "nozzle_temperature": ["220"],
+                "hot_plate_temp": ["60"],
+                "enable_pressure_advance": ["1"],
+                "pressure_advance": ["0.04"],
+                "adaptive_pressure_advance": ["1"],
+                "adaptive_pressure_advance_model": [model],
+                "adaptive_pressure_advance_overhangs": ["1"],
+                "adaptive_pressure_advance_bridges": ["0.065"],
+            },
+        )
+
+        self.assertTrue(profile["pressureAdvanceEnabled"])
+        self.assertTrue(profile["adaptivePressureAdvanceEnabled"])
+        self.assertEqual(model, profile["adaptivePressureAdvanceModel"])
+        self.assertTrue(profile["adaptivePressureAdvanceOverhangs"])
+        self.assertEqual(0.065, profile["adaptivePressureAdvanceBridge"])
+
+        with self.assertRaises(ValueError):
+            build_filament(
+                "Example",
+                {
+                    "name": "Invalid adaptive PLA",
+                    "filament_type": ["PLA"],
+                    "nozzle_temperature": ["220"],
+                    "hot_plate_temp": ["60"],
+                    "adaptive_pressure_advance": ["1"],
+                    "adaptive_pressure_advance_model": [model],
+                },
+            )
+
     def test_parses_adaptive_bed_mesh_coordinate_pairs(self) -> None:
         self.assertEqual((10.0, 20.0), coordinate_pair(["10", "20"], 1, 2))
         self.assertEqual((10.5, -20.25), coordinate_pair("10.5,-20.25", 1, 2))

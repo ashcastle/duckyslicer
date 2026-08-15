@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v90.bin"
+private const val CATALOG_ASSET = "profile_catalog_v91.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 90) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 91) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -251,6 +251,12 @@ class OrcaProfileCatalog(private val context: Context) {
         fullFanSpeedLayer = input.readInt(),
         pressureAdvanceEnabled = input.readCatalogBoolean(),
         pressureAdvance = input.readFloat(),
+        adaptivePressureAdvance = AdaptivePressureAdvanceSettings(
+            enabled = input.readCatalogBoolean(),
+            model = input.readCatalogString(),
+            overhangs = input.readCatalogBoolean(),
+            bridge = input.readFloat(),
+        ),
         compatiblePrinters = input.readCatalogStringList(),
         builtIn = true,
     )
@@ -517,5 +523,9 @@ private val FILAMENT_BINARY_FIELDS = arrayOf(
     BinaryField("fullFanSpeedLayer", BINARY_INT),
     BinaryField("pressureAdvanceEnabled", BINARY_BOOL),
     BinaryField("pressureAdvance", BINARY_FLOAT),
+    BinaryField("adaptivePressureAdvanceEnabled", BINARY_BOOL),
+    BinaryField("adaptivePressureAdvanceModel", BINARY_STRING),
+    BinaryField("adaptivePressureAdvanceOverhangs", BINARY_BOOL),
+    BinaryField("adaptivePressureAdvanceBridge", BINARY_FLOAT),
     BinaryField("compatiblePrinters", BINARY_STRING_LIST),
 )

@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 90
+SCHEMA_VERSION = 91
 MAX_FILAMENT_SLOTS = 16
 DEFAULT_GCODE_FILENAME_FORMAT = (
     "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
@@ -23,6 +23,7 @@ DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL = (
     "1.5,0.8571\n2,0.8889\n3,0.9231\n5,0.9520\n10,1"
 )
 MAX_GCODE_FILENAME_FORMAT_BYTES = 1_024
+MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_BYTES = 16_384
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
     "monotonic", "monotonicline", "rectilinear", "alignedrectilinear",
@@ -125,6 +126,46 @@ def small_area_flow_compensation_model(value: Any) -> str:
     if len(model.encode("utf-8")) > 16_384:
         raise ValueError("oversized small-area flow-compensation model")
     return model
+
+
+def adaptive_pressure_advance_model(value: Any, enabled: bool) -> str:
+    candidate = str(scalar(value, "0,0,0\n0,0,0")).replace("\\n", "\n").strip()
+    if len(candidate.encode("utf-8")) > MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_BYTES:
+        raise ValueError("oversized adaptive pressure-advance model")
+    if not enabled:
+        return candidate
+
+    lines = [line.strip() for line in candidate.splitlines() if line.strip()]
+    if len(lines) not in range(2, 257):
+        raise ValueError("invalid adaptive pressure-advance point count")
+    flow_by_acceleration: dict[float, tuple[int, float]] = {}
+    normalized_lines: list[str] = []
+    for line in lines:
+        coordinates = [coordinate.strip() for coordinate in line.split(",")]
+        if len(coordinates) != 3:
+            raise ValueError("invalid adaptive pressure-advance point")
+        try:
+            pressure_advance, flow, acceleration = map(float, coordinates)
+        except ValueError as error:
+            raise ValueError("invalid adaptive pressure-advance number") from error
+        if (
+            not all(math.isfinite(value) for value in (pressure_advance, flow, acceleration))
+            or pressure_advance < 0
+            or pressure_advance > 2
+            or flow < 0.001
+            or flow > 1_000
+            or acceleration < 1
+            or acceleration > 1_000_000
+        ):
+            raise ValueError("unsafe adaptive pressure-advance model")
+        count, previous_flow = flow_by_acceleration.get(acceleration, (0, -1.0))
+        if flow <= previous_flow:
+            raise ValueError("adaptive pressure-advance flow values must increase")
+        flow_by_acceleration[acceleration] = (count + 1, flow)
+        normalized_lines.append(",".join(coordinates))
+    if any(count < 2 for count, _ in flow_by_acceleration.values()):
+        raise ValueError("adaptive pressure-advance acceleration needs two flow points")
+    return "\n".join(normalized_lines)
 
 
 def nullable_scalar(value: Any) -> Any | None:
@@ -748,6 +789,7 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     )
     if not filament_type or not (150 <= nozzle <= 400 and 0 <= bed <= 160):
         raise ValueError("unsafe filament temperatures")
+    adaptive_pa_enabled = boolean(raw.get("adaptive_pressure_advance"))
     profile = {
         "id": stable_id("filament", brand, name),
         "name": name,
@@ -865,6 +907,16 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "fullFanSpeedLayer": integer(raw.get("full_fan_speed_layer"), 3),
         "pressureAdvanceEnabled": boolean(raw.get("enable_pressure_advance")),
         "pressureAdvance": number(raw.get("pressure_advance"), 0),
+        "adaptivePressureAdvanceEnabled": adaptive_pa_enabled,
+        "adaptivePressureAdvanceModel": adaptive_pressure_advance_model(
+            raw.get("adaptive_pressure_advance_model"), adaptive_pa_enabled
+        ),
+        "adaptivePressureAdvanceOverhangs": boolean(
+            raw.get("adaptive_pressure_advance_overhangs")
+        ),
+        "adaptivePressureAdvanceBridge": number(
+            raw.get("adaptive_pressure_advance_bridges"), 0
+        ),
         "compatiblePrinters": values(raw.get("compatible_printers")),
     }
     if not (
@@ -944,6 +996,11 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
              profile["retractLiftEnforce"] in {"all", "top", "bottom", "top_bottom"})
         and (profile["retractionDistanceWhenCut"] is None or
              10 <= profile["retractionDistanceWhenCut"] <= 18)
+        and 0 <= profile["pressureAdvance"] <= 10
+        and 0 <= profile["adaptivePressureAdvanceBridge"] <= 2
+        and len(profile["adaptivePressureAdvanceModel"].encode("utf-8")) <=
+            MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_BYTES
+        and (not profile["adaptivePressureAdvanceEnabled"] or profile["pressureAdvanceEnabled"])
     ):
         raise ValueError("unsafe filament limits")
     return profile
