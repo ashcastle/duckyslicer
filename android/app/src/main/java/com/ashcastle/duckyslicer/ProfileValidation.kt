@@ -275,7 +275,9 @@ internal object ProfileValidation {
             profile.bottomShellThickness in 0f..100f &&
             profile.surfaceDensity.topPercent in 0f..100f &&
             profile.surfaceDensity.bottomPercent in 10f..100f &&
-            profile.fillPattern in INFILL_PATTERNS &&
+            profile.fillPattern in SPARSE_INFILL_PATTERNS &&
+            profile.fillMultiline in 1..5 &&
+            (profile.fillPattern in MULTILINE_INFILL_PATTERNS || profile.fillMultiline == 1) &&
             profile.topSurfacePattern in INFILL_PATTERNS &&
             profile.bottomSurfacePattern in INFILL_PATTERNS &&
             profile.internalSolidInfillPattern in INFILL_PATTERNS &&

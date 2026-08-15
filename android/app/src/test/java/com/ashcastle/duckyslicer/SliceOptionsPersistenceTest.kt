@@ -661,6 +661,8 @@ class SliceOptionsPersistenceTest {
         assertEquals("0,90", restored.quality.solidInfillRotationTemplate)
         assertEquals("0,60,120", restored.toNativeConfig().sparseInfillRotationTemplate)
         assertEquals("0,90", restored.toNativeConfig().solidInfillRotationTemplate)
+        assertEquals(4, restored.quality.fillMultiline)
+        assertEquals(4, restored.toNativeConfig().fillMultiline)
         assertEquals(LateralInfillSettings(-32f, 57f, 68f), restored.quality.lateralInfill)
         assertEquals(-32f, restored.toNativeConfig().lateralLatticeAngle1)
         assertEquals(57f, restored.toNativeConfig().lateralLatticeAngle2)
@@ -1262,6 +1264,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         quality = QualityProfile.FINE_06.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_06.name),
             surfaceDensity = SurfaceDensitySettings(topPercent = 44f, bottomPercent = 71f),
+            fillMultiline = 4,
             lateralInfill = LateralInfillSettings(-32f, 57f, 68f),
             infillShiftStep = 1.7f,
             symmetricInfillYAxis = true,

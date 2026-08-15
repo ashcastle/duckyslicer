@@ -195,6 +195,7 @@ class ProfileStoreMigrationTest {
             assertEquals(0f, restoredSlicing.multiMaterial.segmentedRegionInterlockingDepth)
             assertEquals(0, restoredSlicing.supportCoverage.enforcedLayers)
             assertEquals(LateralInfillSettings(), restoredSlicing.lateralInfill)
+            assertEquals(1, restoredSlicing.fillMultiline)
         } finally {
             file.delete()
         }
@@ -390,6 +391,26 @@ class ProfileStoreMigrationTest {
             assertEquals(true, restored.symmetricInfillYAxis)
             assertEquals("0,60,120", restored.sparseInfillRotationTemplate)
             assertEquals("0,90", restored.solidInfillRotationTemplate)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun fillMultilinePersistsInUserSlicingProfiles() {
+        val directory = Files.createTempDirectory("duckyslicer-profile-fill-multiline-").toFile()
+        val file = directory.resolve("user_profiles.json")
+        try {
+            val options = SliceOptions().copy(
+                fillPattern = "crosshatch",
+                quality = QualityProfile.STANDARD.copy(fillMultiline = 4),
+            )
+
+            val saved = ProfileStore(file).saveSlicing("Four-line infill", options)
+            val restored = ProfileStore(file).load().slicing.single { it.id == saved.id }
+
+            assertEquals("crosshatch", restored.fillPattern)
+            assertEquals(4, restored.fillMultiline)
         } finally {
             directory.deleteRecursively()
         }

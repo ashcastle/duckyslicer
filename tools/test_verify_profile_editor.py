@@ -50,8 +50,17 @@ def valid_sources() -> dict[str, str]:
             " R.string.top_surface_density R.string.bottom_surface_density"
             " R.string.infill_shift_step R.string.symmetric_infill_y_axis"
             " R.string.infill_lateral_honeycomb R.string.infill_lateral_lattice"
+            " R.string.infill_cross_hatch R.string.infill_line R.string.infill_triangles"
+            " R.string.infill_tri_hexagon R.string.infill_cubic R.string.infill_adaptive_cubic"
+            " R.string.infill_quarter_cubic R.string.infill_support_cubic"
+            " R.string.infill_lightning R.string.infill_3d_honeycomb"
+            " R.string.infill_tpms_d R.string.infill_tpms_fk R.string.infill_concentric"
+            " R.string.infill_hilbert_curve R.string.infill_archimedean_chords"
+            " R.string.infill_octagram_spiral"
             " R.string.lateral_lattice_angle_1 R.string.lateral_lattice_angle_2"
-            " R.string.infill_overhang_angle LateralInfillGeometrySettings("
+            " R.string.infill_overhang_angle entries = SPARSE_INFILL_PATTERNS"
+            " MULTILINE_INFILL_PATTERNS fillMultilineForPattern( R.string.fill_multiline"
+            " LateralInfillGeometrySettings("
             " quality = options.quality.copy(lateralInfill = it)"
             " stringResource(R.string.degrees_value, settings.firstAngle)"
             " stringResource(R.string.degrees_value, settings.secondAngle)"
@@ -198,6 +207,12 @@ def valid_sources() -> dict[str, str]:
             "disablingSpiralModePreservesCompanionSettings "
             ".withSpiralMode(true) .withSpiralMode(false)"
         ),
+        "InfillPatternTest.kt": (
+            "sparsePatternListExactlyMatchesPinnedOrcaEnum "
+            "assertEquals(26, SPARSE_INFILL_PATTERNS.size) "
+            "multilineCompatibilityMatchesOrcaDesktopDependencies "
+            "fillMultilineForPattern(pattern, 5)"
+        ),
         "strings.xml": (
             'name="quality" name="strength" name="speed" name="supports" name="others" '
             'name="recent_profiles" name="profile_list" name="search_settings" name="support_type" '
@@ -217,6 +232,13 @@ def valid_sources() -> dict[str, str]:
             ' name="top_surface_density" name="bottom_surface_density"'
             ' name="infill_shift_step" name="symmetric_infill_y_axis"'
             ' name="infill_lateral_honeycomb" name="infill_lateral_lattice"'
+            ' name="infill_cross_hatch" name="infill_line" name="infill_triangles"'
+            ' name="infill_tri_hexagon" name="infill_cubic" name="infill_adaptive_cubic"'
+            ' name="infill_quarter_cubic" name="infill_support_cubic"'
+            ' name="infill_lightning" name="infill_3d_honeycomb"'
+            ' name="infill_tpms_d" name="infill_tpms_fk" name="infill_concentric"'
+            ' name="infill_hilbert_curve" name="infill_archimedean_chords"'
+            ' name="infill_octagram_spiral" name="fill_multiline" name="fill_multiline_value"'
             ' name="lateral_lattice_angle_1" name="lateral_lattice_angle_2"'
             ' name="infill_overhang_angle"'
             ' name="support_on_build_plate_only" name="enforce_support_layers"'
@@ -274,6 +296,13 @@ def valid_sources() -> dict[str, str]:
             ' name="top_surface_density" name="bottom_surface_density"'
             ' name="infill_shift_step" name="symmetric_infill_y_axis"'
             ' name="infill_lateral_honeycomb" name="infill_lateral_lattice"'
+            ' name="infill_cross_hatch" name="infill_line" name="infill_triangles"'
+            ' name="infill_tri_hexagon" name="infill_cubic" name="infill_adaptive_cubic"'
+            ' name="infill_quarter_cubic" name="infill_support_cubic"'
+            ' name="infill_lightning" name="infill_3d_honeycomb"'
+            ' name="infill_tpms_d" name="infill_tpms_fk" name="infill_concentric"'
+            ' name="infill_hilbert_curve" name="infill_archimedean_chords"'
+            ' name="infill_octagram_spiral" name="fill_multiline" name="fill_multiline_value"'
             ' name="lateral_lattice_angle_1" name="lateral_lattice_angle_2"'
             ' name="infill_overhang_angle"'
             ' name="support_on_build_plate_only" name="enforce_support_layers"'
@@ -341,6 +370,15 @@ class VerifyProfileEditorTest(unittest.TestCase):
             "stringResource(R.string.degrees_value, settings.firstAngle.roundToInt())",
         )
         with self.assertRaisesRegex(VerificationError, "floating-point degrees format"):
+            verify_profile_editor(sources)
+
+    def test_rejects_incomplete_sparse_infill_enum_regression(self) -> None:
+        sources = valid_sources()
+        sources["InfillPatternTest.kt"] = sources["InfillPatternTest.kt"].replace(
+            "assertEquals(26, SPARSE_INFILL_PATTERNS.size)",
+            "assertEquals(13, SPARSE_INFILL_PATTERNS.size)",
+        )
+        with self.assertRaisesRegex(VerificationError, "sparse-infill editor regression"):
             verify_profile_editor(sources)
 
     def test_rejects_missing_korean_title(self) -> None:

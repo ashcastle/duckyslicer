@@ -684,6 +684,21 @@ data class LateralInfillSettings(
     val overhangAngle: Float = 60f,
 )
 
+internal val SPARSE_INFILL_PATTERNS = listOf(
+    "rectilinear", "alignedrectilinear", "zigzag", "crosszag", "lockedzag", "line",
+    "grid", "triangles", "tri-hexagon", "cubic", "adaptivecubic", "quartercubic",
+    "supportcubic", "lightning", "honeycomb", "3dhoneycomb", "lateral-honeycomb",
+    "lateral-lattice", "crosshatch", "tpmsd", "tpmsfk", "gyroid", "concentric",
+    "hilbertcurve", "archimedeanchords", "octagramspiral",
+)
+
+internal val MULTILINE_INFILL_PATTERNS = SPARSE_INFILL_PATTERNS.toSet() - setOf(
+    "zigzag", "crosszag", "lockedzag", "line",
+)
+
+internal fun fillMultilineForPattern(pattern: String, value: Int): Int =
+    if (pattern in MULTILINE_INFILL_PATTERNS) value.coerceIn(1, 5) else 1
+
 data class ExtrusionRateSmoothingSettings(
     val maximumSlope: Float = 0f,
     val segmentLength: Float = 3f,
@@ -882,6 +897,7 @@ data class QualityProfile(
     val bottomShellThickness: Float = 0f,
     val surfaceDensity: SurfaceDensitySettings = SurfaceDensitySettings(),
     val fillPattern: String = "gyroid",
+    val fillMultiline: Int = 1,
     val lateralInfill: LateralInfillSettings = LateralInfillSettings(),
     val topSurfacePattern: String = "monotonicline",
     val bottomSurfacePattern: String = "monotonic",
@@ -2047,6 +2063,7 @@ data class SliceOptions(
             filamentDensities = nativeFilaments.map(FilamentProfile::density).toFloatArray(),
             filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
+            native.fillMultiline = fillMultilineForPattern(fillPattern, quality.fillMultiline)
             native.lateralLatticeAngle1 = quality.lateralInfill.firstAngle
             native.lateralLatticeAngle2 = quality.lateralInfill.secondAngle
             native.infillOverhangAngle = quality.lateralInfill.overhangAngle

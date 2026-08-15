@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 77
+SCHEMA_VERSION = 78
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -1000,6 +1000,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "topSurfaceDensity": number(raw.get("top_surface_density"), 100),
         "bottomSurfaceDensity": number(raw.get("bottom_surface_density"), 100),
         "fillPattern": infill_pattern(raw.get("sparse_infill_pattern"), "gyroid"),
+        "fillMultiline": integer(raw.get("fill_multiline"), 1),
         "lateralLatticeAngle1": number(raw.get("lateral_lattice_angle_1"), -45),
         "lateralLatticeAngle2": number(raw.get("lateral_lattice_angle_2"), 45),
         "infillOverhangAngle": number(raw.get("infill_overhang_angle"), 60),
@@ -1534,6 +1535,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 10 <= profile["raftFirstLayerDensity"] <= 100
         and 0 <= profile["raftFirstLayerExpansion"] <= 1_000
         and profile["fillPattern"] in INFILL_PATTERNS
+        and 1 <= profile["fillMultiline"] <= 5
         and profile["topSurfacePattern"] in INFILL_PATTERNS
         and profile["bottomSurfacePattern"] in INFILL_PATTERNS
         and profile["internalSolidInfillPattern"] in INFILL_PATTERNS

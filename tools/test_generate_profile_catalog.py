@@ -279,6 +279,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         )
 
         self.assertEqual("lockedzag", profile["fillPattern"])
+        self.assertEqual(1, profile["fillMultiline"])
         self.assertEqual(-32.0, profile["lateralLatticeAngle1"])
         self.assertEqual(57.0, profile["lateralLatticeAngle2"])
         self.assertEqual(68.0, profile["infillOverhangAngle"])
@@ -292,6 +293,22 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertFalse(profile["skeletonInfillLineWidthPercent"])
         self.assertEqual("0,60,120", profile["sparseInfillRotationTemplate"])
         self.assertEqual("0,90", profile["solidInfillRotationTemplate"])
+
+    def test_preserves_fill_multiline(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Multiline cross hatch",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "sparse_infill_pattern": "crosshatch",
+                "fill_multiline": "4",
+            },
+            {},
+        )
+
+        self.assertEqual("crosshatch", profile["fillPattern"])
+        self.assertEqual(4, profile["fillMultiline"])
 
     def test_preserves_skirt_start_point(self) -> None:
         profile = build_process(

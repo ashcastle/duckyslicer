@@ -429,6 +429,75 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun everyCompiledSparsePatternAndMultilineReachRealFillGeometry() {
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.U1_04)
+            .selectFilament(FilamentProfile.PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                fillDensity = 0.24f,
+                topSolidLayers = 2,
+                bottomSolidLayers = 2,
+                perimeters = 2,
+            )
+
+        fun slice(pattern: String, multiline: Int): SliceOutcome = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.copy(
+                fillPattern = pattern,
+                quality = base.quality.copy(fillMultiline = multiline),
+            ),
+        )
+
+        fun sparseInfillMotion(gcode: String): List<String> {
+            var sparseInfill = false
+            return gcode.lineSequence().mapNotNull { line ->
+                if (line.startsWith(";TYPE:")) sparseInfill = line == ";TYPE:Sparse infill"
+                line.substringBefore(';').trimEnd().takeIf {
+                    sparseInfill && it.startsWith("G1 ") && it.contains(" E") &&
+                        (it.contains(" X") || it.contains(" Y"))
+                }
+            }.toList()
+        }
+
+        for (pattern in SPARSE_INFILL_PATTERNS) {
+            val outcome = slice(pattern, 1)
+            try {
+                val gcode = outcome.output.readText()
+                assertTrue(
+                    "$pattern must survive strict Orca enum deserialization",
+                    gcode.contains("; sparse_infill_pattern = $pattern"),
+                )
+                assertTrue("$pattern must produce a non-empty G-code file", gcode.contains("G1 "))
+            } finally {
+                outcome.output.delete()
+            }
+        }
+
+        val single = slice("crosshatch", 1)
+        val fourLines = slice("crosshatch", 4)
+        try {
+            val singleGcode = single.output.readText()
+            val fourLineGcode = fourLines.output.readText()
+            val singleMotion = sparseInfillMotion(singleGcode)
+            val fourLineMotion = sparseInfillMotion(fourLineGcode)
+
+            assertTrue(singleGcode.contains("; fill_multiline = 1"))
+            assertTrue(fourLineGcode.contains("; fill_multiline = 4"))
+            assertTrue("Single-line Cross Hatch must produce sparse infill", singleMotion.isNotEmpty())
+            assertTrue("Four-line Cross Hatch must produce sparse infill", fourLineMotion.isNotEmpty())
+            assertNotEquals(
+                "Fill Multiline must change extrusion geometry, not only metadata",
+                singleMotion,
+                fourLineMotion,
+            )
+        } finally {
+            single.output.delete()
+            fourLines.output.delete()
+        }
+    }
+
+    @Test
     fun printableOverhangsChangeRealModelGeometry() {
         val baseOptions = SliceOptions()
             .selectQuality(QualityProfile.DRAFT)
@@ -2275,7 +2344,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(77, catalog.schemaVersion)
+        assertEquals(78, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2556,6 +2625,7 @@ class NativeEngineInstrumentedTest {
             },
         )
         assertTrue(catalog.slicing.all(ProfileValidation::slicing))
+        assertTrue(catalog.slicing.all { it.fillMultiline in 1..5 })
         assertTrue(
             "The catalog must retain process-wide flow calibration",
             catalog.slicing.any { it.printFlowRatio != 1f },
@@ -4709,6 +4779,7 @@ class NativeEngineInstrumentedTest {
                 infillAnchorMaxPercent = false,
                 quality = QualityProfile.DRAFT_06.copy(
                     surfaceDensity = SurfaceDensitySettings(topPercent = 42f, bottomPercent = 68f),
+                    fillMultiline = 4,
                     lateralInfill = LateralInfillSettings(-32f, 57f, 68f),
                     skeletonInfillDensity = 31f,
                     skinInfillDensity = 47f,
@@ -4977,6 +5048,7 @@ class NativeEngineInstrumentedTest {
         assertTrue("Combined infill height must preserve absolute units", gcode.contains("; infill_combination_max_layer_height = 0.48"))
         assertTrue("Sparse infill direction must reach Orca", gcode.contains("; infill_direction = 37"))
         assertTrue("Solid infill direction must reach Orca", gcode.contains("; solid_infill_direction = 123"))
+        assertTrue("Fill multiline must reach Orca", gcode.contains("; fill_multiline = 4"))
         assertTrue("First lateral lattice angle must reach Orca", gcode.contains("; lateral_lattice_angle_1 = -32"))
         assertTrue("Second lateral lattice angle must reach Orca", gcode.contains("; lateral_lattice_angle_2 = 57"))
         assertTrue("Infill overhang angle must reach Orca", gcode.contains("; infill_overhang_angle = 68"))

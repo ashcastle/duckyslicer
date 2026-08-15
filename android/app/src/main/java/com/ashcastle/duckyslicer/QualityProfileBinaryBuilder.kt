@@ -93,6 +93,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var topSurfaceDensity: Float = base.surfaceDensity.topPercent
     private var bottomSurfaceDensity: Float = base.surfaceDensity.bottomPercent
     private var fillPattern: String = base.fillPattern
+    private var fillMultiline: Int = base.fillMultiline
     private var lateralLatticeAngle1: Float = base.lateralInfill.firstAngle
     private var lateralLatticeAngle2: Float = base.lateralInfill.secondAngle
     private var infillOverhangAngle: Float = base.lateralInfill.overhangAngle
@@ -426,6 +427,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         topSurfaceDensity = input.readFloat()
         bottomSurfaceDensity = input.readFloat()
         fillPattern = input.readCatalogString()
+        fillMultiline = input.readInt()
         lateralLatticeAngle1 = input.readFloat()
         lateralLatticeAngle2 = input.readFloat()
         infillOverhangAngle = input.readFloat()
@@ -798,6 +800,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             bottomPercent = bottomSurfaceDensity,
         ),
         fillPattern = fillPattern,
+        fillMultiline = fillMultiline,
         lateralInfill = LateralInfillSettings(
             firstAngle = lateralLatticeAngle1,
             secondAngle = lateralLatticeAngle2,
@@ -1137,6 +1140,7 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("topSurfaceDensity", BINARY_FLOAT),
     BinaryField("bottomSurfaceDensity", BINARY_FLOAT),
     BinaryField("fillPattern", BINARY_STRING),
+    BinaryField("fillMultiline", BINARY_INT),
     BinaryField("lateralLatticeAngle1", BINARY_FLOAT),
     BinaryField("lateralLatticeAngle2", BINARY_FLOAT),
     BinaryField("infillOverhangAngle", BINARY_FLOAT),

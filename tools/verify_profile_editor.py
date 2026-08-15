@@ -23,6 +23,7 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "ProfileSettingsSearchTest.kt",
         "SlicingSettingsSectionTest.kt",
         "SpiralVaseSettingsTest.kt",
+        "InfillPatternTest.kt",
         "strings.xml",
         "strings-ko.xml",
         "CONTRIBUTING.md",
@@ -113,9 +114,29 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "R.string.symmetric_infill_y_axis",
         "R.string.infill_lateral_honeycomb",
         "R.string.infill_lateral_lattice",
+        "R.string.infill_cross_hatch",
+        "R.string.infill_line",
+        "R.string.infill_triangles",
+        "R.string.infill_tri_hexagon",
+        "R.string.infill_cubic",
+        "R.string.infill_adaptive_cubic",
+        "R.string.infill_quarter_cubic",
+        "R.string.infill_support_cubic",
+        "R.string.infill_lightning",
+        "R.string.infill_3d_honeycomb",
+        "R.string.infill_tpms_d",
+        "R.string.infill_tpms_fk",
+        "R.string.infill_concentric",
+        "R.string.infill_hilbert_curve",
+        "R.string.infill_archimedean_chords",
+        "R.string.infill_octagram_spiral",
         "R.string.lateral_lattice_angle_1",
         "R.string.lateral_lattice_angle_2",
         "R.string.infill_overhang_angle",
+        "entries = SPARSE_INFILL_PATTERNS",
+        "MULTILINE_INFILL_PATTERNS",
+        "fillMultilineForPattern(",
+        "R.string.fill_multiline",
         "LateralInfillGeometrySettings(",
         "quality = options.quality.copy(lateralInfill = it)",
         "R.string.sparse_infill_rotation_template",
@@ -448,6 +469,24 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
             'name="symmetric_infill_y_axis"',
             'name="infill_lateral_honeycomb"',
             'name="infill_lateral_lattice"',
+            'name="infill_cross_hatch"',
+            'name="infill_line"',
+            'name="infill_triangles"',
+            'name="infill_tri_hexagon"',
+            'name="infill_cubic"',
+            'name="infill_adaptive_cubic"',
+            'name="infill_quarter_cubic"',
+            'name="infill_support_cubic"',
+            'name="infill_lightning"',
+            'name="infill_3d_honeycomb"',
+            'name="infill_tpms_d"',
+            'name="infill_tpms_fk"',
+            'name="infill_concentric"',
+            'name="infill_hilbert_curve"',
+            'name="infill_archimedean_chords"',
+            'name="infill_octagram_spiral"',
+            'name="fill_multiline"',
+            'name="fill_multiline_value"',
             'name="lateral_lattice_angle_1"',
             'name="lateral_lattice_angle_2"',
             'name="infill_overhang_angle"',
@@ -555,6 +594,16 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         if marker not in spiral_test:
             raise VerificationError(f"spiral-vase editor regression is missing: {marker}")
 
+    infill_test = sources["InfillPatternTest.kt"]
+    for marker in (
+        "sparsePatternListExactlyMatchesPinnedOrcaEnum",
+        "assertEquals(26, SPARSE_INFILL_PATTERNS.size)",
+        "multilineCompatibilityMatchesOrcaDesktopDependencies",
+        "fillMultilineForPattern(pattern, 5)",
+    ):
+        if marker not in infill_test:
+            raise VerificationError(f"sparse-infill editor regression is missing: {marker}")
+
     for document in ("CONTRIBUTING.md",):
         lowered = sources[document].lower()
         if not all(term in lowered for term in ("quality", "strength", "speed", "support", "others")):
@@ -582,6 +631,7 @@ def read_sources() -> dict[str, str]:
         "SpiralVaseSettingsTest.kt": (tests / "SpiralVaseSettingsTest.kt").read_text(
             encoding="utf-8"
         ),
+        "InfillPatternTest.kt": (tests / "InfillPatternTest.kt").read_text(encoding="utf-8"),
         "strings.xml": (resources / "values/strings.xml").read_text(encoding="utf-8"),
         "strings-ko.xml": (resources / "values-ko/strings.xml").read_text(encoding="utf-8"),
         "CONTRIBUTING.md": (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8"),

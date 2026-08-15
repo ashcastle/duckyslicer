@@ -3566,15 +3566,48 @@ private fun SlicingSettingsSheet(
                 }
                 SettingChoices(
                     settingLabel = stringResource(R.string.sparse_infill_pattern),
-                    entries = listOf(
-                        "crosshatch", "grid", "rectilinear", "gyroid", "cubic",
-                        "alignedrectilinear", "zigzag", "crosszag", "lockedzag",
-                        "triangles", "lightning", "lateral-honeycomb", "lateral-lattice",
-                    ),
+                    entries = SPARSE_INFILL_PATTERNS,
                     selected = options.fillPattern,
                     optionLabel = { fillPatternLabel(it) },
-                    onSelected = { onOptionsChanged(options.copy(fillPattern = it)) },
+                    onSelected = { pattern ->
+                        onOptionsChanged(
+                            options.copy(
+                                fillPattern = pattern,
+                                quality = options.quality.copy(
+                                    fillMultiline = fillMultilineForPattern(
+                                        pattern,
+                                        options.quality.fillMultiline,
+                                    ),
+                                ),
+                            ),
+                        )
+                    },
                 )
+                if (
+                    options.fillPattern in MULTILINE_INFILL_PATTERNS ||
+                    settingsQuery.isNotBlank()
+                ) {
+                    SettingSlider(
+                        label = stringResource(R.string.fill_multiline),
+                        valueText = stringResource(
+                            R.string.fill_multiline_value,
+                            options.quality.fillMultiline,
+                        ),
+                        value = options.quality.fillMultiline.toFloat(),
+                        range = 1f..5f,
+                        steps = 3,
+                        enabled = options.fillPattern in MULTILINE_INFILL_PATTERNS,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    quality = options.quality.copy(
+                                        fillMultiline = it.roundToInt(),
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                }
                 if (
                     options.fillPattern in setOf("lateral-honeycomb", "lateral-lattice") ||
                     settingsQuery.isNotBlank()
@@ -7145,10 +7178,26 @@ private fun LateralInfillGeometrySettings(
 
 @Composable
 private fun fillPatternLabel(value: String): String = when (value) {
+    "crosshatch" -> stringResource(R.string.infill_cross_hatch)
+    "line" -> stringResource(R.string.infill_line)
     "grid" -> stringResource(R.string.infill_grid)
+    "triangles" -> stringResource(R.string.infill_triangles)
+    "tri-hexagon" -> stringResource(R.string.infill_tri_hexagon)
+    "cubic" -> stringResource(R.string.infill_cubic)
+    "adaptivecubic" -> stringResource(R.string.infill_adaptive_cubic)
+    "quartercubic" -> stringResource(R.string.infill_quarter_cubic)
+    "supportcubic" -> stringResource(R.string.infill_support_cubic)
+    "lightning" -> stringResource(R.string.infill_lightning)
     "honeycomb" -> stringResource(R.string.infill_honeycomb)
+    "3dhoneycomb" -> stringResource(R.string.infill_3d_honeycomb)
     "lateral-honeycomb" -> stringResource(R.string.infill_lateral_honeycomb)
     "lateral-lattice" -> stringResource(R.string.infill_lateral_lattice)
+    "tpmsd" -> stringResource(R.string.infill_tpms_d)
+    "tpmsfk" -> stringResource(R.string.infill_tpms_fk)
+    "concentric" -> stringResource(R.string.infill_concentric)
+    "hilbertcurve" -> stringResource(R.string.infill_hilbert_curve)
+    "archimedeanchords" -> stringResource(R.string.infill_archimedean_chords)
+    "octagramspiral" -> stringResource(R.string.infill_octagram_spiral)
     "rectilinear" -> stringResource(R.string.infill_rectilinear)
     "alignedrectilinear" -> stringResource(R.string.infill_aligned_rectilinear)
     "zigzag" -> stringResource(R.string.infill_zig_zag)
