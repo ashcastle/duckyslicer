@@ -109,6 +109,11 @@ def valid_sources() -> dict[str, str]:
             " R.string.printer_environment_capabilities"
             " R.string.supports_chamber_temperature_control R.string.supports_air_filtration"
             " supportsChamberTemperatureControl = supportsAirFiltration ="
+            " R.string.adaptive_bed_mesh R.string.bed_mesh_min R.string.bed_mesh_max"
+            " R.string.probe_point_distance R.string.mesh_margin"
+            " bedMeshMinX = bedMeshMinY = bedMeshMaxX = bedMeshMaxY ="
+            " bedMeshProbeDistanceX = bedMeshProbeDistanceY = adaptiveBedMeshMargin ="
+            " CoordinatePairSettingField("
             " MAX_GCODE_TEMPLATE_BYTES"
             " R.string.filament_gcode R.string.filament_start_gcode R.string.filament_end_gcode"
             " R.string.filament_diameter activeProfile.copy(diameter ="
@@ -203,7 +208,9 @@ def valid_sources() -> dict[str, str]:
         "ProfileSettingsSearchTest.kt": (
             "settingSearchTargetsOptionLabelsInsteadOfProfileNames "
             'settingQueryMatches("Z distance", "Top Z distance") '
-            "blankSettingSearchKeepsTheWholeEditorVisible"
+            "blankSettingSearchKeepsTheWholeEditorVisible "
+            "coordinatePairEditorParsesOnlyTwoFiniteCoordinates "
+            'settingQueryMatches("mesh min", "Bed mesh min")'
         ),
         "SlicingSettingsSectionTest.kt": (
             "processEditorUsesExpectedSectionOrder "

@@ -8,6 +8,7 @@ from tools.generate_profile_catalog import (
     build_filament,
     build_printer,
     build_process,
+    coordinate_pair,
     printable_geometry,
     small_area_flow_compensation_model,
     support_type,
@@ -16,6 +17,40 @@ from tools.generate_profile_catalog import (
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_parses_adaptive_bed_mesh_coordinate_pairs(self) -> None:
+        self.assertEqual((10.0, 20.0), coordinate_pair(["10", "20"], 1, 2))
+        self.assertEqual((10.5, -20.25), coordinate_pair("10.5,-20.25", 1, 2))
+        self.assertEqual((10.5, -20.25), coordinate_pair("10.5x-20.25", 1, 2))
+        self.assertEqual((12.0, 12.0), coordinate_pair("12", 1, 2))
+        self.assertEqual((1, 2), coordinate_pair(None, 1, 2))
+        with self.assertRaises(ValueError):
+            coordinate_pair(["1", "2", "3"], 1, 2)
+
+    def test_preserves_and_validates_adaptive_bed_mesh(self) -> None:
+        base = {
+            "name": "Adaptive mesh printer",
+            "printable_area": ["0x0", "300x0", "300x300", "0x300"],
+            "printable_height": "300",
+            "nozzle_diameter": ["0.4"],
+            "gcode_flavor": "klipper",
+            "bed_mesh_min": "10,11",
+            "bed_mesh_max": ["290", "291"],
+            "bed_mesh_probe_distance": "40x41",
+            "adaptive_bed_mesh_margin": "5",
+        }
+
+        profile = build_printer("Example", base)
+
+        self.assertEqual(10.0, profile["bedMeshMinX"])
+        self.assertEqual(11.0, profile["bedMeshMinY"])
+        self.assertEqual(290.0, profile["bedMeshMaxX"])
+        self.assertEqual(291.0, profile["bedMeshMaxY"])
+        self.assertEqual(40.0, profile["bedMeshProbeDistanceX"])
+        self.assertEqual(41.0, profile["bedMeshProbeDistanceY"])
+        self.assertEqual(5.0, profile["adaptiveBedMeshMargin"])
+        with self.assertRaises(ValueError):
+            build_printer("Example", base | {"bed_mesh_min": "295,11"})
+
     def test_preserves_first_layer_inspection(self) -> None:
         enabled = build_printer(
             "Example",

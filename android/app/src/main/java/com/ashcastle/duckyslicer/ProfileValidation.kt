@@ -18,6 +18,19 @@ internal object ProfileValidation {
             profile.extruderCount in 1..MAX_FILAMENT_SLOTS &&
             profile.fanSpeedupTime in 0f..60f &&
             profile.fanKickstart in 0f..60f &&
+            listOf(
+                profile.bedMeshMinX,
+                profile.bedMeshMinY,
+                profile.bedMeshMaxX,
+                profile.bedMeshMaxY,
+            ).all { it in -100_000f..100_000f } &&
+            profile.bedMeshMinX <= profile.bedMeshMaxX &&
+            profile.bedMeshMinY <= profile.bedMeshMaxY &&
+            listOf(
+                profile.bedMeshProbeDistanceX,
+                profile.bedMeshProbeDistanceY,
+                profile.adaptiveBedMeshMargin,
+            ).all { it in 0f..100_000f } &&
             (profile.defaultPrintProfile.isEmpty() || profile.defaultPrintProfile.isSafeLabel()) &&
             profile.defaultFilamentProfiles.size <= MAX_FILAMENT_SLOTS &&
             profile.defaultFilamentProfiles.all { it.isSafeLabel() } &&

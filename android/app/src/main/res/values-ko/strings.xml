@@ -979,6 +979,11 @@
     <string name="printer_environment_capabilities">환경 기능</string>
     <string name="supports_chamber_temperature_control">가열 챔버</string>
     <string name="supports_air_filtration">배기 필터</string>
+    <string name="adaptive_bed_mesh">적응형 베드 메시</string>
+    <string name="bed_mesh_min">베드 메시 최소 좌표</string>
+    <string name="bed_mesh_max">베드 메시 최대 좌표</string>
+    <string name="probe_point_distance">프로브 지점 간격</string>
+    <string name="mesh_margin">메시 여백</string>
     <string name="filament_material_environment">재료 환경</string>
     <string name="filament_softening_temperature">연화 온도</string>
     <string name="filament_nozzle_temperature_minimum">최저 노즐 온도</string>

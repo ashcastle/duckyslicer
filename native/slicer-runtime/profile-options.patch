@@ -2,12 +2,19 @@ diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
 index 669271fe..2d9da18b 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -56,6 +56,8 @@ struct SliceConfig {
+@@ -56,6 +56,15 @@ struct SliceConfig {
      std::string filename_format = "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode";
      std::string input_filename_base = "model";
      std::string printer_model = "DuckySlicer";
 +    bool is_bambu_printer = false;
 +    bool scan_first_layer = false;
++    float bed_mesh_min_x = -99999.0f;
++    float bed_mesh_min_y = -99999.0f;
++    float bed_mesh_max_x = 99999.0f;
++    float bed_mesh_max_y = 99999.0f;
++    float bed_mesh_probe_distance_x = 50.0f;
++    float bed_mesh_probe_distance_y = 50.0f;
++    float adaptive_bed_mesh_margin = 0.0f;
      float lateral_lattice_angle_1 = -45.0f;
      float lateral_lattice_angle_2 = 45.0f;
      float infill_overhang_angle = 60.0f;
@@ -48,12 +55,19 @@ diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_
 index cf6b9fdd..689e50c6 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -106,6 +106,8 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -106,6 +106,15 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.filename_format = getString("filenameFormat");
      config.input_filename_base = getString("inputFilenameBase");
      config.printer_model = getString("printerModel");
 +    config.is_bambu_printer = getBool("isBambuPrinter");
 +    config.scan_first_layer = getBool("scanFirstLayer");
++    config.bed_mesh_min_x = getFloat("bedMeshMinX");
++    config.bed_mesh_min_y = getFloat("bedMeshMinY");
++    config.bed_mesh_max_x = getFloat("bedMeshMaxX");
++    config.bed_mesh_max_y = getFloat("bedMeshMaxY");
++    config.bed_mesh_probe_distance_x = getFloat("bedMeshProbeDistanceX");
++    config.bed_mesh_probe_distance_y = getFloat("bedMeshProbeDistanceY");
++    config.adaptive_bed_mesh_margin = getFloat("adaptiveBedMeshMargin");
      config.lateral_lattice_angle_1 = getFloat("lateralLatticeAngle1");
      config.lateral_lattice_angle_2 = getFloat("lateralLatticeAngle2");
      config.infill_overhang_angle = getFloat("infillOverhangAngle");
@@ -94,12 +108,19 @@ index cf6b9fdd..689e50c6 100644
      config.single_extruder_multi_material_priming = getBool("singleExtruderMultiMaterialPriming");
      config.flush_into_infill = getBool("flushIntoInfill");
      config.flush_into_support = getBool("flushIntoSupport");
-@@ -681,6 +698,8 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -681,6 +698,15 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setString("filenameFormat", config.filename_format);
      setString("inputFilenameBase", config.input_filename_base);
      setString("printerModel", config.printer_model);
 +    setBool("isBambuPrinter", config.is_bambu_printer);
 +    setBool("scanFirstLayer", config.scan_first_layer);
++    setFloat("bedMeshMinX", config.bed_mesh_min_x);
++    setFloat("bedMeshMinY", config.bed_mesh_min_y);
++    setFloat("bedMeshMaxX", config.bed_mesh_max_x);
++    setFloat("bedMeshMaxY", config.bed_mesh_max_y);
++    setFloat("bedMeshProbeDistanceX", config.bed_mesh_probe_distance_x);
++    setFloat("bedMeshProbeDistanceY", config.bed_mesh_probe_distance_y);
++    setFloat("adaptiveBedMeshMargin", config.adaptive_bed_mesh_margin);
      setFloat("lateralLatticeAngle1", config.lateral_lattice_angle_1);
      setFloat("lateralLatticeAngle2", config.lateral_lattice_angle_2);
      setFloat("infillOverhangAngle", config.infill_overhang_angle);
@@ -148,7 +169,7 @@ diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_p
 index 6bd1edf6..619f238d 100644
 --- a/app/src/main/cpp/src/sapil_print.cpp
 +++ b/app/src/main/cpp/src/sapil_print.cpp
-@@ -1312,6 +1312,10 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -1312,6 +1312,23 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("precise_outer_wall", new Slic3r::ConfigOptionBool(config.precise_outer_walls));
      dpc.set_deserialize_strict("print_sequence", config.print_sequence);
      dpc.set_deserialize_strict("print_order", config.print_order);
@@ -156,6 +177,19 @@ index 6bd1edf6..619f238d 100644
 +        "timelapse_type",
 +        config.timelapse_type == "smooth" ? "1" : "0");
 +    dpc.set_key_value("scan_first_layer", new Slic3r::ConfigOptionBool(config.scan_first_layer));
++    dpc.set_key_value(
++        "bed_mesh_min",
++        new Slic3r::ConfigOptionPoint(Slic3r::Vec2d(config.bed_mesh_min_x, config.bed_mesh_min_y)));
++    dpc.set_key_value(
++        "bed_mesh_max",
++        new Slic3r::ConfigOptionPoint(Slic3r::Vec2d(config.bed_mesh_max_x, config.bed_mesh_max_y)));
++    dpc.set_key_value(
++        "bed_mesh_probe_distance",
++        new Slic3r::ConfigOptionPoint(
++            Slic3r::Vec2d(config.bed_mesh_probe_distance_x, config.bed_mesh_probe_distance_y)));
++    dpc.set_key_value(
++        "adaptive_bed_mesh_margin",
++        new Slic3r::ConfigOptionFloat(config.adaptive_bed_mesh_margin));
      dpc.set_key_value("extruder_clearance_radius", new Slic3r::ConfigOptionFloat(config.extruder_clearance_radius));
      dpc.set_key_value("extruder_clearance_height_to_rod", new Slic3r::ConfigOptionFloat(config.extruder_clearance_height_to_rod));
      dpc.set_key_value("extruder_clearance_height_to_lid", new Slic3r::ConfigOptionFloat(config.extruder_clearance_height_to_lid));

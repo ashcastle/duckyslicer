@@ -565,6 +565,22 @@ class SliceOptionsPersistenceTest {
         assertEquals(options.printerProfile.brand, restored.printerProfile.brand)
         assertEquals(options.printerProfile.builtIn, restored.printerProfile.builtIn)
         assertEquals(options.printerProfile.scanFirstLayer, restored.printerProfile.scanFirstLayer)
+        assertEquals(options.printerProfile.bedMeshMinX, restored.printerProfile.bedMeshMinX)
+        assertEquals(options.printerProfile.bedMeshMinY, restored.printerProfile.bedMeshMinY)
+        assertEquals(options.printerProfile.bedMeshMaxX, restored.printerProfile.bedMeshMaxX)
+        assertEquals(options.printerProfile.bedMeshMaxY, restored.printerProfile.bedMeshMaxY)
+        assertEquals(
+            options.printerProfile.bedMeshProbeDistanceX,
+            restored.printerProfile.bedMeshProbeDistanceX,
+        )
+        assertEquals(
+            options.printerProfile.bedMeshProbeDistanceY,
+            restored.printerProfile.bedMeshProbeDistanceY,
+        )
+        assertEquals(
+            options.printerProfile.adaptiveBedMeshMargin,
+            restored.printerProfile.adaptiveBedMeshMargin,
+        )
         assertEquals(options.printerProfile.defaultPrintProfile, restored.printerProfile.defaultPrintProfile)
         assertEquals(
             options.printerProfile.defaultFilamentProfiles,
@@ -1325,6 +1341,13 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             purgeInPrimeTower = false,
             highCurrentOnFilamentSwap = true,
             scanFirstLayer = true,
+            bedMeshMinX = 10f,
+            bedMeshMinY = 11f,
+            bedMeshMaxX = 290f,
+            bedMeshMaxY = 291f,
+            bedMeshProbeDistanceX = 40f,
+            bedMeshProbeDistanceY = 41f,
+            adaptiveBedMeshMargin = 5f,
             toolChangeRetractLengths = listOf(1.4f, 2.6f),
             toolChangeRetractRestartExtras = listOf(-0.2f, 0.3f),
             defaultPrintProfile = "Fixture process",

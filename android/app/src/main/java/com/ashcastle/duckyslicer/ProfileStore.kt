@@ -7,7 +7,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 89
+internal const val USER_PROFILE_SCHEMA_VERSION = 90
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -134,6 +134,13 @@ class ProfileStore private constructor(
             supportsChamberTemperatureControl = options.printerProfile.supportsChamberTemperatureControl,
             supportsAirFiltration = options.printerProfile.supportsAirFiltration,
             scanFirstLayer = options.printerProfile.scanFirstLayer,
+            bedMeshMinX = options.printerProfile.bedMeshMinX,
+            bedMeshMinY = options.printerProfile.bedMeshMinY,
+            bedMeshMaxX = options.printerProfile.bedMeshMaxX,
+            bedMeshMaxY = options.printerProfile.bedMeshMaxY,
+            bedMeshProbeDistanceX = options.printerProfile.bedMeshProbeDistanceX,
+            bedMeshProbeDistanceY = options.printerProfile.bedMeshProbeDistanceY,
+            adaptiveBedMeshMargin = options.printerProfile.adaptiveBedMeshMargin,
             defaultPrintProfile = options.quality.name,
             defaultFilamentProfiles = options.resolvedFilamentSlots().map(FilamentProfile::name),
         )
@@ -687,6 +694,13 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("supportsChamberTemperatureControl", supportsChamberTemperatureControl)
     .put("supportsAirFiltration", supportsAirFiltration)
     .put("scanFirstLayer", scanFirstLayer)
+    .put("bedMeshMinX", bedMeshMinX)
+    .put("bedMeshMinY", bedMeshMinY)
+    .put("bedMeshMaxX", bedMeshMaxX)
+    .put("bedMeshMaxY", bedMeshMaxY)
+    .put("bedMeshProbeDistanceX", bedMeshProbeDistanceX)
+    .put("bedMeshProbeDistanceY", bedMeshProbeDistanceY)
+    .put("adaptiveBedMeshMargin", adaptiveBedMeshMargin)
     .put("defaultPrintProfile", defaultPrintProfile)
     .put("defaultFilamentProfiles", JSONArray(defaultFilamentProfiles))
     .put("builtIn", builtIn)
@@ -1215,6 +1229,13 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         supportsChamberTemperatureControl = optBoolean("supportsChamberTemperatureControl"),
         supportsAirFiltration = optBoolean("supportsAirFiltration"),
         scanFirstLayer = optBoolean("scanFirstLayer"),
+        bedMeshMinX = optDouble("bedMeshMinX", -99_999.0).toFloat(),
+        bedMeshMinY = optDouble("bedMeshMinY", -99_999.0).toFloat(),
+        bedMeshMaxX = optDouble("bedMeshMaxX", 99_999.0).toFloat(),
+        bedMeshMaxY = optDouble("bedMeshMaxY", 99_999.0).toFloat(),
+        bedMeshProbeDistanceX = optDouble("bedMeshProbeDistanceX", 50.0).toFloat(),
+        bedMeshProbeDistanceY = optDouble("bedMeshProbeDistanceY", 50.0).toFloat(),
+        adaptiveBedMeshMargin = optDouble("adaptiveBedMeshMargin", 0.0).toFloat(),
         defaultPrintProfile = optString("defaultPrintProfile", ""),
         defaultFilamentProfiles = stringList("defaultFilamentProfiles"),
     )

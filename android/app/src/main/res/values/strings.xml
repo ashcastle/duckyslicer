@@ -979,6 +979,11 @@
     <string name="printer_environment_capabilities">Environment capabilities</string>
     <string name="supports_chamber_temperature_control">Heated chamber</string>
     <string name="supports_air_filtration">Exhaust filtration</string>
+    <string name="adaptive_bed_mesh">Adaptive bed mesh</string>
+    <string name="bed_mesh_min">Bed mesh min</string>
+    <string name="bed_mesh_max">Bed mesh max</string>
+    <string name="probe_point_distance">Probe point distance</string>
+    <string name="mesh_margin">Mesh margin</string>
     <string name="filament_material_environment">Material environment</string>
     <string name="filament_softening_temperature">Softening temperature</string>
     <string name="filament_nozzle_temperature_minimum">Minimum nozzle temperature</string>

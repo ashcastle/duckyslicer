@@ -259,6 +259,13 @@ data class PrinterProfile(
     val supportsChamberTemperatureControl: Boolean = false,
     val supportsAirFiltration: Boolean = false,
     val scanFirstLayer: Boolean = false,
+    val bedMeshMinX: Float = -99_999f,
+    val bedMeshMinY: Float = -99_999f,
+    val bedMeshMaxX: Float = 99_999f,
+    val bedMeshMaxY: Float = 99_999f,
+    val bedMeshProbeDistanceX: Float = 50f,
+    val bedMeshProbeDistanceY: Float = 50f,
+    val adaptiveBedMeshMargin: Float = 0f,
     val defaultPrintProfile: String = "",
     val defaultFilamentProfiles: List<String> = emptyList(),
 ) {
@@ -1232,7 +1239,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 88,
+    val schemaVersion: Int = 89,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -2231,6 +2238,13 @@ data class SliceOptions(
             native.printerModel = printerProfile.name
             native.isBambuPrinter = printerProfile.brand == "BBL"
             native.scanFirstLayer = printerProfile.scanFirstLayer
+            native.bedMeshMinX = printerProfile.bedMeshMinX
+            native.bedMeshMinY = printerProfile.bedMeshMinY
+            native.bedMeshMaxX = printerProfile.bedMeshMaxX
+            native.bedMeshMaxY = printerProfile.bedMeshMaxY
+            native.bedMeshProbeDistanceX = printerProfile.bedMeshProbeDistanceX
+            native.bedMeshProbeDistanceY = printerProfile.bedMeshProbeDistanceY
+            native.adaptiveBedMeshMargin = printerProfile.adaptiveBedMeshMargin
             native.skirtType = quality.skirtType
             native.singleLoopDraftShield = quality.singleLoopDraftShield
             native.lateralLatticeAngle1 = quality.lateralInfill.firstAngle

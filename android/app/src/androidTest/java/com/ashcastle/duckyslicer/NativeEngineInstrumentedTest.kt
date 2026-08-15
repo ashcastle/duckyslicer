@@ -2394,7 +2394,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(88, catalog.schemaVersion)
+        assertEquals(89, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2413,6 +2413,14 @@ class NativeEngineInstrumentedTest {
         assertEquals(5f, generatedU1.machineToolChangeTime)
         assertFalse(generatedU1.toolChangeTemperatureWait)
         assertEquals("M600", generatedU1.machinePauseGcode)
+        val adaptiveMesh = catalog.printers.single { it.name == "WonderMaker ZR 0.4 nozzle" }
+        assertEquals(10f, adaptiveMesh.bedMeshMinX)
+        assertEquals(10f, adaptiveMesh.bedMeshMinY)
+        assertEquals(290f, adaptiveMesh.bedMeshMaxX)
+        assertEquals(290f, adaptiveMesh.bedMeshMaxY)
+        assertEquals(40f, adaptiveMesh.bedMeshProbeDistanceX)
+        assertEquals(40f, adaptiveMesh.bedMeshProbeDistanceY)
+        assertEquals(5f, adaptiveMesh.adaptiveBedMeshMargin)
         val coreOne = catalog.printers.single { it.name == "Prusa CORE One 0.4 nozzle" }
         val incompatible = SliceOptions()
             .selectFilament(
@@ -4086,6 +4094,50 @@ class NativeEngineInstrumentedTest {
         assertFalse(disabled.lineSequence().any { it.trim() == scanRegistration })
         assertTrue(enabled.lineSequence().any { it.trim() == secondLayerScan })
         assertFalse(disabled.lineSequence().any { it.trim() == secondLayerScan })
+    }
+
+    @Test
+    fun adaptiveBedMeshSettingsReachBundledKlipperStartGcode() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val printer = OrcaProfileCatalog(context).load().printers.single {
+            it.name == "WonderMaker ZR 0.4 nozzle"
+        }.copy(
+            bedMeshMinX = 145f,
+            bedMeshMinY = 145f,
+            bedMeshMaxX = 155f,
+            bedMeshMaxY = 155f,
+            bedMeshProbeDistanceX = 4f,
+            bedMeshProbeDistanceY = 4f,
+            adaptiveBedMeshMargin = 0f,
+        )
+        val outcome = OnDeviceSlicer.slice(
+            fixtureModel(),
+            SliceOptions()
+                .selectPrinter(printer)
+                .selectFilament(FilamentProfile.PLA)
+                .selectQuality(QualityProfile.DRAFT),
+        )
+        try {
+            val start = outcome.output.useLines { lines ->
+                lines.first { it.startsWith("START_PRINT ") }
+            }
+            val values = start.split(' ')
+                .mapNotNull { token ->
+                    val separator = token.indexOf('=')
+                    if (separator <= 0) null else token.substring(0, separator) to token.substring(separator + 1)
+                }
+                .toMap()
+
+            assertEquals(145f, values.getValue("MESH_MIN_X").toFloat(), 0.001f)
+            assertEquals(145f, values.getValue("MESH_MIN_Y").toFloat(), 0.001f)
+            assertEquals(155f, values.getValue("MESH_MAX_X").toFloat(), 0.001f)
+            assertEquals(155f, values.getValue("MESH_MAX_Y").toFloat(), 0.001f)
+            assertEquals(4, values.getValue("PROBE_COUNT_X").toInt())
+            assertEquals(4, values.getValue("PROBE_COUNT_Y").toInt())
+            assertFalse("Native placeholders must be fully resolved", start.contains('{'))
+        } finally {
+            outcome.output.delete()
+        }
     }
 
     @Test

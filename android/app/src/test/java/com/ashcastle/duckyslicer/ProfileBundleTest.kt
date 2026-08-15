@@ -48,6 +48,13 @@ class ProfileBundleTest {
                         supportsChamberTemperatureControl = true,
                         supportsAirFiltration = true,
                         scanFirstLayer = true,
+                        bedMeshMinX = 10f,
+                        bedMeshMinY = 11f,
+                        bedMeshMaxX = 290f,
+                        bedMeshMaxY = 291f,
+                        bedMeshProbeDistanceX = 40f,
+                        bedMeshProbeDistanceY = 41f,
+                        adaptiveBedMeshMargin = 5f,
                         toolChangeRetractLengths = listOf(1.2f, 2.3f),
                         toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
                     ),
@@ -168,6 +175,11 @@ class ProfileBundleTest {
                         it.highCurrentOnFilamentSwap &&
                         it.supportsChamberTemperatureControl && it.supportsAirFiltration &&
                         it.scanFirstLayer &&
+                        it.bedMeshMinX == 10f && it.bedMeshMinY == 11f &&
+                        it.bedMeshMaxX == 290f && it.bedMeshMaxY == 291f &&
+                        it.bedMeshProbeDistanceX == 40f &&
+                        it.bedMeshProbeDistanceY == 41f &&
+                        it.adaptiveBedMeshMargin == 5f &&
                         it.toolChangeRetractLengths == listOf(1.2f, 2.3f) &&
                         it.toolChangeRetractRestartExtras == listOf(-0.1f, 0.2f)
                 },

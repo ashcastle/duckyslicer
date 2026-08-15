@@ -29,6 +29,8 @@ class ProfileSettingsSearchTest {
         assertTrue(settingQueryMatches("타임랩스", "타임랩스"))
         assertTrue(settingQueryMatches("first layer", "Scan first layer"))
         assertTrue(settingQueryMatches("레이어 검사", "첫 레이어 검사"))
+        assertTrue(settingQueryMatches("mesh min", "Bed mesh min"))
+        assertTrue(settingQueryMatches("프로브 간격", "프로브 지점 간격"))
         assertFalse(settingQueryMatches("Z distance", "0.20 mm Standard"))
     }
 
@@ -36,5 +38,14 @@ class ProfileSettingsSearchTest {
     fun blankSettingSearchKeepsTheWholeEditorVisible() {
         assertTrue(settingQueryMatches("", "Layer height"))
         assertTrue(settingQueryMatches("   ", "Nozzle temperature"))
+    }
+
+    @Test
+    fun coordinatePairEditorParsesOnlyTwoFiniteCoordinates() {
+        assertTrue(parseCoordinatePair("10.5, -20.25") == (10.5f to -20.25f))
+        assertTrue(parseCoordinatePair("0, 100000") == (0f to 100_000f))
+        assertTrue(parseCoordinatePair("1") == null)
+        assertTrue(parseCoordinatePair("1, 2, 3") == null)
+        assertTrue(parseCoordinatePair("NaN, 2") == null)
     }
 }

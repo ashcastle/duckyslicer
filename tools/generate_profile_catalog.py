@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 88
+SCHEMA_VERSION = 89
 MAX_FILAMENT_SLOTS = 16
 DEFAULT_GCODE_FILENAME_FORMAT = (
     "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
@@ -250,6 +250,22 @@ def point_values(value: Any) -> tuple[list[float], list[float]]:
     return [point[0] for point in points], [point[1] for point in points]
 
 
+def coordinate_pair(value: Any, default_x: float, default_y: float) -> tuple[float, float]:
+    """Parse Orca's scalar, comma/x-delimited, or two-element point representation."""
+    candidates = values(value)
+    if not candidates:
+        return default_x, default_y
+    if len(candidates) > 2:
+        raise ValueError("invalid coordinate pair")
+    if len(candidates) == 2:
+        return number(candidates[0], default_x), number(candidates[1], default_y)
+    coordinates = [item.strip() for item in re.split(r"[,x]", candidates[0], maxsplit=1)]
+    if len(coordinates) == 2:
+        return number(coordinates[0], default_x), number(coordinates[1], default_y)
+    parsed = number(coordinates[0], default_x)
+    return parsed, parsed
+
+
 def bed_exclude_geometry(
     value: Any,
     origin_x: float,
@@ -381,6 +397,11 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         raw.get("retract_restart_extra_toolchange"), 0
     )
     extruder_offsets_x, extruder_offsets_y = point_values(raw.get("extruder_offset"))
+    bed_mesh_min_x, bed_mesh_min_y = coordinate_pair(raw.get("bed_mesh_min"), -99_999, -99_999)
+    bed_mesh_max_x, bed_mesh_max_y = coordinate_pair(raw.get("bed_mesh_max"), 99_999, 99_999)
+    bed_mesh_probe_distance_x, bed_mesh_probe_distance_y = coordinate_pair(
+        raw.get("bed_mesh_probe_distance"), 50, 50
+    )
     physical_extruder_count = len(values(raw.get("nozzle_diameter")))
     supports_multi_material = str(
         scalar(raw.get("single_extruder_multi_material"), "0")
@@ -432,6 +453,13 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         ),
         "supportsAirFiltration": boolean(raw.get("support_air_filtration")),
         "scanFirstLayer": boolean(raw.get("scan_first_layer")),
+        "bedMeshMinX": bed_mesh_min_x,
+        "bedMeshMinY": bed_mesh_min_y,
+        "bedMeshMaxX": bed_mesh_max_x,
+        "bedMeshMaxY": bed_mesh_max_y,
+        "bedMeshProbeDistanceX": bed_mesh_probe_distance_x,
+        "bedMeshProbeDistanceY": bed_mesh_probe_distance_y,
+        "adaptiveBedMeshMargin": number(raw.get("adaptive_bed_mesh_margin"), 0),
         "machineStartGcode": str(raw.get("machine_start_gcode", "")),
         "machineEndGcode": str(raw.get("machine_end_gcode", "")),
         "machinePauseGcode": str(raw.get("machine_pause_gcode", "")),
@@ -545,6 +573,14 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         ])
         and 0 <= profile["fanSpeedupTime"] <= 60
         and 0 <= profile["fanKickstart"] <= 60
+        and all(-100_000 <= profile[key] <= 100_000 for key in [
+            "bedMeshMinX", "bedMeshMinY", "bedMeshMaxX", "bedMeshMaxY"
+        ])
+        and profile["bedMeshMinX"] <= profile["bedMeshMaxX"]
+        and profile["bedMeshMinY"] <= profile["bedMeshMaxY"]
+        and all(0 <= profile[key] <= 100_000 for key in [
+            "bedMeshProbeDistanceX", "bedMeshProbeDistanceY", "adaptiveBedMeshMargin"
+        ])
         and 0.01 <= profile["minLayerHeight"] <= profile["maxLayerHeight"] <= 2
     ):
         raise ValueError("unsafe motion limits")

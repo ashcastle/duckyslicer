@@ -365,6 +365,13 @@ data class SliceConfig(
     @JvmField var printerModel: String = "DuckySlicer"
     @JvmField var isBambuPrinter: Boolean = false
     @JvmField var scanFirstLayer: Boolean = false
+    @JvmField var bedMeshMinX: Float = -99_999f
+    @JvmField var bedMeshMinY: Float = -99_999f
+    @JvmField var bedMeshMaxX: Float = 99_999f
+    @JvmField var bedMeshMaxY: Float = 99_999f
+    @JvmField var bedMeshProbeDistanceX: Float = 50f
+    @JvmField var bedMeshProbeDistanceY: Float = 50f
+    @JvmField var adaptiveBedMeshMargin: Float = 0f
     @JvmField var skirtType: String = "combined"
     @JvmField var singleLoopDraftShield: Boolean = false
     @JvmField var lateralLatticeAngle1: Float = -45f

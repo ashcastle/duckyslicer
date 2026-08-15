@@ -227,6 +227,19 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "R.string.supports_air_filtration",
         "supportsChamberTemperatureControl =",
         "supportsAirFiltration =",
+        "R.string.adaptive_bed_mesh",
+        "R.string.bed_mesh_min",
+        "R.string.bed_mesh_max",
+        "R.string.probe_point_distance",
+        "R.string.mesh_margin",
+        "bedMeshMinX =",
+        "bedMeshMinY =",
+        "bedMeshMaxX =",
+        "bedMeshMaxY =",
+        "bedMeshProbeDistanceX =",
+        "bedMeshProbeDistanceY =",
+        "adaptiveBedMeshMargin =",
+        "CoordinatePairSettingField(",
         "GcodeTemplateSetting(",
         "MAX_GCODE_TEMPLATE_BYTES",
         "R.string.filament_gcode",
@@ -607,6 +620,8 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "settingSearchTargetsOptionLabelsInsteadOfProfileNames",
         'settingQueryMatches("Z distance", "Top Z distance")',
         "blankSettingSearchKeepsTheWholeEditorVisible",
+        "coordinatePairEditorParsesOnlyTwoFiniteCoordinates",
+        'settingQueryMatches("mesh min", "Bed mesh min")',
     ):
         if marker not in search_test:
             raise VerificationError(f"profile setting-search regression is missing: {marker}")

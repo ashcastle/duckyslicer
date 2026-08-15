@@ -724,6 +724,84 @@ private fun PrinterSettingsSheet(
         },
         onSelected = { onOptionsChanged(options.copy(gcodeFlavor = it)) },
     )
+    SettingsGroupTitle(stringResource(R.string.adaptive_bed_mesh))
+    CoordinatePairSettingField(
+        label = stringResource(R.string.bed_mesh_min),
+        valueX = options.printerProfile.bedMeshMinX,
+        valueY = options.printerProfile.bedMeshMinY,
+        minimum = -100_000f,
+        maximum = 100_000f,
+        suffix = stringResource(R.string.millimeters_suffix),
+        isValid = { x, y ->
+            x <= options.printerProfile.bedMeshMaxX &&
+                y <= options.printerProfile.bedMeshMaxY
+        },
+        onValueChange = { x, y ->
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(
+                        bedMeshMinX = x,
+                        bedMeshMinY = y,
+                    ),
+                ),
+            )
+        },
+    )
+    CoordinatePairSettingField(
+        label = stringResource(R.string.bed_mesh_max),
+        valueX = options.printerProfile.bedMeshMaxX,
+        valueY = options.printerProfile.bedMeshMaxY,
+        minimum = -100_000f,
+        maximum = 100_000f,
+        suffix = stringResource(R.string.millimeters_suffix),
+        isValid = { x, y ->
+            x >= options.printerProfile.bedMeshMinX &&
+                y >= options.printerProfile.bedMeshMinY
+        },
+        onValueChange = { x, y ->
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(
+                        bedMeshMaxX = x,
+                        bedMeshMaxY = y,
+                    ),
+                ),
+            )
+        },
+    )
+    CoordinatePairSettingField(
+        label = stringResource(R.string.probe_point_distance),
+        valueX = options.printerProfile.bedMeshProbeDistanceX,
+        valueY = options.printerProfile.bedMeshProbeDistanceY,
+        minimum = 0f,
+        maximum = 100_000f,
+        suffix = stringResource(R.string.millimeters_suffix),
+        onValueChange = { x, y ->
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(
+                        bedMeshProbeDistanceX = x,
+                        bedMeshProbeDistanceY = y,
+                    ),
+                ),
+            )
+        },
+    )
+    DecimalSettingField(
+        label = stringResource(R.string.mesh_margin),
+        value = options.printerProfile.adaptiveBedMeshMargin,
+        maximum = 100_000f,
+        suffix = stringResource(R.string.millimeters_suffix),
+        onValueChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(
+                        adaptiveBedMeshMargin = it,
+                    ),
+                ),
+            )
+        },
+    )
     SettingsGroupTitle(stringResource(R.string.gcode_output))
     SettingsSwitch(
         label = stringResource(R.string.scan_first_layer),
@@ -7029,6 +7107,70 @@ private fun editableDecimal(value: Float): String =
     if (value == value.roundToInt().toFloat()) value.roundToInt().toString() else value.toString()
 
 private val DECIMAL_INPUT = Regex("[0-9]{0,7}([.,][0-9]{0,2})?")
+
+@Composable
+private fun CoordinatePairSettingField(
+    label: String,
+    valueX: Float,
+    valueY: Float,
+    minimum: Float,
+    maximum: Float,
+    suffix: String,
+    isValid: (Float, Float) -> Boolean = { _, _ -> true },
+    onValueChange: (Float, Float) -> Unit,
+) {
+    if (!settingMatchesQuery(label)) return
+    var input by remember { mutableStateOf(editableCoordinatePair(valueX, valueY)) }
+    var lastApplied by remember { mutableStateOf(valueX to valueY) }
+    LaunchedEffect(valueX, valueY) {
+        if (abs(valueX - lastApplied.first) >= 0.001f ||
+            abs(valueY - lastApplied.second) >= 0.001f
+        ) {
+            input = editableCoordinatePair(valueX, valueY)
+            lastApplied = valueX to valueY
+        }
+    }
+    val parsed = parseCoordinatePair(input)?.takeIf { (x, y) ->
+        x in minimum..maximum && y in minimum..maximum && isValid(x, y)
+    }
+    OutlinedTextField(
+        value = input,
+        onValueChange = { candidate ->
+            if (candidate.length <= 30 && candidate.matches(COORDINATE_PAIR_INPUT)) {
+                input = candidate
+                parseCoordinatePair(candidate)
+                    ?.takeIf { (x, y) ->
+                        x in minimum..maximum && y in minimum..maximum && isValid(x, y)
+                    }
+                    ?.let { (x, y) ->
+                        lastApplied = x to y
+                        onValueChange(x, y)
+                    }
+            }
+        },
+        label = { Text(label) },
+        suffix = { Text(suffix) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        isError = parsed == null,
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+private fun editableCoordinatePair(x: Float, y: Float): String =
+    "${editableDecimal(x)}, ${editableDecimal(y)}"
+
+internal fun parseCoordinatePair(value: String): Pair<Float, Float>? {
+    val parts = value.split(',')
+    if (parts.size != 2) return null
+    val x = parts[0].trim().toFloatOrNull()?.takeIf(Float::isFinite) ?: return null
+    val y = parts[1].trim().toFloatOrNull()?.takeIf(Float::isFinite) ?: return null
+    return x to y
+}
+
+private val COORDINATE_PAIR_INPUT = Regex(
+    "-?[0-9]{0,6}(\\.[0-9]{0,3})?(\\s*,\\s*-?[0-9]{0,6}(\\.[0-9]{0,3})?)?",
+)
 
 @Composable
 private fun IntegerSettingField(
