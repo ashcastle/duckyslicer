@@ -3,6 +3,7 @@ package com.ashcastle.duckyslicer
 import androidx.core.content.FileProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.u1.slicer.NativeLibrary
 import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -14,6 +15,38 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class OrcaModelImportInstrumentedTest {
+    @Test
+    fun bbs3mfPauseUsesTheSelectedPrinterPauseCommand() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val archive = File(context.cacheDir, "pause-command.3mf")
+        val native = NativeLibrary()
+        var gcode: File? = null
+        archive.delete()
+        try {
+            writeStandard3mf(archive, pauseAtZ = 5f)
+            assertTrue("The pause fixture must load through Orca", native.loadModel(archive.absolutePath))
+            val config = SliceOptions()
+                .selectPrinter(
+                    PrinterProfile.CUSTOM_CARTESIAN.copy(
+                        machinePauseGcode = "M25 ; DUCKY_PROFILE_PAUSE",
+                    ),
+                )
+                .toNativeConfig()
+
+            val result = requireNotNull(native.slice(config))
+            assertTrue(result.errorMessage, result.success)
+            gcode = File(result.gcodePath)
+            assertTrue(
+                "The selected printer's pause command must replace the generic 3MF event",
+                gcode.readText().lineSequence().any { it.trim() == "M25 ; DUCKY_PROFILE_PAUSE" },
+            )
+        } finally {
+            native.clearModel()
+            gcode?.delete()
+            archive.delete()
+        }
+    }
+
     @Test
     fun objImportsAsAProjectObjectAndSlicesThroughOrca() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -242,7 +275,7 @@ class OrcaModelImportInstrumentedTest {
         }
     }
 
-    private fun writeStandard3mf(destination: File) {
+    private fun writeStandard3mf(destination: File, pauseAtZ: Float? = null) {
         ZipOutputStream(destination.outputStream().buffered()).use { zip ->
             zip.writeEntry(
                 "[Content_Types].xml",
@@ -276,6 +309,20 @@ class OrcaModelImportInstrumentedTest {
                     </model>
                 """.trimIndent(),
             )
+            if (pauseAtZ != null) {
+                zip.writeEntry(
+                    "Metadata/custom_gcode_per_layer.xml",
+                    """<?xml version="1.0" encoding="UTF-8"?>
+                        <custom_gcodes_per_layer>
+                          <plate>
+                            <plate_info id="1"/>
+                            <layer top_z="$pauseAtZ" type="1" extruder="1" color="" extra="Ducky pause"/>
+                            <mode value="SingleExtruder"/>
+                          </plate>
+                        </custom_gcodes_per_layer>
+                    """.trimIndent(),
+                )
+            }
         }
     }
 

@@ -181,6 +181,7 @@ data class PrinterProfile(
     val maxLayerHeight: Float = nozzleDiameter * 0.7f,
     val machineStartGcode: String = "",
     val machineEndGcode: String = "",
+    val machinePauseGcode: String = "",
     val beforeLayerChangeGcode: String = "",
     val layerChangeGcode: String = "",
     val changeFilamentGcode: String = "",
@@ -1209,7 +1210,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 63,
+    val schemaVersion: Int = 81,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -2142,6 +2143,7 @@ data class SliceOptions(
             native.enforceSupportLayers = supportCoverage.enforcedLayers
             native.beforeLayerChangeGcode = printerProfile.beforeLayerChangeGcode
             native.layerChangeGcode = printerProfile.layerChangeGcode
+            native.machinePauseGcode = printerProfile.machinePauseGcode
             native.changeFilamentGcode = printerProfile.changeFilamentGcode
             native.printingByObjectGcode = printerProfile.printingByObjectGcode
             native.useRelativeEDistances = printerProfile.useRelativeEDistances

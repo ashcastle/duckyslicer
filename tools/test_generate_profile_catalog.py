@@ -557,6 +557,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "min_layer_height": ["0.08"],
                 "max_layer_height": ["0.32"],
                 "gcode_flavor": "marlin",
+                "machine_pause_gcode": "M25 ; PROFILE_PAUSE",
                 "auxiliary_fan": "1",
                 "extruder_clearance_radius": "71.5",
                 "extruder_clearance_height_to_rod": "28.5",
@@ -573,6 +574,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertFalse(profile["singleExtruderMultiMaterial"])
         self.assertEqual(2, profile["extruderCount"])
         self.assertTrue(profile["auxiliaryFan"])
+        self.assertEqual("M25 ; PROFILE_PAUSE", profile["machinePauseGcode"])
         self.assertEqual(0.08, profile["minLayerHeight"])
         self.assertEqual(0.32, profile["maxLayerHeight"])
         self.assertEqual([0.0, 12.5], profile["extruderOffsetsX"])

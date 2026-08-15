@@ -255,6 +255,7 @@ data class SliceConfig(
     // Keep newly added JNI fields out of the already large generated constructor signature.
     @JvmField var beforeLayerChangeGcode: String = ""
     @JvmField var layerChangeGcode: String = ""
+    @JvmField var machinePauseGcode: String = ""
     @JvmField var changeFilamentGcode: String = ""
     @JvmField var printingByObjectGcode: String = ""
     @JvmField var useRelativeEDistances: Boolean = true

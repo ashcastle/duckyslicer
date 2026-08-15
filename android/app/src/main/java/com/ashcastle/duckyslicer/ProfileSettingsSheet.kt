@@ -797,6 +797,17 @@ private fun PrinterSettingsSheet(
         },
     )
     GcodeTemplateSetting(
+        label = stringResource(R.string.machine_pause_gcode),
+        value = options.printerProfile.machinePauseGcode,
+        onValueChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(machinePauseGcode = it),
+                ),
+            )
+        },
+    )
+    GcodeTemplateSetting(
         label = stringResource(R.string.before_layer_change_gcode),
         value = options.printerProfile.beforeLayerChangeGcode,
         onValueChange = {

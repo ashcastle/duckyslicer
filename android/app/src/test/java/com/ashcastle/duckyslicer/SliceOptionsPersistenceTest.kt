@@ -118,6 +118,7 @@ class SliceOptionsPersistenceTest {
                     extruderOffsetsY = listOf(0f, -3.25f),
                     beforeLayerChangeGcode = "; PERSISTED_BEFORE_LAYER",
                     layerChangeGcode = "; PERSISTED_AFTER_LAYER",
+                    machinePauseGcode = "M25 ; PERSISTED_PAUSE",
                     changeFilamentGcode = "T[next_extruder] ; PERSISTED_TOOL_CHANGE",
                     printingByObjectGcode = "; PERSISTED_BETWEEN_OBJECTS",
                     useRelativeEDistances = false,
@@ -235,6 +236,7 @@ class SliceOptionsPersistenceTest {
         assertArrayEquals(floatArrayOf(0f, -3.25f), native.extruderOffsetsY, 0.001f)
         assertEquals("; PERSISTED_BEFORE_LAYER", native.beforeLayerChangeGcode)
         assertEquals("; PERSISTED_AFTER_LAYER", native.layerChangeGcode)
+        assertEquals("M25 ; PERSISTED_PAUSE", native.machinePauseGcode)
         assertEquals("T[next_extruder] ; PERSISTED_TOOL_CHANGE", native.changeFilamentGcode)
         assertEquals("; PERSISTED_BETWEEN_OBJECTS", native.printingByObjectGcode)
         assertFalse(native.useRelativeEDistances)
