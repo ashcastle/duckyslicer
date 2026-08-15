@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 92
+SCHEMA_VERSION = 93
 MAX_FILAMENT_SLOTS = 16
 DEFAULT_GCODE_FILENAME_FORMAT = (
     "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
@@ -436,6 +436,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     )
     height = number(raw.get("printable_height"), 0)
     nozzle = number(raw.get("nozzle_diameter"), 0)
+    nozzle_height = number(raw.get("nozzle_height"), 2.5)
     configured_min_layer_height = number(raw.get("min_layer_height"), 0)
     configured_max_layer_height = number(raw.get("max_layer_height"), 0)
     min_layer_height = configured_min_layer_height if configured_min_layer_height > 0 else 0.07
@@ -460,6 +461,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     if not (
         50 <= height <= 1_500 and
         0.1 <= nozzle <= 2.0 and
+        0.1 <= nozzle_height <= 100 and
         1 <= physical_extruder_count <= MAX_FILAMENT_SLOTS
     ):
         raise ValueError("unsafe printer dimensions")
@@ -484,6 +486,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "nozzleDiameter": nozzle,
         "nozzleMaterial": nozzle_material(raw.get("nozzle_type")),
         "nozzleHrc": integer(raw.get("nozzle_hrc"), 0),
+        "nozzleHeight": nozzle_height,
         "minLayerHeight": min_layer_height,
         "maxLayerHeight": max_layer_height,
         "singleExtruderMultiMaterial": supports_multi_material,

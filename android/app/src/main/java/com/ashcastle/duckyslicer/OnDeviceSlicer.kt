@@ -222,6 +222,7 @@ data class PrinterProfile(
     val brand: String? = null,
     val nozzleMaterial: NozzleMaterial = NozzleMaterial.UNDEFINED,
     val nozzleHrc: Int = 0,
+    val nozzleHeight: Float = 2.5f,
     val minLayerHeight: Float = 0.04f,
     val maxLayerHeight: Float = nozzleDiameter * 0.7f,
     val machineStartGcode: String = "",
@@ -1298,7 +1299,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 92,
+    val schemaVersion: Int = 93,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -2327,6 +2328,7 @@ data class SliceOptions(
             native.machineMaxJunctionDeviation = maxJunctionDeviation
             native.nozzleMaterial = printerProfile.nozzleMaterial.nativeValue
             native.nozzleHrc = printerProfile.nozzleHrc
+            native.nozzleHeight = printerProfile.nozzleHeight
             native.fillMultiline = fillMultilineForPattern(fillPattern, quality.fillMultiline)
             native.filenameFormat = gcodeSettings.filenameFormat
             native.printerModel = printerProfile.name

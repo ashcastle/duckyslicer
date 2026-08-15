@@ -64,6 +64,7 @@ BUILD_INPUTS = (
     "native/slicer-runtime/engine-profile-options.patch",
     "native/slicer-runtime/machine-motion-options.patch",
     "native/slicer-runtime/nozzle-hardness-safety.patch",
+    "native/slicer-runtime/nozzle-height-safety.patch",
     "native/slicer-runtime/profile-options.patch",
     "native/slicer-runtime/runtime.patch",
     "native/slicer-runtime/versions.env",

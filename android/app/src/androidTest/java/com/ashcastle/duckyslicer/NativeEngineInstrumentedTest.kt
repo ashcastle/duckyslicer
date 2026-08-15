@@ -2513,7 +2513,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(92, catalog.schemaVersion)
+        assertEquals(93, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2527,6 +2527,10 @@ class NativeEngineInstrumentedTest {
                 NozzleMaterial.BRASS to 140,
             ),
             catalog.printers.groupingBy(PrinterProfile::nozzleMaterial).eachCount(),
+        )
+        assertEquals(
+            mapOf(2.5f to 714, 4f to 44, 4.2f to 20, 4.76f to 12),
+            catalog.printers.groupingBy(PrinterProfile::nozzleHeight).eachCount(),
         )
         assertEquals(
             mapOf(0 to 1_781, 3 to 1_323, 40 to 218),
@@ -2545,6 +2549,11 @@ class NativeEngineInstrumentedTest {
         assertEquals(5f, generatedU1.machineToolChangeTime)
         assertFalse(generatedU1.toolChangeTemperatureWait)
         assertEquals("M600", generatedU1.machinePauseGcode)
+        assertEquals(2.5f, generatedU1.nozzleHeight)
+        assertEquals(
+            4.76f,
+            catalog.printers.single { it.name == "Bambu Lab A1 0.4 nozzle" }.nozzleHeight,
+        )
         val adaptiveMesh = catalog.printers.single { it.name == "WonderMaker ZR 0.4 nozzle" }
         assertEquals(10f, adaptiveMesh.bedMeshMinX)
         assertEquals(10f, adaptiveMesh.bedMeshMinY)
@@ -6644,6 +6653,58 @@ class NativeEngineInstrumentedTest {
         assertTrue(
             "By-object mode must retain Orca's print-head clearance rejection",
             unsafeSequential.isFailure,
+        )
+    }
+
+    @Test
+    fun nozzleHeightChangesTheRealSequentialClearanceDecision() {
+        val model = inspectModel(fixtureModel().absolutePath)
+        val objects = listOf(
+            ProjectObject("clearance-left", model, ModelTransform(offsetXmm = -32.5f)),
+            ProjectObject("clearance-right", model, ModelTransform(offsetXmm = 32.5f)),
+        )
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.CUSTOM_CARTESIAN.copy(nozzleHeight = 4.76f))
+            .selectFilament(FilamentProfile.GENERIC_PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                printSequence = "by object",
+                skirtLoops = 1,
+                skirtDistance = 5f,
+                skirtHeight = 10,
+                brimType = "no_brim",
+                brimWidth = 0f,
+                quality = QualityProfile.DRAFT.copy(skirtType = "perobject"),
+            )
+
+        val tallNozzle = OnDeviceSlicer.slice(objects, base)
+        try {
+            val gcode = tallNozzle.output.readText()
+            assertTrue(gcode.contains("; nozzle_height = 4.76"))
+            assertEquals(
+                "The safe tall-nozzle arrangement must print both objects",
+                2,
+                gcode.lineSequence()
+                    .filter { it.startsWith("; printing object ") }
+                    .map { it.substringAfter("; printing object ").substringBefore(" id:") }
+                    .toSet()
+                    .size,
+            )
+        } finally {
+            tallNozzle.output.delete()
+        }
+
+        val shortNozzle = runCatching {
+            OnDeviceSlicer.slice(
+                objects,
+                base.copy(
+                    printerProfile = base.printerProfile.copy(nozzleHeight = 2.5f),
+                ),
+            )
+        }
+        assertTrue(
+            "The same by-object placement must be rejected when the shorter nozzle makes the per-object skirt enter the print-head clearance envelope",
+            shortNozzle.isFailure,
         )
     }
 

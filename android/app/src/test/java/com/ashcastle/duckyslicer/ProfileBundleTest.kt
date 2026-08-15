@@ -55,6 +55,7 @@ class ProfileBundleTest {
                         bedMeshProbeDistanceX = 40f,
                         bedMeshProbeDistanceY = 41f,
                         adaptiveBedMeshMargin = 5f,
+                        nozzleHeight = 4.2f,
                         toolChangeRetractLengths = listOf(1.2f, 2.3f),
                         toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
                     ),
@@ -180,6 +181,7 @@ class ProfileBundleTest {
                         it.bedMeshProbeDistanceX == 40f &&
                         it.bedMeshProbeDistanceY == 41f &&
                         it.adaptiveBedMeshMargin == 5f &&
+                        it.nozzleHeight == 4.2f &&
                         it.toolChangeRetractLengths == listOf(1.2f, 2.3f) &&
                         it.toolChangeRetractRestartExtras == listOf(-0.1f, 0.2f)
                 },

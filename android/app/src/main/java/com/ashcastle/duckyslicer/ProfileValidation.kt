@@ -35,6 +35,7 @@ internal object ProfileValidation {
             profile.defaultFilamentProfiles.size <= MAX_FILAMENT_SLOTS &&
             profile.defaultFilamentProfiles.all { it.isSafeLabel() } &&
             profile.nozzleHrc in 0..500 &&
+            profile.nozzleHeight in 0.1f..100f &&
             profile.gcodeFlavor in setOf("marlin", "marlin2", "klipper") &&
             listOf(
                 profile.machineLoadFilamentTime,

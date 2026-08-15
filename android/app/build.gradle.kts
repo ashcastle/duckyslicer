@@ -35,7 +35,7 @@ val orcaEngineRevision = checkNotNull(lockedSlicerVersions["SLICER_ENGINE_COMMIT
 }
 val defaultAndroidStrings = projectDir.resolve("src/main/res/values/strings.xml")
 val orcaTranslationRoot = repositoryRoot.resolve("localization/i18n")
-val generatedProfileCatalog = generatedProfileAssets.map { it.file("profile_catalog_v92.bin") }
+val generatedProfileCatalog = generatedProfileAssets.map { it.file("profile_catalog_v93.bin") }
 val ndkSharedRuntime = nativeNdkDirectory.map { ndk ->
     val prebuiltRoot = ndk.asFile.resolve("toolchains/llvm/prebuilt")
     val candidates = prebuiltRoot.listFiles()
@@ -71,6 +71,7 @@ val buildSlicerRuntime = tasks.register<Exec>("buildSlicerRuntime") {
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/engine-profile-options.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/adaptive-pressure-advance.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/nozzle-hardness-safety.patch"))
+    inputs.file(repositoryRoot.resolve("native/slicer-runtime/nozzle-height-safety.patch"))
     inputs.dir(repositoryRoot.resolve("native/slicer-runtime/overlay"))
     inputs.file(repositoryRoot.resolve(".gitmodules"))
     inputs.property("androidNdkVersion", "28.2.13676358")
@@ -100,7 +101,7 @@ val generateOrcaProfileCatalog = tasks.register<Exec>("generateOrcaProfileCatalo
     )
     inputs.file(profileCatalogGenerator)
     inputs.dir(orcaProfileRoot)
-    inputs.property("profileSchemaVersion", 92)
+    inputs.property("profileSchemaVersion", 93)
     inputs.property("orcaRevision", orcaEngineRevision)
     outputs.file(generatedProfileCatalog)
     outputs.upToDateWhen {

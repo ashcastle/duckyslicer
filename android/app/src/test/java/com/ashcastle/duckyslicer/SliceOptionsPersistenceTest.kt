@@ -585,6 +585,8 @@ class SliceOptionsPersistenceTest {
             options.printerProfile.maxJunctionDeviation,
             restored.printerProfile.maxJunctionDeviation,
         )
+        assertEquals(options.printerProfile.nozzleHeight, restored.printerProfile.nozzleHeight)
+        assertEquals(options.printerProfile.nozzleHeight, restored.toNativeConfig().nozzleHeight)
         assertEquals(options.printerProfile.defaultPrintProfile, restored.printerProfile.defaultPrintProfile)
         assertEquals(
             options.printerProfile.defaultFilamentProfiles,
@@ -1353,6 +1355,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             bedMeshProbeDistanceY = 41f,
             adaptiveBedMeshMargin = 5f,
             maxJunctionDeviation = 0.032f,
+            nozzleHeight = 4.76f,
             toolChangeRetractLengths = listOf(1.4f, 2.6f),
             toolChangeRetractRestartExtras = listOf(-0.2f, 0.3f),
             defaultPrintProfile = "Fixture process",

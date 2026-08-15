@@ -267,6 +267,7 @@ data class SliceConfig(
     @JvmField var machineMaxJunctionDeviation: Float = 0f
     @JvmField var nozzleMaterial: Int = 0
     @JvmField var nozzleHrc: Int = 0
+    @JvmField var nozzleHeight: Float = 2.5f
     @JvmField var filamentRequiredNozzleHrc: IntArray = intArrayOf()
     @JvmField var filamentAdaptivePressureAdvance: IntArray = intArrayOf()
     @JvmField var filamentAdaptivePressureAdvanceModels: Array<String> = arrayOf()

@@ -1,0 +1,53 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -515,6 +515,7 @@ struct SliceConfig {
+     float machine_max_junction_deviation = 0.0f;
+     int nozzle_material = 0;
+     int nozzle_hrc = 0;
++    float nozzle_height = 2.5f;
+     std::vector<float> minimum_layer_heights;
+     std::vector<float> maximum_layer_heights;
+     std::vector<float> extruder_offsets_x;
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -548,6 +548,7 @@ SliceConfig sliceConfigFromJava(JNIEnv* env, jobject jconfig) {
+     config.machine_max_junction_deviation = getFloat("machineMaxJunctionDeviation");
+     config.nozzle_material = getInt("nozzleMaterial");
+     config.nozzle_hrc = getInt("nozzleHrc");
++    config.nozzle_height = getFloat("nozzleHeight");
+     config.minimum_layer_heights = getFloatArray("minimumLayerHeights");
+     config.maximum_layer_heights = getFloatArray("maximumLayerHeights");
+     config.extruder_offsets_x = getFloatArray("extruderOffsetsX");
+@@ -1167,6 +1168,7 @@ void updateJavaSliceConfig(JNIEnv* env, jobject jconfig, const SliceConfig& confi
+     setFloat("machineMaxJunctionDeviation", config.machine_max_junction_deviation);
+     setInt("nozzleMaterial", config.nozzle_material);
+     setInt("nozzleHrc", config.nozzle_hrc);
++    setFloat("nozzleHeight", config.nozzle_height);
+     setStringArray("filamentStartGcodes", config.filament_start_gcodes);
+     setStringArray("filamentEndGcodes", config.filament_end_gcodes);
+     setIntArray("filamentAdaptivePressureAdvance", config.filament_adaptive_pressure_advance);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -562,6 +562,11 @@ static void applyConfigToPrusa(const SliceConfig& config, Slic3r::DynamicPrintCo
+         new Slic3r::ConfigOptionEnum<Slic3r::NozzleType>(
+             static_cast<Slic3r::NozzleType>(config.nozzle_material)));
+     dpc.set_key_value("nozzle_hrc", new Slic3r::ConfigOptionInt(config.nozzle_hrc));
++    if (!std::isfinite(config.nozzle_height) ||
++        config.nozzle_height < 0.1f || config.nozzle_height > 100.0f) {
++        throw std::invalid_argument("Invalid nozzle height");
++    }
++    dpc.set_key_value("nozzle_height", new Slic3r::ConfigOptionFloat(config.nozzle_height));
+     dpc.set_key_value("machine_max_acceleration_extruding", machine_modes(max_acceleration_extruding));
+     dpc.set_key_value("machine_max_acceleration_retracting", machine_modes(positive(config.machine_max_acceleration_retracting, 5000.0)));
+     dpc.set_key_value("machine_max_acceleration_travel", machine_modes(max_acceleration_travel));
+@@ -2094,6 +2099,7 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+                     "machine_max_junction_deviation",
+                     "nozzle_type",
+                     "nozzle_hrc",
++                    "nozzle_height",
+                     "min_layer_height",
+                     "max_layer_height",
+                     // M204 acceleration values (used by GCodeProcessor for time estimation
