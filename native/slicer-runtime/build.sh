@@ -113,6 +113,9 @@ prepare_runtime_source() {
 
     # Normalize the generated worktree before applying the reviewed patch stack.
     # Reverse in the opposite order so repeated local builds stay reproducible.
+    if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/machine-motion-options.patch" 2>/dev/null; then
+        git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/machine-motion-options.patch"
+    fi
     if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/profile-options.patch" 2>/dev/null; then
         git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/profile-options.patch"
     fi
@@ -128,6 +131,9 @@ prepare_runtime_source() {
     git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/profile-options.patch" 2>/dev/null || \
         die "runtime profile-option bridge contains unreviewed changes"
     git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/profile-options.patch"
+    git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/machine-motion-options.patch" 2>/dev/null || \
+        die "runtime machine-motion bridge contains unreviewed changes"
+    git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/machine-motion-options.patch"
 
     local engine_root="$SOURCE_ROOT/app/src/main/cpp/orcaslicer"
     if git -C "$engine_root" apply --reverse --check "$SCRIPT_DIR/engine-profile-options.patch" 2>/dev/null; then

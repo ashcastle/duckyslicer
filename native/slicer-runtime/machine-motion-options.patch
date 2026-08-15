@@ -1,0 +1,56 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -512,6 +512,7 @@ struct SliceConfig {
+     float machine_max_jerk_y = 9.0f;
+     float machine_max_jerk_z = 3.0f;
+     float machine_max_jerk_e = 2.5f;
++    float machine_max_junction_deviation = 0.0f;
+     std::vector<float> minimum_layer_heights;
+     std::vector<float> maximum_layer_heights;
+     std::vector<float> extruder_offsets_x;
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -545,6 +545,7 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.machine_max_jerk_y = getFloat("machineMaxJerkY");
+     config.machine_max_jerk_z = getFloat("machineMaxJerkZ");
+     config.machine_max_jerk_e = getFloat("machineMaxJerkE");
++    config.machine_max_junction_deviation = getFloat("machineMaxJunctionDeviation");
+     config.minimum_layer_heights = getFloatArray("minimumLayerHeights");
+     config.maximum_layer_heights = getFloatArray("maximumLayerHeights");
+     config.extruder_offsets_x = getFloatArray("extruderOffsetsX");
+@@ -1153,6 +1154,7 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setFloat("machineMaxJerkY", config.machine_max_jerk_y);
+     setFloat("machineMaxJerkZ", config.machine_max_jerk_z);
+     setFloat("machineMaxJerkE", config.machine_max_jerk_e);
++    setFloat("machineMaxJunctionDeviation", config.machine_max_junction_deviation);
+     setStringArray("filamentStartGcodes", config.filament_start_gcodes);
+     setStringArray("filamentEndGcodes", config.filament_end_gcodes);
+     setFloatArray("filamentLoadingSpeeds", config.filament_loading_speeds);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -479,6 +479,14 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     dpc.set_key_value("machine_max_jerk_y", machine_modes(positive(config.machine_max_jerk_y, 9.0)));
+     dpc.set_key_value("machine_max_jerk_z", machine_modes(positive(config.machine_max_jerk_z, 3.0)));
+     dpc.set_key_value("machine_max_jerk_e", machine_modes(positive(config.machine_max_jerk_e, 2.5)));
++    if (!std::isfinite(config.machine_max_junction_deviation) ||
++        config.machine_max_junction_deviation < 0.0f ||
++        config.machine_max_junction_deviation > 10.0f) {
++        throw std::invalid_argument("Invalid maximum junction deviation");
++    }
++    dpc.set_key_value(
++        "machine_max_junction_deviation",
++        machine_modes(config.machine_max_junction_deviation));
+     dpc.set_key_value("machine_max_acceleration_extruding", machine_modes(max_acceleration_extruding));
+     dpc.set_key_value("machine_max_acceleration_retracting", machine_modes(positive(config.machine_max_acceleration_retracting, 5000.0)));
+     dpc.set_key_value("machine_max_acceleration_travel", machine_modes(max_acceleration_travel));
+@@ -1935,6 +1943,7 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+                     "machine_max_jerk_y",
+                     "machine_max_jerk_z",
+                     "machine_max_jerk_e",
++                    "machine_max_junction_deviation",
+                     "min_layer_height",
+                     "max_layer_height",
+                     // M204 acceleration values (used by GCodeProcessor for time estimation

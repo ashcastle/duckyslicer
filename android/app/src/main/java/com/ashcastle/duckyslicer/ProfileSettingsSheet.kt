@@ -1391,7 +1391,7 @@ private fun PrinterSettingsSheet(
         minimum = 1f,
         defaultMaximum = 700f,
         increment = 1f,
-        onValueChange = { onOptionsChanged(options.copy(maxSpeedX = it)) },
+        onValueChange = { onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxSpeedX = it))) },
     )
     QuantizedSettingSlider(
         label = stringResource(R.string.maximum_y_speed),
@@ -1400,7 +1400,7 @@ private fun PrinterSettingsSheet(
         minimum = 1f,
         defaultMaximum = 700f,
         increment = 1f,
-        onValueChange = { onOptionsChanged(options.copy(maxSpeedY = it)) },
+        onValueChange = { onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxSpeedY = it))) },
     )
     QuantizedSettingSlider(
         label = stringResource(R.string.maximum_z_speed),
@@ -1409,7 +1409,7 @@ private fun PrinterSettingsSheet(
         minimum = 0.1f,
         defaultMaximum = 100f,
         increment = 0.1f,
-        onValueChange = { onOptionsChanged(options.copy(maxSpeedZ = it)) },
+        onValueChange = { onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxSpeedZ = it))) },
     )
     QuantizedSettingSlider(
         label = stringResource(R.string.maximum_e_speed),
@@ -1418,7 +1418,7 @@ private fun PrinterSettingsSheet(
         minimum = 1f,
         defaultMaximum = 500f,
         increment = 1f,
-        onValueChange = { onOptionsChanged(options.copy(maxSpeedE = it)) },
+        onValueChange = { onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxSpeedE = it))) },
     )
     QuantizedSettingSlider(
         label = stringResource(R.string.maximum_x_acceleration),
@@ -1427,7 +1427,9 @@ private fun PrinterSettingsSheet(
         minimum = 1f,
         defaultMaximum = 50_000f,
         increment = 100f,
-        onValueChange = { onOptionsChanged(options.copy(maxAccelerationX = it)) },
+        onValueChange = {
+            onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxAccelerationX = it)))
+        },
     )
     QuantizedSettingSlider(
         label = stringResource(R.string.maximum_y_acceleration),
@@ -1436,7 +1438,9 @@ private fun PrinterSettingsSheet(
         minimum = 1f,
         defaultMaximum = 50_000f,
         increment = 100f,
-        onValueChange = { onOptionsChanged(options.copy(maxAccelerationY = it)) },
+        onValueChange = {
+            onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxAccelerationY = it)))
+        },
     )
     QuantizedSettingSlider(
         label = stringResource(R.string.maximum_z_acceleration),
@@ -1445,7 +1449,9 @@ private fun PrinterSettingsSheet(
         minimum = 1f,
         defaultMaximum = 50_000f,
         increment = 50f,
-        onValueChange = { onOptionsChanged(options.copy(maxAccelerationZ = it)) },
+        onValueChange = {
+            onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxAccelerationZ = it)))
+        },
     )
     QuantizedSettingSlider(
         label = stringResource(R.string.maximum_e_acceleration),
@@ -1454,7 +1460,9 @@ private fun PrinterSettingsSheet(
         minimum = 1f,
         defaultMaximum = 50_000f,
         increment = 50f,
-        onValueChange = { onOptionsChanged(options.copy(maxAccelerationE = it)) },
+        onValueChange = {
+            onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxAccelerationE = it)))
+        },
     )
     QuantizedSettingSlider(
         label = stringResource(R.string.maximum_print_acceleration),
@@ -1466,9 +1474,11 @@ private fun PrinterSettingsSheet(
         onValueChange = { value ->
             onOptionsChanged(
                 options.copy(
-                    maxAccelerationExtruding = value,
-                    maxAccelerationX = max(options.maxAccelerationX, value),
-                    maxAccelerationY = max(options.maxAccelerationY, value),
+                    machineMotion = options.machineMotion.copy(
+                        maxAccelerationExtruding = value,
+                        maxAccelerationX = max(options.maxAccelerationX, value),
+                        maxAccelerationY = max(options.maxAccelerationY, value),
+                    ),
                 ),
             )
         },
@@ -1480,7 +1490,11 @@ private fun PrinterSettingsSheet(
         minimum = 1f,
         defaultMaximum = 50_000f,
         increment = 100f,
-        onValueChange = { onOptionsChanged(options.copy(maxAccelerationRetracting = it)) },
+        onValueChange = {
+            onOptionsChanged(
+                options.copy(machineMotion = options.machineMotion.copy(maxAccelerationRetracting = it)),
+            )
+        },
     )
     QuantizedSettingSlider(
         label = stringResource(R.string.maximum_travel_acceleration),
@@ -1492,9 +1506,11 @@ private fun PrinterSettingsSheet(
         onValueChange = { value ->
             onOptionsChanged(
                 options.copy(
-                    maxAccelerationTravel = value,
-                    maxAccelerationX = max(options.maxAccelerationX, value),
-                    maxAccelerationY = max(options.maxAccelerationY, value),
+                    machineMotion = options.machineMotion.copy(
+                        maxAccelerationTravel = value,
+                        maxAccelerationX = max(options.maxAccelerationX, value),
+                        maxAccelerationY = max(options.maxAccelerationY, value),
+                    ),
                 ),
             )
         },
@@ -1506,7 +1522,7 @@ private fun PrinterSettingsSheet(
         minimum = 0f,
         defaultMaximum = 100f,
         increment = 0.1f,
-        onValueChange = { onOptionsChanged(options.copy(maxJerkX = it)) },
+        onValueChange = { onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxJerkX = it))) },
     )
     QuantizedSettingSlider(
         label = stringResource(R.string.maximum_y_jerk),
@@ -1515,7 +1531,7 @@ private fun PrinterSettingsSheet(
         minimum = 0f,
         defaultMaximum = 100f,
         increment = 0.1f,
-        onValueChange = { onOptionsChanged(options.copy(maxJerkY = it)) },
+        onValueChange = { onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxJerkY = it))) },
     )
     QuantizedSettingSlider(
         label = stringResource(R.string.maximum_z_jerk),
@@ -1524,7 +1540,7 @@ private fun PrinterSettingsSheet(
         minimum = 0f,
         defaultMaximum = 20f,
         increment = 0.1f,
-        onValueChange = { onOptionsChanged(options.copy(maxJerkZ = it)) },
+        onValueChange = { onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxJerkZ = it))) },
     )
     QuantizedSettingSlider(
         label = stringResource(R.string.maximum_e_jerk),
@@ -1533,7 +1549,21 @@ private fun PrinterSettingsSheet(
         minimum = 0f,
         defaultMaximum = 100f,
         increment = 0.1f,
-        onValueChange = { onOptionsChanged(options.copy(maxJerkE = it)) },
+        onValueChange = { onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxJerkE = it))) },
+    )
+    QuantizedSettingSlider(
+        label = stringResource(R.string.maximum_junction_deviation),
+        valueText = stringResource(
+            R.string.junction_deviation_value,
+            options.maxJunctionDeviation,
+        ),
+        value = options.maxJunctionDeviation,
+        minimum = 0f,
+        defaultMaximum = 1f,
+        increment = 0.001f,
+        onValueChange = {
+            onOptionsChanged(options.copy(machineMotion = options.machineMotion.copy(maxJunctionDeviation = it)))
+        },
     )
         SaveProfileField(onSave = { name -> onSave(name, options) }, onDismiss = onDismiss)
     }

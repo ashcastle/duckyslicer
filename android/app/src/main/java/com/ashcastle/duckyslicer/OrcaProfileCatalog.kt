@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v89.bin"
+private const val CATALOG_ASSET = "profile_catalog_v90.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 89) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 90) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -123,6 +123,7 @@ class OrcaProfileCatalog(private val context: Context) {
         maxJerkY = input.readFloat(),
         maxJerkZ = input.readFloat(),
         maxJerkE = input.readFloat(),
+        maxJunctionDeviation = input.readFloat(),
         retractLength = input.readFloat(),
         retractSpeed = input.readFloat(),
         deretractSpeed = input.readFloat(),
@@ -387,6 +388,7 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("maxJerkY", BINARY_FLOAT),
     BinaryField("maxJerkZ", BINARY_FLOAT),
     BinaryField("maxJerkE", BINARY_FLOAT),
+    BinaryField("maxJunctionDeviation", BINARY_FLOAT),
     BinaryField("retractLength", BINARY_FLOAT),
     BinaryField("retractSpeed", BINARY_FLOAT),
     BinaryField("deretractSpeed", BINARY_FLOAT),

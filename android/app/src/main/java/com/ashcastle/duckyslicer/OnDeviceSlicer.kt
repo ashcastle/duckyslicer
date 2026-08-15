@@ -212,6 +212,7 @@ data class PrinterProfile(
     val maxJerkY: Float = 9f,
     val maxJerkZ: Float = 3f,
     val maxJerkE: Float = 2.5f,
+    val maxJunctionDeviation: Float = 0f,
     val retractLength: Float = 0.8f,
     val retractSpeed: Float = 45f,
     val deretractSpeed: Float = 35f,
@@ -1239,10 +1240,50 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 89,
+    val schemaVersion: Int = 90,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
+
+data class MachineMotionSettings(
+    val maxSpeedX: Float,
+    val maxSpeedY: Float,
+    val maxSpeedZ: Float,
+    val maxSpeedE: Float,
+    val maxAccelerationX: Float,
+    val maxAccelerationY: Float,
+    val maxAccelerationZ: Float,
+    val maxAccelerationE: Float,
+    val maxAccelerationExtruding: Float,
+    val maxAccelerationRetracting: Float,
+    val maxAccelerationTravel: Float,
+    val maxJerkX: Float,
+    val maxJerkY: Float,
+    val maxJerkZ: Float,
+    val maxJerkE: Float,
+    val maxJunctionDeviation: Float,
+) {
+    companion object {
+        fun fromProfile(profile: PrinterProfile) = MachineMotionSettings(
+            maxSpeedX = profile.maxSpeedX,
+            maxSpeedY = profile.maxSpeedY,
+            maxSpeedZ = profile.maxSpeedZ,
+            maxSpeedE = profile.maxSpeedE,
+            maxAccelerationX = profile.maxAccelerationX,
+            maxAccelerationY = profile.maxAccelerationY,
+            maxAccelerationZ = profile.maxAccelerationZ,
+            maxAccelerationE = profile.maxAccelerationE,
+            maxAccelerationExtruding = profile.maxAccelerationExtruding,
+            maxAccelerationRetracting = profile.maxAccelerationRetracting,
+            maxAccelerationTravel = profile.maxAccelerationTravel,
+            maxJerkX = profile.maxJerkX,
+            maxJerkY = profile.maxJerkY,
+            maxJerkZ = profile.maxJerkZ,
+            maxJerkE = profile.maxJerkE,
+            maxJunctionDeviation = profile.maxJunctionDeviation,
+        )
+    }
+}
 
 data class SliceOptions(
     val printerProfile: PrinterProfile = PrinterProfile.U1_04,
@@ -1481,21 +1522,7 @@ data class SliceOptions(
     val spiralStartingFlowRatio: Float = quality.spiralStartingFlowRatio,
     val spiralFinishingFlowRatio: Float = quality.spiralFinishingFlowRatio,
     val gcodeFlavor: String = printerProfile.gcodeFlavor,
-    val maxSpeedX: Float = printerProfile.maxSpeedX,
-    val maxSpeedY: Float = printerProfile.maxSpeedY,
-    val maxSpeedZ: Float = printerProfile.maxSpeedZ,
-    val maxSpeedE: Float = printerProfile.maxSpeedE,
-    val maxAccelerationX: Float = printerProfile.maxAccelerationX,
-    val maxAccelerationY: Float = printerProfile.maxAccelerationY,
-    val maxAccelerationZ: Float = printerProfile.maxAccelerationZ,
-    val maxAccelerationE: Float = printerProfile.maxAccelerationE,
-    val maxAccelerationExtruding: Float = printerProfile.maxAccelerationExtruding,
-    val maxAccelerationRetracting: Float = printerProfile.maxAccelerationRetracting,
-    val maxAccelerationTravel: Float = printerProfile.maxAccelerationTravel,
-    val maxJerkX: Float = printerProfile.maxJerkX,
-    val maxJerkY: Float = printerProfile.maxJerkY,
-    val maxJerkZ: Float = printerProfile.maxJerkZ,
-    val maxJerkE: Float = printerProfile.maxJerkE,
+    val machineMotion: MachineMotionSettings = MachineMotionSettings.fromProfile(printerProfile),
     val extruderClearanceRadius: Float = printerProfile.extruderClearanceRadius,
     val extruderClearanceHeightToRod: Float = printerProfile.extruderClearanceHeightToRod,
     val extruderClearanceHeightToLid: Float = printerProfile.extruderClearanceHeightToLid,
@@ -1504,6 +1531,23 @@ data class SliceOptions(
     val firstLayerBedTemp: Int get() = buildPlate.firstLayerTemperature
 
     val travelSpeedZ: Float get() = quality.travelSpeedZ
+
+    val maxSpeedX: Float get() = machineMotion.maxSpeedX
+    val maxSpeedY: Float get() = machineMotion.maxSpeedY
+    val maxSpeedZ: Float get() = machineMotion.maxSpeedZ
+    val maxSpeedE: Float get() = machineMotion.maxSpeedE
+    val maxAccelerationX: Float get() = machineMotion.maxAccelerationX
+    val maxAccelerationY: Float get() = machineMotion.maxAccelerationY
+    val maxAccelerationZ: Float get() = machineMotion.maxAccelerationZ
+    val maxAccelerationE: Float get() = machineMotion.maxAccelerationE
+    val maxAccelerationExtruding: Float get() = machineMotion.maxAccelerationExtruding
+    val maxAccelerationRetracting: Float get() = machineMotion.maxAccelerationRetracting
+    val maxAccelerationTravel: Float get() = machineMotion.maxAccelerationTravel
+    val maxJerkX: Float get() = machineMotion.maxJerkX
+    val maxJerkY: Float get() = machineMotion.maxJerkY
+    val maxJerkZ: Float get() = machineMotion.maxJerkZ
+    val maxJerkE: Float get() = machineMotion.maxJerkE
+    val maxJunctionDeviation: Float get() = machineMotion.maxJunctionDeviation
 
     val printableOverhangs: PrintableOverhangSettings
         get() = precision.printableOverhangs
@@ -1544,21 +1588,7 @@ data class SliceOptions(
             maxPrintHeight = profile.maxPrintHeight,
             nozzleDiameter = profile.nozzleDiameter,
             gcodeFlavor = profile.gcodeFlavor,
-            maxSpeedX = profile.maxSpeedX,
-            maxSpeedY = profile.maxSpeedY,
-            maxSpeedZ = profile.maxSpeedZ,
-            maxSpeedE = profile.maxSpeedE,
-            maxAccelerationX = profile.maxAccelerationX,
-            maxAccelerationY = profile.maxAccelerationY,
-            maxAccelerationZ = profile.maxAccelerationZ,
-            maxAccelerationE = profile.maxAccelerationE,
-            maxAccelerationExtruding = profile.maxAccelerationExtruding,
-            maxAccelerationRetracting = profile.maxAccelerationRetracting,
-            maxAccelerationTravel = profile.maxAccelerationTravel,
-            maxJerkX = profile.maxJerkX,
-            maxJerkY = profile.maxJerkY,
-            maxJerkZ = profile.maxJerkZ,
-            maxJerkE = profile.maxJerkE,
+            machineMotion = MachineMotionSettings.fromProfile(profile),
             extruderClearanceRadius = profile.extruderClearanceRadius,
             extruderClearanceHeightToRod = profile.extruderClearanceHeightToRod,
             extruderClearanceHeightToLid = profile.extruderClearanceHeightToLid,
@@ -2233,6 +2263,7 @@ data class SliceOptions(
             filamentDensities = nativeFilaments.map(FilamentProfile::density).toFloatArray(),
             filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
+            native.machineMaxJunctionDeviation = maxJunctionDeviation
             native.fillMultiline = fillMultilineForPattern(fillPattern, quality.fillMultiline)
             native.filenameFormat = gcodeSettings.filenameFormat
             native.printerModel = printerProfile.name

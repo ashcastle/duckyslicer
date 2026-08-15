@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 89
+SCHEMA_VERSION = 90
 MAX_FILAMENT_SLOTS = 16
 DEFAULT_GCODE_FILENAME_FORMAT = (
     "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
@@ -492,6 +492,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "maxJerkY": motion("machine_max_jerk_y", 8),
         "maxJerkZ": motion("machine_max_jerk_z", 0.4),
         "maxJerkE": motion("machine_max_jerk_e", 5),
+        "maxJunctionDeviation": number(raw.get("machine_max_junction_deviation"), 0),
         "retractLength": retract_length,
         "retractSpeed": number(raw.get("retraction_speed"), 30),
         "deretractSpeed": number(raw.get("deretraction_speed"), 0),
@@ -581,6 +582,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and all(0 <= profile[key] <= 100_000 for key in [
             "bedMeshProbeDistanceX", "bedMeshProbeDistanceY", "adaptiveBedMeshMargin"
         ])
+        and 0 <= profile["maxJunctionDeviation"] <= 10
         and 0.01 <= profile["minLayerHeight"] <= profile["maxLayerHeight"] <= 2
     ):
         raise ValueError("unsafe motion limits")

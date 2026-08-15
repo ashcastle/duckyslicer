@@ -37,6 +37,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
             "bed_mesh_max": ["290", "291"],
             "bed_mesh_probe_distance": "40x41",
             "adaptive_bed_mesh_margin": "5",
+            "machine_max_junction_deviation": ["0.032", "0"],
         }
 
         profile = build_printer("Example", base)
@@ -48,8 +49,11 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(40.0, profile["bedMeshProbeDistanceX"])
         self.assertEqual(41.0, profile["bedMeshProbeDistanceY"])
         self.assertEqual(5.0, profile["adaptiveBedMeshMargin"])
+        self.assertEqual(0.032, profile["maxJunctionDeviation"])
         with self.assertRaises(ValueError):
             build_printer("Example", base | {"bed_mesh_min": "295,11"})
+        with self.assertRaises(ValueError):
+            build_printer("Example", base | {"machine_max_junction_deviation": "11"})
 
     def test_preserves_first_layer_inspection(self) -> None:
         enabled = build_printer(

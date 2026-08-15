@@ -7,7 +7,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 90
+internal const val USER_PROFILE_SCHEMA_VERSION = 91
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -91,6 +91,7 @@ class ProfileStore private constructor(
             maxJerkY = options.maxJerkY,
             maxJerkZ = options.maxJerkZ,
             maxJerkE = options.maxJerkE,
+            maxJunctionDeviation = options.maxJunctionDeviation,
             retractLength = options.printerProfile.retractLength,
             retractSpeed = options.printerProfile.retractSpeed,
             deretractSpeed = options.printerProfile.deretractSpeed,
@@ -655,6 +656,7 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("maxAccelerationTravel", maxAccelerationTravel)
     .put("maxJerkX", maxJerkX).put("maxJerkY", maxJerkY)
     .put("maxJerkZ", maxJerkZ).put("maxJerkE", maxJerkE)
+    .put("maxJunctionDeviation", maxJunctionDeviation)
     .put("retractLength", retractLength).put("retractSpeed", retractSpeed)
     .put("deretractSpeed", deretractSpeed)
     .put("retractionMinimumTravel", retractionMinimumTravel)
@@ -1170,6 +1172,7 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         maxJerkY = optDouble("maxJerkY", 9.0).toFloat(),
         maxJerkZ = optDouble("maxJerkZ", 3.0).toFloat(),
         maxJerkE = optDouble("maxJerkE", 2.5).toFloat(),
+        maxJunctionDeviation = optDouble("maxJunctionDeviation", 0.0).toFloat(),
         retractLength = retractLength,
         retractSpeed = optDouble("retractSpeed", 45.0).toFloat(),
         deretractSpeed = optDouble("deretractSpeed", 35.0).toFloat(),

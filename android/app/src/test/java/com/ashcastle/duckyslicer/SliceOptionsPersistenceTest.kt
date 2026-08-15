@@ -581,6 +581,10 @@ class SliceOptionsPersistenceTest {
             options.printerProfile.adaptiveBedMeshMargin,
             restored.printerProfile.adaptiveBedMeshMargin,
         )
+        assertEquals(
+            options.printerProfile.maxJunctionDeviation,
+            restored.printerProfile.maxJunctionDeviation,
+        )
         assertEquals(options.printerProfile.defaultPrintProfile, restored.printerProfile.defaultPrintProfile)
         assertEquals(
             options.printerProfile.defaultFilamentProfiles,
@@ -1348,6 +1352,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             bedMeshProbeDistanceX = 40f,
             bedMeshProbeDistanceY = 41f,
             adaptiveBedMeshMargin = 5f,
+            maxJunctionDeviation = 0.032f,
             toolChangeRetractLengths = listOf(1.4f, 2.6f),
             toolChangeRetractRestartExtras = listOf(-0.2f, 0.3f),
             defaultPrintProfile = "Fixture process",
@@ -1780,12 +1785,15 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         spiralFinishingFlowRatio = 0.2f,
         preciseOuterWalls = true,
         gcodeFlavor = "klipper",
-        maxSpeedX = 330f,
-        maxSpeedY = 340f,
-        maxAccelerationX = 4_800f,
-        maxAccelerationY = 4_900f,
-        maxAccelerationExtruding = 3_200f,
-        maxAccelerationTravel = 4_600f,
-        maxJerkX = 8f,
-        maxJerkY = 9f,
+        machineMotion = MachineMotionSettings.fromProfile(PrinterProfile.U1_06).copy(
+            maxSpeedX = 330f,
+            maxSpeedY = 340f,
+            maxAccelerationX = 4_800f,
+            maxAccelerationY = 4_900f,
+            maxAccelerationExtruding = 3_200f,
+            maxAccelerationTravel = 4_600f,
+            maxJerkX = 8f,
+            maxJerkY = 9f,
+            maxJunctionDeviation = 0.032f,
+        ),
     )

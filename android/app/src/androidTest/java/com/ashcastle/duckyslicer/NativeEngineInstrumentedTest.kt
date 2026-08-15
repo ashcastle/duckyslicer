@@ -1597,7 +1597,9 @@ class NativeEngineInstrumentedTest {
                     wallGenerator = "classic",
                     wallSequence = "outer-inner",
                     gcodeFlavor = "klipper",
-                    maxAccelerationTravel = 4_700f,
+                    machineMotion = MachineMotionSettings.fromProfile(PrinterProfile.U1_06).copy(
+                        maxAccelerationTravel = 4_700f,
+                    ),
                 )
             firstStore.save(
                 ProjectSnapshot(
@@ -2002,21 +2004,24 @@ class NativeEngineInstrumentedTest {
                 raftFirstLayerDensity = 87f,
                 raftFirstLayerExpansion = 3.6f,
                 gcodeFlavor = "marlin2",
-                maxSpeedX = 320f,
-                maxSpeedY = 330f,
-                maxSpeedZ = 24f,
-                maxSpeedE = 82f,
-                maxAccelerationX = 4_200f,
-                maxAccelerationY = 4_300f,
-                maxAccelerationZ = 620f,
-                maxAccelerationE = 6_400f,
-                maxAccelerationExtruding = 3_800f,
-                maxAccelerationRetracting = 3_900f,
-                maxAccelerationTravel = 5_000f,
-                maxJerkX = 7f,
-                maxJerkY = 7.5f,
-                maxJerkZ = 0.5f,
-                maxJerkE = 4f,
+                machineMotion = MachineMotionSettings.fromProfile(PrinterProfile.U1_06).copy(
+                    maxSpeedX = 320f,
+                    maxSpeedY = 330f,
+                    maxSpeedZ = 24f,
+                    maxSpeedE = 82f,
+                    maxAccelerationX = 4_200f,
+                    maxAccelerationY = 4_300f,
+                    maxAccelerationZ = 620f,
+                    maxAccelerationE = 6_400f,
+                    maxAccelerationExtruding = 3_800f,
+                    maxAccelerationRetracting = 3_900f,
+                    maxAccelerationTravel = 5_000f,
+                    maxJerkX = 7f,
+                    maxJerkY = 7.5f,
+                    maxJerkZ = 0.5f,
+                    maxJerkE = 4f,
+                    maxJunctionDeviation = 0.042f,
+                ),
             )
             .copy(
                 printerProfile = PrinterProfile.U1_06.copy(
@@ -2329,6 +2334,7 @@ class NativeEngineInstrumentedTest {
         assertEquals(7.5f, restored.printers.last().maxJerkY)
         assertEquals(0.5f, restored.printers.last().maxJerkZ)
         assertEquals(4f, restored.printers.last().maxJerkE)
+        assertEquals(0.042f, restored.printers.last().maxJunctionDeviation)
         assertEquals("M117 SAVED_START", restored.printers.last().machineStartGcode)
         assertEquals("M117 SAVED_END", restored.printers.last().machineEndGcode)
         assertEquals("M25 ; SAVED_PAUSE", restored.printers.last().machinePauseGcode)
@@ -2394,7 +2400,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(89, catalog.schemaVersion)
+        assertEquals(90, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2421,6 +2427,10 @@ class NativeEngineInstrumentedTest {
         assertEquals(40f, adaptiveMesh.bedMeshProbeDistanceX)
         assertEquals(40f, adaptiveMesh.bedMeshProbeDistanceY)
         assertEquals(5f, adaptiveMesh.adaptiveBedMeshMargin)
+        val junctionDeviationPrinter = catalog.printers.single {
+            it.name == "Cubicon xCeler-I 0.4 nozzle"
+        }
+        assertEquals(0f, junctionDeviationPrinter.maxJunctionDeviation)
         val coreOne = catalog.printers.single { it.name == "Prusa CORE One 0.4 nozzle" }
         val incompatible = SliceOptions()
             .selectFilament(
@@ -6675,6 +6685,7 @@ class NativeEngineInstrumentedTest {
             maxJerkY = 7.2f,
             maxJerkZ = 0.6f,
             maxJerkE = 4.4f,
+            maxJunctionDeviation = 0.037f,
             extruderClearanceRadius = 71f,
             extruderClearanceHeightToRod = 29f,
             extruderClearanceHeightToLid = 119f,
@@ -6725,6 +6736,14 @@ class NativeEngineInstrumentedTest {
         assertTrue("Custom Y jerk must reach Orca", gcode.contains("; machine_max_jerk_y = 7.2,7.2"))
         assertTrue("Custom Z jerk must reach Orca", gcode.contains("; machine_max_jerk_z = 0.6,0.6"))
         assertTrue("Custom E jerk must reach Orca", gcode.contains("; machine_max_jerk_e = 4.4,4.4"))
+        assertTrue(
+            "Custom junction deviation must reach Orca",
+            gcode.contains("; machine_max_junction_deviation = 0.037,0.037"),
+        )
+        assertTrue(
+            "Marlin 2 must receive the configured junction deviation",
+            gcode.lineSequence().any { it.startsWith("M205 J0.037") },
+        )
         assertTrue("Print-head radius must reach Orca", gcode.contains("; extruder_clearance_radius = 71"))
         assertTrue("Print-head rod clearance must reach Orca", gcode.contains("; extruder_clearance_height_to_rod = 29"))
         assertTrue("Print-head lid clearance must reach Orca", gcode.contains("; extruder_clearance_height_to_lid = 119"))
