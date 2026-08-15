@@ -51,7 +51,10 @@ internal object ProfileValidation {
             profile.extruderClearanceHeightToRod in 0.1f..1_500f &&
             profile.extruderClearanceHeightToLid in 0.1f..1_500f &&
             profile.machineStartGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
-            profile.machineEndGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH
+            profile.machineEndGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
+            profile.beforeLayerChangeGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
+            profile.layerChangeGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
+            profile.changeFilamentGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH
 
     fun filament(profile: FilamentProfile): Boolean =
         profile.id.isSafeLabel() &&

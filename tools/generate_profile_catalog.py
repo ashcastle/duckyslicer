@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 66
+SCHEMA_VERSION = 67
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -264,6 +264,9 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "auxiliaryFan": boolean(raw.get("auxiliary_fan")),
         "machineStartGcode": str(raw.get("machine_start_gcode", "")),
         "machineEndGcode": str(raw.get("machine_end_gcode", "")),
+        "beforeLayerChangeGcode": str(raw.get("before_layer_change_gcode", "")),
+        "layerChangeGcode": str(raw.get("layer_change_gcode", "")),
+        "changeFilamentGcode": str(raw.get("change_filament_gcode", "")),
         "gcodeFlavor": flavor,
         "maxSpeedX": motion("machine_max_speed_x", 300),
         "maxSpeedY": motion("machine_max_speed_y", 300),

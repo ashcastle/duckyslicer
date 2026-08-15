@@ -734,6 +734,9 @@
     <string name="machine_gcode">시작 및 종료 G-code</string>
     <string name="machine_start_gcode">시작 G-code</string>
     <string name="machine_end_gcode">종료 G-code</string>
+    <string name="before_layer_change_gcode">레이어 변경 전 G-code</string>
+    <string name="layer_change_gcode">레이어 변경 후 G-code</string>
+    <string name="change_filament_gcode">필라멘트 변경 G-code</string>
     <string name="filament_gcode">필라멘트 G-code</string>
     <string name="filament_start_gcode">필라멘트 시작 G-code</string>
     <string name="filament_end_gcode">필라멘트 종료 G-code</string>

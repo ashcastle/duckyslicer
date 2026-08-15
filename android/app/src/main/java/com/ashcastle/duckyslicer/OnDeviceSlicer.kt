@@ -118,6 +118,9 @@ data class PrinterProfile(
     val maxLayerHeight: Float = nozzleDiameter * 0.7f,
     val machineStartGcode: String = "",
     val machineEndGcode: String = "",
+    val beforeLayerChangeGcode: String = "",
+    val layerChangeGcode: String = "",
+    val changeFilamentGcode: String = "",
     val gcodeFlavor: String = "marlin",
     val maxSpeedX: Float = 500f,
     val maxSpeedY: Float = 500f,
@@ -1954,6 +1957,9 @@ data class SliceOptions(
             filamentDensities = nativeFilaments.map(FilamentProfile::density).toFloatArray(),
             filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
+            native.beforeLayerChangeGcode = printerProfile.beforeLayerChangeGcode
+            native.layerChangeGcode = printerProfile.layerChangeGcode
+            native.changeFilamentGcode = printerProfile.changeFilamentGcode
             native.minimumLayerHeights = FloatArray(nativeFilaments.size) {
                 printerProfile.minLayerHeight
             }

@@ -1790,6 +1790,9 @@ class NativeEngineInstrumentedTest {
                 printerProfile = PrinterProfile.U1_06.copy(
                     machineStartGcode = "M117 SAVED_START",
                     machineEndGcode = "M117 SAVED_END",
+                    beforeLayerChangeGcode = "; SAVED_BEFORE_LAYER",
+                    layerChangeGcode = "; SAVED_AFTER_LAYER",
+                    changeFilamentGcode = "T[next_extruder] ; SAVED_TOOL_CHANGE",
                 ),
             )
 
@@ -2064,6 +2067,12 @@ class NativeEngineInstrumentedTest {
         assertEquals(4f, restored.printers.last().maxJerkE)
         assertEquals("M117 SAVED_START", restored.printers.last().machineStartGcode)
         assertEquals("M117 SAVED_END", restored.printers.last().machineEndGcode)
+        assertEquals("; SAVED_BEFORE_LAYER", restored.printers.last().beforeLayerChangeGcode)
+        assertEquals("; SAVED_AFTER_LAYER", restored.printers.last().layerChangeGcode)
+        assertEquals(
+            "T[next_extruder] ; SAVED_TOOL_CHANGE",
+            restored.printers.last().changeFilamentGcode,
+        )
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
         assertEquals(USER_PROFILE_SCHEMA_VERSION, JSONObject(file.readText()).getInt("schemaVersion"))
@@ -2098,7 +2107,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(66, catalog.schemaVersion)
+        assertEquals(67, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2112,6 +2121,8 @@ class NativeEngineInstrumentedTest {
         val inheritedOffset = catalog.printers.single { it.name == "Bambu Lab P1P 0.4 nozzle" }
         assertEquals(listOf(0f), inheritedOffset.extruderOffsetsX)
         assertEquals(listOf(2f), inheritedOffset.extruderOffsetsY)
+        assertTrue(inheritedOffset.layerChangeGcode.contains("M73 L{layer_num+1}"))
+        assertTrue(inheritedOffset.changeFilamentGcode.contains("M620 S[next_extruder]A"))
         val divergentToolChange = catalog.printers.single { it.name == "iQ TiQ2 0.4 Nozzle" }
         assertEquals(listOf(10f, 12f), divergentToolChange.toolChangeRetractLengths)
         assertTrue(
@@ -2843,6 +2854,9 @@ class NativeEngineInstrumentedTest {
         val baselineOptions = SliceOptions()
             .selectPrinter(
                 PrinterProfile.U1_04.copy(
+                    beforeLayerChangeGcode = "; DUCKY_BEFORE_LAYER",
+                    layerChangeGcode = "; DUCKY_AFTER_LAYER",
+                    changeFilamentGcode = "T[next_extruder]\n; DUCKY_CHANGE_FILAMENT",
                     toolChangeRetractLengths = listOf(1.2f, 2.3f),
                     toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
                 ),
@@ -2884,6 +2898,18 @@ class NativeEngineInstrumentedTest {
 
         assertTrue("Touching volumes must use both materials", interlockedGcode.lineSequence().any { it == "T1" })
         assertTrue(
+            "Before-layer G-code must run on repeated real layer transitions",
+            interlockedGcode.lineSequence().count { it == "; DUCKY_BEFORE_LAYER" } > 1,
+        )
+        assertTrue(
+            "After-layer G-code must run on repeated real layer transitions",
+            interlockedGcode.lineSequence().count { it == "; DUCKY_AFTER_LAYER" } > 1,
+        )
+        assertTrue(
+            "Change-filament G-code must run on a real tool transition",
+            interlockedGcode.lineSequence().any { it == "; DUCKY_CHANGE_FILAMENT" },
+        )
+        assertTrue(
             "Per-tool retract lengths must reach Orca",
             interlockedGcode.contains("; retract_length_toolchange = 1.2,2.3"),
         )
@@ -2907,6 +2933,37 @@ class NativeEngineInstrumentedTest {
             "Interlocking must change real extrusion geometry, not only profile metadata",
             baselinePreview.segments.contentEquals(interlockedPreview.segments),
         )
+    }
+
+    @Test
+    fun bundledBambuLifecycleTemplatesRunThroughRealToolChanges() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val printer = OrcaProfileCatalog(context).load().printers.single {
+            it.name == "Bambu Lab P1P 0.4 nozzle"
+        }
+        val left = inspectModel(interlockingVolumeModel("bambu-left", -20f, 0f).absolutePath)
+        val right = inspectModel(interlockingVolumeModel("bambu-right", 0f, 20f).absolutePath)
+        val projectObject = ProjectObject(
+            id = "bambu-lifecycle-object",
+            volumes = listOf(
+                ProjectVolume("bambu-left", left, filamentSlot = 0),
+                ProjectVolume("bambu-right", right, filamentSlot = 1),
+            ),
+        )
+        val options = SliceOptions()
+            .selectPrinter(printer)
+            .selectFilament(FilamentProfile.PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+                wipeTowerEnabled = false,
+            )
+
+        val output = OnDeviceSlicer.slice(listOf(projectObject), options).output.readText()
+
+        assertTrue("Bundled P1P layer G-code must execute", output.contains("M73 L1"))
+        assertTrue("Bundled P1P tool-change G-code must execute", output.contains("M620 S1A"))
+        assertTrue("The real bundled template must still select tool 1", output.lineSequence().any { it == "T1" })
     }
 
     @Test

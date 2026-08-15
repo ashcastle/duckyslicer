@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v66.bin"
+private const val CATALOG_ASSET = "profile_catalog_v67.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 66) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 67) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -72,6 +72,9 @@ class OrcaProfileCatalog(private val context: Context) {
         auxiliaryFan = input.readCatalogBoolean(),
         machineStartGcode = input.readCatalogString(),
         machineEndGcode = input.readCatalogString(),
+        beforeLayerChangeGcode = input.readCatalogString(),
+        layerChangeGcode = input.readCatalogString(),
+        changeFilamentGcode = input.readCatalogString(),
         gcodeFlavor = input.readCatalogString(),
         maxSpeedX = input.readFloat(),
         maxSpeedY = input.readFloat(),
@@ -257,6 +260,9 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("auxiliaryFan", BINARY_BOOL),
     BinaryField("machineStartGcode", BINARY_STRING),
     BinaryField("machineEndGcode", BINARY_STRING),
+    BinaryField("beforeLayerChangeGcode", BINARY_STRING),
+    BinaryField("layerChangeGcode", BINARY_STRING),
+    BinaryField("changeFilamentGcode", BINARY_STRING),
     BinaryField("gcodeFlavor", BINARY_STRING),
     BinaryField("maxSpeedX", BINARY_FLOAT),
     BinaryField("maxSpeedY", BINARY_FLOAT),

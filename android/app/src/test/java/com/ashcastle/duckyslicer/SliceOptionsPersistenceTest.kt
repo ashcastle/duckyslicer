@@ -66,6 +66,9 @@ class SliceOptionsPersistenceTest {
                     auxiliaryFan = true,
                     extruderOffsetsX = listOf(0f, 12.5f),
                     extruderOffsetsY = listOf(0f, -3.25f),
+                    beforeLayerChangeGcode = "; PERSISTED_BEFORE_LAYER",
+                    layerChangeGcode = "; PERSISTED_AFTER_LAYER",
+                    changeFilamentGcode = "T[next_extruder] ; PERSISTED_TOOL_CHANGE",
                     toolChangeRetractLengths = listOf(1.2f, 2.3f),
                     toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
                 ),
@@ -157,6 +160,9 @@ class SliceOptionsPersistenceTest {
         assertArrayEquals(floatArrayOf(0.32f, 0.32f), native.maximumLayerHeights, 0.001f)
         assertArrayEquals(floatArrayOf(0f, 12.5f), native.extruderOffsetsX, 0.001f)
         assertArrayEquals(floatArrayOf(0f, -3.25f), native.extruderOffsetsY, 0.001f)
+        assertEquals("; PERSISTED_BEFORE_LAYER", native.beforeLayerChangeGcode)
+        assertEquals("; PERSISTED_AFTER_LAYER", native.layerChangeGcode)
+        assertEquals("T[next_extruder] ; PERSISTED_TOOL_CHANGE", native.changeFilamentGcode)
         assertArrayEquals(floatArrayOf(1.2f, 2.3f), native.toolChangeRetractLengths, 0.001f)
         assertArrayEquals(floatArrayOf(-0.1f, 0.2f), native.toolChangeRetractRestartExtras, 0.001f)
         assertEquals(2.85f, restored.filamentDiameter)
@@ -708,6 +714,9 @@ class SliceOptionsPersistenceTest {
             getJSONObject("printer").remove("maxLayerHeight")
             getJSONObject("printer").remove("extruderOffsetsX")
             getJSONObject("printer").remove("extruderOffsetsY")
+            getJSONObject("printer").remove("beforeLayerChangeGcode")
+            getJSONObject("printer").remove("layerChangeGcode")
+            getJSONObject("printer").remove("changeFilamentGcode")
             getJSONObject("printer").remove("toolChangeRetractLengths")
             getJSONObject("printer").remove("toolChangeRetractRestartExtras")
             getJSONArray("filamentSlots").getJSONObject(0).remove("diameter")
@@ -804,6 +813,9 @@ class SliceOptionsPersistenceTest {
         assertEquals(0.28f, restored.printerProfile.maxLayerHeight)
         assertEquals(listOf(0f), restored.printerProfile.extruderOffsetsX)
         assertEquals(listOf(0f), restored.printerProfile.extruderOffsetsY)
+        assertEquals("", restored.printerProfile.beforeLayerChangeGcode)
+        assertEquals("", restored.printerProfile.layerChangeGcode)
+        assertEquals("", restored.printerProfile.changeFilamentGcode)
         assertEquals(listOf(0.8f), restored.printerProfile.toolChangeRetractLengths)
         assertEquals(listOf(0f), restored.printerProfile.toolChangeRetractRestartExtras)
         assertEquals(2.85f, restored.toNativeConfig().filamentDiameter)
@@ -909,6 +921,29 @@ class SliceOptionsPersistenceTest {
             ),
         )
     }
+
+    @Test
+    fun printerLifecycleGcodeTemplateLimitCountsUtf8Bytes() {
+        val unsafe = PrinterProfile.CUSTOM_CARTESIAN.copy(
+            changeFilamentGcode = "한".repeat(87_382),
+        )
+
+        assertFalse(ProfileValidation.printer(unsafe))
+        assertFalse(
+            ProfileValidation.printer(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(
+                    beforeLayerChangeGcode = "한".repeat(87_382),
+                ),
+            ),
+        )
+        assertFalse(
+            ProfileValidation.printer(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(
+                    layerChangeGcode = "한".repeat(87_382),
+                ),
+            ),
+        )
+    }
 }
 
 private fun JSONObject.removeCoolingParityFields() {
@@ -928,6 +963,9 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             auxiliaryFan = true,
             extruderOffsetsX = listOf(0f, 10.5f),
             extruderOffsetsY = listOf(0f, -2.5f),
+            beforeLayerChangeGcode = "; FIXTURE_BEFORE_LAYER",
+            layerChangeGcode = "; FIXTURE_AFTER_LAYER",
+            changeFilamentGcode = "T[next_extruder] ; FIXTURE_TOOL_CHANGE",
             toolChangeRetractLengths = listOf(1.4f, 2.6f),
             toolChangeRetractRestartExtras = listOf(-0.2f, 0.3f),
         ),

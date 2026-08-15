@@ -26,6 +26,9 @@ class ProfileBundleTest {
                         maxLayerHeight = 0.31f,
                         extruderOffsetsX = listOf(0f, 12.5f),
                         extruderOffsetsY = listOf(0f, -3.25f),
+                        beforeLayerChangeGcode = "; BUNDLE_BEFORE_LAYER",
+                        layerChangeGcode = "; BUNDLE_AFTER_LAYER",
+                        changeFilamentGcode = "T[next_extruder] ; BUNDLE_TOOL_CHANGE",
                         toolChangeRetractLengths = listOf(1.2f, 2.3f),
                         toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
                     ),
@@ -92,6 +95,9 @@ class ProfileBundleTest {
                         it.minLayerHeight == 0.09f && it.maxLayerHeight == 0.31f &&
                         it.extruderOffsetsX == listOf(0f, 12.5f) &&
                         it.extruderOffsetsY == listOf(0f, -3.25f) &&
+                        it.beforeLayerChangeGcode == "; BUNDLE_BEFORE_LAYER" &&
+                        it.layerChangeGcode == "; BUNDLE_AFTER_LAYER" &&
+                        it.changeFilamentGcode == "T[next_extruder] ; BUNDLE_TOOL_CHANGE" &&
                         it.toolChangeRetractLengths == listOf(1.2f, 2.3f) &&
                         it.toolChangeRetractRestartExtras == listOf(-0.1f, 0.2f)
                 },

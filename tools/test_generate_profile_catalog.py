@@ -547,6 +547,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "retract_restart_extra": ["0.08"],
                 "z_hop": ["0.7"],
                 "z_hop_types": ["Spiral Lift"],
+                "before_layer_change_gcode": "; DUCKY_BEFORE_LAYER",
+                "layer_change_gcode": "; DUCKY_AFTER_LAYER",
+                "change_filament_gcode": "T[next_extruder] ; DUCKY_CHANGE_FILAMENT",
             },
         )
         inherited = build_filament(
@@ -594,6 +597,12 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(printer["retractWhenChangingLayer"])
         self.assertEqual(65.0, printer["retractBeforeWipe"])
         self.assertEqual("spiral", printer["zHopType"])
+        self.assertEqual("; DUCKY_BEFORE_LAYER", printer["beforeLayerChangeGcode"])
+        self.assertEqual("; DUCKY_AFTER_LAYER", printer["layerChangeGcode"])
+        self.assertEqual(
+            "T[next_extruder] ; DUCKY_CHANGE_FILAMENT",
+            printer["changeFilamentGcode"],
+        )
         self.assertIsNone(inherited["retractLength"])
         self.assertIsNone(inherited["zHopType"])
         self.assertEqual(0.55, overridden["retractLength"])

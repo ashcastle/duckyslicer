@@ -555,6 +555,39 @@ private fun PrinterSettingsSheet(
             )
         },
     )
+    GcodeTemplateSetting(
+        label = stringResource(R.string.before_layer_change_gcode),
+        value = options.printerProfile.beforeLayerChangeGcode,
+        onValueChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(beforeLayerChangeGcode = it),
+                ),
+            )
+        },
+    )
+    GcodeTemplateSetting(
+        label = stringResource(R.string.layer_change_gcode),
+        value = options.printerProfile.layerChangeGcode,
+        onValueChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(layerChangeGcode = it),
+                ),
+            )
+        },
+    )
+    GcodeTemplateSetting(
+        label = stringResource(R.string.change_filament_gcode),
+        value = options.printerProfile.changeFilamentGcode,
+        onValueChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(changeFilamentGcode = it),
+                ),
+            )
+        },
+    )
     SettingsGroupTitle(stringResource(R.string.extruder_offsets))
     if (options.printerProfile.extruderCount > 1) {
         SecondaryScrollableTabRow(selectedTabIndex = activeExtruder) {

@@ -14,6 +14,8 @@ class ProfileSettingsSearchTest {
         assertTrue(settingQueryMatches("maximum layer", "Maximum layer height"))
         assertTrue(settingQueryMatches("offset", "X offset"))
         assertTrue(settingQueryMatches("tool change", "Tool change retraction length"))
+        assertTrue(settingQueryMatches("layer change", "Before layer change G-code"))
+        assertTrue(settingQueryMatches("filament", "Change filament G-code"))
         assertFalse(settingQueryMatches("Z distance", "0.20 mm Standard"))
     }
 
