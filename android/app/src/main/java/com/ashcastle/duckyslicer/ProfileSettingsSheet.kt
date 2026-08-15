@@ -6902,6 +6902,26 @@ private fun PrimeTowerStructureSettings(
 ) {
     SettingsGroupTitle(stringResource(R.string.prime_tower_structure))
     SettingsSwitch(
+        label = stringResource(R.string.prime_tower_framework),
+        checked = settings.primeTowerFramework,
+        onCheckedChange = { onChanged(settings.copy(primeTowerFramework = it)) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.prime_tower_skip_points),
+        checked = settings.primeTowerSkipPoints,
+        onCheckedChange = { onChanged(settings.copy(primeTowerSkipPoints = it)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.prime_tower_infill_gap),
+        valueText = stringResource(R.string.percent_value, settings.primeTowerInfillGap.roundToInt()),
+        value = settings.primeTowerInfillGap.coerceIn(100f, 1_000f),
+        range = 100f..1_000f,
+        steps = 899,
+        onValueChange = {
+            onChanged(settings.copy(primeTowerInfillGap = it.roundToInt().toFloat()))
+        },
+    )
+    SettingsSwitch(
         label = stringResource(R.string.prime_tower_flat_ironing),
         checked = settings.primeTowerFlatIroning,
         onCheckedChange = { onChanged(settings.copy(primeTowerFlatIroning = it)) },

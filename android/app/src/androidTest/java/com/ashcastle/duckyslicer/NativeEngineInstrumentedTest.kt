@@ -3905,6 +3905,86 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun primeTowerStructureControlsChangeRealToolpaths() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val printer = OrcaProfileCatalog(context).load().printers.single {
+            it.name == "Bambu Lab P1P 0.4 nozzle"
+        }
+        val model = inspectModel(fixtureModel().absolutePath)
+        val objects = listOf(
+            ProjectObject(
+                id = "tower-structure-primary",
+                model = model,
+                transform = ModelTransform(offsetXmm = -20f),
+                filamentSlot = 0,
+            ),
+            ProjectObject(
+                id = "tower-structure-secondary",
+                model = model,
+                transform = ModelTransform(offsetXmm = 20f),
+                filamentSlot = 1,
+            ),
+        )
+        val baseOptions = SliceOptions()
+            .selectPrinter(printer)
+            .selectFilament(FilamentProfile.PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+                wipeTowerEnabled = true,
+                multiMaterial = MultiMaterialSettings(
+                    purgeVolumes = listOf(0f, 140f, 140f, 0f),
+                    primeTowerFramework = false,
+                    primeTowerSkipPoints = false,
+                    primeTowerInfillGap = 150f,
+                ),
+            )
+
+        val baseline = OnDeviceSlicer.slice(objects, baseOptions)
+        val framework = OnDeviceSlicer.slice(
+            objects,
+            baseOptions.copy(
+                multiMaterial = baseOptions.multiMaterial.copy(primeTowerFramework = true),
+            ),
+        )
+        val skippedWall = OnDeviceSlicer.slice(
+            objects,
+            baseOptions.copy(
+                multiMaterial = baseOptions.multiMaterial.copy(primeTowerSkipPoints = true),
+            ),
+        )
+        val widerGap = OnDeviceSlicer.slice(
+            objects,
+            baseOptions.copy(
+                multiMaterial = baseOptions.multiMaterial.copy(primeTowerInfillGap = 250f),
+            ),
+        )
+
+        val baselinePreview = loadGcodePreview(baseline.output.absolutePath, 0, Int.MAX_VALUE)
+        val frameworkPreview = loadGcodePreview(framework.output.absolutePath, 0, Int.MAX_VALUE)
+        val skippedWallPreview = loadGcodePreview(skippedWall.output.absolutePath, 0, Int.MAX_VALUE)
+        val widerGapPreview = loadGcodePreview(widerGap.output.absolutePath, 0, Int.MAX_VALUE)
+        val baselineGcode = baseline.output.readText()
+        val frameworkGcode = framework.output.readText()
+
+        val frameworkConfigEnabled = frameworkGcode.contains("; prime_tower_enable_framework = 1")
+        val frameworkGeometryChanged = !baselinePreview.segments.contentEquals(frameworkPreview.segments)
+        val skippedWallGeometryChanged = !baselinePreview.segments.contentEquals(skippedWallPreview.segments)
+        val widerGapGeometryChanged = !baselinePreview.segments.contentEquals(widerGapPreview.segments)
+
+        assertTrue("The fixture must execute a real material change", baselineGcode.lineSequence().any { it == "T1" })
+        assertTrue(
+            "Expected active prime-tower controls; config=$frameworkConfigEnabled, " +
+                "frameworkGeometry=$frameworkGeometryChanged, " +
+                "skipGeometry=$skippedWallGeometryChanged, gapGeometry=$widerGapGeometryChanged",
+            frameworkConfigEnabled &&
+                frameworkGeometryChanged &&
+                skippedWallGeometryChanged &&
+                widerGapGeometryChanged,
+        )
+    }
+
+    @Test
     fun automaticTreeSupportRetainsItsModeAndCreatesSupportToolpaths() {
         val model = inspectModel(supportPaintOverhangModel().absolutePath)
         val options = SliceOptions()

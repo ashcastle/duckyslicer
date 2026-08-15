@@ -929,6 +929,9 @@
     <string name="cubic_millimeters_value">%1$.1f mm³</string>
     <string name="prime_tower_brim_width">Tower brim width</string>
     <string name="prime_tower_structure">Tower structure</string>
+    <string name="prime_tower_framework">Internal ribs</string>
+    <string name="prime_tower_skip_points">Skip wipe start points</string>
+    <string name="prime_tower_infill_gap">Tower infill gap</string>
     <string name="prime_tower_flat_ironing">Iron flat top</string>
     <string name="prime_tower_interface_features">Material interface features</string>
     <string name="prime_tower_interface_cooldown">Cool during material interface</string>

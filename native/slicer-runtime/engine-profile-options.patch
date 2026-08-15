@@ -12,7 +12,7 @@ index 3d8c71404e..ef17f010c4 100644
  		// Sum the total length of the extrusion.
  		float total_extrusion_length_in_plane() {
 diff --git a/src/libslic3r/GCode/WipeTower2.cpp b/src/libslic3r/GCode/WipeTower2.cpp
-index dbdcab75f1..f084f9e44d 100644
+index dbdcab75f1..eb442967c8 100644
 --- a/src/libslic3r/GCode/WipeTower2.cpp
 +++ b/src/libslic3r/GCode/WipeTower2.cpp
 @@ -1023,6 +1023,22 @@ public:
@@ -60,17 +60,23 @@ index dbdcab75f1..f084f9e44d 100644
      return result;
  }
  
-@@ -1306,6 +1328,9 @@ WipeTower2::WipeTower2(const PrintConfig&                     config,
+@@ -1306,7 +1328,15 @@ WipeTower2::WipeTower2(const PrintConfig&                     config,
      , m_rib_width(config.wipe_tower_rib_width)
      , m_extra_rib_length(config.wipe_tower_extra_rib_length)
      , m_wall_type((int) config.wipe_tower_wall_type)
 +    , m_flat_ironing(config.prime_tower_flat_ironing.value)
 +    , m_enable_tower_interface_features(config.enable_tower_interface_features.value)
 +    , m_enable_tower_interface_cooldown_during_tower(config.enable_tower_interface_cooldown_during_tower.value)
++    , m_tower_framework(config.prime_tower_enable_framework.value)
++    , m_use_gap_wall(config.prime_tower_skip_points.value)
++    , m_prime_tower_infill_gap(std::max(1.f, float(config.prime_tower_infill_gap.value) / 100.f))
  {
++    m_extra_spacing_wipe = std::max(m_extra_spacing_wipe, m_prime_tower_infill_gap * m_extra_flow);
++    m_extra_spacing_ramming = std::max(m_extra_spacing_ramming, m_prime_tower_infill_gap);
      // Read absolute value of first layer speed, if given as percentage,
      // it is taken over following default. Speeds from config are not
-@@ -1368,6 +1393,17 @@ void WipeTower2::set_extruder(size_t idx, const PrintConfig& config)
+     // easily accessible here.
+@@ -1368,6 +1398,17 @@ void WipeTower2::set_extruder(size_t idx, const PrintConfig& config)
      m_filpar[idx].temperature = config.nozzle_temperature.get_at(idx);
      m_filpar[idx].first_layer_temperature              = config.nozzle_temperature_initial_layer.get_at(idx);
      m_filpar[idx].filament_minimal_purge_on_wipe_tower = config.filament_minimal_purge_on_wipe_tower.get_at(idx);
@@ -88,7 +94,7 @@ index dbdcab75f1..f084f9e44d 100644
  
      // If this is a single extruder MM printer, we will use all the SE-specific config values.
      // Otherwise, the defaults will be used to turn off the SE stuff.
-@@ -1549,10 +1585,14 @@ WipeTower::ToolChangeResult WipeTower2::emit_planned_tool_change(const WipeTower
+@@ -1549,10 +1590,14 @@ WipeTower::ToolChangeResult WipeTower2::emit_planned_tool_change(const WipeTower
  
      float wipe_area   = 0.f;
      float wipe_volume = 0.f;
@@ -103,7 +109,7 @@ index dbdcab75f1..f084f9e44d 100644
      }
  
      WipeTower::box_coordinates cleaning_box(Vec2f(m_perimeter_width / 2.f, m_perimeter_width / 2.f), m_wipe_tower_width - m_perimeter_width,
-@@ -1600,7 +1640,31 @@ WipeTower::ToolChangeResult WipeTower2::emit_planned_tool_change(const WipeTower
+@@ -1600,7 +1645,31 @@ WipeTower::ToolChangeResult WipeTower2::emit_planned_tool_change(const WipeTower
          toolchange_Change(writer, tool, m_filpar[tool].material); // Change the tool, set a speed override for soluble and flex materials.
          toolchange_Load(writer, cleaning_box);
          writer.travel(writer.x(), writer.y() - m_perimeter_width); // cooling and loading were done a bit down the road
@@ -136,7 +142,7 @@ index dbdcab75f1..f084f9e44d 100644
          writer.append(";" + GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Wipe_Tower_End) + "\n");
          ++m_num_tool_changes;
      } else
-@@ -1624,7 +1688,8 @@ WipeTower::ToolChangeResult WipeTower2::emit_planned_tool_change(const WipeTower
+@@ -1624,7 +1693,8 @@ WipeTower::ToolChangeResult WipeTower2::emit_planned_tool_change(const WipeTower
      if (m_current_tool < m_used_filament_length.size())
          m_used_filament_length[m_current_tool] += writer.get_and_reset_used_filament_length();
  
@@ -146,7 +152,7 @@ index dbdcab75f1..f084f9e44d 100644
      result.purge_volume                = wipe_volume;
      return result;
  }
-@@ -2005,7 +2070,11 @@ void WipeTower2::toolchange_Load(WipeTowerWriter2& writer, const WipeTower::box_
+@@ -2005,7 +2075,11 @@ void WipeTower2::toolchange_Load(WipeTowerWriter2& writer, const WipeTower::box_
  }
  
  // Wipe the newly loaded filament until the end of the assigned wipe area.
@@ -159,7 +165,7 @@ index dbdcab75f1..f084f9e44d 100644
  {
      // Increase flow on first layer, slow down print.
      writer.set_extrusion_flow(m_extrusion_flow * (is_first_layer() ? 1.18f : 1.f)).append("; CP TOOLCHANGE WIPE\n");
-@@ -2037,6 +2106,10 @@ void WipeTower2::toolchange_Wipe(WipeTowerWriter2& writer, const WipeTower::box_
+@@ -2037,6 +2111,10 @@ void WipeTower2::toolchange_Wipe(WipeTowerWriter2& writer, const WipeTower::box_
          m_left_to_right = !m_left_to_right;
      }
  
@@ -170,7 +176,7 @@ index dbdcab75f1..f084f9e44d 100644
      // now the wiping itself:
      for (int i = 0; true; ++i) {
          if (i != 0) {
-@@ -2056,6 +2129,12 @@ void WipeTower2::toolchange_Wipe(WipeTowerWriter2& writer, const WipeTower::box_
+@@ -2056,6 +2134,12 @@ void WipeTower2::toolchange_Wipe(WipeTowerWriter2& writer, const WipeTower::box_
          else
              writer.extrude(xl + (i % 4 == 1 ? 0 : 1.5f * line_width), writer.y(), wipe_speed);
  
@@ -183,7 +189,7 @@ index dbdcab75f1..f084f9e44d 100644
          if (writer.y() + float(EPSILON) > cleaning_box.lu.y() - 0.5f * line_width)
              break; // in case next line would not fit
  
-@@ -2108,6 +2187,8 @@ WipeTower::ToolChangeResult WipeTower2::finish_layer()
+@@ -2108,6 +2192,8 @@ WipeTower::ToolChangeResult WipeTower2::finish_layer()
      // If spare layers are excluded -> if 1 or less toolchange has been done, it must be still the first layer, too. So slow down.
      bool  first_layer   = is_first_layer() || (m_num_tool_changes <= 1 && m_no_sparse_layers);
      float feedrate      = first_layer ? m_first_layer_speed * 60.f : std::min(m_wipe_tower_max_purge_speed * 60.f, m_infill_speed * 60.f);
@@ -192,8 +198,103 @@ index dbdcab75f1..f084f9e44d 100644
      float reserve_depth = m_layer_info->local_z_reserve_depth();
      float current_depth = std::max(0.f, m_layer_info->depth - m_layer_info->toolchanges_depth() - reserve_depth);
      float fill_depth    = std::max(0.f, current_depth - m_perimeter_width);
+@@ -2177,6 +2263,19 @@ WipeTower::ToolChangeResult WipeTower2::finish_layer()
+                       ";------------------\n\n\n\n\n\n\n");
+     }
+ 
++    if (m_tower_framework && dy > 2.f * m_perimeter_width && right > left) {
++        writer.append("; CP PRIME TOWER INTERNAL RIBS START\n");
++        const float bottom = fill_box.ld.y() + m_perimeter_width;
++        const float top = fill_box.lu.y() - m_perimeter_width;
++        for (int rib = 1; rib <= 2; ++rib) {
++            const float x = left + (right - left) * float(rib) / 3.f;
++            const Vec2f start = rib % 2 ? Vec2f(x, bottom) : Vec2f(x, top);
++            const Vec2f end = rib % 2 ? Vec2f(x, top) : Vec2f(x, bottom);
++            writer.travel(start).extrude(end, feedrate);
++        }
++        writer.append("; CP PRIME TOWER INTERNAL RIBS END\n");
++    }
++
+     const float spacing = m_perimeter_width - m_layer_height * float(1. - M_PI_4);
+     feedrate = first_layer ? m_first_layer_speed * 60.f : std::min(m_wipe_tower_max_purge_speed * 60.f, m_perimeter_speed * 60.f);
+ 
+@@ -2189,7 +2288,7 @@ WipeTower::ToolChangeResult WipeTower2::finish_layer()
+         poly             = generate_support_cone_wall(writer, wt_box, feedrate, infill_cone, spacing);
+     } else {
+         WipeTower::box_coordinates wt_box(Vec2f(0.f, 0.f), m_wipe_tower_width, m_layer_info->depth + m_perimeter_width);
+-        poly = generate_support_rib_wall(writer, wt_box, feedrate, first_layer, m_wall_type == (int) wtwRib, true, false);
++        poly = generate_support_rib_wall(writer, wt_box, feedrate, first_layer, m_wall_type == (int) wtwRib, true, m_use_gap_wall);
+     }
+ 
+     // brim with chamfer (gradual layer-by-layer reduction)
+@@ -2457,6 +2556,12 @@ void WipeTower2::plan_tower()
+                 m_plan[i].depth = this_layer_depth;
+         }
+     }
++
++    if (m_tower_framework && m_wipe_tower_depth > m_perimeter_width) {
++        const float framework_depth = m_wipe_tower_depth - m_perimeter_width;
++        for (WipeTowerInfo &layer : m_plan)
++            layer.depth = framework_depth;
++    }
+ }
+ 
+ void WipeTower2::save_on_last_wipe()
+@@ -2521,6 +2626,35 @@ bool WipeTower2::layer_has_soluble_toolchange(const WipeTowerInfo &layer) const
+     return has_soluble(layer.local_z_tool_changes) || has_soluble(layer.tool_changes);
+ }
+ 
++void WipeTower2::update_wall_skip_points(const WipeTowerInfo &layer)
++{
++    m_wall_skip_points.clear();
++    if (!m_use_gap_wall || m_layer_info == m_plan.end())
++        return;
++
++    const size_t layer_index = size_t(m_layer_info - m_plan.begin());
++    float process_depth = 0.f;
++    auto append_points = [&](const std::vector<WipeTowerInfo::ToolChange> &tool_changes) {
++        for (const WipeTowerInfo::ToolChange &tool_change : tool_changes) {
++            const float wipe_depth = std::max(m_perimeter_width, tool_change.required_depth);
++            const float far_y = std::max(process_depth,
++                process_depth + wipe_depth - m_extra_spacing_wipe * m_perimeter_width);
++            Vec2f point;
++            switch (layer_index % 4) {
++            case 0: point = Vec2f(0.f, process_depth); break;
++            case 1: point = Vec2f(m_wipe_tower_width, far_y); break;
++            case 2: point = Vec2f(m_wipe_tower_width, process_depth); break;
++            default: point = Vec2f(0.f, far_y); break;
++            }
++            point.y() = std::max(0.f, std::min(point.y(), layer.depth));
++            m_wall_skip_points.emplace_back(point);
++            process_depth += tool_change.required_depth;
++        }
++    };
++    append_points(layer.local_z_tool_changes);
++    append_points(layer.tool_changes);
++}
++
+ float WipeTower2::cumulative_toolchange_depth_before(const WipeTowerInfo::ToolChange *tool_change) const
+ {
+     if (tool_change == nullptr || m_layer_info == m_plan.end())
+@@ -2634,6 +2768,7 @@ void WipeTower2::generate(std::vector<std::vector<WipeTower::ToolChangeResult>>&
+                                  << " planned_depth=" << layer.planned_depth();
+         set_layer(layer.z, layer.height, 0, false /*layer.z == m_plan.front().z*/, layer.z == m_plan.back().z);
+         m_internal_rotation += 180.f;
++        update_wall_skip_points(layer);
+ 
+         if (m_layer_info->depth < m_wipe_tower_depth - m_perimeter_width)
+             m_y_shift = (m_wipe_tower_depth - m_layer_info->depth - m_perimeter_width) / 2.f;
+@@ -2834,7 +2969,7 @@ Polygon WipeTower2::generate_support_rib_wall(WipeTowerWriter2&
+         return wall_polygon;
+ 
+     if (skip_points) {
+-        result_wall = contrust_gap_for_skip_points(wall_polygon, std::vector<Vec2f>(), m_wipe_tower_width, 2.5 * m_perimeter_width,
++        result_wall = contrust_gap_for_skip_points(wall_polygon, m_wall_skip_points, m_wipe_tower_width, 2.5 * m_perimeter_width,
+                                                    insert_skip_polygon);
+     } else {
+         result_wall.push_back(to_polyline(wall_polygon));
 diff --git a/src/libslic3r/GCode/WipeTower2.hpp b/src/libslic3r/GCode/WipeTower2.hpp
-index fc72388e74..f746ff50c7 100644
+index fc72388e74..af028662af 100644
 --- a/src/libslic3r/GCode/WipeTower2.hpp
 +++ b/src/libslic3r/GCode/WipeTower2.hpp
 @@ -31,7 +31,8 @@ public:
@@ -240,7 +341,7 @@ index fc72388e74..f746ff50c7 100644
      };
  
  private:
-@@ -212,6 +221,11 @@ private:
+@@ -212,6 +221,15 @@ private:
  	float  m_perimeter_speed    = 0.f;
      float  m_first_layer_speed  = 0.f;
      size_t m_first_layer_idx    = size_t(-1);
@@ -249,10 +350,22 @@ index fc72388e74..f746ff50c7 100644
 +    bool   m_enable_tower_interface_cooldown_during_tower = false;
 +    bool   m_prev_layer_had_interface = false;
 +    bool   m_current_layer_has_interface = false;
++    bool   m_tower_framework = false;
++    bool   m_use_gap_wall = true;
++    float  m_prime_tower_infill_gap = 1.5f;
++    std::vector<Vec2f> m_wall_skip_points;
  
  	int m_wall_type;
      bool   m_used_fillet                  = true;
-@@ -351,7 +365,8 @@ private:
+@@ -329,6 +347,7 @@ private:
+     int first_toolchange_to_nonsoluble(
+             const std::vector<WipeTowerInfo::ToolChange>& tool_changes) const;
+     bool layer_has_soluble_toolchange(const WipeTowerInfo &layer) const;
++    void update_wall_skip_points(const WipeTowerInfo &layer);
+     float cumulative_toolchange_depth_before(const WipeTowerInfo::ToolChange *tool_change) const;
+     WipeTower::ToolChangeResult emit_planned_tool_change(const WipeTowerInfo::ToolChange *tool_change);
+ 
+@@ -351,7 +370,8 @@ private:
  	void toolchange_Wipe(
  		WipeTowerWriter2 &writer,
  		const WipeTower::box_coordinates  &cleaning_box,
