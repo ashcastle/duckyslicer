@@ -123,6 +123,7 @@ class ProfileBundleTest {
                         primeTowerInterfaceCooldown = true,
                         primeTowerInfillGap = 175f,
                     ),
+                    gcodeSettings = GcodeSettings(timelapseType = "smooth"),
                 ),
             )
 
@@ -235,6 +236,7 @@ class ProfileBundleTest {
             assertTrue(importedSlicing.multiMaterial.primeTowerInterfaceFeatures)
             assertTrue(importedSlicing.multiMaterial.primeTowerInterfaceCooldown)
             assertEquals(175f, importedSlicing.multiMaterial.primeTowerInfillGap)
+            assertEquals("smooth", importedSlicing.gcodeSettings.timelapseType)
 
             val firstGeneration = destinationFile.readBytes()
             val repeated = destination.importBundle(bytes)

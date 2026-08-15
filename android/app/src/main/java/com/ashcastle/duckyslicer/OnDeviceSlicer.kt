@@ -750,6 +750,7 @@ data class GcodeSettings(
     val labelObjects: Boolean = true,
     val excludeObjects: Boolean = false,
     val verboseComments: Boolean = false,
+    val timelapseType: String = "traditional",
     val initialLayerTravelSpeed: Float = 100f,
     val initialLayerTravelSpeedPercent: Boolean = true,
     val slowDownLayers: Int = 0,
@@ -1230,7 +1231,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 86,
+    val schemaVersion: Int = 87,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1933,6 +1934,12 @@ data class SliceOptions(
     )
 
     fun toNativeConfig(): SliceConfig {
+        require(gcodeSettings.timelapseType in setOf("traditional", "smooth")) {
+            "Invalid timelapse type"
+        }
+        require(gcodeSettings.timelapseType != "smooth" || printSequence == "by layer") {
+            "Smooth timelapse requires by-layer printing"
+        }
         val nativeFilaments = resolvedFilamentSlots().mapIndexed { index, profile ->
             if (index != 0) {
                 profile
@@ -2175,7 +2182,8 @@ data class SliceOptions(
             extruderTemps = nativeFilaments.map(FilamentProfile::nozzleTemp).toIntArray(),
             extruderRetractLength = nativeRetractions.map(RetractionSettings::length).toFloatArray(),
             extruderRetractSpeed = nativeRetractions.map(RetractionSettings::speed).toFloatArray(),
-            wipeTowerEnabled = wipeTowerEnabled && nativeFilaments.size > 1,
+            wipeTowerEnabled = gcodeSettings.timelapseType == "smooth" ||
+                (wipeTowerEnabled && nativeFilaments.size > 1),
             wipeTowerWidth = wipeTowerWidth,
             machineStartGcode = printerProfile.machineStartGcode,
             machineEndGcode = printerProfile.machineEndGcode,
@@ -2220,6 +2228,7 @@ data class SliceOptions(
             native.fillMultiline = fillMultilineForPattern(fillPattern, quality.fillMultiline)
             native.filenameFormat = gcodeSettings.filenameFormat
             native.printerModel = printerProfile.name
+            native.isBambuPrinter = printerProfile.brand == "BBL"
             native.skirtType = quality.skirtType
             native.singleLoopDraftShield = quality.singleLoopDraftShield
             native.lateralLatticeAngle1 = quality.lateralInfill.firstAngle
@@ -2540,6 +2549,7 @@ data class SliceOptions(
             native.gcodeLabelObjects = gcodeSettings.labelObjects
             native.excludeObject = gcodeSettings.excludeObjects
             native.gcodeComments = gcodeSettings.verboseComments
+            native.timelapseType = gcodeSettings.timelapseType
             native.initialLayerTravelSpeed = gcodeSettings.initialLayerTravelSpeed
             native.initialLayerTravelSpeedPercent = gcodeSettings.initialLayerTravelSpeedPercent
             native.slowDownLayers = gcodeSettings.slowDownLayers

@@ -25,6 +25,8 @@ class ProfileSettingsSearchTest {
         assertTrue(settingQueryMatches("프라임", "프라임 타워에서 퍼지"))
         assertTrue(settingQueryMatches("interface purge", "Interface purge length"))
         assertTrue(settingQueryMatches("flow compensation", "Flow compensation model"))
+        assertTrue(settingQueryMatches("timelapse", "Timelapse"))
+        assertTrue(settingQueryMatches("타임랩스", "타임랩스"))
         assertFalse(settingQueryMatches("Z distance", "0.20 mm Standard"))
     }
 

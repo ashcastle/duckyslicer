@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 86
+SCHEMA_VERSION = 87
 MAX_FILAMENT_SLOTS = 16
 DEFAULT_GCODE_FILENAME_FORMAT = (
     "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
@@ -595,6 +595,13 @@ def infill_pattern(value: Any, default: str) -> str:
 def enum_value(value: Any, allowed: set[str], default: str) -> str:
     candidate = str(scalar(value, default)).strip().lower()
     return candidate if candidate in allowed else default
+
+
+def timelapse_type(value: Any) -> str:
+    return {
+        "0": "traditional",
+        "1": "smooth",
+    }.get(str(scalar(value, "0")).strip(), "traditional")
 
 
 def support_type(value: Any) -> str:
@@ -1373,6 +1380,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "gcodeLabelObjects": boolean(raw.get("gcode_label_objects"), True),
         "excludeObject": boolean(raw.get("exclude_object")),
         "gcodeComments": boolean(raw.get("gcode_comments")),
+        "timelapseType": timelapse_type(raw.get("timelapse_type")),
         "initialLayerTravelSpeed": initial_layer_travel_speed,
         "initialLayerTravelSpeedPercent": initial_layer_travel_speed_percent,
         "slowDownLayers": integer(raw.get("slow_down_layers"), 0),
@@ -1585,6 +1593,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 0 <= profile["maxBridgeLength"] <= 1_000_000
         and profile["printSequence"] in {"by layer", "by object"}
         and profile["printOrder"] in {"default", "as_obj_list"}
+        and profile["timelapseType"] in {"traditional", "smooth"}
+        and (profile["timelapseType"] != "smooth" or profile["printSequence"] == "by layer")
         and 0 <= profile["spiralModeMaxXySmoothing"] <= (
             1_000 if profile["spiralModeMaxXySmoothingPercent"] else 10
         )

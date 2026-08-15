@@ -1,8 +1,24 @@
 diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
-index 669271fe..90454e89 100644
+index 669271fe..2d9da18b 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -359,6 +359,11 @@ struct SliceConfig {
+@@ -56,6 +56,7 @@ struct SliceConfig {
+     std::string filename_format = "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode";
+     std::string input_filename_base = "model";
+     std::string printer_model = "DuckySlicer";
++    bool is_bambu_printer = false;
+     float lateral_lattice_angle_1 = -45.0f;
+     float lateral_lattice_angle_2 = 45.0f;
+     float infill_overhang_angle = 60.0f;
+@@ -328,6 +329,7 @@ struct SliceConfig {
+     bool precise_outer_walls = true;
+     std::string print_sequence = "by layer";
+     std::string print_order = "default";
++    std::string timelapse_type = "traditional";
+     float extruder_clearance_radius = 40.0f;
+     float extruder_clearance_height_to_rod = 40.0f;
+     float extruder_clearance_height_to_lid = 120.0f;
+@@ -359,6 +361,11 @@ struct SliceConfig {
      int extruder_count = 1;
      std::vector<int> extruder_temps;           // per-extruder nozzle temps
      std::vector<int> filament_idle_temperatures; // per-extruder inactive-tool temperatures
@@ -14,7 +30,7 @@ index 669271fe..90454e89 100644
      std::vector<float> extruder_retract_length; // per-extruder retraction
      std::vector<float> extruder_retract_speed;  // per-extruder retraction speed
      std::vector<float> extruder_deretract_speed;
-@@ -411,6 +416,12 @@ struct SliceConfig {
+@@ -411,6 +418,12 @@ struct SliceConfig {
      float wipe_tower_extra_rib_length = 0.0f;
      float wipe_tower_rib_width = 8.0f;
      bool wipe_tower_fillet_wall = true;
@@ -28,10 +44,26 @@ index 669271fe..90454e89 100644
      bool flush_into_infill = false;
      bool flush_into_support = true;
 diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
-index cf6b9fdd..37fb61b2 100644
+index cf6b9fdd..689e50c6 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -389,6 +389,15 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -106,6 +106,7 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.filename_format = getString("filenameFormat");
+     config.input_filename_base = getString("inputFilenameBase");
+     config.printer_model = getString("printerModel");
++    config.is_bambu_printer = getBool("isBambuPrinter");
+     config.lateral_lattice_angle_1 = getFloat("lateralLatticeAngle1");
+     config.lateral_lattice_angle_2 = getFloat("lateralLatticeAngle2");
+     config.infill_overhang_angle = getFloat("infillOverhangAngle");
+@@ -362,6 +363,7 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.precise_outer_walls = getBool("preciseOuterWalls");
+     config.print_sequence = getString("printSequence");
+     config.print_order = getString("printOrder");
++    config.timelapse_type = getString("timelapseType");
+     config.extruder_clearance_radius = getFloat("extruderClearanceRadius");
+     config.extruder_clearance_height_to_rod = getFloat("extruderClearanceHeightToRod");
+     config.extruder_clearance_height_to_lid = getFloat("extruderClearanceHeightToLid");
+@@ -389,6 +391,15 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.extruder_count = getInt("extruderCount");
      config.extruder_temps = getIntArray("extruderTemps");
      config.filament_idle_temperatures = getIntArray("filamentIdleTemperatures");
@@ -47,7 +79,7 @@ index cf6b9fdd..37fb61b2 100644
      config.extruder_retract_length = getFloatArray("extruderRetractLength");
      config.extruder_retract_speed = getFloatArray("extruderRetractSpeed");
      config.extruder_deretract_speed = getFloatArray("extruderDeretractSpeed");
-@@ -440,6 +449,12 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -440,6 +451,12 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.wipe_tower_extra_rib_length = getFloat("wipeTowerExtraRibLength");
      config.wipe_tower_rib_width = getFloat("wipeTowerRibWidth");
      config.wipe_tower_fillet_wall = getBool("wipeTowerFilletWall");
@@ -60,7 +92,23 @@ index cf6b9fdd..37fb61b2 100644
      config.single_extruder_multi_material_priming = getBool("singleExtruderMultiMaterialPriming");
      config.flush_into_infill = getBool("flushIntoInfill");
      config.flush_into_support = getBool("flushIntoSupport");
-@@ -963,6 +978,19 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -681,6 +698,7 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setString("filenameFormat", config.filename_format);
+     setString("inputFilenameBase", config.input_filename_base);
+     setString("printerModel", config.printer_model);
++    setBool("isBambuPrinter", config.is_bambu_printer);
+     setFloat("lateralLatticeAngle1", config.lateral_lattice_angle_1);
+     setFloat("lateralLatticeAngle2", config.lateral_lattice_angle_2);
+     setFloat("infillOverhangAngle", config.infill_overhang_angle);
+@@ -932,6 +950,7 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setBool("preciseOuterWalls", config.precise_outer_walls);
+     setString("printSequence", config.print_sequence);
+     setString("printOrder", config.print_order);
++    setString("timelapseType", config.timelapse_type);
+     setFloat("extruderClearanceRadius", config.extruder_clearance_radius);
+     setFloat("extruderClearanceHeightToRod", config.extruder_clearance_height_to_rod);
+     setFloat("extruderClearanceHeightToLid", config.extruder_clearance_height_to_lid);
+@@ -963,6 +982,19 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setInt("extruderCount", config.extruder_count);
      setIntArray("extruderTemps", config.extruder_temps);
      setIntArray("filamentIdleTemperatures", config.filament_idle_temperatures);
@@ -80,7 +128,7 @@ index cf6b9fdd..37fb61b2 100644
      setIntArray("filamentBedTemps", config.filament_bed_temps);
      setIntArray("filamentBedTempInitialLayers", config.filament_bed_temp_initial_layers);
      setFloatArray("filamentShrinkages", config.filament_shrinkages);
-@@ -1019,6 +1047,12 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -1019,6 +1051,12 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setFloat("wipeTowerExtraRibLength", config.wipe_tower_extra_rib_length);
      setFloat("wipeTowerRibWidth", config.wipe_tower_rib_width);
      setBool("wipeTowerFilletWall", config.wipe_tower_fillet_wall);
@@ -94,10 +142,20 @@ index cf6b9fdd..37fb61b2 100644
      setBool("flushIntoInfill", config.flush_into_infill);
      setBool("flushIntoSupport", config.flush_into_support);
 diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
-index 6bd1edf6..346263fa 100644
+index 6bd1edf6..619f238d 100644
 --- a/app/src/main/cpp/src/sapil_print.cpp
 +++ b/app/src/main/cpp/src/sapil_print.cpp
-@@ -1392,6 +1392,62 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -1312,6 +1312,9 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     dpc.set_key_value("precise_outer_wall", new Slic3r::ConfigOptionBool(config.precise_outer_walls));
+     dpc.set_deserialize_strict("print_sequence", config.print_sequence);
+     dpc.set_deserialize_strict("print_order", config.print_order);
++    dpc.set_deserialize_strict(
++        "timelapse_type",
++        config.timelapse_type == "smooth" ? "1" : "0");
+     dpc.set_key_value("extruder_clearance_radius", new Slic3r::ConfigOptionFloat(config.extruder_clearance_radius));
+     dpc.set_key_value("extruder_clearance_height_to_rod", new Slic3r::ConfigOptionFloat(config.extruder_clearance_height_to_rod));
+     dpc.set_key_value("extruder_clearance_height_to_lid", new Slic3r::ConfigOptionFloat(config.extruder_clearance_height_to_lid));
+@@ -1392,6 +1395,62 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
          while ((int)v.size() < n_ext) v.push_back(v.back());
          dpc.set_key_value("filament_minimal_purge_on_wipe_tower", new Slic3r::ConfigOptionFloats(std::move(v)));
      }
@@ -160,7 +218,7 @@ index 6bd1edf6..346263fa 100644
      if (!config.filament_nozzle_temp_initial_layers.empty()) {
          std::vector<int> v = config.filament_nozzle_temp_initial_layers;
          while ((int)v.size() < n_ext) v.push_back(v.back());
-@@ -1636,6 +1692,18 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -1636,6 +1695,18 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wipe_tower_extra_rib_length", new Slic3r::ConfigOptionFloat(config.wipe_tower_extra_rib_length));
      dpc.set_key_value("wipe_tower_rib_width", new Slic3r::ConfigOptionFloat(config.wipe_tower_rib_width));
      dpc.set_key_value("wipe_tower_fillet_wall", new Slic3r::ConfigOptionBool(config.wipe_tower_fillet_wall));
@@ -179,7 +237,25 @@ index 6bd1edf6..346263fa 100644
      dpc.set_key_value("single_extruder_multi_material_priming", new Slic3r::ConfigOptionBool(config.single_extruder_multi_material_priming));
      dpc.set_key_value("enable_infill_filament_override", new Slic3r::ConfigOptionBool(config.infill_filament_override_enabled));
      dpc.set_key_value("infill_filament_use_base_first_layers", new Slic3r::ConfigOptionInt(config.infill_filament_base_first_layers));
-@@ -1999,6 +2067,12 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -1644,7 +1715,7 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     dpc.set_key_value("wall_filament", new Slic3r::ConfigOptionInt(config.wall_filament));
+     dpc.set_key_value("solid_infill_filament", new Slic3r::ConfigOptionInt(config.solid_infill_filament));
+     dpc.set_key_value("wipe_tower_filament", new Slic3r::ConfigOptionInt(config.wipe_tower_filament));
+-    if (n_ext > 1 && config.wipe_tower_enabled) {
++    if (config.wipe_tower_enabled && (n_ext > 1 || config.timelapse_type == "smooth")) {
+         dpc.set_key_value("enable_prime_tower", new Slic3r::ConfigOptionBool(true));
+         dpc.set_key_value("wipe_tower_x", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, config.wipe_tower_x)));
+         dpc.set_key_value("wipe_tower_y", new Slic3r::ConfigOptionFloats(std::vector<double>(n_ext, config.wipe_tower_y)));
+@@ -1743,6 +1814,8 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+             config.change_filament_gcode.size() <= MAX_GCODE_TEMPLATE_BYTES &&
+             config.printing_by_object_gcode.size() <= MAX_GCODE_TEMPLATE_BYTES;
+         if (config.extruder_count < 1 || config.extruder_count > 16 ||
++            (config.timelapse_type != "traditional" && config.timelapse_type != "smooth") ||
++            (config.timelapse_type == "smooth" && config.print_sequence != "by layer") ||
+             config.extruder_offsets_x.size() != config.extruder_offsets_y.size() ||
+             config.extruder_offsets_x.size() > 16 ||
+             !valid_machine_gcodes ||
+@@ -1999,6 +2072,12 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
                      "wipe_tower_x",
                      "wipe_tower_y",
                      "wipe_tower_rotation_angle",
@@ -192,7 +268,7 @@ index 6bd1edf6..346263fa 100644
                      // Extruder offsets (per-extruder, must match extruder count)
                      "extruder_offset",
                      // Tool change / wipe tower filament handling (from printer+filament profile)
-@@ -2046,6 +2120,11 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -2046,6 +2125,11 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
                      "flush_volumes_matrix",
                      "flush_multiplier",
                      "filament_minimal_purge_on_wipe_tower",
@@ -204,7 +280,7 @@ index 6bd1edf6..346263fa 100644
                      "purge_in_prime_tower",
                      // Ooze prevention re-heat mode: 0 = M104 (non-blocking), 1 = M109 (wait).
                      "tool_change_temprature_wait",
-@@ -2241,6 +2320,11 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+@@ -2241,6 +2325,11 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
                  pad_bools("enable_pressure_advance");
                  pad_floats("pressure_advance");
                  pad_floats("filament_minimal_purge_on_wipe_tower");
@@ -216,4 +292,13 @@ index 6bd1edf6..346263fa 100644
  
                  // Flush volumes matrix — NxN where N = virtual_ext.
                  // ToolOrdering derives extruder count from sqrt(matrix.size()).
+@@ -2269,6 +2358,9 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
 
+         // Create a Print object
+         Slic3r::Print print;
++        // Orca's desktop pipeline supplies this preset-vendor bit outside PrintConfig.
++        // Preserve that engine behavior for bundled BBL profiles on Android.
++        print.is_BBL_printer() = config.is_bambu_printer;
+
+         // Apply model + config to the print
+         Slic3r::Model& model = getGlobalModel();

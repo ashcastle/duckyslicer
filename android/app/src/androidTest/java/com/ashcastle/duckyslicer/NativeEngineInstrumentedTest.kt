@@ -2394,7 +2394,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(86, catalog.schemaVersion)
+        assertEquals(87, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -3906,10 +3906,11 @@ class NativeEngineInstrumentedTest {
 
     @Test
     fun primeTowerStructureControlsChangeRealToolpaths() {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val printer = OrcaProfileCatalog(context).load().printers.single {
-            it.name == "Bambu Lab P1P 0.4 nozzle"
-        }
+        val printer = PrinterProfile.U1_04.copy(
+            machineStartGcode = "",
+            machineEndGcode = "",
+            changeFilamentGcode = "T[next_extruder]",
+        )
         val model = inspectModel(fixtureModel().absolutePath)
         val objects = listOf(
             ProjectObject(
@@ -3981,6 +3982,77 @@ class NativeEngineInstrumentedTest {
                 frameworkGeometryChanged &&
                 skippedWallGeometryChanged &&
                 widerGapGeometryChanged,
+        )
+    }
+
+    @Test
+    fun smoothTimelapseRunsTheBundledOrcaTowerPathOnEveryLayer() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val printer = OrcaProfileCatalog(context).load().printers.single {
+            it.name == "Bambu Lab P1P 0.4 nozzle"
+        }
+        val model = inspectModel(fixtureModel().absolutePath)
+        val objects = listOf(
+            ProjectObject(
+                id = "timelapse-object",
+                model = model,
+            ),
+        )
+        val base = SliceOptions()
+            .selectPrinter(printer)
+            .selectFilament(FilamentProfile.PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                wipeTowerEnabled = true,
+            )
+
+        val traditional = OnDeviceSlicer.slice(
+            objects,
+            base.copy(
+                gcodeSettings = base.gcodeSettings.copy(timelapseType = "traditional"),
+            ),
+        )
+        val smooth = OnDeviceSlicer.slice(
+            objects,
+            base.copy(
+                gcodeSettings = base.gcodeSettings.copy(timelapseType = "smooth"),
+            ),
+        )
+        val traditionalGcode = traditional.output.readText()
+        val smoothGcode = smooth.output.readText()
+        val traditionalPreview = loadGcodePreview(
+            traditional.output.absolutePath,
+            0,
+            Int.MAX_VALUE,
+        )
+        val smoothPreview = loadGcodePreview(smooth.output.absolutePath, 0, Int.MAX_VALUE)
+        val traditionalTowerBlocks = traditionalGcode.lineSequence().count {
+            it == "; WIPE_TOWER_START"
+        }
+        val smoothTowerBlocks = smoothGcode.lineSequence().count { it == "; WIPE_TOWER_START" }
+        val traditionalTowerExtrusion = wipeTowerExtrusion(traditionalGcode)
+        val smoothTowerExtrusion = wipeTowerExtrusion(smoothGcode)
+
+        assertTrue(traditionalGcode.contains("; timelapse_type = 0"))
+        assertTrue(smoothGcode.contains("; timelapse_type = 1"))
+        assertFalse(traditionalGcode.contains("; WIPE_TOWER_START"))
+        assertTrue(smoothGcode.contains("; WIPE_TOWER_START"))
+        assertTrue(
+            "Traditional P1P layer-change template must execute",
+            traditionalGcode.contains("M971 S11 C10 O0"),
+        )
+        assertTrue(
+            "Smooth P1P layer-change template must execute",
+            smoothGcode.contains("M971 S11 C11 O0"),
+        )
+        assertTrue(
+            "Smooth timelapse must schedule additional real wipe-tower work; " +
+                "blocks=$traditionalTowerBlocks/$smoothTowerBlocks, " +
+                "extrusion=$traditionalTowerExtrusion/$smoothTowerExtrusion, " +
+                "segments=${traditionalPreview.segments.size}/${smoothPreview.segments.size}",
+            smoothTowerBlocks > traditionalTowerBlocks ||
+                smoothTowerExtrusion > traditionalTowerExtrusion ||
+                !traditionalPreview.segments.contentEquals(smoothPreview.segments),
         )
     }
 

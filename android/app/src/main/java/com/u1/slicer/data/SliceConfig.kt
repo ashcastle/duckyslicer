@@ -363,6 +363,7 @@ data class SliceConfig(
         "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
     @JvmField var inputFilenameBase: String = "model"
     @JvmField var printerModel: String = "DuckySlicer"
+    @JvmField var isBambuPrinter: Boolean = false
     @JvmField var skirtType: String = "combined"
     @JvmField var singleLoopDraftShield: Boolean = false
     @JvmField var lateralLatticeAngle1: Float = -45f
@@ -428,6 +429,7 @@ data class SliceConfig(
     @JvmField var wipeTowerFilament: Int = 0
     @JvmField var printSequence: String = "by layer"
     @JvmField var printOrder: String = "default"
+    @JvmField var timelapseType: String = "traditional"
     @JvmField var extruderClearanceRadius: Float = 40f
     @JvmField var extruderClearanceHeightToRod: Float = 40f
     @JvmField var extruderClearanceHeightToLid: Float = 120f

@@ -88,6 +88,21 @@ internal fun settingQueryMatches(query: String, label: String): Boolean {
     return normalized.split(' ').filter(String::isNotBlank).all(candidate::contains)
 }
 
+internal fun SliceOptions.withPrintSequenceSelection(sequence: String): SliceOptions = copy(
+    printSequence = sequence,
+    gcodeSettings = if (sequence == "by object" && gcodeSettings.timelapseType == "smooth") {
+        gcodeSettings.copy(timelapseType = "traditional")
+    } else {
+        gcodeSettings
+    },
+)
+
+internal fun SliceOptions.withTimelapseSelection(type: String): SliceOptions = copy(
+    printSequence = if (type == "smooth") "by layer" else printSequence,
+    wipeTowerEnabled = wipeTowerEnabled || type == "smooth",
+    gcodeSettings = gcodeSettings.copy(timelapseType = type),
+)
+
 private fun BuildPlateType.labelResource(): Int = when (this) {
     BuildPlateType.TEXTURED_PEI -> R.string.textured_pei_plate
     BuildPlateType.HIGH_TEMP -> R.string.high_temp_plate
@@ -5522,7 +5537,9 @@ private fun SlicingSettingsSheet(
                             if (it == "by object") R.string.print_by_object else R.string.print_by_layer,
                         )
                     },
-                    onSelected = { onOptionsChanged(options.copy(printSequence = it)) },
+                    onSelected = { sequence ->
+                        onOptionsChanged(options.withPrintSequenceSelection(sequence))
+                    },
                 )
                 if (options.printSequence == "by layer" || settingsQuery.isNotBlank()) {
                     SettingChoices(
@@ -5573,6 +5590,23 @@ private fun SlicingSettingsSheet(
                                 gcodeSettings = options.gcodeSettings.copy(verboseComments = it),
                             ),
                         )
+                    },
+                )
+                SettingChoices(
+                    settingLabel = stringResource(R.string.timelapse),
+                    entries = listOf("traditional", "smooth"),
+                    selected = options.gcodeSettings.timelapseType,
+                    optionLabel = {
+                        stringResource(
+                            if (it == "smooth") {
+                                R.string.timelapse_smooth
+                            } else {
+                                R.string.timelapse_traditional
+                            },
+                        )
+                    },
+                    onSelected = { type ->
+                        onOptionsChanged(options.withTimelapseSelection(type))
                     },
                 )
                 FilenameFormatSetting(

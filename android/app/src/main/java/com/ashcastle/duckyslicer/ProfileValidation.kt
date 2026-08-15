@@ -278,6 +278,7 @@ internal object ProfileValidation {
             profile.printableOverhangs.maximumAngle in 0f..90f &&
             profile.printableOverhangs.holeArea in 0f..1_000_000f &&
             profile.gcodeSettings.slowDownLayers in 0..1_000 &&
+            profile.gcodeSettings.timelapseType in setOf("traditional", "smooth") &&
             profile.minWidthTopSurface in 0f..1_500f &&
             profile.overhangReverseThreshold in 0f..2_000f &&
             profile.counterboreHoleBridging in setOf("none", "partiallybridge", "sacrificiallayer") &&
@@ -445,6 +446,7 @@ internal object ProfileValidation {
             profile.maxBridgeLength in 0f..1_000_000f &&
             profile.printSequence in setOf("by layer", "by object") &&
             profile.printOrder in setOf("default", "as_obj_list") &&
+            (profile.gcodeSettings.timelapseType != "smooth" || profile.printSequence == "by layer") &&
             profile.spiralModeMaxXySmoothing in 0f..(
                 if (profile.spiralModeMaxXySmoothingPercent) 1_000f else 10f
             ) &&

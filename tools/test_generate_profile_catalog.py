@@ -11,10 +11,43 @@ from tools.generate_profile_catalog import (
     printable_geometry,
     small_area_flow_compensation_model,
     support_type,
+    timelapse_type,
 )
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_preserves_orca_timelapse_mode_and_rejects_smooth_by_object(self) -> None:
+        self.assertEqual("traditional", timelapse_type(None))
+        self.assertEqual("traditional", timelapse_type("0"))
+        self.assertEqual("smooth", timelapse_type("1"))
+        self.assertEqual("traditional", timelapse_type("unexpected"))
+
+        smooth = build_process(
+            "Example",
+            {
+                "name": "Smooth timelapse",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "timelapse_type": "1",
+                "print_sequence": "by layer",
+            },
+            {},
+        )
+        self.assertEqual("smooth", smooth["timelapseType"])
+
+        with self.assertRaises(ValueError):
+            build_process(
+                "Example",
+                {
+                    "name": "Unsafe smooth timelapse",
+                    "layer_height": "0.2",
+                    "initial_layer_print_height": "0.2",
+                    "timelapse_type": "1",
+                    "print_sequence": "by object",
+                },
+                {},
+            )
+
     def test_normalizes_and_validates_small_area_flow_compensation(self) -> None:
         serialized = '0,0;"\\n0.5,0.6";"\\n10,1"'
         self.assertEqual(
