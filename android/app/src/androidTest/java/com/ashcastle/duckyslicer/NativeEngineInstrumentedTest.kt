@@ -2394,7 +2394,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(85, catalog.schemaVersion)
+        assertEquals(86, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2537,6 +2537,16 @@ class NativeEngineInstrumentedTest {
         assertTrue(
             "Inherited minimum wipe-tower purge values must survive catalog generation",
             catalog.filaments.any { kotlin.math.abs(it.minimalPurgeOnWipeTower - 15f) >= 0.001f },
+        )
+        assertTrue(
+            "Pinned presets without tower-interface overrides must receive engine defaults",
+            catalog.filaments.all {
+                it.towerInterfacePreExtrusionDistance == 10f &&
+                    it.towerInterfacePreExtrusionLength == 0f &&
+                    it.towerIroningArea == 4f &&
+                    it.towerInterfacePurgeLength == 20f &&
+                    it.towerInterfacePrintTemperature == -1
+            },
         )
         assertTrue(
             "Inherited auxiliary cooling speeds must survive catalog generation",
@@ -2708,6 +2718,17 @@ class NativeEngineInstrumentedTest {
                     it.multiMaterial.preheatSteps != 1 ||
                     it.multiMaterial.interfaceShells ||
                     it.multiMaterial.interlockingBeam
+            },
+        )
+        assertTrue(
+            "Pinned presets without new tower-structure overrides must receive engine defaults",
+            catalog.slicing.all {
+                !it.multiMaterial.primeTowerFramework &&
+                    it.multiMaterial.primeTowerSkipPoints &&
+                    !it.multiMaterial.primeTowerFlatIroning &&
+                    !it.multiMaterial.primeTowerInterfaceFeatures &&
+                    !it.multiMaterial.primeTowerInterfaceCooldown &&
+                    it.multiMaterial.primeTowerInfillGap == 150f
             },
         )
         assertTrue(
@@ -3947,8 +3968,20 @@ class NativeEngineInstrumentedTest {
     @Test
     fun supportFilamentRoutingAndPrimeTowerReachOrca() {
         val model = inspectModel(fixtureModel().absolutePath)
-        val primary = FilamentProfile.PLA
-        val secondary = FilamentProfile.PETG
+        val primary = FilamentProfile.PLA.copy(
+            towerInterfacePreExtrusionDistance = 11f,
+            towerInterfacePreExtrusionLength = 12f,
+            towerIroningArea = 13f,
+            towerInterfacePurgeLength = 14f,
+            towerInterfacePrintTemperature = 231,
+        )
+        val secondary = FilamentProfile.PETG.copy(
+            towerInterfacePreExtrusionDistance = 21f,
+            towerInterfacePreExtrusionLength = 22f,
+            towerIroningArea = 23f,
+            towerInterfacePurgeLength = 24f,
+            towerInterfacePrintTemperature = 241,
+        )
         val options = SliceOptions()
             .selectPrinter(PrinterProfile.U1_04)
             .selectFilament(primary)
@@ -3973,6 +4006,12 @@ class NativeEngineInstrumentedTest {
                     primeVolume = 61.5f,
                     purgeVolumes = listOf(0f, 65f, 175f, 0f),
                     primeTowerBrimWidth = 4.5f,
+                    primeTowerFramework = true,
+                    primeTowerSkipPoints = false,
+                    primeTowerFlatIroning = true,
+                    primeTowerInterfaceFeatures = true,
+                    primeTowerInterfaceCooldown = true,
+                    primeTowerInfillGap = 175f,
                     wipeTowerNoSparseLayers = true,
                     wipeTowerRotationAngle = 73f,
                     wipeTowerBridging = 12.5f,
@@ -4049,6 +4088,17 @@ class NativeEngineInstrumentedTest {
             gcode.contains("; purge_in_prime_tower = 0"),
         )
         assertTrue("Tower brim width must reach Orca", gcode.contains("; prime_tower_brim_width = 4.5"))
+        assertTrue(gcode.contains("; prime_tower_enable_framework = 1"))
+        assertTrue(gcode.contains("; prime_tower_skip_points = 0"))
+        assertTrue(gcode.contains("; prime_tower_flat_ironing = 1"))
+        assertTrue(gcode.contains("; enable_tower_interface_features = 1"))
+        assertTrue(gcode.contains("; enable_tower_interface_cooldown_during_tower = 1"))
+        assertTrue(gcode.contains("; prime_tower_infill_gap = 175%"))
+        assertTrue(gcode.contains("; filament_tower_interface_pre_extrusion_dist = 11,21"))
+        assertTrue(gcode.contains("; filament_tower_interface_pre_extrusion_length = 12,22"))
+        assertTrue(gcode.contains("; filament_tower_ironing_area = 13,23"))
+        assertTrue(gcode.contains("; filament_tower_interface_purge_volume = 14,24"))
+        assertTrue(gcode.contains("; filament_tower_interface_print_temp = 231,241"))
         assertTrue("Sparse tower layers must remain disabled", gcode.contains("; wipe_tower_no_sparse_layers = 1"))
         assertTrue("Tower rotation must reach Orca", gcode.contains("; wipe_tower_rotation_angle = 73"))
         assertTrue("Tower bridging must reach Orca", gcode.contains("; wipe_tower_bridging = 12.5"))
@@ -4185,6 +4235,12 @@ class NativeEngineInstrumentedTest {
             ),
         )
         val defaultsGcode = defaultsOutcome.output.readText()
+        assertTrue(defaultsGcode.contains("; prime_tower_enable_framework = 0"))
+        assertTrue(defaultsGcode.contains("; prime_tower_skip_points = 1"))
+        assertTrue(defaultsGcode.contains("; prime_tower_flat_ironing = 0"))
+        assertTrue(defaultsGcode.contains("; enable_tower_interface_features = 0"))
+        assertTrue(defaultsGcode.contains("; enable_tower_interface_cooldown_during_tower = 0"))
+        assertTrue(defaultsGcode.contains("; prime_tower_infill_gap = 150%"))
         assertTrue("Tower rotation must default to zero", defaultsGcode.contains("; wipe_tower_rotation_angle = 0"))
         assertTrue("Tower bridging must retain its default", defaultsGcode.contains("; wipe_tower_bridging = 10"))
         assertTrue("Tower spacing must retain its default", defaultsGcode.contains("; wipe_tower_extra_spacing = 100%"))
@@ -4278,6 +4334,85 @@ class NativeEngineInstrumentedTest {
         } finally {
             low.output.delete()
             high.output.delete()
+        }
+    }
+
+    @Test
+    fun towerInterfaceSettingsChangeRealWipeTowerGcode() {
+        val model = inspectModel(fixtureModel().absolutePath)
+        val objects = listOf(
+            ProjectObject(
+                id = "tower-interface-primary",
+                model = model,
+                transform = ModelTransform(offsetXmm = -20f),
+                filamentSlot = 0,
+            ),
+            ProjectObject(
+                id = "tower-interface-secondary",
+                model = model,
+                transform = ModelTransform(offsetXmm = 20f),
+                filamentSlot = 1,
+            ),
+        )
+        val primary = FilamentProfile.PLA.copy(
+            towerInterfacePreExtrusionDistance = 8f,
+            towerInterfacePreExtrusionLength = 15f,
+            towerIroningArea = 9f,
+            towerInterfacePurgeLength = 100f,
+            towerInterfacePrintTemperature = 260,
+        )
+        val secondary = FilamentProfile.PETG.copy(
+            towerInterfacePreExtrusionDistance = 8f,
+            towerInterfacePreExtrusionLength = 15f,
+            towerIroningArea = 9f,
+            towerInterfacePurgeLength = 100f,
+            towerInterfacePrintTemperature = 260,
+        )
+        val base = SliceOptions()
+            .selectPrinter(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(
+                    id = "test-tower-interface-semm-04",
+                    name = "Test tower interface SEMM · 0.4 mm",
+                    singleExtruderMultiMaterial = true,
+                    extruderCount = 2,
+                ),
+            )
+            .selectFilament(primary)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                filamentSlots = listOf(primary, secondary),
+                wipeTowerEnabled = true,
+                multiMaterial = MultiMaterialSettings(
+                    purgeVolumes = listOf(0f, 20f, 75f, 0f),
+                ),
+            )
+        val enabled = base.copy(
+            multiMaterial = base.multiMaterial.copy(
+                primeTowerFlatIroning = true,
+                primeTowerInterfaceFeatures = true,
+                primeTowerInterfaceCooldown = true,
+            ),
+        )
+
+        val baseline = OnDeviceSlicer.slice(objects, base)
+        val enhanced = OnDeviceSlicer.slice(objects, enabled)
+        try {
+            val baselineGcode = baseline.output.readText()
+            val enhancedGcode = enhanced.output.readText()
+            assertTrue(enhancedGcode.contains("; enable_tower_interface_features = 1"))
+            assertTrue(enhancedGcode.contains("; enable_tower_interface_cooldown_during_tower = 1"))
+            assertTrue(enhancedGcode.contains("; filament_tower_interface_purge_volume = 100,100"))
+            assertTrue(
+                "Interface temperature must reach emitted tower G-code",
+                enhancedGcode.lineSequence().any { it.startsWith("M109 S260") },
+            )
+            assertTrue(
+                "Interface purge and pre-extrusion must add real wipe-tower extrusion",
+                wipeTowerExtrusion(enhancedGcode) > wipeTowerExtrusion(baselineGcode) + 50f,
+            )
+        } finally {
+            baseline.output.delete()
+            enhanced.output.delete()
         }
     }
 

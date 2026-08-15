@@ -421,6 +421,11 @@ data class FilamentProfile(
     val soluble: Boolean = false,
     val supportMaterial: Boolean = false,
     val minimalPurgeOnWipeTower: Float = 15f,
+    val towerInterfacePreExtrusionDistance: Float = 10f,
+    val towerInterfacePreExtrusionLength: Float = 0f,
+    val towerIroningArea: Float = 4f,
+    val towerInterfacePurgeLength: Float = 20f,
+    val towerInterfacePrintTemperature: Int = -1,
     val additionalCoolingFanSpeed: Int = 0,
     val loadingSpeed: Float = 28f,
     val loadingSpeedStart: Float = 3f,
@@ -629,6 +634,12 @@ data class MultiMaterialSettings(
     val primeVolume: Float = 45f,
     val purgeVolumes: List<Float> = emptyList(),
     val primeTowerBrimWidth: Float = 3f,
+    val primeTowerFramework: Boolean = false,
+    val primeTowerSkipPoints: Boolean = true,
+    val primeTowerFlatIroning: Boolean = false,
+    val primeTowerInterfaceFeatures: Boolean = false,
+    val primeTowerInterfaceCooldown: Boolean = false,
+    val primeTowerInfillGap: Float = 150f,
     val wipeTowerNoSparseLayers: Boolean = false,
     val wipeTowerRotationAngle: Float = 0f,
     val wipeTowerBridging: Float = 10f,
@@ -1219,7 +1230,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 85,
+    val schemaVersion: Int = 86,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -2261,6 +2272,21 @@ data class SliceOptions(
             native.filamentMinimalPurgeOnWipeTower = nativeFilaments
                 .map(FilamentProfile::minimalPurgeOnWipeTower)
                 .toFloatArray()
+            native.filamentTowerInterfacePreExtrusionDistances = nativeFilaments
+                .map(FilamentProfile::towerInterfacePreExtrusionDistance)
+                .toFloatArray()
+            native.filamentTowerInterfacePreExtrusionLengths = nativeFilaments
+                .map(FilamentProfile::towerInterfacePreExtrusionLength)
+                .toFloatArray()
+            native.filamentTowerIroningAreas = nativeFilaments
+                .map(FilamentProfile::towerIroningArea)
+                .toFloatArray()
+            native.filamentTowerInterfacePurgeLengths = nativeFilaments
+                .map(FilamentProfile::towerInterfacePurgeLength)
+                .toFloatArray()
+            native.filamentTowerInterfacePrintTemperatures = nativeFilaments
+                .map(FilamentProfile::towerInterfacePrintTemperature)
+                .toIntArray()
             native.filamentAdditionalCoolingFanSpeeds = nativeFilaments
                 .map(FilamentProfile::additionalCoolingFanSpeed)
                 .toIntArray()
@@ -2440,6 +2466,12 @@ data class SliceOptions(
                 printerProfile.purgeInPrimeTower &&
                 multiMaterial.purgeVolumes.isNotEmpty()
             native.primeTowerBrimWidth = multiMaterial.primeTowerBrimWidth
+            native.primeTowerFramework = multiMaterial.primeTowerFramework
+            native.primeTowerSkipPoints = multiMaterial.primeTowerSkipPoints
+            native.primeTowerFlatIroning = multiMaterial.primeTowerFlatIroning
+            native.primeTowerInterfaceFeatures = multiMaterial.primeTowerInterfaceFeatures
+            native.primeTowerInterfaceCooldown = multiMaterial.primeTowerInterfaceCooldown
+            native.primeTowerInfillGap = multiMaterial.primeTowerInfillGap
             native.wipeTowerNoSparseLayers = multiMaterial.wipeTowerNoSparseLayers
             native.wipeTowerRotationAngle = multiMaterial.wipeTowerRotationAngle
             native.wipeTowerBridging = multiMaterial.wipeTowerBridging

@@ -1776,6 +1776,12 @@ private fun FilamentSettingsSheet(
                 )
             },
         )
+        FilamentPrimeTowerInterfaceSettings(
+            profile = activeProfile,
+            onChanged = { updated ->
+                onOptionsChanged(options.updateFilamentSlot(selectedSlot, updated))
+            },
+        )
         SettingsGroupTitle(stringResource(R.string.filament_material_environment))
         SettingSlider(
             label = stringResource(R.string.filament_softening_temperature),
@@ -5579,76 +5585,11 @@ private fun SlicingSettingsSheet(
                         )
                     },
                 )
-                SettingsGroupTitle(stringResource(R.string.spiral_vase))
-                SettingsSwitch(
-                    label = stringResource(R.string.spiral_vase),
-                    checked = options.spiralMode,
-                    onCheckedChange = { enabled ->
-                        onOptionsChanged(options.withSpiralMode(enabled))
-                    },
+                SpiralVaseSettings(
+                    options = options,
+                    showInactive = settingsQuery.isNotBlank(),
+                    onOptionsChanged = onOptionsChanged,
                 )
-                if (options.spiralMode || settingsQuery.isNotBlank()) {
-                    Text(
-                        stringResource(R.string.spiral_vase_summary),
-                        color = Color(0xFFC8C9C2),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    SettingsSwitch(
-                        label = stringResource(R.string.smooth_spiral),
-                        checked = options.spiralModeSmooth,
-                        onCheckedChange = {
-                            onOptionsChanged(options.copy(spiralModeSmooth = it))
-                        },
-                    )
-                    LengthOrPercentSetting(
-                        label = stringResource(R.string.max_xy_smoothing),
-                        value = options.spiralModeMaxXySmoothing,
-                        percent = options.spiralModeMaxXySmoothingPercent,
-                        maximumAbsolute = 10f,
-                        maximumPercent = 1_000f,
-                        onValueChange = {
-                            onOptionsChanged(options.copy(spiralModeMaxXySmoothing = it))
-                        },
-                        onPercentChange = { percent, value ->
-                            onOptionsChanged(
-                                options.copy(
-                                    spiralModeMaxXySmoothing = value,
-                                    spiralModeMaxXySmoothingPercent = percent,
-                                ),
-                            )
-                        },
-                    )
-                    SettingSlider(
-                        label = stringResource(R.string.spiral_starting_flow),
-                        valueText = stringResource(
-                            R.string.flow_ratio_value,
-                            options.spiralStartingFlowRatio,
-                        ),
-                        value = options.spiralStartingFlowRatio,
-                        range = 0f..1f,
-                        steps = 99,
-                        onValueChange = {
-                            onOptionsChanged(
-                                options.copy(spiralStartingFlowRatio = (it * 100f).roundToInt() / 100f),
-                            )
-                        },
-                    )
-                    SettingSlider(
-                        label = stringResource(R.string.spiral_finishing_flow),
-                        valueText = stringResource(
-                            R.string.flow_ratio_value,
-                            options.spiralFinishingFlowRatio,
-                        ),
-                        value = options.spiralFinishingFlowRatio,
-                        range = 0f..1f,
-                        steps = 99,
-                        onValueChange = {
-                            onOptionsChanged(
-                                options.copy(spiralFinishingFlowRatio = (it * 100f).roundToInt() / 100f),
-                            )
-                        },
-                    )
-                }
                 SettingsGroupTitle(stringResource(R.string.prime_tower))
                 SettingsSwitch(
                     label = stringResource(R.string.enable_prime_tower),
@@ -5703,6 +5644,13 @@ private fun SlicingSettingsSheet(
                                     ),
                                 ),
                             )
+                        },
+                    )
+                    PrimeTowerStructureSettings(
+                        settings = options.multiMaterial,
+                        showInactive = settingsQuery.isNotBlank(),
+                        onChanged = {
+                            onOptionsChanged(options.copy(multiMaterial = it))
                         },
                     )
                     SettingSlider(
@@ -6816,6 +6764,161 @@ private fun FilenameFormatSetting(
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+@Composable
+private fun SpiralVaseSettings(
+    options: SliceOptions,
+    showInactive: Boolean,
+    onOptionsChanged: (SliceOptions) -> Unit,
+) {
+    SettingsGroupTitle(stringResource(R.string.spiral_vase))
+    SettingsSwitch(
+        label = stringResource(R.string.spiral_vase),
+        checked = options.spiralMode,
+        onCheckedChange = { enabled ->
+            onOptionsChanged(options.withSpiralMode(enabled))
+        },
+    )
+    if (options.spiralMode || showInactive) {
+        Text(
+            stringResource(R.string.spiral_vase_summary),
+            color = Color(0xFFC8C9C2),
+            style = MaterialTheme.typography.bodySmall,
+        )
+        SettingsSwitch(
+            label = stringResource(R.string.smooth_spiral),
+            checked = options.spiralModeSmooth,
+            onCheckedChange = {
+                onOptionsChanged(options.copy(spiralModeSmooth = it))
+            },
+        )
+        LengthOrPercentSetting(
+            label = stringResource(R.string.max_xy_smoothing),
+            value = options.spiralModeMaxXySmoothing,
+            percent = options.spiralModeMaxXySmoothingPercent,
+            maximumAbsolute = 10f,
+            maximumPercent = 1_000f,
+            onValueChange = {
+                onOptionsChanged(options.copy(spiralModeMaxXySmoothing = it))
+            },
+            onPercentChange = { percent, value ->
+                onOptionsChanged(
+                    options.copy(
+                        spiralModeMaxXySmoothing = value,
+                        spiralModeMaxXySmoothingPercent = percent,
+                    ),
+                )
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.spiral_starting_flow),
+            valueText = stringResource(
+                R.string.flow_ratio_value,
+                options.spiralStartingFlowRatio,
+            ),
+            value = options.spiralStartingFlowRatio,
+            range = 0f..1f,
+            steps = 99,
+            onValueChange = {
+                onOptionsChanged(
+                    options.copy(spiralStartingFlowRatio = (it * 100f).roundToInt() / 100f),
+                )
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.spiral_finishing_flow),
+            valueText = stringResource(
+                R.string.flow_ratio_value,
+                options.spiralFinishingFlowRatio,
+            ),
+            value = options.spiralFinishingFlowRatio,
+            range = 0f..1f,
+            steps = 99,
+            onValueChange = {
+                onOptionsChanged(
+                    options.copy(spiralFinishingFlowRatio = (it * 100f).roundToInt() / 100f),
+                )
+            },
+        )
+    }
+}
+
+@Composable
+private fun FilamentPrimeTowerInterfaceSettings(
+    profile: FilamentProfile,
+    onChanged: (FilamentProfile) -> Unit,
+) {
+    SettingsGroupTitle(stringResource(R.string.filament_prime_tower_interface))
+    DecimalSettingField(
+        label = stringResource(R.string.tower_interface_pre_extrusion_distance),
+        value = profile.towerInterfacePreExtrusionDistance,
+        maximum = 1_000f,
+        suffix = stringResource(R.string.millimeters_suffix),
+        onValueChange = { onChanged(profile.copy(towerInterfacePreExtrusionDistance = it)) },
+    )
+    DecimalSettingField(
+        label = stringResource(R.string.tower_interface_pre_extrusion_length),
+        value = profile.towerInterfacePreExtrusionLength,
+        maximum = 1_000f,
+        suffix = stringResource(R.string.millimeters_suffix),
+        onValueChange = { onChanged(profile.copy(towerInterfacePreExtrusionLength = it)) },
+    )
+    DecimalSettingField(
+        label = stringResource(R.string.tower_ironing_area),
+        value = profile.towerIroningArea,
+        maximum = 10_000f,
+        suffix = stringResource(R.string.square_millimeters_suffix),
+        onValueChange = { onChanged(profile.copy(towerIroningArea = it)) },
+    )
+    DecimalSettingField(
+        label = stringResource(R.string.tower_interface_purge_length),
+        value = profile.towerInterfacePurgeLength,
+        maximum = 1_000f,
+        suffix = stringResource(R.string.millimeters_suffix),
+        onValueChange = { onChanged(profile.copy(towerInterfacePurgeLength = it)) },
+    )
+    SettingSlider(
+        label = stringResource(R.string.tower_interface_print_temperature),
+        valueText = if (profile.towerInterfacePrintTemperature < 0) {
+            stringResource(R.string.filament_automatic)
+        } else {
+            stringResource(R.string.celsius_value, profile.towerInterfacePrintTemperature)
+        },
+        value = profile.towerInterfacePrintTemperature.toFloat(),
+        range = -1f..500f,
+        steps = 500,
+        onValueChange = {
+            onChanged(profile.copy(towerInterfacePrintTemperature = it.roundToInt()))
+        },
+    )
+}
+
+@Composable
+private fun PrimeTowerStructureSettings(
+    settings: MultiMaterialSettings,
+    showInactive: Boolean,
+    onChanged: (MultiMaterialSettings) -> Unit,
+) {
+    SettingsGroupTitle(stringResource(R.string.prime_tower_structure))
+    SettingsSwitch(
+        label = stringResource(R.string.prime_tower_flat_ironing),
+        checked = settings.primeTowerFlatIroning,
+        onCheckedChange = { onChanged(settings.copy(primeTowerFlatIroning = it)) },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.prime_tower_interface_features),
+        checked = settings.primeTowerInterfaceFeatures,
+        onCheckedChange = { onChanged(settings.copy(primeTowerInterfaceFeatures = it)) },
+    )
+    if (settings.primeTowerInterfaceFeatures || showInactive) {
+        SettingsSwitch(
+            label = stringResource(R.string.prime_tower_interface_cooldown),
+            checked = settings.primeTowerInterfaceCooldown,
+            enabled = settings.primeTowerInterfaceFeatures,
+            onCheckedChange = { onChanged(settings.copy(primeTowerInterfaceCooldown = it)) },
+        )
+    }
 }
 
 @Composable

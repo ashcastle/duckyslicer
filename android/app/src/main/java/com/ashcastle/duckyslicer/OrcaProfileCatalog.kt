@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v85.bin"
+private const val CATALOG_ASSET = "profile_catalog_v86.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 85) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 86) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -179,6 +179,11 @@ class OrcaProfileCatalog(private val context: Context) {
         soluble = input.readBoolean(),
         supportMaterial = input.readBoolean(),
         minimalPurgeOnWipeTower = input.readFloat(),
+        towerInterfacePreExtrusionDistance = input.readFloat(),
+        towerInterfacePreExtrusionLength = input.readFloat(),
+        towerIroningArea = input.readFloat(),
+        towerInterfacePurgeLength = input.readFloat(),
+        towerInterfacePrintTemperature = input.readInt(),
         additionalCoolingFanSpeed = input.readInt(),
         loadingSpeed = input.readFloat(),
         loadingSpeedStart = input.readFloat(),
@@ -431,6 +436,11 @@ private val FILAMENT_BINARY_FIELDS = arrayOf(
     BinaryField("soluble", BINARY_BOOL),
     BinaryField("supportMaterial", BINARY_BOOL),
     BinaryField("minimalPurgeOnWipeTower", BINARY_FLOAT),
+    BinaryField("towerInterfacePreExtrusionDistance", BINARY_FLOAT),
+    BinaryField("towerInterfacePreExtrusionLength", BINARY_FLOAT),
+    BinaryField("towerIroningArea", BINARY_FLOAT),
+    BinaryField("towerInterfacePurgeLength", BINARY_FLOAT),
+    BinaryField("towerInterfacePrintTemperature", BINARY_INT),
     BinaryField("additionalCoolingFanSpeed", BINARY_INT),
     BinaryField("loadingSpeed", BINARY_FLOAT),
     BinaryField("loadingSpeedStart", BINARY_FLOAT),

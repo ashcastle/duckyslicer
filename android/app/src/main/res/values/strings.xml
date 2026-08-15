@@ -263,7 +263,9 @@
     <string name="fan_speedup_time">Fan speed-up time</string>
     <string name="fan_speedup_overhangs">Only overhangs</string>
     <string name="fan_kickstart">Fan kick-start time</string>
+    <string name="millimeters_suffix">mm</string>
     <string name="cubic_millimeters_suffix">mm³</string>
+    <string name="square_millimeters_suffix">mm²</string>
     <string name="retraction">Retraction</string>
     <string name="retraction_defaults">Retraction defaults</string>
     <string name="retraction_length">Retraction length</string>
@@ -926,6 +928,16 @@
     <string name="prime_volume">Prime volume</string>
     <string name="cubic_millimeters_value">%1$.1f mm³</string>
     <string name="prime_tower_brim_width">Tower brim width</string>
+    <string name="prime_tower_structure">Tower structure</string>
+    <string name="prime_tower_flat_ironing">Iron flat top</string>
+    <string name="prime_tower_interface_features">Material interface features</string>
+    <string name="prime_tower_interface_cooldown">Cool during material interface</string>
+    <string name="filament_prime_tower_interface">Prime tower interface</string>
+    <string name="tower_interface_pre_extrusion_distance">Pre-extrusion travel</string>
+    <string name="tower_interface_pre_extrusion_length">Pre-extrusion length</string>
+    <string name="tower_ironing_area">Ironing area</string>
+    <string name="tower_interface_purge_length">Interface purge length</string>
+    <string name="tower_interface_print_temperature">Interface temperature</string>
     <string name="wipe_tower_no_sparse_layers">No sparse tower layers</string>
     <string name="wipe_tower_rotation_angle">Tower rotation angle</string>
     <string name="wipe_tower_bridging">Maximum bridging distance</string>

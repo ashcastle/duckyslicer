@@ -23,6 +23,7 @@ class ProfileSettingsSearchTest {
         assertTrue(settingQueryMatches("parking", "Filament parking position"))
         assertTrue(settingQueryMatches("ramming", "Enable filament ramming"))
         assertTrue(settingQueryMatches("프라임", "프라임 타워에서 퍼지"))
+        assertTrue(settingQueryMatches("interface purge", "Interface purge length"))
         assertTrue(settingQueryMatches("flow compensation", "Flow compensation model"))
         assertFalse(settingQueryMatches("Z distance", "0.20 mm Standard"))
     }

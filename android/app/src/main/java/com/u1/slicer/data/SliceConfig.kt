@@ -275,6 +275,11 @@ data class SliceConfig(
     @JvmField var manualFilamentChange: Boolean = false
     @JvmField var disableM73: Boolean = false
     @JvmField var filamentIdleTemperatures: IntArray = intArrayOf()
+    @JvmField var filamentTowerInterfacePreExtrusionDistances: FloatArray = floatArrayOf()
+    @JvmField var filamentTowerInterfacePreExtrusionLengths: FloatArray = floatArrayOf()
+    @JvmField var filamentTowerIroningAreas: FloatArray = floatArrayOf()
+    @JvmField var filamentTowerInterfacePurgeLengths: FloatArray = floatArrayOf()
+    @JvmField var filamentTowerInterfacePrintTemperatures: IntArray = intArrayOf()
     @JvmField var bedExcludeArea: FloatArray = floatArrayOf(0f, 0f)
     @JvmField var machineLoadFilamentTime: Float = 0f
     @JvmField var machineUnloadFilamentTime: Float = 0f
@@ -398,6 +403,12 @@ data class SliceConfig(
     @JvmField var wipeTowerExtraRibLength: Float = 0f
     @JvmField var wipeTowerRibWidth: Float = 8f
     @JvmField var wipeTowerFilletWall: Boolean = true
+    @JvmField var primeTowerFramework: Boolean = false
+    @JvmField var primeTowerSkipPoints: Boolean = true
+    @JvmField var primeTowerFlatIroning: Boolean = false
+    @JvmField var primeTowerInterfaceFeatures: Boolean = false
+    @JvmField var primeTowerInterfaceCooldown: Boolean = false
+    @JvmField var primeTowerInfillGap: Float = 150f
     @JvmField var singleExtruderMultiMaterialPriming: Boolean = false
     @JvmField var supportPatternAngle: Float = 0f
     @JvmField var supportThresholdOverlap: Float = 50f

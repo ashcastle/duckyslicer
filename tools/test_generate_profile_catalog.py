@@ -119,6 +119,12 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "prime_tower_width": "42",
                 "prime_volume": "61.5",
                 "prime_tower_brim_width": "4.5",
+                "prime_tower_enable_framework": "1",
+                "prime_tower_skip_points": "0",
+                "prime_tower_flat_ironing": "1",
+                "enable_tower_interface_features": "1",
+                "enable_tower_interface_cooldown_during_tower": "1",
+                "prime_tower_infill_gap": "175",
                 "wipe_tower_no_sparse_layers": "1",
                 "wipe_tower_rotation_angle": "73",
                 "wipe_tower_bridging": "12.5",
@@ -192,6 +198,12 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(42.0, profile["wipeTowerWidth"])
         self.assertEqual(61.5, profile["primeVolume"])
         self.assertEqual(4.5, profile["primeTowerBrimWidth"])
+        self.assertTrue(profile["primeTowerFramework"])
+        self.assertFalse(profile["primeTowerSkipPoints"])
+        self.assertTrue(profile["primeTowerFlatIroning"])
+        self.assertTrue(profile["primeTowerInterfaceFeatures"])
+        self.assertTrue(profile["primeTowerInterfaceCooldown"])
+        self.assertEqual(175.0, profile["primeTowerInfillGap"])
         self.assertTrue(profile["wipeTowerNoSparseLayers"])
         self.assertEqual(73.0, profile["wipeTowerRotationAngle"])
         self.assertEqual(12.5, profile["wipeTowerBridging"])
@@ -814,6 +826,11 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "filament_soluble": ["1"],
                 "filament_is_support": ["1"],
                 "filament_minimal_purge_on_wipe_tower": ["35"],
+                "filament_tower_interface_pre_extrusion_dist": ["21"],
+                "filament_tower_interface_pre_extrusion_length": ["22"],
+                "filament_tower_ironing_area": ["23"],
+                "filament_tower_interface_purge_volume": ["24"],
+                "filament_tower_interface_print_temp": ["241"],
                 "additional_cooling_fan_speed": ["75%"],
                 "filament_loading_speed": ["27"],
                 "filament_loading_speed_start": ["4"],
@@ -910,6 +927,11 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(overridden["soluble"])
         self.assertTrue(overridden["supportMaterial"])
         self.assertEqual(35.0, overridden["minimalPurgeOnWipeTower"])
+        self.assertEqual(21.0, overridden["towerInterfacePreExtrusionDistance"])
+        self.assertEqual(22.0, overridden["towerInterfacePreExtrusionLength"])
+        self.assertEqual(23.0, overridden["towerIroningArea"])
+        self.assertEqual(24.0, overridden["towerInterfacePurgeLength"])
+        self.assertEqual(241, overridden["towerInterfacePrintTemperature"])
         self.assertEqual(75, overridden["additionalCoolingFanSpeed"])
         self.assertEqual(27.0, overridden["loadingSpeed"])
         self.assertEqual(4.0, overridden["loadingSpeedStart"])
@@ -985,6 +1007,11 @@ class GenerateProfileCatalogTest(unittest.TestCase):
     def test_rejects_unsafe_purge_floor_and_auxiliary_fan_speed(self) -> None:
         for key, value in (
             ("filament_minimal_purge_on_wipe_tower", "1000.01"),
+            ("filament_tower_interface_pre_extrusion_dist", "1000.01"),
+            ("filament_tower_interface_pre_extrusion_length", "1000.01"),
+            ("filament_tower_ironing_area", "10000.01"),
+            ("filament_tower_interface_purge_volume", "1000.01"),
+            ("filament_tower_interface_print_temp", "501"),
             ("additional_cooling_fan_speed", "101"),
         ):
             with self.subTest(key=key), self.assertRaises(ValueError):
@@ -997,6 +1024,20 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                         "hot_plate_temp": ["60"],
                         key: [value],
                     },
+                )
+
+    def test_rejects_unsafe_prime_tower_infill_gap(self) -> None:
+        for value in ("99.9", "1000.1"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                build_process(
+                    "Example",
+                    {
+                        "name": "Unsafe prime tower",
+                        "layer_height": "0.2",
+                        "initial_layer_print_height": "0.2",
+                        "prime_tower_infill_gap": value,
+                    },
+                    {},
                 )
 
     def test_preserves_first_per_filament_gcode_template(self) -> None:

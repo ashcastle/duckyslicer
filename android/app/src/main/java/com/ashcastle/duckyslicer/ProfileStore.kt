@@ -7,7 +7,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 86
+internal const val USER_PROFILE_SCHEMA_VERSION = 87
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -258,6 +258,11 @@ class ProfileStore private constructor(
             soluble = effective.soluble,
             supportMaterial = effective.supportMaterial,
             minimalPurgeOnWipeTower = effective.minimalPurgeOnWipeTower,
+            towerInterfacePreExtrusionDistance = effective.towerInterfacePreExtrusionDistance,
+            towerInterfacePreExtrusionLength = effective.towerInterfacePreExtrusionLength,
+            towerIroningArea = effective.towerIroningArea,
+            towerInterfacePurgeLength = effective.towerInterfacePurgeLength,
+            towerInterfacePrintTemperature = effective.towerInterfacePrintTemperature,
             additionalCoolingFanSpeed = effective.additionalCoolingFanSpeed,
             loadingSpeed = effective.loadingSpeed,
             loadingSpeedStart = effective.loadingSpeedStart,
@@ -740,6 +745,11 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("soluble", soluble)
     .put("supportMaterial", supportMaterial)
     .put("minimalPurgeOnWipeTower", minimalPurgeOnWipeTower)
+    .put("towerInterfacePreExtrusionDistance", towerInterfacePreExtrusionDistance)
+    .put("towerInterfacePreExtrusionLength", towerInterfacePreExtrusionLength)
+    .put("towerIroningArea", towerIroningArea)
+    .put("towerInterfacePurgeLength", towerInterfacePurgeLength)
+    .put("towerInterfacePrintTemperature", towerInterfacePrintTemperature)
     .put("additionalCoolingFanSpeed", additionalCoolingFanSpeed)
     .put("loadingSpeed", loadingSpeed)
     .put("loadingSpeedStart", loadingSpeedStart)
@@ -949,6 +959,12 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("primeVolume", multiMaterial.primeVolume)
     .put("purgeVolumes", JSONArray(multiMaterial.purgeVolumes))
     .put("primeTowerBrimWidth", multiMaterial.primeTowerBrimWidth)
+    .put("primeTowerFramework", multiMaterial.primeTowerFramework)
+    .put("primeTowerSkipPoints", multiMaterial.primeTowerSkipPoints)
+    .put("primeTowerFlatIroning", multiMaterial.primeTowerFlatIroning)
+    .put("primeTowerInterfaceFeatures", multiMaterial.primeTowerInterfaceFeatures)
+    .put("primeTowerInterfaceCooldown", multiMaterial.primeTowerInterfaceCooldown)
+    .put("primeTowerInfillGap", multiMaterial.primeTowerInfillGap)
     .put("wipeTowerNoSparseLayers", multiMaterial.wipeTowerNoSparseLayers)
     .put("wipeTowerRotationAngle", multiMaterial.wipeTowerRotationAngle)
     .put("wipeTowerBridging", multiMaterial.wipeTowerBridging)
@@ -1267,6 +1283,17 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         soluble = optBoolean("soluble", false),
         supportMaterial = optBoolean("supportMaterial", false),
         minimalPurgeOnWipeTower = optDouble("minimalPurgeOnWipeTower", 15.0).toFloat(),
+        towerInterfacePreExtrusionDistance = optDouble(
+            "towerInterfacePreExtrusionDistance",
+            10.0,
+        ).toFloat(),
+        towerInterfacePreExtrusionLength = optDouble(
+            "towerInterfacePreExtrusionLength",
+            0.0,
+        ).toFloat(),
+        towerIroningArea = optDouble("towerIroningArea", 4.0).toFloat(),
+        towerInterfacePurgeLength = optDouble("towerInterfacePurgeLength", 20.0).toFloat(),
+        towerInterfacePrintTemperature = optInt("towerInterfacePrintTemperature", -1),
         additionalCoolingFanSpeed = optInt("additionalCoolingFanSpeed", 0),
         loadingSpeed = optDouble("loadingSpeed", 28.0).toFloat(),
         loadingSpeedStart = optDouble("loadingSpeedStart", 3.0).toFloat(),
@@ -1503,6 +1530,12 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
             primeVolume = optDouble("primeVolume", 45.0).toFloat(),
             purgeVolumes = purgeVolumeList("purgeVolumes"),
             primeTowerBrimWidth = optDouble("primeTowerBrimWidth", 3.0).toFloat(),
+            primeTowerFramework = optBoolean("primeTowerFramework"),
+            primeTowerSkipPoints = optBoolean("primeTowerSkipPoints", true),
+            primeTowerFlatIroning = optBoolean("primeTowerFlatIroning"),
+            primeTowerInterfaceFeatures = optBoolean("primeTowerInterfaceFeatures"),
+            primeTowerInterfaceCooldown = optBoolean("primeTowerInterfaceCooldown"),
+            primeTowerInfillGap = optDouble("primeTowerInfillGap", 150.0).toFloat(),
             wipeTowerNoSparseLayers = optBoolean("wipeTowerNoSparseLayers"),
             wipeTowerRotationAngle = optDouble("wipeTowerRotationAngle", 0.0).toFloat(),
             wipeTowerBridging = optDouble("wipeTowerBridging", 10.0).toFloat(),

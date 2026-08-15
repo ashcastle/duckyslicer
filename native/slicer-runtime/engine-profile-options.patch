@@ -1,0 +1,403 @@
+diff --git a/src/libslic3r/GCode/WipeTower.hpp b/src/libslic3r/GCode/WipeTower.hpp
+index 3d8c71404e..ef17f010c4 100644
+--- a/src/libslic3r/GCode/WipeTower.hpp
++++ b/src/libslic3r/GCode/WipeTower.hpp
+@@ -80,6 +80,8 @@ public:
+         // But if finish_layer_tcr is before tool_change_tcr, we have to travel to the wipe tower before
+         // executing the gcode finish_layer_tcr.
+         bool is_finish_first = false;
++        // True when this tool change forms a material-contact interface.
++        bool is_contact = false;
+ 
+ 		// Sum the total length of the extrusion.
+ 		float total_extrusion_length_in_plane() {
+diff --git a/src/libslic3r/GCode/WipeTower2.cpp b/src/libslic3r/GCode/WipeTower2.cpp
+index dbdcab75f1..f084f9e44d 100644
+--- a/src/libslic3r/GCode/WipeTower2.cpp
++++ b/src/libslic3r/GCode/WipeTower2.cpp
+@@ -1023,6 +1023,22 @@ public:
+ 
+     WipeTowerWriter2& add_wipe_point(float x, float y) { return add_wipe_point(Vec2f(x, y)); }
+ 
++    void spiral_flat_ironing(const Vec2f& center, float area, float step_length, float feedrate)
++    {
++        const float edge_length = std::sqrt(area);
++        Vec2f box_max = center + Vec2f{step_length, step_length};
++        Vec2f box_min = center - Vec2f{step_length, step_length};
++        int turns = std::ceil(edge_length / step_length / 2.f);
++        while (turns-- > 0) {
++            travel(box_max.x(), m_current_pos.y(), feedrate);
++            travel(m_current_pos.x(), box_max.y(), feedrate);
++            travel(box_min.x(), m_current_pos.y(), feedrate);
++            travel(m_current_pos.x(), box_min.y(), feedrate);
++            box_max += Vec2f{step_length, step_length};
++            box_min -= Vec2f{step_length, step_length};
++        }
++    }
++
+     // Extrude with an explicitely provided amount of extrusion.
+     WipeTowerWriter2& extrude_arc_explicit(ArcSegment& arc,
+                                            float       f             = 0.f,
+@@ -1250,7 +1266,12 @@ private:
+ 
+ }; // class WipeTowerWriter2
+ 
+-WipeTower::ToolChangeResult WipeTower2::construct_tcr(WipeTowerWriter2& writer, bool priming, size_t old_tool, bool is_finish) const
++WipeTower::ToolChangeResult WipeTower2::construct_tcr(
++    WipeTowerWriter2& writer,
++    bool priming,
++    size_t old_tool,
++    bool is_finish,
++    bool is_contact) const
+ {
+     WipeTower::ToolChangeResult result;
+     result.priming         = priming;
+@@ -1265,6 +1286,7 @@ WipeTower::ToolChangeResult WipeTower2::construct_tcr(WipeTowerWriter2& writer,
+     result.extrusions      = std::move(writer.extrusions());
+     result.wipe_path       = std::move(writer.wipe_path());
+     result.is_finish_first = is_finish;
++    result.is_contact      = is_contact;
+     return result;
+ }
+ 
+@@ -1306,6 +1328,9 @@ WipeTower2::WipeTower2(const PrintConfig&                     config,
+     , m_rib_width(config.wipe_tower_rib_width)
+     , m_extra_rib_length(config.wipe_tower_extra_rib_length)
+     , m_wall_type((int) config.wipe_tower_wall_type)
++    , m_flat_ironing(config.prime_tower_flat_ironing.value)
++    , m_enable_tower_interface_features(config.enable_tower_interface_features.value)
++    , m_enable_tower_interface_cooldown_during_tower(config.enable_tower_interface_cooldown_during_tower.value)
+ {
+     // Read absolute value of first layer speed, if given as percentage,
+     // it is taken over following default. Speeds from config are not
+@@ -1368,6 +1393,17 @@ void WipeTower2::set_extruder(size_t idx, const PrintConfig& config)
+     m_filpar[idx].temperature = config.nozzle_temperature.get_at(idx);
+     m_filpar[idx].first_layer_temperature              = config.nozzle_temperature_initial_layer.get_at(idx);
+     m_filpar[idx].filament_minimal_purge_on_wipe_tower = config.filament_minimal_purge_on_wipe_tower.get_at(idx);
++    int interface_temp = config.filament_tower_interface_print_temp.get_at(idx);
++    if (interface_temp == -1)
++        interface_temp = config.nozzle_temperature_range_high.get_at(idx);
++    m_filpar[idx].interface_print_temperature = interface_temp;
++    m_filpar[idx].tower_interface_pre_extrusion_dist =
++        config.filament_tower_interface_pre_extrusion_dist.get_at(idx);
++    m_filpar[idx].tower_interface_pre_extrusion_length =
++        config.filament_tower_interface_pre_extrusion_length.get_at(idx);
++    m_filpar[idx].tower_ironing_area = config.filament_tower_ironing_area.get_at(idx);
++    m_filpar[idx].tower_interface_purge_length =
++        config.filament_tower_interface_purge_volume.get_at(idx);
+ 
+     // If this is a single extruder MM printer, we will use all the SE-specific config values.
+     // Otherwise, the defaults will be used to turn off the SE stuff.
+@@ -1549,10 +1585,14 @@ WipeTower::ToolChangeResult WipeTower2::emit_planned_tool_change(const WipeTower
+ 
+     float wipe_area   = 0.f;
+     float wipe_volume = 0.f;
++    const bool interface_layer =
++        m_enable_tower_interface_features && m_current_layer_has_interface;
+ 
+     if (tool_change != nullptr) {
+         wipe_volume = tool_change->wipe_volume;
+         wipe_area   = tool_change->required_depth;
++        if (interface_layer && tool < m_filpar.size())
++            wipe_volume += m_filpar[tool].tower_interface_purge_length * m_filpar[tool].filament_area;
+     }
+ 
+     WipeTower::box_coordinates cleaning_box(Vec2f(m_perimeter_width / 2.f, m_perimeter_width / 2.f), m_wipe_tower_width - m_perimeter_width,
+@@ -1600,7 +1640,31 @@ WipeTower::ToolChangeResult WipeTower2::emit_planned_tool_change(const WipeTower
+         toolchange_Change(writer, tool, m_filpar[tool].material); // Change the tool, set a speed override for soluble and flex materials.
+         toolchange_Load(writer, cleaning_box);
+         writer.travel(writer.x(), writer.y() - m_perimeter_width); // cooling and loading were done a bit down the road
+-        toolchange_Wipe(writer, cleaning_box, wipe_volume); // Wipe the newly loaded filament until the end of the assigned wipe area.
++        const int base_temp = is_first_layer() ?
++            m_filpar[tool].first_layer_temperature : m_filpar[tool].temperature;
++        if (interface_layer) {
++            const int interface_temp = m_filpar[tool].interface_print_temperature;
++            if (interface_temp > 0 && interface_temp != base_temp)
++                writer.set_extruder_temp(interface_temp, true);
++            if (m_enable_tower_interface_cooldown_during_tower &&
++                interface_temp > 0 && interface_temp != base_temp) {
++                writer.set_extruder_temp(base_temp, false);
++            }
++            const float pre_dist = m_filpar[tool].tower_interface_pre_extrusion_dist;
++            const float pre_len = m_filpar[tool].tower_interface_pre_extrusion_length;
++            if (pre_dist > 0.f && pre_len > 0.f) {
++                const float target_x = std::max(
++                    cleaning_box.ld.x(),
++                    std::min(cleaning_box.rd.x(), writer.x() + pre_dist));
++                writer.extrude_explicit(target_x, writer.y(), pre_len, 600.f);
++            }
++        }
++        toolchange_Wipe(writer, cleaning_box, wipe_volume, interface_layer);
++        if (interface_layer && !m_enable_tower_interface_cooldown_during_tower) {
++            const int interface_temp = m_filpar[tool].interface_print_temperature;
++            if (interface_temp > 0 && interface_temp != base_temp)
++                writer.set_extruder_temp(base_temp, false);
++        }
+         writer.append(";" + GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Wipe_Tower_End) + "\n");
+         ++m_num_tool_changes;
+     } else
+@@ -1624,7 +1688,8 @@ WipeTower::ToolChangeResult WipeTower2::emit_planned_tool_change(const WipeTower
+     if (m_current_tool < m_used_filament_length.size())
+         m_used_filament_length[m_current_tool] += writer.get_and_reset_used_filament_length();
+ 
+-    WipeTower::ToolChangeResult result = construct_tcr(writer, false, old_tool, false);
++    WipeTower::ToolChangeResult result =
++        construct_tcr(writer, false, old_tool, false, interface_layer);
+     result.purge_volume                = wipe_volume;
+     return result;
+ }
+@@ -2005,7 +2070,11 @@ void WipeTower2::toolchange_Load(WipeTowerWriter2& writer, const WipeTower::box_
+ }
+ 
+ // Wipe the newly loaded filament until the end of the assigned wipe area.
+-void WipeTower2::toolchange_Wipe(WipeTowerWriter2& writer, const WipeTower::box_coordinates& cleaning_box, float wipe_volume)
++void WipeTower2::toolchange_Wipe(
++    WipeTowerWriter2& writer,
++    const WipeTower::box_coordinates& cleaning_box,
++    float wipe_volume,
++    bool interface_layer)
+ {
+     // Increase flow on first layer, slow down print.
+     writer.set_extrusion_flow(m_extrusion_flow * (is_first_layer() ? 1.18f : 1.f)).append("; CP TOOLCHANGE WIPE\n");
+@@ -2037,6 +2106,10 @@ void WipeTower2::toolchange_Wipe(WipeTowerWriter2& writer, const WipeTower::box_
+         m_left_to_right = !m_left_to_right;
+     }
+ 
++    const bool do_ironing =
++        m_flat_ironing && (!interface_layer || !m_enable_tower_interface_features);
++    const float ironing_area = m_filpar[m_current_tool].tower_ironing_area;
++
+     // now the wiping itself:
+     for (int i = 0; true; ++i) {
+         if (i != 0) {
+@@ -2056,6 +2129,12 @@ void WipeTower2::toolchange_Wipe(WipeTowerWriter2& writer, const WipeTower::box_
+         else
+             writer.extrude(xl + (i % 4 == 1 ? 0 : 1.5f * line_width), writer.y(), wipe_speed);
+ 
++        if (i == 0 && do_ironing && ironing_area > 0.f) {
++            writer.travel(writer.x(), writer.y(), 600.f);
++            writer.spiral_flat_ironing(
++                writer.pos(), ironing_area, m_perimeter_width, 10.f * 60.f);
++        }
++
+         if (writer.y() + float(EPSILON) > cleaning_box.lu.y() - 0.5f * line_width)
+             break; // in case next line would not fit
+ 
+@@ -2108,6 +2187,8 @@ WipeTower::ToolChangeResult WipeTower2::finish_layer()
+     // If spare layers are excluded -> if 1 or less toolchange has been done, it must be still the first layer, too. So slow down.
+     bool  first_layer   = is_first_layer() || (m_num_tool_changes <= 1 && m_no_sparse_layers);
+     float feedrate      = first_layer ? m_first_layer_speed * 60.f : std::min(m_wipe_tower_max_purge_speed * 60.f, m_infill_speed * 60.f);
++    if (m_enable_tower_interface_features && m_prev_layer_had_interface)
++        feedrate = std::min(feedrate, 20.f * 60.f);
+     float reserve_depth = m_layer_info->local_z_reserve_depth();
+     float current_depth = std::max(0.f, m_layer_info->depth - m_layer_info->toolchanges_depth() - reserve_depth);
+     float fill_depth    = std::max(0.f, current_depth - m_perimeter_width);
+diff --git a/src/libslic3r/GCode/WipeTower2.hpp b/src/libslic3r/GCode/WipeTower2.hpp
+index fc72388e74..f746ff50c7 100644
+--- a/src/libslic3r/GCode/WipeTower2.hpp
++++ b/src/libslic3r/GCode/WipeTower2.hpp
+@@ -31,7 +31,8 @@ public:
+     WipeTower::ToolChangeResult construct_tcr(WipeTowerWriter2& writer,
+                                    bool priming,
+                                    size_t old_tool,
+-								   bool is_finish) const;
++								   bool is_finish,
++                                   bool is_contact = false) const;
+ 
+ 	// x			-- x coordinates of wipe tower in mm ( left bottom corner )
+ 	// y			-- y coordinates of wipe tower in mm ( left bottom corner )
+@@ -84,11 +85,14 @@ public:
+ 		m_layer_height			= layer_height;
+ 		m_depth_traversed  = 0.f;
+         m_current_layer_finished = false;
++        m_prev_layer_had_interface = m_current_layer_has_interface;
+ 
+ 		
+         // Advance m_layer_info iterator, making sure we got it right
+ 		while (!m_plan.empty() && m_layer_info->z < print_z - WT_EPSILON && m_layer_info+1 != m_plan.end())
+ 			++m_layer_info;
++        m_current_layer_has_interface =
++            m_layer_info != m_plan.end() && m_layer_info->toolchanges_depth() > WT_EPSILON;
+ 
+ 		//m_current_shape = (! this->is_first_layer() && m_current_shape == SHAPE_NORMAL) ? SHAPE_REVERSED : SHAPE_NORMAL;
+         m_current_shape = SHAPE_NORMAL;
+@@ -143,6 +147,7 @@ public:
+         bool                is_soluble = false;
+         int  			    temperature = 0;
+         int  			    first_layer_temperature = 0;
++        int                 interface_print_temperature = 0;
+         float               loading_speed = 0.f;
+         float               loading_speed_start = 0.f;
+         float               unloading_speed = 0.f;
+@@ -166,6 +171,10 @@ public:
+ 		float               filament_minimal_purge_on_wipe_tower = 0.f;
+         float               retract_length;
+         float               retract_speed;
++        float               tower_interface_pre_extrusion_dist = 0.f;
++        float               tower_interface_pre_extrusion_length = 0.f;
++        float               tower_ironing_area = 4.f;
++        float               tower_interface_purge_length = 0.f;
+     };
+ 
+ private:
+@@ -212,6 +221,11 @@ private:
+ 	float  m_perimeter_speed    = 0.f;
+     float  m_first_layer_speed  = 0.f;
+     size_t m_first_layer_idx    = size_t(-1);
++    bool   m_flat_ironing = false;
++    bool   m_enable_tower_interface_features = false;
++    bool   m_enable_tower_interface_cooldown_during_tower = false;
++    bool   m_prev_layer_had_interface = false;
++    bool   m_current_layer_has_interface = false;
+ 
+ 	int m_wall_type;
+     bool   m_used_fillet                  = true;
+@@ -351,7 +365,8 @@ private:
+ 	void toolchange_Wipe(
+ 		WipeTowerWriter2 &writer,
+ 		const WipeTower::box_coordinates  &cleaning_box,
+-		float wipe_volume);
++		float wipe_volume,
++        bool interface_layer = false);
+ 
+ 
+     Polygon generate_support_rib_wall(WipeTowerWriter2&                 writer,
+diff --git a/src/libslic3r/PrintConfig.cpp b/src/libslic3r/PrintConfig.cpp
+index 179cae85ab..42ea4c79e9 100644
+--- a/src/libslic3r/PrintConfig.cpp
++++ b/src/libslic3r/PrintConfig.cpp
+@@ -2284,6 +2284,46 @@ void PrintConfigDef::init_fff_params()
+     def->mode = comAdvanced;
+     def->set_default_value(new ConfigOptionFloats { 15. });
+ 
++    def = this->add("filament_tower_interface_pre_extrusion_dist", coFloats);
++    def->label = L("Interface layer pre-extrusion distance");
++    def->tooltip = L("Pre-extrusion distance for prime tower interface layers.");
++    def->sidetext = "mm";
++    def->min = 0;
++    def->mode = comAdvanced;
++    def->set_default_value(new ConfigOptionFloats { 10. });
++
++    def = this->add("filament_tower_interface_pre_extrusion_length", coFloats);
++    def->label = L("Interface layer pre-extrusion length");
++    def->tooltip = L("Pre-extrusion length for prime tower interface layers.");
++    def->sidetext = "mm";
++    def->min = 0;
++    def->mode = comAdvanced;
++    def->set_default_value(new ConfigOptionFloats { 0. });
++
++    def = this->add("filament_tower_ironing_area", coFloats);
++    def->label = L("Tower ironing area");
++    def->tooltip = L("Ironing area for prime tower interface layers.");
++    def->sidetext = u8"mm²";
++    def->min = 0;
++    def->mode = comAdvanced;
++    def->set_default_value(new ConfigOptionFloats { 4. });
++
++    def = this->add("filament_tower_interface_purge_volume", coFloats);
++    def->label = L("Interface layer purge length");
++    def->tooltip = L("Purge length for prime tower interface layers.");
++    def->sidetext = "mm";
++    def->min = 0;
++    def->mode = comAdvanced;
++    def->set_default_value(new ConfigOptionFloats { 20. });
++
++    def = this->add("filament_tower_interface_print_temp", coInts);
++    def->label = L("Interface layer print temperature");
++    def->tooltip = L("Temperature for prime tower interface layers. -1 uses the maximum recommended nozzle temperature.");
++    def->sidetext = u8"°C";
++    def->min = -1;
++    def->mode = comAdvanced;
++    def->set_default_value(new ConfigOptionInts { -1 });
++
+     def = this->add("filament_cooling_final_speed", coFloats);
+     def->label = L("Speed of the last cooling move");
+     def->tooltip = L("Cooling moves are gradually accelerating towards this speed.");
+@@ -3223,6 +3263,12 @@ void PrintConfigDef::init_fff_params()
+     def->mode = comSimple;
+     def->set_default_value(new ConfigOptionBool(false));
+ 
++    def = this->add("prime_tower_enable_framework", coBool);
++    def->label = L("Internal ribs");
++    def->tooltip = L("Enable internal ribs to increase the stability of the prime tower.");
++    def->mode = comAdvanced;
++    def->set_default_value(new ConfigOptionBool(false));
++
+     def = this->add("gcode_label_objects", coBool);
+     def->label = L("Label objects");
+     def->tooltip = L("Enable this to add comments into the G-code labeling print moves with what object they belong to,"
+@@ -6020,6 +6066,37 @@ void PrintConfigDef::init_fff_params()
+     def->min = 0.;
+     def->set_default_value(new ConfigOptionFloat(4.0));
+ 
++    def = this->add("prime_tower_skip_points", coBool);
++    def->label = L("Skip points");
++    def->tooltip = L("Skip the wipe path start points on the prime tower wall.");
++    def->mode = comAdvanced;
++    def->set_default_value(new ConfigOptionBool(true));
++
++    def = this->add("prime_tower_flat_ironing", coBool);
++    def->label = L("Iron flat top");
++    def->mode = comAdvanced;
++    def->set_default_value(new ConfigOptionBool(false));
++
++    def = this->add("enable_tower_interface_features", coBool);
++    def->label = L("Enable tower interface features");
++    def->tooltip = L("Optimize prime tower behavior where different materials meet.");
++    def->mode = comAdvanced;
++    def->set_default_value(new ConfigOptionBool(false));
++
++    def = this->add("enable_tower_interface_cooldown_during_tower", coBool);
++    def->label = L("Cool down during prime tower interface");
++    def->tooltip = L("Return to print temperature while printing the prime tower interface.");
++    def->mode = comAdvanced;
++    def->set_default_value(new ConfigOptionBool(false));
++
++    def = this->add("prime_tower_infill_gap", coPercent);
++    def->label = L("Infill gap");
++    def->tooltip = L("Prime tower infill spacing.");
++    def->sidetext = "%";
++    def->mode = comAdvanced;
++    def->min = 100;
++    def->set_default_value(new ConfigOptionPercent(150));
++
+     def = this->add("wipe_tower_cone_angle", coFloat);
+     def->label = L("Stabilization cone apex angle");
+     def->tooltip = L("Angle at the apex of the cone that is used to stabilize the wipe tower. "
+diff --git a/src/libslic3r/PrintConfig.hpp b/src/libslic3r/PrintConfig.hpp
+index 0f39d80e41..58b0dcdf6f 100644
+--- a/src/libslic3r/PrintConfig.hpp
++++ b/src/libslic3r/PrintConfig.hpp
+@@ -1268,6 +1268,11 @@ PRINT_CONFIG_CLASS_DEFINE(
+     ((ConfigOptionInts,                filament_cooling_moves))
+     ((ConfigOptionFloats,              filament_cooling_initial_speed))
+     ((ConfigOptionFloats,              filament_minimal_purge_on_wipe_tower))
++    ((ConfigOptionFloats,              filament_tower_interface_pre_extrusion_dist))
++    ((ConfigOptionFloats,              filament_tower_interface_pre_extrusion_length))
++    ((ConfigOptionFloats,              filament_tower_ironing_area))
++    ((ConfigOptionFloats,              filament_tower_interface_purge_volume))
++    ((ConfigOptionInts,                filament_tower_interface_print_temp))
+     ((ConfigOptionFloats,              filament_cooling_final_speed))
+     ((ConfigOptionStrings,             filament_ramming_parameters))
+     ((ConfigOptionBools,               filament_multitool_ramming))
+@@ -1409,6 +1414,7 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
+     ((ConfigOptionInts,               nozzle_temperature_range_high))
+     ((ConfigOptionFloats,             wipe_distance))
+     ((ConfigOptionBool,               enable_prime_tower))
++    ((ConfigOptionBool,               prime_tower_enable_framework))
+     // BBS: change wipe_tower_x and wipe_tower_y data type to floats to add partplate logic
+     ((ConfigOptionFloats,             wipe_tower_x))
+     ((ConfigOptionFloats,             wipe_tower_y))
+@@ -1418,6 +1424,11 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
+     ((ConfigOptionFloat,              prime_tower_brim_width))
+     ((ConfigOptionBool,               prime_tower_brim_chamfer))
+     ((ConfigOptionFloat,              prime_tower_brim_chamfer_max_width))
++    ((ConfigOptionPercent,            prime_tower_infill_gap))
++    ((ConfigOptionBool,               prime_tower_skip_points))
++    ((ConfigOptionBool,               prime_tower_flat_ironing))
++    ((ConfigOptionBool,               enable_tower_interface_features))
++    ((ConfigOptionBool,               enable_tower_interface_cooldown_during_tower))
+     ((ConfigOptionFloat,              wipe_tower_bridging))
+     ((ConfigOptionPercent,            wipe_tower_extra_flow))
+     ((ConfigOptionFloat,              local_z_wipe_tower_purge_lines))
+

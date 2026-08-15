@@ -56,13 +56,13 @@ EXPECTED_TRANSLATION_COUNTS: Final[dict[str, int]] = {
     "nl": 248,
     "pl": 334,
     "pt_BR": 354,
-    "ru": 364,
+    "ru": 366,
     "sv": 218,
-    "th": 365,
+    "th": 367,
     "tr": 356,
-    "uk": 334,
+    "uk": 336,
     "vi": 343,
-    "zh_CN": 364,
+    "zh_CN": 365,
     "zh_TW": 365,
 }
 SUPPORTED_ORCA_LOCALES: Final[frozenset[str]] = frozenset(

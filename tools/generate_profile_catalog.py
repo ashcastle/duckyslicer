@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 85
+SCHEMA_VERSION = 86
 MAX_FILAMENT_SLOTS = 16
 DEFAULT_GCODE_FILENAME_FORMAT = (
     "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
@@ -734,6 +734,19 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "soluble": boolean(raw.get("filament_soluble")),
         "supportMaterial": boolean(raw.get("filament_is_support")),
         "minimalPurgeOnWipeTower": number(raw.get("filament_minimal_purge_on_wipe_tower"), 15),
+        "towerInterfacePreExtrusionDistance": number(
+            raw.get("filament_tower_interface_pre_extrusion_dist"), 10
+        ),
+        "towerInterfacePreExtrusionLength": number(
+            raw.get("filament_tower_interface_pre_extrusion_length"), 0
+        ),
+        "towerIroningArea": number(raw.get("filament_tower_ironing_area"), 4),
+        "towerInterfacePurgeLength": number(
+            raw.get("filament_tower_interface_purge_volume"), 20
+        ),
+        "towerInterfacePrintTemperature": integer(
+            raw.get("filament_tower_interface_print_temp"), -1
+        ),
         "additionalCoolingFanSpeed": integer(raw.get("additional_cooling_fan_speed"), 0),
         "loadingSpeed": number(raw.get("filament_loading_speed"), 28),
         "loadingSpeedStart": number(raw.get("filament_loading_speed_start"), 3),
@@ -847,6 +860,11 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
             ]
         )
         and 0 <= profile["minimalPurgeOnWipeTower"] <= 1_000
+        and 0 <= profile["towerInterfacePreExtrusionDistance"] <= 1_000
+        and 0 <= profile["towerInterfacePreExtrusionLength"] <= 1_000
+        and 0 <= profile["towerIroningArea"] <= 10_000
+        and 0 <= profile["towerInterfacePurgeLength"] <= 1_000
+        and -1 <= profile["towerInterfacePrintTemperature"] <= 500
         and all(0 <= profile[key] <= 1_000 for key in [
             "loadingSpeed", "loadingSpeedStart", "unloadingSpeed", "unloadingSpeedStart",
             "toolchangeDelay", "stampingLoadingSpeed", "stampingDistance",
@@ -1299,6 +1317,14 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "wipeTowerWidth": number(raw.get("prime_tower_width"), 60),
         "primeVolume": number(raw.get("prime_volume"), 45),
         "primeTowerBrimWidth": number(raw.get("prime_tower_brim_width"), 3),
+        "primeTowerFramework": boolean(raw.get("prime_tower_enable_framework")),
+        "primeTowerSkipPoints": boolean(raw.get("prime_tower_skip_points"), True),
+        "primeTowerFlatIroning": boolean(raw.get("prime_tower_flat_ironing")),
+        "primeTowerInterfaceFeatures": boolean(raw.get("enable_tower_interface_features")),
+        "primeTowerInterfaceCooldown": boolean(
+            raw.get("enable_tower_interface_cooldown_during_tower")
+        ),
+        "primeTowerInfillGap": number(raw.get("prime_tower_infill_gap"), 150),
         "wipeTowerNoSparseLayers": boolean(raw.get("wipe_tower_no_sparse_layers")),
         "wipeTowerRotationAngle": number(raw.get("wipe_tower_rotation_angle"), 0),
         "wipeTowerBridging": number(raw.get("wipe_tower_bridging"), 10),
@@ -1496,6 +1522,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 10 <= profile["wipeTowerWidth"] <= 300
         and 1 <= profile["primeVolume"] <= 1_000
         and 0 <= profile["primeTowerBrimWidth"] <= 100
+        and 100 <= profile["primeTowerInfillGap"] <= 1_000
         and -500 <= profile["standbyTemperatureDelta"] <= 500
         and 0 <= profile["internalBridgeAngle"] <= 360
         and 0 <= profile["infillWallOverlap"] <= 100

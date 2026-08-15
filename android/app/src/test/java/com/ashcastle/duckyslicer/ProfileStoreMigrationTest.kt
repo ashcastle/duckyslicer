@@ -57,6 +57,11 @@ class ProfileStoreMigrationTest {
                 remove("soluble")
                 remove("supportMaterial")
                 remove("minimalPurgeOnWipeTower")
+                remove("towerInterfacePreExtrusionDistance")
+                remove("towerInterfacePreExtrusionLength")
+                remove("towerIroningArea")
+                remove("towerInterfacePurgeLength")
+                remove("towerInterfacePrintTemperature")
                 remove("additionalCoolingFanSpeed")
                 remove("fanCoolingLayerTime")
                 remove("slowDownForLayerCooling")
@@ -109,6 +114,12 @@ class ProfileStoreMigrationTest {
                 remove("symmetricInfillYAxis")
                 remove("smallAreaFlowCompensation")
                 remove("smallAreaFlowCompensationModel")
+                remove("primeTowerFramework")
+                remove("primeTowerSkipPoints")
+                remove("primeTowerFlatIroning")
+                remove("primeTowerInterfaceFeatures")
+                remove("primeTowerInterfaceCooldown")
+                remove("primeTowerInfillGap")
             }
             file.writeText(
                 JSONObject()
@@ -165,6 +176,11 @@ class ProfileStoreMigrationTest {
             assertFalse(restoredFilament.soluble)
             assertFalse(restoredFilament.supportMaterial)
             assertEquals(15f, restoredFilament.minimalPurgeOnWipeTower)
+            assertEquals(10f, restoredFilament.towerInterfacePreExtrusionDistance)
+            assertEquals(0f, restoredFilament.towerInterfacePreExtrusionLength)
+            assertEquals(4f, restoredFilament.towerIroningArea)
+            assertEquals(20f, restoredFilament.towerInterfacePurgeLength)
+            assertEquals(-1, restoredFilament.towerInterfacePrintTemperature)
             assertEquals(0, restoredFilament.additionalCoolingFanSpeed)
             assertEquals(60f, restoredFilament.fanCoolingLayerTime)
             assertTrue(restoredFilament.slowDownForLayerCooling)
@@ -188,6 +204,12 @@ class ProfileStoreMigrationTest {
             assertEquals(ExtrusionRateSmoothingSettings(), restoredSlicing.extrusionRateSmoothing)
             assertEquals(0f, restoredSlicing.travelSpeedZ)
             assertEquals(emptyList<Float>(), restoredSlicing.multiMaterial.purgeVolumes)
+            assertFalse(restoredSlicing.multiMaterial.primeTowerFramework)
+            assertTrue(restoredSlicing.multiMaterial.primeTowerSkipPoints)
+            assertFalse(restoredSlicing.multiMaterial.primeTowerFlatIroning)
+            assertFalse(restoredSlicing.multiMaterial.primeTowerInterfaceFeatures)
+            assertFalse(restoredSlicing.multiMaterial.primeTowerInterfaceCooldown)
+            assertEquals(150f, restoredSlicing.multiMaterial.primeTowerInfillGap)
             assertEquals(BrimEarSettings(), restoredSlicing.precision.brimEars)
             assertEquals(25f, restoredSlicing.skeletonInfillDensity)
             assertEquals(25f, restoredSlicing.skinInfillDensity)
@@ -345,6 +367,14 @@ class ProfileStoreMigrationTest {
                     steps = 11,
                     innerWalls = true,
                 ),
+                multiMaterial = MultiMaterialSettings(
+                    primeTowerFramework = true,
+                    primeTowerSkipPoints = false,
+                    primeTowerFlatIroning = true,
+                    primeTowerInterfaceFeatures = true,
+                    primeTowerInterfaceCooldown = true,
+                    primeTowerInfillGap = 175f,
+                ),
             )
 
             val saved = ProfileStore(file).saveSlicing("Jerk tuned", options)
@@ -359,6 +389,12 @@ class ProfileStoreMigrationTest {
             assertEquals(12.5f, restored.travelJerk)
             assertEquals(options.scarfSeam, restored.scarfSeam)
             assertEquals(7, restored.supportCoverage.enforcedLayers)
+            assertTrue(restored.multiMaterial.primeTowerFramework)
+            assertFalse(restored.multiMaterial.primeTowerSkipPoints)
+            assertTrue(restored.multiMaterial.primeTowerFlatIroning)
+            assertTrue(restored.multiMaterial.primeTowerInterfaceFeatures)
+            assertTrue(restored.multiMaterial.primeTowerInterfaceCooldown)
+            assertEquals(175f, restored.multiMaterial.primeTowerInfillGap)
         } finally {
             directory.deleteRecursively()
         }
@@ -479,6 +515,11 @@ class ProfileStoreMigrationTest {
                         soluble = true,
                         supportMaterial = true,
                         minimalPurgeOnWipeTower = 35f,
+                        towerInterfacePreExtrusionDistance = 21f,
+                        towerInterfacePreExtrusionLength = 22f,
+                        towerIroningArea = 23f,
+                        towerInterfacePurgeLength = 24f,
+                        towerInterfacePrintTemperature = 241,
                         additionalCoolingFanSpeed = 70,
                         fanCoolingLayerTime = 42f,
                         slowDownForLayerCooling = false,
@@ -531,6 +572,16 @@ class ProfileStoreMigrationTest {
             assertTrue(restored.supportMaterial)
             assertEquals(35f, saved.minimalPurgeOnWipeTower)
             assertEquals(35f, restored.minimalPurgeOnWipeTower)
+            assertEquals(21f, saved.towerInterfacePreExtrusionDistance)
+            assertEquals(21f, restored.towerInterfacePreExtrusionDistance)
+            assertEquals(22f, saved.towerInterfacePreExtrusionLength)
+            assertEquals(22f, restored.towerInterfacePreExtrusionLength)
+            assertEquals(23f, saved.towerIroningArea)
+            assertEquals(23f, restored.towerIroningArea)
+            assertEquals(24f, saved.towerInterfacePurgeLength)
+            assertEquals(24f, restored.towerInterfacePurgeLength)
+            assertEquals(241, saved.towerInterfacePrintTemperature)
+            assertEquals(241, restored.towerInterfacePrintTemperature)
             assertEquals(70, saved.additionalCoolingFanSpeed)
             assertEquals(70, restored.additionalCoolingFanSpeed)
             assertEquals(42f, saved.fanCoolingLayerTime)

@@ -121,7 +121,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(58, persisted.getInt("schemaVersion"))
+        assertEquals(59, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),
@@ -545,6 +545,11 @@ internal fun multiFilamentSettingsFixture(): SliceOptions {
         soluble = true,
         supportMaterial = true,
         minimalPurgeOnWipeTower = 35f,
+        towerInterfacePreExtrusionDistance = 21f,
+        towerInterfacePreExtrusionLength = 22f,
+        towerIroningArea = 23f,
+        towerInterfacePurgeLength = 24f,
+        towerInterfacePrintTemperature = 241,
         additionalCoolingFanSpeed = 70,
         fanCoolingLayerTime = 91f,
         slowDownForLayerCooling = true,

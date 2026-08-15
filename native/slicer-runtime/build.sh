@@ -111,11 +111,34 @@ prepare_runtime_source() {
     [ "$(git -C "$SOURCE_ROOT/app/src/main/cpp/orcaslicer" rev-parse HEAD)" = "$SLICER_ENGINE_COMMIT" ] || \
         die "slicer engine submodule pin mismatch"
 
-    if git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/runtime.patch" 2>/dev/null; then
-        git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/runtime.patch"
-    elif ! git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/runtime.patch" 2>/dev/null; then
+    # Normalize the generated worktree before applying the reviewed patch stack.
+    # Reverse in the opposite order so repeated local builds stay reproducible.
+    if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/profile-options.patch" 2>/dev/null; then
+        git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/profile-options.patch"
+    fi
+    if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/runtime.patch" 2>/dev/null; then
+        git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/runtime.patch"
+    fi
+    if ! git -C "$SOURCE_ROOT" diff --quiet -- . ':(exclude)app/src/main/cpp/orcaslicer'; then
         die "runtime source contains changes outside the reviewed DuckySlicer patch"
     fi
+    git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/runtime.patch" 2>/dev/null || \
+        die "reviewed runtime patch no longer applies"
+    git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/runtime.patch"
+    git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/profile-options.patch" 2>/dev/null || \
+        die "runtime profile-option bridge contains unreviewed changes"
+    git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/profile-options.patch"
+
+    local engine_root="$SOURCE_ROOT/app/src/main/cpp/orcaslicer"
+    if git -C "$engine_root" apply --reverse --check "$SCRIPT_DIR/engine-profile-options.patch" 2>/dev/null; then
+        git -C "$engine_root" apply --reverse "$SCRIPT_DIR/engine-profile-options.patch"
+    fi
+    if ! git -C "$engine_root" diff --quiet; then
+        die "slicer engine profile-option bridge contains unreviewed changes"
+    fi
+    git -C "$engine_root" apply --check "$SCRIPT_DIR/engine-profile-options.patch" 2>/dev/null || \
+        die "reviewed slicer engine profile-option patch no longer applies"
+    git -C "$engine_root" apply "$SCRIPT_DIR/engine-profile-options.patch"
 
     mkdir -p "$EXTERN_ROOT/openssl_stub/include/openssl"
     mkdir -p "$EXTERN_ROOT/libpng_stub/include"

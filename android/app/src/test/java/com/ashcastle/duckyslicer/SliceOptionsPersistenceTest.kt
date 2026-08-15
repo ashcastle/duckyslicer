@@ -21,6 +21,11 @@ class SliceOptionsPersistenceTest {
             shrinkageXyPercent = 99.2f,
             shrinkageZPercent = 99.18f,
             minimalPurgeOnWipeTower = 9f,
+            towerInterfacePreExtrusionDistance = 11f,
+            towerInterfacePreExtrusionLength = 12f,
+            towerIroningArea = 13f,
+            towerInterfacePurgeLength = 14f,
+            towerInterfacePrintTemperature = 231,
             additionalCoolingFanSpeed = 40,
             loadingSpeed = 21f,
             loadingSpeedStart = 4f,
@@ -69,6 +74,11 @@ class SliceOptionsPersistenceTest {
             soluble = true,
             supportMaterial = true,
             minimalPurgeOnWipeTower = 35f,
+            towerInterfacePreExtrusionDistance = 21f,
+            towerInterfacePreExtrusionLength = 22f,
+            towerIroningArea = 23f,
+            towerInterfacePurgeLength = 24f,
+            towerInterfacePrintTemperature = 241,
             additionalCoolingFanSpeed = 70,
             loadingSpeed = 31f,
             loadingSpeedStart = 5f,
@@ -172,6 +182,12 @@ class SliceOptionsPersistenceTest {
                     primeVolume = 61.5f,
                     purgeVolumes = listOf(0f, 65f, 175f, 0f),
                     primeTowerBrimWidth = 4.5f,
+                    primeTowerFramework = true,
+                    primeTowerSkipPoints = false,
+                    primeTowerFlatIroning = true,
+                    primeTowerInterfaceFeatures = true,
+                    primeTowerInterfaceCooldown = true,
+                    primeTowerInfillGap = 175f,
                     wipeTowerNoSparseLayers = true,
                     wipeTowerRotationAngle = 73f,
                     wipeTowerBridging = 12.5f,
@@ -286,6 +302,23 @@ class SliceOptionsPersistenceTest {
         assertEquals(listOf(0, 1), native.filamentSoluble.toList())
         assertEquals(listOf(0, 1), native.filamentIsSupport.toList())
         assertArrayEquals(floatArrayOf(9f, 35f), native.filamentMinimalPurgeOnWipeTower, 0.001f)
+        assertArrayEquals(
+            floatArrayOf(11f, 21f),
+            native.filamentTowerInterfacePreExtrusionDistances,
+            0.001f,
+        )
+        assertArrayEquals(
+            floatArrayOf(12f, 22f),
+            native.filamentTowerInterfacePreExtrusionLengths,
+            0.001f,
+        )
+        assertArrayEquals(floatArrayOf(13f, 23f), native.filamentTowerIroningAreas, 0.001f)
+        assertArrayEquals(
+            floatArrayOf(14f, 24f),
+            native.filamentTowerInterfacePurgeLengths,
+            0.001f,
+        )
+        assertEquals(listOf(231, 241), native.filamentTowerInterfacePrintTemperatures.toList())
         assertEquals(listOf(40, 70), native.filamentAdditionalCoolingFanSpeeds.toList())
         assertArrayEquals(floatArrayOf(21f, 31f), native.filamentLoadingSpeeds, 0.001f)
         assertArrayEquals(floatArrayOf(4f, 5f), native.filamentLoadingSpeedStarts, 0.001f)
@@ -354,6 +387,12 @@ class SliceOptionsPersistenceTest {
         assertEquals(false, native.singleExtruderMultiMaterial)
         assertEquals(false, native.purgeInPrimeTower)
         assertEquals(4.5f, native.primeTowerBrimWidth)
+        assertTrue(native.primeTowerFramework)
+        assertFalse(native.primeTowerSkipPoints)
+        assertTrue(native.primeTowerFlatIroning)
+        assertTrue(native.primeTowerInterfaceFeatures)
+        assertTrue(native.primeTowerInterfaceCooldown)
+        assertEquals(175f, native.primeTowerInfillGap)
         assertEquals(true, native.wipeTowerNoSparseLayers)
         assertEquals(73f, native.wipeTowerRotationAngle)
         assertEquals(12.5f, native.wipeTowerBridging)
@@ -911,6 +950,7 @@ class SliceOptionsPersistenceTest {
             getJSONObject("filament").remove("soluble")
             getJSONObject("filament").remove("supportMaterial")
             getJSONObject("filament").remove("minimalPurgeOnWipeTower")
+            getJSONObject("filament").removePrimeTowerInterfaceFields()
             getJSONObject("filament").remove("additionalCoolingFanSpeed")
             getJSONObject("filament").removeCoolingParityFields()
             getJSONObject("printer").remove("auxiliaryFan")
@@ -946,6 +986,7 @@ class SliceOptionsPersistenceTest {
             getJSONArray("filamentSlots").getJSONObject(0).remove("soluble")
             getJSONArray("filamentSlots").getJSONObject(0).remove("supportMaterial")
             getJSONArray("filamentSlots").getJSONObject(0).remove("minimalPurgeOnWipeTower")
+            getJSONArray("filamentSlots").getJSONObject(0).removePrimeTowerInterfaceFields()
             getJSONArray("filamentSlots").getJSONObject(0).remove("additionalCoolingFanSpeed")
             getJSONArray("filamentSlots").getJSONObject(0).removeCoolingParityFields()
             getJSONObject("slicing").apply {
@@ -976,6 +1017,12 @@ class SliceOptionsPersistenceTest {
                 remove("bottomSurfaceDensity")
                 remove("infillShiftStep")
                 remove("symmetricInfillYAxis")
+                remove("primeTowerFramework")
+                remove("primeTowerSkipPoints")
+                remove("primeTowerFlatIroning")
+                remove("primeTowerInterfaceFeatures")
+                remove("primeTowerInterfaceCooldown")
+                remove("primeTowerInfillGap")
             }
         }
 
@@ -1020,6 +1067,11 @@ class SliceOptionsPersistenceTest {
         assertEquals(false, restored.filamentProfile.soluble)
         assertEquals(false, restored.filamentProfile.supportMaterial)
         assertEquals(15f, restored.filamentProfile.minimalPurgeOnWipeTower)
+        assertEquals(10f, restored.filamentProfile.towerInterfacePreExtrusionDistance)
+        assertEquals(0f, restored.filamentProfile.towerInterfacePreExtrusionLength)
+        assertEquals(4f, restored.filamentProfile.towerIroningArea)
+        assertEquals(20f, restored.filamentProfile.towerInterfacePurgeLength)
+        assertEquals(-1, restored.filamentProfile.towerInterfacePrintTemperature)
         assertEquals(0, restored.filamentProfile.additionalCoolingFanSpeed)
         assertEquals(60f, restored.filamentProfile.fanCoolingLayerTime)
         assertEquals(true, restored.filamentProfile.slowDownForLayerCooling)
@@ -1087,6 +1139,12 @@ class SliceOptionsPersistenceTest {
         assertEquals(0f, restored.travelSpeedZ)
         assertEquals(0f, restored.toNativeConfig().travelSpeedZ)
         assertEquals(emptyList<Float>(), restored.multiMaterial.purgeVolumes)
+        assertFalse(restored.multiMaterial.primeTowerFramework)
+        assertTrue(restored.multiMaterial.primeTowerSkipPoints)
+        assertFalse(restored.multiMaterial.primeTowerFlatIroning)
+        assertFalse(restored.multiMaterial.primeTowerInterfaceFeatures)
+        assertFalse(restored.multiMaterial.primeTowerInterfaceCooldown)
+        assertEquals(150f, restored.multiMaterial.primeTowerInfillGap)
         assertEquals(listOf(0f), restored.toNativeConfig().purgeVolumes.toList())
     }
 
@@ -1232,6 +1290,14 @@ private fun JSONObject.removeCoolingParityFields() {
     remove("supportInterfaceFanSpeed")
 }
 
+private fun JSONObject.removePrimeTowerInterfaceFields() {
+    remove("towerInterfacePreExtrusionDistance")
+    remove("towerInterfacePreExtrusionLength")
+    remove("towerIroningArea")
+    remove("towerInterfacePurgeLength")
+    remove("towerInterfacePrintTemperature")
+}
+
 internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
     .selectPrinter(
         PrinterProfile.U1_06.copy(
@@ -1274,6 +1340,11 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             shrinkageXyPercent = 99.2f,
             shrinkageZPercent = 99.18f,
             minimalPurgeOnWipeTower = 9f,
+            towerInterfacePreExtrusionDistance = 11f,
+            towerInterfacePreExtrusionLength = 12f,
+            towerIroningArea = 13f,
+            towerInterfacePurgeLength = 14f,
+            towerInterfacePrintTemperature = 231,
             additionalCoolingFanSpeed = 40,
             fanCoolingLayerTime = 42f,
             slowDownForLayerCooling = false,
@@ -1498,6 +1569,12 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         multiMaterial = MultiMaterialSettings(
             primeVolume = 58f,
             primeTowerBrimWidth = 5.5f,
+            primeTowerFramework = true,
+            primeTowerSkipPoints = false,
+            primeTowerFlatIroning = true,
+            primeTowerInterfaceFeatures = true,
+            primeTowerInterfaceCooldown = true,
+            primeTowerInfillGap = 175f,
             wipeTowerNoSparseLayers = true,
             wipeTowerRotationAngle = 73f,
             wipeTowerBridging = 12.5f,

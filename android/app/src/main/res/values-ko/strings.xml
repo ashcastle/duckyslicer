@@ -263,7 +263,9 @@
     <string name="fan_speedup_time">팬 미리 켜기 시간</string>
     <string name="fan_speedup_overhangs">오버행에만 적용</string>
     <string name="fan_kickstart">팬 시동 가속 시간</string>
+    <string name="millimeters_suffix">mm</string>
     <string name="cubic_millimeters_suffix">mm³</string>
+    <string name="square_millimeters_suffix">mm²</string>
     <string name="retraction">리트랙션</string>
     <string name="retraction_defaults">리트랙션 기본값</string>
     <string name="retraction_length">리트랙션 길이</string>
@@ -926,6 +928,16 @@
     <string name="prime_volume">프라임 용적</string>
     <string name="cubic_millimeters_value">%1$.1f mm³</string>
     <string name="prime_tower_brim_width">타워 브림 너비</string>
+    <string name="prime_tower_structure">타워 구조</string>
+    <string name="prime_tower_flat_ironing">평평한 상단 다듬기</string>
+    <string name="prime_tower_interface_features">재료 경계 기능</string>
+    <string name="prime_tower_interface_cooldown">재료 경계에서 냉각</string>
+    <string name="filament_prime_tower_interface">프라임 타워 재료 경계</string>
+    <string name="tower_interface_pre_extrusion_distance">사전 압출 이동 거리</string>
+    <string name="tower_interface_pre_extrusion_length">사전 압출 길이</string>
+    <string name="tower_ironing_area">다듬기 면적</string>
+    <string name="tower_interface_purge_length">경계 퍼지 길이</string>
+    <string name="tower_interface_print_temperature">경계 출력 온도</string>
     <string name="wipe_tower_no_sparse_layers">빈 타워 레이어 생략</string>
     <string name="wipe_tower_rotation_angle">타워 회전 각도</string>
     <string name="wipe_tower_bridging">최대 브리징 거리</string>

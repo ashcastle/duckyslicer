@@ -59,6 +59,11 @@ class ProfileBundleTest {
                         filamentStartGcode = "M117 BUNDLE_FILAMENT_START",
                         filamentEndGcode = "M117 BUNDLE_FILAMENT_END",
                         minimalPurgeOnWipeTower = 35f,
+                        towerInterfacePreExtrusionDistance = 21f,
+                        towerInterfacePreExtrusionLength = 22f,
+                        towerIroningArea = 23f,
+                        towerInterfacePurgeLength = 24f,
+                        towerInterfacePrintTemperature = 241,
                         additionalCoolingFanSpeed = 70,
                         loadingSpeed = 27f,
                         unloadingSpeed = 88f,
@@ -109,6 +114,14 @@ class ProfileBundleTest {
                     quality = QualityProfile.STANDARD.copy(
                         smallAreaFlowCompensation = true,
                         smallAreaFlowCompensationModel = "0,0\n0.5,0.6\n10,1",
+                    ),
+                    multiMaterial = MultiMaterialSettings(
+                        primeTowerFramework = true,
+                        primeTowerSkipPoints = false,
+                        primeTowerFlatIroning = true,
+                        primeTowerInterfaceFeatures = true,
+                        primeTowerInterfaceCooldown = true,
+                        primeTowerInfillGap = 175f,
                     ),
                 ),
             )
@@ -165,6 +178,11 @@ class ProfileBundleTest {
             assertEquals("M117 BUNDLE_FILAMENT_START", importedFilament.filamentStartGcode)
             assertEquals("M117 BUNDLE_FILAMENT_END", importedFilament.filamentEndGcode)
             assertEquals(35f, importedFilament.minimalPurgeOnWipeTower)
+            assertEquals(21f, importedFilament.towerInterfacePreExtrusionDistance)
+            assertEquals(22f, importedFilament.towerInterfacePreExtrusionLength)
+            assertEquals(23f, importedFilament.towerIroningArea)
+            assertEquals(24f, importedFilament.towerInterfacePurgeLength)
+            assertEquals(241, importedFilament.towerInterfacePrintTemperature)
             assertEquals(70, importedFilament.additionalCoolingFanSpeed)
             assertEquals(27f, importedFilament.loadingSpeed)
             assertEquals(88f, importedFilament.unloadingSpeed)
@@ -211,6 +229,12 @@ class ProfileBundleTest {
             }
             assertTrue(importedSlicing.smallAreaFlowCompensation)
             assertEquals("0,0\n0.5,0.6\n10,1", importedSlicing.smallAreaFlowCompensationModel)
+            assertTrue(importedSlicing.multiMaterial.primeTowerFramework)
+            assertFalse(importedSlicing.multiMaterial.primeTowerSkipPoints)
+            assertTrue(importedSlicing.multiMaterial.primeTowerFlatIroning)
+            assertTrue(importedSlicing.multiMaterial.primeTowerInterfaceFeatures)
+            assertTrue(importedSlicing.multiMaterial.primeTowerInterfaceCooldown)
+            assertEquals(175f, importedSlicing.multiMaterial.primeTowerInfillGap)
 
             val firstGeneration = destinationFile.readBytes()
             val repeated = destination.importBundle(bytes)

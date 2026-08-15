@@ -1,0 +1,219 @@
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+index 669271fe..90454e89 100644
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -359,6 +359,11 @@ struct SliceConfig {
+     int extruder_count = 1;
+     std::vector<int> extruder_temps;           // per-extruder nozzle temps
+     std::vector<int> filament_idle_temperatures; // per-extruder inactive-tool temperatures
++    std::vector<float> filament_tower_interface_pre_extrusion_distances;
++    std::vector<float> filament_tower_interface_pre_extrusion_lengths;
++    std::vector<float> filament_tower_ironing_areas;
++    std::vector<float> filament_tower_interface_purge_lengths;
++    std::vector<int> filament_tower_interface_print_temperatures;
+     std::vector<float> extruder_retract_length; // per-extruder retraction
+     std::vector<float> extruder_retract_speed;  // per-extruder retraction speed
+     std::vector<float> extruder_deretract_speed;
+@@ -411,6 +416,12 @@ struct SliceConfig {
+     float wipe_tower_extra_rib_length = 0.0f;
+     float wipe_tower_rib_width = 8.0f;
+     bool wipe_tower_fillet_wall = true;
++    bool prime_tower_framework = false;
++    bool prime_tower_skip_points = true;
++    bool prime_tower_flat_ironing = false;
++    bool prime_tower_interface_features = false;
++    bool prime_tower_interface_cooldown = false;
++    float prime_tower_infill_gap = 150.0f;
+     bool single_extruder_multi_material_priming = false;
+     bool flush_into_infill = false;
+     bool flush_into_support = true;
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+index cf6b9fdd..37fb61b2 100644
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -389,6 +389,15 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.extruder_count = getInt("extruderCount");
+     config.extruder_temps = getIntArray("extruderTemps");
+     config.filament_idle_temperatures = getIntArray("filamentIdleTemperatures");
++    config.filament_tower_interface_pre_extrusion_distances =
++        getFloatArray("filamentTowerInterfacePreExtrusionDistances");
++    config.filament_tower_interface_pre_extrusion_lengths =
++        getFloatArray("filamentTowerInterfacePreExtrusionLengths");
++    config.filament_tower_ironing_areas = getFloatArray("filamentTowerIroningAreas");
++    config.filament_tower_interface_purge_lengths =
++        getFloatArray("filamentTowerInterfacePurgeLengths");
++    config.filament_tower_interface_print_temperatures =
++        getIntArray("filamentTowerInterfacePrintTemperatures");
+     config.extruder_retract_length = getFloatArray("extruderRetractLength");
+     config.extruder_retract_speed = getFloatArray("extruderRetractSpeed");
+     config.extruder_deretract_speed = getFloatArray("extruderDeretractSpeed");
+@@ -440,6 +449,12 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.wipe_tower_extra_rib_length = getFloat("wipeTowerExtraRibLength");
+     config.wipe_tower_rib_width = getFloat("wipeTowerRibWidth");
+     config.wipe_tower_fillet_wall = getBool("wipeTowerFilletWall");
++    config.prime_tower_framework = getBool("primeTowerFramework");
++    config.prime_tower_skip_points = getBool("primeTowerSkipPoints");
++    config.prime_tower_flat_ironing = getBool("primeTowerFlatIroning");
++    config.prime_tower_interface_features = getBool("primeTowerInterfaceFeatures");
++    config.prime_tower_interface_cooldown = getBool("primeTowerInterfaceCooldown");
++    config.prime_tower_infill_gap = getFloat("primeTowerInfillGap");
+     config.single_extruder_multi_material_priming = getBool("singleExtruderMultiMaterialPriming");
+     config.flush_into_infill = getBool("flushIntoInfill");
+     config.flush_into_support = getBool("flushIntoSupport");
+@@ -963,6 +978,19 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setInt("extruderCount", config.extruder_count);
+     setIntArray("extruderTemps", config.extruder_temps);
+     setIntArray("filamentIdleTemperatures", config.filament_idle_temperatures);
++    setFloatArray(
++        "filamentTowerInterfacePreExtrusionDistances",
++        config.filament_tower_interface_pre_extrusion_distances);
++    setFloatArray(
++        "filamentTowerInterfacePreExtrusionLengths",
++        config.filament_tower_interface_pre_extrusion_lengths);
++    setFloatArray("filamentTowerIroningAreas", config.filament_tower_ironing_areas);
++    setFloatArray(
++        "filamentTowerInterfacePurgeLengths",
++        config.filament_tower_interface_purge_lengths);
++    setIntArray(
++        "filamentTowerInterfacePrintTemperatures",
++        config.filament_tower_interface_print_temperatures);
+     setIntArray("filamentBedTemps", config.filament_bed_temps);
+     setIntArray("filamentBedTempInitialLayers", config.filament_bed_temp_initial_layers);
+     setFloatArray("filamentShrinkages", config.filament_shrinkages);
+@@ -1019,6 +1047,12 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setFloat("wipeTowerExtraRibLength", config.wipe_tower_extra_rib_length);
+     setFloat("wipeTowerRibWidth", config.wipe_tower_rib_width);
+     setBool("wipeTowerFilletWall", config.wipe_tower_fillet_wall);
++    setBool("primeTowerFramework", config.prime_tower_framework);
++    setBool("primeTowerSkipPoints", config.prime_tower_skip_points);
++    setBool("primeTowerFlatIroning", config.prime_tower_flat_ironing);
++    setBool("primeTowerInterfaceFeatures", config.prime_tower_interface_features);
++    setBool("primeTowerInterfaceCooldown", config.prime_tower_interface_cooldown);
++    setFloat("primeTowerInfillGap", config.prime_tower_infill_gap);
+     setBool("singleExtruderMultiMaterialPriming", config.single_extruder_multi_material_priming);
+     setBool("flushIntoInfill", config.flush_into_infill);
+     setBool("flushIntoSupport", config.flush_into_support);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+index 6bd1edf6..346263fa 100644
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -1392,6 +1392,62 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+         while ((int)v.size() < n_ext) v.push_back(v.back());
+         dpc.set_key_value("filament_minimal_purge_on_wipe_tower", new Slic3r::ConfigOptionFloats(std::move(v)));
+     }
++    auto bounded_filament_floats = [n_ext](
++        const std::vector<float>& source,
++        double fallback,
++        double minimum,
++        double maximum,
++        const char* error
++    ) {
++        std::vector<double> values;
++        values.reserve(n_ext);
++        for (int index = 0; index < n_ext; ++index) {
++            const double value = source.empty()
++                ? fallback
++                : source[std::min(index, static_cast<int>(source.size()) - 1)];
++            if (!std::isfinite(value) || value < minimum || value > maximum)
++                throw std::invalid_argument(error);
++            values.push_back(value);
++        }
++        return values;
++    };
++    dpc.set_key_value(
++        "filament_tower_interface_pre_extrusion_dist",
++        new Slic3r::ConfigOptionFloats(bounded_filament_floats(
++            config.filament_tower_interface_pre_extrusion_distances,
++            10.0, 0.0, 1000.0, "Invalid tower interface pre-extrusion distance")));
++    dpc.set_key_value(
++        "filament_tower_interface_pre_extrusion_length",
++        new Slic3r::ConfigOptionFloats(bounded_filament_floats(
++            config.filament_tower_interface_pre_extrusion_lengths,
++            0.0, 0.0, 1000.0, "Invalid tower interface pre-extrusion length")));
++    dpc.set_key_value(
++        "filament_tower_ironing_area",
++        new Slic3r::ConfigOptionFloats(bounded_filament_floats(
++            config.filament_tower_ironing_areas,
++            4.0, 0.0, 10000.0, "Invalid tower ironing area")));
++    dpc.set_key_value(
++        "filament_tower_interface_purge_volume",
++        new Slic3r::ConfigOptionFloats(bounded_filament_floats(
++            config.filament_tower_interface_purge_lengths,
++            20.0, 0.0, 1000.0, "Invalid tower interface purge length")));
++    {
++        std::vector<int> temperatures;
++        temperatures.reserve(n_ext);
++        for (int index = 0; index < n_ext; ++index) {
++            const int value = config.filament_tower_interface_print_temperatures.empty()
++                ? -1
++                : config.filament_tower_interface_print_temperatures[
++                    std::min(index, static_cast<int>(
++                        config.filament_tower_interface_print_temperatures.size()) - 1)];
++            if (value < -1 || value > 500)
++                throw std::invalid_argument("Invalid tower interface print temperature");
++            temperatures.push_back(value);
++        }
++        dpc.set_key_value(
++            "filament_tower_interface_print_temp",
++            new Slic3r::ConfigOptionInts(std::move(temperatures)));
++    }
+     if (!config.filament_nozzle_temp_initial_layers.empty()) {
+         std::vector<int> v = config.filament_nozzle_temp_initial_layers;
+         while ((int)v.size() < n_ext) v.push_back(v.back());
+@@ -1636,6 +1692,18 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+     dpc.set_key_value("wipe_tower_extra_rib_length", new Slic3r::ConfigOptionFloat(config.wipe_tower_extra_rib_length));
+     dpc.set_key_value("wipe_tower_rib_width", new Slic3r::ConfigOptionFloat(config.wipe_tower_rib_width));
+     dpc.set_key_value("wipe_tower_fillet_wall", new Slic3r::ConfigOptionBool(config.wipe_tower_fillet_wall));
++    if (!std::isfinite(config.prime_tower_infill_gap) ||
++        config.prime_tower_infill_gap < 100.0f || config.prime_tower_infill_gap > 1000.0f) {
++        throw std::invalid_argument("Invalid prime tower infill gap");
++    }
++    dpc.set_key_value("prime_tower_enable_framework", new Slic3r::ConfigOptionBool(config.prime_tower_framework));
++    dpc.set_key_value("prime_tower_skip_points", new Slic3r::ConfigOptionBool(config.prime_tower_skip_points));
++    dpc.set_key_value("prime_tower_flat_ironing", new Slic3r::ConfigOptionBool(config.prime_tower_flat_ironing));
++    dpc.set_key_value("enable_tower_interface_features", new Slic3r::ConfigOptionBool(config.prime_tower_interface_features));
++    dpc.set_key_value(
++        "enable_tower_interface_cooldown_during_tower",
++        new Slic3r::ConfigOptionBool(config.prime_tower_interface_cooldown));
++    dpc.set_key_value("prime_tower_infill_gap", new Slic3r::ConfigOptionPercent(config.prime_tower_infill_gap));
+     dpc.set_key_value("single_extruder_multi_material_priming", new Slic3r::ConfigOptionBool(config.single_extruder_multi_material_priming));
+     dpc.set_key_value("enable_infill_filament_override", new Slic3r::ConfigOptionBool(config.infill_filament_override_enabled));
+     dpc.set_key_value("infill_filament_use_base_first_layers", new Slic3r::ConfigOptionInt(config.infill_filament_base_first_layers));
+@@ -1999,6 +2067,12 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+                     "wipe_tower_x",
+                     "wipe_tower_y",
+                     "wipe_tower_rotation_angle",
++                    "prime_tower_enable_framework",
++                    "prime_tower_skip_points",
++                    "prime_tower_flat_ironing",
++                    "enable_tower_interface_features",
++                    "enable_tower_interface_cooldown_during_tower",
++                    "prime_tower_infill_gap",
+                     // Extruder offsets (per-extruder, must match extruder count)
+                     "extruder_offset",
+                     // Tool change / wipe tower filament handling (from printer+filament profile)
+@@ -2046,6 +2120,11 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+                     "flush_volumes_matrix",
+                     "flush_multiplier",
+                     "filament_minimal_purge_on_wipe_tower",
++                    "filament_tower_interface_pre_extrusion_dist",
++                    "filament_tower_interface_pre_extrusion_length",
++                    "filament_tower_ironing_area",
++                    "filament_tower_interface_purge_volume",
++                    "filament_tower_interface_print_temp",
+                     "purge_in_prime_tower",
+                     // Ooze prevention re-heat mode: 0 = M104 (non-blocking), 1 = M109 (wait).
+                     "tool_change_temprature_wait",
+@@ -2241,6 +2320,11 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+                 pad_bools("enable_pressure_advance");
+                 pad_floats("pressure_advance");
+                 pad_floats("filament_minimal_purge_on_wipe_tower");
++                pad_floats("filament_tower_interface_pre_extrusion_dist");
++                pad_floats("filament_tower_interface_pre_extrusion_length");
++                pad_floats("filament_tower_ironing_area");
++                pad_floats("filament_tower_interface_purge_volume");
++                pad_ints("filament_tower_interface_print_temp");
+ 
+                 // Flush volumes matrix — NxN where N = virtual_ext.
+                 // ToolOrdering derives extruder count from sqrt(matrix.size()).
+

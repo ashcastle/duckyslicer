@@ -124,6 +124,11 @@ internal object ProfileValidation {
             profile.internalBridgeFanSpeed in -1..100 &&
             profile.supportInterfaceFanSpeed in -1..100 &&
             profile.minimalPurgeOnWipeTower in MIN_PURGE_VOLUME..MAX_PURGE_VOLUME &&
+            profile.towerInterfacePreExtrusionDistance in 0f..1_000f &&
+            profile.towerInterfacePreExtrusionLength in 0f..1_000f &&
+            profile.towerIroningArea in 0f..10_000f &&
+            profile.towerInterfacePurgeLength in 0f..1_000f &&
+            profile.towerInterfacePrintTemperature in -1..500 &&
             listOf(
                 profile.loadingSpeed,
                 profile.loadingSpeedStart,
@@ -373,6 +378,7 @@ internal object ProfileValidation {
             profile.multiMaterial.primeVolume in 1f..1_000f &&
             purgeVolumesAreValid(profile.multiMaterial.purgeVolumes) &&
             profile.multiMaterial.primeTowerBrimWidth in 0f..100f &&
+            profile.multiMaterial.primeTowerInfillGap in 100f..1_000f &&
             profile.multiMaterial.wipeTowerRotationAngle in 0f..359f &&
             profile.multiMaterial.wipeTowerBridging in 0f..1_000f &&
             profile.multiMaterial.wipeTowerExtraSpacing in 1f..1_000f &&

@@ -171,6 +171,12 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var wipeTowerWidth: Float = base.wipeTowerWidth
     private var primeVolume: Float = base.multiMaterial.primeVolume
     private var primeTowerBrimWidth: Float = base.multiMaterial.primeTowerBrimWidth
+    private var primeTowerFramework: Boolean = base.multiMaterial.primeTowerFramework
+    private var primeTowerSkipPoints: Boolean = base.multiMaterial.primeTowerSkipPoints
+    private var primeTowerFlatIroning: Boolean = base.multiMaterial.primeTowerFlatIroning
+    private var primeTowerInterfaceFeatures: Boolean = base.multiMaterial.primeTowerInterfaceFeatures
+    private var primeTowerInterfaceCooldown: Boolean = base.multiMaterial.primeTowerInterfaceCooldown
+    private var primeTowerInfillGap: Float = base.multiMaterial.primeTowerInfillGap
     private var wipeTowerNoSparseLayers: Boolean = base.multiMaterial.wipeTowerNoSparseLayers
     private var wipeTowerRotationAngle: Float = base.multiMaterial.wipeTowerRotationAngle
     private var wipeTowerBridging: Float = base.multiMaterial.wipeTowerBridging
@@ -624,6 +630,12 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         wipeTowerWidth = input.readFloat()
         primeVolume = input.readFloat()
         primeTowerBrimWidth = input.readFloat()
+        primeTowerFramework = input.readCatalogBoolean()
+        primeTowerSkipPoints = input.readCatalogBoolean()
+        primeTowerFlatIroning = input.readCatalogBoolean()
+        primeTowerInterfaceFeatures = input.readCatalogBoolean()
+        primeTowerInterfaceCooldown = input.readCatalogBoolean()
+        primeTowerInfillGap = input.readFloat()
         wipeTowerNoSparseLayers = input.readCatalogBoolean()
         wipeTowerRotationAngle = input.readFloat()
         wipeTowerBridging = input.readFloat()
@@ -895,6 +907,12 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         multiMaterial = MultiMaterialSettings(
             primeVolume = primeVolume,
             primeTowerBrimWidth = primeTowerBrimWidth,
+            primeTowerFramework = primeTowerFramework,
+            primeTowerSkipPoints = primeTowerSkipPoints,
+            primeTowerFlatIroning = primeTowerFlatIroning,
+            primeTowerInterfaceFeatures = primeTowerInterfaceFeatures,
+            primeTowerInterfaceCooldown = primeTowerInterfaceCooldown,
+            primeTowerInfillGap = primeTowerInfillGap,
             wipeTowerNoSparseLayers = wipeTowerNoSparseLayers,
             wipeTowerRotationAngle = wipeTowerRotationAngle,
             wipeTowerBridging = wipeTowerBridging,
@@ -1332,6 +1350,12 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("wipeTowerWidth", BINARY_FLOAT),
     BinaryField("primeVolume", BINARY_FLOAT),
     BinaryField("primeTowerBrimWidth", BINARY_FLOAT),
+    BinaryField("primeTowerFramework", BINARY_BOOL),
+    BinaryField("primeTowerSkipPoints", BINARY_BOOL),
+    BinaryField("primeTowerFlatIroning", BINARY_BOOL),
+    BinaryField("primeTowerInterfaceFeatures", BINARY_BOOL),
+    BinaryField("primeTowerInterfaceCooldown", BINARY_BOOL),
+    BinaryField("primeTowerInfillGap", BINARY_FLOAT),
     BinaryField("wipeTowerNoSparseLayers", BINARY_BOOL),
     BinaryField("wipeTowerRotationAngle", BINARY_FLOAT),
     BinaryField("wipeTowerBridging", BINARY_FLOAT),

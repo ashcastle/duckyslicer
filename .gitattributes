@@ -1,3 +1,4 @@
 # Set the default behavior, in case people don't have core.autocrlf set.
 * text=auto
-native/slicer-runtime/*.patch whitespace=-blank-at-eol
+# Patch payloads retain pinned source context verbatim, including mixed indentation.
+native/slicer-runtime/*.patch whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab
