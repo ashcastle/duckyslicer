@@ -2131,7 +2131,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(69, catalog.schemaVersion)
+        assertEquals(70, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2200,6 +2200,26 @@ class NativeEngineInstrumentedTest {
         assertTrue(
             "Inherited auxiliary cooling speeds must survive catalog generation",
             catalog.filaments.any { it.additionalCoolingFanSpeed > 0 },
+        )
+        assertTrue(
+            "Inherited exchange speeds must survive catalog generation",
+            catalog.filaments.any { it.loadingSpeed != 28f || it.unloadingSpeed != 90f },
+        )
+        assertTrue(
+            "Inherited cooling moves must survive catalog generation",
+            catalog.filaments.any { it.coolingMoves != 4 },
+        )
+        assertTrue(
+            "Inherited stamping motion must survive catalog generation",
+            catalog.filaments.any { it.stampingDistance > 0f && it.stampingLoadingSpeed > 0f },
+        )
+        assertTrue(
+            "Inherited ramming curves must survive catalog generation",
+            catalog.filaments.any { it.rammingParameters != DEFAULT_FILAMENT_RAMMING_PARAMETERS },
+        )
+        assertTrue(
+            "Inherited multi-tool ramming must survive catalog generation",
+            catalog.filaments.any { it.multitoolRamming },
         )
         assertTrue(
             "Inherited layer-time fan thresholds must survive catalog generation",
@@ -2899,8 +2919,38 @@ class NativeEngineInstrumentedTest {
     fun interlockingBeamsChangeTouchingMultiMaterialVolumeToolpaths() {
         val left = inspectModel(interlockingVolumeModel("left", -20f, 0f).absolutePath)
         val right = inspectModel(interlockingVolumeModel("right", 0f, 20f).absolutePath)
-        val primary = FilamentProfile.PLA
-        val secondary = FilamentProfile.PETG
+        val primary = FilamentProfile.PLA.copy(
+            loadingSpeed = 21f,
+            loadingSpeedStart = 4f,
+            unloadingSpeed = 81f,
+            unloadingSpeedStart = 91f,
+            toolchangeDelay = 0.7f,
+            coolingMoves = 3,
+            stampingLoadingSpeed = 29f,
+            stampingDistance = 45f,
+            coolingInitialSpeed = 2.5f,
+            coolingFinalSpeed = 4.5f,
+            rammingParameters = "125 95 7 8 9| 0.1 7 0.5 8",
+            multitoolRamming = true,
+            multitoolRammingVolume = 6f,
+            multitoolRammingFlow = 16f,
+        )
+        val secondary = FilamentProfile.PETG.copy(
+            loadingSpeed = 31f,
+            loadingSpeedStart = 5f,
+            unloadingSpeed = 82f,
+            unloadingSpeedStart = 92f,
+            toolchangeDelay = 1.2f,
+            coolingMoves = 5,
+            stampingLoadingSpeed = 0f,
+            stampingDistance = 0f,
+            coolingInitialSpeed = 3.5f,
+            coolingFinalSpeed = 5.5f,
+            rammingParameters = "130 90 8 9 10| 0.2 8 0.6 9",
+            multitoolRamming = false,
+            multitoolRammingVolume = 7f,
+            multitoolRammingFlow = 17f,
+        )
         val projectObject = ProjectObject(
             id = "interlocking-object",
             volumes = listOf(
@@ -3034,8 +3084,33 @@ class NativeEngineInstrumentedTest {
             purgeInPrimeTower = true,
             highCurrentOnFilamentSwap = true,
         )
-        val primary = FilamentProfile.PLA
-        val secondary = FilamentProfile.PETG
+        val primary = FilamentProfile.PLA.copy(
+            loadingSpeed = 21f,
+            loadingSpeedStart = 4f,
+            unloadingSpeed = 81f,
+            unloadingSpeedStart = 91f,
+            toolchangeDelay = 0.7f,
+            coolingMoves = 3,
+            stampingLoadingSpeed = 29f,
+            stampingDistance = 45f,
+            coolingInitialSpeed = 2.5f,
+            coolingFinalSpeed = 4.5f,
+            multitoolRamming = true,
+            multitoolRammingVolume = 6f,
+            multitoolRammingFlow = 16f,
+        )
+        val secondary = FilamentProfile.PETG.copy(
+            loadingSpeed = 31f,
+            loadingSpeedStart = 5f,
+            unloadingSpeed = 82f,
+            unloadingSpeedStart = 92f,
+            toolchangeDelay = 1.2f,
+            coolingMoves = 5,
+            coolingInitialSpeed = 3.5f,
+            coolingFinalSpeed = 5.5f,
+            multitoolRammingVolume = 7f,
+            multitoolRammingFlow = 17f,
+        )
         val base = SliceOptions()
             .selectPrinter(printer)
             .selectFilament(primary)
@@ -3048,6 +3123,12 @@ class NativeEngineInstrumentedTest {
                 ),
             )
         val enabled = OnDeviceSlicer.slice(listOf(projectObject), base).output.readText()
+        val defaultMotion = OnDeviceSlicer.slice(
+            listOf(projectObject),
+            base.selectFilament(FilamentProfile.PLA).copy(
+                filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+            ),
+        ).output.readText()
         val disabled = OnDeviceSlicer.slice(
             listOf(projectObject),
             base.copy(
@@ -3070,9 +3151,30 @@ class NativeEngineInstrumentedTest {
         assertTrue(enabled.contains("; enable_filament_ramming = 1"))
         assertTrue(enabled.contains("; purge_in_prime_tower = 1"))
         assertTrue(enabled.contains("; high_current_on_filament_swap = 1"))
+        assertTrue(
+            enabled.lineSequence().filter { it.contains("filament_loading_speed") }.joinToString("\n"),
+            enabled.contains("; filament_loading_speed = 21,31"),
+        )
+        assertTrue(enabled.contains("; filament_loading_speed_start = 4,5"))
+        assertTrue(enabled.contains("; filament_unloading_speed = 81,82"))
+        assertTrue(enabled.contains("; filament_unloading_speed_start = 91,92"))
+        assertTrue(enabled.contains("; filament_toolchange_delay = 0.7,1.2"))
+        assertTrue(enabled.contains("; filament_cooling_moves = 3,5"))
+        assertTrue(enabled.contains("; filament_stamping_loading_speed = 29,0"))
+        assertTrue(enabled.contains("; filament_stamping_distance = 45,0"))
+        assertTrue(enabled.contains("; filament_cooling_initial_speed = 2.5,3.5"))
+        assertTrue(enabled.contains("; filament_cooling_final_speed = 4.5,5.5"))
+        assertTrue(enabled.contains("; filament_multitool_ramming = 1,0"))
+        assertTrue(enabled.contains("; filament_multitool_ramming_volume = 6,7"))
+        assertTrue(enabled.contains("; filament_multitool_ramming_flow = 16,17"))
         assertTrue("High-current SEMM ramming must emit Orca's current increase", enabled.contains("M907 E750"))
         assertTrue("High-current SEMM ramming must restore the current", enabled.contains("M907 E550"))
         assertTrue("The enabled SEMM path must execute a real tool transition", enabled.lineSequence().any { it == "T1" })
+        assertNotEquals(
+            "Filament exchange motion must change real WipeTower output",
+            defaultMotion,
+            enabled,
+        )
 
         assertTrue(disabled.contains("; cooling_tube_retraction = 0"))
         assertTrue(disabled.contains("; cooling_tube_length = 0"))
@@ -3083,6 +3185,70 @@ class NativeEngineInstrumentedTest {
         assertTrue(disabled.contains("; high_current_on_filament_swap = 0"))
         assertFalse(disabled.contains("M907 E750"))
         assertNotEquals("SEMM exchange settings must change real output", enabled, disabled)
+    }
+
+    @Test
+    fun independentToolchangerRammingChangesRealWipeTowerToolpaths() {
+        val left = inspectModel(interlockingVolumeModel("toolchanger-left", -20f, 0f).absolutePath)
+        val right = inspectModel(interlockingVolumeModel("toolchanger-right", 0f, 20f).absolutePath)
+        val projectObject = ProjectObject(
+            id = "toolchanger-ramming-object",
+            volumes = listOf(
+                ProjectVolume("toolchanger-left", left, filamentSlot = 0),
+                ProjectVolume("toolchanger-right", right, filamentSlot = 1),
+            ),
+        )
+        val rammingFilament = FilamentProfile.PLA.copy(
+            multitoolRamming = true,
+            multitoolRammingVolume = 6f,
+            multitoolRammingFlow = 16f,
+        )
+        val passiveFilament = FilamentProfile.PETG.copy(
+            multitoolRamming = false,
+            multitoolRammingVolume = 7f,
+            multitoolRammingFlow = 17f,
+        )
+        val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(
+            singleExtruderMultiMaterial = false,
+            extruderCount = 2,
+            machineStartGcode = "",
+            machineEndGcode = "",
+            changeFilamentGcode = "T[next_extruder]",
+        )
+        val enabledOptions = SliceOptions()
+            .selectPrinter(printer)
+            .selectFilament(rammingFilament)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                filamentSlots = listOf(rammingFilament, passiveFilament),
+                wipeTowerEnabled = true,
+                multiMaterial = MultiMaterialSettings(
+                    purgeVolumes = listOf(0f, 140f, 140f, 0f),
+                ),
+            )
+        val disabledOptions = enabledOptions.copy(
+            filamentProfile = rammingFilament.copy(multitoolRamming = false),
+            filamentSlots = listOf(
+                rammingFilament.copy(multitoolRamming = false),
+                passiveFilament,
+            ),
+        )
+
+        val enabled = OnDeviceSlicer.slice(listOf(projectObject), enabledOptions)
+        val disabled = OnDeviceSlicer.slice(listOf(projectObject), disabledOptions)
+        val enabledGcode = enabled.output.readText()
+        val enabledPreview = loadGcodePreview(enabled.output.absolutePath, 0, Int.MAX_VALUE)
+        val disabledPreview = loadGcodePreview(disabled.output.absolutePath, 0, Int.MAX_VALUE)
+
+        assertTrue(enabledGcode.contains("; single_extruder_multi_material = 0"))
+        assertTrue(enabledGcode.contains("; filament_multitool_ramming = 1,0"))
+        assertTrue(enabledGcode.contains("; filament_multitool_ramming_volume = 6,7"))
+        assertTrue(enabledGcode.contains("; filament_multitool_ramming_flow = 16,17"))
+        assertTrue("Independent toolchanger must execute a real tool transition", enabledGcode.lineSequence().any { it == "T1" })
+        assertFalse(
+            "Independent-tool ramming must change rendered wipe-tower extrusion geometry",
+            enabledPreview.segments.contentEquals(disabledPreview.segments),
+        )
     }
 
     @Test

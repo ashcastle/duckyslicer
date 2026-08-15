@@ -103,6 +103,21 @@ internal object ProfileValidation {
             profile.internalBridgeFanSpeed in -1..100 &&
             profile.supportInterfaceFanSpeed in -1..100 &&
             profile.minimalPurgeOnWipeTower in MIN_PURGE_VOLUME..MAX_PURGE_VOLUME &&
+            listOf(
+                profile.loadingSpeed,
+                profile.loadingSpeedStart,
+                profile.unloadingSpeed,
+                profile.unloadingSpeedStart,
+                profile.toolchangeDelay,
+                profile.stampingLoadingSpeed,
+                profile.stampingDistance,
+                profile.coolingInitialSpeed,
+                profile.coolingFinalSpeed,
+                profile.multitoolRammingVolume,
+                profile.multitoolRammingFlow,
+            ).all { it in 0f..1_000f } &&
+            profile.coolingMoves in 0..20 &&
+            profile.rammingParameters.isSafeRammingParameters() &&
             profile.retractLength.isNullOrIn(0f..100f) &&
             profile.retractSpeed.isNullOrIn(0f..500f) &&
             profile.deretractSpeed.isNullOrIn(0f..500f) &&
@@ -453,6 +468,18 @@ internal object ProfileValidation {
     private const val MAX_LABEL_LENGTH = 512
     private const val MAX_COMPATIBILITY_ENTRIES = 512
     private const val MAX_GCODE_TEMPLATE_LENGTH = 262_144
+}
+
+private fun String.isSafeRammingParameters(): Boolean {
+    if (toByteArray(Charsets.UTF_8).size > 16_384) return false
+    val parts = split('|')
+    if (parts.size != 2) return false
+    val left = parts[0].trim().split(Regex("\\s+")).filter(String::isNotEmpty)
+    val right = parts[1].trim().split(Regex("\\s+")).filter(String::isNotEmpty)
+    if (left.size < 3 || right.size < 2 || right.size % 2 != 0) return false
+    return (left + right).all { token ->
+        token.toFloatOrNull()?.let { it.isFinite() && it in 0f..1_000f } == true
+    }
 }
 
 private fun purgeVolumesAreValid(values: List<Float>): Boolean {

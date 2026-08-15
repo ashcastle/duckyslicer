@@ -1497,6 +1497,151 @@ private fun FilamentSettingsSheet(
                 )
             },
         )
+        SettingsGroupTitle(stringResource(R.string.filament_exchange_motion))
+        DecimalSettingField(
+            label = stringResource(R.string.filament_loading_speed),
+            value = activeProfile.loadingSpeed,
+            maximum = 1_000f,
+            suffix = "mm/s",
+            onValueChange = { value ->
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(loadingSpeed = value),
+                ))
+            },
+        )
+        DecimalSettingField(
+            label = stringResource(R.string.filament_loading_speed_start),
+            value = activeProfile.loadingSpeedStart,
+            maximum = 1_000f,
+            suffix = "mm/s",
+            onValueChange = { value ->
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(loadingSpeedStart = value),
+                ))
+            },
+        )
+        DecimalSettingField(
+            label = stringResource(R.string.filament_unloading_speed),
+            value = activeProfile.unloadingSpeed,
+            maximum = 1_000f,
+            suffix = "mm/s",
+            onValueChange = { value ->
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(unloadingSpeed = value),
+                ))
+            },
+        )
+        DecimalSettingField(
+            label = stringResource(R.string.filament_unloading_speed_start),
+            value = activeProfile.unloadingSpeedStart,
+            maximum = 1_000f,
+            suffix = "mm/s",
+            onValueChange = { value ->
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(unloadingSpeedStart = value),
+                ))
+            },
+        )
+        DecimalSettingField(
+            label = stringResource(R.string.filament_toolchange_delay),
+            value = activeProfile.toolchangeDelay,
+            maximum = 1_000f,
+            suffix = stringResource(R.string.seconds_suffix),
+            onValueChange = { value ->
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(toolchangeDelay = value),
+                ))
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.filament_cooling_moves),
+            valueText = activeProfile.coolingMoves.toString(),
+            value = activeProfile.coolingMoves.toFloat(),
+            range = 0f..20f,
+            steps = 19,
+            onValueChange = { value ->
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(coolingMoves = value.roundToInt()),
+                ))
+            },
+        )
+        DecimalSettingField(
+            label = stringResource(R.string.filament_cooling_initial_speed),
+            value = activeProfile.coolingInitialSpeed,
+            maximum = 1_000f,
+            suffix = "mm/s",
+            onValueChange = { value ->
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(coolingInitialSpeed = value),
+                ))
+            },
+        )
+        DecimalSettingField(
+            label = stringResource(R.string.filament_cooling_final_speed),
+            value = activeProfile.coolingFinalSpeed,
+            maximum = 1_000f,
+            suffix = "mm/s",
+            onValueChange = { value ->
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(coolingFinalSpeed = value),
+                ))
+            },
+        )
+        DecimalSettingField(
+            label = stringResource(R.string.filament_stamping_speed),
+            value = activeProfile.stampingLoadingSpeed,
+            maximum = 1_000f,
+            suffix = "mm/s",
+            onValueChange = { value ->
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(stampingLoadingSpeed = value),
+                ))
+            },
+        )
+        DecimalSettingField(
+            label = stringResource(R.string.filament_stamping_distance),
+            value = activeProfile.stampingDistance,
+            maximum = 1_000f,
+            suffix = "mm",
+            onValueChange = { value ->
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(stampingDistance = value),
+                ))
+            },
+        )
+        SettingsSwitch(
+            label = stringResource(R.string.filament_multitool_ramming),
+            checked = activeProfile.multitoolRamming,
+            onCheckedChange = { enabled ->
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(multitoolRamming = enabled),
+                ))
+            },
+        )
+        if (activeProfile.multitoolRamming || settingsQuery.isNotBlank()) {
+            DecimalSettingField(
+                label = stringResource(R.string.filament_multitool_ramming_volume),
+                value = activeProfile.multitoolRammingVolume,
+                maximum = 1_000f,
+                suffix = stringResource(R.string.cubic_millimeters_suffix),
+                onValueChange = { value ->
+                    onOptionsChanged(options.updateFilamentSlot(
+                        selectedSlot, activeProfile.copy(multitoolRammingVolume = value),
+                    ))
+                },
+            )
+            DecimalSettingField(
+                label = stringResource(R.string.filament_multitool_ramming_flow),
+                value = activeProfile.multitoolRammingFlow,
+                maximum = 1_000f,
+                suffix = "mm³/s",
+                onValueChange = { value ->
+                    onOptionsChanged(options.updateFilamentSlot(
+                        selectedSlot, activeProfile.copy(multitoolRammingFlow = value),
+                    ))
+                },
+            )
+        }
         SettingsGroupTitle(stringResource(R.string.retraction))
         SettingsSwitch(
             label = stringResource(R.string.use_printer_retraction_defaults),

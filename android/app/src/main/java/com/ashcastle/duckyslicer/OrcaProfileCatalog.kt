@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v69.bin"
+private const val CATALOG_ASSET = "profile_catalog_v70.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 69) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 70) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -156,6 +156,20 @@ class OrcaProfileCatalog(private val context: Context) {
         supportMaterial = input.readBoolean(),
         minimalPurgeOnWipeTower = input.readFloat(),
         additionalCoolingFanSpeed = input.readInt(),
+        loadingSpeed = input.readFloat(),
+        loadingSpeedStart = input.readFloat(),
+        unloadingSpeed = input.readFloat(),
+        unloadingSpeedStart = input.readFloat(),
+        toolchangeDelay = input.readFloat(),
+        coolingMoves = input.readInt(),
+        stampingLoadingSpeed = input.readFloat(),
+        stampingDistance = input.readFloat(),
+        coolingInitialSpeed = input.readFloat(),
+        coolingFinalSpeed = input.readFloat(),
+        rammingParameters = input.readCatalogString(),
+        multitoolRamming = input.readCatalogBoolean(),
+        multitoolRammingVolume = input.readFloat(),
+        multitoolRammingFlow = input.readFloat(),
         filamentStartGcode = input.readCatalogString(),
         filamentEndGcode = input.readCatalogString(),
         retractLength = input.readCatalogNullableFloat(),
@@ -357,6 +371,20 @@ private val FILAMENT_BINARY_FIELDS = arrayOf(
     BinaryField("supportMaterial", BINARY_BOOL),
     BinaryField("minimalPurgeOnWipeTower", BINARY_FLOAT),
     BinaryField("additionalCoolingFanSpeed", BINARY_INT),
+    BinaryField("loadingSpeed", BINARY_FLOAT),
+    BinaryField("loadingSpeedStart", BINARY_FLOAT),
+    BinaryField("unloadingSpeed", BINARY_FLOAT),
+    BinaryField("unloadingSpeedStart", BINARY_FLOAT),
+    BinaryField("toolchangeDelay", BINARY_FLOAT),
+    BinaryField("coolingMoves", BINARY_INT),
+    BinaryField("stampingLoadingSpeed", BINARY_FLOAT),
+    BinaryField("stampingDistance", BINARY_FLOAT),
+    BinaryField("coolingInitialSpeed", BINARY_FLOAT),
+    BinaryField("coolingFinalSpeed", BINARY_FLOAT),
+    BinaryField("rammingParameters", BINARY_STRING),
+    BinaryField("multitoolRamming", BINARY_BOOL),
+    BinaryField("multitoolRammingVolume", BINARY_FLOAT),
+    BinaryField("multitoolRammingFlow", BINARY_FLOAT),
     BinaryField("filamentStartGcode", BINARY_STRING),
     BinaryField("filamentEndGcode", BINARY_STRING),
     BinaryField("retractLength", BINARY_NULLABLE_FLOAT),

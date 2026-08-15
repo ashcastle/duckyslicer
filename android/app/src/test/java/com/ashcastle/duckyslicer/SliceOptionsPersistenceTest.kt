@@ -22,6 +22,20 @@ class SliceOptionsPersistenceTest {
             shrinkageZPercent = 99.18f,
             minimalPurgeOnWipeTower = 9f,
             additionalCoolingFanSpeed = 40,
+            loadingSpeed = 21f,
+            loadingSpeedStart = 4f,
+            unloadingSpeed = 81f,
+            unloadingSpeedStart = 91f,
+            toolchangeDelay = 0.7f,
+            coolingMoves = 3,
+            stampingLoadingSpeed = 29f,
+            stampingDistance = 45f,
+            coolingInitialSpeed = 2.5f,
+            coolingFinalSpeed = 4.5f,
+            rammingParameters = "125 95 7 8 9| 0.1 7 0.5 8",
+            multitoolRamming = true,
+            multitoolRammingVolume = 6f,
+            multitoolRammingFlow = 16f,
             fanCoolingLayerTime = 42f,
             slowDownForLayerCooling = false,
             keepFanAlwaysOn = true,
@@ -48,6 +62,20 @@ class SliceOptionsPersistenceTest {
             supportMaterial = true,
             minimalPurgeOnWipeTower = 35f,
             additionalCoolingFanSpeed = 70,
+            loadingSpeed = 31f,
+            loadingSpeedStart = 5f,
+            unloadingSpeed = 82f,
+            unloadingSpeedStart = 92f,
+            toolchangeDelay = 1.2f,
+            coolingMoves = 5,
+            stampingLoadingSpeed = 0f,
+            stampingDistance = 0f,
+            coolingInitialSpeed = 3.5f,
+            coolingFinalSpeed = 5.5f,
+            rammingParameters = "130 90 8 9 10| 0.2 8 0.6 9",
+            multitoolRamming = false,
+            multitoolRammingVolume = 7f,
+            multitoolRammingFlow = 17f,
             fanCoolingLayerTime = 91f,
             slowDownForLayerCooling = true,
             keepFanAlwaysOn = false,
@@ -205,6 +233,23 @@ class SliceOptionsPersistenceTest {
         assertEquals(listOf(0, 1), native.filamentIsSupport.toList())
         assertArrayEquals(floatArrayOf(9f, 35f), native.filamentMinimalPurgeOnWipeTower, 0.001f)
         assertEquals(listOf(40, 70), native.filamentAdditionalCoolingFanSpeeds.toList())
+        assertArrayEquals(floatArrayOf(21f, 31f), native.filamentLoadingSpeeds, 0.001f)
+        assertArrayEquals(floatArrayOf(4f, 5f), native.filamentLoadingSpeedStarts, 0.001f)
+        assertArrayEquals(floatArrayOf(81f, 82f), native.filamentUnloadingSpeeds, 0.001f)
+        assertArrayEquals(floatArrayOf(91f, 92f), native.filamentUnloadingSpeedStarts, 0.001f)
+        assertArrayEquals(floatArrayOf(0.7f, 1.2f), native.filamentToolchangeDelays, 0.001f)
+        assertEquals(listOf(3, 5), native.filamentCoolingMoves.toList())
+        assertArrayEquals(floatArrayOf(29f, 0f), native.filamentStampingLoadingSpeeds, 0.001f)
+        assertArrayEquals(floatArrayOf(45f, 0f), native.filamentStampingDistances, 0.001f)
+        assertArrayEquals(floatArrayOf(2.5f, 3.5f), native.filamentCoolingInitialSpeeds, 0.001f)
+        assertArrayEquals(floatArrayOf(4.5f, 5.5f), native.filamentCoolingFinalSpeeds, 0.001f)
+        assertEquals(
+            listOf("125 95 7 8 9| 0.1 7 0.5 8", "130 90 8 9 10| 0.2 8 0.6 9"),
+            native.filamentRammingParameters.toList(),
+        )
+        assertEquals(listOf(1, 0), native.filamentMultitoolRamming.toList())
+        assertArrayEquals(floatArrayOf(6f, 7f), native.filamentMultitoolRammingVolumes, 0.001f)
+        assertArrayEquals(floatArrayOf(16f, 17f), native.filamentMultitoolRammingFlows, 0.001f)
         assertArrayEquals(floatArrayOf(42f, 91f), native.filamentFanCoolingLayerTimes, 0.001f)
         assertEquals(listOf(0, 1), native.filamentSlowDownForLayerCooling.toList())
         assertEquals(listOf(1, 0), native.filamentKeepFanAlwaysOn.toList())

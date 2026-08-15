@@ -54,6 +54,15 @@ class ProfileBundleTest {
                         filamentEndGcode = "M117 BUNDLE_FILAMENT_END",
                         minimalPurgeOnWipeTower = 35f,
                         additionalCoolingFanSpeed = 70,
+                        loadingSpeed = 27f,
+                        unloadingSpeed = 88f,
+                        coolingMoves = 6,
+                        coolingInitialSpeed = 2.8f,
+                        coolingFinalSpeed = 4.8f,
+                        rammingParameters = "125 95 7 8 9| 0.1 7 0.5 8",
+                        multitoolRamming = true,
+                        multitoolRammingVolume = 8f,
+                        multitoolRammingFlow = 18f,
                         fanCoolingLayerTime = 42f,
                         slowDownForLayerCooling = false,
                         keepFanAlwaysOn = true,
@@ -128,6 +137,15 @@ class ProfileBundleTest {
             assertEquals("M117 BUNDLE_FILAMENT_END", importedFilament.filamentEndGcode)
             assertEquals(35f, importedFilament.minimalPurgeOnWipeTower)
             assertEquals(70, importedFilament.additionalCoolingFanSpeed)
+            assertEquals(27f, importedFilament.loadingSpeed)
+            assertEquals(88f, importedFilament.unloadingSpeed)
+            assertEquals(6, importedFilament.coolingMoves)
+            assertEquals(2.8f, importedFilament.coolingInitialSpeed)
+            assertEquals(4.8f, importedFilament.coolingFinalSpeed)
+            assertEquals("125 95 7 8 9| 0.1 7 0.5 8", importedFilament.rammingParameters)
+            assertTrue(importedFilament.multitoolRamming)
+            assertEquals(8f, importedFilament.multitoolRammingVolume)
+            assertEquals(18f, importedFilament.multitoolRammingFlow)
             assertEquals(42f, importedFilament.fanCoolingLayerTime)
             assertFalse(importedFilament.slowDownForLayerCooling)
             assertTrue(importedFilament.keepFanAlwaysOn)

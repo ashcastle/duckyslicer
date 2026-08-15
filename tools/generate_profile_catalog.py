@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 69
+SCHEMA_VERSION = 70
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -97,6 +97,33 @@ def z_hop_type(value: Any, default: str | None) -> str | None:
         "slope": "slope", "slope lift": "slope",
         "spiral": "spiral", "spiral lift": "spiral",
     }.get(normalized, default)
+
+
+DEFAULT_RAMMING_PARAMETERS = (
+    "120 100 6.6 6.8 7.2 7.6 7.9 8.2 8.7 9.4 9.9 10.0|"
+    " 0.05 6.6 0.45 6.8 0.95 7.8 1.45 8.3 1.95 9.7 2.45 10"
+    " 2.95 7.6 3.45 7.6 3.95 7.6 4.45 7.6 4.95 7.6"
+)
+
+
+def ramming_parameters(value: Any) -> str:
+    candidate = str(scalar(value, DEFAULT_RAMMING_PARAMETERS)).strip()
+    if len(candidate) >= 2 and candidate[0] == candidate[-1] == '"':
+        candidate = candidate[1:-1].strip()
+    parts = candidate.split("|")
+    if len(parts) != 2:
+        return DEFAULT_RAMMING_PARAMETERS
+    left = parts[0].split()
+    right = parts[1].split()
+    if len(left) < 3 or len(right) < 2 or len(right) % 2:
+        return DEFAULT_RAMMING_PARAMETERS
+    try:
+        numbers = [float(token) for token in left + right]
+    except ValueError:
+        return DEFAULT_RAMMING_PARAMETERS
+    if not all(math.isfinite(number) and 0 <= number <= 1_000 for number in numbers):
+        return DEFAULT_RAMMING_PARAMETERS
+    return f"{' '.join(left)}| {' '.join(right)}"
 
 
 def values(value: Any) -> list[str]:
@@ -539,6 +566,20 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "supportMaterial": boolean(raw.get("filament_is_support")),
         "minimalPurgeOnWipeTower": number(raw.get("filament_minimal_purge_on_wipe_tower"), 15),
         "additionalCoolingFanSpeed": integer(raw.get("additional_cooling_fan_speed"), 0),
+        "loadingSpeed": number(raw.get("filament_loading_speed"), 28),
+        "loadingSpeedStart": number(raw.get("filament_loading_speed_start"), 3),
+        "unloadingSpeed": number(raw.get("filament_unloading_speed"), 90),
+        "unloadingSpeedStart": number(raw.get("filament_unloading_speed_start"), 100),
+        "toolchangeDelay": number(raw.get("filament_toolchange_delay"), 0),
+        "coolingMoves": integer(raw.get("filament_cooling_moves"), 4),
+        "stampingLoadingSpeed": number(raw.get("filament_stamping_loading_speed"), 0),
+        "stampingDistance": number(raw.get("filament_stamping_distance"), 0),
+        "coolingInitialSpeed": number(raw.get("filament_cooling_initial_speed"), 2.2),
+        "coolingFinalSpeed": number(raw.get("filament_cooling_final_speed"), 3.4),
+        "rammingParameters": ramming_parameters(raw.get("filament_ramming_parameters")),
+        "multitoolRamming": boolean(raw.get("filament_multitool_ramming")),
+        "multitoolRammingVolume": number(raw.get("filament_multitool_ramming_volume"), 10),
+        "multitoolRammingFlow": number(raw.get("filament_multitool_ramming_flow"), 10),
         "filamentStartGcode": str(scalar(raw.get("filament_start_gcode"), "")),
         "filamentEndGcode": str(scalar(raw.get("filament_end_gcode"), "")),
         "retractLength": nullable_number(raw.get("filament_retraction_length")),
@@ -616,6 +657,14 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
             ]
         )
         and 0 <= profile["minimalPurgeOnWipeTower"] <= 1_000
+        and all(0 <= profile[key] <= 1_000 for key in [
+            "loadingSpeed", "loadingSpeedStart", "unloadingSpeed", "unloadingSpeedStart",
+            "toolchangeDelay", "stampingLoadingSpeed", "stampingDistance",
+            "coolingInitialSpeed", "coolingFinalSpeed", "multitoolRammingVolume",
+            "multitoolRammingFlow",
+        ])
+        and 0 <= profile["coolingMoves"] <= 20
+        and len(profile["rammingParameters"].encode("utf-8")) <= 16_384
         and 0 <= profile["fanCoolingLayerTime"] <= 1_000
         and profile["overhangFanThreshold"] in {"0%", "10%", "25%", "50%", "75%", "95%"}
         and -1 <= profile["internalBridgeFanSpeed"] <= 100

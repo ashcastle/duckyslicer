@@ -330,6 +330,20 @@ data class FilamentProfile(
     val supportMaterial: Boolean = false,
     val minimalPurgeOnWipeTower: Float = 15f,
     val additionalCoolingFanSpeed: Int = 0,
+    val loadingSpeed: Float = 28f,
+    val loadingSpeedStart: Float = 3f,
+    val unloadingSpeed: Float = 90f,
+    val unloadingSpeedStart: Float = 100f,
+    val toolchangeDelay: Float = 0f,
+    val coolingMoves: Int = 4,
+    val stampingLoadingSpeed: Float = 0f,
+    val stampingDistance: Float = 0f,
+    val coolingInitialSpeed: Float = 2.2f,
+    val coolingFinalSpeed: Float = 3.4f,
+    val rammingParameters: String = DEFAULT_FILAMENT_RAMMING_PARAMETERS,
+    val multitoolRamming: Boolean = false,
+    val multitoolRammingVolume: Float = 10f,
+    val multitoolRammingFlow: Float = 10f,
 ) {
     companion object {
         // Curated from the included Snapmaker U1 filament catalog.
@@ -408,6 +422,11 @@ data class FilamentProfile(
         )
     }
 }
+
+internal const val DEFAULT_FILAMENT_RAMMING_PARAMETERS =
+    "120 100 6.6 6.8 7.2 7.6 7.9 8.2 8.7 9.4 9.9 10.0|" +
+        " 0.05 6.6 0.45 6.8 0.95 7.8 1.45 8.3 1.95 9.7 2.45 10" +
+        " 2.95 7.6 3.45 7.6 3.95 7.6 4.45 7.6 4.95 7.6"
 
 internal fun FilamentProfile.bedTemperature(type: BuildPlateType): Int = when (type) {
     BuildPlateType.COOL -> coolPlateTemp
@@ -2041,6 +2060,32 @@ data class SliceOptions(
             native.filamentSupportInterfaceFanSpeeds = nativeFilaments
                 .map(FilamentProfile::supportInterfaceFanSpeed)
                 .toIntArray()
+            native.filamentLoadingSpeeds = nativeFilaments.map(FilamentProfile::loadingSpeed).toFloatArray()
+            native.filamentLoadingSpeedStarts = nativeFilaments
+                .map(FilamentProfile::loadingSpeedStart).toFloatArray()
+            native.filamentUnloadingSpeeds = nativeFilaments
+                .map(FilamentProfile::unloadingSpeed).toFloatArray()
+            native.filamentUnloadingSpeedStarts = nativeFilaments
+                .map(FilamentProfile::unloadingSpeedStart).toFloatArray()
+            native.filamentToolchangeDelays = nativeFilaments
+                .map(FilamentProfile::toolchangeDelay).toFloatArray()
+            native.filamentCoolingMoves = nativeFilaments.map(FilamentProfile::coolingMoves).toIntArray()
+            native.filamentStampingLoadingSpeeds = nativeFilaments
+                .map(FilamentProfile::stampingLoadingSpeed).toFloatArray()
+            native.filamentStampingDistances = nativeFilaments
+                .map(FilamentProfile::stampingDistance).toFloatArray()
+            native.filamentCoolingInitialSpeeds = nativeFilaments
+                .map(FilamentProfile::coolingInitialSpeed).toFloatArray()
+            native.filamentCoolingFinalSpeeds = nativeFilaments
+                .map(FilamentProfile::coolingFinalSpeed).toFloatArray()
+            native.filamentRammingParameters = nativeFilaments
+                .map(FilamentProfile::rammingParameters).toTypedArray()
+            native.filamentMultitoolRamming = nativeFilaments
+                .map { if (it.multitoolRamming) 1 else 0 }.toIntArray()
+            native.filamentMultitoolRammingVolumes = nativeFilaments
+                .map(FilamentProfile::multitoolRammingVolume).toFloatArray()
+            native.filamentMultitoolRammingFlows = nativeFilaments
+                .map(FilamentProfile::multitoolRammingFlow).toFloatArray()
             native.auxiliaryFan = printerProfile.auxiliaryFan
             native.topSurfaceDensity = quality.surfaceDensity.topPercent
             native.bottomSurfaceDensity = quality.surfaceDensity.bottomPercent

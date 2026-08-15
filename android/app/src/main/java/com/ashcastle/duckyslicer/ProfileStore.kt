@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 70
+internal const val USER_PROFILE_SCHEMA_VERSION = 71
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -141,6 +141,20 @@ class ProfileStore private constructor(
                 supportMaterial = options.filamentProfile.supportMaterial,
                 minimalPurgeOnWipeTower = options.filamentProfile.minimalPurgeOnWipeTower,
                 additionalCoolingFanSpeed = options.filamentProfile.additionalCoolingFanSpeed,
+                loadingSpeed = options.filamentProfile.loadingSpeed,
+                loadingSpeedStart = options.filamentProfile.loadingSpeedStart,
+                unloadingSpeed = options.filamentProfile.unloadingSpeed,
+                unloadingSpeedStart = options.filamentProfile.unloadingSpeedStart,
+                toolchangeDelay = options.filamentProfile.toolchangeDelay,
+                coolingMoves = options.filamentProfile.coolingMoves,
+                stampingLoadingSpeed = options.filamentProfile.stampingLoadingSpeed,
+                stampingDistance = options.filamentProfile.stampingDistance,
+                coolingInitialSpeed = options.filamentProfile.coolingInitialSpeed,
+                coolingFinalSpeed = options.filamentProfile.coolingFinalSpeed,
+                rammingParameters = options.filamentProfile.rammingParameters,
+                multitoolRamming = options.filamentProfile.multitoolRamming,
+                multitoolRammingVolume = options.filamentProfile.multitoolRammingVolume,
+                multitoolRammingFlow = options.filamentProfile.multitoolRammingFlow,
                 fanMinSpeed = options.fanMinSpeed,
                 fanMaxSpeed = options.fanMaxSpeed,
                 overhangFanSpeed = options.overhangFanSpeed,
@@ -215,6 +229,20 @@ class ProfileStore private constructor(
             supportMaterial = effective.supportMaterial,
             minimalPurgeOnWipeTower = effective.minimalPurgeOnWipeTower,
             additionalCoolingFanSpeed = effective.additionalCoolingFanSpeed,
+            loadingSpeed = effective.loadingSpeed,
+            loadingSpeedStart = effective.loadingSpeedStart,
+            unloadingSpeed = effective.unloadingSpeed,
+            unloadingSpeedStart = effective.unloadingSpeedStart,
+            toolchangeDelay = effective.toolchangeDelay,
+            coolingMoves = effective.coolingMoves,
+            stampingLoadingSpeed = effective.stampingLoadingSpeed,
+            stampingDistance = effective.stampingDistance,
+            coolingInitialSpeed = effective.coolingInitialSpeed,
+            coolingFinalSpeed = effective.coolingFinalSpeed,
+            rammingParameters = effective.rammingParameters,
+            multitoolRamming = effective.multitoolRamming,
+            multitoolRammingVolume = effective.multitoolRammingVolume,
+            multitoolRammingFlow = effective.multitoolRammingFlow,
         )
         require(ProfileValidation.filament(profile)) { "Filament profile contains unsafe values" }
         append("filaments", profile.toProfileJson())
@@ -640,6 +668,20 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("supportMaterial", supportMaterial)
     .put("minimalPurgeOnWipeTower", minimalPurgeOnWipeTower)
     .put("additionalCoolingFanSpeed", additionalCoolingFanSpeed)
+    .put("loadingSpeed", loadingSpeed)
+    .put("loadingSpeedStart", loadingSpeedStart)
+    .put("unloadingSpeed", unloadingSpeed)
+    .put("unloadingSpeedStart", unloadingSpeedStart)
+    .put("toolchangeDelay", toolchangeDelay)
+    .put("coolingMoves", coolingMoves)
+    .put("stampingLoadingSpeed", stampingLoadingSpeed)
+    .put("stampingDistance", stampingDistance)
+    .put("coolingInitialSpeed", coolingInitialSpeed)
+    .put("coolingFinalSpeed", coolingFinalSpeed)
+    .put("rammingParameters", rammingParameters)
+    .put("multitoolRamming", multitoolRamming)
+    .put("multitoolRammingVolume", multitoolRammingVolume)
+    .put("multitoolRammingFlow", multitoolRammingFlow)
     .put("builtIn", builtIn)
     .put("brand", brand ?: JSONObject.NULL)
     .put("compatiblePrinters", JSONArray(compatiblePrinters))
@@ -1100,6 +1142,20 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         supportMaterial = optBoolean("supportMaterial", false),
         minimalPurgeOnWipeTower = optDouble("minimalPurgeOnWipeTower", 15.0).toFloat(),
         additionalCoolingFanSpeed = optInt("additionalCoolingFanSpeed", 0),
+        loadingSpeed = optDouble("loadingSpeed", 28.0).toFloat(),
+        loadingSpeedStart = optDouble("loadingSpeedStart", 3.0).toFloat(),
+        unloadingSpeed = optDouble("unloadingSpeed", 90.0).toFloat(),
+        unloadingSpeedStart = optDouble("unloadingSpeedStart", 100.0).toFloat(),
+        toolchangeDelay = optDouble("toolchangeDelay", 0.0).toFloat(),
+        coolingMoves = optInt("coolingMoves", 4),
+        stampingLoadingSpeed = optDouble("stampingLoadingSpeed", 0.0).toFloat(),
+        stampingDistance = optDouble("stampingDistance", 0.0).toFloat(),
+        coolingInitialSpeed = optDouble("coolingInitialSpeed", 2.2).toFloat(),
+        coolingFinalSpeed = optDouble("coolingFinalSpeed", 3.4).toFloat(),
+        rammingParameters = optString("rammingParameters", DEFAULT_FILAMENT_RAMMING_PARAMETERS),
+        multitoolRamming = optBoolean("multitoolRamming", false),
+        multitoolRammingVolume = optDouble("multitoolRammingVolume", 10.0).toFloat(),
+        multitoolRammingFlow = optDouble("multitoolRammingFlow", 10.0).toFloat(),
     )
 }.getOrNull()
 

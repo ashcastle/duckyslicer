@@ -591,6 +591,20 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "filament_is_support": ["1"],
                 "filament_minimal_purge_on_wipe_tower": ["35"],
                 "additional_cooling_fan_speed": ["75%"],
+                "filament_loading_speed": ["27"],
+                "filament_loading_speed_start": ["4"],
+                "filament_unloading_speed": ["88"],
+                "filament_unloading_speed_start": ["98"],
+                "filament_toolchange_delay": ["0.7"],
+                "filament_cooling_moves": ["6"],
+                "filament_stamping_loading_speed": ["29"],
+                "filament_stamping_distance": ["45"],
+                "filament_cooling_initial_speed": ["2.8"],
+                "filament_cooling_final_speed": ["4.8"],
+                "filament_ramming_parameters": ['"125 95 7 8 9| 0.1 7 0.5 8"'],
+                "filament_multitool_ramming": ["1"],
+                "filament_multitool_ramming_volume": ["8"],
+                "filament_multitool_ramming_flow": ["18"],
                 "fan_cooling_layer_time": ["42"],
                 "slow_down_for_layer_cooling": ["0"],
                 "reduce_fan_stop_start_freq": ["1"],
@@ -639,6 +653,20 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(overridden["supportMaterial"])
         self.assertEqual(35.0, overridden["minimalPurgeOnWipeTower"])
         self.assertEqual(75, overridden["additionalCoolingFanSpeed"])
+        self.assertEqual(27.0, overridden["loadingSpeed"])
+        self.assertEqual(4.0, overridden["loadingSpeedStart"])
+        self.assertEqual(88.0, overridden["unloadingSpeed"])
+        self.assertEqual(98.0, overridden["unloadingSpeedStart"])
+        self.assertEqual(0.7, overridden["toolchangeDelay"])
+        self.assertEqual(6, overridden["coolingMoves"])
+        self.assertEqual(29.0, overridden["stampingLoadingSpeed"])
+        self.assertEqual(45.0, overridden["stampingDistance"])
+        self.assertEqual(2.8, overridden["coolingInitialSpeed"])
+        self.assertEqual(4.8, overridden["coolingFinalSpeed"])
+        self.assertEqual("125 95 7 8 9| 0.1 7 0.5 8", overridden["rammingParameters"])
+        self.assertTrue(overridden["multitoolRamming"])
+        self.assertEqual(8.0, overridden["multitoolRammingVolume"])
+        self.assertEqual(18.0, overridden["multitoolRammingFlow"])
         self.assertEqual(42.0, overridden["fanCoolingLayerTime"])
         self.assertFalse(overridden["slowDownForLayerCooling"])
         self.assertTrue(overridden["keepFanAlwaysOn"])
