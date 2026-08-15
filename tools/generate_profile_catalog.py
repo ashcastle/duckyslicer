@@ -13,8 +13,12 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 79
+SCHEMA_VERSION = 80
 MAX_FILAMENT_SLOTS = 16
+DEFAULT_GCODE_FILENAME_FORMAT = (
+    "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
+)
+MAX_GCODE_FILENAME_FORMAT_BYTES = 1_024
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
     "monotonic", "monotonicline", "rectilinear", "alignedrectilinear",
@@ -59,6 +63,18 @@ def integer(value: Any, default: int) -> int:
 def boolean(value: Any, default: bool = False) -> bool:
     candidate = str(scalar(value, "1" if default else "0")).strip().lower()
     return candidate in {"1", "true", "yes", "on"}
+
+
+def filename_format(value: Any) -> str:
+    candidate = str(scalar(value, DEFAULT_GCODE_FILENAME_FORMAT))
+    if not candidate.strip():
+        candidate = DEFAULT_GCODE_FILENAME_FORMAT
+    if (
+        len(candidate.encode("utf-8")) > MAX_GCODE_FILENAME_FORMAT_BYTES
+        or any(character in candidate for character in ("\0", "\r", "\n"))
+    ):
+        raise ValueError("unsafe filename format")
+    return candidate
 
 
 def nullable_scalar(value: Any) -> Any | None:
@@ -1255,6 +1271,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "slowDownLayers": integer(raw.get("slow_down_layers"), 0),
         "accelToDecelEnabled": boolean(raw.get("accel_to_decel_enable"), True),
         "accelToDecelFactor": number(raw.get("accel_to_decel_factor"), 50),
+        "filenameFormat": filename_format(raw.get("filename_format")),
         "spiralMode": boolean(raw.get("spiral_mode")),
         "spiralModeSmooth": boolean(raw.get("spiral_mode_smooth")),
         "spiralModeMaxXySmoothing": spiral_xy_smoothing,

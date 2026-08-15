@@ -186,6 +186,7 @@ class ProfileStoreMigrationTest {
             assertTrue(restoredSlicing.skeletonInfillLineWidthPercent)
             assertEquals(-135f, restoredSlicing.skirtStartAngle)
             assertEquals(false, restoredSlicing.gcodeSettings.verboseComments)
+            assertEquals(DEFAULT_GCODE_FILENAME_FORMAT, restoredSlicing.gcodeSettings.filenameFormat)
             assertEquals(SurfaceDensitySettings(), restoredSlicing.surfaceDensity)
             assertEquals(0.4f, restoredSlicing.infillShiftStep)
             assertEquals(false, restoredSlicing.symmetricInfillYAxis)
@@ -352,7 +353,10 @@ class ProfileStoreMigrationTest {
         try {
             val options = SliceOptions().copy(
                 fillPattern = "lockedzag",
-                gcodeSettings = GcodeSettings(verboseComments = true),
+                gcodeSettings = GcodeSettings(
+                    verboseComments = true,
+                    filenameFormat = "{input_filename_base}_{print_time}.gcode",
+                ),
                 quality = QualityProfile.STANDARD.copy(
                     surfaceDensity = SurfaceDensitySettings(topPercent = 42f, bottomPercent = 68f),
                     lateralInfill = LateralInfillSettings(-32f, 57f, 68f),
@@ -390,6 +394,10 @@ class ProfileStoreMigrationTest {
             assertEquals("perobject", restored.skirtType)
             assertEquals(true, restored.singleLoopDraftShield)
             assertEquals(true, restored.gcodeSettings.verboseComments)
+            assertEquals(
+                "{input_filename_base}_{print_time}.gcode",
+                restored.gcodeSettings.filenameFormat,
+            )
             assertEquals(42f, restored.surfaceDensity.topPercent)
             assertEquals(68f, restored.surfaceDensity.bottomPercent)
             assertEquals(LateralInfillSettings(-32f, 57f, 68f), restored.lateralInfill)

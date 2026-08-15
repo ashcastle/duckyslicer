@@ -335,6 +335,10 @@ data class SliceConfig(
     @JvmField var sparseInfillRotationTemplate: String = ""
     @JvmField var solidInfillRotationTemplate: String = ""
     @JvmField var fillMultiline: Int = 1
+    @JvmField var filenameFormat: String =
+        "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
+    @JvmField var inputFilenameBase: String = "model"
+    @JvmField var printerModel: String = "DuckySlicer"
     @JvmField var skirtType: String = "combined"
     @JvmField var singleLoopDraftShield: Boolean = false
     @JvmField var lateralLatticeAngle1: Float = -45f

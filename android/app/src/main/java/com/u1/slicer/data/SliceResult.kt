@@ -10,4 +10,5 @@ data class SliceResult(
     @JvmField val estimatedTimeSeconds: Float,
     @JvmField val estimatedFilamentMm: Float,
     @JvmField val estimatedFilamentGrams: Float,
+    @JvmField val suggestedFilename: String,
 )

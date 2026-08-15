@@ -537,10 +537,27 @@ class RemoteDeviceClient(
         gcode: File,
         onProgress: (Int) -> Unit,
         cancellation: RemoteRequestCancellation,
+    ): RemoteUpload = upload(
+        profile,
+        credential,
+        gcode,
+        gcode.name,
+        onProgress,
+        cancellation,
+    )
+
+    internal fun upload(
+        profile: RemoteDeviceProfile,
+        credential: String,
+        gcode: File,
+        displayName: String,
+        onProgress: (Int) -> Unit,
+        cancellation: RemoteRequestCancellation,
     ): RemoteUpload {
         cancellation.throwIfRequested()
         require(gcode.isFile) { "gcode_missing" }
         require(gcode.length() in 1..MAX_REMOTE_GCODE_BYTES) { "gcode_size_invalid" }
+        require(displayName == safeGcodeFileName(displayName)) { "gcode_name_invalid" }
         val endpoint = when (profile.kind) {
             RemoteDeviceKind.OCTOPRINT -> "/api/files/local"
             RemoteDeviceKind.KLIPPER -> "/server/files/upload"
@@ -551,16 +568,25 @@ class RemoteDeviceClient(
         }
         val response = SliceArtifactLease.acquire(gcode).use {
             cancellation.throwIfRequested()
-            multipart(profile, credential, endpoint, fields, gcode, onProgress, cancellation)
+            multipart(
+                profile,
+                credential,
+                endpoint,
+                fields,
+                gcode,
+                displayName,
+                onProgress,
+                cancellation,
+            )
         }
         val remotePath = when (profile.kind) {
             RemoteDeviceKind.OCTOPRINT -> response.optJSONObject("files")
                 ?.optJSONObject("local")?.optString("path")
             RemoteDeviceKind.KLIPPER -> response.optJSONObject("result")
                 ?.optJSONObject("item")?.optString("path")
-        }.orEmpty().ifBlank { gcode.name }.let(::safeRemotePath)
+        }.orEmpty().ifBlank { displayName }.let(::safeRemotePath)
         cancellation.complete()
-        return RemoteUpload(profile.id, remotePath, gcode.name)
+        return RemoteUpload(profile.id, remotePath, displayName)
     }
 
     fun start(profile: RemoteDeviceProfile, credential: String, upload: RemoteUpload) = start(
@@ -746,6 +772,7 @@ class RemoteDeviceClient(
         path: String,
         fields: Map<String, String>,
         file: File,
+        displayName: String,
         onProgress: (Int) -> Unit,
         cancellation: RemoteRequestCancellation,
     ): JSONObject {
@@ -760,7 +787,7 @@ class RemoteDeviceClient(
             append("--$boundary\r\n")
             append(
                 "Content-Disposition: form-data; name=\"file\"; " +
-                    "filename=\"${safeHeaderFileName(file.name)}\"\r\n",
+                    "filename=\"${safeHeaderFileName(displayName)}\"\r\n",
             )
             append("Content-Type: text/x-gcode\r\n\r\n")
         }.toByteArray(StandardCharsets.UTF_8)

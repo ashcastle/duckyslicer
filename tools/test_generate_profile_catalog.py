@@ -348,6 +348,63 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual("combined", defaults["skirtType"])
         self.assertFalse(defaults["singleLoopDraftShield"])
 
+    def test_preserves_safe_output_filename_format_and_repairs_blank_legacy_value(self) -> None:
+        template = (
+            "{input_filename_base}_{filament_type[initial_tool]}_"
+            "{layer_height}mm_{printer_model}_{print_time}.gcode"
+        )
+        profile = build_process(
+            "Example",
+            {
+                "name": "Named output",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "filename_format": template,
+            },
+            {},
+        )
+        self.assertEqual(template, profile["filenameFormat"])
+
+        whitespace_template = "  {input_filename_base}.gcode  "
+        whitespace_profile = build_process(
+            "Example",
+            {
+                "name": "Whitespace output",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "filename_format": whitespace_template,
+            },
+            {},
+        )
+        self.assertEqual(whitespace_template, whitespace_profile["filenameFormat"])
+
+        repaired = build_process(
+            "Example",
+            {
+                "name": "Legacy blank output",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "filename_format": "",
+            },
+            {},
+        )
+        self.assertEqual(
+            "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode",
+            repaired["filenameFormat"],
+        )
+
+        with self.assertRaisesRegex(ValueError, "unsafe filename format"):
+            build_process(
+                "Example",
+                {
+                    "name": "Unsafe output",
+                    "layer_height": "0.2",
+                    "initial_layer_print_height": "0.2",
+                    "filename_format": "bad\nname.gcode",
+                },
+                {},
+            )
+
     def test_normalizes_legacy_zero_feature_filaments_to_first_tool(self) -> None:
         profile = build_process(
             "Example",

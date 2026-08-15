@@ -212,6 +212,9 @@
     <string name="label_objects">오브젝트 라벨</string>
     <string name="exclude_objects">오브젝트 제외</string>
     <string name="verbose_gcode">상세 G-code</string>
+    <string name="filename_format">파일 이름 형식</string>
+    <string name="filename_format_hint">모델, 필라멘트, 프린터, 레이어 높이와 출력 시간을 포함할 수 있습니다.</string>
+    <string name="filename_format_invalid">파일 이름 형식을 입력하세요.</string>
     <string name="intra_layer_order">레이어 내부 순서</string>
     <string name="print_by_layer">레이어별</string>
     <string name="print_by_object">오브젝트별</string>

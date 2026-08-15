@@ -1127,15 +1127,9 @@ private fun DuckySlicerScreen(
 
     val saveGcode = {
         val requested = plateSliceResults.resultFor(selectedPlateId)
-        val selected = selectedProjectObject?.model ?: projectObjects.firstOrNull()?.model
-        if (requested != null && selected != null && !exportingGcode) {
-            val baseName = if (projectObjects.size > 1) {
-                "project"
-            } else {
-                selected.fileName.substringBeforeLast('.').ifBlank { "model" }
-            }
+        if (requested != null && projectObjects.isNotEmpty() && !exportingGcode) {
             pendingGcodeExport = requested
-            savePicker.launch("$baseName.gcode")
+            savePicker.launch(requested.outcome.suggestedName)
         }
     }
 
@@ -1553,11 +1547,12 @@ private fun DuckySlicerScreen(
         },
         onRemoteUpload = {
             val profile = selectedRemoteDevice()
-            val output = plateSliceResults.resultFor(selectedPlateId)?.outcome?.output
-            if (profile != null && output != null && !remoteBusy) {
+            val outcome = plateSliceResults.resultFor(selectedPlateId)?.outcome
+            if (profile != null && outcome != null && !remoteBusy) {
                 remoteOperationModel.upload(
                     profile,
-                    output,
+                    outcome.output,
+                    outcome.suggestedName,
                     appSettings.connectionTimeoutSeconds,
                 )
             }

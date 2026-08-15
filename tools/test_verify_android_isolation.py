@@ -70,7 +70,9 @@ StandardCopyOption.ATOMIC_MOVE
 output.fd.sync()
 outcome.isRestorableFrom(context.filesDir)
 plateId
-RECORD_VERSION = 2
+put("suggestedName", outcome.suggestedName)
+safeGcodeFileName(value.getString("suggestedName"))
+RECORD_VERSION = 3
 synchronized(localLock)
 channel.lock()
 loadUnlocked(context)

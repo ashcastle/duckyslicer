@@ -159,6 +159,7 @@ internal object ForegroundSliceStore {
             put("estimatedSeconds", outcome.estimatedSeconds.toDouble())
             put("filamentMm", outcome.filamentMm.toDouble())
             put("filamentGrams", outcome.filamentGrams.toDouble())
+            put("suggestedName", outcome.suggestedName)
         }
     }.toString()
 
@@ -183,6 +184,11 @@ internal object ForegroundSliceStore {
                 estimatedSeconds = value.getDouble("estimatedSeconds").toFloat(),
                 filamentMm = value.getDouble("filamentMm").toFloat(),
                 filamentGrams = value.getDouble("filamentGrams").toFloat(),
+                suggestedName = if (version >= 3) {
+                    safeGcodeFileName(value.getString("suggestedName"))
+                } else {
+                    "model.gcode"
+                },
             ).also {
                 require(it.isRestorableFrom(context.filesDir)) {
                     "Foreground slice result is unavailable"
@@ -214,7 +220,7 @@ internal object ForegroundSliceStore {
     private fun sessionFile(context: Context) = File(context.filesDir, SESSION_FILE_NAME)
 
     private const val MIN_RECORD_VERSION = 1
-    private const val RECORD_VERSION = 2
+    private const val RECORD_VERSION = 3
     private const val SESSION_FILE_NAME = "foreground-slice.session"
     private const val LOCK_FILE_NAME = "foreground-slice.lock"
     private const val MAX_RECORD_BYTES = 4 * 1_024

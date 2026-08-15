@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 80
+internal const val USER_PROFILE_SCHEMA_VERSION = 81
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -968,6 +968,7 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("slowDownLayers", gcodeSettings.slowDownLayers)
     .put("accelToDecelEnabled", gcodeSettings.accelToDecelEnabled)
     .put("accelToDecelFactor", gcodeSettings.accelToDecelFactor)
+    .put("filenameFormat", gcodeSettings.filenameFormat)
     .put("skirtType", skirtType)
     .put("skirtHeight", skirtHeight)
     .put("skirtSpeed", skirtSpeed)
@@ -1514,6 +1515,7 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
             slowDownLayers = optInt("slowDownLayers", 0),
             accelToDecelEnabled = optBoolean("accelToDecelEnabled", true),
             accelToDecelFactor = optDouble("accelToDecelFactor", 50.0).toFloat(),
+            filenameFormat = optString("filenameFormat", DEFAULT_GCODE_FILENAME_FORMAT),
         ),
         skirtType = optString("skirtType", "combined"),
         skirtLoops = optInt("skirtLoops", 0),

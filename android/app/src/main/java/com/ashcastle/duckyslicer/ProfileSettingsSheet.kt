@@ -5522,6 +5522,16 @@ private fun SlicingSettingsSheet(
                         )
                     },
                 )
+                FilenameFormatSetting(
+                    value = options.gcodeSettings.filenameFormat,
+                    onValueChange = {
+                        onOptionsChanged(
+                            options.copy(
+                                gcodeSettings = options.gcodeSettings.copy(filenameFormat = it),
+                            ),
+                        )
+                    },
+                )
                 SettingsGroupTitle(stringResource(R.string.spiral_vase))
                 SettingsSwitch(
                     label = stringResource(R.string.spiral_vase),
@@ -6662,6 +6672,39 @@ private fun GcodeTemplateSetting(
         label = { Text(label) },
         minLines = 4,
         maxLines = 10,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun FilenameFormatSetting(
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    val label = stringResource(R.string.filename_format)
+    if (!settingMatchesQuery(label)) return
+    val valid = filenameFormatIsValid(value)
+    OutlinedTextField(
+        value = value,
+        onValueChange = { candidate ->
+            if (
+                candidate.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_FILENAME_FORMAT_BYTES &&
+                candidate.none { it == '\u0000' || it == '\r' || it == '\n' }
+            ) {
+                onValueChange(candidate)
+            }
+        },
+        label = { Text(label) },
+        placeholder = { Text(DEFAULT_GCODE_FILENAME_FORMAT) },
+        supportingText = {
+            Text(
+                stringResource(
+                    if (valid) R.string.filename_format_hint else R.string.filename_format_invalid,
+                ),
+            )
+        },
+        isError = !valid,
+        singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
 }

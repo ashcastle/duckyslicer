@@ -436,6 +436,7 @@ internal object ProfileValidation {
             ) &&
             profile.spiralStartingFlowRatio in 0f..1f &&
             profile.spiralFinishingFlowRatio in 0f..1f &&
+            filenameFormatIsValid(profile.gcodeSettings.filenameFormat) &&
             profile.skirtType in setOf("combined", "perobject") &&
             profile.skirtLoops in 0..100 &&
             profile.skirtDistance in 0f..1_000f &&
@@ -532,3 +533,10 @@ internal fun rotationTemplateIsValid(value: String): Boolean {
         token.trim().toFloatOrNull()?.let { it.isFinite() && it in -360f..360f } == true
     }
 }
+
+internal fun filenameFormatIsValid(value: String): Boolean =
+    value.isNotBlank() &&
+        value.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_FILENAME_FORMAT_BYTES &&
+        value.none { it == '\u0000' || it == '\r' || it == '\n' }
+
+internal const val MAX_GCODE_FILENAME_FORMAT_BYTES = 1_024

@@ -345,6 +345,7 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
     fun upload(
         profile: RemoteDeviceProfile,
         output: File,
+        displayName: String = output.name,
         timeoutSeconds: Int,
     ): Boolean = launchOperation(
         profile = profile,
@@ -356,6 +357,7 @@ internal class RemoteOperationViewModel(application: Application) : AndroidViewM
                 profile,
                 credential,
                 output,
+                displayName,
                 onProgress,
                 cancellation,
             ),

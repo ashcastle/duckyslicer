@@ -63,6 +63,8 @@ def valid_sources() -> dict[str, str]:
             " R.string.skirt_type R.string.skirt_combined R.string.skirt_per_object"
             " R.string.single_loop_after_first_layer skirtType = it"
             " singleLoopDraftShield = it enabled = options.skirtLoops > 0"
+            " R.string.filename_format R.string.filename_format_hint"
+            " R.string.filename_format_invalid FilenameFormatSetting( filenameFormat = it"
             " LateralInfillGeometrySettings("
             " quality = options.quality.copy(lateralInfill = it)"
             " stringResource(R.string.degrees_value, settings.firstAngle)"
@@ -244,6 +246,7 @@ def valid_sources() -> dict[str, str]:
             ' name="infill_octagram_spiral" name="fill_multiline" name="fill_multiline_value"'
             ' name="skirt_type" name="skirt_combined" name="skirt_per_object"'
             ' name="single_loop_after_first_layer"'
+            ' name="filename_format" name="filename_format_hint" name="filename_format_invalid"'
             ' name="lateral_lattice_angle_1" name="lateral_lattice_angle_2"'
             ' name="infill_overhang_angle"'
             ' name="support_on_build_plate_only" name="enforce_support_layers"'
@@ -310,6 +313,7 @@ def valid_sources() -> dict[str, str]:
             ' name="infill_octagram_spiral" name="fill_multiline" name="fill_multiline_value"'
             ' name="skirt_type" name="skirt_combined" name="skirt_per_object"'
             ' name="single_loop_after_first_layer"'
+            ' name="filename_format" name="filename_format_hint" name="filename_format_invalid"'
             ' name="lateral_lattice_angle_1" name="lateral_lattice_angle_2"'
             ' name="infill_overhang_angle"'
             ' name="support_on_build_plate_only" name="enforce_support_layers"'

@@ -52,6 +52,7 @@ internal object SlicerProcessClient {
     fun slice(
         transformedModels: List<File>,
         options: SliceOptions,
+        inputFilenameBase: String = "model",
         objectVolumeCounts: IntArray = IntArray(transformedModels.size) { 1 },
         filamentSlots: IntArray = IntArray(transformedModels.size),
         volumeRoles: IntArray = IntArray(transformedModels.size) {
@@ -69,6 +70,7 @@ internal object SlicerProcessClient {
         List(objectVolumeCounts.size) { null },
         List(objectVolumeCounts.size) { null },
         options,
+        inputFilenameBase,
         objectVolumeCounts,
         filamentSlots,
         volumeRoles,
@@ -88,6 +90,7 @@ internal object SlicerProcessClient {
         processOverrideFiles: List<File?>,
         brimPointFiles: List<File?>,
         options: SliceOptions,
+        inputFilenameBase: String = "model",
         objectVolumeCounts: IntArray = IntArray(transformedModels.size) { 1 },
         filamentSlots: IntArray = IntArray(transformedModels.size),
         volumeRoles: IntArray = IntArray(transformedModels.size) {
@@ -106,6 +109,7 @@ internal object SlicerProcessClient {
         processOverrideFiles,
         brimPointFiles,
         options,
+        inputFilenameBase,
         objectVolumeCounts,
         filamentSlots,
         volumeRoles,
@@ -135,6 +139,7 @@ internal object SlicerProcessClient {
             List(transformedModels.size) { null },
             List(transformedModels.size) { null },
             options,
+            "model",
             IntArray(transformedModels.size) { 1 },
             IntArray(transformedModels.size),
             IntArray(transformedModels.size) { ProjectVolumeRole.MODEL_PART.nativeValue },
@@ -631,6 +636,7 @@ internal object SlicerProcessClient {
         processOverrideFiles: List<File?>,
         brimPointFiles: List<File?>,
         options: SliceOptions,
+        inputFilenameBase: String,
         objectVolumeCounts: IntArray,
         filamentSlots: IntArray,
         volumeRoles: IntArray,
@@ -677,12 +683,15 @@ internal object SlicerProcessClient {
         val processOverridePaths = processOverrideFiles.map { it?.absolutePath.orEmpty() }
         val brimPointPaths = brimPointFiles.map { it?.absolutePath.orEmpty() }
         val volumeConfigPaths = volumeConfigFiles.map { it?.absolutePath.orEmpty() }
+        require(
+            safeGcodeFileName(inputFilenameBase).removeSuffix(".gcode") == inputFilenameBase
+        ) { "Invalid input filename" }
         val optionsText = options.toProjectJson().toString()
         require(
             encodedRequestBytes(
                 modelPaths + supportPaintPaths + seamPaintPaths + multiColorPaintPaths +
                     variableLayerHeightPaths + processOverridePaths + brimPointPaths +
-                    volumeConfigPaths,
+                    volumeConfigPaths + inputFilenameBase,
                 optionsText,
             ) <=
                 SlicerProcessContract.MAX_REQUEST_BYTES,
@@ -724,6 +733,7 @@ internal object SlicerProcessClient {
                 ArrayList(volumeConfigPaths),
             )
             putString(SlicerProcessContract.KEY_OPTIONS, optionsText)
+            putString(SlicerProcessContract.KEY_INPUT_FILENAME_BASE, inputFilenameBase)
             putIntArray(SlicerProcessContract.KEY_OBJECT_VOLUME_COUNTS, objectVolumeCounts)
             putIntArray(SlicerProcessContract.KEY_FILAMENT_SLOTS, filamentSlots)
             putIntArray(SlicerProcessContract.KEY_VOLUME_ROLES, volumeRoles)
@@ -1092,6 +1102,10 @@ internal object SlicerProcessClient {
             estimatedSeconds = response.getFloat(SlicerProcessContract.KEY_ESTIMATED_SECONDS),
             filamentMm = response.getFloat(SlicerProcessContract.KEY_FILAMENT_MM),
             filamentGrams = response.getFloat(SlicerProcessContract.KEY_FILAMENT_GRAMS),
+            suggestedName = safeGcodeFileName(
+                response.getString(SlicerProcessContract.KEY_SUGGESTED_FILENAME).orEmpty(),
+                "model",
+            ),
         ).also {
             check(it.isRestorableFrom(context.filesDir)) { "Slicer result is invalid" }
         }
@@ -1872,6 +1886,9 @@ class SlicerProcessService : Service() {
                         filamentGrams = result.getFloat(
                             SlicerProcessContract.KEY_FILAMENT_GRAMS,
                         ),
+                        suggestedName = safeGcodeFileName(
+                            result.getString(SlicerProcessContract.KEY_SUGGESTED_FILENAME).orEmpty(),
+                        ),
                     ),
                 )
             } else {
@@ -2022,6 +2039,12 @@ class SlicerProcessService : Service() {
         val optionsText = requireNotNull(extras.getString(SlicerProcessContract.KEY_OPTIONS)) {
             "Slice settings are unavailable"
         }
+        val inputFilenameBase = requireNotNull(
+            extras.getString(SlicerProcessContract.KEY_INPUT_FILENAME_BASE),
+        ) { "Input filename is unavailable" }
+        require(
+            safeGcodeFileName(inputFilenameBase).removeSuffix(".gcode") == inputFilenameBase
+        ) { "Invalid input filename" }
         require(optionsText.toByteArray(Charsets.UTF_8).size <= SlicerProcessContract.MAX_OPTIONS_BYTES) {
             "Slice settings are too large"
         }
@@ -2029,7 +2052,7 @@ class SlicerProcessService : Service() {
             encodedRequestBytes(
                 paths + supportPaintPaths + seamPaintPaths + multiColorPaintPaths +
                     variableLayerHeightPaths + processOverridePaths + brimPointPaths +
-                    volumeConfigPaths,
+                    volumeConfigPaths + inputFilenameBase,
                 optionsText,
             ) <=
                 SlicerProcessContract.MAX_REQUEST_BYTES,
@@ -2101,6 +2124,7 @@ class SlicerProcessService : Service() {
                 volumeRoles,
                 volumeConfigFiles,
                 options,
+                inputFilenameBase,
                 maximumGcodeBytes,
                 onProgress,
             ),
@@ -2520,6 +2544,7 @@ class SlicerProcessService : Service() {
         volumeRoles: List<ProjectVolumeRole>,
         volumeConfigFiles: List<File?>,
         options: SliceOptions,
+        inputFilenameBase: String,
         maximumGcodeBytes: Int,
         onProgress: (Int) -> Unit,
     ): SliceOutcome {
@@ -2618,6 +2643,7 @@ class SlicerProcessService : Service() {
             }
             val nativeConfig = options.toNativeConfig().apply {
                 this.maximumGcodeBytes = maximumGcodeBytes
+                this.inputFilenameBase = inputFilenameBase
                 if (supportPaintFiles.any { it?.hasEnforcer == true }) {
                     this.supportEnabled = true
                     this.supportType = if (options.supportType.isTreeSupportType()) {
@@ -2649,6 +2675,10 @@ class SlicerProcessService : Service() {
                 estimatedSeconds = result.estimatedTimeSeconds,
                 filamentMm = result.estimatedFilamentMm,
                 filamentGrams = result.estimatedFilamentGrams,
+                suggestedName = safeGcodeFileName(
+                    result.suggestedFilename,
+                    inputFilenameBase,
+                ),
             )
         } finally {
             runtime.clearModel()
@@ -2969,6 +2999,7 @@ class SlicerProcessService : Service() {
         putFloat(SlicerProcessContract.KEY_ESTIMATED_SECONDS, outcome.estimatedSeconds)
         putFloat(SlicerProcessContract.KEY_FILAMENT_MM, outcome.filamentMm)
         putFloat(SlicerProcessContract.KEY_FILAMENT_GRAMS, outcome.filamentGrams)
+        putString(SlicerProcessContract.KEY_SUGGESTED_FILENAME, outcome.suggestedName)
     }
 
     private fun failure(message: String) = Bundle().apply {
@@ -3124,6 +3155,7 @@ private object SlicerProcessContract {
     const val KEY_PROCESS_OVERRIDE_PATHS = "processOverridePaths"
     const val KEY_BRIM_POINT_PATHS = "brimPointPaths"
     const val KEY_OPTIONS = "options"
+    const val KEY_INPUT_FILENAME_BASE = "inputFilenameBase"
     const val KEY_MAXIMUM_GCODE_BYTES_FOR_TEST = "maximumGcodeBytesForTest"
     const val KEY_OK = "ok"
     const val KEY_CANCELED = "canceled"
@@ -3134,6 +3166,7 @@ private object SlicerProcessContract {
     const val KEY_ESTIMATED_SECONDS = "estimatedSeconds"
     const val KEY_FILAMENT_MM = "filamentMm"
     const val KEY_FILAMENT_GRAMS = "filamentGrams"
+    const val KEY_SUGGESTED_FILENAME = "suggestedFilename"
     const val KEY_ROTATION_RADIANS = "rotationRadians"
     const val KEY_BED_SIZE_X = "bedSizeX"
     const val KEY_BED_SIZE_Y = "bedSizeY"

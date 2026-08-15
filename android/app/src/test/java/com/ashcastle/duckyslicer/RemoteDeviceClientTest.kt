@@ -44,10 +44,19 @@ class RemoteDeviceClientTest {
         try {
             withServer("""{"files":{"local":{"path":"duck.gcode"}}}""") { baseUrl, request ->
                 val profile = RemoteDeviceProfile("octo", "Workshop", RemoteDeviceKind.OCTOPRINT, baseUrl)
-                val upload = RemoteDeviceClient(2_000).upload(profile, "octo-secret", gcode)
+                val upload = RemoteDeviceClient(2_000).upload(
+                    profile,
+                    "octo-secret",
+                    gcode,
+                    "bench_PLA_22m.gcode",
+                    {},
+                    RemoteRequestCancellation(),
+                )
                 assertEquals("duck.gcode", upload.remotePath)
+                assertEquals("bench_PLA_22m.gcode", upload.displayName)
                 assertTrue(request.get().startsWith("POST /api/files/local HTTP/1.1"))
                 assertTrue(request.get().contains("name=\"print\"\r\n\r\nfalse"))
+                assertTrue(request.get().contains("filename=\"bench_PLA_22m.gcode\""))
                 assertTrue(request.get().contains("G28\nG1 X10"))
             }
         } finally {

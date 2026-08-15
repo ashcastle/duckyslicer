@@ -14,6 +14,7 @@ data class SliceOutcome(
     val estimatedSeconds: Float,
     val filamentMm: Float,
     val filamentGrams: Float,
+    val suggestedName: String = "model.gcode",
 ) : Serializable
 
 internal fun SliceOutcome.isRestorableFrom(filesRoot: File): Boolean = runCatching {
@@ -25,8 +26,69 @@ internal fun SliceOutcome.isRestorableFrom(filesRoot: File): Boolean = runCatchi
         layers > 0 &&
         estimatedSeconds.isFinite() && estimatedSeconds >= 0f &&
         filamentMm.isFinite() && filamentMm >= 0f &&
-        filamentGrams.isFinite() && filamentGrams >= 0f
+        filamentGrams.isFinite() && filamentGrams >= 0f &&
+        suggestedName == safeGcodeFileName(suggestedName)
 }.getOrDefault(false)
+
+internal fun safeGcodeFileName(candidate: String, fallbackBase: String = "model"): String {
+    fun clean(value: String): String = boundedUtf8(
+        value
+            .substringAfterLast('/')
+            .substringAfterLast('\\')
+            .map { character ->
+                val category = Character.getType(character)
+                if (
+                    Character.isISOControl(character) ||
+                    category == Character.FORMAT.toInt() ||
+                    category == Character.LINE_SEPARATOR.toInt() ||
+                    category == Character.PARAGRAPH_SEPARATOR.toInt() ||
+                    character in charArrayOf(':', '*', '?', '"', '<', '>', '|')
+                ) '_'
+                else character
+            }
+            .joinToString("")
+            .trim()
+            .trim('.'),
+        MAX_GCODE_FILENAME_BASE_BYTES,
+    )
+
+    var base = clean(candidate)
+    while (base.endsWith(GCODE_EXTENSION, ignoreCase = true)) {
+        base = base.dropLast(GCODE_EXTENSION.length).trimEnd('.', ' ')
+    }
+    if (base.isBlank()) {
+        base = clean(fallbackBase)
+        while (base.endsWith(GCODE_EXTENSION, ignoreCase = true)) {
+            base = base.dropLast(GCODE_EXTENSION.length).trimEnd('.', ' ')
+        }
+    }
+    return "${base.ifBlank { "model" }}$GCODE_EXTENSION"
+}
+
+internal fun safeGcodeInputFilenameBase(candidate: String): String {
+    val fileName = candidate
+        .substringAfterLast('/')
+        .substringAfterLast('\\')
+        .trim()
+    val withoutExtension = fileName
+        .substringBeforeLast('.', missingDelimiterValue = fileName)
+        .ifBlank { fileName }
+    return safeGcodeFileName(withoutExtension).removeSuffix(GCODE_EXTENSION)
+}
+
+private fun boundedUtf8(value: String, maximumBytes: Int): String = buildString {
+    var byteCount = 0
+    for (codePoint in value.codePoints().toArray()) {
+        val characters = String(Character.toChars(codePoint))
+        val characterBytes = characters.toByteArray(Charsets.UTF_8).size
+        if (byteCount + characterBytes > maximumBytes) break
+        append(characters)
+        byteCount += characterBytes
+    }
+}
+
+private const val MAX_GCODE_FILENAME_BASE_BYTES = 180
+private const val GCODE_EXTENSION = ".gcode"
 
 internal fun normalizedSupportType(value: String): String = when (val candidate = value.trim().lowercase()) {
     "normal(auto)", "normal" -> "normal(auto)"
@@ -661,6 +723,9 @@ internal fun FeatureFilamentSettings.nativeVolumeSlot(projectSlot: Int): Int {
     return if (routesDefaultVolumeByFeature) 0 else 1
 }
 
+internal const val DEFAULT_GCODE_FILENAME_FORMAT =
+    "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
+
 data class GcodeSettings(
     val arcFitting: Boolean = false,
     val labelObjects: Boolean = true,
@@ -671,6 +736,7 @@ data class GcodeSettings(
     val slowDownLayers: Int = 0,
     val accelToDecelEnabled: Boolean = true,
     val accelToDecelFactor: Float = 50f,
+    val filenameFormat: String = DEFAULT_GCODE_FILENAME_FORMAT,
 )
 
 data class SurfaceDensitySettings(
@@ -2066,6 +2132,8 @@ data class SliceOptions(
             filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
             native.fillMultiline = fillMultilineForPattern(fillPattern, quality.fillMultiline)
+            native.filenameFormat = gcodeSettings.filenameFormat
+            native.printerModel = printerProfile.name
             native.skirtType = quality.skirtType
             native.singleLoopDraftShield = quality.singleLoopDraftShield
             native.lateralLatticeAngle1 = quality.lateralInfill.firstAngle
@@ -2585,6 +2653,13 @@ object OnDeviceSlicer {
                     processOverrideFiles,
                     brimPointFiles,
                     options,
+                    inputFilenameBase = if (objects.size > 1) {
+                        "project"
+                    } else {
+                        safeGcodeInputFilenameBase(
+                            objects.single().primaryModelPart.model.fileName,
+                        )
+                    },
                     objectVolumeCounts = transformedModels.objectVolumeCounts,
                     filamentSlots = volumes.map(ProjectVolume::filamentSlot).toIntArray(),
                     volumeRoles = volumes.map { it.role.nativeValue }.toIntArray(),

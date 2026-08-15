@@ -212,6 +212,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var slowDownLayers: Int = base.gcodeSettings.slowDownLayers
     private var accelToDecelEnabled: Boolean = base.gcodeSettings.accelToDecelEnabled
     private var accelToDecelFactor: Float = base.gcodeSettings.accelToDecelFactor
+    private var filenameFormat: String = base.gcodeSettings.filenameFormat
     private var skirtType: String = base.skirtType
     private var skirtLoops: Int = base.skirtLoops
     private var skirtDistance: Float = base.skirtDistance
@@ -660,6 +661,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         slowDownLayers = input.readInt()
         accelToDecelEnabled = input.readCatalogBoolean()
         accelToDecelFactor = input.readFloat()
+        filenameFormat = input.readCatalogString()
         spiralMode = input.readCatalogBoolean()
         spiralModeSmooth = input.readCatalogBoolean()
         spiralModeMaxXySmoothing = input.readFloat()
@@ -932,6 +934,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             slowDownLayers = slowDownLayers,
             accelToDecelEnabled = accelToDecelEnabled,
             accelToDecelFactor = accelToDecelFactor,
+            filenameFormat = filenameFormat,
         ),
         skirtType = skirtType,
         skirtLoops = skirtLoops,
@@ -1362,6 +1365,7 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("slowDownLayers", BINARY_INT),
     BinaryField("accelToDecelEnabled", BINARY_BOOL),
     BinaryField("accelToDecelFactor", BINARY_FLOAT),
+    BinaryField("filenameFormat", BINARY_STRING),
     BinaryField("spiralMode", BINARY_BOOL),
     BinaryField("spiralModeSmooth", BINARY_BOOL),
     BinaryField("spiralModeMaxXySmoothing", BINARY_FLOAT),

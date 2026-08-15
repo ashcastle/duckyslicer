@@ -515,6 +515,7 @@ class SliceOptionsPersistenceTest {
         assertEquals(options.printerProfile.id, restored.printerProfile.id)
         assertEquals(options.printerProfile.brand, restored.printerProfile.brand)
         assertEquals(options.printerProfile.builtIn, restored.printerProfile.builtIn)
+        assertEquals(restored.printerProfile.name, restored.toNativeConfig().printerModel)
         assertEquals(options.bedOriginX, restored.bedOriginX)
         assertEquals(options.bedOriginY, restored.bedOriginY)
         assertEquals(options.bedPolygon, restored.bedPolygon)
@@ -537,6 +538,11 @@ class SliceOptionsPersistenceTest {
         assertEquals(175f, restored.innerWallSpeed)
         assertEquals(17f, restored.travelSpeedZ)
         assertEquals(17f, restored.toNativeConfig().travelSpeedZ)
+        assertEquals(
+            "{input_filename_base}_{layer_height}mm_{print_time}.gcode",
+            restored.gcodeSettings.filenameFormat,
+        )
+        assertEquals(restored.gcodeSettings.filenameFormat, restored.toNativeConfig().filenameFormat)
         assertEquals(210f, restored.sparseInfillSpeed)
         assertEquals(165f, restored.internalSolidInfillSpeed)
         assertEquals(95f, restored.topSurfaceSpeed)
@@ -971,6 +977,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(-135f, restored.toNativeConfig().skirtStartAngle)
         assertEquals(false, restored.gcodeSettings.verboseComments)
         assertEquals(false, restored.toNativeConfig().gcodeComments)
+        assertEquals(DEFAULT_GCODE_FILENAME_FORMAT, restored.gcodeSettings.filenameFormat)
+        assertEquals(DEFAULT_GCODE_FILENAME_FORMAT, restored.toNativeConfig().filenameFormat)
         assertEquals(SurfaceDensitySettings(), restored.quality.surfaceDensity)
         assertEquals(100f, restored.toNativeConfig().topSurfaceDensity)
         assertEquals(100f, restored.toNativeConfig().bottomSurfaceDensity)
@@ -1459,6 +1467,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             slowDownLayers = 4,
             accelToDecelEnabled = false,
             accelToDecelFactor = 27f,
+            filenameFormat = "{input_filename_base}_{layer_height}mm_{print_time}.gcode",
         ),
         infillFirst = true,
         infillWallOverlap = 19f,

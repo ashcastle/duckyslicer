@@ -3,10 +3,18 @@ package com.ashcastle.duckyslicer
 import java.io.File
 import java.nio.file.Files
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SliceOutcomeRestorationTest {
+    @Test
+    fun inputFilenameBaseDropsTheSourceExtensionWithoutKeepingItsPath() {
+        assertEquals("bench model.v2", safeGcodeInputFilenameBase("../imports/bench model.v2.stl"))
+        assertEquals("hidden", safeGcodeInputFilenameBase(".hidden"))
+        assertEquals("model", safeGcodeInputFilenameBase(".."))
+    }
+
     @Test
     fun retainedPrivateOutputCanBeRestoredAfterConfigurationChange() = withRoot { root ->
         val output = root.resolve(SliceArtifactStore.OUTPUT_DIRECTORY)
@@ -36,6 +44,21 @@ class SliceOutcomeRestorationTest {
         assertFalse(outcome(output).copy(estimatedSeconds = Float.NaN).isRestorableFrom(root))
         assertFalse(outcome(output).copy(filamentMm = -1f).isRestorableFrom(root))
         assertFalse(outcome(output).copy(layers = 0).isRestorableFrom(root))
+        assertFalse(
+            outcome(output).copy(suggestedName = "../outside.gcode").isRestorableFrom(root),
+        )
+    }
+
+    @Test
+    fun gcodeDocumentNamesArePathFreeBoundedAndHaveOneSuffix() {
+        assertEquals("duck.gcode", safeGcodeFileName("../../duck.gcode.gcode"))
+        assertEquals("duck_bad_name.gcode", safeGcodeFileName("duck:bad?name.GCODE"))
+        assertEquals("safe_name.gcode", safeGcodeFileName("safe\u202Ename.gcode"))
+        assertEquals("safe_name.gcode", safeGcodeFileName("safe\u0085name.gcode"))
+        assertEquals("model.gcode", safeGcodeFileName("..."))
+        val unicode = safeGcodeFileName("오리🦆".repeat(100))
+        assertTrue(unicode.toByteArray(Charsets.UTF_8).size <= 186)
+        assertTrue(unicode.endsWith(".gcode"))
     }
 
     private fun outcome(output: File) = SliceOutcome(

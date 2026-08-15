@@ -85,6 +85,45 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun outputFilenameUsesOrcaPlaceholdersAndOriginalModelName() {
+        val modelFile = fixtureModel()
+        val printer = PrinterProfile.U1_04.copy(name = "Production Printer 0.4")
+        val model = inspectModel(modelFile.absolutePath).copy(
+            fileName = "production filename fixture.stl",
+        )
+        val options = SliceOptions()
+            .selectPrinter(printer)
+            .selectFilament(FilamentProfile.PLA)
+            .selectQuality(QualityProfile.STANDARD)
+            .copy(
+                layerHeight = 0.2f,
+                gcodeSettings = GcodeSettings(
+                    filenameFormat = "{input_filename_base}__{filament_type[initial_tool]}__" +
+                        "{layer_height}mm__{printer_model}__{print_time}.gcode",
+                ),
+            )
+
+        val outcome = OnDeviceSlicer.slice(
+            listOf(ProjectObject(id = "named-model", model = model)),
+            options,
+        )
+        try {
+            assertTrue(outcome.output.length() > 1_000L)
+            assertTrue(
+                outcome.suggestedName,
+                outcome.suggestedName.startsWith("production filename fixture__PLA__0.2mm__"),
+            )
+            assertTrue(outcome.suggestedName, outcome.suggestedName.contains("__Production Printer 0.4__"))
+            assertTrue(outcome.suggestedName, outcome.suggestedName.endsWith(".gcode"))
+            assertFalse(outcome.suggestedName, outcome.suggestedName.contains('{'))
+            assertFalse(outcome.suggestedName, outcome.suggestedName.contains('}'))
+            assertEquals(outcome.suggestedName, safeGcodeFileName(outcome.suggestedName))
+        } finally {
+            outcome.output.delete()
+        }
+    }
+
+    @Test
     fun inheritedPerFeatureJerkChangesActualMarlinToolpathCommands() {
         val printer = PrinterProfile.U1_04.copy(
             gcodeFlavor = "marlin2",
@@ -2344,7 +2383,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(79, catalog.schemaVersion)
+        assertEquals(80, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2626,6 +2665,11 @@ class NativeEngineInstrumentedTest {
         )
         assertTrue(catalog.slicing.all(ProfileValidation::slicing))
         assertTrue(catalog.slicing.all { it.fillMultiline in 1..5 })
+        assertTrue(catalog.slicing.all { filenameFormatIsValid(it.gcodeSettings.filenameFormat) })
+        assertTrue(
+            "The upstream process catalog must preserve its filename conventions",
+            catalog.slicing.map { it.gcodeSettings.filenameFormat }.distinct().size > 10,
+        )
         assertTrue(
             "The catalog must retain process-wide flow calibration",
             catalog.slicing.any { it.printFlowRatio != 1f },
