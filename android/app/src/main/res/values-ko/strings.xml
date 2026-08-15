@@ -199,6 +199,12 @@
     <string name="spiral_vase_summary">벽 한 줄만 사용하고 인필, 상단 레이어, 서포트는 사용하지 않습니다.</string>
     <string name="print_sequence">출력 순서</string>
     <string name="gcode_output">G-code 출력</string>
+    <string name="tool_change_timing">도구 교체 시간</string>
+    <string name="machine_filament_load_time">필라멘트 로드 시간</string>
+    <string name="machine_filament_unload_time">필라멘트 언로드 시간</string>
+    <string name="machine_tool_change_time">도구 교체 시간</string>
+    <string name="wait_for_tool_temperature">도구 온도까지 대기</string>
+    <string name="idle_temperature">유휴 온도</string>
     <string name="label_objects">오브젝트 라벨</string>
     <string name="exclude_objects">오브젝트 제외</string>
     <string name="verbose_gcode">상세 G-code</string>

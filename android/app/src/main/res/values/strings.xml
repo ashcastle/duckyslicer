@@ -219,6 +219,12 @@
     <string name="spiral_vase_summary">Uses one wall, no infill, no top layers, and no supports.</string>
     <string name="print_sequence">Print sequence</string>
     <string name="gcode_output">G-code output</string>
+    <string name="tool_change_timing">Tool change timing</string>
+    <string name="machine_filament_load_time">Filament load time</string>
+    <string name="machine_filament_unload_time">Filament unload time</string>
+    <string name="machine_tool_change_time">Tool change time</string>
+    <string name="wait_for_tool_temperature">Wait for tool temperature</string>
+    <string name="idle_temperature">Idle temperature</string>
     <string name="label_objects">Label objects</string>
     <string name="exclude_objects">Exclude objects</string>
     <string name="verbose_gcode">Verbose G-code</string>

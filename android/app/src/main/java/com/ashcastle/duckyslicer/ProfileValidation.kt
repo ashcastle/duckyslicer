@@ -16,6 +16,11 @@ internal object ProfileValidation {
             profile.maxLayerHeight in profile.minLayerHeight..2f &&
             profile.extruderCount in 1..MAX_FILAMENT_SLOTS &&
             profile.gcodeFlavor in setOf("marlin", "marlin2", "klipper") &&
+            listOf(
+                profile.machineLoadFilamentTime,
+                profile.machineUnloadFilamentTime,
+                profile.machineToolChangeTime,
+            ).all { it in 0f..3_600f } &&
             listOf(profile.maxSpeedX, profile.maxSpeedY, profile.maxSpeedZ, profile.maxSpeedE)
                 .all { it in 0.1f..2_000f } &&
             listOf(
@@ -75,6 +80,7 @@ internal object ProfileValidation {
             profile.brand.isSafeOptionalLabel() &&
             profile.nozzleTemp in 150..400 &&
             profile.firstLayerNozzleTemp in 150..400 &&
+            profile.idleTemperature in 0..500 &&
             listOf(
                 profile.bedTemp,
                 profile.firstLayerBedTemp,

@@ -126,6 +126,10 @@ data class PrinterProfile(
     val emitMachineLimitsToGcode: Boolean = true,
     val manualFilamentChange: Boolean = false,
     val disableM73: Boolean = false,
+    val machineLoadFilamentTime: Float = 0f,
+    val machineUnloadFilamentTime: Float = 0f,
+    val machineToolChangeTime: Float = 0f,
+    val toolChangeTemperatureWait: Boolean = true,
     val gcodeFlavor: String = "marlin",
     val maxSpeedX: Float = 500f,
     val maxSpeedY: Float = 500f,
@@ -368,6 +372,7 @@ data class FilamentProfile(
     val airFiltration: Boolean = false,
     val duringPrintExhaustFanSpeed: Int = 60,
     val completePrintExhaustFanSpeed: Int = 80,
+    val idleTemperature: Int = 0,
 ) {
     companion object {
         // Curated from the included Snapmaker U1 filament catalog.
@@ -2038,6 +2043,12 @@ data class SliceOptions(
             native.emitMachineLimitsToGcode = printerProfile.emitMachineLimitsToGcode
             native.manualFilamentChange = printerProfile.manualFilamentChange
             native.disableM73 = printerProfile.disableM73
+            native.filamentIdleTemperatures = nativeFilaments
+                .map(FilamentProfile::idleTemperature).toIntArray()
+            native.machineLoadFilamentTime = printerProfile.machineLoadFilamentTime
+            native.machineUnloadFilamentTime = printerProfile.machineUnloadFilamentTime
+            native.machineToolChangeTime = printerProfile.machineToolChangeTime
+            native.toolChangeTemperatureWait = printerProfile.toolChangeTemperatureWait
             native.minimumLayerHeights = FloatArray(nativeFilaments.size) {
                 printerProfile.minLayerHeight
             }

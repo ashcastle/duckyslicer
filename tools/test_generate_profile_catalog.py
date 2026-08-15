@@ -564,6 +564,10 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "emit_machine_limits_to_gcode": "0",
                 "manual_filament_change": "1",
                 "disable_m73": "1",
+                "machine_load_filament_time": "12.5",
+                "machine_unload_filament_time": "23.5",
+                "machine_tool_change_time": "4.5",
+                "tool_change_temprature_wait": "0",
                 "cooling_tube_retraction": "73.5",
                 "cooling_tube_length": "11",
                 "parking_pos_retraction": "80",
@@ -640,6 +644,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "filament_retract_lift_enforce": ["Top Only"],
                 "filament_long_retractions_when_cut": ["1"],
                 "filament_retraction_distances_when_cut": ["16.5"],
+                "idle_temperature": ["135"],
                 "filament_wipe": ["0"],
             },
         )
@@ -669,6 +674,10 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertFalse(printer["emitMachineLimitsToGcode"])
         self.assertTrue(printer["manualFilamentChange"])
         self.assertTrue(printer["disableM73"])
+        self.assertEqual(12.5, printer["machineLoadFilamentTime"])
+        self.assertEqual(23.5, printer["machineUnloadFilamentTime"])
+        self.assertEqual(4.5, printer["machineToolChangeTime"])
+        self.assertFalse(printer["toolChangeTemperatureWait"])
         self.assertEqual(73.5, printer["coolingTubeRetraction"])
         self.assertEqual(11.0, printer["coolingTubeLength"])
         self.assertEqual(80.0, printer["parkingPosRetraction"])
@@ -731,6 +740,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual("top", overridden["retractLiftEnforce"])
         self.assertTrue(overridden["longRetractionWhenCut"])
         self.assertEqual(16.5, overridden["retractionDistanceWhenCut"])
+        self.assertEqual(135, overridden["idleTemperature"])
         self.assertFalse(overridden["wipeWhileRetracting"])
 
     def test_rejects_unsafe_filament_diameter(self) -> None:

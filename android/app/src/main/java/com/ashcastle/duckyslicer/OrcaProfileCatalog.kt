@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v73.bin"
+private const val CATALOG_ASSET = "profile_catalog_v74.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 73) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 74) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -89,6 +89,10 @@ class OrcaProfileCatalog(private val context: Context) {
         emitMachineLimitsToGcode = input.readCatalogBoolean(),
         manualFilamentChange = input.readCatalogBoolean(),
         disableM73 = input.readCatalogBoolean(),
+        machineLoadFilamentTime = input.readFloat(),
+        machineUnloadFilamentTime = input.readFloat(),
+        machineToolChangeTime = input.readFloat(),
+        toolChangeTemperatureWait = input.readCatalogBoolean(),
         gcodeFlavor = input.readCatalogString(),
         maxSpeedX = input.readFloat(),
         maxSpeedY = input.readFloat(),
@@ -142,6 +146,7 @@ class OrcaProfileCatalog(private val context: Context) {
         nativeName = input.readCatalogString(),
         nozzleTemp = input.readInt(),
         firstLayerNozzleTemp = input.readInt(),
+        idleTemperature = input.readInt(),
         bedTemp = input.readInt(),
         firstLayerBedTemp = input.readInt(),
         texturedPlateTemp = input.readInt(),
@@ -327,6 +332,10 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("emitMachineLimitsToGcode", BINARY_BOOL),
     BinaryField("manualFilamentChange", BINARY_BOOL),
     BinaryField("disableM73", BINARY_BOOL),
+    BinaryField("machineLoadFilamentTime", BINARY_FLOAT),
+    BinaryField("machineUnloadFilamentTime", BINARY_FLOAT),
+    BinaryField("machineToolChangeTime", BINARY_FLOAT),
+    BinaryField("toolChangeTemperatureWait", BINARY_BOOL),
     BinaryField("gcodeFlavor", BINARY_STRING),
     BinaryField("maxSpeedX", BINARY_FLOAT),
     BinaryField("maxSpeedY", BINARY_FLOAT),
@@ -381,6 +390,7 @@ private val FILAMENT_BINARY_FIELDS = arrayOf(
     BinaryField("nativeName", BINARY_STRING),
     BinaryField("nozzleTemp", BINARY_INT),
     BinaryField("firstLayerNozzleTemp", BINARY_INT),
+    BinaryField("idleTemperature", BINARY_INT),
     BinaryField("bedTemp", BINARY_INT),
     BinaryField("firstLayerBedTemp", BINARY_INT),
     BinaryField("texturedPlateTemp", BINARY_INT),

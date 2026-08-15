@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 74
+internal const val USER_PROFILE_SCHEMA_VERSION = 75
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -67,6 +67,10 @@ class ProfileStore private constructor(
             emitMachineLimitsToGcode = options.printerProfile.emitMachineLimitsToGcode,
             manualFilamentChange = options.printerProfile.manualFilamentChange,
             disableM73 = options.printerProfile.disableM73,
+            machineLoadFilamentTime = options.printerProfile.machineLoadFilamentTime,
+            machineUnloadFilamentTime = options.printerProfile.machineUnloadFilamentTime,
+            machineToolChangeTime = options.printerProfile.machineToolChangeTime,
+            toolChangeTemperatureWait = options.printerProfile.toolChangeTemperatureWait,
             gcodeFlavor = options.gcodeFlavor,
             maxSpeedX = options.maxSpeedX,
             maxSpeedY = options.maxSpeedY,
@@ -185,6 +189,7 @@ class ProfileStore private constructor(
             nativeName = effective.nativeName,
             nozzleTemp = effective.nozzleTemp,
             firstLayerNozzleTemp = effective.firstLayerNozzleTemp,
+            idleTemperature = effective.idleTemperature,
             bedTemp = effective.bedTemp,
             firstLayerBedTemp = effective.firstLayerBedTemp,
             texturedPlateTemp = effective.texturedPlateTemp,
@@ -605,6 +610,10 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("emitMachineLimitsToGcode", emitMachineLimitsToGcode)
     .put("manualFilamentChange", manualFilamentChange)
     .put("disableM73", disableM73)
+    .put("machineLoadFilamentTime", machineLoadFilamentTime)
+    .put("machineUnloadFilamentTime", machineUnloadFilamentTime)
+    .put("machineToolChangeTime", machineToolChangeTime)
+    .put("toolChangeTemperatureWait", toolChangeTemperatureWait)
     .put("gcodeFlavor", gcodeFlavor)
     .put("maxSpeedX", maxSpeedX).put("maxSpeedY", maxSpeedY)
     .put("maxSpeedZ", maxSpeedZ).put("maxSpeedE", maxSpeedE)
@@ -656,6 +665,7 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
 internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("id", id).put("name", name).put("nativeName", nativeName)
     .put("nozzleTemp", nozzleTemp).put("firstLayerNozzleTemp", firstLayerNozzleTemp)
+    .put("idleTemperature", idleTemperature)
     .put("bedTemp", bedTemp).put("firstLayerBedTemp", firstLayerBedTemp)
     .put("texturedPlateTemp", texturedPlateTemp)
     .put("firstLayerTexturedPlateTemp", firstLayerTexturedPlateTemp)
@@ -1072,6 +1082,10 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         emitMachineLimitsToGcode = optBoolean("emitMachineLimitsToGcode", true),
         manualFilamentChange = optBoolean("manualFilamentChange"),
         disableM73 = optBoolean("disableM73"),
+        machineLoadFilamentTime = optDouble("machineLoadFilamentTime", 0.0).toFloat(),
+        machineUnloadFilamentTime = optDouble("machineUnloadFilamentTime", 0.0).toFloat(),
+        machineToolChangeTime = optDouble("machineToolChangeTime", 0.0).toFloat(),
+        toolChangeTemperatureWait = optBoolean("toolChangeTemperatureWait", true),
         gcodeFlavor = optString("gcodeFlavor", "marlin"),
         maxSpeedX = optDouble("maxSpeedX", 500.0).toFloat(),
         maxSpeedY = optDouble("maxSpeedY", 500.0).toFloat(),
@@ -1147,6 +1161,7 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         getInt("nozzleTemp"), optInt("firstLayerNozzleTemp", getInt("nozzleTemp")),
         bedTemp, firstLayerBedTemp,
         getDouble("flowRatio").toFloat(), getDouble("maxVolumetricSpeed").toFloat(),
+        idleTemperature = optInt("idleTemperature", 0),
         builtIn = optBoolean("builtIn"),
         brand = optionalString("brand"),
         texturedPlateTemp = optInt("texturedPlateTemp", bedTemp),

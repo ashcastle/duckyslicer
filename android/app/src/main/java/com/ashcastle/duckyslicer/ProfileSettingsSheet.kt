@@ -710,6 +710,49 @@ private fun PrinterSettingsSheet(
             )
         },
     )
+    SettingsGroupTitle(stringResource(R.string.tool_change_timing))
+    DecimalSettingField(
+        label = stringResource(R.string.machine_filament_load_time),
+        value = options.printerProfile.machineLoadFilamentTime,
+        maximum = 3_600f,
+        suffix = stringResource(R.string.seconds_suffix),
+        onValueChange = { value ->
+            onOptionsChanged(options.copy(
+                printerProfile = options.printerProfile.copy(machineLoadFilamentTime = value),
+            ))
+        },
+    )
+    DecimalSettingField(
+        label = stringResource(R.string.machine_filament_unload_time),
+        value = options.printerProfile.machineUnloadFilamentTime,
+        maximum = 3_600f,
+        suffix = stringResource(R.string.seconds_suffix),
+        onValueChange = { value ->
+            onOptionsChanged(options.copy(
+                printerProfile = options.printerProfile.copy(machineUnloadFilamentTime = value),
+            ))
+        },
+    )
+    DecimalSettingField(
+        label = stringResource(R.string.machine_tool_change_time),
+        value = options.printerProfile.machineToolChangeTime,
+        maximum = 3_600f,
+        suffix = stringResource(R.string.seconds_suffix),
+        onValueChange = { value ->
+            onOptionsChanged(options.copy(
+                printerProfile = options.printerProfile.copy(machineToolChangeTime = value),
+            ))
+        },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.wait_for_tool_temperature),
+        checked = options.printerProfile.toolChangeTemperatureWait,
+        onCheckedChange = { enabled ->
+            onOptionsChanged(options.copy(
+                printerProfile = options.printerProfile.copy(toolChangeTemperatureWait = enabled),
+            ))
+        },
+    )
     SettingsGroupTitle(stringResource(R.string.machine_gcode))
     GcodeTemplateSetting(
         label = stringResource(R.string.machine_start_gcode),
@@ -1454,6 +1497,18 @@ private fun FilamentSettingsSheet(
                         activeProfile.copy(firstLayerNozzleTemp = it.roundToInt()),
                     ),
                 )
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.idle_temperature),
+            valueText = stringResource(R.string.celsius_value, activeProfile.idleTemperature),
+            value = activeProfile.idleTemperature.toFloat(),
+            range = 0f..500f,
+            steps = 499,
+            onValueChange = { value ->
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(idleTemperature = value.roundToInt()),
+                ))
             },
         )
         SettingChoices(

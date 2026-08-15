@@ -1563,6 +1563,7 @@ class NativeEngineInstrumentedTest {
                 retractRestartExtra = 0.07f,
                 zHop = 0.65f,
                 zHopType = "spiral",
+                idleTemperature = 135,
                 softeningTemperature = 62,
                 nozzleTemperatureRangeLow = 195,
                 nozzleTemperatureRangeHigh = 245,
@@ -1847,6 +1848,10 @@ class NativeEngineInstrumentedTest {
                     emitMachineLimitsToGcode = false,
                     manualFilamentChange = true,
                     disableM73 = true,
+                    machineLoadFilamentTime = 12.5f,
+                    machineUnloadFilamentTime = 23.5f,
+                    machineToolChangeTime = 4.5f,
+                    toolChangeTemperatureWait = false,
                     coolingTubeRetraction = 73.5f,
                     coolingTubeLength = 11f,
                     parkingPosRetraction = 80f,
@@ -2015,6 +2020,7 @@ class NativeEngineInstrumentedTest {
         assertEquals("spiral", restored.filaments.last().zHopType)
         assertEquals("M117 SAVED_FILAMENT_START", restored.filaments.last().filamentStartGcode)
         assertEquals("M117 SAVED_FILAMENT_END", restored.filaments.last().filamentEndGcode)
+        assertEquals(135, restored.filaments.last().idleTemperature)
         assertEquals(62, restored.filaments.last().softeningTemperature)
         assertEquals(195, restored.filaments.last().nozzleTemperatureRangeLow)
         assertEquals(245, restored.filaments.last().nozzleTemperatureRangeHigh)
@@ -2149,6 +2155,10 @@ class NativeEngineInstrumentedTest {
         assertFalse(restored.printers.last().emitMachineLimitsToGcode)
         assertTrue(restored.printers.last().manualFilamentChange)
         assertTrue(restored.printers.last().disableM73)
+        assertEquals(12.5f, restored.printers.last().machineLoadFilamentTime)
+        assertEquals(23.5f, restored.printers.last().machineUnloadFilamentTime)
+        assertEquals(4.5f, restored.printers.last().machineToolChangeTime)
+        assertFalse(restored.printers.last().toolChangeTemperatureWait)
         assertEquals(73.5f, restored.printers.last().coolingTubeRetraction)
         assertEquals(11f, restored.printers.last().coolingTubeLength)
         assertEquals(80f, restored.printers.last().parkingPosRetraction)
@@ -2192,7 +2202,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(73, catalog.schemaVersion)
+        assertEquals(74, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2203,11 +2213,19 @@ class NativeEngineInstrumentedTest {
         assertEquals(0.32f, generatedU1.maxLayerHeight)
         assertEquals(listOf(10f, 10f, 10f, 10f), generatedU1.toolChangeRetractLengths)
         assertEquals(listOf(0f, 0f, 0f, 0f), generatedU1.toolChangeRetractRestartExtras)
+        assertEquals(5f, generatedU1.machineToolChangeTime)
+        assertFalse(generatedU1.toolChangeTemperatureWait)
         val boundedLift = catalog.printers.single { it.name == "Anycubic Kobra 2 Neo 0.4 nozzle" }
         assertEquals(0.3f, boundedLift.retractLiftAbove)
         assertEquals(258f, boundedLift.retractLiftBelow)
         val firmwareRetraction = catalog.printers.single { it.name == "Kingroon KP3S PRO V2 0.4 nozzle" }
         assertTrue(firmwareRetraction.useFirmwareRetraction)
+        val estimatedExchange = catalog.printers.single {
+            it.name == "Anycubic Kobra 2 Max 0.4 nozzle"
+        }
+        assertEquals(25f, estimatedExchange.machineLoadFilamentTime)
+        assertEquals(29f, estimatedExchange.machineUnloadFilamentTime)
+        assertEquals(0f, estimatedExchange.machineToolChangeTime)
         val filamentLiftOverride = catalog.filaments.single {
             it.name == "Anycubic PLA Silk @Anycubic Kobra S1 0.4 nozzle"
         }
@@ -2227,6 +2245,10 @@ class NativeEngineInstrumentedTest {
         }
         assertEquals(true, filamentCutOverride.longRetractionWhenCut)
         assertEquals(18f, filamentCutOverride.retractionDistanceWhenCut)
+        val idleTemperature = catalog.filaments.single {
+            it.name == "Prusa Generic ABS @CORE One"
+        }
+        assertEquals(130, idleTemperature.idleTemperature)
         val absoluteOutput = catalog.printers.single {
             it.name == "Anycubic Kobra 2 Max 0.4 nozzle"
         }
@@ -3249,6 +3271,78 @@ class NativeEngineInstrumentedTest {
         assertTrue(firmwareRetraction.contains("; long_retractions_when_cut = 0,0"))
         assertTrue(firmwareRetraction.lineSequence().any { it == "; DUCKY_LONG_CUT_DISABLED" })
         assertFalse(firmwareRetraction.lineSequence().any { it.startsWith("; DUCKY_LONG_CUT E-") })
+    }
+
+    @Test
+    fun toolChangeTimingAndIdleTemperatureReachRealTwoToolGcode() {
+        val left = inspectModel(interlockingVolumeModel("timing-left", -20f, 0f).absolutePath)
+        val right = inspectModel(interlockingVolumeModel("timing-right", 0f, 20f).absolutePath)
+        val projectObject = ProjectObject(
+            id = "timing-object",
+            volumes = listOf(
+                ProjectVolume("timing-left", left, filamentSlot = 0),
+                ProjectVolume("timing-right", right, filamentSlot = 1),
+            ),
+        )
+        val primary = FilamentProfile.PLA.copy(idleTemperature = 135)
+        val secondary = FilamentProfile.PETG.copy(idleTemperature = 145)
+        val basePrinter = PrinterProfile.CUSTOM_CARTESIAN.copy(
+            extruderCount = 2,
+            machineStartGcode = "",
+            machineEndGcode = "",
+            changeFilamentGcode = "T[next_extruder]",
+            machineLoadFilamentTime = 0f,
+            machineUnloadFilamentTime = 0f,
+            machineToolChangeTime = 0f,
+            toolChangeTemperatureWait = true,
+        )
+        val baseOptions = SliceOptions()
+            .selectPrinter(basePrinter)
+            .selectFilament(primary)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                filamentSlots = listOf(primary, secondary),
+                wipeTowerEnabled = false,
+                multiMaterial = MultiMaterialSettings(
+                    oozePrevention = true,
+                    standbyTemperatureDelta = -5,
+                ),
+            )
+        val baseline = OnDeviceSlicer.slice(listOf(projectObject), baseOptions)
+        val timed = OnDeviceSlicer.slice(
+            listOf(projectObject),
+            baseOptions.copy(
+                printerProfile = basePrinter.copy(
+                    machineLoadFilamentTime = 100f,
+                    machineUnloadFilamentTime = 110f,
+                    machineToolChangeTime = 120f,
+                ),
+            ),
+        )
+        val nonBlocking = OnDeviceSlicer.slice(
+            listOf(projectObject),
+            baseOptions.copy(
+                printerProfile = basePrinter.copy(toolChangeTemperatureWait = false),
+            ),
+        )
+        val timedGcode = timed.output.readText()
+        val nonBlockingGcode = nonBlocking.output.readText()
+        val idleCommand = Regex("""M104(?:\s+T1)?\s+S145|M104\s+S145\s+T1""")
+        val blockingReheat = Regex("""M109(?:\s+T1)?\s+S245|M109\s+S245\s+T1""")
+        val nonBlockingReheat = Regex("""M104(?:\s+T1)?\s+S245|M104\s+S245\s+T1""")
+
+        assertTrue("Both materials must participate in a real tool transition", timedGcode.lineSequence().any { it == "T1" })
+        assertTrue(timedGcode.contains("; machine_load_filament_time = 100"))
+        assertTrue(timedGcode.contains("; machine_unload_filament_time = 110"))
+        assertTrue(timedGcode.contains("; machine_tool_change_time = 120"))
+        assertTrue(timedGcode.contains("; idle_temperature = 135,145"))
+        assertTrue("The inactive second tool must receive its exact idle temperature", idleCommand.containsMatchIn(timedGcode))
+        assertTrue("Blocking policy must emit an M109 reheat for T1", blockingReheat.containsMatchIn(timedGcode))
+        assertTrue("Non-blocking policy must emit an M104 reheat for T1", nonBlockingReheat.containsMatchIn(nonBlockingGcode))
+        assertTrue(
+            "One real tool change must add the configured load, unload, and switch duration",
+            timed.estimatedSeconds - baseline.estimatedSeconds >= 300f,
+        )
     }
 
     @Test

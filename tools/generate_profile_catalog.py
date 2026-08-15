@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 73
+SCHEMA_VERSION = 74
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -323,6 +323,10 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "emitMachineLimitsToGcode": boolean(raw.get("emit_machine_limits_to_gcode"), True),
         "manualFilamentChange": boolean(raw.get("manual_filament_change")),
         "disableM73": boolean(raw.get("disable_m73")),
+        "machineLoadFilamentTime": number(raw.get("machine_load_filament_time"), 0),
+        "machineUnloadFilamentTime": number(raw.get("machine_unload_filament_time"), 0),
+        "machineToolChangeTime": number(raw.get("machine_tool_change_time"), 0),
+        "toolChangeTemperatureWait": boolean(raw.get("tool_change_temprature_wait"), True),
         "gcodeFlavor": flavor,
         "maxSpeedX": motion("machine_max_speed_x", 300),
         "maxSpeedY": motion("machine_max_speed_y", 300),
@@ -410,6 +414,9 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and 1 <= profile["travelSlope"] <= 90
         and profile["longRetractionWhenCutLevel"] in {0, 1, 2}
         and 10 <= profile["retractionDistanceWhenCut"] <= 18
+        and all(0 <= profile[key] <= 3_600 for key in [
+            "machineLoadFilamentTime", "machineUnloadFilamentTime", "machineToolChangeTime"
+        ])
         and 0.01 <= profile["minLayerHeight"] <= profile["maxLayerHeight"] <= 2
     ):
         raise ValueError("unsafe motion limits")
@@ -575,6 +582,7 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "nativeName": filament_type,
         "nozzleTemp": nozzle,
         "firstLayerNozzleTemp": first_nozzle,
+        "idleTemperature": integer(raw.get("idle_temperature"), 0),
         "bedTemp": bed,
         "firstLayerBedTemp": first_bed,
         "texturedPlateTemp": textured_bed,
@@ -725,6 +733,7 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and 0 <= profile["chamberTemperature"] <= 200
         and 0 <= profile["duringPrintExhaustFanSpeed"] <= 100
         and 0 <= profile["completePrintExhaustFanSpeed"] <= 100
+        and 0 <= profile["idleTemperature"] <= 500
         and 0 <= profile["fanCoolingLayerTime"] <= 1_000
         and profile["overhangFanThreshold"] in {"0%", "10%", "25%", "50%", "75%", "95%"}
         and -1 <= profile["internalBridgeFanSpeed"] <= 100
