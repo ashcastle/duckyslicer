@@ -121,7 +121,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(41, persisted.getInt("schemaVersion"))
+        assertEquals(42, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),
@@ -232,6 +232,13 @@ class ProjectStoreTest {
         assertEquals(false, restored.sliceOptions?.printerProfile?.emitMachineLimitsToGcode)
         assertEquals(true, restored.sliceOptions?.printerProfile?.manualFilamentChange)
         assertEquals(true, restored.sliceOptions?.printerProfile?.disableM73)
+        assertEquals(73.5f, restored.sliceOptions?.printerProfile?.coolingTubeRetraction)
+        assertEquals(11f, restored.sliceOptions?.printerProfile?.coolingTubeLength)
+        assertEquals(80f, restored.sliceOptions?.printerProfile?.parkingPosRetraction)
+        assertEquals(-3.5f, restored.sliceOptions?.printerProfile?.extraLoadingMove)
+        assertEquals(false, restored.sliceOptions?.printerProfile?.enableFilamentRamming)
+        assertEquals(false, restored.sliceOptions?.printerProfile?.purgeInPrimeTower)
+        assertEquals(true, restored.sliceOptions?.printerProfile?.highCurrentOnFilamentSwap)
         assertEquals(
             listOf(1.4f, 2.6f),
             restored.sliceOptions?.printerProfile?.toolChangeRetractLengths,

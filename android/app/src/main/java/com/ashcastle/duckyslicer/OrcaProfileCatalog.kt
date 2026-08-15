@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v68.bin"
+private const val CATALOG_ASSET = "profile_catalog_v69.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 68) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 69) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -68,6 +68,13 @@ class OrcaProfileCatalog(private val context: Context) {
         minLayerHeight = input.readFloat(),
         maxLayerHeight = input.readFloat(),
         singleExtruderMultiMaterial = input.readCatalogBoolean(),
+        coolingTubeRetraction = input.readFloat(),
+        coolingTubeLength = input.readFloat(),
+        parkingPosRetraction = input.readFloat(),
+        extraLoadingMove = input.readFloat(),
+        enableFilamentRamming = input.readCatalogBoolean(),
+        purgeInPrimeTower = input.readCatalogBoolean(),
+        highCurrentOnFilamentSwap = input.readCatalogBoolean(),
         extruderCount = input.readInt(),
         auxiliaryFan = input.readCatalogBoolean(),
         machineStartGcode = input.readCatalogString(),
@@ -261,6 +268,13 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("minLayerHeight", BINARY_FLOAT),
     BinaryField("maxLayerHeight", BINARY_FLOAT),
     BinaryField("singleExtruderMultiMaterial", BINARY_BOOL),
+    BinaryField("coolingTubeRetraction", BINARY_FLOAT),
+    BinaryField("coolingTubeLength", BINARY_FLOAT),
+    BinaryField("parkingPosRetraction", BINARY_FLOAT),
+    BinaryField("extraLoadingMove", BINARY_FLOAT),
+    BinaryField("enableFilamentRamming", BINARY_BOOL),
+    BinaryField("purgeInPrimeTower", BINARY_BOOL),
+    BinaryField("highCurrentOnFilamentSwap", BINARY_BOOL),
     BinaryField("extruderCount", BINARY_INT),
     BinaryField("auxiliaryFan", BINARY_BOOL),
     BinaryField("machineStartGcode", BINARY_STRING),

@@ -261,6 +261,12 @@ data class SliceConfig(
     @JvmField var emitMachineLimitsToGcode: Boolean = true
     @JvmField var manualFilamentChange: Boolean = false
     @JvmField var disableM73: Boolean = false
+    @JvmField var coolingTubeRetraction: Float = 91.5f
+    @JvmField var coolingTubeLength: Float = 5f
+    @JvmField var parkingPosRetraction: Float = 92f
+    @JvmField var extraLoadingMove: Float = -2f
+    @JvmField var enableFilamentRamming: Boolean = true
+    @JvmField var highCurrentOnFilamentSwap: Boolean = false
     @JvmField var auxiliaryFan: Boolean = false
     @JvmField var filamentSoluble: IntArray = intArrayOf()
     @JvmField var filamentIsSupport: IntArray = intArrayOf()

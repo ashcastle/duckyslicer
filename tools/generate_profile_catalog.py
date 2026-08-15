@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 68
+SCHEMA_VERSION = 69
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -260,6 +260,13 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "minLayerHeight": min_layer_height,
         "maxLayerHeight": max_layer_height,
         "singleExtruderMultiMaterial": supports_multi_material,
+        "coolingTubeRetraction": number(raw.get("cooling_tube_retraction"), 91.5),
+        "coolingTubeLength": number(raw.get("cooling_tube_length"), 5),
+        "parkingPosRetraction": number(raw.get("parking_pos_retraction"), 92),
+        "extraLoadingMove": number(raw.get("extra_loading_move"), -2),
+        "enableFilamentRamming": boolean(raw.get("enable_filament_ramming"), True),
+        "purgeInPrimeTower": boolean(raw.get("purge_in_prime_tower"), True),
+        "highCurrentOnFilamentSwap": boolean(raw.get("high_current_on_filament_swap")),
         "extruderCount": extruder_count,
         "auxiliaryFan": boolean(raw.get("auxiliary_fan")),
         "machineStartGcode": str(raw.get("machine_start_gcode", "")),

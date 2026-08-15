@@ -741,6 +741,13 @@
     <string name="use_relative_e_distances">Use relative E distances</string>
     <string name="emit_machine_limits_to_gcode">Emit limits to G-code</string>
     <string name="manual_filament_change">Manual filament change</string>
+    <string name="cooling_tube_position">Cooling tube position</string>
+    <string name="cooling_tube_length">Cooling tube length</string>
+    <string name="filament_parking_position">Filament parking position</string>
+    <string name="extra_loading_distance">Extra loading distance</string>
+    <string name="enable_filament_ramming">Enable filament ramming</string>
+    <string name="purge_in_prime_tower">Purge in prime tower</string>
+    <string name="high_current_on_filament_swap">High extruder current on filament swap</string>
     <string name="disable_m73">Disable remaining-time commands</string>
     <string name="filament_gcode">Filament G-code</string>
     <string name="filament_start_gcode">Filament start G-code</string>

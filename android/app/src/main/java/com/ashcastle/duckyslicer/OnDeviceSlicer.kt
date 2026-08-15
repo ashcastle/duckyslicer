@@ -164,6 +164,13 @@ data class PrinterProfile(
     val bedOriginY: Float = 0f,
     val bedPolygon: List<Float> = rectangularBedPolygon(bedSizeX, bedSizeY),
     val singleExtruderMultiMaterial: Boolean = false,
+    val coolingTubeRetraction: Float = 91.5f,
+    val coolingTubeLength: Float = 5f,
+    val parkingPosRetraction: Float = 92f,
+    val extraLoadingMove: Float = -2f,
+    val enableFilamentRamming: Boolean = true,
+    val purgeInPrimeTower: Boolean = true,
+    val highCurrentOnFilamentSwap: Boolean = false,
     val extruderCount: Int = 1,
     val auxiliaryFan: Boolean = false,
 ) {
@@ -2101,7 +2108,14 @@ data class SliceOptions(
             native.primeVolume = multiMaterial.primeVolume
             native.purgeVolumes = multiMaterial.resolvedPurgeVolumes(nativeFilaments.size).toFloatArray()
             native.singleExtruderMultiMaterial = printerProfile.singleExtruderMultiMaterial
+            native.coolingTubeRetraction = printerProfile.coolingTubeRetraction
+            native.coolingTubeLength = printerProfile.coolingTubeLength
+            native.parkingPosRetraction = printerProfile.parkingPosRetraction
+            native.extraLoadingMove = printerProfile.extraLoadingMove
+            native.enableFilamentRamming = printerProfile.enableFilamentRamming
+            native.highCurrentOnFilamentSwap = printerProfile.highCurrentOnFilamentSwap
             native.purgeInPrimeTower = printerProfile.singleExtruderMultiMaterial &&
+                printerProfile.purgeInPrimeTower &&
                 multiMaterial.purgeVolumes.isNotEmpty()
             native.primeTowerBrimWidth = multiMaterial.primeTowerBrimWidth
             native.wipeTowerNoSparseLayers = multiMaterial.wipeTowerNoSparseLayers

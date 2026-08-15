@@ -34,6 +34,13 @@ class ProfileBundleTest {
                         emitMachineLimitsToGcode = false,
                         manualFilamentChange = true,
                         disableM73 = true,
+                        coolingTubeRetraction = 73.5f,
+                        coolingTubeLength = 11f,
+                        parkingPosRetraction = 80f,
+                        extraLoadingMove = -3.5f,
+                        enableFilamentRamming = false,
+                        purgeInPrimeTower = false,
+                        highCurrentOnFilamentSwap = true,
                         toolChangeRetractLengths = listOf(1.2f, 2.3f),
                         toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
                     ),
@@ -106,6 +113,10 @@ class ProfileBundleTest {
                         it.printingByObjectGcode == "; BUNDLE_BETWEEN_OBJECTS" &&
                         !it.useRelativeEDistances && !it.emitMachineLimitsToGcode &&
                         it.manualFilamentChange && it.disableM73 &&
+                        it.coolingTubeRetraction == 73.5f && it.coolingTubeLength == 11f &&
+                        it.parkingPosRetraction == 80f && it.extraLoadingMove == -3.5f &&
+                        !it.enableFilamentRamming && !it.purgeInPrimeTower &&
+                        it.highCurrentOnFilamentSwap &&
                         it.toolChangeRetractLengths == listOf(1.2f, 2.3f) &&
                         it.toolChangeRetractRestartExtras == listOf(-0.1f, 0.2f)
                 },

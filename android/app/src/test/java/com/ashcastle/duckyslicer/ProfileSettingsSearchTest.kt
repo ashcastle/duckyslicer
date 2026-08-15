@@ -19,6 +19,10 @@ class ProfileSettingsSearchTest {
         assertTrue(settingQueryMatches("relative E", "Use relative E distances"))
         assertTrue(settingQueryMatches("machine limits", "Emit machine limits to G-code"))
         assertTrue(settingQueryMatches("printing object", "Printing by object G-code"))
+        assertTrue(settingQueryMatches("cooling tube", "Cooling tube position"))
+        assertTrue(settingQueryMatches("parking", "Filament parking position"))
+        assertTrue(settingQueryMatches("ramming", "Enable filament ramming"))
+        assertTrue(settingQueryMatches("프라임", "프라임 타워에서 퍼지"))
         assertFalse(settingQueryMatches("Z distance", "0.20 mm Standard"))
     }
 

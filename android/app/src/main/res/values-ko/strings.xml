@@ -741,6 +741,13 @@
     <string name="use_relative_e_distances">상대 E 거리 사용</string>
     <string name="emit_machine_limits_to_gcode">기계 한계를 G-code에 출력</string>
     <string name="manual_filament_change">수동 필라멘트 교체</string>
+    <string name="cooling_tube_position">냉각 튜브 위치</string>
+    <string name="cooling_tube_length">냉각 튜브 길이</string>
+    <string name="filament_parking_position">필라멘트 주차 위치</string>
+    <string name="extra_loading_distance">추가 로딩 거리</string>
+    <string name="enable_filament_ramming">필라멘트 램밍 사용</string>
+    <string name="purge_in_prime_tower">프라임 타워에서 퍼지</string>
+    <string name="high_current_on_filament_swap">필라멘트 교체 시 압출기 고전류</string>
     <string name="disable_m73">남은 시간 명령 비활성화</string>
     <string name="filament_gcode">필라멘트 G-code</string>
     <string name="filament_start_gcode">필라멘트 시작 G-code</string>

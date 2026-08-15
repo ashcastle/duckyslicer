@@ -1798,6 +1798,13 @@ class NativeEngineInstrumentedTest {
                     emitMachineLimitsToGcode = false,
                     manualFilamentChange = true,
                     disableM73 = true,
+                    coolingTubeRetraction = 73.5f,
+                    coolingTubeLength = 11f,
+                    parkingPosRetraction = 80f,
+                    extraLoadingMove = -3.5f,
+                    enableFilamentRamming = false,
+                    purgeInPrimeTower = false,
+                    highCurrentOnFilamentSwap = true,
                 ),
             )
 
@@ -2083,6 +2090,13 @@ class NativeEngineInstrumentedTest {
         assertFalse(restored.printers.last().emitMachineLimitsToGcode)
         assertTrue(restored.printers.last().manualFilamentChange)
         assertTrue(restored.printers.last().disableM73)
+        assertEquals(73.5f, restored.printers.last().coolingTubeRetraction)
+        assertEquals(11f, restored.printers.last().coolingTubeLength)
+        assertEquals(80f, restored.printers.last().parkingPosRetraction)
+        assertEquals(-3.5f, restored.printers.last().extraLoadingMove)
+        assertFalse(restored.printers.last().enableFilamentRamming)
+        assertFalse(restored.printers.last().purgeInPrimeTower)
+        assertTrue(restored.printers.last().highCurrentOnFilamentSwap)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
         assertEquals(USER_PROFILE_SCHEMA_VERSION, JSONObject(file.readText()).getInt("schemaVersion"))
@@ -2117,7 +2131,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(68, catalog.schemaVersion)
+        assertEquals(69, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2148,6 +2162,24 @@ class NativeEngineInstrumentedTest {
             it.name == "RatRig V-Core 4 300 0.4 nozzle"
         }
         assertEquals(";BETWEEN_OBJECTS\nG92 E0", betweenObjects.printingByObjectGcode)
+        val semmExchange = catalog.printers.single {
+            it.name == "Artillery M1 Pro 0.4 nozzle"
+        }
+        assertEquals(91.5f, semmExchange.coolingTubeRetraction)
+        assertEquals(5f, semmExchange.coolingTubeLength)
+        assertEquals(92f, semmExchange.parkingPosRetraction)
+        assertEquals(-2f, semmExchange.extraLoadingMove)
+        assertTrue(semmExchange.enableFilamentRamming)
+        assertTrue(semmExchange.purgeInPrimeTower)
+        assertFalse(semmExchange.highCurrentOnFilamentSwap)
+        val highCurrentExchange = catalog.printers.single {
+            it.name == "Co Print ChromaSet 0.4 nozzle"
+        }
+        assertEquals(0f, highCurrentExchange.coolingTubeRetraction)
+        assertEquals(0f, highCurrentExchange.coolingTubeLength)
+        assertEquals(25f, highCurrentExchange.parkingPosRetraction)
+        assertEquals(0f, highCurrentExchange.extraLoadingMove)
+        assertTrue(highCurrentExchange.highCurrentOnFilamentSwap)
         val divergentToolChange = catalog.printers.single { it.name == "iQ TiQ2 0.4 Nozzle" }
         assertEquals(listOf(10f, 12f), divergentToolChange.toolChangeRetractLengths)
         assertTrue(
@@ -2975,6 +3007,82 @@ class NativeEngineInstrumentedTest {
             "Interlocking must change real extrusion geometry, not only profile metadata",
             baselinePreview.segments.contentEquals(interlockedPreview.segments),
         )
+    }
+
+    @Test
+    fun semmMachineExchangeSettingsControlRealWipeTowerGcode() {
+        val left = inspectModel(interlockingVolumeModel("semm-left", -20f, 0f).absolutePath)
+        val right = inspectModel(interlockingVolumeModel("semm-right", 0f, 20f).absolutePath)
+        val projectObject = ProjectObject(
+            id = "semm-exchange-object",
+            volumes = listOf(
+                ProjectVolume("semm-left", left, filamentSlot = 0),
+                ProjectVolume("semm-right", right, filamentSlot = 1),
+            ),
+        )
+        val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(
+            singleExtruderMultiMaterial = true,
+            extruderCount = 2,
+            machineStartGcode = "",
+            machineEndGcode = "",
+            changeFilamentGcode = "T[next_extruder]",
+            coolingTubeRetraction = 73.5f,
+            coolingTubeLength = 11f,
+            parkingPosRetraction = 80f,
+            extraLoadingMove = -3.5f,
+            enableFilamentRamming = true,
+            purgeInPrimeTower = true,
+            highCurrentOnFilamentSwap = true,
+        )
+        val primary = FilamentProfile.PLA
+        val secondary = FilamentProfile.PETG
+        val base = SliceOptions()
+            .selectPrinter(printer)
+            .selectFilament(primary)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                filamentSlots = listOf(primary, secondary),
+                wipeTowerEnabled = true,
+                multiMaterial = MultiMaterialSettings(
+                    purgeVolumes = listOf(0f, 140f, 140f, 0f),
+                ),
+            )
+        val enabled = OnDeviceSlicer.slice(listOf(projectObject), base).output.readText()
+        val disabled = OnDeviceSlicer.slice(
+            listOf(projectObject),
+            base.copy(
+                printerProfile = printer.copy(
+                    coolingTubeRetraction = 0f,
+                    coolingTubeLength = 0f,
+                    parkingPosRetraction = 25f,
+                    extraLoadingMove = 0f,
+                    enableFilamentRamming = false,
+                    purgeInPrimeTower = false,
+                    highCurrentOnFilamentSwap = false,
+                ),
+            ),
+        ).output.readText()
+
+        assertTrue(enabled.contains("; cooling_tube_retraction = 73.5"))
+        assertTrue(enabled.contains("; cooling_tube_length = 11"))
+        assertTrue(enabled.contains("; parking_pos_retraction = 80"))
+        assertTrue(enabled.contains("; extra_loading_move = -3.5"))
+        assertTrue(enabled.contains("; enable_filament_ramming = 1"))
+        assertTrue(enabled.contains("; purge_in_prime_tower = 1"))
+        assertTrue(enabled.contains("; high_current_on_filament_swap = 1"))
+        assertTrue("High-current SEMM ramming must emit Orca's current increase", enabled.contains("M907 E750"))
+        assertTrue("High-current SEMM ramming must restore the current", enabled.contains("M907 E550"))
+        assertTrue("The enabled SEMM path must execute a real tool transition", enabled.lineSequence().any { it == "T1" })
+
+        assertTrue(disabled.contains("; cooling_tube_retraction = 0"))
+        assertTrue(disabled.contains("; cooling_tube_length = 0"))
+        assertTrue(disabled.contains("; parking_pos_retraction = 25"))
+        assertTrue(disabled.contains("; extra_loading_move = 0"))
+        assertTrue(disabled.contains("; enable_filament_ramming = 0"))
+        assertTrue(disabled.contains("; purge_in_prime_tower = 0"))
+        assertTrue(disabled.contains("; high_current_on_filament_swap = 0"))
+        assertFalse(disabled.contains("M907 E750"))
+        assertNotEquals("SEMM exchange settings must change real output", enabled, disabled)
     }
 
     @Test

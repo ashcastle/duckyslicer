@@ -555,6 +555,13 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "emit_machine_limits_to_gcode": "0",
                 "manual_filament_change": "1",
                 "disable_m73": "1",
+                "cooling_tube_retraction": "73.5",
+                "cooling_tube_length": "11",
+                "parking_pos_retraction": "80",
+                "extra_loading_move": "-3.5",
+                "enable_filament_ramming": "0",
+                "purge_in_prime_tower": "0",
+                "high_current_on_filament_swap": "1",
             },
         )
         inherited = build_filament(
@@ -613,6 +620,13 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertFalse(printer["emitMachineLimitsToGcode"])
         self.assertTrue(printer["manualFilamentChange"])
         self.assertTrue(printer["disableM73"])
+        self.assertEqual(73.5, printer["coolingTubeRetraction"])
+        self.assertEqual(11.0, printer["coolingTubeLength"])
+        self.assertEqual(80.0, printer["parkingPosRetraction"])
+        self.assertEqual(-3.5, printer["extraLoadingMove"])
+        self.assertFalse(printer["enableFilamentRamming"])
+        self.assertFalse(printer["purgeInPrimeTower"])
+        self.assertTrue(printer["highCurrentOnFilamentSwap"])
         self.assertIsNone(inherited["retractLength"])
         self.assertIsNone(inherited["zHopType"])
         self.assertEqual(0.55, overridden["retractLength"])

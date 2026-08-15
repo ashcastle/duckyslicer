@@ -138,7 +138,7 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(39, manifest.getInt("schemaVersion"))
+            assertEquals(40, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(
@@ -287,6 +287,13 @@ class ProjectArchiveTest {
             assertEquals(false, imported.sliceOptions?.printerProfile?.emitMachineLimitsToGcode)
             assertEquals(true, imported.sliceOptions?.printerProfile?.manualFilamentChange)
             assertEquals(true, imported.sliceOptions?.printerProfile?.disableM73)
+            assertEquals(73.5f, imported.sliceOptions?.printerProfile?.coolingTubeRetraction)
+            assertEquals(11f, imported.sliceOptions?.printerProfile?.coolingTubeLength)
+            assertEquals(80f, imported.sliceOptions?.printerProfile?.parkingPosRetraction)
+            assertEquals(-3.5f, imported.sliceOptions?.printerProfile?.extraLoadingMove)
+            assertEquals(false, imported.sliceOptions?.printerProfile?.enableFilamentRamming)
+            assertEquals(false, imported.sliceOptions?.printerProfile?.purgeInPrimeTower)
+            assertEquals(true, imported.sliceOptions?.printerProfile?.highCurrentOnFilamentSwap)
             assertEquals(
                 listOf(1.4f, 2.6f),
                 imported.sliceOptions?.printerProfile?.toolChangeRetractLengths,

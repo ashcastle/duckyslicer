@@ -50,6 +50,10 @@ internal object ProfileValidation {
             profile.extruderClearanceRadius in 0.1f..1_000f &&
             profile.extruderClearanceHeightToRod in 0.1f..1_500f &&
             profile.extruderClearanceHeightToLid in 0.1f..1_500f &&
+            profile.coolingTubeRetraction in 0f..1_000f &&
+            profile.coolingTubeLength in 0f..1_000f &&
+            profile.parkingPosRetraction in 0f..1_000f &&
+            profile.extraLoadingMove in -1_000f..1_000f &&
             profile.machineStartGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
             profile.machineEndGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&
             profile.beforeLayerChangeGcode.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_TEMPLATE_LENGTH &&

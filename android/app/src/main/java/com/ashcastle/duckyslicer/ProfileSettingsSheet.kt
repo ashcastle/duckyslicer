@@ -508,6 +508,114 @@ private fun PrinterSettingsSheet(
             )
         },
     )
+    if (options.printerProfile.singleExtruderMultiMaterial || settingsQuery.isNotBlank()) {
+        SettingsGroupTitle(stringResource(R.string.filament_changes))
+        QuantizedSettingSlider(
+            label = stringResource(R.string.cooling_tube_position),
+            valueText = stringResource(
+                R.string.millimeters_value_precise,
+                options.printerProfile.coolingTubeRetraction,
+            ),
+            value = options.printerProfile.coolingTubeRetraction,
+            minimum = 0f,
+            defaultMaximum = max(200f, options.printerProfile.coolingTubeRetraction),
+            increment = 0.5f,
+            onValueChange = {
+                onOptionsChanged(
+                    options.copy(
+                        printerProfile = options.printerProfile.copy(coolingTubeRetraction = it),
+                    ),
+                )
+            },
+        )
+        QuantizedSettingSlider(
+            label = stringResource(R.string.cooling_tube_length),
+            valueText = stringResource(
+                R.string.millimeters_value_precise,
+                options.printerProfile.coolingTubeLength,
+            ),
+            value = options.printerProfile.coolingTubeLength,
+            minimum = 0f,
+            defaultMaximum = max(100f, options.printerProfile.coolingTubeLength),
+            increment = 0.5f,
+            onValueChange = {
+                onOptionsChanged(
+                    options.copy(
+                        printerProfile = options.printerProfile.copy(coolingTubeLength = it),
+                    ),
+                )
+            },
+        )
+        QuantizedSettingSlider(
+            label = stringResource(R.string.filament_parking_position),
+            valueText = stringResource(
+                R.string.millimeters_value_precise,
+                options.printerProfile.parkingPosRetraction,
+            ),
+            value = options.printerProfile.parkingPosRetraction,
+            minimum = 0f,
+            defaultMaximum = max(200f, options.printerProfile.parkingPosRetraction),
+            increment = 0.5f,
+            onValueChange = {
+                onOptionsChanged(
+                    options.copy(
+                        printerProfile = options.printerProfile.copy(parkingPosRetraction = it),
+                    ),
+                )
+            },
+        )
+        QuantizedSettingSlider(
+            label = stringResource(R.string.extra_loading_distance),
+            valueText = stringResource(
+                R.string.millimeters_value_precise,
+                options.printerProfile.extraLoadingMove,
+            ),
+            value = options.printerProfile.extraLoadingMove,
+            minimum = min(-100f, options.printerProfile.extraLoadingMove),
+            defaultMaximum = max(100f, options.printerProfile.extraLoadingMove),
+            increment = 0.5f,
+            onValueChange = {
+                onOptionsChanged(
+                    options.copy(
+                        printerProfile = options.printerProfile.copy(extraLoadingMove = it),
+                    ),
+                )
+            },
+        )
+        SettingsSwitch(
+            label = stringResource(R.string.enable_filament_ramming),
+            checked = options.printerProfile.enableFilamentRamming,
+            onCheckedChange = {
+                onOptionsChanged(
+                    options.copy(
+                        printerProfile = options.printerProfile.copy(enableFilamentRamming = it),
+                    ),
+                )
+            },
+        )
+        SettingsSwitch(
+            label = stringResource(R.string.purge_in_prime_tower),
+            checked = options.printerProfile.purgeInPrimeTower,
+            onCheckedChange = {
+                onOptionsChanged(
+                    options.copy(
+                        printerProfile = options.printerProfile.copy(purgeInPrimeTower = it),
+                    ),
+                )
+            },
+        )
+        SettingsSwitch(
+            label = stringResource(R.string.high_current_on_filament_swap),
+            checked = options.printerProfile.highCurrentOnFilamentSwap,
+            onCheckedChange = {
+                onOptionsChanged(
+                    options.copy(
+                        printerProfile = options.printerProfile.copy(highCurrentOnFilamentSwap = it),
+                    ),
+                )
+            },
+        )
+    }
     SettingsSwitch(
         label = stringResource(R.string.auxiliary_part_cooling_fan),
         checked = options.printerProfile.auxiliaryFan,

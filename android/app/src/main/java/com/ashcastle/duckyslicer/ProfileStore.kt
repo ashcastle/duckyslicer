@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 69
+internal const val USER_PROFILE_SCHEMA_VERSION = 70
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -102,6 +102,13 @@ class ProfileStore private constructor(
             extruderClearanceHeightToRod = options.extruderClearanceHeightToRod,
             extruderClearanceHeightToLid = options.extruderClearanceHeightToLid,
             singleExtruderMultiMaterial = options.printerProfile.singleExtruderMultiMaterial,
+            coolingTubeRetraction = options.printerProfile.coolingTubeRetraction,
+            coolingTubeLength = options.printerProfile.coolingTubeLength,
+            parkingPosRetraction = options.printerProfile.parkingPosRetraction,
+            extraLoadingMove = options.printerProfile.extraLoadingMove,
+            enableFilamentRamming = options.printerProfile.enableFilamentRamming,
+            purgeInPrimeTower = options.printerProfile.purgeInPrimeTower,
+            highCurrentOnFilamentSwap = options.printerProfile.highCurrentOnFilamentSwap,
             extruderCount = options.printerProfile.extruderCount,
             auxiliaryFan = options.printerProfile.auxiliaryFan,
         )
@@ -571,6 +578,13 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("extruderClearanceHeightToRod", extruderClearanceHeightToRod)
     .put("extruderClearanceHeightToLid", extruderClearanceHeightToLid)
     .put("singleExtruderMultiMaterial", singleExtruderMultiMaterial)
+    .put("coolingTubeRetraction", coolingTubeRetraction)
+    .put("coolingTubeLength", coolingTubeLength)
+    .put("parkingPosRetraction", parkingPosRetraction)
+    .put("extraLoadingMove", extraLoadingMove)
+    .put("enableFilamentRamming", enableFilamentRamming)
+    .put("purgeInPrimeTower", purgeInPrimeTower)
+    .put("highCurrentOnFilamentSwap", highCurrentOnFilamentSwap)
     .put("extruderCount", extruderCount)
     .put("auxiliaryFan", auxiliaryFan)
     .put("builtIn", builtIn)
@@ -1012,6 +1026,13 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
             rectangularBedPolygon(bedSizeX, bedSizeY)
         },
         singleExtruderMultiMaterial = optBoolean("singleExtruderMultiMaterial"),
+        coolingTubeRetraction = optDouble("coolingTubeRetraction", 91.5).toFloat(),
+        coolingTubeLength = optDouble("coolingTubeLength", 5.0).toFloat(),
+        parkingPosRetraction = optDouble("parkingPosRetraction", 92.0).toFloat(),
+        extraLoadingMove = optDouble("extraLoadingMove", -2.0).toFloat(),
+        enableFilamentRamming = optBoolean("enableFilamentRamming", true),
+        purgeInPrimeTower = optBoolean("purgeInPrimeTower", true),
+        highCurrentOnFilamentSwap = optBoolean("highCurrentOnFilamentSwap"),
         extruderCount = extruderCount,
         auxiliaryFan = optBoolean("auxiliaryFan", false),
     )

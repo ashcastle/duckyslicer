@@ -75,6 +75,13 @@ class SliceOptionsPersistenceTest {
                     emitMachineLimitsToGcode = false,
                     manualFilamentChange = true,
                     disableM73 = true,
+                    coolingTubeRetraction = 73.5f,
+                    coolingTubeLength = 11f,
+                    parkingPosRetraction = 80f,
+                    extraLoadingMove = -3.5f,
+                    enableFilamentRamming = false,
+                    purgeInPrimeTower = false,
+                    highCurrentOnFilamentSwap = true,
                     toolChangeRetractLengths = listOf(1.2f, 2.3f),
                     toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
                 ),
@@ -174,6 +181,13 @@ class SliceOptionsPersistenceTest {
         assertFalse(native.emitMachineLimitsToGcode)
         assertTrue(native.manualFilamentChange)
         assertTrue(native.disableM73)
+        assertEquals(73.5f, native.coolingTubeRetraction)
+        assertEquals(11f, native.coolingTubeLength)
+        assertEquals(80f, native.parkingPosRetraction)
+        assertEquals(-3.5f, native.extraLoadingMove)
+        assertFalse(native.enableFilamentRamming)
+        assertFalse(native.purgeInPrimeTower)
+        assertTrue(native.highCurrentOnFilamentSwap)
         assertArrayEquals(floatArrayOf(1.2f, 2.3f), native.toolChangeRetractLengths, 0.001f)
         assertArrayEquals(floatArrayOf(-0.1f, 0.2f), native.toolChangeRetractRestartExtras, 0.001f)
         assertEquals(2.85f, restored.filamentDiameter)
@@ -733,6 +747,13 @@ class SliceOptionsPersistenceTest {
             getJSONObject("printer").remove("emitMachineLimitsToGcode")
             getJSONObject("printer").remove("manualFilamentChange")
             getJSONObject("printer").remove("disableM73")
+            getJSONObject("printer").remove("coolingTubeRetraction")
+            getJSONObject("printer").remove("coolingTubeLength")
+            getJSONObject("printer").remove("parkingPosRetraction")
+            getJSONObject("printer").remove("extraLoadingMove")
+            getJSONObject("printer").remove("enableFilamentRamming")
+            getJSONObject("printer").remove("purgeInPrimeTower")
+            getJSONObject("printer").remove("highCurrentOnFilamentSwap")
             getJSONObject("printer").remove("toolChangeRetractLengths")
             getJSONObject("printer").remove("toolChangeRetractRestartExtras")
             getJSONArray("filamentSlots").getJSONObject(0).remove("diameter")
@@ -837,6 +858,13 @@ class SliceOptionsPersistenceTest {
         assertTrue(restored.printerProfile.emitMachineLimitsToGcode)
         assertFalse(restored.printerProfile.manualFilamentChange)
         assertFalse(restored.printerProfile.disableM73)
+        assertEquals(91.5f, restored.printerProfile.coolingTubeRetraction)
+        assertEquals(5f, restored.printerProfile.coolingTubeLength)
+        assertEquals(92f, restored.printerProfile.parkingPosRetraction)
+        assertEquals(-2f, restored.printerProfile.extraLoadingMove)
+        assertTrue(restored.printerProfile.enableFilamentRamming)
+        assertTrue(restored.printerProfile.purgeInPrimeTower)
+        assertFalse(restored.printerProfile.highCurrentOnFilamentSwap)
         assertEquals(listOf(0.8f), restored.printerProfile.toolChangeRetractLengths)
         assertEquals(listOf(0f), restored.printerProfile.toolChangeRetractRestartExtras)
         assertEquals(2.85f, restored.toNativeConfig().filamentDiameter)
@@ -999,6 +1027,13 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             emitMachineLimitsToGcode = false,
             manualFilamentChange = true,
             disableM73 = true,
+            coolingTubeRetraction = 73.5f,
+            coolingTubeLength = 11f,
+            parkingPosRetraction = 80f,
+            extraLoadingMove = -3.5f,
+            enableFilamentRamming = false,
+            purgeInPrimeTower = false,
+            highCurrentOnFilamentSwap = true,
             toolChangeRetractLengths = listOf(1.4f, 2.6f),
             toolChangeRetractRestartExtras = listOf(-0.2f, 0.3f),
         ),
