@@ -931,6 +931,44 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(16, profile["extruderCount"])
         self.assertFalse(profile["auxiliaryFan"])
 
+    def test_preserves_explicit_dual_tool_capacity_with_inherited_semm_flag(self) -> None:
+        profile = build_printer(
+            "Example",
+            {
+                "name": "Explicit dual tool printer",
+                "printable_area": ["0x0", "200x0", "200x200", "0x200"],
+                "printable_height": "220",
+                "nozzle_diameter": ["0.4", "0.4"],
+                "single_extruder_multi_material": "1",
+                "gcode_flavor": "marlin",
+            },
+        )
+
+        self.assertTrue(profile["singleExtruderMultiMaterial"])
+        self.assertEqual(2, profile["extruderCount"])
+
+    def test_normalizes_legacy_toolchange_gcode_without_overriding_modern_template(self) -> None:
+        base = {
+            "name": "Legacy tool-change printer",
+            "printable_area": ["0x0", "200x0", "200x200", "0x200"],
+            "printable_height": "220",
+            "nozzle_diameter": ["0.4", "0.4"],
+            "gcode_flavor": "marlin",
+            "toolchange_gcode": "; LEGACY_TOOL_CHANGE",
+        }
+
+        inherited = build_printer(
+            "Example",
+            base | {"change_filament_gcode": ""},
+        )
+        modern = build_printer(
+            "Example",
+            base | {"change_filament_gcode": "; MODERN_TOOL_CHANGE"},
+        )
+
+        self.assertEqual("; LEGACY_TOOL_CHANGE", inherited["changeFilamentGcode"])
+        self.assertEqual("; MODERN_TOOL_CHANGE", modern["changeFilamentGcode"])
+
     def test_preserves_all_orca_build_plate_temperatures(self) -> None:
         profile = build_filament(
             "Example",

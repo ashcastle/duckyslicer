@@ -1299,7 +1299,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 93,
+    val schemaVersion: Int = 94,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )

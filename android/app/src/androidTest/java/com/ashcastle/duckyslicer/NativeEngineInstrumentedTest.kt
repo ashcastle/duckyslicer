@@ -2513,7 +2513,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(93, catalog.schemaVersion)
+        assertEquals(94, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2604,6 +2604,17 @@ class NativeEngineInstrumentedTest {
         assertEquals(
             dual.defaultFilamentProfiles,
             dualDefaults.resolvedFilamentSlots().map(FilamentProfile::name),
+        )
+        val raise3dDual = catalog.printers.single {
+            it.name == "Raise3D Pro3 0.4 nozzle (Dual)"
+        }
+        assertEquals(2, raise3dDual.extruderCount)
+        assertTrue(raise3dDual.singleExtruderMultiMaterial)
+        assertTrue(raise3dDual.changeFilamentGcode.contains("; layer [layer_num] tool change"))
+        assertTrue(
+            raise3dDual.changeFilamentGcode.contains(
+                "M109 T[next_extruder] S{nozzle_temperature[next_extruder]}",
+            ),
         )
         assertEquals(
             "TIMELAPSE_TAKE_FRAME",
@@ -4065,6 +4076,55 @@ class NativeEngineInstrumentedTest {
         assertTrue("Bundled P1P layer G-code must execute", output.contains("M73 L1"))
         assertTrue("Bundled P1P tool-change G-code must execute", output.contains("M620 S1A"))
         assertTrue("The real bundled template must still select tool 1", output.lineSequence().any { it == "T1" })
+    }
+
+    @Test
+    fun bundledRaise3dLegacyToolchangeTemplateRunsThroughRealDualToolSlice() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val bundledPrinter = OrcaProfileCatalog(context).load().printers.single {
+            it.name == "Raise3D Pro3 0.4 nozzle (Dual)"
+        }
+        val printer = bundledPrinter.copy(machineStartGcode = "", machineEndGcode = "")
+        val left = inspectModel(interlockingVolumeModel("raise3d-left", -20f, 0f).absolutePath)
+        val right = inspectModel(interlockingVolumeModel("raise3d-right", 0f, 20f).absolutePath)
+        val projectObject = ProjectObject(
+            id = "raise3d-legacy-toolchange-object",
+            volumes = listOf(
+                ProjectVolume("raise3d-left", left, filamentSlot = 0),
+                ProjectVolume("raise3d-right", right, filamentSlot = 1),
+            ),
+        )
+        val options = SliceOptions()
+            .selectPrinter(printer)
+            .selectFilament(FilamentProfile.PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+                wipeTowerEnabled = false,
+            )
+
+        val output = OnDeviceSlicer.slice(listOf(projectObject), options).output.readText()
+        val executableLines = output.lineSequence().map(String::trim).toList()
+        val resolvedMarker = Regex("""; layer \d+ tool change""")
+        val resolvedMarkerIndex = executableLines.indexOfFirst(resolvedMarker::matches)
+
+        assertEquals(2, printer.extruderCount)
+        assertTrue(
+            "The legacy template marker must be resolved and executed",
+            resolvedMarkerIndex >= 0,
+        )
+        assertTrue(
+            "The outgoing tool must receive a resolved standby temperature",
+            executableLines.any { Regex("""M104 T[01] S\d+""").matches(it) },
+        )
+        assertTrue(
+            "The incoming tool must receive a resolved blocking temperature",
+            executableLines.any { Regex("""M109 T[01] S\d+""").matches(it) },
+        )
+        assertTrue("The real bundled dual preset must select tool 1", executableLines.any { it == "T1" })
+        val resolvedBlock = executableLines.drop(resolvedMarkerIndex).take(5)
+        assertFalse(resolvedBlock.any { it.contains("[current_extruder]") })
+        assertFalse(resolvedBlock.any { it.contains("[next_extruder]") })
     }
 
     @Test

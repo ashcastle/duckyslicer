@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 93
+SCHEMA_VERSION = 94
 MAX_FILAMENT_SLOTS = 16
 DEFAULT_GCODE_FILENAME_FORMAT = (
     "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
@@ -51,6 +51,16 @@ def scalar(value: Any, default: Any = None) -> Any:
     if isinstance(value, list):
         return value[0] if value else default
     return default if value is None else value
+
+
+def first_non_blank(raw: dict[str, Any], names: list[str], default: str = "") -> str:
+    for name in names:
+        if name not in raw:
+            continue
+        candidate = str(raw[name])
+        if candidate.strip():
+            return candidate
+    return default
 
 
 def number(value: Any, default: float) -> float:
@@ -456,7 +466,11 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     supports_multi_material = str(
         scalar(raw.get("single_extruder_multi_material"), "0")
     ).lower() in {"1", "true"}
-    extruder_count = MAX_FILAMENT_SLOTS if supports_multi_material else physical_extruder_count
+    extruder_count = (
+        MAX_FILAMENT_SLOTS
+        if supports_multi_material and physical_extruder_count == 1
+        else physical_extruder_count
+    )
     flavor = str(scalar(raw.get("gcode_flavor"), "")).lower()
     if not (
         50 <= height <= 1_500 and
@@ -520,7 +534,10 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "timeLapseGcode": str(raw.get("time_lapse_gcode", "")),
         "beforeLayerChangeGcode": str(raw.get("before_layer_change_gcode", "")),
         "layerChangeGcode": str(raw.get("layer_change_gcode", "")),
-        "changeFilamentGcode": str(raw.get("change_filament_gcode", "")),
+        "changeFilamentGcode": first_non_blank(
+            raw,
+            ["change_filament_gcode", "toolchange_gcode"],
+        ),
         "printingByObjectGcode": str(raw.get("printing_by_object_gcode", "")),
         "useRelativeEDistances": boolean(raw.get("use_relative_e_distances"), True),
         "emitMachineLimitsToGcode": boolean(raw.get("emit_machine_limits_to_gcode"), True),
