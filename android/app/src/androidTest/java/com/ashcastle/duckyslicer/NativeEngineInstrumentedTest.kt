@@ -2098,7 +2098,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(65, catalog.schemaVersion)
+        assertEquals(66, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2109,6 +2109,9 @@ class NativeEngineInstrumentedTest {
         assertEquals(0.32f, generatedU1.maxLayerHeight)
         assertEquals(listOf(10f, 10f, 10f, 10f), generatedU1.toolChangeRetractLengths)
         assertEquals(listOf(0f, 0f, 0f, 0f), generatedU1.toolChangeRetractRestartExtras)
+        val inheritedOffset = catalog.printers.single { it.name == "Bambu Lab P1P 0.4 nozzle" }
+        assertEquals(listOf(0f), inheritedOffset.extruderOffsetsX)
+        assertEquals(listOf(2f), inheritedOffset.extruderOffsetsY)
         val divergentToolChange = catalog.printers.single { it.name == "iQ TiQ2 0.4 Nozzle" }
         assertEquals(listOf(10f, 12f), divergentToolChange.toolChangeRetractLengths)
         assertTrue(
@@ -2865,9 +2868,19 @@ class NativeEngineInstrumentedTest {
                 ),
             ),
         )
+        val offset = OnDeviceSlicer.slice(
+            listOf(projectObject),
+            baselineOptions.copy(
+                printerProfile = baselineOptions.printerProfile.copy(
+                    extruderOffsetsX = listOf(0f, 12.5f),
+                    extruderOffsetsY = listOf(0f, -3.25f),
+                ),
+            ),
+        )
         val baselinePreview = loadGcodePreview(baseline.output.absolutePath, 0, Int.MAX_VALUE)
         val interlockedPreview = loadGcodePreview(interlocked.output.absolutePath, 0, Int.MAX_VALUE)
         val interlockedGcode = interlocked.output.readText()
+        val offsetGcode = offset.output.readText()
 
         assertTrue("Touching volumes must use both materials", interlockedGcode.lineSequence().any { it == "T1" })
         assertTrue(
@@ -2877,6 +2890,17 @@ class NativeEngineInstrumentedTest {
         assertTrue(
             "Per-tool restart extras must reach Orca",
             interlockedGcode.contains("; retract_restart_extra_toolchange = -0.1,0.2"),
+        )
+        assertTrue(
+            "Per-tool XY offsets must reach Orca",
+            offsetGcode.contains("; extruder_offset = 0x0,12.5x-3.25"),
+        )
+        val baselineToolMove = firstXyMoveAfterToolOne(baseline.output.readText())
+        val offsetToolMove = firstXyMoveAfterToolOne(offsetGcode)
+        assertTrue(
+            "A non-zero second-tool offset must change real G-code coordinates",
+            abs(baselineToolMove.first - offsetToolMove.first) > 1f ||
+                abs(baselineToolMove.second - offsetToolMove.second) > 1f,
         )
         assertTrue("Interlocking must be active in Orca", interlockedGcode.contains("; interlocking_beam = 1"))
         assertFalse(
@@ -5249,5 +5273,26 @@ class NativeEngineInstrumentedTest {
             }
         }
         return total
+    }
+
+    private fun firstXyMoveAfterToolOne(gcode: String): Pair<Float, Float> {
+        var afterToolOne = false
+        gcode.lineSequence().forEach { line ->
+            if (line == "T1") {
+                afterToolOne = true
+            } else if (afterToolOne && (line.startsWith("G0 ") || line.startsWith("G1 "))) {
+                val values = line.split(' ').mapNotNull { token ->
+                    when {
+                        token.startsWith("X") -> "X" to token.drop(1).toFloatOrNull()
+                        token.startsWith("Y") -> "Y" to token.drop(1).toFloatOrNull()
+                        else -> null
+                    }
+                }.filter { it.second != null }.associate { it.first to requireNotNull(it.second) }
+                if (values.containsKey("X") && values.containsKey("Y")) {
+                    return values.getValue("X") to values.getValue("Y")
+                }
+            }
+        }
+        error("No XY move found after T1")
     }
 }

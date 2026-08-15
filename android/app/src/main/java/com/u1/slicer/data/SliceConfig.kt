@@ -262,6 +262,8 @@ data class SliceConfig(
     @JvmField var filamentShrinkageCompensationZ: FloatArray = floatArrayOf()
     @JvmField var minimumLayerHeights: FloatArray = floatArrayOf()
     @JvmField var maximumLayerHeights: FloatArray = floatArrayOf()
+    @JvmField var extruderOffsetsX: FloatArray = floatArrayOf()
+    @JvmField var extruderOffsetsY: FloatArray = floatArrayOf()
     @JvmField var toolChangeRetractLengths: FloatArray = floatArrayOf()
     @JvmField var toolChangeRetractRestartExtras: FloatArray = floatArrayOf()
     @JvmField var filamentFanCoolingLayerTimes: FloatArray = floatArrayOf()

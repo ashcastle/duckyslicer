@@ -36,6 +36,11 @@ internal object ProfileValidation {
             profile.wipeDistance in 0f..100f &&
             profile.retractBeforeWipe in 0f..100f &&
             profile.retractRestartExtra in -100f..100f &&
+            profile.extruderOffsetsX.size in 1..MAX_FILAMENT_SLOTS &&
+            profile.extruderOffsetsX.all { it in -1_000f..1_000f } &&
+            profile.extruderOffsetsY.size in 1..MAX_FILAMENT_SLOTS &&
+            profile.extruderOffsetsX.size == profile.extruderOffsetsY.size &&
+            profile.extruderOffsetsY.all { it in -1_000f..1_000f } &&
             profile.toolChangeRetractLengths.size in 1..MAX_FILAMENT_SLOTS &&
             profile.toolChangeRetractLengths.all { it in 0f..100f } &&
             profile.toolChangeRetractRestartExtras.size in 1..MAX_FILAMENT_SLOTS &&

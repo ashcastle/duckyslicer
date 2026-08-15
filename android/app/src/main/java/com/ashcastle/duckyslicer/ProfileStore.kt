@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 66
+internal const val USER_PROFILE_SCHEMA_VERSION = 67
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -84,6 +84,8 @@ class ProfileStore private constructor(
             wipeDistance = options.printerProfile.wipeDistance,
             retractBeforeWipe = options.printerProfile.retractBeforeWipe,
             retractRestartExtra = options.printerProfile.retractRestartExtra,
+            extruderOffsetsX = options.printerProfile.extruderOffsetsX,
+            extruderOffsetsY = options.printerProfile.extruderOffsetsY,
             toolChangeRetractLengths = options.printerProfile.toolChangeRetractLengths,
             toolChangeRetractRestartExtras = options.printerProfile.toolChangeRetractRestartExtras,
             zHop = options.printerProfile.zHop,
@@ -544,6 +546,8 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("retractWhenChangingLayer", retractWhenChangingLayer)
     .put("wipeWhileRetracting", wipeWhileRetracting).put("wipeDistance", wipeDistance)
     .put("retractBeforeWipe", retractBeforeWipe).put("retractRestartExtra", retractRestartExtra)
+    .put("extruderOffsetsX", JSONArray(extruderOffsetsX))
+    .put("extruderOffsetsY", JSONArray(extruderOffsetsY))
     .put("toolChangeRetractLengths", JSONArray(toolChangeRetractLengths))
     .put("toolChangeRetractRestartExtras", JSONArray(toolChangeRetractRestartExtras))
     .put("zHop", zHop).put("zHopType", zHopType)
@@ -965,6 +969,8 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         wipeDistance = optDouble("wipeDistance", 1.0).toFloat(),
         retractBeforeWipe = optDouble("retractBeforeWipe", 100.0).toFloat(),
         retractRestartExtra = optDouble("retractRestartExtra", 0.0).toFloat(),
+        extruderOffsetsX = extruderFloatList("extruderOffsetsX") ?: listOf(0f),
+        extruderOffsetsY = extruderFloatList("extruderOffsetsY") ?: listOf(0f),
         toolChangeRetractLengths = extruderFloatList("toolChangeRetractLengths")
             ?: listOf(retractLength),
         toolChangeRetractRestartExtras = extruderFloatList("toolChangeRetractRestartExtras")

@@ -22,6 +22,8 @@ class ProfileStoreMigrationTest {
                 remove("auxiliaryFan")
                 remove("minLayerHeight")
                 remove("maxLayerHeight")
+                remove("extruderOffsetsX")
+                remove("extruderOffsetsY")
                 remove("toolChangeRetractLengths")
                 remove("toolChangeRetractRestartExtras")
             }
@@ -105,6 +107,8 @@ class ProfileStoreMigrationTest {
             assertFalse(restoredPrinter.auxiliaryFan)
             assertEquals(0.04f, restoredPrinter.minLayerHeight)
             assertEquals(0.28f, restoredPrinter.maxLayerHeight)
+            assertEquals(listOf(0f), restoredPrinter.extruderOffsetsX)
+            assertEquals(listOf(0f), restoredPrinter.extruderOffsetsY)
             assertEquals(listOf(0.8f), restoredPrinter.toolChangeRetractLengths)
             assertEquals(listOf(0f), restoredPrinter.toolChangeRetractRestartExtras)
             assertTrue(restoredFilament.compatiblePrinters.isEmpty())

@@ -433,6 +433,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "extruder_clearance_height_to_lid": "118",
                 "retract_length_toolchange": ["1.5", "2.5"],
                 "retract_restart_extra_toolchange": ["-0.1", "0.2"],
+                "extruder_offset": ["0x0", "12.5x-3.25"],
             },
         )
 
@@ -444,6 +445,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(profile["auxiliaryFan"])
         self.assertEqual(0.08, profile["minLayerHeight"])
         self.assertEqual(0.32, profile["maxLayerHeight"])
+        self.assertEqual([0.0, 12.5], profile["extruderOffsetsX"])
+        self.assertEqual([0.0, -3.25], profile["extruderOffsetsY"])
         self.assertEqual([1.5, 2.5], profile["toolChangeRetractLengths"])
         self.assertEqual([-0.1, 0.2], profile["toolChangeRetractRestartExtras"])
 

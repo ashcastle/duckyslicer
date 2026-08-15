@@ -351,6 +351,8 @@ private fun PrinterSettingsSheet(
         selectedExtruder = selectedExtruder.coerceIn(0, options.printerProfile.extruderCount - 1)
     }
     val activeExtruder = selectedExtruder.coerceIn(0, options.printerProfile.extruderCount - 1)
+    val extruderOffsetsX = options.printerProfile.resolvedExtruderOffsetsX()
+    val extruderOffsetsY = options.printerProfile.resolvedExtruderOffsetsY()
     val toolChangeRetractLengths = options.printerProfile.resolvedToolChangeRetractLengths()
     val toolChangeRetractRestartExtras =
         options.printerProfile.resolvedToolChangeRetractRestartExtras()
@@ -553,7 +555,7 @@ private fun PrinterSettingsSheet(
             )
         },
     )
-    SettingsGroupTitle(stringResource(R.string.tool_change_retraction))
+    SettingsGroupTitle(stringResource(R.string.extruder_offsets))
     if (options.printerProfile.extruderCount > 1) {
         SecondaryScrollableTabRow(selectedTabIndex = activeExtruder) {
             repeat(options.printerProfile.extruderCount) { index ->
@@ -565,6 +567,55 @@ private fun PrinterSettingsSheet(
             }
         }
     }
+    QuantizedSettingSlider(
+        label = stringResource(R.string.extruder_offset_x),
+        valueText = stringResource(
+            R.string.millimeters_value_precise,
+            extruderOffsetsX[activeExtruder],
+        ),
+        value = extruderOffsetsX[activeExtruder],
+        minimum = min(-100f, extruderOffsetsX[activeExtruder]),
+        defaultMaximum = max(100f, extruderOffsetsX[activeExtruder]),
+        increment = 0.1f,
+        onValueChange = {
+            val updated = extruderOffsetsX.toMutableList().apply {
+                this[activeExtruder] = it
+            }
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(
+                        extruderOffsetsX = updated,
+                        extruderOffsetsY = extruderOffsetsY,
+                    ),
+                ),
+            )
+        },
+    )
+    QuantizedSettingSlider(
+        label = stringResource(R.string.extruder_offset_y),
+        valueText = stringResource(
+            R.string.millimeters_value_precise,
+            extruderOffsetsY[activeExtruder],
+        ),
+        value = extruderOffsetsY[activeExtruder],
+        minimum = min(-100f, extruderOffsetsY[activeExtruder]),
+        defaultMaximum = max(100f, extruderOffsetsY[activeExtruder]),
+        increment = 0.1f,
+        onValueChange = {
+            val updated = extruderOffsetsY.toMutableList().apply {
+                this[activeExtruder] = it
+            }
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(
+                        extruderOffsetsX = extruderOffsetsX,
+                        extruderOffsetsY = updated,
+                    ),
+                ),
+            )
+        },
+    )
+    SettingsGroupTitle(stringResource(R.string.tool_change_retraction))
     QuantizedSettingSlider(
         label = stringResource(R.string.tool_change_retraction_length),
         valueText = stringResource(

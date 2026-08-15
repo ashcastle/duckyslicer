@@ -24,6 +24,8 @@ class ProfileBundleTest {
                         auxiliaryFan = true,
                         minLayerHeight = 0.09f,
                         maxLayerHeight = 0.31f,
+                        extruderOffsetsX = listOf(0f, 12.5f),
+                        extruderOffsetsY = listOf(0f, -3.25f),
                         toolChangeRetractLengths = listOf(1.2f, 2.3f),
                         toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
                     ),
@@ -88,6 +90,8 @@ class ProfileBundleTest {
                 catalog.printers.any {
                         it.name == "Portable printer" && !it.builtIn && it.auxiliaryFan &&
                         it.minLayerHeight == 0.09f && it.maxLayerHeight == 0.31f &&
+                        it.extruderOffsetsX == listOf(0f, 12.5f) &&
+                        it.extruderOffsetsY == listOf(0f, -3.25f) &&
                         it.toolChangeRetractLengths == listOf(1.2f, 2.3f) &&
                         it.toolChangeRetractRestartExtras == listOf(-0.1f, 0.2f)
                 },

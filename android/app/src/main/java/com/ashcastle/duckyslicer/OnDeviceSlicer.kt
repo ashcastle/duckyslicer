@@ -143,6 +143,8 @@ data class PrinterProfile(
     val wipeDistance: Float = 1f,
     val retractBeforeWipe: Float = 100f,
     val retractRestartExtra: Float = 0f,
+    val extruderOffsetsX: List<Float> = listOf(0f),
+    val extruderOffsetsY: List<Float> = listOf(0f),
     val toolChangeRetractLengths: List<Float> = listOf(retractLength),
     val toolChangeRetractRestartExtras: List<Float> = listOf(0f),
     val zHop: Float = 0.4f,
@@ -157,6 +159,12 @@ data class PrinterProfile(
     val extruderCount: Int = 1,
     val auxiliaryFan: Boolean = false,
 ) {
+    fun resolvedExtruderOffsetsX(count: Int = extruderCount): List<Float> =
+        extruderOffsetsX.resizedExtruderValues(count, 0f)
+
+    fun resolvedExtruderOffsetsY(count: Int = extruderCount): List<Float> =
+        extruderOffsetsY.resizedExtruderValues(count, 0f)
+
     fun resolvedToolChangeRetractLengths(count: Int = extruderCount): List<Float> =
         toolChangeRetractLengths.resizedExtruderValues(count, retractLength)
 
@@ -1952,6 +1960,12 @@ data class SliceOptions(
             native.maximumLayerHeights = FloatArray(nativeFilaments.size) {
                 printerProfile.maxLayerHeight
             }
+            native.extruderOffsetsX = printerProfile
+                .resolvedExtruderOffsetsX(nativeFilaments.size)
+                .toFloatArray()
+            native.extruderOffsetsY = printerProfile
+                .resolvedExtruderOffsetsY(nativeFilaments.size)
+                .toFloatArray()
             native.toolChangeRetractLengths = printerProfile
                 .resolvedToolChangeRetractLengths(nativeFilaments.size)
                 .toFloatArray()

@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v65.bin"
+private const val CATALOG_ASSET = "profile_catalog_v66.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 65) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 66) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -97,6 +97,8 @@ class OrcaProfileCatalog(private val context: Context) {
         wipeDistance = input.readFloat(),
         retractBeforeWipe = input.readFloat(),
         retractRestartExtra = input.readFloat(),
+        extruderOffsetsX = input.readCatalogFloatList(),
+        extruderOffsetsY = input.readCatalogFloatList(),
         toolChangeRetractLengths = input.readCatalogFloatList(),
         toolChangeRetractRestartExtras = input.readCatalogFloatList(),
         zHop = input.readFloat(),
@@ -280,6 +282,8 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("wipeDistance", BINARY_FLOAT),
     BinaryField("retractBeforeWipe", BINARY_FLOAT),
     BinaryField("retractRestartExtra", BINARY_FLOAT),
+    BinaryField("extruderOffsetsX", BINARY_FLOAT_LIST),
+    BinaryField("extruderOffsetsY", BINARY_FLOAT_LIST),
     BinaryField("toolChangeRetractLengths", BINARY_FLOAT_LIST),
     BinaryField("toolChangeRetractRestartExtras", BINARY_FLOAT_LIST),
     BinaryField("zHop", BINARY_FLOAT),

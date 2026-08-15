@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 65
+SCHEMA_VERSION = 66
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -110,6 +110,23 @@ def values(value: Any) -> list[str]:
 def number_values(value: Any, default: float) -> list[float]:
     candidates = values(value)
     return [number(candidate, default) for candidate in candidates] if candidates else [default]
+
+
+def point_values(value: Any) -> tuple[list[float], list[float]]:
+    """Parse Orca's ConfigOptionPoints JSON representation into parallel XY arrays."""
+    points: list[tuple[float, float]] = []
+    for candidate in values(value) or ["0x0"]:
+        # Orca accepts comma-separated points inside one vector value and uses `x`
+        # between the two coordinates. A missing second coordinate resolves to zero.
+        for point_text in candidate.split(","):
+            coordinates = point_text.strip().lower().split("x", 1)
+            points.append(
+                (
+                    number(coordinates[0], 0),
+                    number(coordinates[1], 0) if len(coordinates) == 2 else 0,
+                )
+            )
+    return [point[0] for point in points], [point[1] for point in points]
 
 
 def stable_id(kind: str, brand: str, name: str) -> str:
@@ -209,6 +226,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     tool_change_retract_restart_extras = number_values(
         raw.get("retract_restart_extra_toolchange"), 0
     )
+    extruder_offsets_x, extruder_offsets_y = point_values(raw.get("extruder_offset"))
     physical_extruder_count = len(values(raw.get("nozzle_diameter")))
     supports_multi_material = str(
         scalar(raw.get("single_extruder_multi_material"), "0")
@@ -271,6 +289,8 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "wipeDistance": number(raw.get("wipe_distance"), 1),
         "retractBeforeWipe": number(raw.get("retract_before_wipe"), 100),
         "retractRestartExtra": number(raw.get("retract_restart_extra"), 0),
+        "extruderOffsetsX": extruder_offsets_x,
+        "extruderOffsetsY": extruder_offsets_y,
         "toolChangeRetractLengths": tool_change_retract_lengths,
         "toolChangeRetractRestartExtras": tool_change_retract_restart_extras,
         "zHop": number(raw.get("z_hop"), 0.4),
@@ -303,6 +323,10 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and 0 <= profile["wipeDistance"] <= 100
         and 0 <= profile["retractBeforeWipe"] <= 100
         and -100 <= profile["retractRestartExtra"] <= 100
+        and 1 <= len(profile["extruderOffsetsX"]) <= MAX_FILAMENT_SLOTS
+        and all(-1_000 <= value <= 1_000 for value in profile["extruderOffsetsX"])
+        and 1 <= len(profile["extruderOffsetsY"]) <= MAX_FILAMENT_SLOTS
+        and all(-1_000 <= value <= 1_000 for value in profile["extruderOffsetsY"])
         and 1 <= len(profile["toolChangeRetractLengths"]) <= MAX_FILAMENT_SLOTS
         and all(0 <= value <= 100 for value in profile["toolChangeRetractLengths"])
         and 1 <= len(profile["toolChangeRetractRestartExtras"]) <= MAX_FILAMENT_SLOTS
