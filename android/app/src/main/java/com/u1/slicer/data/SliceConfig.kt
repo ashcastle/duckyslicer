@@ -1,5 +1,16 @@
 package com.u1.slicer.data
 
+const val DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL = """0,0
+0.2,0.4444
+0.4,0.6145
+0.6,0.7059
+0.8,0.7619
+1.5,0.8571
+2,0.8889
+3,0.9231
+5,0.9520
+10,1"""
+
 /**
  * JNI configuration contract for the native slicer runtime.
  * The mobile UI exposes a smaller, task-oriented settings model.
@@ -339,6 +350,9 @@ data class SliceConfig(
     @JvmField var symmetricInfillYAxis: Boolean = false
     @JvmField var sparseInfillRotationTemplate: String = ""
     @JvmField var solidInfillRotationTemplate: String = ""
+    @JvmField var smallAreaFlowCompensation: Boolean = false
+    @JvmField var smallAreaFlowCompensationModel: String =
+        DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL
     @JvmField var fillMultiline: Int = 1
     @JvmField var filenameFormat: String =
         "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"

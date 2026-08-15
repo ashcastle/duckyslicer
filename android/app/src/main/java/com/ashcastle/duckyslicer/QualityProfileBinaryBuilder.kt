@@ -110,6 +110,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var solidInfillDirection: Float = base.solidInfillDirection
     private var sparseInfillRotationTemplate: String = base.sparseInfillRotationTemplate
     private var solidInfillRotationTemplate: String = base.solidInfillRotationTemplate
+    private var smallAreaFlowCompensation: Boolean = base.smallAreaFlowCompensation
+    private var smallAreaFlowCompensationModel: String = base.smallAreaFlowCompensationModel
     private var alignInfillDirectionToModel: Boolean = base.alignInfillDirectionToModel
     private var minimumSparseInfillArea: Float = base.minimumSparseInfillArea
     private var infillAnchor: Float = base.infillAnchor
@@ -447,6 +449,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         solidInfillDirection = input.readFloat()
         sparseInfillRotationTemplate = input.readCatalogString()
         solidInfillRotationTemplate = input.readCatalogString()
+        smallAreaFlowCompensation = input.readCatalogBoolean()
+        smallAreaFlowCompensationModel = input.readCatalogString()
         alignInfillDirectionToModel = input.readCatalogBoolean()
         minimumSparseInfillArea = input.readFloat()
         infillAnchor = input.readFloat()
@@ -825,6 +829,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         solidInfillDirection = solidInfillDirection,
         sparseInfillRotationTemplate = sparseInfillRotationTemplate,
         solidInfillRotationTemplate = solidInfillRotationTemplate,
+        smallAreaFlowCompensation = smallAreaFlowCompensation,
+        smallAreaFlowCompensationModel = smallAreaFlowCompensationModel,
         alignInfillDirectionToModel = alignInfillDirectionToModel,
         minimumSparseInfillArea = minimumSparseInfillArea,
         infillAnchor = infillAnchor,
@@ -1166,6 +1172,8 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("solidInfillDirection", BINARY_FLOAT),
     BinaryField("sparseInfillRotationTemplate", BINARY_STRING),
     BinaryField("solidInfillRotationTemplate", BINARY_STRING),
+    BinaryField("smallAreaFlowCompensation", BINARY_BOOL),
+    BinaryField("smallAreaFlowCompensationModel", BINARY_STRING),
     BinaryField("alignInfillDirectionToModel", BINARY_BOOL),
     BinaryField("minimumSparseInfillArea", BINARY_FLOAT),
     BinaryField("infillAnchor", BINARY_FLOAT),

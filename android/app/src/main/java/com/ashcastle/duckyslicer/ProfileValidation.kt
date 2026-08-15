@@ -298,6 +298,7 @@ internal object ProfileValidation {
             profile.solidInfillDirection in 0f..360f &&
             rotationTemplateIsValid(profile.sparseInfillRotationTemplate) &&
             rotationTemplateIsValid(profile.solidInfillRotationTemplate) &&
+            smallAreaFlowCompensationModelIsValid(profile.smallAreaFlowCompensationModel) &&
             profile.minimumSparseInfillArea in 0f..1_000_000f &&
             profile.infillAnchor in 0f..1_000f &&
             profile.infillAnchorMax in 0f..1_000f &&
@@ -541,9 +542,38 @@ internal fun rotationTemplateIsValid(value: String): Boolean {
     }
 }
 
+internal fun smallAreaFlowCompensationModelIsValid(value: String): Boolean {
+    if (value.toByteArray(Charsets.UTF_8).size > MAX_SMALL_AREA_FLOW_MODEL_BYTES) return false
+    val points = value.split('\n')
+        .map(String::trim)
+        .filter(String::isNotEmpty)
+    if (points.size !in 2..MAX_SMALL_AREA_FLOW_MODEL_POINTS) return false
+    var previousLength = -1.0
+    var finalFactor = Double.NaN
+    points.forEachIndexed { index, point ->
+        val coordinates = point.split(',').map(String::trim)
+        if (coordinates.size != 2) return false
+        val extrusionLength = coordinates[0].toDoubleOrNull() ?: return false
+        val factor = coordinates[1].toDoubleOrNull() ?: return false
+        if (
+            !extrusionLength.isFinite() || extrusionLength !in 0.0..1_000_000.0 ||
+            !factor.isFinite() || factor !in 0.0..2.0 ||
+            (index == 0 && extrusionLength != 0.0) ||
+            (index > 0 && extrusionLength <= previousLength)
+        ) {
+            return false
+        }
+        previousLength = extrusionLength
+        finalFactor = factor
+    }
+    return kotlin.math.abs(finalFactor - 1.0) <= 1e-6
+}
+
 internal fun filenameFormatIsValid(value: String): Boolean =
     value.isNotBlank() &&
         value.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_FILENAME_FORMAT_BYTES &&
         value.none { it == '\u0000' || it == '\r' || it == '\n' }
 
 internal const val MAX_GCODE_FILENAME_FORMAT_BYTES = 1_024
+internal const val MAX_SMALL_AREA_FLOW_MODEL_BYTES = 16_384
+private const val MAX_SMALL_AREA_FLOW_MODEL_POINTS = 256

@@ -371,6 +371,10 @@
     <string name="bottom_shell_thickness">최소 하단 두께</string>
     <string name="top_surface_density">상단 표면 밀도</string>
     <string name="bottom_surface_density">하단 표면 밀도</string>
+    <string name="small_area_flow_compensation">작은 영역 유량 보정(베타)</string>
+    <string name="small_area_flow_compensation_model">유량 보정 모델</string>
+    <string name="small_area_flow_compensation_model_hint">줄마다 압출 길이와 유량 계수를 하나씩 입력하세요. 첫 길이는 0, 마지막 계수는 1이어야 합니다.</string>
+    <string name="small_area_flow_compensation_model_invalid">길이,계수 쌍을 2~256개 입력하세요. 길이는 0 이상이며 오름차순이어야 하고 계수는 0~2여야 합니다.</string>
     <string name="dimensional_accuracy">치수 정확도</string>
     <string name="xy_hole_compensation">X–Y 구멍 보정</string>
     <string name="xy_contour_compensation">X–Y 외곽 보정</string>

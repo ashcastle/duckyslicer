@@ -103,7 +103,15 @@ class ProfileBundleTest {
                     ),
                 ),
             )
-            source.saveSlicing("Portable slicing", SliceOptions())
+            source.saveSlicing(
+                "Portable slicing",
+                SliceOptions().copy(
+                    quality = QualityProfile.STANDARD.copy(
+                        smallAreaFlowCompensation = true,
+                        smallAreaFlowCompensationModel = "0,0\n0.5,0.6\n10,1",
+                    ),
+                ),
+            )
 
             val bytes = source.exportBundle()
             val root = JSONObject(bytes.toString(Charsets.UTF_8))
@@ -198,7 +206,11 @@ class ProfileBundleTest {
             assertEquals(56, importedFilament.firstLayerGraphicEffectPlateTemp)
             assertEquals(99.2f, importedFilament.shrinkageXyPercent)
             assertEquals(99.18f, importedFilament.shrinkageZPercent)
-            assertTrue(catalog.slicing.any { it.name == "Portable slicing" && !it.builtIn })
+            val importedSlicing = catalog.slicing.single {
+                it.name == "Portable slicing" && !it.builtIn
+            }
+            assertTrue(importedSlicing.smallAreaFlowCompensation)
+            assertEquals("0,0\n0.5,0.6\n10,1", importedSlicing.smallAreaFlowCompensationModel)
 
             val firstGeneration = destinationFile.readBytes()
             val repeated = destination.importBundle(bytes)

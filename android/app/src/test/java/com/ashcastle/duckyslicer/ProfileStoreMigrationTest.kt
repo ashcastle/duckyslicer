@@ -1,5 +1,6 @@
 package com.ashcastle.duckyslicer
 
+import com.u1.slicer.data.DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL
 import java.nio.file.Files
 import org.json.JSONArray
 import org.json.JSONObject
@@ -106,6 +107,8 @@ class ProfileStoreMigrationTest {
                 remove("bottomSurfaceDensity")
                 remove("infillShiftStep")
                 remove("symmetricInfillYAxis")
+                remove("smallAreaFlowCompensation")
+                remove("smallAreaFlowCompensationModel")
             }
             file.writeText(
                 JSONObject()
@@ -202,6 +205,11 @@ class ProfileStoreMigrationTest {
             assertEquals(false, restoredSlicing.symmetricInfillYAxis)
             assertEquals("", restoredSlicing.sparseInfillRotationTemplate)
             assertEquals("", restoredSlicing.solidInfillRotationTemplate)
+            assertFalse(restoredSlicing.smallAreaFlowCompensation)
+            assertEquals(
+                DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL,
+                restoredSlicing.smallAreaFlowCompensationModel,
+            )
             assertEquals(0f, restoredSlicing.multiMaterial.segmentedRegionMaxWidth)
             assertEquals(0f, restoredSlicing.multiMaterial.segmentedRegionInterlockingDepth)
             assertEquals(0, restoredSlicing.supportCoverage.enforcedLayers)
@@ -378,6 +386,8 @@ class ProfileStoreMigrationTest {
                     symmetricInfillYAxis = true,
                     sparseInfillRotationTemplate = "0,60,120",
                     solidInfillRotationTemplate = "0,90",
+                    smallAreaFlowCompensation = true,
+                    smallAreaFlowCompensationModel = "0,0\n0.5,0.6\n10,1",
                     skinInfillLineWidth = 135f,
                     skinInfillLineWidthPercent = true,
                     skeletonInfillLineWidth = 0.62f,
@@ -415,6 +425,8 @@ class ProfileStoreMigrationTest {
             assertEquals(true, restored.symmetricInfillYAxis)
             assertEquals("0,60,120", restored.sparseInfillRotationTemplate)
             assertEquals("0,90", restored.solidInfillRotationTemplate)
+            assertTrue(restored.smallAreaFlowCompensation)
+            assertEquals("0,0\n0.5,0.6\n10,1", restored.smallAreaFlowCompensationModel)
         } finally {
             directory.deleteRecursively()
         }

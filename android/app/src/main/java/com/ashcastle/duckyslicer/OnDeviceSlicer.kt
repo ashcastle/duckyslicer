@@ -1,5 +1,6 @@
 package com.ashcastle.duckyslicer
 
+import com.u1.slicer.data.DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL
 import com.u1.slicer.data.SliceConfig
 import java.io.File
 import java.io.Serializable
@@ -985,6 +986,8 @@ data class QualityProfile(
     val solidInfillDirection: Float = 45f,
     val sparseInfillRotationTemplate: String = "",
     val solidInfillRotationTemplate: String = "",
+    val smallAreaFlowCompensation: Boolean = false,
+    val smallAreaFlowCompensationModel: String = DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL,
     val alignInfillDirectionToModel: Boolean = false,
     val minimumSparseInfillArea: Float = 15f,
     val infillAnchor: Float = 400f,
@@ -1216,7 +1219,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 84,
+    val schemaVersion: Int = 85,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -2351,6 +2354,8 @@ data class SliceOptions(
             native.symmetricInfillYAxis = quality.symmetricInfillYAxis
             native.sparseInfillRotationTemplate = quality.sparseInfillRotationTemplate
             native.solidInfillRotationTemplate = quality.solidInfillRotationTemplate
+            native.smallAreaFlowCompensation = quality.smallAreaFlowCompensation
+            native.smallAreaFlowCompensationModel = quality.smallAreaFlowCompensationModel
             native.skinInfillLineWidth = quality.skinInfillLineWidth
             native.skinInfillLineWidthPercent = quality.skinInfillLineWidthPercent
             native.skeletonInfillLineWidth = quality.skeletonInfillLineWidth

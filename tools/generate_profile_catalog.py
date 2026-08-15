@@ -13,10 +13,14 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 84
+SCHEMA_VERSION = 85
 MAX_FILAMENT_SLOTS = 16
 DEFAULT_GCODE_FILENAME_FORMAT = (
     "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
+)
+DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL = (
+    "0,0\n0.2,0.4444\n0.4,0.6145\n0.6,0.7059\n0.8,0.7619\n"
+    "1.5,0.8571\n2,0.8889\n3,0.9231\n5,0.9520\n10,1"
 )
 MAX_GCODE_FILENAME_FORMAT_BYTES = 1_024
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
@@ -75,6 +79,52 @@ def filename_format(value: Any) -> str:
     ):
         raise ValueError("unsafe filename format")
     return candidate
+
+
+def small_area_flow_compensation_model(value: Any) -> str:
+    if value is None:
+        return DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL
+    raw_values = value if isinstance(value, list) else [value]
+    lines: list[str] = []
+    for raw_value in raw_values:
+        serialized = str(raw_value).replace("\\n", "\n")
+        for candidate in re.split(r"[;\n]", serialized):
+            normalized = candidate.strip().strip('"').strip()
+            if normalized:
+                lines.append(normalized)
+    if not lines:
+        return DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL
+    if len(lines) > 256:
+        raise ValueError("too many small-area flow-compensation points")
+    previous_length = -1.0
+    normalized_lines: list[str] = []
+    for index, line in enumerate(lines):
+        coordinates = [coordinate.strip() for coordinate in line.split(",")]
+        if len(coordinates) != 2:
+            raise ValueError("invalid small-area flow-compensation point")
+        try:
+            extrusion_length, factor = map(float, coordinates)
+        except ValueError as error:
+            raise ValueError("invalid small-area flow-compensation number") from error
+        if (
+            not math.isfinite(extrusion_length)
+            or not math.isfinite(factor)
+            or extrusion_length < 0
+            or extrusion_length > 1_000_000
+            or factor < 0
+            or factor > 2
+            or (index == 0 and extrusion_length != 0)
+            or (index > 0 and extrusion_length <= previous_length)
+        ):
+            raise ValueError("unsafe small-area flow-compensation model")
+        previous_length = extrusion_length
+        normalized_lines.append(f"{coordinates[0]},{coordinates[1]}")
+    if len(normalized_lines) < 2 or abs(float(normalized_lines[-1].split(",")[1]) - 1) > 1e-6:
+        raise ValueError("small-area flow-compensation model must end at factor one")
+    model = "\n".join(normalized_lines)
+    if len(model.encode("utf-8")) > 16_384:
+        raise ValueError("oversized small-area flow-compensation model")
+    return model
 
 
 def nullable_scalar(value: Any) -> Any | None:
@@ -1063,6 +1113,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
             raw.get("solid_infill_rotate_template"),
             "0,90" if boolean(raw.get("rotate_solid_infill_direction")) else "",
         ),
+        "smallAreaFlowCompensation": boolean(raw.get("small_area_infill_flow_compensation")),
+        "smallAreaFlowCompensationModel": small_area_flow_compensation_model(
+            raw.get("small_area_infill_flow_compensation_model")
+        ),
         "alignInfillDirectionToModel": boolean(raw.get("align_infill_direction_to_model")),
         "minimumSparseInfillArea": number(raw.get("minimum_sparse_infill_area"), 15),
         "infillAnchor": infill_anchor,
@@ -1450,6 +1504,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
             1_000 if profile["infillCombinationMaxLayerHeightPercent"] else 10
         )
         and all(0 <= profile[key] <= 360 for key in ["infillDirection", "solidInfillDirection"])
+        and len(profile["smallAreaFlowCompensationModel"].encode("utf-8")) <= 16_384
         and -75 <= profile["lateralLatticeAngle1"] <= 75
         and -75 <= profile["lateralLatticeAngle2"] <= 75
         and 15 <= profile["infillOverhangAngle"] <= 75

@@ -1,12 +1,13 @@
 package com.ashcastle.duckyslicer
 
 import android.content.Context
+import com.u1.slicer.data.DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 85
+internal const val USER_PROFILE_SCHEMA_VERSION = 86
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -394,6 +395,8 @@ class ProfileStore private constructor(
             symmetricInfillYAxis = options.quality.symmetricInfillYAxis,
             sparseInfillRotationTemplate = options.quality.sparseInfillRotationTemplate,
             solidInfillRotationTemplate = options.quality.solidInfillRotationTemplate,
+            smallAreaFlowCompensation = options.quality.smallAreaFlowCompensation,
+            smallAreaFlowCompensationModel = options.quality.smallAreaFlowCompensationModel,
             skinInfillLineWidth = options.quality.skinInfillLineWidth,
             skinInfillLineWidthPercent = options.quality.skinInfillLineWidthPercent,
             skeletonInfillLineWidth = options.quality.skeletonInfillLineWidth,
@@ -876,6 +879,8 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("symmetricInfillYAxis", symmetricInfillYAxis)
     .put("sparseInfillRotationTemplate", sparseInfillRotationTemplate)
     .put("solidInfillRotationTemplate", solidInfillRotationTemplate)
+    .put("smallAreaFlowCompensation", smallAreaFlowCompensation)
+    .put("smallAreaFlowCompensationModel", smallAreaFlowCompensationModel)
     .put("skinInfillLineWidth", skinInfillLineWidth)
     .put("skinInfillLineWidthPercent", skinInfillLineWidthPercent)
     .put("skeletonInfillLineWidth", skeletonInfillLineWidth)
@@ -1413,6 +1418,11 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         symmetricInfillYAxis = optBoolean("symmetricInfillYAxis"),
         sparseInfillRotationTemplate = optString("sparseInfillRotationTemplate", ""),
         solidInfillRotationTemplate = optString("solidInfillRotationTemplate", ""),
+        smallAreaFlowCompensation = optBoolean("smallAreaFlowCompensation"),
+        smallAreaFlowCompensationModel = optString(
+            "smallAreaFlowCompensationModel",
+            DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL,
+        ),
         skinInfillLineWidth = optDouble("skinInfillLineWidth", 100.0).toFloat(),
         skinInfillLineWidthPercent = optBoolean("skinInfillLineWidthPercent", true),
         skeletonInfillLineWidth = optDouble("skeletonInfillLineWidth", 100.0).toFloat(),

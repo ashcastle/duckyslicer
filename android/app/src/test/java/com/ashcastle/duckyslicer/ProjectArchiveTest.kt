@@ -138,7 +138,7 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(55, manifest.getInt("schemaVersion"))
+            assertEquals(56, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(
@@ -301,6 +301,11 @@ class ProjectArchiveTest {
             assertEquals(false, imported.sliceOptions?.printerProfile?.enableFilamentRamming)
             assertEquals(false, imported.sliceOptions?.printerProfile?.purgeInPrimeTower)
             assertEquals(true, imported.sliceOptions?.printerProfile?.highCurrentOnFilamentSwap)
+            assertEquals(true, imported.sliceOptions?.quality?.smallAreaFlowCompensation)
+            assertEquals(
+                "0,0\n0.5,0.6\n10,1",
+                imported.sliceOptions?.quality?.smallAreaFlowCompensationModel,
+            )
             assertEquals(
                 listOf(1.4f, 2.6f),
                 imported.sliceOptions?.printerProfile?.toolChangeRetractLengths,

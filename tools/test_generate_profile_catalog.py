@@ -9,11 +9,44 @@ from tools.generate_profile_catalog import (
     build_printer,
     build_process,
     printable_geometry,
+    small_area_flow_compensation_model,
     support_type,
 )
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_normalizes_and_validates_small_area_flow_compensation(self) -> None:
+        serialized = '0,0;"\\n0.5,0.6";"\\n10,1"'
+        self.assertEqual(
+            "0,0\n0.5,0.6\n10,1",
+            small_area_flow_compensation_model(serialized),
+        )
+        profile = build_process(
+            "Example",
+            {
+                "name": "Small area compensation",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "small_area_infill_flow_compensation": "1",
+                "small_area_infill_flow_compensation_model": [
+                    "0,0",
+                    "\n0.5,0.6",
+                    "\n10,1",
+                ],
+            },
+            {},
+        )
+        self.assertTrue(profile["smallAreaFlowCompensation"])
+        self.assertEqual("0,0\n0.5,0.6\n10,1", profile["smallAreaFlowCompensationModel"])
+        for invalid in (
+            "0,0\n0.5,0.6\n0.4,1",
+            "1,0\n10,1",
+            "0,0\n10,0.9",
+            "0,0\n10,3",
+        ):
+            with self.assertRaises(ValueError):
+                small_area_flow_compensation_model(invalid)
+
     def test_legacy_support_modes_remain_automatic(self) -> None:
         self.assertEqual("normal(auto)", support_type("normal"))
         self.assertEqual("tree(auto)", support_type("tree"))

@@ -3508,6 +3508,7 @@ private fun SlicingSettingsSheet(
                         )
                     },
                 )
+                SmallAreaFlowCompensationSettings(options, settingsQuery, onOptionsChanged)
                 SettingsGroupTitle(stringResource(R.string.dimensional_accuracy))
                 SettingSlider(
                     label = stringResource(R.string.xy_hole_compensation),
@@ -6630,6 +6631,68 @@ private fun RotationTemplateSetting(
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+@Composable
+private fun SmallAreaFlowCompensationModelSetting(
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    val label = stringResource(R.string.small_area_flow_compensation_model)
+    if (!settingMatchesQuery(label)) return
+    val valid = smallAreaFlowCompensationModelIsValid(value)
+    OutlinedTextField(
+        value = value,
+        onValueChange = { candidate ->
+            if (candidate.toByteArray(Charsets.UTF_8).size <= MAX_SMALL_AREA_FLOW_MODEL_BYTES) {
+                onValueChange(candidate)
+            }
+        },
+        label = { Text(label) },
+        supportingText = {
+            Text(
+                stringResource(
+                    if (valid) R.string.small_area_flow_compensation_model_hint
+                    else R.string.small_area_flow_compensation_model_invalid,
+                ),
+            )
+        },
+        isError = !valid,
+        minLines = 5,
+        maxLines = 10,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun SmallAreaFlowCompensationSettings(
+    options: SliceOptions,
+    settingsQuery: String,
+    onOptionsChanged: (SliceOptions) -> Unit,
+) {
+    SettingsSwitch(
+        label = stringResource(R.string.small_area_flow_compensation),
+        checked = options.quality.smallAreaFlowCompensation,
+        onCheckedChange = {
+            onOptionsChanged(
+                options.copy(
+                    quality = options.quality.copy(smallAreaFlowCompensation = it),
+                ),
+            )
+        },
+    )
+    if (options.quality.smallAreaFlowCompensation || settingsQuery.isNotBlank()) {
+        SmallAreaFlowCompensationModelSetting(
+            value = options.quality.smallAreaFlowCompensationModel,
+            onValueChange = {
+                onOptionsChanged(
+                    options.copy(
+                        quality = options.quality.copy(smallAreaFlowCompensationModel = it),
+                    ),
+                )
+            },
+        )
+    }
 }
 
 @Composable

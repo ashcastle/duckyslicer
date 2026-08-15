@@ -7,6 +7,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.u1.slicer.data.DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL
 import org.json.JSONObject
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -2393,7 +2394,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(84, catalog.schemaVersion)
+        assertEquals(85, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2806,6 +2807,18 @@ class NativeEngineInstrumentedTest {
         assertTrue(
             "Legacy Orca solid-infill rotation must survive catalog normalization",
             catalog.slicing.any { it.solidInfillRotationTemplate == "0,90" },
+        )
+        assertTrue(
+            "Every generated compensation curve must satisfy the native spline contract",
+            catalog.slicing.all {
+                smallAreaFlowCompensationModelIsValid(it.smallAreaFlowCompensationModel)
+            },
+        )
+        assertTrue(
+            "The pinned Orca curve must survive list and serialized profile encodings",
+            catalog.slicing.all {
+                it.smallAreaFlowCompensationModel == DEFAULT_SMALL_AREA_FLOW_COMPENSATION_MODEL
+            },
         )
         assertTrue(catalog.slicing.any { it.internalBridgeSpeedPercent })
         assertTrue(catalog.slicing.any { !it.bridgeAccelerationPercent })
@@ -5812,6 +5825,101 @@ class NativeEngineInstrumentedTest {
             sparse.output.delete()
             dense.output.delete()
         }
+    }
+
+    @Test
+    fun smallAreaFlowCompensationChangesRealShortSurfaceExtrusion() {
+        val model = fixtureModel()
+        val compensationModel = "0,0.5\n100,1"
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.CUSTOM_CARTESIAN)
+            .selectFilament(FilamentProfile.GENERIC_PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                topSolidLayers = 1,
+                bottomSolidLayers = 1,
+                topSurfacePattern = "rectilinear",
+                internalSolidInfillPattern = "rectilinear",
+                skirtLoops = 0,
+                brimWidth = 0f,
+            )
+
+        fun slice(enabled: Boolean): SliceOutcome = OnDeviceSlicer.slice(
+            model,
+            base.copy(
+                quality = base.quality.copy(
+                    smallAreaFlowCompensation = enabled,
+                    smallAreaFlowCompensationModel = compensationModel,
+                ),
+            ),
+        )
+
+        fun topSurfaceExtrusion(gcode: String): List<Float> {
+            var topSurface = false
+            return gcode.lineSequence().mapNotNull { line ->
+                if (line.startsWith(";TYPE:")) topSurface = line == ";TYPE:Top surface"
+                if (!topSurface || !line.startsWith("G1 ") ||
+                    !(line.contains(" X") || line.contains(" Y"))) {
+                    return@mapNotNull null
+                }
+                Regex("(?:^| )E([+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+))")
+                    .find(line.substringBefore(';'))?.groupValues?.get(1)?.toFloatOrNull()
+                    ?.takeIf { it > 0f }
+            }.toList()
+        }
+
+        val disabled = slice(false)
+        val enabled = slice(true)
+        try {
+            val disabledGcode = disabled.output.readText()
+            val enabledGcode = enabled.output.readText()
+            val disabledExtrusion = topSurfaceExtrusion(disabledGcode)
+            val enabledExtrusion = topSurfaceExtrusion(enabledGcode)
+
+            assertTrue(enabledGcode.contains("; small_area_infill_flow_compensation = 1"))
+            assertTrue("The fixture needs short top-surface extrusion", disabledExtrusion.isNotEmpty())
+            assertEquals(
+                "Enabled top-surface lines: " + enabledGcode.lineSequence()
+                    .dropWhile { it != ";TYPE:Top surface" }
+                    .takeWhile { !it.startsWith(";TYPE:") || it == ";TYPE:Top surface" }
+                    .take(20).joinToString(" | "),
+                disabledExtrusion.size,
+                enabledExtrusion.size,
+            )
+            assertNotEquals(
+                "The enabled Orca compensator must alter physical E values",
+                disabledExtrusion,
+                enabledExtrusion,
+            )
+            assertTrue(
+                "A sub-unity compensation curve must reduce total short-line extrusion",
+                enabledExtrusion.sum() < disabledExtrusion.sum(),
+            )
+        } finally {
+            disabled.output.delete()
+            enabled.output.delete()
+        }
+    }
+
+    @Test
+    fun malformedSmallAreaFlowCompensationModelIsRejectedByNativeBoundary() {
+        val failure = runCatching {
+            OnDeviceSlicer.slice(
+                fixtureModel(),
+                SliceOptions()
+                    .selectPrinter(PrinterProfile.CUSTOM_CARTESIAN)
+                    .selectFilament(FilamentProfile.GENERIC_PLA)
+                    .selectQuality(QualityProfile.DRAFT)
+                    .copy(
+                        quality = QualityProfile.DRAFT.copy(
+                            smallAreaFlowCompensation = true,
+                            smallAreaFlowCompensationModel = "0,0\n0.5,0.8\n0.4,1",
+                        ),
+                    ),
+            )
+        }.exceptionOrNull()
+
+        assertTrue("A non-increasing compensation curve must not reach Orca", failure != null)
     }
 
     @Test

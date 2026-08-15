@@ -121,7 +121,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(57, persisted.getInt("schemaVersion"))
+        assertEquals(58, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),
@@ -160,6 +160,11 @@ class ProjectStoreTest {
         assertEquals(
             options.toProjectJson().toString(),
             restored.sliceOptions?.toProjectJson()?.toString(),
+        )
+        assertEquals(true, restored.sliceOptions?.quality?.smallAreaFlowCompensation)
+        assertEquals(
+            "0,0\n0.5,0.6\n10,1",
+            restored.sliceOptions?.quality?.smallAreaFlowCompensationModel,
         )
         assertEquals(
             listOf("M117 PRIMARY_START", "M117 SECONDARY_START"),

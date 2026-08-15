@@ -682,6 +682,16 @@ class SliceOptionsPersistenceTest {
         assertEquals("0,90", restored.quality.solidInfillRotationTemplate)
         assertEquals("0,60,120", restored.toNativeConfig().sparseInfillRotationTemplate)
         assertEquals("0,90", restored.toNativeConfig().solidInfillRotationTemplate)
+        assertEquals(true, restored.quality.smallAreaFlowCompensation)
+        assertEquals(
+            "0,0\n0.5,0.6\n10,1",
+            restored.quality.smallAreaFlowCompensationModel,
+        )
+        assertEquals(true, restored.toNativeConfig().smallAreaFlowCompensation)
+        assertEquals(
+            "0,0\n0.5,0.6\n10,1",
+            restored.toNativeConfig().smallAreaFlowCompensationModel,
+        )
         assertEquals(4, restored.quality.fillMultiline)
         assertEquals(4, restored.toNativeConfig().fillMultiline)
         assertEquals(LateralInfillSettings(-32f, 57f, 68f), restored.quality.lateralInfill)
@@ -1341,6 +1351,8 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             symmetricInfillYAxis = true,
             sparseInfillRotationTemplate = "0,60,120",
             solidInfillRotationTemplate = "0,90",
+            smallAreaFlowCompensation = true,
+            smallAreaFlowCompensationModel = "0,0\n0.5,0.6\n10,1",
             travelSpeedZ = 17f,
             skeletonInfillDensity = 31f,
             skinInfillDensity = 47f,
