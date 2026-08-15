@@ -121,7 +121,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(54, persisted.getInt("schemaVersion"))
+        assertEquals(55, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),
@@ -211,6 +211,10 @@ class ProjectStoreTest {
         assertEquals(
             listOf(0f, -2.5f),
             restored.sliceOptions?.printerProfile?.extruderOffsetsY,
+        )
+        assertEquals(
+            "; FIXTURE_TIMELAPSE",
+            restored.sliceOptions?.printerProfile?.timeLapseGcode,
         )
         assertEquals(
             "; FIXTURE_BEFORE_LAYER",

@@ -16,6 +16,40 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class OrcaModelImportInstrumentedTest {
     @Test
+    fun selectedPrinterTimelapseCommandIsExpandedForEveryLayer() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val archive = File(context.cacheDir, "timelapse-command.3mf")
+        val native = NativeLibrary()
+        var gcode: File? = null
+        archive.delete()
+        try {
+            writeStandard3mf(archive)
+            assertTrue("The timelapse fixture must load through Orca", native.loadModel(archive.absolutePath))
+            val config = SliceOptions()
+                .selectPrinter(
+                    PrinterProfile.CUSTOM_CARTESIAN.copy(
+                        timeLapseGcode = "; DUCKY_TIMELAPSE layer={layer_num} z={layer_z}",
+                    ),
+                )
+                .toNativeConfig()
+
+            val result = requireNotNull(native.slice(config))
+            assertTrue(result.errorMessage, result.success)
+            gcode = File(result.gcodePath)
+            val commands = gcode.readLines()
+                .map(String::trim)
+                .filter { it.startsWith("; DUCKY_TIMELAPSE layer=") }
+            assertTrue("Timelapse G-code must be emitted on multiple layers", commands.size > 2)
+            assertTrue("Layer placeholders must expand to changing values", commands.distinct().size > 2)
+            assertTrue("Raw layer placeholders must not reach G-code", commands.none { '{' in it || '}' in it })
+        } finally {
+            native.clearModel()
+            gcode?.delete()
+            archive.delete()
+        }
+    }
+
+    @Test
     fun bbs3mfPauseUsesTheSelectedPrinterPauseCommand() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val archive = File(context.cacheDir, "pause-command.3mf")

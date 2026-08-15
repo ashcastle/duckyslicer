@@ -27,6 +27,7 @@ class ProfileBundleTest {
                         extruderOffsetsX = listOf(0f, 12.5f),
                         extruderOffsetsY = listOf(0f, -3.25f),
                         beforeLayerChangeGcode = "; BUNDLE_BEFORE_LAYER",
+                        timeLapseGcode = "; BUNDLE_TIMELAPSE",
                         layerChangeGcode = "; BUNDLE_AFTER_LAYER",
                         changeFilamentGcode = "T[next_extruder] ; BUNDLE_TOOL_CHANGE",
                         printingByObjectGcode = "; BUNDLE_BETWEEN_OBJECTS",
@@ -127,6 +128,7 @@ class ProfileBundleTest {
                         it.extruderOffsetsX == listOf(0f, 12.5f) &&
                         it.extruderOffsetsY == listOf(0f, -3.25f) &&
                         it.beforeLayerChangeGcode == "; BUNDLE_BEFORE_LAYER" &&
+                        it.timeLapseGcode == "; BUNDLE_TIMELAPSE" &&
                         it.layerChangeGcode == "; BUNDLE_AFTER_LAYER" &&
                         it.changeFilamentGcode == "T[next_extruder] ; BUNDLE_TOOL_CHANGE" &&
                         it.printingByObjectGcode == "; BUNDLE_BETWEEN_OBJECTS" &&

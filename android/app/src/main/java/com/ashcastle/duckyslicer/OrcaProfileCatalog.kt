@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v81.bin"
+private const val CATALOG_ASSET = "profile_catalog_v82.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 81) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 82) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -83,6 +83,7 @@ class OrcaProfileCatalog(private val context: Context) {
         machineStartGcode = input.readCatalogString(),
         machineEndGcode = input.readCatalogString(),
         machinePauseGcode = input.readCatalogString(),
+        timeLapseGcode = input.readCatalogString(),
         beforeLayerChangeGcode = input.readCatalogString(),
         layerChangeGcode = input.readCatalogString(),
         changeFilamentGcode = input.readCatalogString(),
@@ -328,6 +329,7 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("machineStartGcode", BINARY_STRING),
     BinaryField("machineEndGcode", BINARY_STRING),
     BinaryField("machinePauseGcode", BINARY_STRING),
+    BinaryField("timeLapseGcode", BINARY_STRING),
     BinaryField("beforeLayerChangeGcode", BINARY_STRING),
     BinaryField("layerChangeGcode", BINARY_STRING),
     BinaryField("changeFilamentGcode", BINARY_STRING),

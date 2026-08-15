@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 81
+SCHEMA_VERSION = 82
 MAX_FILAMENT_SLOTS = 16
 DEFAULT_GCODE_FILENAME_FORMAT = (
     "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
@@ -366,6 +366,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "machineStartGcode": str(raw.get("machine_start_gcode", "")),
         "machineEndGcode": str(raw.get("machine_end_gcode", "")),
         "machinePauseGcode": str(raw.get("machine_pause_gcode", "")),
+        "timeLapseGcode": str(raw.get("time_lapse_gcode", "")),
         "beforeLayerChangeGcode": str(raw.get("before_layer_change_gcode", "")),
         "layerChangeGcode": str(raw.get("layer_change_gcode", "")),
         "changeFilamentGcode": str(raw.get("change_filament_gcode", "")),
@@ -448,6 +449,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and -100 <= profile["retractRestartExtra"] <= 100
         and len(profile["printingByObjectGcode"].encode("utf-8")) <= 262_144
         and len(profile["machinePauseGcode"].encode("utf-8")) <= 262_144
+        and len(profile["timeLapseGcode"].encode("utf-8")) <= 262_144
         and 1 <= len(profile["extruderOffsetsX"]) <= MAX_FILAMENT_SLOTS
         and all(-1_000 <= value <= 1_000 for value in profile["extruderOffsetsX"])
         and 1 <= len(profile["extruderOffsetsY"]) <= MAX_FILAMENT_SLOTS

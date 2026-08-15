@@ -794,6 +794,7 @@
     <string name="machine_start_gcode">Start G-code</string>
     <string name="machine_end_gcode">End G-code</string>
     <string name="machine_pause_gcode">Pause G-code</string>
+    <string name="time_lapse_gcode">Timelapse G-code</string>
     <string name="before_layer_change_gcode">Before layer change G-code</string>
     <string name="layer_change_gcode">After layer change G-code</string>
     <string name="change_filament_gcode">Change filament G-code</string>

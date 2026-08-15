@@ -2022,6 +2022,7 @@ class NativeEngineInstrumentedTest {
                     machineStartGcode = "M117 SAVED_START",
                     machineEndGcode = "M117 SAVED_END",
                     machinePauseGcode = "M25 ; SAVED_PAUSE",
+                    timeLapseGcode = "; SAVED_TIMELAPSE",
                     beforeLayerChangeGcode = "; SAVED_BEFORE_LAYER",
                     layerChangeGcode = "; SAVED_AFTER_LAYER",
                     changeFilamentGcode = "T[next_extruder] ; SAVED_TOOL_CHANGE",
@@ -2327,6 +2328,7 @@ class NativeEngineInstrumentedTest {
         assertEquals("M117 SAVED_START", restored.printers.last().machineStartGcode)
         assertEquals("M117 SAVED_END", restored.printers.last().machineEndGcode)
         assertEquals("M25 ; SAVED_PAUSE", restored.printers.last().machinePauseGcode)
+        assertEquals("; SAVED_TIMELAPSE", restored.printers.last().timeLapseGcode)
         assertEquals("; SAVED_BEFORE_LAYER", restored.printers.last().beforeLayerChangeGcode)
         assertEquals("; SAVED_AFTER_LAYER", restored.printers.last().layerChangeGcode)
         assertEquals(
@@ -2385,7 +2387,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(81, catalog.schemaVersion)
+        assertEquals(82, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2399,6 +2401,10 @@ class NativeEngineInstrumentedTest {
         assertEquals(5f, generatedU1.machineToolChangeTime)
         assertFalse(generatedU1.toolChangeTemperatureWait)
         assertEquals("M600", generatedU1.machinePauseGcode)
+        assertEquals(
+            "TIMELAPSE_TAKE_FRAME",
+            catalog.printers.single { it.name == "Artillery M1 Pro 0.4 nozzle" }.timeLapseGcode,
+        )
         val boundedLift = catalog.printers.single { it.name == "Anycubic Kobra 2 Neo 0.4 nozzle" }
         assertEquals(0.3f, boundedLift.retractLiftAbove)
         assertEquals(258f, boundedLift.retractLiftBelow)

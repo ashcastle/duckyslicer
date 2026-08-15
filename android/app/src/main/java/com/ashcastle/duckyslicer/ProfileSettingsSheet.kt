@@ -808,6 +808,17 @@ private fun PrinterSettingsSheet(
         },
     )
     GcodeTemplateSetting(
+        label = stringResource(R.string.time_lapse_gcode),
+        value = options.printerProfile.timeLapseGcode,
+        onValueChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(timeLapseGcode = it),
+                ),
+            )
+        },
+    )
+    GcodeTemplateSetting(
         label = stringResource(R.string.before_layer_change_gcode),
         value = options.printerProfile.beforeLayerChangeGcode,
         onValueChange = {

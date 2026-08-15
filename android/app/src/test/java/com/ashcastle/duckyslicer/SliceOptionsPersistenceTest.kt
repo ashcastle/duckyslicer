@@ -119,6 +119,7 @@ class SliceOptionsPersistenceTest {
                     beforeLayerChangeGcode = "; PERSISTED_BEFORE_LAYER",
                     layerChangeGcode = "; PERSISTED_AFTER_LAYER",
                     machinePauseGcode = "M25 ; PERSISTED_PAUSE",
+                    timeLapseGcode = "; PERSISTED_TIMELAPSE",
                     changeFilamentGcode = "T[next_extruder] ; PERSISTED_TOOL_CHANGE",
                     printingByObjectGcode = "; PERSISTED_BETWEEN_OBJECTS",
                     useRelativeEDistances = false,
@@ -237,6 +238,7 @@ class SliceOptionsPersistenceTest {
         assertEquals("; PERSISTED_BEFORE_LAYER", native.beforeLayerChangeGcode)
         assertEquals("; PERSISTED_AFTER_LAYER", native.layerChangeGcode)
         assertEquals("M25 ; PERSISTED_PAUSE", native.machinePauseGcode)
+        assertEquals("; PERSISTED_TIMELAPSE", native.timeLapseGcode)
         assertEquals("T[next_extruder] ; PERSISTED_TOOL_CHANGE", native.changeFilamentGcode)
         assertEquals("; PERSISTED_BETWEEN_OBJECTS", native.printingByObjectGcode)
         assertFalse(native.useRelativeEDistances)
@@ -1139,6 +1141,13 @@ class SliceOptionsPersistenceTest {
         assertFalse(
             ProfileValidation.printer(
                 PrinterProfile.CUSTOM_CARTESIAN.copy(
+                    timeLapseGcode = "한".repeat(87_382),
+                ),
+            ),
+        )
+        assertFalse(
+            ProfileValidation.printer(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(
                     beforeLayerChangeGcode = "한".repeat(87_382),
                 ),
             ),
@@ -1177,6 +1186,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             auxiliaryFan = true,
             extruderOffsetsX = listOf(0f, 10.5f),
             extruderOffsetsY = listOf(0f, -2.5f),
+            timeLapseGcode = "; FIXTURE_TIMELAPSE",
             beforeLayerChangeGcode = "; FIXTURE_BEFORE_LAYER",
             layerChangeGcode = "; FIXTURE_AFTER_LAYER",
             changeFilamentGcode = "T[next_extruder] ; FIXTURE_TOOL_CHANGE",

@@ -138,7 +138,7 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(52, manifest.getInt("schemaVersion"))
+            assertEquals(53, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(
@@ -266,6 +266,10 @@ class ProjectArchiveTest {
             assertEquals(
                 listOf(0f, -2.5f),
                 imported.sliceOptions?.printerProfile?.extruderOffsetsY,
+            )
+            assertEquals(
+                "; FIXTURE_TIMELAPSE",
+                imported.sliceOptions?.printerProfile?.timeLapseGcode,
             )
             assertEquals(
                 "; FIXTURE_BEFORE_LAYER",
