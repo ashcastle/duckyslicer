@@ -143,6 +143,8 @@ data class PrinterProfile(
     val wipeDistance: Float = 1f,
     val retractBeforeWipe: Float = 100f,
     val retractRestartExtra: Float = 0f,
+    val toolChangeRetractLengths: List<Float> = listOf(retractLength),
+    val toolChangeRetractRestartExtras: List<Float> = listOf(0f),
     val zHop: Float = 0.4f,
     val zHopType: String = "slope",
     val extruderClearanceRadius: Float = 40f,
@@ -155,6 +157,12 @@ data class PrinterProfile(
     val extruderCount: Int = 1,
     val auxiliaryFan: Boolean = false,
 ) {
+    fun resolvedToolChangeRetractLengths(count: Int = extruderCount): List<Float> =
+        toolChangeRetractLengths.resizedExtruderValues(count, retractLength)
+
+    fun resolvedToolChangeRetractRestartExtras(count: Int = extruderCount): List<Float> =
+        toolChangeRetractRestartExtras.resizedExtruderValues(count, 0f)
+
     companion object {
         val U1_02 = PrinterProfile(
             "snapmaker-u1-02", "U1 · 0.2 mm", 270f, 270f, 270f, 0.2f, true, "Snapmaker",
@@ -1944,6 +1952,12 @@ data class SliceOptions(
             native.maximumLayerHeights = FloatArray(nativeFilaments.size) {
                 printerProfile.maxLayerHeight
             }
+            native.toolChangeRetractLengths = printerProfile
+                .resolvedToolChangeRetractLengths(nativeFilaments.size)
+                .toFloatArray()
+            native.toolChangeRetractRestartExtras = printerProfile
+                .resolvedToolChangeRetractRestartExtras(nativeFilaments.size)
+                .toFloatArray()
             native.filamentShrinkages = nativeFilaments
                 .map(FilamentProfile::shrinkageXyPercent)
                 .toFloatArray()
@@ -2150,6 +2164,12 @@ data class SliceOptions(
             native.scarfInnerWalls = scarfSeam.innerWalls
         }
     }
+}
+
+private fun List<Float>.resizedExtruderValues(count: Int, fallback: Float): List<Float> {
+    val safeCount = count.coerceIn(1, MAX_FILAMENT_SLOTS)
+    val source = if (isEmpty()) listOf(fallback) else this
+    return List(safeCount) { index -> source.getOrElse(index) { source.last() } }
 }
 
 internal fun SliceOptions.withSpiralMode(enabled: Boolean): SliceOptions =

@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 65
+internal const val USER_PROFILE_SCHEMA_VERSION = 66
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -84,6 +84,8 @@ class ProfileStore private constructor(
             wipeDistance = options.printerProfile.wipeDistance,
             retractBeforeWipe = options.printerProfile.retractBeforeWipe,
             retractRestartExtra = options.printerProfile.retractRestartExtra,
+            toolChangeRetractLengths = options.printerProfile.toolChangeRetractLengths,
+            toolChangeRetractRestartExtras = options.printerProfile.toolChangeRetractRestartExtras,
             zHop = options.printerProfile.zHop,
             zHopType = options.printerProfile.zHopType,
             extruderClearanceRadius = options.extruderClearanceRadius,
@@ -542,6 +544,8 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("retractWhenChangingLayer", retractWhenChangingLayer)
     .put("wipeWhileRetracting", wipeWhileRetracting).put("wipeDistance", wipeDistance)
     .put("retractBeforeWipe", retractBeforeWipe).put("retractRestartExtra", retractRestartExtra)
+    .put("toolChangeRetractLengths", JSONArray(toolChangeRetractLengths))
+    .put("toolChangeRetractRestartExtras", JSONArray(toolChangeRetractRestartExtras))
     .put("zHop", zHop).put("zHopType", zHopType)
     .put("extruderClearanceRadius", extruderClearanceRadius)
     .put("extruderClearanceHeightToRod", extruderClearanceHeightToRod)
@@ -924,6 +928,8 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
     val bedSizeX = getDouble("bedSizeX").toFloat()
     val bedSizeY = getDouble("bedSizeY").toFloat()
     val nozzleDiameter = getDouble("nozzleDiameter").toFloat()
+    val retractLength = optDouble("retractLength", 0.8).toFloat()
+    val extruderCount = optInt("extruderCount", 1)
     PrinterProfile(
         getString("id"), getString("name"),
         bedSizeX, bedSizeY,
@@ -950,7 +956,7 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         maxJerkY = optDouble("maxJerkY", 9.0).toFloat(),
         maxJerkZ = optDouble("maxJerkZ", 3.0).toFloat(),
         maxJerkE = optDouble("maxJerkE", 2.5).toFloat(),
-        retractLength = optDouble("retractLength", 0.8).toFloat(),
+        retractLength = retractLength,
         retractSpeed = optDouble("retractSpeed", 45.0).toFloat(),
         deretractSpeed = optDouble("deretractSpeed", 35.0).toFloat(),
         retractionMinimumTravel = optDouble("retractionMinimumTravel", 1.0).toFloat(),
@@ -959,6 +965,10 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         wipeDistance = optDouble("wipeDistance", 1.0).toFloat(),
         retractBeforeWipe = optDouble("retractBeforeWipe", 100.0).toFloat(),
         retractRestartExtra = optDouble("retractRestartExtra", 0.0).toFloat(),
+        toolChangeRetractLengths = extruderFloatList("toolChangeRetractLengths")
+            ?: listOf(retractLength),
+        toolChangeRetractRestartExtras = extruderFloatList("toolChangeRetractRestartExtras")
+            ?: listOf(0f),
         zHop = optDouble("zHop", 0.4).toFloat(),
         zHopType = optString("zHopType", "slope"),
         extruderClearanceRadius = optDouble("extruderClearanceRadius", 40.0).toFloat(),
@@ -972,7 +982,7 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
             rectangularBedPolygon(bedSizeX, bedSizeY)
         },
         singleExtruderMultiMaterial = optBoolean("singleExtruderMultiMaterial"),
-        extruderCount = optInt("extruderCount", 1),
+        extruderCount = extruderCount,
         auxiliaryFan = optBoolean("auxiliaryFan", false),
     )
 }.getOrNull()
@@ -1426,6 +1436,11 @@ private fun JSONObject.stringList(key: String): List<String> =
 
 private fun JSONObject.floatList(key: String): List<Float>? = optJSONArray(key)?.let { values ->
     if (values.length() !in 6..512 || values.length() % 2 != 0) return null
+    List(values.length()) { index -> values.getDouble(index).toFloat() }
+}
+
+private fun JSONObject.extruderFloatList(key: String): List<Float>? = optJSONArray(key)?.let { values ->
+    if (values.length() !in 1..MAX_FILAMENT_SLOTS) return null
     List(values.length()) { index -> values.getDouble(index).toFloat() }
 }
 

@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 64
+SCHEMA_VERSION = 65
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -105,6 +105,11 @@ def values(value: Any) -> list[str]:
     if not isinstance(value, list):
         value = [value]
     return [str(item) for item in value if str(item).strip()]
+
+
+def number_values(value: Any, default: float) -> list[float]:
+    candidates = values(value)
+    return [number(candidate, default) for candidate in candidates] if candidates else [default]
 
 
 def stable_id(kind: str, brand: str, name: str) -> str:
@@ -199,6 +204,11 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     configured_max_layer_height = number(raw.get("max_layer_height"), 0)
     min_layer_height = configured_min_layer_height if configured_min_layer_height > 0 else 0.07
     max_layer_height = configured_max_layer_height if configured_max_layer_height > 0 else nozzle * 0.75
+    retract_length = number(raw.get("retraction_length"), 0.8)
+    tool_change_retract_lengths = number_values(raw.get("retract_length_toolchange"), retract_length)
+    tool_change_retract_restart_extras = number_values(
+        raw.get("retract_restart_extra_toolchange"), 0
+    )
     physical_extruder_count = len(values(raw.get("nozzle_diameter")))
     supports_multi_material = str(
         scalar(raw.get("single_extruder_multi_material"), "0")
@@ -252,7 +262,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "maxJerkY": motion("machine_max_jerk_y", 8),
         "maxJerkZ": motion("machine_max_jerk_z", 0.4),
         "maxJerkE": motion("machine_max_jerk_e", 5),
-        "retractLength": number(raw.get("retraction_length"), 0.8),
+        "retractLength": retract_length,
         "retractSpeed": number(raw.get("retraction_speed"), 30),
         "deretractSpeed": number(raw.get("deretraction_speed"), 0),
         "retractionMinimumTravel": number(raw.get("retraction_minimum_travel"), 2),
@@ -261,6 +271,8 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "wipeDistance": number(raw.get("wipe_distance"), 1),
         "retractBeforeWipe": number(raw.get("retract_before_wipe"), 100),
         "retractRestartExtra": number(raw.get("retract_restart_extra"), 0),
+        "toolChangeRetractLengths": tool_change_retract_lengths,
+        "toolChangeRetractRestartExtras": tool_change_retract_restart_extras,
         "zHop": number(raw.get("z_hop"), 0.4),
         "zHopType": z_hop_type(raw.get("z_hop_types"), "slope"),
         "extruderClearanceRadius": number(raw.get("extruder_clearance_radius"), 40),
@@ -291,6 +303,10 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and 0 <= profile["wipeDistance"] <= 100
         and 0 <= profile["retractBeforeWipe"] <= 100
         and -100 <= profile["retractRestartExtra"] <= 100
+        and 1 <= len(profile["toolChangeRetractLengths"]) <= MAX_FILAMENT_SLOTS
+        and all(0 <= value <= 100 for value in profile["toolChangeRetractLengths"])
+        and 1 <= len(profile["toolChangeRetractRestartExtras"]) <= MAX_FILAMENT_SLOTS
+        and all(-100 <= value <= 100 for value in profile["toolChangeRetractRestartExtras"])
         and 0 <= profile["zHop"] <= 5
         and profile["zHopType"] in {"auto", "normal", "slope", "spiral"}
         and 0.01 <= profile["minLayerHeight"] <= profile["maxLayerHeight"] <= 2

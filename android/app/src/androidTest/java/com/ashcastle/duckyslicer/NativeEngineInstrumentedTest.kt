@@ -2098,7 +2098,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(64, catalog.schemaVersion)
+        assertEquals(65, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2107,6 +2107,10 @@ class NativeEngineInstrumentedTest {
         val generatedU1 = catalog.printers.single { it.name == "Snapmaker U1 (0.4 nozzle)" }
         assertEquals(0.08f, generatedU1.minLayerHeight)
         assertEquals(0.32f, generatedU1.maxLayerHeight)
+        assertEquals(listOf(10f, 10f, 10f, 10f), generatedU1.toolChangeRetractLengths)
+        assertEquals(listOf(0f, 0f, 0f, 0f), generatedU1.toolChangeRetractRestartExtras)
+        val divergentToolChange = catalog.printers.single { it.name == "iQ TiQ2 0.4 Nozzle" }
+        assertEquals(listOf(10f, 12f), divergentToolChange.toolChangeRetractLengths)
         assertTrue(
             "Inherited filament G-code templates must survive catalog generation",
             catalog.filaments.any {
@@ -2834,7 +2838,12 @@ class NativeEngineInstrumentedTest {
             ),
         )
         val baselineOptions = SliceOptions()
-            .selectPrinter(PrinterProfile.U1_04)
+            .selectPrinter(
+                PrinterProfile.U1_04.copy(
+                    toolChangeRetractLengths = listOf(1.2f, 2.3f),
+                    toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
+                ),
+            )
             .selectFilament(primary)
             .selectQuality(QualityProfile.DRAFT)
             .copy(
@@ -2861,6 +2870,14 @@ class NativeEngineInstrumentedTest {
         val interlockedGcode = interlocked.output.readText()
 
         assertTrue("Touching volumes must use both materials", interlockedGcode.lineSequence().any { it == "T1" })
+        assertTrue(
+            "Per-tool retract lengths must reach Orca",
+            interlockedGcode.contains("; retract_length_toolchange = 1.2,2.3"),
+        )
+        assertTrue(
+            "Per-tool restart extras must reach Orca",
+            interlockedGcode.contains("; retract_restart_extra_toolchange = -0.1,0.2"),
+        )
         assertTrue("Interlocking must be active in Orca", interlockedGcode.contains("; interlocking_beam = 1"))
         assertFalse(
             "Interlocking must change real extrusion geometry, not only profile metadata",

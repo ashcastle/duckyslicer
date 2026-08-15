@@ -902,4 +902,7 @@
     <string name="segmented_region_interlocking_depth">Interlocking depth of a segmented region</string>
     <string name="minimum_layer_height">Minimum layer height</string>
     <string name="maximum_layer_height">Maximum layer height</string>
+    <string name="tool_change_retraction">Tool change retraction</string>
+    <string name="tool_change_retraction_length">Tool change retraction length</string>
+    <string name="tool_change_retract_restart_extra">Tool change restart extra</string>
 </resources>

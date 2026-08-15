@@ -346,6 +346,14 @@ private fun PrinterSettingsSheet(
 ) {
     var profilesOpen by remember { mutableStateOf(false) }
     var settingsQuery by remember { mutableStateOf("") }
+    var selectedExtruder by rememberSaveable(options.printerProfile.id) { mutableStateOf(0) }
+    LaunchedEffect(options.printerProfile.extruderCount) {
+        selectedExtruder = selectedExtruder.coerceIn(0, options.printerProfile.extruderCount - 1)
+    }
+    val activeExtruder = selectedExtruder.coerceIn(0, options.printerProfile.extruderCount - 1)
+    val toolChangeRetractLengths = options.printerProfile.resolvedToolChangeRetractLengths()
+    val toolChangeRetractRestartExtras =
+        options.printerProfile.resolvedToolChangeRetractRestartExtras()
     SettingsSheet(
         title = stringResource(R.string.printer_profile),
         onDismiss = onDismiss,
@@ -541,6 +549,60 @@ private fun PrinterSettingsSheet(
             onOptionsChanged(
                 options.copy(
                     printerProfile = options.printerProfile.copy(machineEndGcode = it),
+                ),
+            )
+        },
+    )
+    SettingsGroupTitle(stringResource(R.string.tool_change_retraction))
+    if (options.printerProfile.extruderCount > 1) {
+        SecondaryScrollableTabRow(selectedTabIndex = activeExtruder) {
+            repeat(options.printerProfile.extruderCount) { index ->
+                Tab(
+                    selected = index == activeExtruder,
+                    onClick = { selectedExtruder = index },
+                    text = { Text(stringResource(R.string.extruder_number, index + 1)) },
+                )
+            }
+        }
+    }
+    QuantizedSettingSlider(
+        label = stringResource(R.string.tool_change_retraction_length),
+        valueText = stringResource(
+            R.string.millimeters_value_precise,
+            toolChangeRetractLengths[activeExtruder],
+        ),
+        value = toolChangeRetractLengths[activeExtruder],
+        minimum = 0f,
+        defaultMaximum = max(20f, toolChangeRetractLengths[activeExtruder]),
+        increment = 0.1f,
+        onValueChange = {
+            val updated = toolChangeRetractLengths.toMutableList().apply {
+                this[activeExtruder] = it
+            }
+            onOptionsChanged(
+                options.updatePrinterRetraction(
+                    options.printerProfile.copy(toolChangeRetractLengths = updated),
+                ),
+            )
+        },
+    )
+    QuantizedSettingSlider(
+        label = stringResource(R.string.tool_change_retract_restart_extra),
+        valueText = stringResource(
+            R.string.millimeters_value_precise,
+            toolChangeRetractRestartExtras[activeExtruder],
+        ),
+        value = toolChangeRetractRestartExtras[activeExtruder],
+        minimum = min(-20f, toolChangeRetractRestartExtras[activeExtruder]),
+        defaultMaximum = max(20f, toolChangeRetractRestartExtras[activeExtruder]),
+        increment = 0.1f,
+        onValueChange = {
+            val updated = toolChangeRetractRestartExtras.toMutableList().apply {
+                this[activeExtruder] = it
+            }
+            onOptionsChanged(
+                options.updatePrinterRetraction(
+                    options.printerProfile.copy(toolChangeRetractRestartExtras = updated),
                 ),
             )
         },

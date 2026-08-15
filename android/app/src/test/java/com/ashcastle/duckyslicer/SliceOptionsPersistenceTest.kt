@@ -61,7 +61,13 @@ class SliceOptionsPersistenceTest {
             firstLayerTexturedPlateTemp = 64,
         )
         val options = SliceOptions()
-            .selectPrinter(PrinterProfile.U1_04.copy(auxiliaryFan = true))
+            .selectPrinter(
+                PrinterProfile.U1_04.copy(
+                    auxiliaryFan = true,
+                    toolChangeRetractLengths = listOf(1.2f, 2.3f),
+                    toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
+                ),
+            )
             .selectFilament(primary)
             .selectBuildPlate(BuildPlateType.TEXTURED_PEI)
             .copy(
@@ -147,6 +153,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(0.32f, restored.printerProfile.maxLayerHeight)
         assertArrayEquals(floatArrayOf(0.08f, 0.08f), native.minimumLayerHeights, 0.001f)
         assertArrayEquals(floatArrayOf(0.32f, 0.32f), native.maximumLayerHeights, 0.001f)
+        assertArrayEquals(floatArrayOf(1.2f, 2.3f), native.toolChangeRetractLengths, 0.001f)
+        assertArrayEquals(floatArrayOf(-0.1f, 0.2f), native.toolChangeRetractRestartExtras, 0.001f)
         assertEquals(2.85f, restored.filamentDiameter)
         assertEquals(2.85f, restored.filamentProfile.diameter)
         assertEquals(2.85f, native.filamentDiameter)
@@ -694,6 +702,8 @@ class SliceOptionsPersistenceTest {
             getJSONObject("printer").remove("auxiliaryFan")
             getJSONObject("printer").remove("minLayerHeight")
             getJSONObject("printer").remove("maxLayerHeight")
+            getJSONObject("printer").remove("toolChangeRetractLengths")
+            getJSONObject("printer").remove("toolChangeRetractRestartExtras")
             getJSONArray("filamentSlots").getJSONObject(0).remove("diameter")
             getJSONArray("filamentSlots").getJSONObject(0).remove("density")
             getJSONArray("filamentSlots").getJSONObject(0).remove("costPerKilogram")
@@ -786,6 +796,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(false, restored.printerProfile.auxiliaryFan)
         assertEquals(0.04f, restored.printerProfile.minLayerHeight)
         assertEquals(0.28f, restored.printerProfile.maxLayerHeight)
+        assertEquals(listOf(0.8f), restored.printerProfile.toolChangeRetractLengths)
+        assertEquals(listOf(0f), restored.printerProfile.toolChangeRetractRestartExtras)
         assertEquals(2.85f, restored.toNativeConfig().filamentDiameter)
         assertEquals(listOf(1.24f), restored.toNativeConfig().filamentDensities.toList())
         assertEquals(listOf(0f), restored.toNativeConfig().filamentCosts.toList())
@@ -809,6 +821,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(false, restored.toNativeConfig().auxiliaryFan)
         assertEquals(listOf(0.04f), restored.toNativeConfig().minimumLayerHeights.toList())
         assertEquals(listOf(0.28f), restored.toNativeConfig().maximumLayerHeights.toList())
+        assertEquals(listOf(0.8f), restored.toNativeConfig().toolChangeRetractLengths.toList())
+        assertEquals(listOf(0f), restored.toNativeConfig().toolChangeRetractRestartExtras.toList())
         assertEquals(0f, restored.travelSpeedZ)
         assertEquals(0f, restored.toNativeConfig().travelSpeedZ)
         assertEquals(emptyList<Float>(), restored.multiMaterial.purgeVolumes)
@@ -899,7 +913,13 @@ private fun JSONObject.removeCoolingParityFields() {
 }
 
 internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
-    .selectPrinter(PrinterProfile.U1_06.copy(auxiliaryFan = true))
+    .selectPrinter(
+        PrinterProfile.U1_06.copy(
+            auxiliaryFan = true,
+            toolChangeRetractLengths = listOf(1.4f, 2.6f),
+            toolChangeRetractRestartExtras = listOf(-0.2f, 0.3f),
+        ),
+    )
     .selectFilament(
         FilamentProfile.PETG.copy(
             compatiblePrinters = listOf(PrinterProfile.U1_06.name),

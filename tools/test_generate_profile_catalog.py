@@ -423,7 +423,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "name": "Safe sequential printer",
                 "printable_area": ["0x0", "200x0", "200x200", "0x200"],
                 "printable_height": "220",
-                "nozzle_diameter": "0.4",
+                "nozzle_diameter": ["0.4", "0.4"],
                 "min_layer_height": ["0.08"],
                 "max_layer_height": ["0.32"],
                 "gcode_flavor": "marlin",
@@ -431,6 +431,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "extruder_clearance_radius": "71.5",
                 "extruder_clearance_height_to_rod": "28.5",
                 "extruder_clearance_height_to_lid": "118",
+                "retract_length_toolchange": ["1.5", "2.5"],
+                "retract_restart_extra_toolchange": ["-0.1", "0.2"],
             },
         )
 
@@ -438,10 +440,12 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(28.5, profile["extruderClearanceHeightToRod"])
         self.assertEqual(118.0, profile["extruderClearanceHeightToLid"])
         self.assertFalse(profile["singleExtruderMultiMaterial"])
-        self.assertEqual(1, profile["extruderCount"])
+        self.assertEqual(2, profile["extruderCount"])
         self.assertTrue(profile["auxiliaryFan"])
         self.assertEqual(0.08, profile["minLayerHeight"])
         self.assertEqual(0.32, profile["maxLayerHeight"])
+        self.assertEqual([1.5, 2.5], profile["toolChangeRetractLengths"])
+        self.assertEqual([-0.1, 0.2], profile["toolChangeRetractRestartExtras"])
 
     def test_resolves_orca_layer_height_sentinels_and_rejects_inverted_limits(self) -> None:
         base = {

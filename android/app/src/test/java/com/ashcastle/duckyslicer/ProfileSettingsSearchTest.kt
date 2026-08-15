@@ -12,6 +12,7 @@ class ProfileSettingsSearchTest {
         assertTrue(settingQueryMatches("  speed  ", "Outer wall speed"))
         assertTrue(settingQueryMatches("거리", "상단 Z 거리"))
         assertTrue(settingQueryMatches("maximum layer", "Maximum layer height"))
+        assertTrue(settingQueryMatches("tool change", "Tool change retraction length"))
         assertFalse(settingQueryMatches("Z distance", "0.20 mm Standard"))
     }
 

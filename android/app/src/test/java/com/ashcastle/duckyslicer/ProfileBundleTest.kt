@@ -24,6 +24,8 @@ class ProfileBundleTest {
                         auxiliaryFan = true,
                         minLayerHeight = 0.09f,
                         maxLayerHeight = 0.31f,
+                        toolChangeRetractLengths = listOf(1.2f, 2.3f),
+                        toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
                     ),
                 ),
             )
@@ -84,8 +86,10 @@ class ProfileBundleTest {
             val catalog = destination.load()
             assertTrue(
                 catalog.printers.any {
-                    it.name == "Portable printer" && !it.builtIn && it.auxiliaryFan &&
-                        it.minLayerHeight == 0.09f && it.maxLayerHeight == 0.31f
+                        it.name == "Portable printer" && !it.builtIn && it.auxiliaryFan &&
+                        it.minLayerHeight == 0.09f && it.maxLayerHeight == 0.31f &&
+                        it.toolChangeRetractLengths == listOf(1.2f, 2.3f) &&
+                        it.toolChangeRetractRestartExtras == listOf(-0.1f, 0.2f)
                 },
             )
             val importedFilament = catalog.filaments.single {

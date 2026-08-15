@@ -174,10 +174,10 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
     }
 
     fun savePrinter(name: String, options: SliceOptions, sessionRevision: Long): Boolean =
-        launchSave(SupportEvent.PRINTER_PROFILE_SAVE_FAILED) { operationId ->
+        launchSave(SupportEvent.PRINTER_PROFILE_SAVE_FAILED) { operationId, catalog ->
             val saved = profileStore.savePrinter(name, options)
             ProfileSaveResult(
-                catalog = profileStore.load(),
+                catalog = catalog.copy(printers = catalog.printers + saved),
                 completion = ProfileSaveCompletion.Printer(
                     operationId,
                     sessionRevision,
@@ -193,10 +193,10 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
         slot: Int,
         sessionRevision: Long,
     ): Boolean = launchSave(SupportEvent.FILAMENT_PROFILE_SAVE_FAILED) {
-        operationId ->
+        operationId, catalog ->
         val saved = profileStore.saveFilament(name, options, slot)
         ProfileSaveResult(
-            catalog = profileStore.load(),
+            catalog = catalog.copy(filaments = catalog.filaments + saved),
             completion = ProfileSaveCompletion.Filament(
                 operationId,
                 sessionRevision,
@@ -208,10 +208,10 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
     }
 
     fun saveSlicing(name: String, options: SliceOptions, sessionRevision: Long): Boolean =
-        launchSave(SupportEvent.SLICING_PROFILE_SAVE_FAILED) { operationId ->
+        launchSave(SupportEvent.SLICING_PROFILE_SAVE_FAILED) { operationId, catalog ->
             val saved = profileStore.saveSlicing(name, options)
             ProfileSaveResult(
-                catalog = profileStore.load(),
+                catalog = catalog.copy(slicing = catalog.slicing + saved),
                 completion = ProfileSaveCompletion.Slicing(
                     operationId,
                     sessionRevision,
@@ -429,7 +429,7 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
     @Synchronized
     private fun launchSave(
         failureEvent: SupportEvent,
-        operation: (Long) -> ProfileSaveResult,
+        operation: (Long, ProfileCatalog) -> ProfileSaveResult,
     ): Boolean {
         val current = mutableState.value
         if (current.busy || !current.catalogLoaded || current.completion != null) return false
@@ -441,7 +441,7 @@ internal class ProfileLibraryViewModel(application: Application) : AndroidViewMo
         )
         viewModelScope.launch {
             val result = try {
-                withContext(Dispatchers.IO) { operation(operationId) }
+                withContext(Dispatchers.IO) { operation(operationId, current.catalog) }
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: Exception) {

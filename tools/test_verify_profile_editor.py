@@ -93,6 +93,10 @@ def valid_sources() -> dict[str, str]:
             " options.printerProfile.copy(auxiliaryFan ="
             " R.string.minimum_layer_height options.printerProfile.copy(minLayerHeight ="
             " R.string.maximum_layer_height options.printerProfile.copy(maxLayerHeight ="
+            " R.string.tool_change_retraction R.string.tool_change_retraction_length"
+            " options.printerProfile.copy(toolChangeRetractLengths ="
+            " R.string.tool_change_retract_restart_extra"
+            " options.printerProfile.copy(toolChangeRetractRestartExtras ="
             " filamentStartGcode = filamentEndGcode ="
             " R.string.maximum_z_speed R.string.maximum_e_speed"
             " R.string.maximum_x_acceleration R.string.maximum_y_acceleration"
@@ -173,6 +177,8 @@ def valid_sources() -> dict[str, str]:
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="machine_gcode" name="machine_start_gcode" name="machine_end_gcode"'
             ' name="minimum_layer_height" name="maximum_layer_height"'
+            ' name="tool_change_retraction" name="tool_change_retraction_length"'
+            ' name="tool_change_retract_restart_extra"'
             ' name="filament_gcode" name="filament_start_gcode" name="filament_end_gcode"'
             ' name="filament_diameter"'
             ' name="filament_density" name="filament_price_per_kilogram"'
@@ -221,6 +227,8 @@ def valid_sources() -> dict[str, str]:
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="machine_gcode" name="machine_start_gcode" name="machine_end_gcode"'
             ' name="minimum_layer_height" name="maximum_layer_height"'
+            ' name="tool_change_retraction" name="tool_change_retraction_length"'
+            ' name="tool_change_retract_restart_extra"'
             ' name="filament_gcode" name="filament_start_gcode" name="filament_end_gcode"'
             ' name="filament_diameter"'
             ' name="filament_density" name="filament_price_per_kilogram"'
