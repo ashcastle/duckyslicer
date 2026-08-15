@@ -257,6 +257,8 @@ data class PrinterProfile(
     val fanKickstart: Float = 0f,
     val supportsChamberTemperatureControl: Boolean = false,
     val supportsAirFiltration: Boolean = false,
+    val defaultPrintProfile: String = "",
+    val defaultFilamentProfiles: List<String> = emptyList(),
 ) {
     fun resolvedExtruderOffsetsX(count: Int = extruderCount): List<Float> =
         extruderOffsetsX.resizedExtruderValues(count, 0f)
@@ -1214,7 +1216,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 83,
+    val schemaVersion: Int = 84,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1543,6 +1545,71 @@ data class SliceOptions(
         } else {
             updated.selectQuality(QualityProfile.standardFor(profile.nozzleDiameter))
         }
+    }
+
+    internal fun selectPrinter(profile: PrinterProfile, catalog: ProfileCatalog): SliceOptions {
+        val currentFilaments = resolvedFilamentSlots()
+            .take(profile.extruderCount.coerceIn(1, MAX_FILAMENT_SLOTS))
+        val retainFilaments = currentFilaments.all {
+            it.compatiblePrinters.matchesPrinter(profile)
+        }
+        val retainQuality = quality.compatiblePrinters.matchesPrinter(profile) &&
+            abs(quality.nozzleDiameter - profile.nozzleDiameter) < 0.05f
+        var updated = selectPrinter(profile)
+
+        if (!retainFilaments) {
+            val resolvedDefaults = profile.defaultFilamentProfiles.map { preferredName ->
+                catalog.filaments.firstOrNull { candidate ->
+                    candidate.name == preferredName &&
+                        candidate.compatiblePrinters.matchesPrinter(profile)
+                }
+            }
+            val fallback = resolvedDefaults.firstNotNullOfOrNull { it }
+                ?: catalog.filaments.firstOrNull {
+                    it.compatiblePrinters.matchesPrinter(profile)
+                }
+            if (fallback != null) {
+                val exactPhysicalDefaults = resolvedDefaults
+                    .takeIf {
+                        !profile.singleExtruderMultiMaterial &&
+                            profile.extruderCount > 1 &&
+                            profile.defaultFilamentProfiles.size == profile.extruderCount &&
+                            it.all { candidate -> candidate != null }
+                    }
+                    ?.map { requireNotNull(it) }
+                    ?.takeIf { defaults ->
+                        defaults.all { candidate -> candidate.hasCompatibleDiameter(defaults.first()) }
+                    }
+                val replacements = exactPhysicalDefaults
+                    ?: List(currentFilaments.size.coerceAtLeast(1)) { fallback }
+                val primary = currentFilaments.firstOrNull()?.takeIf {
+                    it.compatiblePrinters.matchesPrinter(profile)
+                } ?: replacements.first()
+                val reconciled = replacements.mapIndexed { index, replacement ->
+                    currentFilaments.getOrNull(index)?.takeIf { candidate ->
+                        candidate.compatiblePrinters.matchesPrinter(profile) &&
+                            candidate.hasCompatibleDiameter(primary)
+                    } ?: replacement.takeIf { it.hasCompatibleDiameter(primary) } ?: primary
+                }
+                updated = updated.selectFilament(primary).copy(filamentSlots = reconciled)
+            }
+        }
+
+        if (!retainQuality) {
+            val preferred = profile.defaultPrintProfile.takeIf(String::isNotBlank)?.let { preferredName ->
+                catalog.slicing.firstOrNull { candidate ->
+                    candidate.name == preferredName &&
+                        candidate.compatiblePrinters.matchesPrinter(profile) &&
+                        abs(candidate.nozzleDiameter - profile.nozzleDiameter) < 0.05f
+                }
+            }
+            val replacement = preferred ?: catalog.slicing.firstOrNull {
+                it.compatiblePrinters.matchesPrinter(profile) &&
+                    abs(it.nozzleDiameter - profile.nozzleDiameter) < 0.05f
+            }
+            if (replacement != null) updated = updated.selectQuality(replacement)
+        }
+        return updated
     }
 
     fun selectFilament(profile: FilamentProfile) = copy(

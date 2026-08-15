@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 84
+internal const val USER_PROFILE_SCHEMA_VERSION = 85
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -132,6 +132,8 @@ class ProfileStore private constructor(
             fanKickstart = options.printerProfile.fanKickstart,
             supportsChamberTemperatureControl = options.printerProfile.supportsChamberTemperatureControl,
             supportsAirFiltration = options.printerProfile.supportsAirFiltration,
+            defaultPrintProfile = options.quality.name,
+            defaultFilamentProfiles = options.resolvedFilamentSlots().map(FilamentProfile::name),
         )
         require(ProfileValidation.printer(profile)) { "Printer profile contains unsafe values" }
         append("printers", profile.toProfileJson())
@@ -675,6 +677,8 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("fanKickstart", fanKickstart)
     .put("supportsChamberTemperatureControl", supportsChamberTemperatureControl)
     .put("supportsAirFiltration", supportsAirFiltration)
+    .put("defaultPrintProfile", defaultPrintProfile)
+    .put("defaultFilamentProfiles", JSONArray(defaultFilamentProfiles))
     .put("builtIn", builtIn)
     .put("brand", brand ?: JSONObject.NULL)
 
@@ -1186,6 +1190,8 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         fanKickstart = optDouble("fanKickstart", 0.0).toFloat(),
         supportsChamberTemperatureControl = optBoolean("supportsChamberTemperatureControl"),
         supportsAirFiltration = optBoolean("supportsAirFiltration"),
+        defaultPrintProfile = optString("defaultPrintProfile", ""),
+        defaultFilamentProfiles = stringList("defaultFilamentProfiles"),
     )
 }.getOrNull()
 

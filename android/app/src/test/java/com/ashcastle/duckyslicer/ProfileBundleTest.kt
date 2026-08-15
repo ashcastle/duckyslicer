@@ -148,6 +148,9 @@ class ProfileBundleTest {
                         it.toolChangeRetractRestartExtras == listOf(-0.1f, 0.2f)
                 },
             )
+            val importedPrinter = catalog.printers.single { it.name == "Portable printer" }
+            assertEquals(QualityProfile.STANDARD.name, importedPrinter.defaultPrintProfile)
+            assertEquals(listOf(FilamentProfile.PLA.name), importedPrinter.defaultFilamentProfiles)
             val importedFilament = catalog.filaments.single {
                 it.name == "Portable filament" && !it.builtIn
             }

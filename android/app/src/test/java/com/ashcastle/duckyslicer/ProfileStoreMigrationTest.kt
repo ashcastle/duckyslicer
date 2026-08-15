@@ -44,6 +44,8 @@ class ProfileStoreMigrationTest {
                 remove("highCurrentOnFilamentSwap")
                 remove("toolChangeRetractLengths")
                 remove("toolChangeRetractRestartExtras")
+                remove("defaultPrintProfile")
+                remove("defaultFilamentProfiles")
             }
             val legacyFilament = filament.toProfileJson().withoutProfileMetadata().apply {
                 remove("diameter")
@@ -138,6 +140,8 @@ class ProfileStoreMigrationTest {
             assertTrue(restoredPrinter.emitMachineLimitsToGcode)
             assertFalse(restoredPrinter.manualFilamentChange)
             assertFalse(restoredPrinter.disableM73)
+            assertEquals("", restoredPrinter.defaultPrintProfile)
+            assertEquals(emptyList<String>(), restoredPrinter.defaultFilamentProfiles)
             assertEquals(91.5f, restoredPrinter.coolingTubeRetraction)
             assertEquals(5f, restoredPrinter.coolingTubeLength)
             assertEquals(92f, restoredPrinter.parkingPosRetraction)

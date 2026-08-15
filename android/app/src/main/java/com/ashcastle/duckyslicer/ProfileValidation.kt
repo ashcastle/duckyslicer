@@ -18,6 +18,9 @@ internal object ProfileValidation {
             profile.extruderCount in 1..MAX_FILAMENT_SLOTS &&
             profile.fanSpeedupTime in 0f..60f &&
             profile.fanKickstart in 0f..60f &&
+            (profile.defaultPrintProfile.isEmpty() || profile.defaultPrintProfile.isSafeLabel()) &&
+            profile.defaultFilamentProfiles.size <= MAX_FILAMENT_SLOTS &&
+            profile.defaultFilamentProfiles.all { it.isSafeLabel() } &&
             profile.gcodeFlavor in setOf("marlin", "marlin2", "klipper") &&
             listOf(
                 profile.machineLoadFilamentTime,

@@ -569,6 +569,11 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "retract_length_toolchange": ["1.5", "2.5"],
                 "retract_restart_extra_toolchange": ["-0.1", "0.2"],
                 "extruder_offset": ["0x0", "12.5x-3.25"],
+                "default_print_profile": "0.20 mm Standard @Example 0.4 nozzle",
+                "default_filament_profile": [
+                    "Example PLA @Example",
+                    "Example Support @Example",
+                ],
             },
         )
 
@@ -590,9 +595,34 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual([1.5, 2.5], profile["toolChangeRetractLengths"])
         self.assertEqual([-0.1, 0.2], profile["toolChangeRetractRestartExtras"])
         self.assertEqual(
+            "0.20 mm Standard @Example 0.4 nozzle",
+            profile["defaultPrintProfile"],
+        )
+        self.assertEqual(
+            ["Example PLA @Example", "Example Support @Example"],
+            profile["defaultFilamentProfiles"],
+        )
+        self.assertEqual(
             [0.0, 0.0, 18.0, 0.0, 18.0, 28.0, 0.0, 28.0],
             profile["bedExcludeArea"],
         )
+
+    def test_normalizes_legacy_semicolon_delimited_printer_defaults(self) -> None:
+        profile = build_printer(
+            "Example",
+            {
+                "name": "Legacy defaults printer",
+                "printable_area": ["0x0", "200x0", "200x200", "0x200"],
+                "printable_height": "220",
+                "nozzle_diameter": "0.4",
+                "gcode_flavor": "marlin",
+                "default_print_profile": " Fine ; Draft ",
+                "default_filament_profile": " PLA ; PETG ",
+            },
+        )
+
+        self.assertEqual("Fine", profile["defaultPrintProfile"])
+        self.assertEqual(["PLA", "PETG"], profile["defaultFilamentProfiles"])
 
     def test_resolves_orca_layer_height_sentinels_and_rejects_inverted_limits(self) -> None:
         base = {

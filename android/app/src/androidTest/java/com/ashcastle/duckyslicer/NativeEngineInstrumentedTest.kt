@@ -2393,13 +2393,18 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(83, catalog.schemaVersion)
+        assertEquals(84, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include upstream filament presets", catalog.filaments.size > 3_000)
         assertTrue("The catalog must include upstream slicing presets", catalog.slicing.size > 2_000)
         val generatedU1 = catalog.printers.single { it.name == "Snapmaker U1 (0.4 nozzle)" }
+        assertEquals(
+            "0.20 Standard @Snapmaker U1 (0.4 nozzle)",
+            generatedU1.defaultPrintProfile,
+        )
+        assertEquals(listOf("Snapmaker PLA"), generatedU1.defaultFilamentProfiles)
         assertEquals(0.08f, generatedU1.minLayerHeight)
         assertEquals(0.32f, generatedU1.maxLayerHeight)
         assertEquals(listOf(10f, 10f, 10f, 10f), generatedU1.toolChangeRetractLengths)
@@ -2407,6 +2412,35 @@ class NativeEngineInstrumentedTest {
         assertEquals(5f, generatedU1.machineToolChangeTime)
         assertFalse(generatedU1.toolChangeTemperatureWait)
         assertEquals("M600", generatedU1.machinePauseGcode)
+        val coreOne = catalog.printers.single { it.name == "Prusa CORE One 0.4 nozzle" }
+        val incompatible = SliceOptions()
+            .selectFilament(
+                FilamentProfile.GENERIC_PLA.copy(
+                    id = "instrumented-foreign-filament",
+                    name = "Instrumented foreign filament",
+                    compatiblePrinters = listOf("Different printer"),
+                ),
+            )
+            .selectQuality(
+                QualityProfile.STANDARD.copy(
+                    id = "instrumented-foreign-quality",
+                    name = "Instrumented foreign quality",
+                    compatiblePrinters = listOf("Different printer"),
+                ),
+            )
+        val defaultsSelected = incompatible.selectPrinter(coreOne, catalog)
+        assertEquals(coreOne.defaultPrintProfile, defaultsSelected.quality.name)
+        assertEquals(
+            coreOne.defaultFilamentProfiles.single(),
+            defaultsSelected.filamentProfile.name,
+        )
+        val dual = catalog.printers.single { it.name == "Snapmaker A250 Dual (0.2 nozzle)" }
+        val dualDefaults = incompatible.selectPrinter(dual, catalog)
+        assertEquals(dual.defaultPrintProfile, dualDefaults.quality.name)
+        assertEquals(
+            dual.defaultFilamentProfiles,
+            dualDefaults.resolvedFilamentSlots().map(FilamentProfile::name),
+        )
         assertEquals(
             "TIMELAPSE_TAKE_FRAME",
             catalog.printers.single { it.name == "Artillery M1 Pro 0.4 nozzle" }.timeLapseGcode,

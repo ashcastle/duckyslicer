@@ -237,21 +237,7 @@ internal fun ProfileSettings(
             profiles = catalog.printers,
             recentIds = recents.printerIds,
             onProfileSelected = { printer ->
-                var updated = activeEditor.session.working.selectPrinter(printer)
-                if (!updated.filamentProfile.compatiblePrinters.matchesPrinter(printer)) {
-                    catalog.filaments.firstOrNull { it.compatiblePrinters.matchesPrinter(printer) }
-                        ?.let { updated = updated.selectFilament(it) }
-                }
-                if (
-                    !updated.quality.compatiblePrinters.matchesPrinter(printer) ||
-                    abs(updated.quality.nozzleDiameter - printer.nozzleDiameter) >= 0.05f
-                ) {
-                    catalog.slicing.firstOrNull {
-                        it.compatiblePrinters.matchesPrinter(printer) &&
-                            abs(it.nozzleDiameter - printer.nozzleDiameter) < 0.05f
-                    }?.let { updated = updated.selectQuality(it) }
-                }
-                updateEditor(updated)
+                updateEditor(activeEditor.session.working.selectPrinter(printer, catalog))
             },
             onOptionsChanged = ::updateEditor,
             onSave = { name, staged ->

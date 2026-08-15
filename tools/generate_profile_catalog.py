@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 83
+SCHEMA_VERSION = 84
 MAX_FILAMENT_SLOTS = 16
 DEFAULT_GCODE_FILENAME_FORMAT = (
     "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
@@ -161,6 +161,21 @@ def values(value: Any) -> list[str]:
     if not isinstance(value, list):
         value = [value]
     return [str(item) for item in value if str(item).strip()]
+
+
+def default_profile_names(value: Any) -> list[str]:
+    """Normalize Orca's array and legacy semicolon-delimited preset references."""
+    normalized = [
+        name.strip()
+        for item in values(value)
+        for name in item.split(";")
+        if name.strip()
+    ]
+    if len(normalized) > MAX_FILAMENT_SLOTS:
+        raise ValueError("too many default profile references")
+    if any(len(name) > 512 or len(name.encode("utf-8")) > 2_048 for name in normalized):
+        raise ValueError("unsafe default profile reference")
+    return normalized
 
 
 def number_values(value: Any, default: float) -> list[float]:
@@ -425,6 +440,8 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "extruderClearanceRadius": number(raw.get("extruder_clearance_radius"), 40),
         "extruderClearanceHeightToRod": number(raw.get("extruder_clearance_height_to_rod"), 40),
         "extruderClearanceHeightToLid": number(raw.get("extruder_clearance_height_to_lid"), 120),
+        "defaultPrintProfile": next(iter(default_profile_names(raw.get("default_print_profile"))), ""),
+        "defaultFilamentProfiles": default_profile_names(raw.get("default_filament_profile")),
     }
     if not (
         all(0.1 <= profile[key] <= 2_000 for key in ["maxSpeedX", "maxSpeedY", "maxSpeedZ", "maxSpeedE"])
@@ -443,6 +460,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and 0.1 <= profile["extruderClearanceRadius"] <= 1_000
         and 0.1 <= profile["extruderClearanceHeightToRod"] <= 1_500
         and 0.1 <= profile["extruderClearanceHeightToLid"] <= 1_500
+        and len(profile["defaultFilamentProfiles"]) <= MAX_FILAMENT_SLOTS
         and 0 <= profile["retractLength"] <= 100
         and 0 <= profile["retractSpeed"] <= 500
         and 0 <= profile["deretractSpeed"] <= 500

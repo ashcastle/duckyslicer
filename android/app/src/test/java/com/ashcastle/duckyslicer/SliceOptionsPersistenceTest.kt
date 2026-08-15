@@ -525,6 +525,11 @@ class SliceOptionsPersistenceTest {
         assertEquals(options.printerProfile.id, restored.printerProfile.id)
         assertEquals(options.printerProfile.brand, restored.printerProfile.brand)
         assertEquals(options.printerProfile.builtIn, restored.printerProfile.builtIn)
+        assertEquals(options.printerProfile.defaultPrintProfile, restored.printerProfile.defaultPrintProfile)
+        assertEquals(
+            options.printerProfile.defaultFilamentProfiles,
+            restored.printerProfile.defaultFilamentProfiles,
+        )
         assertEquals(restored.printerProfile.name, restored.toNativeConfig().printerModel)
         assertEquals(options.bedOriginX, restored.bedOriginX)
         assertEquals(options.bedOriginY, restored.bedOriginY)
@@ -1191,6 +1196,18 @@ class SliceOptionsPersistenceTest {
                 ),
             ),
         )
+        assertFalse(
+            ProfileValidation.printer(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(defaultPrintProfile = "x".repeat(513)),
+            ),
+        )
+        assertFalse(
+            ProfileValidation.printer(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(
+                    defaultFilamentProfiles = List(MAX_FILAMENT_SLOTS + 1) { "PLA $it" },
+                ),
+            ),
+        )
     }
 }
 
@@ -1232,6 +1249,8 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             highCurrentOnFilamentSwap = true,
             toolChangeRetractLengths = listOf(1.4f, 2.6f),
             toolChangeRetractRestartExtras = listOf(-0.2f, 0.3f),
+            defaultPrintProfile = "Fixture process",
+            defaultFilamentProfiles = listOf("Fixture primary", "Fixture secondary"),
         ),
     )
     .selectFilament(
