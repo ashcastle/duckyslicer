@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 63
+SCHEMA_VERSION = 64
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -195,6 +195,10 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     width, depth, bed_origin_x, bed_origin_y, bed_polygon = printable_geometry(raw.get("printable_area"))
     height = number(raw.get("printable_height"), 0)
     nozzle = number(raw.get("nozzle_diameter"), 0)
+    configured_min_layer_height = number(raw.get("min_layer_height"), 0)
+    configured_max_layer_height = number(raw.get("max_layer_height"), 0)
+    min_layer_height = configured_min_layer_height if configured_min_layer_height > 0 else 0.07
+    max_layer_height = configured_max_layer_height if configured_max_layer_height > 0 else nozzle * 0.75
     physical_extruder_count = len(values(raw.get("nozzle_diameter")))
     supports_multi_material = str(
         scalar(raw.get("single_extruder_multi_material"), "0")
@@ -225,6 +229,8 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "bedPolygon": bed_polygon,
         "maxPrintHeight": height,
         "nozzleDiameter": nozzle,
+        "minLayerHeight": min_layer_height,
+        "maxLayerHeight": max_layer_height,
         "singleExtruderMultiMaterial": supports_multi_material,
         "extruderCount": extruder_count,
         "auxiliaryFan": boolean(raw.get("auxiliary_fan")),
@@ -287,6 +293,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and -100 <= profile["retractRestartExtra"] <= 100
         and 0 <= profile["zHop"] <= 5
         and profile["zHopType"] in {"auto", "normal", "slope", "spiral"}
+        and 0.01 <= profile["minLayerHeight"] <= profile["maxLayerHeight"] <= 2
     ):
         raise ValueError("unsafe motion limits")
     return profile

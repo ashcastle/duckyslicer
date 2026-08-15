@@ -91,6 +91,8 @@ def valid_sources() -> dict[str, str]:
             " activeProfile.copy(internalBridgeFanSpeed ="
             " activeProfile.copy(supportInterfaceFanSpeed ="
             " options.printerProfile.copy(auxiliaryFan ="
+            " R.string.minimum_layer_height options.printerProfile.copy(minLayerHeight ="
+            " R.string.maximum_layer_height options.printerProfile.copy(maxLayerHeight ="
             " filamentStartGcode = filamentEndGcode ="
             " R.string.maximum_z_speed R.string.maximum_e_speed"
             " R.string.maximum_x_acceleration R.string.maximum_y_acceleration"
@@ -170,6 +172,7 @@ def valid_sources() -> dict[str, str]:
             ' name="tree_support_auto_brim" name="tree_support_brim_width"'
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="machine_gcode" name="machine_start_gcode" name="machine_end_gcode"'
+            ' name="minimum_layer_height" name="maximum_layer_height"'
             ' name="filament_gcode" name="filament_start_gcode" name="filament_end_gcode"'
             ' name="filament_diameter"'
             ' name="filament_density" name="filament_price_per_kilogram"'
@@ -217,6 +220,7 @@ def valid_sources() -> dict[str, str]:
             ' name="tree_support_auto_brim" name="tree_support_brim_width"'
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="machine_gcode" name="machine_start_gcode" name="machine_end_gcode"'
+            ' name="minimum_layer_height" name="maximum_layer_height"'
             ' name="filament_gcode" name="filament_start_gcode" name="filament_end_gcode"'
             ' name="filament_diameter"'
             ' name="filament_density" name="filament_price_per_kilogram"'

@@ -12,6 +12,8 @@ internal object ProfileValidation {
             bedPolygonIsValid(profile.bedPolygon, profile.bedSizeX, profile.bedSizeY) &&
             profile.maxPrintHeight in 50f..1_500f &&
             profile.nozzleDiameter in 0.1f..2f &&
+            profile.minLayerHeight in 0.01f..2f &&
+            profile.maxLayerHeight in profile.minLayerHeight..2f &&
             profile.extruderCount in 1..MAX_FILAMENT_SLOTS &&
             profile.gcodeFlavor in setOf("marlin", "marlin2", "klipper") &&
             listOf(profile.maxSpeedX, profile.maxSpeedY, profile.maxSpeedZ, profile.maxSpeedE)

@@ -424,6 +424,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "printable_area": ["0x0", "200x0", "200x200", "0x200"],
                 "printable_height": "220",
                 "nozzle_diameter": "0.4",
+                "min_layer_height": ["0.08"],
+                "max_layer_height": ["0.32"],
                 "gcode_flavor": "marlin",
                 "auxiliary_fan": "1",
                 "extruder_clearance_radius": "71.5",
@@ -438,6 +440,29 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertFalse(profile["singleExtruderMultiMaterial"])
         self.assertEqual(1, profile["extruderCount"])
         self.assertTrue(profile["auxiliaryFan"])
+        self.assertEqual(0.08, profile["minLayerHeight"])
+        self.assertEqual(0.32, profile["maxLayerHeight"])
+
+    def test_resolves_orca_layer_height_sentinels_and_rejects_inverted_limits(self) -> None:
+        base = {
+            "name": "Layer limit printer",
+            "printable_area": ["0x0", "200x0", "200x200", "0x200"],
+            "printable_height": "220",
+            "nozzle_diameter": "0.4",
+            "gcode_flavor": "marlin",
+            "min_layer_height": ["0"],
+            "max_layer_height": ["0"],
+        }
+
+        profile = build_printer("Example", base)
+
+        self.assertEqual(0.07, profile["minLayerHeight"])
+        self.assertAlmostEqual(0.3, profile["maxLayerHeight"])
+        with self.assertRaises(ValueError):
+            build_printer(
+                "Example",
+                base | {"min_layer_height": ["0.35"], "max_layer_height": ["0.2"]},
+            )
 
     def test_classifies_single_extruder_multi_material_printers(self) -> None:
         profile = build_printer(

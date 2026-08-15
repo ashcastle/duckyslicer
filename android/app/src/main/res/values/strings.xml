@@ -900,4 +900,6 @@
     <string name="infill_rotation_template_invalid">Enter up to 32 comma-separated angles from −360° to 360°.</string>
     <string name="segmented_region_max_width">Maximum width of a segmented region</string>
     <string name="segmented_region_interlocking_depth">Interlocking depth of a segmented region</string>
+    <string name="minimum_layer_height">Minimum layer height</string>
+    <string name="maximum_layer_height">Maximum layer height</string>
 </resources>

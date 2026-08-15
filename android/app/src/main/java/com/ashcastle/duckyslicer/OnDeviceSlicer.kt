@@ -114,6 +114,8 @@ data class PrinterProfile(
     val nozzleDiameter: Float,
     val builtIn: Boolean = false,
     val brand: String? = null,
+    val minLayerHeight: Float = 0.04f,
+    val maxLayerHeight: Float = nozzleDiameter * 0.7f,
     val machineStartGcode: String = "",
     val machineEndGcode: String = "",
     val gcodeFlavor: String = "marlin",
@@ -156,18 +158,22 @@ data class PrinterProfile(
     companion object {
         val U1_02 = PrinterProfile(
             "snapmaker-u1-02", "U1 · 0.2 mm", 270f, 270f, 270f, 0.2f, true, "Snapmaker",
+            minLayerHeight = 0.04f, maxLayerHeight = 0.14f,
             extruderCount = 4, extruderClearanceRadius = 72.5f, extruderClearanceHeightToRod = 27.5f,
         )
         val U1_04 = PrinterProfile(
             "snapmaker-u1-04", "U1 · 0.4 mm", 270f, 270f, 270f, 0.4f, true, "Snapmaker",
+            minLayerHeight = 0.08f, maxLayerHeight = 0.32f,
             extruderCount = 4, extruderClearanceRadius = 72.5f, extruderClearanceHeightToRod = 27.5f,
         )
         val U1_06 = PrinterProfile(
             "snapmaker-u1-06", "U1 · 0.6 mm", 270f, 270f, 270f, 0.6f, true, "Snapmaker",
+            minLayerHeight = 0.12f, maxLayerHeight = 0.42f,
             extruderCount = 4, extruderClearanceRadius = 72.5f, extruderClearanceHeightToRod = 27.5f,
         )
         val U1_08 = PrinterProfile(
             "snapmaker-u1-08", "U1 · 0.8 mm", 270f, 270f, 270f, 0.8f, true, "Snapmaker",
+            minLayerHeight = 0.16f, maxLayerHeight = 0.56f,
             extruderCount = 4, extruderClearanceRadius = 72.5f, extruderClearanceHeightToRod = 27.5f,
         )
         val CUSTOM_CARTESIAN = PrinterProfile(
@@ -1932,6 +1938,12 @@ data class SliceOptions(
             filamentDensities = nativeFilaments.map(FilamentProfile::density).toFloatArray(),
             filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
+            native.minimumLayerHeights = FloatArray(nativeFilaments.size) {
+                printerProfile.minLayerHeight
+            }
+            native.maximumLayerHeights = FloatArray(nativeFilaments.size) {
+                printerProfile.maxLayerHeight
+            }
             native.filamentShrinkages = nativeFilaments
                 .map(FilamentProfile::shrinkageXyPercent)
                 .toFloatArray()
@@ -2233,15 +2245,16 @@ object OnDeviceSlicer {
                 } && volume.multiColorPaint.facets.values.all { it in availableFilamentSlots }
             }
         }) { "Multi-color paint references unavailable geometry or filament" }
-        val maximumLayerHeight = options.nozzleDiameter * 0.7f
+        val layerHeightRange = options.printerProfile.minLayerHeight..
+            options.printerProfile.maxLayerHeight
         require(objects.all { projectObject ->
             projectObject.variableLayerHeights.ranges.all { range ->
-                range.layerHeightMm in 0.04f..maximumLayerHeight
+                range.layerHeightMm in layerHeightRange
             }
         }) { "Variable layer height is unavailable for this nozzle" }
         require(objects.all { projectObject ->
             projectObject.processOverrides.layerHeightMm?.let {
-                it in 0.04f..maximumLayerHeight
+                it in 0.04f..options.printerProfile.maxLayerHeight
             } != false
         }) { "Object layer height is unavailable for this nozzle" }
 

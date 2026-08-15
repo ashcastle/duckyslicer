@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 64
+internal const val USER_PROFILE_SCHEMA_VERSION = 65
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -55,6 +55,8 @@ class ProfileStore private constructor(
             bedPolygon = options.bedPolygon,
             maxPrintHeight = options.maxPrintHeight,
             nozzleDiameter = options.nozzleDiameter,
+            minLayerHeight = options.printerProfile.minLayerHeight,
+            maxLayerHeight = options.printerProfile.maxLayerHeight,
             machineStartGcode = options.printerProfile.machineStartGcode,
             machineEndGcode = options.printerProfile.machineEndGcode,
             gcodeFlavor = options.gcodeFlavor,
@@ -522,6 +524,7 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("bedOriginX", bedOriginX).put("bedOriginY", bedOriginY)
     .put("bedPolygon", JSONArray(bedPolygon))
     .put("maxPrintHeight", maxPrintHeight).put("nozzleDiameter", nozzleDiameter)
+    .put("minLayerHeight", minLayerHeight).put("maxLayerHeight", maxLayerHeight)
     .put("machineStartGcode", machineStartGcode).put("machineEndGcode", machineEndGcode)
     .put("gcodeFlavor", gcodeFlavor)
     .put("maxSpeedX", maxSpeedX).put("maxSpeedY", maxSpeedY)
@@ -920,10 +923,13 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
 internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching {
     val bedSizeX = getDouble("bedSizeX").toFloat()
     val bedSizeY = getDouble("bedSizeY").toFloat()
+    val nozzleDiameter = getDouble("nozzleDiameter").toFloat()
     PrinterProfile(
         getString("id"), getString("name"),
         bedSizeX, bedSizeY,
-        getDouble("maxPrintHeight").toFloat(), getDouble("nozzleDiameter").toFloat(),
+        getDouble("maxPrintHeight").toFloat(), nozzleDiameter,
+        minLayerHeight = optDouble("minLayerHeight", 0.04).toFloat(),
+        maxLayerHeight = optDouble("maxLayerHeight", nozzleDiameter * 0.7).toFloat(),
         builtIn = optBoolean("builtIn"),
         brand = optionalString("brand"),
         machineStartGcode = optString("machineStartGcode"),

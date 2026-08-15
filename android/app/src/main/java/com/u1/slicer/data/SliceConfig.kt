@@ -260,6 +260,8 @@ data class SliceConfig(
     @JvmField var filamentBedTemps: IntArray = intArrayOf()
     @JvmField var filamentShrinkages: FloatArray = floatArrayOf()
     @JvmField var filamentShrinkageCompensationZ: FloatArray = floatArrayOf()
+    @JvmField var minimumLayerHeights: FloatArray = floatArrayOf()
+    @JvmField var maximumLayerHeights: FloatArray = floatArrayOf()
     @JvmField var filamentFanCoolingLayerTimes: FloatArray = floatArrayOf()
     @JvmField var filamentSlowDownForLayerCooling: IntArray = intArrayOf()
     @JvmField var filamentKeepFanAlwaysOn: IntArray = intArrayOf()

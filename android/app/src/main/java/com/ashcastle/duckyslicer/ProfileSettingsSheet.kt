@@ -437,6 +437,42 @@ private fun PrinterSettingsSheet(
             )
         },
     )
+    QuantizedSettingSlider(
+        label = stringResource(R.string.minimum_layer_height),
+        valueText = stringResource(
+            R.string.millimeters_value_precise,
+            options.printerProfile.minLayerHeight,
+        ),
+        value = options.printerProfile.minLayerHeight,
+        minimum = 0.01f,
+        defaultMaximum = options.printerProfile.maxLayerHeight,
+        increment = 0.01f,
+        onValueChange = {
+            onOptionsChanged(
+                options.updatePrinterRetraction(
+                    options.printerProfile.copy(minLayerHeight = it),
+                ),
+            )
+        },
+    )
+    QuantizedSettingSlider(
+        label = stringResource(R.string.maximum_layer_height),
+        valueText = stringResource(
+            R.string.millimeters_value_precise,
+            options.printerProfile.maxLayerHeight,
+        ),
+        value = options.printerProfile.maxLayerHeight,
+        minimum = options.printerProfile.minLayerHeight,
+        defaultMaximum = max(options.nozzleDiameter, options.printerProfile.maxLayerHeight),
+        increment = 0.01f,
+        onValueChange = {
+            onOptionsChanged(
+                options.updatePrinterRetraction(
+                    options.printerProfile.copy(maxLayerHeight = it),
+                ),
+            )
+        },
+    )
     SettingSlider(
         label = stringResource(R.string.extruder_count),
         valueText = options.printerProfile.extruderCount.toString(),
@@ -1652,7 +1688,7 @@ private fun SlicingSettingsSheet(
             )
         },
     ) {
-        val maximumLayerHeight = (options.nozzleDiameter * 0.7f).coerceAtLeast(0.14f)
+        val maximumLayerHeight = options.printerProfile.maxLayerHeight.coerceAtLeast(0.04f)
         val layerHeightSteps = ((maximumLayerHeight - 0.04f) / 0.01f).roundToInt().coerceAtLeast(2) - 1
         val minimumLineWidth = options.nozzleDiameter * 0.5f
         val maximumLineWidth = listOf(

@@ -20,7 +20,11 @@ class ProfileBundleTest {
             source.savePrinter(
                 "Portable printer",
                 SliceOptions().selectPrinter(
-                    PrinterProfile.CUSTOM_CARTESIAN.copy(auxiliaryFan = true),
+                    PrinterProfile.CUSTOM_CARTESIAN.copy(
+                        auxiliaryFan = true,
+                        minLayerHeight = 0.09f,
+                        maxLayerHeight = 0.31f,
+                    ),
                 ),
             )
             source.saveFilament(
@@ -80,7 +84,8 @@ class ProfileBundleTest {
             val catalog = destination.load()
             assertTrue(
                 catalog.printers.any {
-                    it.name == "Portable printer" && !it.builtIn && it.auxiliaryFan
+                    it.name == "Portable printer" && !it.builtIn && it.auxiliaryFan &&
+                        it.minLayerHeight == 0.09f && it.maxLayerHeight == 0.31f
                 },
             )
             val importedFilament = catalog.filaments.single {

@@ -1210,7 +1210,8 @@ internal fun WorkspaceScreen(
         VariableLayerHeightSheet(
             current = selectedObject.variableLayerHeights,
             baseLayerHeightMm = sliceOptions.layerHeight,
-            nozzleDiameterMm = sliceOptions.nozzleDiameter,
+            minimumLayerHeightMm = sliceOptions.printerProfile.minLayerHeight,
+            maximumLayerHeightMm = sliceOptions.printerProfile.maxLayerHeight,
             onApply = {
                 showVariableLayerHeightTool = false
                 onVariableLayerHeightsChanged(it)
@@ -2121,12 +2122,15 @@ private fun CutObjectSheet(
 private fun VariableLayerHeightSheet(
     current: VariableLayerHeights,
     baseLayerHeightMm: Float,
-    nozzleDiameterMm: Float,
+    minimumLayerHeightMm: Float,
+    maximumLayerHeightMm: Float,
     onApply: (VariableLayerHeights) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val maximumLayerHeight = (nozzleDiameterMm * 0.7f).coerceAtLeast(0.04f)
-    val initialLayerHeight = (baseLayerHeightMm * 0.5f).coerceIn(0.04f, maximumLayerHeight)
+    val minimumLayerHeight = minimumLayerHeightMm.coerceAtLeast(0.01f)
+    val maximumLayerHeight = maximumLayerHeightMm.coerceAtLeast(minimumLayerHeight)
+    val initialLayerHeight = (baseLayerHeightMm * 0.5f)
+        .coerceIn(minimumLayerHeight, maximumLayerHeight)
     var staged by remember(current) { mutableStateOf(current) }
     var selectedIndex by remember(current) { mutableStateOf(-1) }
     var selectedRange by remember(current) { mutableStateOf(0.25f..0.75f) }
@@ -2264,8 +2268,8 @@ private fun VariableLayerHeightSheet(
                         selectedLayerHeight,
                     ),
                     value = selectedLayerHeight,
-                    range = 0.04f..maximumLayerHeight,
-                    steps = ((maximumLayerHeight - 0.04f) / 0.01f)
+                    range = minimumLayerHeight..maximumLayerHeight,
+                    steps = ((maximumLayerHeight - minimumLayerHeight) / 0.01f)
                         .roundToInt().coerceAtLeast(1) - 1,
                     enabled = true,
                     onValueChange = {

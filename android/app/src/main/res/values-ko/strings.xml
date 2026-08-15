@@ -900,4 +900,6 @@
     <string name="infill_rotation_template_invalid">−360°~360° 각도를 쉼표로 구분해 32개까지 입력하세요.</string>
     <string name="segmented_region_max_width">세그먼트 영역 최대 너비</string>
     <string name="segmented_region_interlocking_depth">세그먼트 영역 맞물림 깊이</string>
+    <string name="minimum_layer_height">최소 레이어 높이</string>
+    <string name="maximum_layer_height">최대 레이어 높이</string>
 </resources>

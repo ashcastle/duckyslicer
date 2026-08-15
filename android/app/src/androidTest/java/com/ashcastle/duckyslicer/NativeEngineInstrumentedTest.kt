@@ -2098,12 +2098,15 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(63, catalog.schemaVersion)
+        assertEquals(64, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
         assertTrue("The catalog must include upstream filament presets", catalog.filaments.size > 3_000)
         assertTrue("The catalog must include upstream slicing presets", catalog.slicing.size > 2_000)
+        val generatedU1 = catalog.printers.single { it.name == "Snapmaker U1 (0.4 nozzle)" }
+        assertEquals(0.08f, generatedU1.minLayerHeight)
+        assertEquals(0.32f, generatedU1.maxLayerHeight)
         assertTrue(
             "Inherited filament G-code templates must survive catalog generation",
             catalog.filaments.any {

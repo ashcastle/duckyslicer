@@ -20,6 +20,8 @@ class ProfileStoreMigrationTest {
             val slicing = QualityProfile.STANDARD.copy(id = "v3-slicing", name = "V3 Slicing")
             val legacyPrinter = printer.toProfileJson().withoutProfileMetadata().apply {
                 remove("auxiliaryFan")
+                remove("minLayerHeight")
+                remove("maxLayerHeight")
             }
             val legacyFilament = filament.toProfileJson().withoutProfileMetadata().apply {
                 remove("diameter")
@@ -99,6 +101,8 @@ class ProfileStoreMigrationTest {
             assertNull(restoredPrinter.brand)
             assertFalse(restoredPrinter.singleExtruderMultiMaterial)
             assertFalse(restoredPrinter.auxiliaryFan)
+            assertEquals(0.04f, restoredPrinter.minLayerHeight)
+            assertEquals(0.28f, restoredPrinter.maxLayerHeight)
             assertTrue(restoredFilament.compatiblePrinters.isEmpty())
             assertTrue(restoredSlicing.compatiblePrinters.isEmpty())
             assertEquals("V3 Filament", restoredFilament.name)

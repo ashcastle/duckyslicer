@@ -65,7 +65,7 @@ internal fun ObjectProcessSettingsSheet(
     var draft by remember(current) { mutableStateOf(current) }
     var category by remember { mutableStateOf(ObjectSettingCategory.QUALITY) }
     val dirty = draft != current
-    val maximumLayerHeight = (options.nozzleDiameter * 0.7f).coerceAtLeast(0.04f)
+    val maximumLayerHeight = options.printerProfile.maxLayerHeight.coerceAtLeast(0.04f)
     val sheetHeight = with(LocalDensity.current) {
         LocalWindowInfo.current.containerSize.height.toDp()
     } * 0.92f
