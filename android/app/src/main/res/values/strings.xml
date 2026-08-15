@@ -588,6 +588,10 @@
     <string name="support_ironing_spacing">Support ironing spacing</string>
     <string name="bed_adhesion">Bed adhesion</string>
     <string name="skirt_loops">Skirt loops</string>
+    <string name="skirt_type">Skirt type</string>
+    <string name="skirt_combined">Combined</string>
+    <string name="skirt_per_object">Per object</string>
+    <string name="single_loop_after_first_layer">Single loop after first layer</string>
     <string name="skirt_distance">Skirt distance</string>
     <string name="skirt_start_point">Skirt start point</string>
     <string name="brim_width">Brim width</string>

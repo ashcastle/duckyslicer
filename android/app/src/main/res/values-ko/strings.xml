@@ -588,6 +588,10 @@
     <string name="support_ironing_spacing">서포트 다림질 간격</string>
     <string name="bed_adhesion">베드 접착</string>
     <string name="skirt_loops">스커트 루프</string>
+    <string name="skirt_type">스커트 유형</string>
+    <string name="skirt_combined">통합</string>
+    <string name="skirt_per_object">오브젝트별</string>
+    <string name="single_loop_after_first_layer">첫 레이어 이후 단일 루프</string>
     <string name="skirt_distance">스커트 거리</string>
     <string name="skirt_start_point">스커트 시작점</string>
     <string name="brim_width">브림 너비</string>

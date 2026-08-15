@@ -60,6 +60,9 @@ def valid_sources() -> dict[str, str]:
             " R.string.lateral_lattice_angle_1 R.string.lateral_lattice_angle_2"
             " R.string.infill_overhang_angle entries = SPARSE_INFILL_PATTERNS"
             " MULTILINE_INFILL_PATTERNS fillMultilineForPattern( R.string.fill_multiline"
+            " R.string.skirt_type R.string.skirt_combined R.string.skirt_per_object"
+            " R.string.single_loop_after_first_layer skirtType = it"
+            " singleLoopDraftShield = it enabled = options.skirtLoops > 0"
             " LateralInfillGeometrySettings("
             " quality = options.quality.copy(lateralInfill = it)"
             " stringResource(R.string.degrees_value, settings.firstAngle)"
@@ -239,6 +242,8 @@ def valid_sources() -> dict[str, str]:
             ' name="infill_tpms_d" name="infill_tpms_fk" name="infill_concentric"'
             ' name="infill_hilbert_curve" name="infill_archimedean_chords"'
             ' name="infill_octagram_spiral" name="fill_multiline" name="fill_multiline_value"'
+            ' name="skirt_type" name="skirt_combined" name="skirt_per_object"'
+            ' name="single_loop_after_first_layer"'
             ' name="lateral_lattice_angle_1" name="lateral_lattice_angle_2"'
             ' name="infill_overhang_angle"'
             ' name="support_on_build_plate_only" name="enforce_support_layers"'
@@ -303,6 +308,8 @@ def valid_sources() -> dict[str, str]:
             ' name="infill_tpms_d" name="infill_tpms_fk" name="infill_concentric"'
             ' name="infill_hilbert_curve" name="infill_archimedean_chords"'
             ' name="infill_octagram_spiral" name="fill_multiline" name="fill_multiline_value"'
+            ' name="skirt_type" name="skirt_combined" name="skirt_per_object"'
+            ' name="single_loop_after_first_layer"'
             ' name="lateral_lattice_angle_1" name="lateral_lattice_angle_2"'
             ' name="infill_overhang_angle"'
             ' name="support_on_build_plate_only" name="enforce_support_layers"'

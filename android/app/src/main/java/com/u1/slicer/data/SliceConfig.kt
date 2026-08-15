@@ -335,6 +335,8 @@ data class SliceConfig(
     @JvmField var sparseInfillRotationTemplate: String = ""
     @JvmField var solidInfillRotationTemplate: String = ""
     @JvmField var fillMultiline: Int = 1
+    @JvmField var skirtType: String = "combined"
+    @JvmField var singleLoopDraftShield: Boolean = false
     @JvmField var lateralLatticeAngle1: Float = -45f
     @JvmField var lateralLatticeAngle2: Float = 45f
     @JvmField var infillOverhangAngle: Float = 60f

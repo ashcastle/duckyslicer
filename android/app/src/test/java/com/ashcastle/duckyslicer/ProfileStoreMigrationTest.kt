@@ -196,6 +196,8 @@ class ProfileStoreMigrationTest {
             assertEquals(0, restoredSlicing.supportCoverage.enforcedLayers)
             assertEquals(LateralInfillSettings(), restoredSlicing.lateralInfill)
             assertEquals(1, restoredSlicing.fillMultiline)
+            assertEquals("combined", restoredSlicing.skirtType)
+            assertEquals(false, restoredSlicing.singleLoopDraftShield)
         } finally {
             file.delete()
         }
@@ -367,6 +369,8 @@ class ProfileStoreMigrationTest {
                     skeletonInfillLineWidth = 0.62f,
                     skeletonInfillLineWidthPercent = false,
                     skirtStartAngle = -25f,
+                    skirtType = "perobject",
+                    singleLoopDraftShield = true,
                 ),
             )
 
@@ -383,6 +387,8 @@ class ProfileStoreMigrationTest {
             assertEquals(0.62f, restored.skeletonInfillLineWidth)
             assertEquals(false, restored.skeletonInfillLineWidthPercent)
             assertEquals(-25f, restored.skirtStartAngle)
+            assertEquals("perobject", restored.skirtType)
+            assertEquals(true, restored.singleLoopDraftShield)
             assertEquals(true, restored.gcodeSettings.verboseComments)
             assertEquals(42f, restored.surfaceDensity.topPercent)
             assertEquals(68f, restored.surfaceDensity.bottomPercent)

@@ -976,6 +976,7 @@ data class QualityProfile(
     val wipeTowerWidth: Float = 60f,
     val multiMaterial: MultiMaterialSettings = MultiMaterialSettings(),
     val gcodeSettings: GcodeSettings = GcodeSettings(),
+    val skirtType: String = "combined",
     val skirtLoops: Int = 0,
     val skirtDistance: Float = 6f,
     val skirtStartAngle: Float = -135f,
@@ -983,6 +984,7 @@ data class QualityProfile(
     val skirtSpeed: Float = 50f,
     val minimumSkirtLength: Float = 0f,
     val draftShield: String = "disabled",
+    val singleLoopDraftShield: Boolean = false,
     val outerWallLineWidth: Float = 0f,
     val innerWallLineWidth: Float = 0f,
     val topSurfaceLineWidth: Float = 0f,
@@ -2064,6 +2066,8 @@ data class SliceOptions(
             filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
             native.fillMultiline = fillMultilineForPattern(fillPattern, quality.fillMultiline)
+            native.skirtType = quality.skirtType
+            native.singleLoopDraftShield = quality.singleLoopDraftShield
             native.lateralLatticeAngle1 = quality.lateralInfill.firstAngle
             native.lateralLatticeAngle2 = quality.lateralInfill.secondAngle
             native.infillOverhangAngle = quality.lateralInfill.overhangAngle

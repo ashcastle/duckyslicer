@@ -436,6 +436,7 @@ internal object ProfileValidation {
             ) &&
             profile.spiralStartingFlowRatio in 0f..1f &&
             profile.spiralFinishingFlowRatio in 0f..1f &&
+            profile.skirtType in setOf("combined", "perobject") &&
             profile.skirtLoops in 0..100 &&
             profile.skirtDistance in 0f..1_000f &&
             profile.skirtStartAngle in -180f..180f &&

@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 79
+internal const val USER_PROFILE_SCHEMA_VERSION = 80
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -439,6 +439,7 @@ class ProfileStore private constructor(
             wipeTowerWidth = options.wipeTowerWidth,
             multiMaterial = options.multiMaterial,
             gcodeSettings = options.gcodeSettings,
+            skirtType = options.quality.skirtType,
             skirtLoops = options.skirtLoops,
             skirtDistance = options.skirtDistance,
             skirtStartAngle = options.quality.skirtStartAngle,
@@ -446,6 +447,7 @@ class ProfileStore private constructor(
             skirtSpeed = options.skirtSpeed,
             minimumSkirtLength = options.minimumSkirtLength,
             draftShield = options.draftShield,
+            singleLoopDraftShield = options.quality.singleLoopDraftShield,
             outerWallLineWidth = options.outerWallLineWidth,
             innerWallLineWidth = options.innerWallLineWidth,
             topSurfaceLineWidth = options.topSurfaceLineWidth,
@@ -966,10 +968,12 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("slowDownLayers", gcodeSettings.slowDownLayers)
     .put("accelToDecelEnabled", gcodeSettings.accelToDecelEnabled)
     .put("accelToDecelFactor", gcodeSettings.accelToDecelFactor)
+    .put("skirtType", skirtType)
     .put("skirtHeight", skirtHeight)
     .put("skirtSpeed", skirtSpeed)
     .put("minimumSkirtLength", minimumSkirtLength)
     .put("draftShield", draftShield)
+    .put("singleLoopDraftShield", singleLoopDraftShield)
     .put("skirtDistance", skirtDistance)
     .put("skirtStartAngle", skirtStartAngle)
     .put("outerWallLineWidth", outerWallLineWidth)
@@ -1511,6 +1515,7 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
             accelToDecelEnabled = optBoolean("accelToDecelEnabled", true),
             accelToDecelFactor = optDouble("accelToDecelFactor", 50.0).toFloat(),
         ),
+        skirtType = optString("skirtType", "combined"),
         skirtLoops = optInt("skirtLoops", 0),
         skirtDistance = optDouble("skirtDistance", 6.0).toFloat(),
         skirtStartAngle = optDouble("skirtStartAngle", -135.0).toFloat(),
@@ -1518,6 +1523,7 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         skirtSpeed = optDouble("skirtSpeed", 50.0).toFloat(),
         minimumSkirtLength = optDouble("minimumSkirtLength", 0.0).toFloat(),
         draftShield = optString("draftShield", "disabled"),
+        singleLoopDraftShield = optBoolean("singleLoopDraftShield"),
         outerWallLineWidth = optDouble("outerWallLineWidth", 0.0).toFloat(),
         innerWallLineWidth = optDouble("innerWallLineWidth", 0.0).toFloat(),
         topSurfaceLineWidth = optDouble("topSurfaceLineWidth", 0.0).toFloat(),

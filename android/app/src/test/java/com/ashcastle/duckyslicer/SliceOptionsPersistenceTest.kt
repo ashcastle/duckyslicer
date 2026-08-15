@@ -841,6 +841,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(false, restored.spiralModeMaxXySmoothingPercent)
         assertEquals(0.35f, restored.spiralStartingFlowRatio)
         assertEquals(0.2f, restored.spiralFinishingFlowRatio)
+        assertEquals("perobject", restored.quality.skirtType)
+        assertEquals("perobject", restored.toNativeConfig().skirtType)
         assertEquals(2, restored.skirtLoops)
         assertEquals(8f, restored.skirtDistance)
         assertEquals(-25f, restored.quality.skirtStartAngle)
@@ -849,6 +851,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(57f, restored.skirtSpeed)
         assertEquals(12f, restored.minimumSkirtLength)
         assertEquals("enabled", restored.draftShield)
+        assertEquals(true, restored.quality.singleLoopDraftShield)
+        assertEquals(true, restored.toNativeConfig().singleLoopDraftShield)
         assertEquals("inner_only", restored.brimType)
         assertEquals(5f, restored.brimWidth)
         assertEquals(0.15f, restored.brimObjectGap)
@@ -1280,6 +1284,8 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             skeletonInfillLineWidth = 0.62f,
             skeletonInfillLineWidthPercent = false,
             skirtStartAngle = -25f,
+            skirtType = "perobject",
+            singleLoopDraftShield = true,
         ),
         firstLayerSpeed = 32f,
         supportEnabled = true,

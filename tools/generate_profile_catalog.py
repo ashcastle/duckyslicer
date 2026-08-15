@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 78
+SCHEMA_VERSION = 79
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -1078,6 +1078,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         ),
         "supportIroningFlow": number(raw.get("support_ironing_flow"), 10),
         "supportIroningSpacing": number(raw.get("support_ironing_spacing"), 0.1),
+        "skirtType": enum_value(raw.get("skirt_type"), {"combined", "perobject"}, "combined"),
         "skirtLoops": integer(raw.get("skirt_loops"), 0),
         "skirtDistance": number(raw.get("skirt_distance"), 6),
         "skirtStartAngle": number(raw.get("skirt_start_angle"), -135),
@@ -1085,6 +1086,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "skirtSpeed": number(raw.get("skirt_speed"), 50),
         "minimumSkirtLength": number(raw.get("min_skirt_length"), 0),
         "draftShield": enum_value(raw.get("draft_shield"), {"disabled", "enabled"}, "disabled"),
+        "singleLoopDraftShield": boolean(raw.get("single_loop_draft_shield")),
         "raftLayers": integer(raw.get("raft_layers"), 0),
         "raftContactDistance": number(raw.get("raft_contact_distance"), 0.1),
         "raftExpansion": number(raw.get("raft_expansion"), 1.5),
@@ -1525,6 +1527,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 1 <= profile["interlockingBeamLayerCount"] <= 1_000
         and 1 <= profile["interlockingDepth"] <= 1_000
         and 0 <= profile["interlockingBoundaryAvoidance"] <= 1_000
+        and profile["skirtType"] in {"combined", "perobject"}
         and -180 <= profile["skirtStartAngle"] <= 180
         and 0 <= profile["skirtHeight"] <= 10_000
         and 0 <= profile["skirtSpeed"] <= 2_000

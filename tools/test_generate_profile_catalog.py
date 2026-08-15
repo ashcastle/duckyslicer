@@ -324,6 +324,30 @@ class GenerateProfileCatalogTest(unittest.TestCase):
 
         self.assertEqual(-25.0, profile["skirtStartAngle"])
 
+    def test_preserves_per_object_and_single_loop_skirt_behavior(self) -> None:
+        profile = build_process(
+            "Example",
+            {
+                "name": "Per-object skirt",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "skirt_type": "perobject",
+                "single_loop_draft_shield": "1",
+            },
+            {},
+        )
+
+        self.assertEqual("perobject", profile["skirtType"])
+        self.assertTrue(profile["singleLoopDraftShield"])
+
+        defaults = build_process(
+            "Example",
+            {"name": "Default skirt", "layer_height": "0.2", "initial_layer_print_height": "0.2"},
+            {},
+        )
+        self.assertEqual("combined", defaults["skirtType"])
+        self.assertFalse(defaults["singleLoopDraftShield"])
+
     def test_normalizes_legacy_zero_feature_filaments_to_first_tool(self) -> None:
         profile = build_process(
             "Example",

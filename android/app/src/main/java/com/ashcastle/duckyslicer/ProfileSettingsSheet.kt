@@ -6239,6 +6239,24 @@ private fun SlicingSettingsSheet(
                     steps = 9,
                     onValueChange = { onOptionsChanged(options.copy(skirtLoops = it.roundToInt())) },
                 )
+                if (options.skirtLoops > 0 || settingsQuery.isNotBlank()) {
+                    SettingChoices(
+                        settingLabel = stringResource(R.string.skirt_type),
+                        entries = listOf("combined", "perobject"),
+                        selected = options.quality.skirtType,
+                        optionLabel = {
+                            stringResource(
+                                if (it == "perobject") R.string.skirt_per_object else R.string.skirt_combined,
+                            )
+                        },
+                        enabled = options.skirtLoops > 0,
+                        onSelected = {
+                            onOptionsChanged(
+                                options.copy(quality = options.quality.copy(skirtType = it)),
+                            )
+                        },
+                    )
+                }
                 SettingSlider(
                     label = stringResource(R.string.skirt_distance),
                     valueText = stringResource(R.string.millimeters_value_precise, options.skirtDistance),
@@ -6292,6 +6310,20 @@ private fun SlicingSettingsSheet(
                         onOptionsChanged(options.copy(draftShield = if (it) "enabled" else "disabled"))
                     },
                 )
+                if (options.skirtLoops > 0 || settingsQuery.isNotBlank()) {
+                    SettingsSwitch(
+                        label = stringResource(R.string.single_loop_after_first_layer),
+                        checked = options.quality.singleLoopDraftShield,
+                        enabled = options.skirtLoops > 0,
+                        onCheckedChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    quality = options.quality.copy(singleLoopDraftShield = it),
+                                ),
+                            )
+                        },
+                    )
+                }
                 SettingChoices(
                     settingLabel = stringResource(R.string.brim_type),
                     entries = listOf("auto_brim", "brim_ears", "outer_only", "inner_only", "outer_and_inner", "no_brim"),
@@ -6835,6 +6867,7 @@ private fun <T> SettingChoices(
     entries: List<T>,
     selected: T,
     optionLabel: @Composable (T) -> String,
+    enabled: Boolean = true,
     onSelected: (T) -> Unit,
 ) {
     if (!settingMatchesQuery(settingLabel)) return
@@ -6843,6 +6876,7 @@ private fun <T> SettingChoices(
         entries = entries,
         selected = selected,
         label = optionLabel,
+        enabled = enabled,
         onSelected = onSelected,
     )
 }
@@ -7039,6 +7073,7 @@ private fun <T> CompactChoices(
     entries: List<T>,
     selected: T,
     label: @Composable (T) -> String,
+    enabled: Boolean = true,
     onSelected: (T) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth()) {
@@ -7050,12 +7085,13 @@ private fun <T> CompactChoices(
                     .heightIn(min = 48.dp)
                     .selectable(
                         selected = selectedEntry,
+                        enabled = enabled,
                         role = Role.RadioButton,
                         onClick = { onSelected(entry) },
                     ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                RadioButton(selected = selectedEntry, onClick = null)
+                RadioButton(selected = selectedEntry, enabled = enabled, onClick = null)
                 Text(label(entry))
             }
         }

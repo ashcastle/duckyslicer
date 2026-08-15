@@ -2344,7 +2344,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(78, catalog.schemaVersion)
+        assertEquals(79, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -4792,6 +4792,8 @@ class NativeEngineInstrumentedTest {
                     skeletonInfillLineWidth = 0.62f,
                     skeletonInfillLineWidthPercent = false,
                     skirtStartAngle = -25f,
+                    skirtType = "perobject",
+                    singleLoopDraftShield = true,
                 ),
                 gapFillTarget = "everywhere",
                 filterOutGapFill = 0.9f,
@@ -4942,6 +4944,7 @@ class NativeEngineInstrumentedTest {
         assertTrue("Filament lift surface policy must override the printer", gcode.contains("; retract_lift_enforce = Top Only"))
         assertTrue("Z-hop slope must reach G-code", gcode.contains("; travel_slope = 7"))
         assertTrue("Prime-tower Z-hop policy must reach G-code", gcode.contains("; z_hop_when_prime = 0"))
+        assertTrue("Skirt topology must reach Orca", gcode.contains("; skirt_type = perobject"))
         assertTrue("Skirt loops must reach G-code", gcode.contains("; skirt_loops = 2"))
         assertTrue("Skirt distance must reach Orca", gcode.contains("; skirt_distance = 7"))
         assertTrue("Skirt start point must reach Orca", gcode.contains("; skirt_start_angle = -25"))
@@ -4950,6 +4953,10 @@ class NativeEngineInstrumentedTest {
         assertTrue("Skirt speed must reach Orca", gcode.contains("; skirt_speed = 59"))
         assertTrue("Minimum skirt extrusion must reach Orca", gcode.contains("; min_skirt_length = 14"))
         assertTrue("Draft shield mode must reach Orca", gcode.contains("; draft_shield = enabled"))
+        assertTrue(
+            "Single-loop draft shield must reach Orca",
+            gcode.contains("; single_loop_draft_shield = 1"),
+        )
         assertTrue("Brim topology must reach Orca", gcode.contains("; brim_type = outer_and_inner"))
         assertTrue("Brim width must reach Orca", gcode.contains("; brim_width = 6"))
         assertTrue("Brim gap must reach Orca", gcode.contains("; brim_object_gap = 0.17"))
@@ -5512,6 +5519,108 @@ class NativeEngineInstrumentedTest {
             defaultStart,
             zeroStart,
         )
+    }
+
+    @Test
+    fun perObjectAndSingleLoopSkirtsChangeRealExtrusionGeometry() {
+        val model = inspectModel(fixtureModel().absolutePath)
+        val objects = listOf(
+            ProjectObject("skirt-left", model, ModelTransform(offsetXmm = -18f)),
+            ProjectObject("skirt-right", model, ModelTransform(offsetXmm = 18f)),
+        )
+        val base = SliceOptions()
+            .selectPrinter(PrinterProfile.CUSTOM_CARTESIAN)
+            .selectFilament(FilamentProfile.GENERIC_PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                skirtLoops = 1,
+                skirtDistance = 5f,
+                skirtHeight = 1,
+                brimType = "no_brim",
+                brimWidth = 0f,
+            )
+
+        fun skirtMotionsByLayer(gcode: String): List<List<String>> {
+            val layers = mutableListOf<MutableList<String>>()
+            var inSkirt = false
+            for (line in gcode.lineSequence()) {
+                if (line == ";LAYER_CHANGE") {
+                    layers += mutableListOf<String>()
+                    inSkirt = false
+                } else if (line.startsWith(";TYPE:")) {
+                    inSkirt = line == ";TYPE:Skirt"
+                } else if (
+                    layers.isNotEmpty() && inSkirt && line.startsWith("G1 ") &&
+                    line.contains(" E") && (line.contains(" X") || line.contains(" Y"))
+                ) {
+                    layers.last() += line.substringBefore(';').trimEnd()
+                }
+            }
+            return layers
+        }
+
+        val combined = OnDeviceSlicer.slice(
+            objects,
+            base.copy(quality = base.quality.copy(skirtType = "combined")),
+        )
+        val perObject = OnDeviceSlicer.slice(
+            objects,
+            base.copy(quality = base.quality.copy(skirtType = "perobject")),
+        )
+        val fullLoops = OnDeviceSlicer.slice(
+            listOf(objects.first()),
+            base.copy(
+                skirtLoops = 3,
+                skirtHeight = 3,
+                quality = base.quality.copy(singleLoopDraftShield = false),
+            ),
+        )
+        val singleLoop = OnDeviceSlicer.slice(
+            listOf(objects.first()),
+            base.copy(
+                skirtLoops = 3,
+                skirtHeight = 3,
+                quality = base.quality.copy(singleLoopDraftShield = true),
+            ),
+        )
+        try {
+            val combinedGcode = combined.output.readText()
+            val perObjectGcode = perObject.output.readText()
+            val combinedFirstLayer = skirtMotionsByLayer(combinedGcode).first()
+            val perObjectFirstLayer = skirtMotionsByLayer(perObjectGcode).first()
+            assertTrue(combinedGcode.contains("; skirt_type = combined"))
+            assertTrue(perObjectGcode.contains("; skirt_type = perobject"))
+            assertTrue("Combined skirt must extrude", combinedFirstLayer.isNotEmpty())
+            assertTrue("Per-object skirts must extrude", perObjectFirstLayer.isNotEmpty())
+            assertNotEquals(
+                "Per-object skirt topology must change physical extrusion",
+                combinedFirstLayer,
+                perObjectFirstLayer,
+            )
+
+            val fullGcode = fullLoops.output.readText()
+            val singleGcode = singleLoop.output.readText()
+            val fullLayers = skirtMotionsByLayer(fullGcode)
+            val singleLayers = skirtMotionsByLayer(singleGcode)
+            assertTrue(fullGcode.contains("; single_loop_draft_shield = 0"))
+            assertTrue(singleGcode.contains("; single_loop_draft_shield = 1"))
+            assertTrue("Three skirt layers must be generated", fullLayers.take(3).all { it.isNotEmpty() })
+            assertEquals(
+                "Single-loop mode must retain the configured first-layer loops",
+                fullLayers.first().size,
+                singleLayers.first().size,
+            )
+            assertTrue(
+                "Single-loop mode must reduce post-first-layer skirt extrusion",
+                singleLayers.drop(1).take(2).sumOf { it.size } <
+                    fullLayers.drop(1).take(2).sumOf { it.size },
+            )
+        } finally {
+            combined.output.delete()
+            perObject.output.delete()
+            fullLoops.output.delete()
+            singleLoop.output.delete()
+        }
     }
 
     @Test

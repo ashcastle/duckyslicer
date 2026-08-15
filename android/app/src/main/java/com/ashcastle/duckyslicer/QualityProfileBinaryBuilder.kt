@@ -212,6 +212,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var slowDownLayers: Int = base.gcodeSettings.slowDownLayers
     private var accelToDecelEnabled: Boolean = base.gcodeSettings.accelToDecelEnabled
     private var accelToDecelFactor: Float = base.gcodeSettings.accelToDecelFactor
+    private var skirtType: String = base.skirtType
     private var skirtLoops: Int = base.skirtLoops
     private var skirtDistance: Float = base.skirtDistance
     private var skirtStartAngle: Float = base.skirtStartAngle
@@ -219,6 +220,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var skirtSpeed: Float = base.skirtSpeed
     private var minimumSkirtLength: Float = base.minimumSkirtLength
     private var draftShield: String = base.draftShield
+    private var singleLoopDraftShield: Boolean = base.singleLoopDraftShield
     private var outerWallLineWidth: Float = base.outerWallLineWidth
     private var innerWallLineWidth: Float = base.innerWallLineWidth
     private var topSurfaceLineWidth: Float = base.topSurfaceLineWidth
@@ -496,6 +498,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     }
 
     private fun readGroup5(input: DataInputStream) {
+        skirtType = input.readCatalogString()
         skirtLoops = input.readInt()
         skirtDistance = input.readFloat()
         skirtStartAngle = input.readFloat()
@@ -503,6 +506,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         skirtSpeed = input.readFloat()
         minimumSkirtLength = input.readFloat()
         draftShield = input.readCatalogString()
+        singleLoopDraftShield = input.readCatalogBoolean()
         raftLayers = input.readInt()
         raftContactDistance = input.readFloat()
         raftExpansion = input.readFloat()
@@ -929,6 +933,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             accelToDecelEnabled = accelToDecelEnabled,
             accelToDecelFactor = accelToDecelFactor,
         ),
+        skirtType = skirtType,
         skirtLoops = skirtLoops,
         skirtDistance = skirtDistance,
         skirtStartAngle = skirtStartAngle,
@@ -936,6 +941,7 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         skirtSpeed = skirtSpeed,
         minimumSkirtLength = minimumSkirtLength,
         draftShield = draftShield,
+        singleLoopDraftShield = singleLoopDraftShield,
         outerWallLineWidth = outerWallLineWidth,
         innerWallLineWidth = innerWallLineWidth,
         topSurfaceLineWidth = topSurfaceLineWidth,
@@ -1203,6 +1209,7 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("supportIroningPattern", BINARY_STRING),
     BinaryField("supportIroningFlow", BINARY_FLOAT),
     BinaryField("supportIroningSpacing", BINARY_FLOAT),
+    BinaryField("skirtType", BINARY_STRING),
     BinaryField("skirtLoops", BINARY_INT),
     BinaryField("skirtDistance", BINARY_FLOAT),
     BinaryField("skirtStartAngle", BINARY_FLOAT),
@@ -1210,6 +1217,7 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("skirtSpeed", BINARY_FLOAT),
     BinaryField("minimumSkirtLength", BINARY_FLOAT),
     BinaryField("draftShield", BINARY_STRING),
+    BinaryField("singleLoopDraftShield", BINARY_BOOL),
     BinaryField("raftLayers", BINARY_INT),
     BinaryField("raftContactDistance", BINARY_FLOAT),
     BinaryField("raftExpansion", BINARY_FLOAT),
