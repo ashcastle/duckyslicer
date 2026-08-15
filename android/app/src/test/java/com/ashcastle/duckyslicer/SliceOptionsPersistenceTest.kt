@@ -36,6 +36,14 @@ class SliceOptionsPersistenceTest {
             multitoolRamming = true,
             multitoolRammingVolume = 6f,
             multitoolRammingFlow = 16f,
+            softeningTemperature = 62,
+            nozzleTemperatureRangeLow = 195,
+            nozzleTemperatureRangeHigh = 245,
+            chamberTemperatureControl = true,
+            chamberTemperature = 55,
+            airFiltration = true,
+            duringPrintExhaustFanSpeed = 70,
+            completePrintExhaustFanSpeed = 40,
             fanCoolingLayerTime = 42f,
             slowDownForLayerCooling = false,
             keepFanAlwaysOn = true,
@@ -76,6 +84,14 @@ class SliceOptionsPersistenceTest {
             multitoolRamming = false,
             multitoolRammingVolume = 7f,
             multitoolRammingFlow = 17f,
+            softeningTemperature = 80,
+            nozzleTemperatureRangeLow = 220,
+            nozzleTemperatureRangeHigh = 280,
+            chamberTemperatureControl = false,
+            chamberTemperature = 60,
+            airFiltration = false,
+            duringPrintExhaustFanSpeed = 100,
+            completePrintExhaustFanSpeed = 0,
             fanCoolingLayerTime = 91f,
             slowDownForLayerCooling = true,
             keepFanAlwaysOn = false,
@@ -110,6 +126,8 @@ class SliceOptionsPersistenceTest {
                     enableFilamentRamming = false,
                     purgeInPrimeTower = false,
                     highCurrentOnFilamentSwap = true,
+                    supportsChamberTemperatureControl = true,
+                    supportsAirFiltration = true,
                     toolChangeRetractLengths = listOf(1.2f, 2.3f),
                     toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
                 ),
@@ -216,6 +234,8 @@ class SliceOptionsPersistenceTest {
         assertFalse(native.enableFilamentRamming)
         assertFalse(native.purgeInPrimeTower)
         assertTrue(native.highCurrentOnFilamentSwap)
+        assertTrue(native.supportsChamberTemperatureControl)
+        assertTrue(native.supportsAirFiltration)
         assertArrayEquals(floatArrayOf(1.2f, 2.3f), native.toolChangeRetractLengths, 0.001f)
         assertArrayEquals(floatArrayOf(-0.1f, 0.2f), native.toolChangeRetractRestartExtras, 0.001f)
         assertEquals(2.85f, restored.filamentDiameter)
@@ -250,6 +270,14 @@ class SliceOptionsPersistenceTest {
         assertEquals(listOf(1, 0), native.filamentMultitoolRamming.toList())
         assertArrayEquals(floatArrayOf(6f, 7f), native.filamentMultitoolRammingVolumes, 0.001f)
         assertArrayEquals(floatArrayOf(16f, 17f), native.filamentMultitoolRammingFlows, 0.001f)
+        assertEquals(listOf(62, 80), native.filamentSofteningTemperatures.toList())
+        assertEquals(listOf(195, 220), native.filamentNozzleTemperatureRangeLows.toList())
+        assertEquals(listOf(245, 280), native.filamentNozzleTemperatureRangeHighs.toList())
+        assertEquals(listOf(1, 0), native.filamentChamberTemperatureControl.toList())
+        assertEquals(listOf(55, 60), native.filamentChamberTemperatures.toList())
+        assertEquals(listOf(1, 0), native.filamentAirFiltration.toList())
+        assertEquals(listOf(70, 100), native.filamentDuringPrintExhaustFanSpeeds.toList())
+        assertEquals(listOf(40, 0), native.filamentCompletePrintExhaustFanSpeeds.toList())
         assertArrayEquals(floatArrayOf(42f, 91f), native.filamentFanCoolingLayerTimes, 0.001f)
         assertEquals(listOf(0, 1), native.filamentSlowDownForLayerCooling.toList())
         assertEquals(listOf(1, 0), native.filamentKeepFanAlwaysOn.toList())

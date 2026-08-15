@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 71
+internal const val USER_PROFILE_SCHEMA_VERSION = 72
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -111,6 +111,8 @@ class ProfileStore private constructor(
             highCurrentOnFilamentSwap = options.printerProfile.highCurrentOnFilamentSwap,
             extruderCount = options.printerProfile.extruderCount,
             auxiliaryFan = options.printerProfile.auxiliaryFan,
+            supportsChamberTemperatureControl = options.printerProfile.supportsChamberTemperatureControl,
+            supportsAirFiltration = options.printerProfile.supportsAirFiltration,
         )
         require(ProfileValidation.printer(profile)) { "Printer profile contains unsafe values" }
         append("printers", profile.toProfileJson())
@@ -243,6 +245,14 @@ class ProfileStore private constructor(
             multitoolRamming = effective.multitoolRamming,
             multitoolRammingVolume = effective.multitoolRammingVolume,
             multitoolRammingFlow = effective.multitoolRammingFlow,
+            softeningTemperature = effective.softeningTemperature,
+            nozzleTemperatureRangeLow = effective.nozzleTemperatureRangeLow,
+            nozzleTemperatureRangeHigh = effective.nozzleTemperatureRangeHigh,
+            chamberTemperatureControl = effective.chamberTemperatureControl,
+            chamberTemperature = effective.chamberTemperature,
+            airFiltration = effective.airFiltration,
+            duringPrintExhaustFanSpeed = effective.duringPrintExhaustFanSpeed,
+            completePrintExhaustFanSpeed = effective.completePrintExhaustFanSpeed,
         )
         require(ProfileValidation.filament(profile)) { "Filament profile contains unsafe values" }
         append("filaments", profile.toProfileJson())
@@ -615,6 +625,8 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("highCurrentOnFilamentSwap", highCurrentOnFilamentSwap)
     .put("extruderCount", extruderCount)
     .put("auxiliaryFan", auxiliaryFan)
+    .put("supportsChamberTemperatureControl", supportsChamberTemperatureControl)
+    .put("supportsAirFiltration", supportsAirFiltration)
     .put("builtIn", builtIn)
     .put("brand", brand ?: JSONObject.NULL)
 
@@ -682,6 +694,14 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("multitoolRamming", multitoolRamming)
     .put("multitoolRammingVolume", multitoolRammingVolume)
     .put("multitoolRammingFlow", multitoolRammingFlow)
+    .put("softeningTemperature", softeningTemperature)
+    .put("nozzleTemperatureRangeLow", nozzleTemperatureRangeLow)
+    .put("nozzleTemperatureRangeHigh", nozzleTemperatureRangeHigh)
+    .put("chamberTemperatureControl", chamberTemperatureControl)
+    .put("chamberTemperature", chamberTemperature)
+    .put("airFiltration", airFiltration)
+    .put("duringPrintExhaustFanSpeed", duringPrintExhaustFanSpeed)
+    .put("completePrintExhaustFanSpeed", completePrintExhaustFanSpeed)
     .put("builtIn", builtIn)
     .put("brand", brand ?: JSONObject.NULL)
     .put("compatiblePrinters", JSONArray(compatiblePrinters))
@@ -1077,6 +1097,8 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         highCurrentOnFilamentSwap = optBoolean("highCurrentOnFilamentSwap"),
         extruderCount = extruderCount,
         auxiliaryFan = optBoolean("auxiliaryFan", false),
+        supportsChamberTemperatureControl = optBoolean("supportsChamberTemperatureControl"),
+        supportsAirFiltration = optBoolean("supportsAirFiltration"),
     )
 }.getOrNull()
 
@@ -1156,6 +1178,14 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         multitoolRamming = optBoolean("multitoolRamming", false),
         multitoolRammingVolume = optDouble("multitoolRammingVolume", 10.0).toFloat(),
         multitoolRammingFlow = optDouble("multitoolRammingFlow", 10.0).toFloat(),
+        softeningTemperature = optInt("softeningTemperature", 100),
+        nozzleTemperatureRangeLow = optInt("nozzleTemperatureRangeLow", 190),
+        nozzleTemperatureRangeHigh = optInt("nozzleTemperatureRangeHigh", 240),
+        chamberTemperatureControl = optBoolean("chamberTemperatureControl"),
+        chamberTemperature = optInt("chamberTemperature", 0),
+        airFiltration = optBoolean("airFiltration"),
+        duringPrintExhaustFanSpeed = optInt("duringPrintExhaustFanSpeed", 60),
+        completePrintExhaustFanSpeed = optInt("completePrintExhaustFanSpeed", 80),
     )
 }.getOrNull()
 

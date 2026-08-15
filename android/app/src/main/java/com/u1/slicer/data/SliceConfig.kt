@@ -268,6 +268,8 @@ data class SliceConfig(
     @JvmField var enableFilamentRamming: Boolean = true
     @JvmField var highCurrentOnFilamentSwap: Boolean = false
     @JvmField var auxiliaryFan: Boolean = false
+    @JvmField var supportsChamberTemperatureControl: Boolean = false
+    @JvmField var supportsAirFiltration: Boolean = false
     @JvmField var filamentSoluble: IntArray = intArrayOf()
     @JvmField var filamentIsSupport: IntArray = intArrayOf()
     @JvmField var bedType: Int = 4
@@ -302,6 +304,14 @@ data class SliceConfig(
     @JvmField var filamentMultitoolRamming: IntArray = intArrayOf()
     @JvmField var filamentMultitoolRammingVolumes: FloatArray = floatArrayOf()
     @JvmField var filamentMultitoolRammingFlows: FloatArray = floatArrayOf()
+    @JvmField var filamentSofteningTemperatures: IntArray = intArrayOf()
+    @JvmField var filamentNozzleTemperatureRangeLows: IntArray = intArrayOf()
+    @JvmField var filamentNozzleTemperatureRangeHighs: IntArray = intArrayOf()
+    @JvmField var filamentChamberTemperatureControl: IntArray = intArrayOf()
+    @JvmField var filamentChamberTemperatures: IntArray = intArrayOf()
+    @JvmField var filamentAirFiltration: IntArray = intArrayOf()
+    @JvmField var filamentDuringPrintExhaustFanSpeeds: IntArray = intArrayOf()
+    @JvmField var filamentCompletePrintExhaustFanSpeeds: IntArray = intArrayOf()
     @JvmField var skeletonInfillDensity: Float = 25f
     @JvmField var skinInfillDensity: Float = 25f
     @JvmField var skinInfillDepth: Float = 2f

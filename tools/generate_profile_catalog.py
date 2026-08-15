@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 70
+SCHEMA_VERSION = 71
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -296,6 +296,10 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "highCurrentOnFilamentSwap": boolean(raw.get("high_current_on_filament_swap")),
         "extruderCount": extruder_count,
         "auxiliaryFan": boolean(raw.get("auxiliary_fan")),
+        "supportsChamberTemperatureControl": boolean(
+            raw.get("support_chamber_temp_control")
+        ),
+        "supportsAirFiltration": boolean(raw.get("support_air_filtration")),
         "machineStartGcode": str(raw.get("machine_start_gcode", "")),
         "machineEndGcode": str(raw.get("machine_end_gcode", "")),
         "beforeLayerChangeGcode": str(raw.get("before_layer_change_gcode", "")),
@@ -580,6 +584,16 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "multitoolRamming": boolean(raw.get("filament_multitool_ramming")),
         "multitoolRammingVolume": number(raw.get("filament_multitool_ramming_volume"), 10),
         "multitoolRammingFlow": number(raw.get("filament_multitool_ramming_flow"), 10),
+        "softeningTemperature": integer(raw.get("temperature_vitrification"), 100),
+        "nozzleTemperatureRangeLow": integer(raw.get("nozzle_temperature_range_low"), 190),
+        "nozzleTemperatureRangeHigh": integer(raw.get("nozzle_temperature_range_high"), 240),
+        "chamberTemperatureControl": boolean(raw.get("activate_chamber_temp_control")),
+        "chamberTemperature": integer(raw.get("chamber_temperature"), 0),
+        "airFiltration": boolean(raw.get("activate_air_filtration")),
+        "duringPrintExhaustFanSpeed": integer(raw.get("during_print_exhaust_fan_speed"), 60),
+        "completePrintExhaustFanSpeed": integer(
+            raw.get("complete_print_exhaust_fan_speed"), 80
+        ),
         "filamentStartGcode": str(scalar(raw.get("filament_start_gcode"), "")),
         "filamentEndGcode": str(scalar(raw.get("filament_end_gcode"), "")),
         "retractLength": nullable_number(raw.get("filament_retraction_length")),
@@ -665,6 +679,11 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         ])
         and 0 <= profile["coolingMoves"] <= 20
         and len(profile["rammingParameters"].encode("utf-8")) <= 16_384
+        and 0 <= profile["softeningTemperature"] <= 500
+        and 0 <= profile["nozzleTemperatureRangeLow"] <= profile["nozzleTemperatureRangeHigh"] <= 500
+        and 0 <= profile["chamberTemperature"] <= 200
+        and 0 <= profile["duringPrintExhaustFanSpeed"] <= 100
+        and 0 <= profile["completePrintExhaustFanSpeed"] <= 100
         and 0 <= profile["fanCoolingLayerTime"] <= 1_000
         and profile["overhangFanThreshold"] in {"0%", "10%", "25%", "50%", "75%", "95%"}
         and -1 <= profile["internalBridgeFanSpeed"] <= 100

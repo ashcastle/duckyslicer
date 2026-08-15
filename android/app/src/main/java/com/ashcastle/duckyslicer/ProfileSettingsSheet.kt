@@ -627,6 +627,31 @@ private fun PrinterSettingsSheet(
             )
         },
     )
+    SettingsGroupTitle(stringResource(R.string.printer_environment_capabilities))
+    SettingsSwitch(
+        label = stringResource(R.string.supports_chamber_temperature_control),
+        checked = options.printerProfile.supportsChamberTemperatureControl,
+        onCheckedChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(
+                        supportsChamberTemperatureControl = it,
+                    ),
+                ),
+            )
+        },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.supports_air_filtration),
+        checked = options.printerProfile.supportsAirFiltration,
+        onCheckedChange = {
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(supportsAirFiltration = it),
+                ),
+            )
+        },
+    )
     SettingChoices(
         settingLabel = stringResource(R.string.printer_firmware),
         entries = listOf("marlin", "marlin2", "klipper"),
@@ -1497,6 +1522,121 @@ private fun FilamentSettingsSheet(
                 )
             },
         )
+        SettingsGroupTitle(stringResource(R.string.filament_material_environment))
+        SettingSlider(
+            label = stringResource(R.string.filament_softening_temperature),
+            valueText = stringResource(R.string.celsius_value, activeProfile.softeningTemperature),
+            value = activeProfile.softeningTemperature.toFloat(),
+            range = 0f..500f,
+            steps = 499,
+            onValueChange = { value ->
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(softeningTemperature = value.roundToInt()),
+                ))
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.filament_nozzle_temperature_minimum),
+            valueText = stringResource(R.string.celsius_value, activeProfile.nozzleTemperatureRangeLow),
+            value = activeProfile.nozzleTemperatureRangeLow.toFloat(),
+            range = 0f..500f,
+            steps = 499,
+            onValueChange = { value ->
+                val minimum = value.roundToInt()
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot,
+                    activeProfile.copy(
+                        nozzleTemperatureRangeLow = minimum,
+                        nozzleTemperatureRangeHigh = max(
+                            minimum,
+                            activeProfile.nozzleTemperatureRangeHigh,
+                        ),
+                    ),
+                ))
+            },
+        )
+        SettingSlider(
+            label = stringResource(R.string.filament_nozzle_temperature_maximum),
+            valueText = stringResource(R.string.celsius_value, activeProfile.nozzleTemperatureRangeHigh),
+            value = activeProfile.nozzleTemperatureRangeHigh.toFloat(),
+            range = 0f..500f,
+            steps = 499,
+            onValueChange = { value ->
+                val maximum = value.roundToInt()
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot,
+                    activeProfile.copy(
+                        nozzleTemperatureRangeLow = min(
+                            maximum,
+                            activeProfile.nozzleTemperatureRangeLow,
+                        ),
+                        nozzleTemperatureRangeHigh = maximum,
+                    ),
+                ))
+            },
+        )
+        SettingsSwitch(
+            label = stringResource(R.string.filament_chamber_temperature_control),
+            checked = activeProfile.chamberTemperatureControl,
+            enabled = options.printerProfile.supportsChamberTemperatureControl,
+            onCheckedChange = { enabled ->
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(chamberTemperatureControl = enabled),
+                ))
+            },
+        )
+        if (activeProfile.chamberTemperatureControl || settingsQuery.isNotBlank()) {
+            SettingSlider(
+                label = stringResource(R.string.filament_chamber_temperature),
+                valueText = stringResource(R.string.celsius_value, activeProfile.chamberTemperature),
+                value = activeProfile.chamberTemperature.toFloat(),
+                range = 0f..200f,
+                steps = 199,
+                onValueChange = { value ->
+                    onOptionsChanged(options.updateFilamentSlot(
+                        selectedSlot, activeProfile.copy(chamberTemperature = value.roundToInt()),
+                    ))
+                },
+            )
+        }
+        SettingsSwitch(
+            label = stringResource(R.string.filament_air_filtration),
+            checked = activeProfile.airFiltration,
+            enabled = options.printerProfile.supportsAirFiltration,
+            onCheckedChange = { enabled ->
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(airFiltration = enabled),
+                ))
+            },
+        )
+        if (activeProfile.airFiltration || settingsQuery.isNotBlank()) {
+            SettingSlider(
+                label = stringResource(R.string.filament_exhaust_during_print),
+                valueText = stringResource(R.string.percent_value, activeProfile.duringPrintExhaustFanSpeed),
+                value = activeProfile.duringPrintExhaustFanSpeed.toFloat(),
+                range = 0f..100f,
+                steps = 99,
+                onValueChange = { value ->
+                    onOptionsChanged(options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(duringPrintExhaustFanSpeed = value.roundToInt()),
+                    ))
+                },
+            )
+            SettingSlider(
+                label = stringResource(R.string.filament_exhaust_after_print),
+                valueText = stringResource(R.string.percent_value, activeProfile.completePrintExhaustFanSpeed),
+                value = activeProfile.completePrintExhaustFanSpeed.toFloat(),
+                range = 0f..100f,
+                steps = 99,
+                onValueChange = { value ->
+                    onOptionsChanged(options.updateFilamentSlot(
+                        selectedSlot,
+                        activeProfile.copy(completePrintExhaustFanSpeed = value.roundToInt()),
+                    ))
+                },
+            )
+        }
         SettingsGroupTitle(stringResource(R.string.filament_exchange_motion))
         DecimalSettingField(
             label = stringResource(R.string.filament_loading_speed),

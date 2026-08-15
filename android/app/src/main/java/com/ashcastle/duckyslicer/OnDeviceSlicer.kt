@@ -173,6 +173,8 @@ data class PrinterProfile(
     val highCurrentOnFilamentSwap: Boolean = false,
     val extruderCount: Int = 1,
     val auxiliaryFan: Boolean = false,
+    val supportsChamberTemperatureControl: Boolean = false,
+    val supportsAirFiltration: Boolean = false,
 ) {
     fun resolvedExtruderOffsetsX(count: Int = extruderCount): List<Float> =
         extruderOffsetsX.resizedExtruderValues(count, 0f)
@@ -344,6 +346,14 @@ data class FilamentProfile(
     val multitoolRamming: Boolean = false,
     val multitoolRammingVolume: Float = 10f,
     val multitoolRammingFlow: Float = 10f,
+    val softeningTemperature: Int = 100,
+    val nozzleTemperatureRangeLow: Int = 190,
+    val nozzleTemperatureRangeHigh: Int = 240,
+    val chamberTemperatureControl: Boolean = false,
+    val chamberTemperature: Int = 0,
+    val airFiltration: Boolean = false,
+    val duringPrintExhaustFanSpeed: Int = 60,
+    val completePrintExhaustFanSpeed: Int = 80,
 ) {
     companion object {
         // Curated from the included Snapmaker U1 filament catalog.
@@ -2087,6 +2097,24 @@ data class SliceOptions(
             native.filamentMultitoolRammingFlows = nativeFilaments
                 .map(FilamentProfile::multitoolRammingFlow).toFloatArray()
             native.auxiliaryFan = printerProfile.auxiliaryFan
+            native.supportsChamberTemperatureControl = printerProfile.supportsChamberTemperatureControl
+            native.supportsAirFiltration = printerProfile.supportsAirFiltration
+            native.filamentSofteningTemperatures = nativeFilaments
+                .map(FilamentProfile::softeningTemperature).toIntArray()
+            native.filamentNozzleTemperatureRangeLows = nativeFilaments
+                .map(FilamentProfile::nozzleTemperatureRangeLow).toIntArray()
+            native.filamentNozzleTemperatureRangeHighs = nativeFilaments
+                .map(FilamentProfile::nozzleTemperatureRangeHigh).toIntArray()
+            native.filamentChamberTemperatureControl = nativeFilaments
+                .map { if (it.chamberTemperatureControl) 1 else 0 }.toIntArray()
+            native.filamentChamberTemperatures = nativeFilaments
+                .map(FilamentProfile::chamberTemperature).toIntArray()
+            native.filamentAirFiltration = nativeFilaments
+                .map { if (it.airFiltration) 1 else 0 }.toIntArray()
+            native.filamentDuringPrintExhaustFanSpeeds = nativeFilaments
+                .map(FilamentProfile::duringPrintExhaustFanSpeed).toIntArray()
+            native.filamentCompletePrintExhaustFanSpeeds = nativeFilaments
+                .map(FilamentProfile::completePrintExhaustFanSpeed).toIntArray()
             native.topSurfaceDensity = quality.surfaceDensity.topPercent
             native.bottomSurfaceDensity = quality.surfaceDensity.bottomPercent
             native.skeletonInfillDensity = quality.skeletonInfillDensity

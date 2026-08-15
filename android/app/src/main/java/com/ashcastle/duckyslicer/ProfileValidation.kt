@@ -118,6 +118,12 @@ internal object ProfileValidation {
             ).all { it in 0f..1_000f } &&
             profile.coolingMoves in 0..20 &&
             profile.rammingParameters.isSafeRammingParameters() &&
+            profile.softeningTemperature in 0..500 &&
+            profile.nozzleTemperatureRangeLow in 0..500 &&
+            profile.nozzleTemperatureRangeHigh in profile.nozzleTemperatureRangeLow..500 &&
+            profile.chamberTemperature in 0..200 &&
+            profile.duringPrintExhaustFanSpeed in 0..100 &&
+            profile.completePrintExhaustFanSpeed in 0..100 &&
             profile.retractLength.isNullOrIn(0f..100f) &&
             profile.retractSpeed.isNullOrIn(0f..500f) &&
             profile.deretractSpeed.isNullOrIn(0f..500f) &&

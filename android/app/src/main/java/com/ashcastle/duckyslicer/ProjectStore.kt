@@ -945,7 +945,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 43
+        const val SCHEMA_VERSION = 44
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"

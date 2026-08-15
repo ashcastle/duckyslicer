@@ -1522,6 +1522,14 @@ class NativeEngineInstrumentedTest {
                 retractRestartExtra = 0.07f,
                 zHop = 0.65f,
                 zHopType = "spiral",
+                softeningTemperature = 62,
+                nozzleTemperatureRangeLow = 195,
+                nozzleTemperatureRangeHigh = 245,
+                chamberTemperatureControl = true,
+                chamberTemperature = 55,
+                airFiltration = true,
+                duringPrintExhaustFanSpeed = 70,
+                completePrintExhaustFanSpeed = 40,
             ))
             .copy(nozzleTemp = 248, firstLayerNozzleTemp = 253)
             .selectQuality(QualityProfile.FINE_06)
@@ -1805,6 +1813,8 @@ class NativeEngineInstrumentedTest {
                     enableFilamentRamming = false,
                     purgeInPrimeTower = false,
                     highCurrentOnFilamentSwap = true,
+                    supportsChamberTemperatureControl = true,
+                    supportsAirFiltration = true,
                 ),
             )
 
@@ -1964,6 +1974,14 @@ class NativeEngineInstrumentedTest {
         assertEquals("spiral", restored.filaments.last().zHopType)
         assertEquals("M117 SAVED_FILAMENT_START", restored.filaments.last().filamentStartGcode)
         assertEquals("M117 SAVED_FILAMENT_END", restored.filaments.last().filamentEndGcode)
+        assertEquals(62, restored.filaments.last().softeningTemperature)
+        assertEquals(195, restored.filaments.last().nozzleTemperatureRangeLow)
+        assertEquals(245, restored.filaments.last().nozzleTemperatureRangeHigh)
+        assertTrue(restored.filaments.last().chamberTemperatureControl)
+        assertEquals(55, restored.filaments.last().chamberTemperature)
+        assertTrue(restored.filaments.last().airFiltration)
+        assertEquals(70, restored.filaments.last().duringPrintExhaustFanSpeed)
+        assertEquals(40, restored.filaments.last().completePrintExhaustFanSpeed)
         assertEquals(40, restored.filaments.last().fanMinSpeed)
         assertTrue(restored.filaments.last().pressureAdvanceEnabled)
         assertEquals(0.035f, restored.filaments.last().pressureAdvance)
@@ -2097,6 +2115,8 @@ class NativeEngineInstrumentedTest {
         assertFalse(restored.printers.last().enableFilamentRamming)
         assertFalse(restored.printers.last().purgeInPrimeTower)
         assertTrue(restored.printers.last().highCurrentOnFilamentSwap)
+        assertTrue(restored.printers.last().supportsChamberTemperatureControl)
+        assertTrue(restored.printers.last().supportsAirFiltration)
         assertEquals(null, restored.printers.last().brand)
         assertEquals(null, restored.filaments.last().brand)
         assertEquals(USER_PROFILE_SCHEMA_VERSION, JSONObject(file.readText()).getInt("schemaVersion"))
@@ -2131,7 +2151,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(70, catalog.schemaVersion)
+        assertEquals(71, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2258,6 +2278,37 @@ class NativeEngineInstrumentedTest {
         assertTrue(
             "Inherited auxiliary-fan capability must survive catalog generation",
             catalog.printers.any { it.auxiliaryFan },
+        )
+        assertTrue(
+            "Heated-chamber capability must survive printer catalog generation",
+            catalog.printers.any { it.supportsChamberTemperatureControl },
+        )
+        assertTrue(
+            "Exhaust-filtration capability must survive printer catalog generation",
+            catalog.printers.any { it.supportsAirFiltration },
+        )
+        assertTrue(
+            "Orca chamber material settings must survive filament catalog generation",
+            catalog.filaments.any {
+                it.chamberTemperatureControl && it.chamberTemperature > 0
+            },
+        )
+        assertTrue(
+            "Orca exhaust material settings must survive filament catalog generation",
+            catalog.filaments.any {
+                it.airFiltration &&
+                    (it.duringPrintExhaustFanSpeed > 0 || it.completePrintExhaustFanSpeed > 0)
+            },
+        )
+        assertTrue(
+            "Material softening temperatures must retain inherited variation",
+            catalog.filaments.map { it.softeningTemperature }.toSet().size > 1,
+        )
+        assertTrue(
+            "Safe nozzle ranges must retain inherited variation",
+            catalog.filaments.any {
+                it.nozzleTemperatureRangeLow != 190 || it.nozzleTemperatureRangeHigh != 240
+            },
         )
         val representativeBrands = setOf(
             "Prusa", "Creality", "Anycubic", "Elegoo", "Snapmaker", "Sovol", "Qidi",
@@ -5301,6 +5352,95 @@ class NativeEngineInstrumentedTest {
             "Disabling remaining-time output must remove generated M73 commands",
             disabled.lineSequence().any { it.startsWith("M73 ") },
         )
+    }
+
+    @Test
+    fun chamberAndFiltrationProfilesEmitOnlyForCapablePrinters() {
+        val material = FilamentProfile.GENERIC_PLA.copy(
+            softeningTemperature = 62,
+            nozzleTemperatureRangeLow = 195,
+            nozzleTemperatureRangeHigh = 245,
+            chamberTemperatureControl = true,
+            chamberTemperature = 55,
+            airFiltration = true,
+            duringPrintExhaustFanSpeed = 70,
+            completePrintExhaustFanSpeed = 40,
+        )
+        val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(
+            gcodeFlavor = "marlin2",
+            machineStartGcode = "",
+            machineEndGcode = "",
+        )
+        val base = SliceOptions()
+            .selectFilament(material)
+            .selectQuality(QualityProfile.DRAFT)
+        val capable = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.selectPrinter(
+                printer.copy(
+                    supportsChamberTemperatureControl = true,
+                    supportsAirFiltration = true,
+                ),
+            ),
+        )
+        val incapable = OnDeviceSlicer.slice(
+            fixtureModel(),
+            base.selectPrinter(
+                printer.copy(
+                    supportsChamberTemperatureControl = false,
+                    supportsAirFiltration = false,
+                ),
+            ),
+        )
+
+        try {
+            val capableGcode = capable.output.readText()
+            assertTrue(capableGcode.contains("; support_chamber_temp_control = 1"))
+            assertTrue(capableGcode.contains("; support_air_filtration = 1"))
+            assertTrue(capableGcode.contains("; temperature_vitrification = 62"))
+            assertTrue(capableGcode.contains("; nozzle_temperature_range_low = 195"))
+            assertTrue(capableGcode.contains("; nozzle_temperature_range_high = 245"))
+            assertTrue(capableGcode.contains("; activate_chamber_temp_control = 1"))
+            assertTrue(capableGcode.contains("; chamber_temperature = 55"))
+            assertTrue(capableGcode.contains("; activate_air_filtration = 1"))
+            assertTrue(capableGcode.contains("; during_print_exhaust_fan_speed = 70"))
+            assertTrue(capableGcode.contains("; complete_print_exhaust_fan_speed = 40"))
+            assertTrue(
+                "A capable printer must receive Orca's blocking chamber warm-up",
+                capableGcode.lineSequence().any { it.startsWith("M191 S55 ") },
+            )
+            assertTrue(
+                "A capable printer must turn the chamber heater off after printing",
+                capableGcode.lineSequence().any { it.startsWith("M141 S0;") },
+            )
+            assertTrue(
+                "A capable printer must use the selected during-print exhaust speed",
+                capableGcode.lineSequence().any { it == "M106 P3 S178" },
+            )
+            assertTrue(
+                "A capable printer must use the selected post-print exhaust speed",
+                capableGcode.lineSequence().any { it == "M106 P3 S102" },
+            )
+
+            val incapableGcode = incapable.output.readText()
+            assertTrue(incapableGcode.contains("; support_chamber_temp_control = 0"))
+            assertTrue(incapableGcode.contains("; support_air_filtration = 0"))
+            assertTrue(incapableGcode.contains("; activate_chamber_temp_control = 0"))
+            assertTrue(incapableGcode.contains("; activate_air_filtration = 0"))
+            assertFalse(
+                "A material profile must not send chamber commands to unsupported firmware",
+                incapableGcode.lineSequence().any {
+                    it.startsWith("M191 ") || it.startsWith("M141 ")
+                },
+            )
+            assertFalse(
+                "A material profile must not send exhaust commands to unsupported firmware",
+                incapableGcode.lineSequence().any { it.startsWith("M106 P3 ") },
+            )
+        } finally {
+            capable.output.delete()
+            incapable.output.delete()
+        }
     }
 
     @Test

@@ -41,6 +41,8 @@ class ProfileBundleTest {
                         enableFilamentRamming = false,
                         purgeInPrimeTower = false,
                         highCurrentOnFilamentSwap = true,
+                        supportsChamberTemperatureControl = true,
+                        supportsAirFiltration = true,
                         toolChangeRetractLengths = listOf(1.2f, 2.3f),
                         toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
                     ),
@@ -63,6 +65,14 @@ class ProfileBundleTest {
                         multitoolRamming = true,
                         multitoolRammingVolume = 8f,
                         multitoolRammingFlow = 18f,
+                        softeningTemperature = 62,
+                        nozzleTemperatureRangeLow = 195,
+                        nozzleTemperatureRangeHigh = 245,
+                        chamberTemperatureControl = true,
+                        chamberTemperature = 55,
+                        airFiltration = true,
+                        duringPrintExhaustFanSpeed = 70,
+                        completePrintExhaustFanSpeed = 40,
                         fanCoolingLayerTime = 42f,
                         slowDownForLayerCooling = false,
                         keepFanAlwaysOn = true,
@@ -126,6 +136,7 @@ class ProfileBundleTest {
                         it.parkingPosRetraction == 80f && it.extraLoadingMove == -3.5f &&
                         !it.enableFilamentRamming && !it.purgeInPrimeTower &&
                         it.highCurrentOnFilamentSwap &&
+                        it.supportsChamberTemperatureControl && it.supportsAirFiltration &&
                         it.toolChangeRetractLengths == listOf(1.2f, 2.3f) &&
                         it.toolChangeRetractRestartExtras == listOf(-0.1f, 0.2f)
                 },
@@ -146,6 +157,14 @@ class ProfileBundleTest {
             assertTrue(importedFilament.multitoolRamming)
             assertEquals(8f, importedFilament.multitoolRammingVolume)
             assertEquals(18f, importedFilament.multitoolRammingFlow)
+            assertEquals(62, importedFilament.softeningTemperature)
+            assertEquals(195, importedFilament.nozzleTemperatureRangeLow)
+            assertEquals(245, importedFilament.nozzleTemperatureRangeHigh)
+            assertTrue(importedFilament.chamberTemperatureControl)
+            assertEquals(55, importedFilament.chamberTemperature)
+            assertTrue(importedFilament.airFiltration)
+            assertEquals(70, importedFilament.duringPrintExhaustFanSpeed)
+            assertEquals(40, importedFilament.completePrintExhaustFanSpeed)
             assertEquals(42f, importedFilament.fanCoolingLayerTime)
             assertFalse(importedFilament.slowDownForLayerCooling)
             assertTrue(importedFilament.keepFanAlwaysOn)

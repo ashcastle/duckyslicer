@@ -562,6 +562,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "enable_filament_ramming": "0",
                 "purge_in_prime_tower": "0",
                 "high_current_on_filament_swap": "1",
+                "support_chamber_temp_control": "1",
+                "support_air_filtration": ["1"],
             },
         )
         inherited = build_filament(
@@ -605,6 +607,14 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "filament_multitool_ramming": ["1"],
                 "filament_multitool_ramming_volume": ["8"],
                 "filament_multitool_ramming_flow": ["18"],
+                "temperature_vitrification": ["62"],
+                "nozzle_temperature_range_low": ["195"],
+                "nozzle_temperature_range_high": ["245"],
+                "activate_chamber_temp_control": ["1"],
+                "chamber_temperature": ["55"],
+                "activate_air_filtration": ["1"],
+                "during_print_exhaust_fan_speed": ["70%"],
+                "complete_print_exhaust_fan_speed": ["40%"],
                 "fan_cooling_layer_time": ["42"],
                 "slow_down_for_layer_cooling": ["0"],
                 "reduce_fan_stop_start_freq": ["1"],
@@ -641,6 +651,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertFalse(printer["enableFilamentRamming"])
         self.assertFalse(printer["purgeInPrimeTower"])
         self.assertTrue(printer["highCurrentOnFilamentSwap"])
+        self.assertTrue(printer["supportsChamberTemperatureControl"])
+        self.assertTrue(printer["supportsAirFiltration"])
         self.assertIsNone(inherited["retractLength"])
         self.assertIsNone(inherited["zHopType"])
         self.assertEqual(0.55, overridden["retractLength"])
@@ -667,6 +679,14 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(overridden["multitoolRamming"])
         self.assertEqual(8.0, overridden["multitoolRammingVolume"])
         self.assertEqual(18.0, overridden["multitoolRammingFlow"])
+        self.assertEqual(62, overridden["softeningTemperature"])
+        self.assertEqual(195, overridden["nozzleTemperatureRangeLow"])
+        self.assertEqual(245, overridden["nozzleTemperatureRangeHigh"])
+        self.assertTrue(overridden["chamberTemperatureControl"])
+        self.assertEqual(55, overridden["chamberTemperature"])
+        self.assertTrue(overridden["airFiltration"])
+        self.assertEqual(70, overridden["duringPrintExhaustFanSpeed"])
+        self.assertEqual(40, overridden["completePrintExhaustFanSpeed"])
         self.assertEqual(42.0, overridden["fanCoolingLayerTime"])
         self.assertFalse(overridden["slowDownForLayerCooling"])
         self.assertTrue(overridden["keepFanAlwaysOn"])
