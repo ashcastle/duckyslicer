@@ -276,6 +276,12 @@
     <string name="z_hop_slope_angle">Z-hop slope angle</string>
     <string name="z_hop_on_prime_tower">Z-hop when moving to prime tower</string>
     <string name="firmware_retraction">Use firmware retraction</string>
+    <string name="filament_cut_retraction_control">Long retraction control</string>
+    <string name="filament_cut_retraction_disabled">Disabled</string>
+    <string name="filament_cut_retraction_printer">Printer profile</string>
+    <string name="filament_cut_retraction_filament">Filament profiles</string>
+    <string name="long_retraction_when_cut">Long retraction when cut (beta)</string>
+    <string name="retraction_distance_when_cut">Retraction distance when cut</string>
     <string name="cooling">Cooling</string>
     <string name="minimum_fan_speed">Minimum fan</string>
     <string name="maximum_fan_speed">Maximum fan</string>

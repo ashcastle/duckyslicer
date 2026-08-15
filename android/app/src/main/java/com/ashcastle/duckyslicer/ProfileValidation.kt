@@ -52,6 +52,8 @@ internal object ProfileValidation {
             (profile.retractLiftBelow == 0f || profile.retractLiftAbove <= profile.retractLiftBelow) &&
             profile.retractLiftEnforce in RETRACT_LIFT_ENFORCEMENTS &&
             profile.travelSlope in 1f..90f &&
+            profile.longRetractionWhenCutLevel in 0..2 &&
+            profile.retractionDistanceWhenCut in 10f..18f &&
             profile.extruderClearanceRadius in 0.1f..1_000f &&
             profile.extruderClearanceHeightToRod in 0.1f..1_500f &&
             profile.extruderClearanceHeightToLid in 0.1f..1_500f &&
@@ -142,6 +144,7 @@ internal object ProfileValidation {
             profile.retractLiftBelow.isNullOrIn(0f..1_500f) &&
             (profile.retractLiftEnforce == null ||
                 profile.retractLiftEnforce in RETRACT_LIFT_ENFORCEMENTS) &&
+            profile.retractionDistanceWhenCut.isNullOrIn(10f..18f) &&
             profile.slowDownLayerTime in 0f..600f &&
             profile.slowDownMinSpeed in 0f..500f &&
             profile.closeFanFirstLayers in 0..10_000 &&

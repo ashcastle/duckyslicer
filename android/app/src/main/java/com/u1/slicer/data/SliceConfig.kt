@@ -411,6 +411,9 @@ data class SliceConfig(
     @JvmField var extruderTravelSlope: FloatArray = floatArrayOf()
     @JvmField var extruderZHopWhenPrime: IntArray = intArrayOf()
     @JvmField var useFirmwareRetraction: Boolean = false
+    @JvmField var longRetractionWhenCutLevel: Int = 0
+    @JvmField var extruderLongRetractionWhenCut: IntArray = intArrayOf()
+    @JvmField var extruderRetractionDistanceWhenCut: FloatArray = floatArrayOf()
     @JvmField var primeVolume: Float = 45f
     @JvmField var purgeVolumes: FloatArray = floatArrayOf()
     @JvmField var singleExtruderMultiMaterial: Boolean = false

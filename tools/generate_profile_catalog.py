@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 72
+SCHEMA_VERSION = 73
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -360,6 +360,9 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "travelSlope": number(raw.get("travel_slope"), 3),
         "zHopWhenPrime": boolean(raw.get("z_hop_when_prime"), True),
         "useFirmwareRetraction": boolean(raw.get("use_firmware_retraction")),
+        "longRetractionWhenCutLevel": integer(raw.get("enable_long_retraction_when_cut"), 0),
+        "longRetractionWhenCut": boolean(raw.get("long_retractions_when_cut")),
+        "retractionDistanceWhenCut": number(raw.get("retraction_distances_when_cut"), 18),
         "extruderClearanceRadius": number(raw.get("extruder_clearance_radius"), 40),
         "extruderClearanceHeightToRod": number(raw.get("extruder_clearance_height_to_rod"), 40),
         "extruderClearanceHeightToLid": number(raw.get("extruder_clearance_height_to_lid"), 120),
@@ -405,6 +408,8 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
              profile["retractLiftAbove"] <= profile["retractLiftBelow"])
         and profile["retractLiftEnforce"] in {"all", "top", "bottom", "top_bottom"}
         and 1 <= profile["travelSlope"] <= 90
+        and profile["longRetractionWhenCutLevel"] in {0, 1, 2}
+        and 10 <= profile["retractionDistanceWhenCut"] <= 18
         and 0.01 <= profile["minLayerHeight"] <= profile["maxLayerHeight"] <= 2
     ):
         raise ValueError("unsafe motion limits")
@@ -637,6 +642,12 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "retractLiftEnforce": retract_lift_enforcement(
             raw.get("filament_retract_lift_enforce"), None
         ),
+        "longRetractionWhenCut": nullable_boolean(
+            raw.get("filament_long_retractions_when_cut")
+        ),
+        "retractionDistanceWhenCut": nullable_number(
+            raw.get("filament_retraction_distances_when_cut")
+        ),
         "fanMinSpeed": integer(raw.get("fan_min_speed"), 30),
         "fanMaxSpeed": integer(raw.get("fan_max_speed"), 100),
         "fanCoolingLayerTime": number(raw.get("fan_cooling_layer_time"), 60),
@@ -731,6 +742,8 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and (profile["retractLiftBelow"] is None or 0 <= profile["retractLiftBelow"] <= 1_500)
         and (profile["retractLiftEnforce"] is None or
              profile["retractLiftEnforce"] in {"all", "top", "bottom", "top_bottom"})
+        and (profile["retractionDistanceWhenCut"] is None or
+             10 <= profile["retractionDistanceWhenCut"] <= 18)
     ):
         raise ValueError("unsafe filament limits")
     return profile

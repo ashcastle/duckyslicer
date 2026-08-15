@@ -1082,6 +1082,60 @@ private fun PrinterSettingsSheet(
             ))
         },
     )
+    SettingChoices(
+        settingLabel = stringResource(R.string.filament_cut_retraction_control),
+        entries = listOf(0, 1, 2),
+        selected = options.printerProfile.longRetractionWhenCutLevel,
+        optionLabel = { level ->
+            stringResource(when (level) {
+                1 -> R.string.filament_cut_retraction_printer
+                2 -> R.string.filament_cut_retraction_filament
+                else -> R.string.filament_cut_retraction_disabled
+            })
+        },
+        onSelected = { level ->
+            onOptionsChanged(options.updatePrinterRetraction(
+                options.printerProfile.copy(
+                    longRetractionWhenCutLevel = level,
+                    longRetractionWhenCut = if (level == 0) {
+                        false
+                    } else {
+                        options.printerProfile.longRetractionWhenCut
+                    },
+                ),
+            ))
+        },
+    )
+    if ((options.printerProfile.longRetractionWhenCutLevel > 0 &&
+            !options.printerProfile.useFirmwareRetraction) || settingsQuery.isNotBlank()
+    ) {
+        SettingsSwitch(
+            label = stringResource(R.string.long_retraction_when_cut),
+            checked = options.printerProfile.longRetractionWhenCut,
+            onCheckedChange = { enabled ->
+                onOptionsChanged(options.updatePrinterRetraction(
+                    options.printerProfile.copy(longRetractionWhenCut = enabled),
+                ))
+            },
+        )
+        if (options.printerProfile.longRetractionWhenCut || settingsQuery.isNotBlank()) {
+            SettingSlider(
+                label = stringResource(R.string.retraction_distance_when_cut),
+                valueText = stringResource(
+                    R.string.millimeters_value_precise,
+                    options.printerProfile.retractionDistanceWhenCut,
+                ),
+                value = options.printerProfile.retractionDistanceWhenCut,
+                range = 10f..18f,
+                steps = 79,
+                onValueChange = { value ->
+                    onOptionsChanged(options.updatePrinterRetraction(
+                        options.printerProfile.copy(retractionDistanceWhenCut = value),
+                    ))
+                },
+            )
+        }
+    }
     SettingsGroupTitle(stringResource(R.string.sequential_printing_clearance))
     SettingSlider(
         label = stringResource(R.string.extruder_clearance_radius),
@@ -1323,7 +1377,9 @@ private fun FilamentSettingsSheet(
         activeProfile.retractBeforeWipe == null && activeProfile.retractRestartExtra == null &&
         activeProfile.zHop == null && activeProfile.zHopType == null &&
         activeProfile.retractLiftAbove == null && activeProfile.retractLiftBelow == null &&
-        activeProfile.retractLiftEnforce == null
+        activeProfile.retractLiftEnforce == null &&
+        activeProfile.longRetractionWhenCut == null &&
+        activeProfile.retractionDistanceWhenCut == null
     SettingsSheet(
         title = stringResource(R.string.filament_profile),
         onDismiss = onDismiss,
@@ -1872,6 +1928,7 @@ private fun FilamentSettingsSheet(
                         retractRestartExtra = null, zHop = null, zHopType = null,
                         retractLiftAbove = null, retractLiftBelow = null,
                         retractLiftEnforce = null,
+                        longRetractionWhenCut = null, retractionDistanceWhenCut = null,
                     )
                 } else {
                     activeProfile.copy(
@@ -1889,6 +1946,8 @@ private fun FilamentSettingsSheet(
                         retractLiftAbove = resolvedRetraction.liftAbove,
                         retractLiftBelow = resolvedRetraction.liftBelow,
                         retractLiftEnforce = resolvedRetraction.liftEnforce,
+                        longRetractionWhenCut = resolvedRetraction.longRetractionWhenCut,
+                        retractionDistanceWhenCut = resolvedRetraction.retractionDistanceWhenCut,
                     )
                 }
                 onOptionsChanged(options.updateFilamentSlot(selectedSlot, updated))
@@ -2065,6 +2124,36 @@ private fun FilamentSettingsSheet(
                 ))
             },
         )
+        if ((options.printerProfile.longRetractionWhenCutLevel == 2 &&
+                !options.printerProfile.useFirmwareRetraction) || settingsQuery.isNotBlank()
+        ) {
+            SettingsSwitch(
+                label = stringResource(R.string.long_retraction_when_cut),
+                checked = resolvedRetraction.longRetractionWhenCut,
+                onCheckedChange = { enabled ->
+                    onOptionsChanged(options.updateFilamentSlot(
+                        selectedSlot, activeProfile.copy(longRetractionWhenCut = enabled),
+                    ))
+                },
+            )
+            if (resolvedRetraction.longRetractionWhenCut || settingsQuery.isNotBlank()) {
+                SettingSlider(
+                    label = stringResource(R.string.retraction_distance_when_cut),
+                    valueText = stringResource(
+                        R.string.millimeters_value_precise,
+                        resolvedRetraction.retractionDistanceWhenCut,
+                    ),
+                    value = resolvedRetraction.retractionDistanceWhenCut,
+                    range = 10f..18f,
+                    steps = 79,
+                    onValueChange = { value ->
+                        onOptionsChanged(options.updateFilamentSlot(
+                            selectedSlot, activeProfile.copy(retractionDistanceWhenCut = value),
+                        ))
+                    },
+                )
+            }
+        }
         SettingsGroupTitle(stringResource(R.string.cooling))
         SettingSlider(
             label = stringResource(R.string.auxiliary_part_cooling_fan),

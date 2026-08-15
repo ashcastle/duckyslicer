@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.BufferedInputStream
 import java.io.DataInputStream
 
-private const val CATALOG_ASSET = "profile_catalog_v72.bin"
+private const val CATALOG_ASSET = "profile_catalog_v73.bin"
 private val CATALOG_MAGIC = "DUCKYPC1".toByteArray(Charsets.US_ASCII)
 private const val MAX_BINARY_FIELDS = 512
 private const val MAX_BINARY_RECORDS = 100_000
@@ -34,7 +34,7 @@ class OrcaProfileCatalog(private val context: Context) {
         input.readFully(magic)
         check(magic.contentEquals(CATALOG_MAGIC)) { "Invalid profile catalog header" }
         val schemaVersion = input.readInt()
-        check(schemaVersion == 72) { "Unsupported profile catalog schema" }
+        check(schemaVersion == 73) { "Unsupported profile catalog schema" }
         val sourceRevision = input.readCatalogString()
         val rejectedCount = input.readBoundedCount(MAX_BINARY_RECORDS, "rejected profiles")
         val printers = input.readSection(PRINTER_BINARY_FIELDS, ::readPrinter)
@@ -126,6 +126,9 @@ class OrcaProfileCatalog(private val context: Context) {
         travelSlope = input.readFloat(),
         zHopWhenPrime = input.readCatalogBoolean(),
         useFirmwareRetraction = input.readCatalogBoolean(),
+        longRetractionWhenCutLevel = input.readInt(),
+        longRetractionWhenCut = input.readCatalogBoolean(),
+        retractionDistanceWhenCut = input.readFloat(),
         extruderClearanceRadius = input.readFloat(),
         extruderClearanceHeightToRod = input.readFloat(),
         extruderClearanceHeightToLid = input.readFloat(),
@@ -202,6 +205,8 @@ class OrcaProfileCatalog(private val context: Context) {
         retractLiftAbove = input.readCatalogNullableFloat(),
         retractLiftBelow = input.readCatalogNullableFloat(),
         retractLiftEnforce = input.readCatalogNullableString(),
+        longRetractionWhenCut = input.readCatalogNullableBoolean(),
+        retractionDistanceWhenCut = input.readCatalogNullableFloat(),
         fanMinSpeed = input.readInt(),
         fanMaxSpeed = input.readInt(),
         fanCoolingLayerTime = input.readFloat(),
@@ -359,6 +364,9 @@ private val PRINTER_BINARY_FIELDS = arrayOf(
     BinaryField("travelSlope", BINARY_FLOAT),
     BinaryField("zHopWhenPrime", BINARY_BOOL),
     BinaryField("useFirmwareRetraction", BINARY_BOOL),
+    BinaryField("longRetractionWhenCutLevel", BINARY_INT),
+    BinaryField("longRetractionWhenCut", BINARY_BOOL),
+    BinaryField("retractionDistanceWhenCut", BINARY_FLOAT),
     BinaryField("extruderClearanceRadius", BINARY_FLOAT),
     BinaryField("extruderClearanceHeightToRod", BINARY_FLOAT),
     BinaryField("extruderClearanceHeightToLid", BINARY_FLOAT),
@@ -436,6 +444,8 @@ private val FILAMENT_BINARY_FIELDS = arrayOf(
     BinaryField("retractLiftAbove", BINARY_NULLABLE_FLOAT),
     BinaryField("retractLiftBelow", BINARY_NULLABLE_FLOAT),
     BinaryField("retractLiftEnforce", BINARY_NULLABLE_STRING),
+    BinaryField("longRetractionWhenCut", BINARY_NULLABLE_BOOL),
+    BinaryField("retractionDistanceWhenCut", BINARY_NULLABLE_FLOAT),
     BinaryField("fanMinSpeed", BINARY_INT),
     BinaryField("fanMaxSpeed", BINARY_INT),
     BinaryField("fanCoolingLayerTime", BINARY_FLOAT),

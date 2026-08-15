@@ -2192,7 +2192,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(72, catalog.schemaVersion)
+        assertEquals(73, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2217,8 +2217,16 @@ class NativeEngineInstrumentedTest {
         val inheritedOffset = catalog.printers.single { it.name == "Bambu Lab P1P 0.4 nozzle" }
         assertEquals(listOf(0f), inheritedOffset.extruderOffsetsX)
         assertEquals(listOf(2f), inheritedOffset.extruderOffsetsY)
+        assertEquals(2, inheritedOffset.longRetractionWhenCutLevel)
+        assertFalse(inheritedOffset.longRetractionWhenCut)
+        assertEquals(18f, inheritedOffset.retractionDistanceWhenCut)
         assertTrue(inheritedOffset.layerChangeGcode.contains("M73 L{layer_num+1}"))
         assertTrue(inheritedOffset.changeFilamentGcode.contains("M620 S[next_extruder]A"))
+        val filamentCutOverride = catalog.filaments.single {
+            it.name == "Bambu PLA Basic @System"
+        }
+        assertEquals(true, filamentCutOverride.longRetractionWhenCut)
+        assertEquals(18f, filamentCutOverride.retractionDistanceWhenCut)
         val absoluteOutput = catalog.printers.single {
             it.name == "Anycubic Kobra 2 Max 0.4 nozzle"
         }
@@ -3160,6 +3168,87 @@ class NativeEngineInstrumentedTest {
             "Interlocking must change real extrusion geometry, not only profile metadata",
             baselinePreview.segments.contentEquals(interlockedPreview.segments),
         )
+    }
+
+    @Test
+    fun filamentCutLongRetractionControlsRealToolChangeGcode() {
+        val left = inspectModel(interlockingVolumeModel("cut-retraction-left", -20f, 0f).absolutePath)
+        val right = inspectModel(interlockingVolumeModel("cut-retraction-right", 0f, 20f).absolutePath)
+        val projectObject = ProjectObject(
+            id = "cut-retraction-object",
+            volumes = listOf(
+                ProjectVolume("cut-retraction-left", left, filamentSlot = 0),
+                ProjectVolume("cut-retraction-right", right, filamentSlot = 1),
+            ),
+        )
+        val changeTemplate = """
+            {if previous_extruder >= 0}
+            {if long_retractions_when_cut[previous_extruder]}
+            ; DUCKY_LONG_CUT E-{retraction_distances_when_cut[previous_extruder]}
+            {else}
+            ; DUCKY_LONG_CUT_DISABLED
+            {endif}
+            {else}
+            ; DUCKY_LONG_CUT_INITIAL
+            {endif}
+            T[next_extruder]
+        """.trimIndent()
+        val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(
+            extruderCount = 2,
+            machineStartGcode = "",
+            machineEndGcode = "",
+            changeFilamentGcode = changeTemplate,
+            longRetractionWhenCutLevel = 2,
+            longRetractionWhenCut = false,
+            retractionDistanceWhenCut = 17f,
+        )
+        val enabledFilament = FilamentProfile.PLA.copy(
+            longRetractionWhenCut = true,
+            retractionDistanceWhenCut = 16.5f,
+        )
+        val disabledFilament = FilamentProfile.PETG.copy(
+            longRetractionWhenCut = false,
+            retractionDistanceWhenCut = 12.5f,
+        )
+        val options = SliceOptions()
+            .selectPrinter(printer)
+            .selectFilament(enabledFilament)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                filamentSlots = listOf(enabledFilament, disabledFilament),
+                wipeTowerEnabled = false,
+            )
+
+        val enabled = OnDeviceSlicer.slice(listOf(projectObject), options).output.readText()
+        val disabled = OnDeviceSlicer.slice(
+            listOf(projectObject),
+            options.selectFilament(enabledFilament.copy(longRetractionWhenCut = false)).copy(
+                filamentSlots = listOf(
+                    enabledFilament.copy(longRetractionWhenCut = false),
+                    disabledFilament,
+                ),
+            ),
+        ).output.readText()
+        val firmwareRetraction = OnDeviceSlicer.slice(
+            listOf(projectObject),
+            options.copy(printerProfile = printer.copy(useFirmwareRetraction = true)),
+        ).output.readText()
+
+        assertTrue(enabled.contains("; enable_long_retraction_when_cut = 2"))
+        assertTrue(enabled.contains("; long_retractions_when_cut = 1,0"))
+        assertTrue(enabled.contains("; retraction_distances_when_cut = 16.5,12.5"))
+        assertTrue(
+            "The enabled branch must use the first material's exact distance",
+            enabled.lineSequence().any { it == "; DUCKY_LONG_CUT E-16.5" },
+        )
+        assertTrue("The enabled branch must execute a real tool transition", enabled.lineSequence().any { it == "T1" })
+        assertTrue(disabled.contains("; long_retractions_when_cut = 0,0"))
+        assertTrue(disabled.lineSequence().any { it == "; DUCKY_LONG_CUT_DISABLED" })
+        assertFalse(disabled.lineSequence().any { it.startsWith("; DUCKY_LONG_CUT E-") })
+        assertTrue(firmwareRetraction.contains("; use_firmware_retraction = 1"))
+        assertTrue(firmwareRetraction.contains("; long_retractions_when_cut = 0,0"))
+        assertTrue(firmwareRetraction.lineSequence().any { it == "; DUCKY_LONG_CUT_DISABLED" })
+        assertFalse(firmwareRetraction.lineSequence().any { it.startsWith("; DUCKY_LONG_CUT E-") })
     }
 
     @Test

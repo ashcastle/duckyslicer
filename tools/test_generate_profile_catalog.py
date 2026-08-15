@@ -553,6 +553,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "travel_slope": ["7"],
                 "z_hop_when_prime": ["0"],
                 "use_firmware_retraction": ["1"],
+                "enable_long_retraction_when_cut": ["2"],
+                "long_retractions_when_cut": ["0"],
+                "retraction_distances_when_cut": ["17"],
                 "before_layer_change_gcode": "; DUCKY_BEFORE_LAYER",
                 "layer_change_gcode": "; DUCKY_AFTER_LAYER",
                 "change_filament_gcode": "T[next_extruder] ; DUCKY_CHANGE_FILAMENT",
@@ -580,6 +583,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "nozzle_temperature": ["220"],
                 "hot_plate_temp": ["60"],
                 "filament_retraction_length": ["nil"],
+                "filament_long_retractions_when_cut": ["nil"],
+                "filament_retraction_distances_when_cut": ["nil"],
             },
         )
         overridden = build_filament(
@@ -633,6 +638,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "filament_retract_lift_above": ["0.8"],
                 "filament_retract_lift_below": ["150"],
                 "filament_retract_lift_enforce": ["Top Only"],
+                "filament_long_retractions_when_cut": ["1"],
+                "filament_retraction_distances_when_cut": ["16.5"],
                 "filament_wipe": ["0"],
             },
         )
@@ -648,6 +655,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(7.0, printer["travelSlope"])
         self.assertFalse(printer["zHopWhenPrime"])
         self.assertTrue(printer["useFirmwareRetraction"])
+        self.assertEqual(2, printer["longRetractionWhenCutLevel"])
+        self.assertFalse(printer["longRetractionWhenCut"])
+        self.assertEqual(17.0, printer["retractionDistanceWhenCut"])
         self.assertEqual("; DUCKY_BEFORE_LAYER", printer["beforeLayerChangeGcode"])
         self.assertEqual("; DUCKY_AFTER_LAYER", printer["layerChangeGcode"])
         self.assertEqual(
@@ -673,6 +683,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertIsNone(inherited["retractLiftAbove"])
         self.assertIsNone(inherited["retractLiftBelow"])
         self.assertIsNone(inherited["retractLiftEnforce"])
+        self.assertIsNone(inherited["longRetractionWhenCut"])
+        self.assertIsNone(inherited["retractionDistanceWhenCut"])
         self.assertEqual(0.55, overridden["retractLength"])
         self.assertEqual(2.85, overridden["diameter"])
         self.assertEqual(1.07, overridden["density"])
@@ -717,6 +729,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(0.8, overridden["retractLiftAbove"])
         self.assertEqual(150.0, overridden["retractLiftBelow"])
         self.assertEqual("top", overridden["retractLiftEnforce"])
+        self.assertTrue(overridden["longRetractionWhenCut"])
+        self.assertEqual(16.5, overridden["retractionDistanceWhenCut"])
         self.assertFalse(overridden["wipeWhileRetracting"])
 
     def test_rejects_unsafe_filament_diameter(self) -> None:

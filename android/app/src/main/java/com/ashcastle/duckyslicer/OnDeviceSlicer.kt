@@ -163,6 +163,9 @@ data class PrinterProfile(
     val travelSlope: Float = 3f,
     val zHopWhenPrime: Boolean = true,
     val useFirmwareRetraction: Boolean = false,
+    val longRetractionWhenCutLevel: Int = 0,
+    val longRetractionWhenCut: Boolean = false,
+    val retractionDistanceWhenCut: Float = 18f,
     val extruderClearanceRadius: Float = 40f,
     val extruderClearanceHeightToRod: Float = 40f,
     val extruderClearanceHeightToLid: Float = 120f,
@@ -314,6 +317,8 @@ data class FilamentProfile(
     val retractLiftAbove: Float? = null,
     val retractLiftBelow: Float? = null,
     val retractLiftEnforce: String? = null,
+    val longRetractionWhenCut: Boolean? = null,
+    val retractionDistanceWhenCut: Float? = null,
     val fanMinSpeed: Int = 30,
     val fanMaxSpeed: Int = 100,
     val fanCoolingLayerTime: Float = 60f,
@@ -539,6 +544,8 @@ data class RetractionSettings(
     val liftAbove: Float,
     val liftBelow: Float,
     val liftEnforce: String,
+    val longRetractionWhenCut: Boolean,
+    val retractionDistanceWhenCut: Float,
 )
 
 data class MultiMaterialSettings(
@@ -770,6 +777,15 @@ internal fun FilamentProfile.resolveRetraction(printer: PrinterProfile) = Retrac
     liftAbove = retractLiftAbove ?: printer.retractLiftAbove,
     liftBelow = retractLiftBelow ?: printer.retractLiftBelow,
     liftEnforce = retractLiftEnforce ?: printer.retractLiftEnforce,
+    longRetractionWhenCut = !printer.useFirmwareRetraction && when (printer.longRetractionWhenCutLevel) {
+        1 -> printer.longRetractionWhenCut
+        2 -> longRetractionWhenCut ?: printer.longRetractionWhenCut
+        else -> false
+    },
+    retractionDistanceWhenCut = when (printer.longRetractionWhenCutLevel) {
+        2 -> retractionDistanceWhenCut ?: printer.retractionDistanceWhenCut
+        else -> printer.retractionDistanceWhenCut
+    },
 )
 
 data class QualityProfile(
@@ -2207,6 +2223,11 @@ data class SliceOptions(
                 if (printerProfile.zHopWhenPrime) 1 else 0
             }
             native.useFirmwareRetraction = printerProfile.useFirmwareRetraction
+            native.longRetractionWhenCutLevel = printerProfile.longRetractionWhenCutLevel
+            native.extruderLongRetractionWhenCut = nativeRetractions
+                .map { if (it.longRetractionWhenCut) 1 else 0 }.toIntArray()
+            native.extruderRetractionDistanceWhenCut = nativeRetractions
+                .map(RetractionSettings::retractionDistanceWhenCut).toFloatArray()
             native.primeVolume = multiMaterial.primeVolume
             native.purgeVolumes = multiMaterial.resolvedPurgeVolumes(nativeFilaments.size).toFloatArray()
             native.singleExtruderMultiMaterial = printerProfile.singleExtruderMultiMaterial

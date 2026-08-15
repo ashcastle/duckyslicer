@@ -239,6 +239,14 @@ class ProfileStoreMigrationTest {
                     singleExtruderMultiMaterial = true,
                     extruderCount = 2,
                     auxiliaryFan = true,
+                    retractLiftAbove = 0.35f,
+                    retractLiftBelow = 180f,
+                    retractLiftEnforce = "top_bottom",
+                    travelSlope = 7f,
+                    zHopWhenPrime = false,
+                    longRetractionWhenCutLevel = 2,
+                    longRetractionWhenCut = true,
+                    retractionDistanceWhenCut = 16.5f,
                 ),
             )
             val saved = ProfileStore(file).savePrinter("Delta bed", options)
@@ -250,6 +258,14 @@ class ProfileStoreMigrationTest {
             assertTrue(restored.singleExtruderMultiMaterial)
             assertEquals(2, restored.extruderCount)
             assertTrue(restored.auxiliaryFan)
+            assertEquals(0.35f, restored.retractLiftAbove)
+            assertEquals(180f, restored.retractLiftBelow)
+            assertEquals("top_bottom", restored.retractLiftEnforce)
+            assertEquals(7f, restored.travelSlope)
+            assertFalse(restored.zHopWhenPrime)
+            assertEquals(2, restored.longRetractionWhenCutLevel)
+            assertTrue(restored.longRetractionWhenCut)
+            assertEquals(16.5f, restored.retractionDistanceWhenCut)
 
             val root = JSONObject(file.readText())
             root.getJSONArray("printers").getJSONObject(0)
@@ -375,6 +391,9 @@ class ProfileStoreMigrationTest {
                 retractLiftAbove = 0.4f,
                 retractLiftBelow = 180f,
                 retractLiftEnforce = "top_bottom",
+                longRetractionWhenCutLevel = 2,
+                longRetractionWhenCut = true,
+                retractionDistanceWhenCut = 17f,
             )
             val options = SliceOptions()
                 .selectPrinter(printer)
@@ -408,16 +427,22 @@ class ProfileStoreMigrationTest {
             assertNull(saved.retractLiftAbove)
             assertNull(saved.retractLiftBelow)
             assertNull(saved.retractLiftEnforce)
+            assertNull(saved.longRetractionWhenCut)
+            assertNull(saved.retractionDistanceWhenCut)
             assertNull(restored.retractLength)
             assertNull(restored.zHopType)
             assertNull(restored.retractLiftAbove)
             assertNull(restored.retractLiftBelow)
             assertNull(restored.retractLiftEnforce)
+            assertNull(restored.longRetractionWhenCut)
+            assertNull(restored.retractionDistanceWhenCut)
             assertEquals(1.35f, restored.resolveRetraction(printer).length)
             assertEquals("spiral", restored.resolveRetraction(printer).zHopType)
             assertEquals(0.4f, restored.resolveRetraction(printer).liftAbove)
             assertEquals(180f, restored.resolveRetraction(printer).liftBelow)
             assertEquals("top_bottom", restored.resolveRetraction(printer).liftEnforce)
+            assertTrue(restored.resolveRetraction(printer).longRetractionWhenCut)
+            assertEquals(17f, restored.resolveRetraction(printer).retractionDistanceWhenCut)
             assertEquals(2.85f, saved.diameter)
             assertEquals(2.85f, restored.diameter)
             assertEquals(1.07f, saved.density)

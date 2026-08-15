@@ -107,6 +107,8 @@ class SliceOptionsPersistenceTest {
             retractLiftAbove = 1.25f,
             retractLiftBelow = 140f,
             retractLiftEnforce = "top",
+            longRetractionWhenCut = false,
+            retractionDistanceWhenCut = 12.5f,
         )
         val options = SliceOptions()
             .selectPrinter(
@@ -136,7 +138,10 @@ class SliceOptionsPersistenceTest {
                     retractLiftEnforce = "top_bottom",
                     travelSlope = 7f,
                     zHopWhenPrime = false,
-                    useFirmwareRetraction = true,
+                    useFirmwareRetraction = false,
+                    longRetractionWhenCutLevel = 2,
+                    longRetractionWhenCut = true,
+                    retractionDistanceWhenCut = 17f,
                     toolChangeRetractLengths = listOf(1.2f, 2.3f),
                     toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
                 ),
@@ -252,7 +257,14 @@ class SliceOptionsPersistenceTest {
         assertEquals(listOf("top_bottom", "top"), native.extruderRetractLiftEnforce.toList())
         assertArrayEquals(floatArrayOf(7f, 7f), native.extruderTravelSlope, 0.001f)
         assertEquals(listOf(0, 0), native.extruderZHopWhenPrime.toList())
-        assertTrue(native.useFirmwareRetraction)
+        assertFalse(native.useFirmwareRetraction)
+        assertEquals(2, native.longRetractionWhenCutLevel)
+        assertEquals(listOf(1, 0), native.extruderLongRetractionWhenCut.toList())
+        assertArrayEquals(
+            floatArrayOf(17f, 12.5f),
+            native.extruderRetractionDistanceWhenCut,
+            0.001f,
+        )
         assertEquals(2.85f, restored.filamentDiameter)
         assertEquals(2.85f, restored.filamentProfile.diameter)
         assertEquals(2.85f, native.filamentDiameter)
@@ -369,6 +381,40 @@ class SliceOptionsPersistenceTest {
         assertEquals(4, native.slowDownLayers)
         assertEquals(false, native.accelToDecelEnabled)
         assertEquals(27f, native.accelToDecelFactor)
+    }
+
+    @Test
+    fun firmwareRetractionForcesLongCutRetractionOffForEveryTool() {
+        val primary = FilamentProfile.PLA.copy(
+            longRetractionWhenCut = true,
+            retractionDistanceWhenCut = 16f,
+        )
+        val secondary = FilamentProfile.PETG.copy(
+            longRetractionWhenCut = true,
+            retractionDistanceWhenCut = 12f,
+        )
+        val native = SliceOptions()
+            .selectPrinter(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(
+                    extruderCount = 2,
+                    useFirmwareRetraction = true,
+                    longRetractionWhenCutLevel = 2,
+                    longRetractionWhenCut = true,
+                    retractionDistanceWhenCut = 17f,
+                ),
+            )
+            .selectFilament(primary)
+            .copy(filamentSlots = listOf(primary, secondary))
+            .toNativeConfig()
+
+        assertTrue(native.useFirmwareRetraction)
+        assertEquals(2, native.longRetractionWhenCutLevel)
+        assertEquals(listOf(0, 0), native.extruderLongRetractionWhenCut.toList())
+        assertArrayEquals(
+            floatArrayOf(16f, 12f),
+            native.extruderRetractionDistanceWhenCut,
+            0.001f,
+        )
     }
 
     @Test
