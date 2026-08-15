@@ -104,6 +104,9 @@ class SliceOptionsPersistenceTest {
             firstLayerBedTemp = 82,
             texturedPlateTemp = 63,
             firstLayerTexturedPlateTemp = 64,
+            retractLiftAbove = 1.25f,
+            retractLiftBelow = 140f,
+            retractLiftEnforce = "top",
         )
         val options = SliceOptions()
             .selectPrinter(
@@ -128,6 +131,12 @@ class SliceOptionsPersistenceTest {
                     highCurrentOnFilamentSwap = true,
                     supportsChamberTemperatureControl = true,
                     supportsAirFiltration = true,
+                    retractLiftAbove = 0.35f,
+                    retractLiftBelow = 180f,
+                    retractLiftEnforce = "top_bottom",
+                    travelSlope = 7f,
+                    zHopWhenPrime = false,
+                    useFirmwareRetraction = true,
                     toolChangeRetractLengths = listOf(1.2f, 2.3f),
                     toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
                 ),
@@ -238,6 +247,12 @@ class SliceOptionsPersistenceTest {
         assertTrue(native.supportsAirFiltration)
         assertArrayEquals(floatArrayOf(1.2f, 2.3f), native.toolChangeRetractLengths, 0.001f)
         assertArrayEquals(floatArrayOf(-0.1f, 0.2f), native.toolChangeRetractRestartExtras, 0.001f)
+        assertArrayEquals(floatArrayOf(0.35f, 1.25f), native.extruderRetractLiftAbove, 0.001f)
+        assertArrayEquals(floatArrayOf(180f, 140f), native.extruderRetractLiftBelow, 0.001f)
+        assertEquals(listOf("top_bottom", "top"), native.extruderRetractLiftEnforce.toList())
+        assertArrayEquals(floatArrayOf(7f, 7f), native.extruderTravelSlope, 0.001f)
+        assertEquals(listOf(0, 0), native.extruderZHopWhenPrime.toList())
+        assertTrue(native.useFirmwareRetraction)
         assertEquals(2.85f, restored.filamentDiameter)
         assertEquals(2.85f, restored.filamentProfile.diameter)
         assertEquals(2.85f, native.filamentDiameter)

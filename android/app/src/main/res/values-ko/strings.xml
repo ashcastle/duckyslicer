@@ -266,6 +266,16 @@
     <string name="z_hop_normal">일반</string>
     <string name="z_hop_slope">경사</string>
     <string name="z_hop_spiral">나선</string>
+    <string name="z_hop_start_height">Z-hop 시작 높이</string>
+    <string name="z_hop_end_height">Z-hop 종료 높이 (0 = 제한 없음)</string>
+    <string name="z_hop_surfaces">Z-hop 적용 면</string>
+    <string name="z_hop_surface_all">모든 면</string>
+    <string name="z_hop_surface_top">상단만</string>
+    <string name="z_hop_surface_bottom">하단만</string>
+    <string name="z_hop_surface_top_bottom">상단 및 하단</string>
+    <string name="z_hop_slope_angle">Z-hop 경사 각도</string>
+    <string name="z_hop_on_prime_tower">프라임 타워 이동 시 Z-hop</string>
+    <string name="firmware_retraction">펌웨어 리트랙션 사용</string>
     <string name="cooling">냉각</string>
     <string name="minimum_fan_speed">최소 팬 속도</string>
     <string name="maximum_fan_speed">최대 팬 속도</string>

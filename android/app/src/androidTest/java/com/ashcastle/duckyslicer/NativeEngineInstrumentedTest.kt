@@ -977,6 +977,47 @@ class NativeEngineInstrumentedTest {
         return destination
     }
 
+    private fun twoIslandRetractionModel(): File {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val destination = File(context.cacheDir, "two-island-retraction.stl")
+        val facets = mutableListOf<List<TestVertex>>()
+
+        fun vertex(x: Float, y: Float, z: Float) = TestVertex(x, y, z)
+        fun quad(a: TestVertex, b: TestVertex, c: TestVertex, d: TestVertex) {
+            facets += listOf(a, b, c)
+            facets += listOf(a, c, d)
+        }
+        fun cube(x0: Float, x1: Float) {
+            val y0 = 0f
+            val y1 = 10f
+            val z0 = 0f
+            val z1 = 10f
+            quad(vertex(x0, y0, z0), vertex(x1, y0, z0), vertex(x1, y0, z1), vertex(x0, y0, z1))
+            quad(vertex(x1, y0, z0), vertex(x1, y1, z0), vertex(x1, y1, z1), vertex(x1, y0, z1))
+            quad(vertex(x1, y1, z0), vertex(x0, y1, z0), vertex(x0, y1, z1), vertex(x1, y1, z1))
+            quad(vertex(x0, y1, z0), vertex(x0, y0, z0), vertex(x0, y0, z1), vertex(x0, y1, z1))
+            quad(vertex(x0, y0, z1), vertex(x1, y0, z1), vertex(x1, y1, z1), vertex(x0, y1, z1))
+            quad(vertex(x0, y1, z0), vertex(x1, y1, z0), vertex(x1, y0, z0), vertex(x0, y0, z0))
+        }
+        cube(0f, 10f)
+        cube(30f, 40f)
+
+        destination.bufferedWriter().use { writer ->
+            writer.appendLine("solid two_island_retraction")
+            facets.forEach { triangle ->
+                writer.appendLine("facet normal 0 0 0")
+                writer.appendLine("outer loop")
+                triangle.forEach { point ->
+                    writer.appendLine("vertex ${point.x} ${point.y} ${point.z}")
+                }
+                writer.appendLine("endloop")
+                writer.appendLine("endfacet")
+            }
+            writer.appendLine("endsolid two_island_retraction")
+        }
+        return destination
+    }
+
     private fun tiltedAutoOrientModel(): File {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val destination = File(context.cacheDir, "tilted-auto-orient.stl")
@@ -2151,7 +2192,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(71, catalog.schemaVersion)
+        assertEquals(72, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2162,6 +2203,17 @@ class NativeEngineInstrumentedTest {
         assertEquals(0.32f, generatedU1.maxLayerHeight)
         assertEquals(listOf(10f, 10f, 10f, 10f), generatedU1.toolChangeRetractLengths)
         assertEquals(listOf(0f, 0f, 0f, 0f), generatedU1.toolChangeRetractRestartExtras)
+        val boundedLift = catalog.printers.single { it.name == "Anycubic Kobra 2 Neo 0.4 nozzle" }
+        assertEquals(0.3f, boundedLift.retractLiftAbove)
+        assertEquals(258f, boundedLift.retractLiftBelow)
+        val firmwareRetraction = catalog.printers.single { it.name == "Kingroon KP3S PRO V2 0.4 nozzle" }
+        assertTrue(firmwareRetraction.useFirmwareRetraction)
+        val filamentLiftOverride = catalog.filaments.single {
+            it.name == "Anycubic PLA Silk @Anycubic Kobra S1 0.4 nozzle"
+        }
+        assertEquals(0.3f, filamentLiftOverride.retractLiftAbove)
+        assertEquals(249f, filamentLiftOverride.retractLiftBelow)
+        assertEquals("all", filamentLiftOverride.retractLiftEnforce)
         val inheritedOffset = catalog.printers.single { it.name == "Bambu Lab P1P 0.4 nozzle" }
         assertEquals(listOf(0f), inheritedOffset.extruderOffsetsX)
         assertEquals(listOf(2f), inheritedOffset.extruderOffsetsY)
@@ -4118,6 +4170,62 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun zHopBoundaryControlsRealLiftMoves() {
+        val model = twoIslandRetractionModel()
+        val basePrinter = PrinterProfile.CUSTOM_CARTESIAN.copy(
+            retractLength = 0.8f,
+            retractionMinimumTravel = 0f,
+            retractWhenChangingLayer = true,
+            zHop = 0.6f,
+            zHopType = "normal",
+            retractLiftAbove = 0f,
+            retractLiftBelow = 0f,
+            retractLiftEnforce = "all",
+            travelSlope = 7f,
+            zHopWhenPrime = false,
+        )
+        val baseOptions = SliceOptions()
+            .selectPrinter(basePrinter)
+            .selectFilament(FilamentProfile.GENERIC_PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                fillDensity = 0.15f,
+                perimeters = 2,
+                gcodeSettings = GcodeSettings(verboseComments = true),
+            )
+
+        val enabled = OnDeviceSlicer.slice(model, baseOptions).output.readText()
+        val suppressed = OnDeviceSlicer.slice(
+            model,
+            baseOptions.selectPrinter(basePrinter.copy(retractLiftAbove = 100f)),
+        ).output.readText()
+        val firmware = OnDeviceSlicer.slice(
+            model,
+            baseOptions.selectPrinter(basePrinter.copy(useFirmwareRetraction = true)),
+        ).output.readText()
+        val enabledLifts = enabled.lineSequence().count { it.contains("lift Z") }
+        val suppressedLifts = suppressed.lineSequence().count { it.contains("lift Z") }
+
+        assertTrue(
+            "The baseline must contain real Z-hop moves; retraction config: " +
+                enabled.lineSequence().filter {
+                    it.startsWith("; retract_") || it.startsWith("; z_hop") ||
+                        it.startsWith("; gcode_comments")
+                }.joinToString(" | "),
+            enabledLifts > 0,
+        )
+        assertEquals("A lower boundary above the model must suppress Z-hop moves", 0, suppressedLifts)
+        assertTrue(enabled.contains("; retract_lift_above = 0"))
+        assertTrue(suppressed.contains("; retract_lift_above = 100"))
+        assertTrue(enabled.contains("; retract_lift_enforce = All Surfaces"))
+        assertTrue(enabled.contains("; travel_slope = 7"))
+        assertTrue(enabled.contains("; z_hop_when_prime = 0"))
+        assertTrue(firmware.contains("; use_firmware_retraction = 1"))
+        assertTrue("Firmware retraction must emit G10", firmware.lineSequence().any { it.startsWith("G10") })
+        assertTrue("Firmware de-retraction must emit G11", firmware.lineSequence().any { it.startsWith("G11") })
+    }
+
+    @Test
     fun attachedStlProducesGcodeOnDevice() {
         val model = fixtureModel()
         var highestProgress = 0
@@ -4125,7 +4233,13 @@ class NativeEngineInstrumentedTest {
         assertTrue("Bundled model fixture must be available", model.isFile)
 
         val options = SliceOptions()
-            .selectPrinter(PrinterProfile.U1_06)
+            .selectPrinter(PrinterProfile.U1_06.copy(
+                retractLiftAbove = 0.35f,
+                retractLiftBelow = 180f,
+                retractLiftEnforce = "top_bottom",
+                travelSlope = 7f,
+                zHopWhenPrime = false,
+            ))
             .selectFilament(FilamentProfile.PETG.copy(
                 retractLength = 1.1f,
                 retractSpeed = 38f,
@@ -4138,6 +4252,9 @@ class NativeEngineInstrumentedTest {
                 retractRestartExtra = 0.09f,
                 zHop = 0.6f,
                 zHopType = "spiral",
+                retractLiftAbove = 0.8f,
+                retractLiftBelow = 150f,
+                retractLiftEnforce = "top",
                 bedTemp = 71,
                 firstLayerBedTemp = 72,
                 coolPlateTemp = 41,
@@ -4429,6 +4546,11 @@ class NativeEngineInstrumentedTest {
         assertTrue("Restart extra must reach G-code", gcode.contains("; retract_restart_extra = 0.09"))
         assertTrue("Z-hop height must reach G-code", gcode.contains("; z_hop = 0.6"))
         assertTrue("Z-hop type must reach G-code", gcode.contains("; z_hop_types = Spiral Lift"))
+        assertTrue("Filament lift lower boundary must override the printer", gcode.contains("; retract_lift_above = 0.8"))
+        assertTrue("Filament lift upper boundary must override the printer", gcode.contains("; retract_lift_below = 150"))
+        assertTrue("Filament lift surface policy must override the printer", gcode.contains("; retract_lift_enforce = Top Only"))
+        assertTrue("Z-hop slope must reach G-code", gcode.contains("; travel_slope = 7"))
+        assertTrue("Prime-tower Z-hop policy must reach G-code", gcode.contains("; z_hop_when_prime = 0"))
         assertTrue("Skirt loops must reach G-code", gcode.contains("; skirt_loops = 2"))
         assertTrue("Skirt distance must reach Orca", gcode.contains("; skirt_distance = 7"))
         assertTrue("Skirt start point must reach Orca", gcode.contains("; skirt_start_angle = -25"))

@@ -47,6 +47,11 @@ internal object ProfileValidation {
             profile.toolChangeRetractRestartExtras.all { it in -100f..100f } &&
             profile.zHop in 0f..5f &&
             profile.zHopType in Z_HOP_TYPES &&
+            profile.retractLiftAbove in 0f..1_500f &&
+            profile.retractLiftBelow in 0f..1_500f &&
+            (profile.retractLiftBelow == 0f || profile.retractLiftAbove <= profile.retractLiftBelow) &&
+            profile.retractLiftEnforce in RETRACT_LIFT_ENFORCEMENTS &&
+            profile.travelSlope in 1f..90f &&
             profile.extruderClearanceRadius in 0.1f..1_000f &&
             profile.extruderClearanceHeightToRod in 0.1f..1_500f &&
             profile.extruderClearanceHeightToLid in 0.1f..1_500f &&
@@ -133,6 +138,10 @@ internal object ProfileValidation {
             profile.retractRestartExtra.isNullOrIn(-100f..100f) &&
             profile.zHop.isNullOrIn(0f..5f) &&
             (profile.zHopType == null || profile.zHopType in Z_HOP_TYPES) &&
+            profile.retractLiftAbove.isNullOrIn(0f..1_500f) &&
+            profile.retractLiftBelow.isNullOrIn(0f..1_500f) &&
+            (profile.retractLiftEnforce == null ||
+                profile.retractLiftEnforce in RETRACT_LIFT_ENFORCEMENTS) &&
             profile.slowDownLayerTime in 0f..600f &&
             profile.slowDownMinSpeed in 0f..500f &&
             profile.closeFanFirstLayers in 0..10_000 &&

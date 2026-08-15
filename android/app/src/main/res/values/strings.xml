@@ -266,6 +266,16 @@
     <string name="z_hop_normal">Normal</string>
     <string name="z_hop_slope">Slope</string>
     <string name="z_hop_spiral">Spiral</string>
+    <string name="z_hop_start_height">Z-hop starts above</string>
+    <string name="z_hop_end_height">Z-hop ends below (0 = no limit)</string>
+    <string name="z_hop_surfaces">Z-hop surfaces</string>
+    <string name="z_hop_surface_all">All surfaces</string>
+    <string name="z_hop_surface_top">Top only</string>
+    <string name="z_hop_surface_bottom">Bottom only</string>
+    <string name="z_hop_surface_top_bottom">Top and bottom</string>
+    <string name="z_hop_slope_angle">Z-hop slope angle</string>
+    <string name="z_hop_on_prime_tower">Z-hop when moving to prime tower</string>
+    <string name="firmware_retraction">Use firmware retraction</string>
     <string name="cooling">Cooling</string>
     <string name="minimum_fan_speed">Minimum fan</string>
     <string name="maximum_fan_speed">Maximum fan</string>

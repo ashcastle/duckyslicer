@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 72
+internal const val USER_PROFILE_SCHEMA_VERSION = 73
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -612,6 +612,12 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("toolChangeRetractLengths", JSONArray(toolChangeRetractLengths))
     .put("toolChangeRetractRestartExtras", JSONArray(toolChangeRetractRestartExtras))
     .put("zHop", zHop).put("zHopType", zHopType)
+    .put("retractLiftAbove", retractLiftAbove)
+    .put("retractLiftBelow", retractLiftBelow)
+    .put("retractLiftEnforce", retractLiftEnforce)
+    .put("travelSlope", travelSlope)
+    .put("zHopWhenPrime", zHopWhenPrime)
+    .put("useFirmwareRetraction", useFirmwareRetraction)
     .put("extruderClearanceRadius", extruderClearanceRadius)
     .put("extruderClearanceHeightToRod", extruderClearanceHeightToRod)
     .put("extruderClearanceHeightToLid", extruderClearanceHeightToLid)
@@ -658,6 +664,9 @@ internal fun FilamentProfile.toProfileJson() = JSONObject()
     .put("retractBeforeWipe", retractBeforeWipe ?: JSONObject.NULL)
     .put("retractRestartExtra", retractRestartExtra ?: JSONObject.NULL)
     .put("zHop", zHop ?: JSONObject.NULL).put("zHopType", zHopType ?: JSONObject.NULL)
+    .put("retractLiftAbove", retractLiftAbove ?: JSONObject.NULL)
+    .put("retractLiftBelow", retractLiftBelow ?: JSONObject.NULL)
+    .put("retractLiftEnforce", retractLiftEnforce ?: JSONObject.NULL)
     .put("fanMinSpeed", fanMinSpeed).put("fanMaxSpeed", fanMaxSpeed)
     .put("fanCoolingLayerTime", fanCoolingLayerTime)
     .put("slowDownForLayerCooling", slowDownForLayerCooling)
@@ -1077,6 +1086,12 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
             ?: listOf(0f),
         zHop = optDouble("zHop", 0.4).toFloat(),
         zHopType = optString("zHopType", "slope"),
+        retractLiftAbove = optDouble("retractLiftAbove", 0.0).toFloat(),
+        retractLiftBelow = optDouble("retractLiftBelow", 0.0).toFloat(),
+        retractLiftEnforce = optString("retractLiftEnforce", "all"),
+        travelSlope = optDouble("travelSlope", 3.0).toFloat(),
+        zHopWhenPrime = optBoolean("zHopWhenPrime", true),
+        useFirmwareRetraction = optBoolean("useFirmwareRetraction"),
         extruderClearanceRadius = optDouble("extruderClearanceRadius", 40.0).toFloat(),
         extruderClearanceHeightToRod = optDouble("extruderClearanceHeightToRod", 40.0).toFloat(),
         extruderClearanceHeightToLid = optDouble("extruderClearanceHeightToLid", 120.0).toFloat(),
@@ -1137,6 +1152,9 @@ internal fun JSONObject.toFilamentProfileOrNull(): FilamentProfile? = runCatchin
         retractRestartExtra = nullableFloat("retractRestartExtra"),
         zHop = nullableFloat("zHop"),
         zHopType = nullableString("zHopType"),
+        retractLiftAbove = nullableFloat("retractLiftAbove"),
+        retractLiftBelow = nullableFloat("retractLiftBelow"),
+        retractLiftEnforce = nullableString("retractLiftEnforce"),
         fanMinSpeed = optInt("fanMinSpeed", 30),
         fanMaxSpeed = optInt("fanMaxSpeed", 100),
         fanCoolingLayerTime = optDouble("fanCoolingLayerTime", 60.0).toFloat(),

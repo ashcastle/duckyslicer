@@ -157,6 +157,12 @@ data class PrinterProfile(
     val toolChangeRetractRestartExtras: List<Float> = listOf(0f),
     val zHop: Float = 0.4f,
     val zHopType: String = "slope",
+    val retractLiftAbove: Float = 0f,
+    val retractLiftBelow: Float = 0f,
+    val retractLiftEnforce: String = "all",
+    val travelSlope: Float = 3f,
+    val zHopWhenPrime: Boolean = true,
+    val useFirmwareRetraction: Boolean = false,
     val extruderClearanceRadius: Float = 40f,
     val extruderClearanceHeightToRod: Float = 40f,
     val extruderClearanceHeightToLid: Float = 120f,
@@ -305,6 +311,9 @@ data class FilamentProfile(
     val retractRestartExtra: Float? = null,
     val zHop: Float? = null,
     val zHopType: String? = null,
+    val retractLiftAbove: Float? = null,
+    val retractLiftBelow: Float? = null,
+    val retractLiftEnforce: String? = null,
     val fanMinSpeed: Int = 30,
     val fanMaxSpeed: Int = 100,
     val fanCoolingLayerTime: Float = 60f,
@@ -527,6 +536,9 @@ data class RetractionSettings(
     val restartExtra: Float,
     val zHop: Float,
     val zHopType: String,
+    val liftAbove: Float,
+    val liftBelow: Float,
+    val liftEnforce: String,
 )
 
 data class MultiMaterialSettings(
@@ -602,6 +614,7 @@ internal const val DEFAULT_PURGE_VOLUME = 140f
 internal const val MIN_PURGE_VOLUME = 0f
 internal const val MAX_PURGE_VOLUME = 1_000f
 internal val OVERHANG_FAN_THRESHOLDS = listOf("0%", "10%", "25%", "50%", "75%", "95%")
+internal val RETRACT_LIFT_ENFORCEMENTS = listOf("all", "top", "bottom", "top_bottom")
 
 data class FeatureFilamentSettings(
     val infillOverrideEnabled: Boolean = false,
@@ -754,6 +767,9 @@ internal fun FilamentProfile.resolveRetraction(printer: PrinterProfile) = Retrac
     restartExtra = retractRestartExtra ?: printer.retractRestartExtra,
     zHop = zHop ?: printer.zHop,
     zHopType = zHopType ?: printer.zHopType,
+    liftAbove = retractLiftAbove ?: printer.retractLiftAbove,
+    liftBelow = retractLiftBelow ?: printer.retractLiftBelow,
+    liftEnforce = retractLiftEnforce ?: printer.retractLiftEnforce,
 )
 
 data class QualityProfile(
@@ -2169,7 +2185,7 @@ data class SliceOptions(
             native.extruderRetractWhenChangingLayer = nativeRetractions
                 .map { if (it.whenChangingLayer) 1 else 0 }.toIntArray()
             native.extruderWipeWhileRetracting = nativeRetractions
-                .map { if (it.wipe) 1 else 0 }.toIntArray()
+                .map { if (it.wipe && !printerProfile.useFirmwareRetraction) 1 else 0 }.toIntArray()
             native.extruderWipeDistance = nativeRetractions
                 .map(RetractionSettings::wipeDistance).toFloatArray()
             native.extruderRetractBeforeWipe = nativeRetractions
@@ -2178,6 +2194,19 @@ data class SliceOptions(
                 .map(RetractionSettings::restartExtra).toFloatArray()
             native.extruderZHop = nativeRetractions.map(RetractionSettings::zHop).toFloatArray()
             native.extruderZHopType = nativeRetractions.map(RetractionSettings::zHopType).toTypedArray()
+            native.extruderRetractLiftAbove = nativeRetractions
+                .map(RetractionSettings::liftAbove).toFloatArray()
+            native.extruderRetractLiftBelow = nativeRetractions
+                .map(RetractionSettings::liftBelow).toFloatArray()
+            native.extruderRetractLiftEnforce = nativeRetractions
+                .map(RetractionSettings::liftEnforce).toTypedArray()
+            native.extruderTravelSlope = FloatArray(nativeRetractions.size) {
+                printerProfile.travelSlope
+            }
+            native.extruderZHopWhenPrime = IntArray(nativeRetractions.size) {
+                if (printerProfile.zHopWhenPrime) 1 else 0
+            }
+            native.useFirmwareRetraction = printerProfile.useFirmwareRetraction
             native.primeVolume = multiMaterial.primeVolume
             native.purgeVolumes = multiMaterial.resolvedPurgeVolumes(nativeFilaments.size).toFloatArray()
             native.singleExtruderMultiMaterial = printerProfile.singleExtruderMultiMaterial

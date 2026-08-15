@@ -1007,6 +1007,81 @@ private fun PrinterSettingsSheet(
             onOptionsChanged(options.updatePrinterRetraction(options.printerProfile.copy(zHopType = it)))
         },
     )
+    DecimalSettingField(
+        label = stringResource(R.string.z_hop_start_height),
+        value = options.printerProfile.retractLiftAbove,
+        maximum = options.printerProfile.maxPrintHeight,
+        suffix = "mm",
+        onValueChange = { value ->
+            val bounded = if (options.printerProfile.retractLiftBelow > 0f) {
+                min(value, options.printerProfile.retractLiftBelow)
+            } else value
+            onOptionsChanged(options.updatePrinterRetraction(
+                options.printerProfile.copy(retractLiftAbove = bounded),
+            ))
+        },
+    )
+    DecimalSettingField(
+        label = stringResource(R.string.z_hop_end_height),
+        value = options.printerProfile.retractLiftBelow,
+        maximum = options.printerProfile.maxPrintHeight,
+        suffix = "mm",
+        onValueChange = { value ->
+            val bounded = if (value == 0f) 0f else max(value, options.printerProfile.retractLiftAbove)
+            onOptionsChanged(options.updatePrinterRetraction(
+                options.printerProfile.copy(retractLiftBelow = bounded),
+            ))
+        },
+    )
+    SettingChoices(
+        settingLabel = stringResource(R.string.z_hop_surfaces),
+        entries = RETRACT_LIFT_ENFORCEMENTS.toList(),
+        selected = options.printerProfile.retractLiftEnforce,
+        optionLabel = { stringResource(when (it) {
+            "top" -> R.string.z_hop_surface_top
+            "bottom" -> R.string.z_hop_surface_bottom
+            "top_bottom" -> R.string.z_hop_surface_top_bottom
+            else -> R.string.z_hop_surface_all
+        }) },
+        onSelected = {
+            onOptionsChanged(options.updatePrinterRetraction(
+                options.printerProfile.copy(retractLiftEnforce = it),
+            ))
+        },
+    )
+    SettingSlider(
+        label = stringResource(R.string.z_hop_slope_angle),
+        valueText = stringResource(R.string.degrees_value, options.printerProfile.travelSlope),
+        value = options.printerProfile.travelSlope,
+        range = 1f..90f,
+        steps = 88,
+        onValueChange = {
+            onOptionsChanged(options.updatePrinterRetraction(
+                options.printerProfile.copy(travelSlope = it.roundToInt().toFloat()),
+            ))
+        },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.z_hop_on_prime_tower),
+        checked = options.printerProfile.zHopWhenPrime,
+        onCheckedChange = {
+            onOptionsChanged(options.updatePrinterRetraction(
+                options.printerProfile.copy(zHopWhenPrime = it),
+            ))
+        },
+    )
+    SettingsSwitch(
+        label = stringResource(R.string.firmware_retraction),
+        checked = options.printerProfile.useFirmwareRetraction,
+        onCheckedChange = {
+            onOptionsChanged(options.updatePrinterRetraction(
+                options.printerProfile.copy(
+                    useFirmwareRetraction = it,
+                    wipeWhileRetracting = if (it) false else options.printerProfile.wipeWhileRetracting,
+                ),
+            ))
+        },
+    )
     SettingsGroupTitle(stringResource(R.string.sequential_printing_clearance))
     SettingSlider(
         label = stringResource(R.string.extruder_clearance_radius),
@@ -1246,7 +1321,9 @@ private fun FilamentSettingsSheet(
         activeProfile.retractionMinimumTravel == null && activeProfile.retractWhenChangingLayer == null &&
         activeProfile.wipeWhileRetracting == null && activeProfile.wipeDistance == null &&
         activeProfile.retractBeforeWipe == null && activeProfile.retractRestartExtra == null &&
-        activeProfile.zHop == null && activeProfile.zHopType == null
+        activeProfile.zHop == null && activeProfile.zHopType == null &&
+        activeProfile.retractLiftAbove == null && activeProfile.retractLiftBelow == null &&
+        activeProfile.retractLiftEnforce == null
     SettingsSheet(
         title = stringResource(R.string.filament_profile),
         onDismiss = onDismiss,
@@ -1793,6 +1870,8 @@ private fun FilamentSettingsSheet(
                         retractionMinimumTravel = null, retractWhenChangingLayer = null,
                         wipeWhileRetracting = null, wipeDistance = null, retractBeforeWipe = null,
                         retractRestartExtra = null, zHop = null, zHopType = null,
+                        retractLiftAbove = null, retractLiftBelow = null,
+                        retractLiftEnforce = null,
                     )
                 } else {
                     activeProfile.copy(
@@ -1807,6 +1886,9 @@ private fun FilamentSettingsSheet(
                         retractRestartExtra = resolvedRetraction.restartExtra,
                         zHop = resolvedRetraction.zHop,
                         zHopType = resolvedRetraction.zHopType,
+                        retractLiftAbove = resolvedRetraction.liftAbove,
+                        retractLiftBelow = resolvedRetraction.liftBelow,
+                        retractLiftEnforce = resolvedRetraction.liftEnforce,
                     )
                 }
                 onOptionsChanged(options.updateFilamentSlot(selectedSlot, updated))
@@ -1938,6 +2020,48 @@ private fun FilamentSettingsSheet(
             onSelected = {
                 onOptionsChanged(options.updateFilamentSlot(
                     selectedSlot, activeProfile.copy(zHopType = it),
+                ))
+            },
+        )
+        DecimalSettingField(
+            label = stringResource(R.string.z_hop_start_height),
+            value = resolvedRetraction.liftAbove,
+            maximum = options.printerProfile.maxPrintHeight,
+            suffix = "mm",
+            onValueChange = { value ->
+                val bounded = if (resolvedRetraction.liftBelow > 0f) {
+                    min(value, resolvedRetraction.liftBelow)
+                } else value
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(retractLiftAbove = bounded),
+                ))
+            },
+        )
+        DecimalSettingField(
+            label = stringResource(R.string.z_hop_end_height),
+            value = resolvedRetraction.liftBelow,
+            maximum = options.printerProfile.maxPrintHeight,
+            suffix = "mm",
+            onValueChange = { value ->
+                val bounded = if (value == 0f) 0f else max(value, resolvedRetraction.liftAbove)
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(retractLiftBelow = bounded),
+                ))
+            },
+        )
+        SettingChoices(
+            settingLabel = stringResource(R.string.z_hop_surfaces),
+            entries = RETRACT_LIFT_ENFORCEMENTS.toList(),
+            selected = resolvedRetraction.liftEnforce,
+            optionLabel = { stringResource(when (it) {
+                "top" -> R.string.z_hop_surface_top
+                "bottom" -> R.string.z_hop_surface_bottom
+                "top_bottom" -> R.string.z_hop_surface_top_bottom
+                else -> R.string.z_hop_surface_all
+            }) },
+            onSelected = {
+                onOptionsChanged(options.updateFilamentSlot(
+                    selectedSlot, activeProfile.copy(retractLiftEnforce = it),
                 ))
             },
         )

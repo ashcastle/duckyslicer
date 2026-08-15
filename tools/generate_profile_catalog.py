@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 71
+SCHEMA_VERSION = 72
 MAX_FILAMENT_SLOTS = 16
 SUPPORTED_GCODE_FLAVORS = {"marlin", "marlin2", "klipper"}
 INFILL_PATTERNS = {
@@ -96,6 +96,19 @@ def z_hop_type(value: Any, default: str | None) -> str | None:
         "normal": "normal", "normal lift": "normal",
         "slope": "slope", "slope lift": "slope",
         "spiral": "spiral", "spiral lift": "spiral",
+    }.get(normalized, default)
+
+
+def retract_lift_enforcement(value: Any, default: str | None) -> str | None:
+    candidate = nullable_scalar(value)
+    if candidate is None:
+        return default
+    normalized = str(candidate).strip().lower()
+    return {
+        "all surfaces": "all",
+        "top only": "top",
+        "bottom only": "bottom",
+        "top and bottom": "top_bottom",
     }.get(normalized, default)
 
 
@@ -341,6 +354,12 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "toolChangeRetractRestartExtras": tool_change_retract_restart_extras,
         "zHop": number(raw.get("z_hop"), 0.4),
         "zHopType": z_hop_type(raw.get("z_hop_types"), "slope"),
+        "retractLiftAbove": number(raw.get("retract_lift_above"), 0),
+        "retractLiftBelow": number(raw.get("retract_lift_below"), 0),
+        "retractLiftEnforce": retract_lift_enforcement(raw.get("retract_lift_enforce"), "all"),
+        "travelSlope": number(raw.get("travel_slope"), 3),
+        "zHopWhenPrime": boolean(raw.get("z_hop_when_prime"), True),
+        "useFirmwareRetraction": boolean(raw.get("use_firmware_retraction")),
         "extruderClearanceRadius": number(raw.get("extruder_clearance_radius"), 40),
         "extruderClearanceHeightToRod": number(raw.get("extruder_clearance_height_to_rod"), 40),
         "extruderClearanceHeightToLid": number(raw.get("extruder_clearance_height_to_lid"), 120),
@@ -380,6 +399,12 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and all(-100 <= value <= 100 for value in profile["toolChangeRetractRestartExtras"])
         and 0 <= profile["zHop"] <= 5
         and profile["zHopType"] in {"auto", "normal", "slope", "spiral"}
+        and 0 <= profile["retractLiftAbove"] <= 1_500
+        and 0 <= profile["retractLiftBelow"] <= 1_500
+        and (profile["retractLiftBelow"] == 0 or
+             profile["retractLiftAbove"] <= profile["retractLiftBelow"])
+        and profile["retractLiftEnforce"] in {"all", "top", "bottom", "top_bottom"}
+        and 1 <= profile["travelSlope"] <= 90
         and 0.01 <= profile["minLayerHeight"] <= profile["maxLayerHeight"] <= 2
     ):
         raise ValueError("unsafe motion limits")
@@ -607,6 +632,11 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "retractRestartExtra": nullable_number(raw.get("filament_retract_restart_extra")),
         "zHop": nullable_number(raw.get("filament_z_hop")),
         "zHopType": z_hop_type(raw.get("filament_z_hop_types"), None),
+        "retractLiftAbove": nullable_number(raw.get("filament_retract_lift_above")),
+        "retractLiftBelow": nullable_number(raw.get("filament_retract_lift_below")),
+        "retractLiftEnforce": retract_lift_enforcement(
+            raw.get("filament_retract_lift_enforce"), None
+        ),
         "fanMinSpeed": integer(raw.get("fan_min_speed"), 30),
         "fanMaxSpeed": integer(raw.get("fan_max_speed"), 100),
         "fanCoolingLayerTime": number(raw.get("fan_cooling_layer_time"), 60),
@@ -697,6 +727,10 @@ def build_filament(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         and (profile["retractRestartExtra"] is None or -100 <= profile["retractRestartExtra"] <= 100)
         and (profile["zHop"] is None or 0 <= profile["zHop"] <= 5)
         and (profile["zHopType"] is None or profile["zHopType"] in {"auto", "normal", "slope", "spiral"})
+        and (profile["retractLiftAbove"] is None or 0 <= profile["retractLiftAbove"] <= 1_500)
+        and (profile["retractLiftBelow"] is None or 0 <= profile["retractLiftBelow"] <= 1_500)
+        and (profile["retractLiftEnforce"] is None or
+             profile["retractLiftEnforce"] in {"all", "top", "bottom", "top_bottom"})
     ):
         raise ValueError("unsafe filament limits")
     return profile

@@ -372,6 +372,9 @@ class ProfileStoreMigrationTest {
             val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(
                 retractLength = 1.35f,
                 zHopType = "spiral",
+                retractLiftAbove = 0.4f,
+                retractLiftBelow = 180f,
+                retractLiftEnforce = "top_bottom",
             )
             val options = SliceOptions()
                 .selectPrinter(printer)
@@ -402,10 +405,19 @@ class ProfileStoreMigrationTest {
 
             assertNull(saved.retractLength)
             assertNull(saved.zHopType)
+            assertNull(saved.retractLiftAbove)
+            assertNull(saved.retractLiftBelow)
+            assertNull(saved.retractLiftEnforce)
             assertNull(restored.retractLength)
             assertNull(restored.zHopType)
+            assertNull(restored.retractLiftAbove)
+            assertNull(restored.retractLiftBelow)
+            assertNull(restored.retractLiftEnforce)
             assertEquals(1.35f, restored.resolveRetraction(printer).length)
             assertEquals("spiral", restored.resolveRetraction(printer).zHopType)
+            assertEquals(0.4f, restored.resolveRetraction(printer).liftAbove)
+            assertEquals(180f, restored.resolveRetraction(printer).liftBelow)
+            assertEquals("top_bottom", restored.resolveRetraction(printer).liftEnforce)
             assertEquals(2.85f, saved.diameter)
             assertEquals(2.85f, restored.diameter)
             assertEquals(1.07f, saved.density)

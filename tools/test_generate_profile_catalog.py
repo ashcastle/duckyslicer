@@ -547,6 +547,12 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "retract_restart_extra": ["0.08"],
                 "z_hop": ["0.7"],
                 "z_hop_types": ["Spiral Lift"],
+                "retract_lift_above": ["0.35"],
+                "retract_lift_below": ["180"],
+                "retract_lift_enforce": ["Top and Bottom"],
+                "travel_slope": ["7"],
+                "z_hop_when_prime": ["0"],
+                "use_firmware_retraction": ["1"],
                 "before_layer_change_gcode": "; DUCKY_BEFORE_LAYER",
                 "layer_change_gcode": "; DUCKY_AFTER_LAYER",
                 "change_filament_gcode": "T[next_extruder] ; DUCKY_CHANGE_FILAMENT",
@@ -624,6 +630,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "internal_bridge_fan_speed": ["45"],
                 "support_material_interface_fan_speed": ["85"],
                 "filament_z_hop_types": ["Normal Lift"],
+                "filament_retract_lift_above": ["0.8"],
+                "filament_retract_lift_below": ["150"],
+                "filament_retract_lift_enforce": ["Top Only"],
                 "filament_wipe": ["0"],
             },
         )
@@ -633,6 +642,12 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(printer["retractWhenChangingLayer"])
         self.assertEqual(65.0, printer["retractBeforeWipe"])
         self.assertEqual("spiral", printer["zHopType"])
+        self.assertEqual(0.35, printer["retractLiftAbove"])
+        self.assertEqual(180.0, printer["retractLiftBelow"])
+        self.assertEqual("top_bottom", printer["retractLiftEnforce"])
+        self.assertEqual(7.0, printer["travelSlope"])
+        self.assertFalse(printer["zHopWhenPrime"])
+        self.assertTrue(printer["useFirmwareRetraction"])
         self.assertEqual("; DUCKY_BEFORE_LAYER", printer["beforeLayerChangeGcode"])
         self.assertEqual("; DUCKY_AFTER_LAYER", printer["layerChangeGcode"])
         self.assertEqual(
@@ -655,6 +670,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(printer["supportsAirFiltration"])
         self.assertIsNone(inherited["retractLength"])
         self.assertIsNone(inherited["zHopType"])
+        self.assertIsNone(inherited["retractLiftAbove"])
+        self.assertIsNone(inherited["retractLiftBelow"])
+        self.assertIsNone(inherited["retractLiftEnforce"])
         self.assertEqual(0.55, overridden["retractLength"])
         self.assertEqual(2.85, overridden["diameter"])
         self.assertEqual(1.07, overridden["density"])
@@ -696,6 +714,9 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(45, overridden["internalBridgeFanSpeed"])
         self.assertEqual(85, overridden["supportInterfaceFanSpeed"])
         self.assertEqual("normal", overridden["zHopType"])
+        self.assertEqual(0.8, overridden["retractLiftAbove"])
+        self.assertEqual(150.0, overridden["retractLiftBelow"])
+        self.assertEqual("top", overridden["retractLiftEnforce"])
         self.assertFalse(overridden["wipeWhileRetracting"])
 
     def test_rejects_unsafe_filament_diameter(self) -> None:

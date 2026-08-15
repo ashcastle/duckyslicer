@@ -405,6 +405,12 @@ data class SliceConfig(
     @JvmField var extruderRetractRestartExtra: FloatArray = floatArrayOf()
     @JvmField var extruderZHop: FloatArray = floatArrayOf()
     @JvmField var extruderZHopType: Array<String> = arrayOf()
+    @JvmField var extruderRetractLiftAbove: FloatArray = floatArrayOf()
+    @JvmField var extruderRetractLiftBelow: FloatArray = floatArrayOf()
+    @JvmField var extruderRetractLiftEnforce: Array<String> = arrayOf()
+    @JvmField var extruderTravelSlope: FloatArray = floatArrayOf()
+    @JvmField var extruderZHopWhenPrime: IntArray = intArrayOf()
+    @JvmField var useFirmwareRetraction: Boolean = false
     @JvmField var primeVolume: Float = 45f
     @JvmField var purgeVolumes: FloatArray = floatArrayOf()
     @JvmField var singleExtruderMultiMaterial: Boolean = false
