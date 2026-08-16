@@ -31,6 +31,7 @@ internal object ProfileValidation {
                 profile.bedMeshProbeDistanceY,
                 profile.adaptiveBedMeshMargin,
             ).all { it in 0f..100_000f } &&
+            gcodeThumbnailDefinitionsAreValid(profile.gcodeThumbnails) &&
             (profile.defaultPrintProfile.isEmpty() || profile.defaultPrintProfile.isSafeLabel()) &&
             profile.defaultFilamentProfiles.size <= MAX_FILAMENT_SLOTS &&
             profile.defaultFilamentProfiles.all { it.isSafeLabel() } &&
@@ -635,8 +636,34 @@ internal fun filenameFormatIsValid(value: String): Boolean =
         value.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_FILENAME_FORMAT_BYTES &&
         value.none { it == '\u0000' || it == '\r' || it == '\n' }
 
+internal fun canonicalGcodeThumbnailDefinitions(value: String): String? {
+    if (value.isBlank()) return ""
+    if (value.toByteArray(Charsets.UTF_8).size > MAX_GCODE_THUMBNAIL_BYTES) return null
+    val definitions = value.split(',').map(String::trim)
+    if (definitions.size !in 1..MAX_GCODE_THUMBNAILS || definitions.any(String::isEmpty)) {
+        return null
+    }
+    val canonical = definitions.map { definition ->
+        val match = GCODE_THUMBNAIL_DEFINITION.matchEntire(definition) ?: return null
+        val width = match.groupValues[1].toIntOrNull() ?: return null
+        val height = match.groupValues[2].toIntOrNull() ?: return null
+        val format = match.groupValues[3].uppercase()
+        if (width !in 1..999 || height !in 1..999 || format !in GCODE_THUMBNAIL_FORMATS) return null
+        "${width}x${height}/$format"
+    }
+    return canonical.joinToString(",")
+}
+
+internal fun gcodeThumbnailDefinitionsAreValid(value: String): Boolean =
+    canonicalGcodeThumbnailDefinitions(value) != null
+
 internal const val MAX_GCODE_FILENAME_FORMAT_BYTES = 1_024
+internal const val MAX_GCODE_THUMBNAIL_BYTES = 256
 internal const val MAX_SMALL_AREA_FLOW_MODEL_BYTES = 16_384
 internal const val MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_BYTES = 16_384
 private const val MAX_SMALL_AREA_FLOW_MODEL_POINTS = 256
 private const val MAX_ADAPTIVE_PRESSURE_ADVANCE_MODEL_POINTS = 256
+private const val MAX_GCODE_THUMBNAILS = 8
+private val GCODE_THUMBNAIL_DEFINITION =
+    Regex("([0-9]{1,3})x([0-9]{1,3})/(PNG|JPG|QOI|BTT_TFT|COLPIC)", RegexOption.IGNORE_CASE)
+private val GCODE_THUMBNAIL_FORMATS = setOf("PNG", "JPG", "QOI", "BTT_TFT", "COLPIC")

@@ -381,6 +381,7 @@ data class SliceConfig(
     @JvmField var bedMeshProbeDistanceX: Float = 50f
     @JvmField var bedMeshProbeDistanceY: Float = 50f
     @JvmField var adaptiveBedMeshMargin: Float = 0f
+    @JvmField var gcodeThumbnails: String = ""
     @JvmField var skirtType: String = "combined"
     @JvmField var singleLoopDraftShield: Boolean = false
     @JvmField var lateralLatticeAngle1: Float = -45f

@@ -1,0 +1,95 @@
+diff --git a/app/src/main/cpp/CMakeLists.txt b/app/src/main/cpp/CMakeLists.txt
+--- a/app/src/main/cpp/CMakeLists.txt
++++ b/app/src/main/cpp/CMakeLists.txt
+@@ -1158,6 +1158,7 @@ add_library(prusaslicer-jni SHARED
+     src/sapil_model_simplify.cpp
+     src/sapil_model_volume.cpp
+     src/sapil_brim_points.cpp
++    src/sapil_gcode_thumbnail.cpp
+     src/sapil_bambu_project.cpp
+     src/sapil_bambu_plate.cpp
+     src/sapil_bambu_objects.cpp
+diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
+--- a/app/src/main/cpp/include/sapil.h
++++ b/app/src/main/cpp/include/sapil.h
+@@ -65,6 +65,7 @@ struct SliceConfig {
+     float bed_mesh_probe_distance_x = 50.0f;
+     float bed_mesh_probe_distance_y = 50.0f;
+     float adaptive_bed_mesh_margin = 0.0f;
++    std::string gcode_thumbnails;
+     float lateral_lattice_angle_1 = -45.0f;
+     float lateral_lattice_angle_2 = 45.0f;
+     float infill_overhang_angle = 60.0f;
+diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_config.cpp
+--- a/app/src/main/cpp/src/sapil_config.cpp
++++ b/app/src/main/cpp/src/sapil_config.cpp
+@@ -115,6 +115,7 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+     config.bed_mesh_probe_distance_x = getFloat("bedMeshProbeDistanceX");
+     config.bed_mesh_probe_distance_y = getFloat("bedMeshProbeDistanceY");
+     config.adaptive_bed_mesh_margin = getFloat("adaptiveBedMeshMargin");
++    config.gcode_thumbnails = getString("gcodeThumbnails");
+     config.lateral_lattice_angle_1 = getFloat("lateralLatticeAngle1");
+     config.lateral_lattice_angle_2 = getFloat("lateralLatticeAngle2");
+     config.infill_overhang_angle = getFloat("infillOverhangAngle");
+@@ -727,6 +728,7 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+     setFloat("bedMeshProbeDistanceX", config.bed_mesh_probe_distance_x);
+     setFloat("bedMeshProbeDistanceY", config.bed_mesh_probe_distance_y);
+     setFloat("adaptiveBedMeshMargin", config.adaptive_bed_mesh_margin);
++    setString("gcodeThumbnails", config.gcode_thumbnails);
+     setFloat("lateralLatticeAngle1", config.lateral_lattice_angle_1);
+     setFloat("lateralLatticeAngle2", config.lateral_lattice_angle_2);
+     setFloat("infillOverhangAngle", config.infill_overhang_angle);
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -1,6 +1,7 @@
+ #include "../include/sapil.h"
+ #include "sapil_internal.h"
+ #include "sapil_diagnostics.h"
++#include "sapil_gcode_thumbnail.h"
+ #include <algorithm>
+ #include <atomic>
+ #include <thread>
+@@ -18,6 +19,7 @@
+ #include "libslic3r/PrintConfig.hpp"
+ #include "libslic3r/GCode.hpp"
+ #include "libslic3r/GCode/GCodeProcessor.hpp"
++#include "libslic3r/GCode/Thumbnails.hpp"
+ #include "libslic3r/Model.hpp"
+ #include "libslic3r/Config.hpp"
+ #include "libslic3r/Exception.hpp"
+@@ -1417,6 +1419,19 @@ static Slic3r::DynamicPrintConfig buildPrintConfig(const SliceConfig& config) {
+     dpc.set_key_value(
+         "adaptive_bed_mesh_margin",
+         new Slic3r::ConfigOptionFloat(config.adaptive_bed_mesh_margin));
++    if (config.gcode_thumbnails.size() > 256 ||
++        config.gcode_thumbnails.find_first_of("\r\n\0", 0, 3) != std::string::npos) {
++        throw std::invalid_argument("Invalid G-code thumbnail definitions");
++    }
++    const auto [thumbnail_definitions, thumbnail_errors] =
++        Slic3r::GCodeThumbnails::make_and_check_thumbnail_list(config.gcode_thumbnails);
++    if (thumbnail_errors != Slic3r::enum_bitmask<Slic3r::ThumbnailError>() ||
++        thumbnail_definitions.size() > 8) {
++        throw std::invalid_argument("Invalid G-code thumbnail definitions");
++    }
++    dpc.set_key_value(
++        "thumbnails",
++        new Slic3r::ConfigOptionString(config.gcode_thumbnails));
+     dpc.set_key_value("extruder_clearance_radius", new Slic3r::ConfigOptionFloat(config.extruder_clearance_radius));
+     dpc.set_key_value("extruder_clearance_height_to_rod", new Slic3r::ConfigOptionFloat(config.extruder_clearance_height_to_rod));
+     dpc.set_key_value("extruder_clearance_height_to_lid", new Slic3r::ConfigOptionFloat(config.extruder_clearance_height_to_lid));
+@@ -2799,7 +2814,13 @@ SliceResult SlicerEngine::slice(
+             throw std::invalid_argument("Invalid input filename");
+         }
+         g_active_print.store(&print, std::memory_order_release);
+-        print.export_gcode(output_path, &gcode_result, nullptr);
++        const Slic3r::ThumbnailsGeneratorCallback thumbnail_callback =
++            makeGcodeThumbnailCallback(model, []() {
++                if (g_slice_cancel.load(std::memory_order_acquire)) {
++                    throw Slic3r::CanceledException();
++                }
++            });
++        print.export_gcode(output_path, &gcode_result, thumbnail_callback);
+         g_active_print.store(nullptr, std::memory_order_release);
+ 
+         for (const auto& warning : gcode_result.warnings) {

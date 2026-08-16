@@ -587,6 +587,8 @@ class SliceOptionsPersistenceTest {
         )
         assertEquals(options.printerProfile.nozzleHeight, restored.printerProfile.nozzleHeight)
         assertEquals(options.printerProfile.nozzleHeight, restored.toNativeConfig().nozzleHeight)
+        assertEquals(options.printerProfile.gcodeThumbnails, restored.printerProfile.gcodeThumbnails)
+        assertEquals(options.printerProfile.gcodeThumbnails, restored.toNativeConfig().gcodeThumbnails)
         assertEquals(options.printerProfile.defaultPrintProfile, restored.printerProfile.defaultPrintProfile)
         assertEquals(
             options.printerProfile.defaultFilamentProfiles,
@@ -1356,6 +1358,7 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
             adaptiveBedMeshMargin = 5f,
             maxJunctionDeviation = 0.032f,
             nozzleHeight = 4.76f,
+            gcodeThumbnails = "64x64/PNG,400x300/QOI",
             toolChangeRetractLengths = listOf(1.4f, 2.6f),
             toolChangeRetractRestartExtras = listOf(-0.2f, 0.3f),
             defaultPrintProfile = "Fixture process",

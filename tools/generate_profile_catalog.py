@@ -13,8 +13,10 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 94
+SCHEMA_VERSION = 95
 MAX_FILAMENT_SLOTS = 16
+MAX_GCODE_THUMBNAILS = 8
+SUPPORTED_GCODE_THUMBNAIL_FORMATS = {"PNG", "JPG", "QOI", "BTT_TFT", "COLPIC"}
 DEFAULT_GCODE_FILENAME_FORMAT = (
     "{input_filename_base}_{filament_type[initial_tool]}_{print_time}.gcode"
 )
@@ -98,6 +100,36 @@ def filename_format(value: Any) -> str:
     ):
         raise ValueError("unsafe filename format")
     return candidate
+
+
+def thumbnail_definitions(value: Any, default_format: Any = "PNG") -> str:
+    fallback_format = str(scalar(default_format, "PNG")).strip().upper() or "PNG"
+    if fallback_format not in SUPPORTED_GCODE_THUMBNAIL_FORMATS:
+        raise ValueError("unsupported G-code thumbnail format")
+    candidates = [
+        item.strip()
+        for raw_value in values(value)
+        for item in raw_value.split(",")
+        if item.strip()
+    ]
+    if len(candidates) > MAX_GCODE_THUMBNAILS:
+        raise ValueError("too many G-code thumbnails")
+    normalized: list[str] = []
+    for candidate in candidates:
+        match = re.fullmatch(
+            r"([0-9]{1,3})x([0-9]{1,3})(?:/([A-Za-z_]+))?",
+            candidate,
+        )
+        if match is None:
+            raise ValueError("invalid G-code thumbnail definition")
+        width, height = int(match.group(1)), int(match.group(2))
+        image_format = (match.group(3) or fallback_format).upper()
+        if not (1 <= width <= 999 and 1 <= height <= 999):
+            raise ValueError("unsafe G-code thumbnail dimensions")
+        if image_format not in SUPPORTED_GCODE_THUMBNAIL_FORMATS:
+            raise ValueError("unsupported G-code thumbnail format")
+        normalized.append(f"{width}x{height}/{image_format}")
+    return ",".join(normalized)
 
 
 def small_area_flow_compensation_model(value: Any) -> str:
@@ -528,6 +560,10 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "bedMeshProbeDistanceX": bed_mesh_probe_distance_x,
         "bedMeshProbeDistanceY": bed_mesh_probe_distance_y,
         "adaptiveBedMeshMargin": number(raw.get("adaptive_bed_mesh_margin"), 0),
+        "gcodeThumbnails": thumbnail_definitions(
+            raw.get("thumbnails"),
+            raw.get("thumbnails_format", "PNG"),
+        ),
         "machineStartGcode": str(raw.get("machine_start_gcode", "")),
         "machineEndGcode": str(raw.get("machine_end_gcode", "")),
         "machinePauseGcode": str(raw.get("machine_pause_gcode", "")),

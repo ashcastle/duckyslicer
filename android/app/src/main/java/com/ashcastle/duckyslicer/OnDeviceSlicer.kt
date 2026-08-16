@@ -312,6 +312,7 @@ data class PrinterProfile(
     val bedMeshProbeDistanceX: Float = 50f,
     val bedMeshProbeDistanceY: Float = 50f,
     val adaptiveBedMeshMargin: Float = 0f,
+    val gcodeThumbnails: String = "",
     val defaultPrintProfile: String = "",
     val defaultFilamentProfiles: List<String> = emptyList(),
 ) {
@@ -1299,7 +1300,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 94,
+    val schemaVersion: Int = 95,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -2341,6 +2342,8 @@ data class SliceOptions(
             native.bedMeshProbeDistanceX = printerProfile.bedMeshProbeDistanceX
             native.bedMeshProbeDistanceY = printerProfile.bedMeshProbeDistanceY
             native.adaptiveBedMeshMargin = printerProfile.adaptiveBedMeshMargin
+            native.gcodeThumbnails = canonicalGcodeThumbnailDefinitions(printerProfile.gcodeThumbnails)
+                ?: printerProfile.gcodeThumbnails
             native.skirtType = quality.skirtType
             native.singleLoopDraftShield = quality.singleLoopDraftShield
             native.lateralLatticeAngle1 = quality.lateralInfill.firstAngle

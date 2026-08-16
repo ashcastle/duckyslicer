@@ -14,11 +14,46 @@ from tools.generate_profile_catalog import (
     printable_geometry,
     small_area_flow_compensation_model,
     support_type,
+    thumbnail_definitions,
     timelapse_type,
 )
 
 
 class GenerateProfileCatalogTest(unittest.TestCase):
+    def test_normalizes_and_bounds_gcode_thumbnail_definitions(self) -> None:
+        self.assertEqual("", thumbnail_definitions(None))
+        self.assertEqual(
+            "48x48/PNG,300x300/QOI",
+            thumbnail_definitions(["48x48", "300x300/QOI"], "PNG"),
+        )
+        self.assertEqual(
+            "230x110/JPG",
+            thumbnail_definitions("230x110", "jpg"),
+        )
+        for invalid in (
+            "0x100/PNG",
+            "1000x100/PNG",
+            "100x100/GIF",
+            "100 by 100",
+            ",".join(["16x16/PNG"] * 9),
+        ):
+            with self.assertRaises(ValueError):
+                thumbnail_definitions(invalid)
+
+        profile = build_printer(
+            "Example",
+            {
+                "name": "Thumbnail printer",
+                "printable_area": ["0x0", "220x0", "220x220", "0x220"],
+                "printable_height": "250",
+                "nozzle_diameter": ["0.4"],
+                "gcode_flavor": "marlin",
+                "thumbnails": ["64x64", "400x300/QOI"],
+                "thumbnails_format": "PNG",
+            },
+        )
+        self.assertEqual("64x64/PNG,400x300/QOI", profile["gcodeThumbnails"])
+
     def test_preserves_and_validates_nozzle_hardness_contract(self) -> None:
         self.assertEqual("undefine", nozzle_material(None))
         self.assertEqual("hardened_steel", nozzle_material(["HARDENED_STEEL"]))

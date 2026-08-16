@@ -84,7 +84,7 @@ class AdaptivePressureAdvanceSettingsTest {
         assertEquals(settings, requireNotNull(profileJson.toFilamentProfileOrNull()).adaptivePressureAdvance)
 
         val projectJson = options.toProjectJson()
-        assertEquals(92, projectJson.getInt("formatVersion"))
+        assertEquals(93, projectJson.getInt("formatVersion"))
         val restored = requireNotNull(projectJson.toProjectSliceOptionsOrNull())
         assertEquals(settings, restored.filamentSlots.first().adaptivePressureAdvance)
         assertEquals(0.08f, restored.filamentSlots[1].adaptivePressureAdvance.bridge)

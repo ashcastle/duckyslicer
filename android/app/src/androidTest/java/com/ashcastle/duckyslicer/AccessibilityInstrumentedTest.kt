@@ -306,7 +306,7 @@ class AccessibilityInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val privacyLabel = context.getString(R.string.privacy_policy)
         launchHarness(AccessibilityHarnessActivity.SCREEN_SETTINGS).use {
-            val privacyButton = scrollUntilClickable(privacyLabel)
+            val privacyButton = scrollUntilClickable(privacyLabel, fastScroll = true)
             assertTrue(
                 "The privacy policy action must open its bundled document",
                 privacyButton.performAction(AccessibilityNodeInfo.ACTION_CLICK),

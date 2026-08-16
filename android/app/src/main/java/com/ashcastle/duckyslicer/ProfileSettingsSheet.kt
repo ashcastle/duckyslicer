@@ -866,6 +866,18 @@ private fun PrinterSettingsSheet(
         },
     )
     SettingsGroupTitle(stringResource(R.string.gcode_output))
+    GcodeThumbnailSetting(
+        value = options.printerProfile.gcodeThumbnails,
+        onValueChange = { definitions ->
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(
+                        gcodeThumbnails = definitions,
+                    ),
+                ),
+            )
+        },
+    )
     SettingsSwitch(
         label = stringResource(R.string.scan_first_layer),
         checked = options.printerProfile.scanFirstLayer,
@@ -7104,6 +7116,54 @@ private fun FilenameFormatSetting(
             Text(
                 stringResource(
                     if (valid) R.string.filename_format_hint else R.string.filename_format_invalid,
+                ),
+            )
+        },
+        isError = !valid,
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun GcodeThumbnailSetting(
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    val label = stringResource(R.string.gcode_thumbnails)
+    if (!settingMatchesQuery(label)) return
+    var input by remember { mutableStateOf(value) }
+    var lastApplied by remember { mutableStateOf(value) }
+    LaunchedEffect(value) {
+        if (value != lastApplied) {
+            input = value
+            lastApplied = value
+        }
+    }
+    val normalized = canonicalGcodeThumbnailDefinitions(input)
+    val valid = normalized != null
+    OutlinedTextField(
+        value = input,
+        onValueChange = { candidate ->
+            if (
+                candidate.toByteArray(Charsets.UTF_8).size <= MAX_GCODE_THUMBNAIL_BYTES &&
+                candidate.all { it.isLetterOrDigit() || it in "xX/_-, " }
+            ) {
+                input = candidate
+                val canonical = canonicalGcodeThumbnailDefinitions(candidate)
+                if (canonical != null) {
+                    lastApplied = canonical
+                    onValueChange(canonical)
+                }
+            }
+        },
+        label = { Text(label) },
+        placeholder = { Text("48x48/PNG,300x300/PNG") },
+        supportingText = {
+            Text(
+                stringResource(
+                    if (valid) R.string.gcode_thumbnails_hint
+                    else R.string.gcode_thumbnails_invalid,
                 ),
             )
         },

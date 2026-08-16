@@ -203,6 +203,9 @@
     <string name="spiral_vase_summary">벽 한 줄만 사용하고 인필, 상단 레이어, 서포트는 사용하지 않습니다.</string>
     <string name="print_sequence">출력 순서</string>
     <string name="gcode_output">G-code 출력</string>
+    <string name="gcode_thumbnails">G-code 미리보기 이미지</string>
+    <string name="gcode_thumbnails_hint">이미지는 최대 8개입니다. 너비×높이/형식을 쉼표로 구분하세요.</string>
+    <string name="gcode_thumbnails_invalid">1~999 px와 PNG, JPG, QOI, BTT_TFT 또는 COLPIC 형식을 사용하세요.</string>
     <string name="tool_change_timing">도구 교체 시간</string>
     <string name="machine_filament_load_time">필라멘트 로드 시간</string>
     <string name="machine_filament_unload_time">필라멘트 언로드 시간</string>

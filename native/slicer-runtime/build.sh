@@ -113,6 +113,9 @@ prepare_runtime_source() {
 
     # Normalize the generated worktree before applying the reviewed patch stack.
     # Reverse in the opposite order so repeated local builds stay reproducible.
+    if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/gcode-thumbnail.patch" 2>/dev/null; then
+        git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/gcode-thumbnail.patch"
+    fi
     if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/nozzle-height-safety.patch" 2>/dev/null; then
         git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/nozzle-height-safety.patch"
     fi
@@ -152,6 +155,9 @@ prepare_runtime_source() {
     git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/nozzle-height-safety.patch" 2>/dev/null || \
         die "runtime nozzle-height safety bridge contains unreviewed changes"
     git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/nozzle-height-safety.patch"
+    git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/gcode-thumbnail.patch" 2>/dev/null || \
+        die "runtime G-code thumbnail bridge contains unreviewed changes"
+    git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/gcode-thumbnail.patch"
 
     local engine_root="$SOURCE_ROOT/app/src/main/cpp/orcaslicer"
     if git -C "$engine_root" apply --reverse --check "$SCRIPT_DIR/engine-profile-options.patch" 2>/dev/null; then
@@ -176,6 +182,10 @@ prepare_runtime_source() {
         "$SOURCE_ROOT/app/src/main/cpp/src/sapil_model_volume.cpp"
     copy_if_changed "$SCRIPT_DIR/overlay/sapil_brim_points.cpp" \
         "$SOURCE_ROOT/app/src/main/cpp/src/sapil_brim_points.cpp"
+    copy_if_changed "$SCRIPT_DIR/overlay/sapil_gcode_thumbnail.cpp" \
+        "$SOURCE_ROOT/app/src/main/cpp/src/sapil_gcode_thumbnail.cpp"
+    copy_if_changed "$SCRIPT_DIR/overlay/sapil_gcode_thumbnail.h" \
+        "$SOURCE_ROOT/app/src/main/cpp/src/sapil_gcode_thumbnail.h"
 }
 
 prepare_dependency_sources() {
