@@ -532,6 +532,24 @@ private fun PrinterSettingsSheet(
         },
     )
     QuantizedSettingSlider(
+        label = stringResource(R.string.nozzle_volume),
+        valueText = stringResource(
+            R.string.cubic_millimeters_value,
+            options.printerProfile.nozzleVolume,
+        ),
+        value = options.printerProfile.nozzleVolume,
+        minimum = 0f,
+        defaultMaximum = 250f,
+        increment = 0.1f,
+        onValueChange = { value ->
+            onOptionsChanged(
+                options.copy(
+                    printerProfile = options.printerProfile.copy(nozzleVolume = value),
+                ),
+            )
+        },
+    )
+    QuantizedSettingSlider(
         label = stringResource(R.string.minimum_layer_height),
         valueText = stringResource(
             R.string.millimeters_value_precise,

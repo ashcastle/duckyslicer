@@ -246,6 +246,7 @@
     <string name="nozzle_material_brass">황동</string>
     <string name="nozzle_hardness">노즐 경도</string>
     <string name="nozzle_height">노즐 높이</string>
+    <string name="nozzle_volume">노즐 내부 체적</string>
     <string name="hrc_value">%1$d HRC</string>
     <string name="nozzle_hardness_automatic_value">재질 기본값 · %1$d HRC</string>
     <string name="nozzle_hardness_not_set">설정되지 않음</string>

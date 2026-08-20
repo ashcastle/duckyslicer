@@ -223,6 +223,7 @@ data class PrinterProfile(
     val nozzleMaterial: NozzleMaterial = NozzleMaterial.UNDEFINED,
     val nozzleHrc: Int = 0,
     val nozzleHeight: Float = 2.5f,
+    val nozzleVolume: Float = 0f,
     val minLayerHeight: Float = 0.04f,
     val maxLayerHeight: Float = nozzleDiameter * 0.7f,
     val machineStartGcode: String = "",
@@ -2330,6 +2331,7 @@ data class SliceOptions(
             native.nozzleMaterial = printerProfile.nozzleMaterial.nativeValue
             native.nozzleHrc = printerProfile.nozzleHrc
             native.nozzleHeight = printerProfile.nozzleHeight
+            native.nozzleVolume = printerProfile.nozzleVolume
             native.fillMultiline = fillMultilineForPattern(fillPattern, quality.fillMultiline)
             native.filenameFormat = gcodeSettings.filenameFormat
             native.printerModel = printerProfile.name

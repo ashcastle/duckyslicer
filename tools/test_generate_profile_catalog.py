@@ -125,6 +125,31 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 )["nozzleHeight"],
             )
 
+    def test_preserves_and_validates_nozzle_volume(self) -> None:
+        base = {
+            "name": "Cutter-equipped printer",
+            "printable_area": ["0x0", "220x0", "220x220", "0x220"],
+            "printable_height": "250",
+            "nozzle_diameter": ["0.4"],
+            "gcode_flavor": "marlin",
+        }
+        self.assertEqual(0, build_printer("Example", base)["nozzleVolume"])
+        self.assertEqual(
+            143,
+            build_printer("Example", {**base, "nozzle_volume": ["143"]})["nozzleVolume"],
+        )
+        for invalid in ("-0.1", "1000.1"):
+            with self.assertRaises(ValueError):
+                build_printer("Example", {**base, "nozzle_volume": [invalid]})
+        for non_finite in ("nan", "inf"):
+            self.assertEqual(
+                0,
+                build_printer(
+                    "Example",
+                    {**base, "nozzle_volume": [non_finite]},
+                )["nozzleVolume"],
+            )
+
     def test_validates_adaptive_pressure_advance_models(self) -> None:
         model = "0.06,2,1000\n0.04,12,1000\n0.07,2,5000\n0.05,12,5000"
         self.assertEqual(model, adaptive_pressure_advance_model(model, True))

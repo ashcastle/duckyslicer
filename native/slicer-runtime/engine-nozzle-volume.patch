@@ -1,0 +1,11 @@
+diff --git a/src/libslic3r/GCode/GCodeProcessor.cpp b/src/libslic3r/GCode/GCodeProcessor.cpp
+--- a/src/libslic3r/GCode/GCodeProcessor.cpp
++++ b/src/libslic3r/GCode/GCodeProcessor.cpp
+@@ -702,6 +702,7 @@ void GCodeProcessor::apply_config(const PrintConfig& config)
+ {
+     m_parser.apply_config(config);
++    m_nozzle_volume = static_cast<float>(config.nozzle_volume.value);
+ 
+     m_flavor = config.gcode_flavor;
+ 
+     m_single_extruder_multi_material = config.single_extruder_multi_material;

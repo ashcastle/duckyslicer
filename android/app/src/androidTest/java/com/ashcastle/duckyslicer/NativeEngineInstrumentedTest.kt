@@ -2513,7 +2513,7 @@ class NativeEngineInstrumentedTest {
         val loadElapsedMs = (SystemClock.elapsedRealtimeNanos() - loadStartedAt) / 1_000_000
         Log.i("DuckyCatalogPerf", "loadMs=$loadElapsedMs")
 
-        assertEquals(95, catalog.schemaVersion)
+        assertEquals(96, catalog.schemaVersion)
         assertTrue("Profile catalog loading took ${loadElapsedMs}ms", loadElapsedMs < 5_000)
         assertEquals("2c8a5385bc53cbc16211b4dd36ef9963ee185f4a", catalog.sourceRevision)
         assertTrue("The catalog must cover hundreds of printer variants", catalog.printers.size > 700)
@@ -2550,6 +2550,7 @@ class NativeEngineInstrumentedTest {
         assertFalse(generatedU1.toolChangeTemperatureWait)
         assertEquals("M600", generatedU1.machinePauseGcode)
         assertEquals(2.5f, generatedU1.nozzleHeight)
+        assertEquals(143f, generatedU1.nozzleVolume)
         assertEquals(
             4.76f,
             catalog.printers.single { it.name == "Bambu Lab A1 0.4 nozzle" }.nozzleHeight,
@@ -4785,6 +4786,104 @@ class NativeEngineInstrumentedTest {
         } finally {
             low.output.delete()
             high.output.delete()
+        }
+    }
+
+    @Test
+    fun nozzleVolumeChangesRealPerFilamentMaterialAccounting() {
+        val model = inspectModel(fixtureModel().absolutePath)
+        val objects = listOf(
+            ProjectObject(
+                id = "nozzle-volume-primary",
+                model = model,
+                transform = ModelTransform(offsetXmm = -20f),
+                filamentSlot = 0,
+            ),
+            ProjectObject(
+                id = "nozzle-volume-secondary",
+                model = model,
+                transform = ModelTransform(offsetXmm = 20f),
+                filamentSlot = 1,
+            ),
+        )
+        val base = SliceOptions()
+            .selectPrinter(
+                PrinterProfile.CUSTOM_CARTESIAN.copy(
+                    id = "test-nozzle-volume-semm",
+                    name = "Nozzle volume SEMM",
+                    singleExtruderMultiMaterial = true,
+                    extruderCount = 2,
+                    nozzleVolume = 0f,
+                    changeFilamentGcode = """
+                        ; FLUSH_START
+                        T[next_extruder]
+                        M83
+                        G1 E100 F300
+                        ; FLUSH_END
+                    """.trimIndent(),
+                    machineEndGcode = """
+                        ; Force a deterministic asymmetric pair of final tool changes so
+                        ; nozzle-volume attribution cannot cancel across alternating layers.
+                        T1
+                        M83
+                        ; FLUSH_START
+                        T0
+                        G1 E40 F300
+                        ; FLUSH_END
+                        ; FLUSH_START
+                        T1
+                        G1 E100 F300
+                        ; FLUSH_END
+                    """.trimIndent(),
+                ),
+            )
+            .selectFilament(FilamentProfile.PLA)
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                filamentSlots = listOf(
+                    FilamentProfile.PLA,
+                    FilamentProfile.PETG.copy(density = 2.00f),
+                ),
+                wipeTowerEnabled = true,
+                multiMaterial = MultiMaterialSettings(
+                    purgeVolumes = listOf(0f, 260f, 75f, 0f),
+                ),
+            )
+
+        val empty = OnDeviceSlicer.slice(objects, base)
+        val retained = OnDeviceSlicer.slice(
+            objects,
+            base.copy(
+                printerProfile = base.printerProfile.copy(nozzleVolume = 183f),
+            ),
+        )
+        try {
+            val emptyGcode = empty.output.readText()
+            val retainedGcode = retained.output.readText()
+            val emptyPerFilament = filamentUsedMm(emptyGcode)
+            val retainedPerFilament = filamentUsedMm(retainedGcode)
+
+            assertTrue(emptyGcode.contains("; nozzle_volume = 0"))
+            assertTrue(retainedGcode.contains("; nozzle_volume = 183"))
+            assertTrue(retainedGcode.lineSequence().any { it == "T1" })
+            assertEquals(2, emptyPerFilament.size)
+            assertEquals(2, retainedPerFilament.size)
+            assertTrue(
+                "Nozzle volume must change density-weighted material accounting: " +
+                    "empty=${empty.filamentGrams} retained=${retained.filamentGrams}",
+                abs(empty.filamentGrams - retained.filamentGrams) > 0.001f,
+            )
+            assertTrue(
+                "Changing attribution must not invent or remove total filament length",
+                abs(empty.filamentMm - retained.filamentMm) < 0.2f,
+            )
+            assertTrue(
+                "Nozzle volume is accounting metadata and must not change wipe-tower geometry",
+                abs(wipeTowerExtrusion(emptyGcode) - wipeTowerExtrusion(retainedGcode)) < 0.01f,
+            )
+        } finally {
+            empty.output.delete()
+            retained.output.delete()
         }
     }
 
@@ -7338,6 +7437,12 @@ class NativeEngineInstrumentedTest {
         }
         return total
     }
+
+    private fun filamentUsedMm(gcode: String): List<Float> = gcode.lineSequence()
+        .first { it.startsWith("; filament used [mm] = ") }
+        .substringAfter("=")
+        .split(',')
+        .map { it.trim().toFloat() }
 
     private fun firstXyMoveAfterToolOne(gcode: String): Pair<Float, Float> {
         var afterToolOne = false

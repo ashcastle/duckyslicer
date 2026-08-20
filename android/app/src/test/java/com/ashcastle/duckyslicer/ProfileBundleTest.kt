@@ -56,6 +56,7 @@ class ProfileBundleTest {
                         bedMeshProbeDistanceY = 41f,
                         adaptiveBedMeshMargin = 5f,
                         nozzleHeight = 4.2f,
+                        nozzleVolume = 143f,
                         gcodeThumbnails = "64x64/PNG,400x300/QOI",
                         toolChangeRetractLengths = listOf(1.2f, 2.3f),
                         toolChangeRetractRestartExtras = listOf(-0.1f, 0.2f),
@@ -183,6 +184,7 @@ class ProfileBundleTest {
                         it.bedMeshProbeDistanceY == 41f &&
                         it.adaptiveBedMeshMargin == 5f &&
                         it.nozzleHeight == 4.2f &&
+                        it.nozzleVolume == 143f &&
                         it.gcodeThumbnails == "64x64/PNG,400x300/QOI" &&
                         it.toolChangeRetractLengths == listOf(1.2f, 2.3f) &&
                         it.toolChangeRetractRestartExtras == listOf(-0.1f, 0.2f)

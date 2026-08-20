@@ -138,7 +138,7 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(65, manifest.getInt("schemaVersion"))
+            assertEquals(66, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(
@@ -263,6 +263,7 @@ class ProjectArchiveTest {
             assertEquals(0.12f, imported.sliceOptions?.printerProfile?.minLayerHeight)
             assertEquals(0.42f, imported.sliceOptions?.printerProfile?.maxLayerHeight)
             assertEquals(4.76f, imported.sliceOptions?.printerProfile?.nozzleHeight)
+            assertEquals(143f, imported.sliceOptions?.printerProfile?.nozzleVolume)
             assertEquals(
                 listOf(0f, 10.5f),
                 imported.sliceOptions?.printerProfile?.extruderOffsetsX,

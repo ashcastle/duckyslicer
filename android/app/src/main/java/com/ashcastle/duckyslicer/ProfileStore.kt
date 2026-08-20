@@ -7,7 +7,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 95
+internal const val USER_PROFILE_SCHEMA_VERSION = 96
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -60,6 +60,7 @@ class ProfileStore private constructor(
             nozzleMaterial = options.printerProfile.nozzleMaterial,
             nozzleHrc = options.printerProfile.nozzleHrc,
             nozzleHeight = options.printerProfile.nozzleHeight,
+            nozzleVolume = options.printerProfile.nozzleVolume,
             gcodeThumbnails = options.printerProfile.gcodeThumbnails,
             minLayerHeight = options.printerProfile.minLayerHeight,
             maxLayerHeight = options.printerProfile.maxLayerHeight,
@@ -638,6 +639,7 @@ internal fun PrinterProfile.toProfileJson() = JSONObject()
     .put("maxPrintHeight", maxPrintHeight).put("nozzleDiameter", nozzleDiameter)
     .put("nozzleMaterial", nozzleMaterial.storageValue).put("nozzleHrc", nozzleHrc)
     .put("nozzleHeight", nozzleHeight)
+    .put("nozzleVolume", nozzleVolume)
     .put("gcodeThumbnails", gcodeThumbnails)
     .put("minLayerHeight", minLayerHeight).put("maxLayerHeight", maxLayerHeight)
     .put("machineStartGcode", machineStartGcode).put("machineEndGcode", machineEndGcode)
@@ -1159,6 +1161,7 @@ internal fun JSONObject.toPrinterProfileOrNull(): PrinterProfile? = runCatching 
         ),
         nozzleHrc = optInt("nozzleHrc", 0),
         nozzleHeight = optDouble("nozzleHeight", 2.5).toFloat(),
+        nozzleVolume = optDouble("nozzleVolume", 0.0).toFloat(),
         gcodeThumbnails = optString("gcodeThumbnails"),
         machineStartGcode = optString("machineStartGcode"),
         machineEndGcode = optString("machineEndGcode"),

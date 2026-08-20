@@ -210,6 +210,7 @@
     <string name="nozzle_material_brass">Brass</string>
     <string name="nozzle_hardness">Nozzle hardness</string>
     <string name="nozzle_height">Nozzle height</string>
+    <string name="nozzle_volume">Nozzle volume</string>
     <string name="hrc_value">%1$d HRC</string>
     <string name="nozzle_hardness_automatic_value">Material default · %1$d HRC</string>
     <string name="nozzle_hardness_not_set">Not set</string>

@@ -121,7 +121,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(67, persisted.getInt("schemaVersion"))
+        assertEquals(68, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),
@@ -213,6 +213,7 @@ class ProjectStoreTest {
         assertEquals(0.12f, restored.sliceOptions?.printerProfile?.minLayerHeight)
         assertEquals(0.42f, restored.sliceOptions?.printerProfile?.maxLayerHeight)
         assertEquals(4.76f, restored.sliceOptions?.printerProfile?.nozzleHeight)
+        assertEquals(143f, restored.sliceOptions?.printerProfile?.nozzleVolume)
         assertEquals(
             listOf(0f, 10.5f),
             restored.sliceOptions?.printerProfile?.extruderOffsetsX,

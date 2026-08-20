@@ -35,7 +35,7 @@ class AdaptiveBedMeshSettingsTest {
         assertEquals(profile, storedProfile.toPrinterProfileOrNull())
 
         val storedProject = options.toProjectJson()
-        assertEquals(93, storedProject.getInt("formatVersion"))
+        assertEquals(94, storedProject.getInt("formatVersion"))
         val restored = requireNotNull(storedProject.toProjectSliceOptionsOrNull())
         assertEquals(10f, restored.printerProfile.bedMeshMinX)
         assertEquals(11f, restored.printerProfile.bedMeshMinY)

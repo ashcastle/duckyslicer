@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 95
+SCHEMA_VERSION = 96
 MAX_FILAMENT_SLOTS = 16
 MAX_GCODE_THUMBNAILS = 8
 SUPPORTED_GCODE_THUMBNAIL_FORMATS = {"PNG", "JPG", "QOI", "BTT_TFT", "COLPIC"}
@@ -479,6 +479,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
     height = number(raw.get("printable_height"), 0)
     nozzle = number(raw.get("nozzle_diameter"), 0)
     nozzle_height = number(raw.get("nozzle_height"), 2.5)
+    nozzle_volume = number(raw.get("nozzle_volume"), 0)
     configured_min_layer_height = number(raw.get("min_layer_height"), 0)
     configured_max_layer_height = number(raw.get("max_layer_height"), 0)
     min_layer_height = configured_min_layer_height if configured_min_layer_height > 0 else 0.07
@@ -533,6 +534,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
         "nozzleMaterial": nozzle_material(raw.get("nozzle_type")),
         "nozzleHrc": integer(raw.get("nozzle_hrc"), 0),
         "nozzleHeight": nozzle_height,
+        "nozzleVolume": nozzle_volume,
         "minLayerHeight": min_layer_height,
         "maxLayerHeight": max_layer_height,
         "singleExtruderMultiMaterial": supports_multi_material,
@@ -645,6 +647,7 @@ def build_printer(brand: str, raw: dict[str, Any]) -> dict[str, Any]:
             ]
         )
         and 0 <= profile["nozzleHrc"] <= 500
+        and 0 <= profile["nozzleVolume"] <= 1_000
         and 0.1 <= profile["extruderClearanceRadius"] <= 1_000
         and 0.1 <= profile["extruderClearanceHeightToRod"] <= 1_500
         and 0.1 <= profile["extruderClearanceHeightToLid"] <= 1_500
