@@ -82,6 +82,73 @@ internal fun OrcaFacetAnnotation.paintAt(
     return OrcaFacetAnnotation(next.toSortedMap())
 }
 
+/** Applies one pointer event as a single bounded annotation update. */
+internal fun OrcaFacetAnnotation.paintAll(
+    targets: Collection<FacetPaintTarget>,
+    state: Int,
+    fallbackState: (facetIndex: Int) -> Int = { 0 },
+): OrcaFacetAnnotation {
+    require(state in 0..MAX_FACET_STATE) { "Facet paint state is invalid" }
+    require(targets.size <= MAX_FACET_PAINT_BATCH_TARGETS) { "Facet paint batch is too large" }
+    if (targets.isEmpty()) return this
+    val grouped = targets.groupBy(FacetPaintTarget::facetIndex).toSortedMap()
+    val next = triangles.toMutableMap()
+    var changed = false
+    grouped.forEach facetGroup@ { (facetIndex, facetTargets) ->
+        val fallback = fallbackState(facetIndex)
+        require(fallback in 0..MAX_FACET_STATE) { "Facet paint state is invalid" }
+        val currentValue = next[facetIndex]
+        var root = if (currentValue == null) {
+            FacetNode.Leaf(fallback)
+        } else {
+            runCatching { FacetTreeCodec.parse(currentValue) }.getOrNull()
+                ?: return@facetGroup
+        }
+        facetTargets.forEach { target ->
+            root = root.paint(
+                triangle = FacetTriangle.ROOT,
+                point = target.point,
+                currentDepth = 0,
+                targetDepth = target.subdivisionDepth,
+                state = state,
+            ).compressed()
+        }
+        val encoded = FacetTreeCodec.serialize(root)
+        if (encoded == currentValue || (currentValue == null && encoded == "0")) {
+            return@facetGroup
+        }
+        if (encoded.length > OrcaFacetAnnotation.MAX_TRIANGLE_VALUE_BYTES) return@facetGroup
+        if (encoded == "0") {
+            next.remove(facetIndex)
+        } else {
+            if (
+                facetIndex !in next &&
+                next.size >= OrcaFacetAnnotation.MAX_ANNOTATED_TRIANGLES
+            ) {
+                return@facetGroup
+            }
+            next[facetIndex] = encoded
+        }
+        changed = true
+    }
+    return if (changed) OrcaFacetAnnotation(next.toSortedMap()) else this
+}
+
+internal fun exactPaintFacetsToClear(
+    previous: OrcaFacetAnnotation,
+    next: OrcaFacetAnnotation,
+    targets: Collection<FacetPaintTarget>,
+): Set<Int> = targets.asSequence()
+    .map(FacetPaintTarget::facetIndex)
+    .distinct()
+    .filter { facetIndex ->
+        previous.triangles[facetIndex] != next.triangles[facetIndex] ||
+            facetIndex in next.triangles
+    }
+    .toSet()
+
+internal const val MAX_FACET_PAINT_BATCH_TARGETS = 256
+
 private sealed interface FacetNode {
     data class Leaf(val state: Int) : FacetNode
 

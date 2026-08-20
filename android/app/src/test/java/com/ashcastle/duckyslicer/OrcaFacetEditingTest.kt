@@ -78,6 +78,48 @@ class OrcaFacetEditingTest {
     }
 
     @Test
+    fun batchedFacetPaintMatchesSequentialEditsAndResolvesFallbackOncePerFacet() {
+        val targets = listOf(
+            target(0.8f, 0.1f, 0.1f),
+            target(0.1f, 0.8f, 0.1f),
+            FacetPaintTarget(1, 0.1f, 0.1f, 0.8f, subdivisionDepth = 2),
+        )
+        val fallbackCalls = mutableListOf<Int>()
+        val batched = OrcaFacetAnnotation().paintAll(targets, state = 2) { facetIndex ->
+            fallbackCalls += facetIndex
+            if (facetIndex == 1) 1 else 0
+        }
+        val sequential = targets.fold(OrcaFacetAnnotation()) { annotation, paintTarget ->
+            annotation.paintAt(
+                paintTarget,
+                state = 2,
+                fallbackState = if (paintTarget.facetIndex == 1) 1 else 0,
+            )
+        }
+
+        assertEquals(sequential, batched)
+        assertEquals(listOf(0, 1), fallbackCalls)
+        assertEquals(
+            setOf(0, 1),
+            exactPaintFacetsToClear(
+                previous = OrcaFacetAnnotation(mapOf(0 to "4")),
+                next = OrcaFacetAnnotation(mapOf(0 to "4", 1 to "8")),
+                targets = listOf(
+                    targets[0],
+                    targets[2],
+                    FacetPaintTarget(2, 0.8f, 0.1f, 0.1f, subdivisionDepth = 1),
+                ),
+            ),
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            OrcaFacetAnnotation().paintAll(
+                List(MAX_FACET_PAINT_BATCH_TARGETS + 1) { targets.first() },
+                state = 1,
+            )
+        }
+    }
+
+    @Test
     fun extendedStatesAndStableRegionKeysRemainBounded() {
         val first = FacetPaintTarget(7, 0.79f, 0.11f, 0.10f, subdivisionDepth = 4)
         val nearby = FacetPaintTarget(7, 0.78f, 0.12f, 0.10f, subdivisionDepth = 4)

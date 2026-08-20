@@ -1,5 +1,6 @@
 package com.ashcastle.duckyslicer
 
+import androidx.compose.ui.geometry.Offset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
@@ -152,6 +153,59 @@ class PrepareModelPickingTest {
         )
 
         assertEquals(modelPart.id, hit?.volumeId)
+    }
+
+    @Test
+    fun batchedBrushPickingKeepsEachSampleOnTheFrontmostSelectableSurface() {
+        val base = triangleObject("batched-brush")
+        val lower = base.singleVolume.copy(
+            id = "lower",
+            model = base.singleVolume.model.copy(previewTriangleIndices = intArrayOf(11)),
+        )
+        val upper = base.singleVolume.copy(
+            id = "upper",
+            model = base.singleVolume.model.copy(
+                minMm = listOf(0.0, 0.0, 1.0),
+                maxMm = listOf(2.0, 2.0, 1.0),
+                previewTriangles = base.singleVolume.model.previewTriangles.copyOf().also {
+                    vertices ->
+                    for (index in 2 until vertices.size step 3) vertices[index] = 1f
+                },
+                previewTriangleIndices = intArrayOf(22),
+            ),
+        )
+        val projectObject = base.copy(volumes = listOf(lower, upper))
+        val placement = placements(projectObject).getValue(projectObject.id)
+        val samples = listOf(Offset(498f, 382f), Offset(497f, 381f), Offset(499f, 383f))
+        val indices = buildPreparePickingIndices(listOf(projectObject))
+
+        val frontmost = findPrepareFacetsAtScreenSamples(
+            projectObject = projectObject,
+            placement = placement,
+            viewport = viewport,
+            centerX = 498f,
+            centerY = 382f,
+            samplePositions = samples,
+            touchRadiusPx = 1f,
+            pickingIndices = indices,
+        )
+        val lowerOnly = findPrepareFacetsAtScreenSamples(
+            projectObject = projectObject,
+            placement = placement,
+            viewport = viewport,
+            centerX = 498f,
+            centerY = 382f,
+            samplePositions = samples,
+            touchRadiusPx = 1f,
+            selectableVolumeIds = setOf(lower.id),
+            pickingIndices = indices,
+        )
+
+        assertEquals(samples, frontmost.map(PrepareFacetSampleHit::position))
+        assertTrue(frontmost.all { it.triangle.volumeId == upper.id })
+        assertTrue(frontmost.all { it.triangle.sourceFacetIndex == 22 })
+        assertTrue(lowerOnly.all { it.triangle.volumeId == lower.id })
+        assertTrue(lowerOnly.all { it.triangle.sourceFacetIndex == 11 })
     }
 
     @Test

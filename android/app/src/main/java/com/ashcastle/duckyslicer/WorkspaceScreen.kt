@@ -172,7 +172,8 @@ private const val FACET_BRUSH_MIN_RADIUS_DP = 8f
 private const val FACET_BRUSH_MAX_RADIUS_DP = 48f
 private const val DEFAULT_FACET_BRUSH_RADIUS_DP = 18f
 private const val FACET_BRUSH_SIZE_STEPS = 9
-internal const val FACET_BRUSH_SAMPLE_COUNT = 7
+private const val FACET_BRUSH_SAMPLE_HIT_RADIUS_RATIO = 0.28f
+internal const val FACET_BRUSH_SAMPLE_COUNT = 37
 internal const val MAX_FACET_BRUSH_STROKE_CENTERS = 6
 
 internal fun useWorkspaceNavigationRail(widthDp: Float, heightDp: Float): Boolean =
@@ -510,12 +511,12 @@ internal fun WorkspaceScreen(
     onCancelProjectEdit: () -> Unit,
     onCancelProjectImport: () -> Unit,
     onCancelProjectExport: () -> Unit,
-    onSupportPaintPreview: (String, String, FacetPaintTarget, SupportPaintState?) -> Unit,
+    onSupportPaintPreview: (String, String, List<FacetPaintTarget>, SupportPaintState?) -> Unit,
     onSupportPaintCommitted: (String, String, SupportPaint, OrcaFacetAnnotation) -> Unit,
-    onSeamPaintPreview: (String, String, FacetPaintTarget, SeamPaintState?) -> Unit,
+    onSeamPaintPreview: (String, String, List<FacetPaintTarget>, SeamPaintState?) -> Unit,
     onSeamPaintCommitted: (String, String, SeamPaint, OrcaFacetAnnotation) -> Unit,
     onBrimPointsChanged: (String, BrimPoints) -> Unit,
-    onMultiColorPaintPreview: (String, String, FacetPaintTarget, Int?) -> Unit,
+    onMultiColorPaintPreview: (String, String, List<FacetPaintTarget>, Int?) -> Unit,
     onMultiColorPaintCommitted: (String, String, MultiColorPaint, OrcaFacetAnnotation) -> Unit,
     onVariableLayerHeightsChanged: (VariableLayerHeights) -> Unit,
     onObjectProcessOverridesChanged: (ObjectProcessOverrides) -> Unit,
@@ -2960,15 +2961,15 @@ private fun BedScene(
     onModelTransformCommitted: (ModelTransform) -> Unit,
     onLayOnFace: (String, FloatArray) -> Unit,
     onMeasurePoint: (ModelPoint3) -> Unit,
-    onSupportPaintPreview: (String, String, FacetPaintTarget, SupportPaintState?) -> Unit,
+    onSupportPaintPreview: (String, String, List<FacetPaintTarget>, SupportPaintState?) -> Unit,
     onSupportPaintCommitted: (String, String, SupportPaint, OrcaFacetAnnotation) -> Unit,
-    onSeamPaintPreview: (String, String, FacetPaintTarget, SeamPaintState?) -> Unit,
+    onSeamPaintPreview: (String, String, List<FacetPaintTarget>, SeamPaintState?) -> Unit,
     onSeamPaintCommitted: (String, String, SeamPaint, OrcaFacetAnnotation) -> Unit,
     onBrimPointSelected: (Int?) -> Unit,
     onBrimPointAdded: (BrimPoint) -> Unit,
     onBrimPointMoved: (Int, BrimPoint) -> Unit,
     onBrimPointInvalid: () -> Unit,
-    onMultiColorPaintPreview: (String, String, FacetPaintTarget, Int?) -> Unit,
+    onMultiColorPaintPreview: (String, String, List<FacetPaintTarget>, Int?) -> Unit,
     onMultiColorPaintCommitted: (String, String, MultiColorPaint, OrcaFacetAnnotation) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -3311,7 +3312,21 @@ private fun BedScene(
                     .coerceIn(FACET_BRUSH_MIN_RADIUS_DP, FACET_BRUSH_MAX_RADIUS_DP)
                     .dp.toPx()
                 val brushSampleOffsets = facetBrushSampleOffsets(brushRadiusPx)
-                val brushSampleHitRadiusPx = max(3.dp.toPx(), brushRadiusPx * 0.35f)
+                val brushSampleHitRadiusPx = max(
+                    3.dp.toPx(),
+                    brushRadiusPx * FACET_BRUSH_SAMPLE_HIT_RADIUS_RATIO,
+                )
+                val paintViewport = PrepareHitTestViewport(
+                    widthPx = size.width.toFloat(),
+                    heightPx = size.height.toFloat(),
+                    bedSizeX = bedSizeX,
+                    bedSizeY = bedSizeY,
+                    yawDegrees = yaw,
+                    pitchDegrees = pitch,
+                    zoom = zoom,
+                    panX = pan.x,
+                    panY = pan.y,
+                )
                 if (brimEditingObject != null) {
                     val markerTouchRadius = 24.dp.toPx()
                     val touchedIndex = brimPointScreenPositions
@@ -3574,44 +3589,16 @@ private fun BedScene(
                 var multiColorPaintStart: MultiColorPaint? = null
                 var multiColorAnnotationStart: OrcaFacetAnnotation? = null
                 val paintedTargets = HashSet<FacetPaintTarget>()
-                fun paintSampleAt(position: Offset) {
-                    val objectId = paintingObject?.id ?: return
-                    val hit = if (useDepthTestedPrepare) {
-                        currentModelPlacements[objectId]?.let { placement ->
-                            findPrepareFacetAtScreen(
-                                projectObject = paintingObject,
-                                placement = placement,
-                                viewport = PrepareHitTestViewport(
-                                    widthPx = size.width.toFloat(),
-                                    heightPx = size.height.toFloat(),
-                                    bedSizeX = bedSizeX,
-                                    bedSizeY = bedSizeY,
-                                    yawDegrees = yaw,
-                                    pitchDegrees = pitch,
-                                    zoom = zoom,
-                                    panX = pan.x,
-                                    panY = pan.y,
-                                ),
-                                screenX = position.x,
-                                screenY = position.y,
-                                touchRadiusPx = brushSampleHitRadiusPx,
-                                selectableVolumeIds = paintableVolumeIds,
-                                pickingIndices = currentModelPickingIndices,
-                            )
-                        }
-                    } else {
-                        closestModelTriangle(
-                            modelScreenTriangles[objectId].orEmpty().filter {
-                                it.volumeId in paintableVolumeIds
-                            },
-                            position,
-                            brushSampleHitRadiusPx,
-                        )
-                    } ?: return
+                fun targetForHit(
+                    hit: ModelScreenTriangle,
+                    position: Offset,
+                ): FacetPaintTarget? {
+                    val activePaintingObject = paintingObject ?: return null
                     if (paintedVolumeId == null) {
-                        val volume = paintingObject.volumes.firstOrNull { it.id == hit.volumeId }
-                            ?: return
-                        if (!volume.role.acceptsFacetPaint) return
+                        val volume = activePaintingObject.volumes.firstOrNull {
+                            it.id == hit.volumeId
+                        } ?: return null
+                        if (!volume.role.acceptsFacetPaint) return null
                         paintedVolumeId = volume.id
                         supportPaintStart = volume.supportPaint.takeIf { supportPaintingObject != null }
                         supportAnnotationStart = volume.orcaFacetAnnotations.support.takeIf {
@@ -3628,40 +3615,78 @@ private fun BedScene(
                             multiColorPaintingObject != null
                         }
                     }
-                    if (paintedVolumeId != hit.volumeId) return
+                    if (paintedVolumeId != hit.volumeId) return null
                     val target = facetPaintTarget(hit, position, brushRadiusPx)
-                    if (paintedTargets.add(target)) {
-                        if (supportPaintingObject != null) {
-                            currentSupportPaintPreviewCallback(
-                                objectId,
-                                hit.volumeId,
-                                target,
-                                supportPaintState,
-                            )
-                        } else if (seamPaintingObject != null) {
-                            currentSeamPaintPreviewCallback(
-                                objectId,
-                                hit.volumeId,
-                                target,
-                                seamPaintState,
-                            )
-                        } else if (multiColorPaintingObject != null) {
-                            currentMultiColorPaintPreviewCallback(
-                                objectId,
-                                hit.volumeId,
-                                target,
-                                multiColorPaintSlot,
+                    return target.takeIf(paintedTargets::add)
+                }
+                fun paintFootprintsAt(centers: List<Offset>) {
+                    val activePaintingObject = paintingObject ?: return
+                    val objectId = activePaintingObject.id
+                    val newTargets = ArrayList<FacetPaintTarget>(
+                        min(
+                            centers.size * brushSampleOffsets.size,
+                            MAX_FACET_PAINT_BATCH_TARGETS,
+                        ),
+                    )
+                    centers.forEach { center ->
+                        val samplePositions = buildList(brushSampleOffsets.size) {
+                            brushSampleOffsets.forEach { offset -> add(center + offset) }
+                        }
+                        val hits = if (useDepthTestedPrepare) {
+                            currentModelPlacements[objectId]?.let { placement ->
+                                findPrepareFacetsAtScreenSamples(
+                                    projectObject = activePaintingObject,
+                                    placement = placement,
+                                    viewport = paintViewport,
+                                    centerX = center.x,
+                                    centerY = center.y,
+                                    samplePositions = samplePositions,
+                                    touchRadiusPx = brushSampleHitRadiusPx,
+                                    selectableVolumeIds = paintableVolumeIds,
+                                    pickingIndices = currentModelPickingIndices,
+                                )
+                            }.orEmpty()
+                        } else {
+                            closestModelTrianglesAtPoints(
+                                triangles = modelScreenTriangles[objectId].orEmpty(),
+                                points = samplePositions,
+                                touchRadius = brushSampleHitRadiusPx,
+                                selectableVolumeIds = paintableVolumeIds,
                             )
                         }
+                        hits.mapNotNullTo(newTargets) { hit ->
+                            targetForHit(hit.triangle, hit.position)
+                        }
                     }
-                }
-                fun paintFootprintAt(center: Offset) {
-                    brushSampleOffsets.forEach { offset -> paintSampleAt(center + offset) }
+                    val volumeId = paintedVolumeId ?: return
+                    if (newTargets.isEmpty()) return
+                    if (supportPaintingObject != null) {
+                        currentSupportPaintPreviewCallback(
+                            objectId,
+                            volumeId,
+                            newTargets,
+                            supportPaintState,
+                        )
+                    } else if (seamPaintingObject != null) {
+                        currentSeamPaintPreviewCallback(
+                            objectId,
+                            volumeId,
+                            newTargets,
+                            seamPaintState,
+                        )
+                    } else if (multiColorPaintingObject != null) {
+                        currentMultiColorPaintPreviewCallback(
+                            objectId,
+                            volumeId,
+                            newTargets,
+                            multiColorPaintSlot,
+                        )
+                    }
                 }
                 if (hitObjectId != null) currentSelectionCallback(hitObjectId)
                 if (paintingObject != null) {
                     facetBrushCursor = down.position
-                    paintFootprintAt(down.position)
+                    paintFootprintsAt(listOf(down.position))
                 }
                 var previousPaintCenter = down.position.takeIf { paintingObject != null }
                 var movement = 0f
@@ -3679,15 +3704,16 @@ private fun BedScene(
                                 if (paintingObject != null) {
                                     facetBrushCursor = change.position
                                     val previous = previousPaintCenter
-                                    if (previous == null) {
-                                        paintFootprintAt(change.position)
+                                    val centers = if (previous == null) {
+                                        listOf(change.position)
                                     } else {
                                         facetBrushStrokeCenters(
                                             previous,
                                             change.position,
                                             brushRadiusPx,
-                                        ).forEach(::paintFootprintAt)
+                                        )
                                     }
+                                    paintFootprintsAt(centers)
                                     previousPaintCenter = change.position
                                 } else if (hitObjectId != null) {
                                     val currentSceneScale = min(
@@ -4383,24 +4409,121 @@ internal fun closestModelTriangle(
     point: Offset,
     touchRadius: Float,
 ): ModelScreenTriangle? {
-    val inside = triangles.filter { triangle -> pointInsideTriangle(point, triangle) }
-    if (inside.isNotEmpty()) return inside.maxByOrNull(ModelScreenTriangle::depth)
-    return triangles
-        .asSequence()
-        .map { triangle ->
+    var bestInside: ModelScreenTriangle? = null
+    var bestNearby: ModelScreenTriangle? = null
+    var bestNearbyDistance = Float.POSITIVE_INFINITY
+    triangles.forEach { triangle ->
+        if (pointInsideTriangle(point, triangle)) {
+            val current = bestInside
+            if (
+                current == null || triangle.depth > current.depth + 0.0001f ||
+                (
+                    abs(triangle.depth - current.depth) <= 0.0001f &&
+                        triangle.previewTriangleIndex < current.previewTriangleIndex
+                    )
+            ) {
+                bestInside = triangle
+            }
+        } else if (bestInside == null) {
             val distance = minOf(
                 pointToSegmentDistance(point, triangle.a, triangle.b),
                 pointToSegmentDistance(point, triangle.b, triangle.c),
                 pointToSegmentDistance(point, triangle.c, triangle.a),
             )
-            triangle to distance
+            val current = bestNearby
+            if (
+                distance <= touchRadius &&
+                (
+                    current == null || distance < bestNearbyDistance - 0.001f ||
+                        (
+                            abs(distance - bestNearbyDistance) <= 0.001f &&
+                                (
+                                    triangle.depth > current.depth + 0.0001f ||
+                                        (
+                                            abs(triangle.depth - current.depth) <= 0.0001f &&
+                                                triangle.previewTriangleIndex <
+                                                current.previewTriangleIndex
+                                            )
+                                    )
+                            )
+                    )
+            ) {
+                bestNearby = triangle
+                bestNearbyDistance = distance
+            }
         }
-        .filter { (_, distance) -> distance <= touchRadius }
-        .minWithOrNull(
-            compareBy<Pair<ModelScreenTriangle, Float>> { it.second }
-                .thenByDescending { it.first.depth },
-        )
-        ?.first
+    }
+    return bestInside ?: bestNearby
+}
+
+internal fun closestModelTrianglesAtPoints(
+    triangles: List<ModelScreenTriangle>,
+    points: List<Offset>,
+    touchRadius: Float,
+    selectableVolumeIds: Set<String>? = null,
+): List<PrepareFacetSampleHit> {
+    if (
+        touchRadius < 0f || points.isEmpty() || points.size > MAX_PREPARE_BRUSH_SAMPLES ||
+        points.any { !it.x.isFinite() || !it.y.isFinite() }
+    ) {
+        return emptyList()
+    }
+    val bestInside = BooleanArray(points.size)
+    val bestDistance = FloatArray(points.size) { Float.POSITIVE_INFINITY }
+    val bestTriangle = arrayOfNulls<ModelScreenTriangle>(points.size)
+    val bestTriangleOrder = IntArray(points.size) { Int.MAX_VALUE }
+    triangles.forEachIndexed { triangleOrder, triangle ->
+        if (selectableVolumeIds != null && triangle.volumeId !in selectableVolumeIds) {
+            return@forEachIndexed
+        }
+        points.forEachIndexed { pointIndex, point ->
+            val inside = pointInsideTriangle(point, triangle)
+            val distance = if (!inside && !bestInside[pointIndex]) {
+                minOf(
+                    pointToSegmentDistance(point, triangle.a, triangle.b),
+                    pointToSegmentDistance(point, triangle.b, triangle.c),
+                    pointToSegmentDistance(point, triangle.c, triangle.a),
+                )
+            } else {
+                Float.POSITIVE_INFINITY
+            }
+            val current = bestTriangle[pointIndex]
+            val replace = if (inside) {
+                !bestInside[pointIndex] || current == null ||
+                    triangle.depth > current.depth + 0.0001f ||
+                    (
+                        abs(triangle.depth - current.depth) <= 0.0001f &&
+                            triangleOrder < bestTriangleOrder[pointIndex]
+                        )
+            } else {
+                !bestInside[pointIndex] && distance <= touchRadius &&
+                    (
+                        current == null || distance < bestDistance[pointIndex] - 0.001f ||
+                            (
+                                abs(distance - bestDistance[pointIndex]) <= 0.001f &&
+                                    (
+                                        triangle.depth > current.depth + 0.0001f ||
+                                            (
+                                                abs(triangle.depth - current.depth) <= 0.0001f &&
+                                                    triangleOrder < bestTriangleOrder[pointIndex]
+                                                )
+                                    )
+                                )
+                        )
+            }
+            if (replace) {
+                bestInside[pointIndex] = inside
+                bestDistance[pointIndex] = distance
+                bestTriangle[pointIndex] = triangle
+                bestTriangleOrder[pointIndex] = triangleOrder
+            }
+        }
+    }
+    return buildList(points.size) {
+        points.forEachIndexed { index, point ->
+            bestTriangle[index]?.let { triangle -> add(PrepareFacetSampleHit(point, triangle)) }
+        }
+    }
 }
 
 private fun pointInsideTriangle(point: Offset, triangle: ModelScreenTriangle): Boolean {
@@ -4530,13 +4653,20 @@ internal fun facetPaintTarget(
 
 internal fun facetBrushSampleOffsets(radiusPx: Float): List<Offset> {
     require(radiusPx.isFinite() && radiusPx > 0f) { "Facet brush radius is invalid" }
-    val ringRadius = radiusPx * 0.68f
     return buildList(FACET_BRUSH_SAMPLE_COUNT) {
         add(Offset.Zero)
-        repeat(FACET_BRUSH_SAMPLE_COUNT - 1) { index ->
-            val angle = 2f * PI.toFloat() * index / (FACET_BRUSH_SAMPLE_COUNT - 1)
-            add(Offset(cos(angle) * ringRadius, sin(angle) * ringRadius))
+
+        fun addRing(count: Int, radiusRatio: Float, phaseRadians: Float) {
+            val ringRadius = radiusPx * radiusRatio
+            repeat(count) { index ->
+                val angle = 2f * PI.toFloat() * index / count + phaseRadians
+                add(Offset(cos(angle) * ringRadius, sin(angle) * ringRadius))
+            }
         }
+
+        addRing(count = 6, radiusRatio = 0.34f, phaseRadians = 0f)
+        addRing(count = 12, radiusRatio = 0.62f, phaseRadians = PI.toFloat() / 12f)
+        addRing(count = 18, radiusRatio = 0.78f, phaseRadians = 0f)
     }
 }
 

@@ -1,6 +1,7 @@
 package com.ashcastle.duckyslicer
 
 import androidx.compose.ui.geometry.Offset
+import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -72,10 +73,66 @@ class SupportPaintHitTest {
 
         assertEquals(FACET_BRUSH_SAMPLE_COUNT, offsets.size)
         assertEquals(Offset.Zero, offsets.first())
-        offsets.drop(1).forEach { offset ->
-            assertEquals(radius * 0.68f, offset.getDistance(), 0.0001f)
-            assertTrue(offset.getDistance() <= radius)
+        assertEquals(6, offsets.count { abs(it.getDistance() - radius * 0.34f) < 0.0001f })
+        assertEquals(12, offsets.count { abs(it.getDistance() - radius * 0.62f) < 0.0001f })
+        assertEquals(18, offsets.count { abs(it.getDistance() - radius * 0.78f) < 0.0001f })
+        for (x in -20..20) {
+            for (y in -20..20) {
+                val point = Offset(x.toFloat(), y.toFloat())
+                if (point.getDistance() > radius) continue
+                val nearestSample = offsets.minOf { offset -> (point - offset).getDistance() }
+                assertTrue(
+                    "Every point under the cursor must stay within bounded hit tolerance",
+                    nearestSample <= radius * 0.28f + 0.0001f,
+                )
+            }
         }
+    }
+
+    @Test
+    fun compatibilityBrushBatchKeepsEverySampleFrontmostWithoutTemporarySorting() {
+        val back = ModelScreenTriangle(
+            sourceFacetIndex = 1,
+            previewTriangleIndex = 1,
+            a = Offset(0f, 0f),
+            b = Offset(100f, 0f),
+            c = Offset(0f, 100f),
+            depth = 1f,
+            volumeId = "back",
+        )
+        val front = ModelScreenTriangle(
+            sourceFacetIndex = 2,
+            previewTriangleIndex = 2,
+            a = Offset(10f, 10f),
+            b = Offset(60f, 10f),
+            c = Offset(60f, 12f),
+            depth = 5f,
+            volumeId = "front",
+        )
+        val points = listOf(Offset(30f, 10.5f), Offset(20f, 20f), Offset(90f, 90f))
+
+        val hits = closestModelTrianglesAtPoints(
+            triangles = listOf(back, front),
+            points = points,
+            touchRadius = 2f,
+        )
+        val backOnly = closestModelTrianglesAtPoints(
+            triangles = listOf(back, front),
+            points = points,
+            touchRadius = 2f,
+            selectableVolumeIds = setOf("back"),
+        )
+
+        assertEquals(listOf(2, 1), hits.map { it.triangle.sourceFacetIndex })
+        assertEquals(listOf(1, 1), backOnly.map { it.triangle.sourceFacetIndex })
+        assertEquals(points.take(2), hits.map(PrepareFacetSampleHit::position))
+        assertTrue(
+            closestModelTrianglesAtPoints(
+                triangles = listOf(back),
+                points = List(MAX_PREPARE_BRUSH_SAMPLES + 1) { Offset.Zero },
+                touchRadius = 1f,
+            ).isEmpty(),
+        )
     }
 
     @Test
@@ -99,6 +156,10 @@ class SupportPaintHitTest {
         }
         assertEquals(MAX_FACET_BRUSH_STROKE_CENTERS, extreme.size)
         assertEquals(Offset(10_000f, 0f), extreme.last())
+        assertTrue(
+            FACET_BRUSH_SAMPLE_COUNT * MAX_FACET_BRUSH_STROKE_CENTERS <=
+                MAX_FACET_PAINT_BATCH_TARGETS,
+        )
     }
 
     @Test

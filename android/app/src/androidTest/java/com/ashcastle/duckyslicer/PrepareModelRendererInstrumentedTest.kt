@@ -234,6 +234,10 @@ class PrepareModelRendererInstrumentedTest {
         )
         val objectDurations = ArrayList<Long>()
         val facetDurations = ArrayList<Long>()
+        val brushDurations = ArrayList<Long>()
+        val brushSamples = facetBrushSampleOffsets(24f).map { offset ->
+            androidx.compose.ui.geometry.Offset(360f, 614.4f) + offset
+        }
         repeat(12) {
             val started = SystemClock.elapsedRealtimeNanos()
             assertEquals(
@@ -262,18 +266,37 @@ class PrepareModelRendererInstrumentedTest {
                 ) != null,
             )
             facetDurations += SystemClock.elapsedRealtimeNanos() - facetStarted
+            val brushStarted = SystemClock.elapsedRealtimeNanos()
+            assertEquals(
+                FACET_BRUSH_SAMPLE_COUNT,
+                findPrepareFacetsAtScreenSamples(
+                    projectObject = projectObject,
+                    placement = placement,
+                    viewport = viewport,
+                    centerX = 360f,
+                    centerY = 614.4f,
+                    samplePositions = brushSamples,
+                    touchRadiusPx = 24f * 0.28f,
+                    pickingIndices = pickingIndices,
+                ).size,
+            )
+            brushDurations += SystemClock.elapsedRealtimeNanos() - brushStarted
         }
         val sortedObjects = objectDurations.drop(2).sorted()
         val sortedFacets = facetDurations.drop(2).sorted()
+        val sortedBrushes = brushDurations.drop(2).sorted()
         val objectP50Ms = sortedObjects[sortedObjects.size / 2] / 1_000_000.0
         val objectP95Ms = sortedObjects.last() / 1_000_000.0
         val facetP50Ms = sortedFacets[sortedFacets.size / 2] / 1_000_000.0
         val facetP95Ms = sortedFacets.last() / 1_000_000.0
+        val brushP50Ms = sortedBrushes[sortedBrushes.size / 2] / 1_000_000.0
+        val brushP95Ms = sortedBrushes.last() / 1_000_000.0
         println(
             "DuckyPrepare picking triangles=${triangles.size / 9} " +
                 "indexBuildMs=$indexBuildMs " +
                 "objectP50Ms=$objectP50Ms objectP95Ms=$objectP95Ms " +
-                "facetP50Ms=$facetP50Ms facetP95Ms=$facetP95Ms",
+                "facetP50Ms=$facetP50Ms facetP95Ms=$facetP95Ms " +
+                "brushP50Ms=$brushP50Ms brushP95Ms=$brushP95Ms",
         )
         assertTrue(
             "12k-triangle spatial index and support set must finish promptly: $indexBuildMs ms",
@@ -286,6 +309,11 @@ class PrepareModelRendererInstrumentedTest {
         assertTrue(
             "12k-triangle facet selection must stay inside one frame: p95=$facetP95Ms ms",
             facetP95Ms <= 16.0,
+        )
+        assertTrue(
+            "12k-triangle 37-point brush selection must stay inside one frame: " +
+                "p95=$brushP95Ms ms",
+            brushP95Ms <= 16.0,
         )
     }
 

@@ -152,6 +152,8 @@ def valid_sources() -> dict[str, str]:
         ),
         "OrcaFacetEditing.kt": (
             "MAX_SUBDIVISION_DEPTH = 4 fun OrcaFacetAnnotation.paintAt( "
+            "fun OrcaFacetAnnotation.paintAll( internal fun exactPaintFacetsToClear( "
+            "MAX_FACET_PAINT_BATCH_TARGETS = 256 "
             "preserving every untouched recursive child "
             "children = List(4) { FacetNode.Leaf(this.state) } ).compressed() "
             "encoded.length > OrcaFacetAnnotation.MAX_TRIANGLE_VALUE_BYTES "
@@ -164,7 +166,11 @@ def valid_sources() -> dict[str, str]:
             ".candidateTriangles( return result.copyOf(output) "
             "candidateCount = candidates?.size ?: triangleCount "
             "candidates?.get(candidatePosition) ?: candidatePosition "
-            "PREPARE_PICKING_CANCELLATION_INTERVAL = 256 checkCancellation()"
+            "PREPARE_PICKING_CANCELLATION_INTERVAL = 256 checkCancellation() "
+            "internal fun findPrepareFacetsAtScreenSamples( "
+            "MAX_PREPARE_BRUSH_SAMPLES = 64 "
+            "val candidateRadius = footprintRadius + touchRadiusPx "
+            "samplePositions.forEachIndexed"
         ),
         "ModelPreparationScheduler.kt": (
             "Dispatchers.Default.limitedParallelism(1) "
@@ -251,9 +257,13 @@ def valid_sources() -> dict[str, str]:
             "supportAnnotationStart multiColorAnnotationStart "
             "internal fun facetBrushSampleOffsets( "
             "internal fun facetBrushStrokeCenters( "
-            "FACET_BRUSH_SAMPLE_COUNT = 7 "
+            "FACET_BRUSH_SAMPLE_COUNT = 37 "
             "MAX_FACET_BRUSH_STROKE_CENTERS = 6 "
-            "brushSampleHitRadiusPx fun drawFacetBrushCursor() "
+            "FACET_BRUSH_SAMPLE_HIT_RADIUS_RATIO = 0.28f "
+            "brushSampleHitRadiusPx findPrepareFacetsAtScreenSamples( "
+            "internal fun closestModelTrianglesAtPoints( "
+            "paintFootprintsAt(centers: List<Offset>) List<FacetPaintTarget> "
+            "MAX_FACET_PAINT_BATCH_TARGETS fun drawFacetBrushCursor() "
             "private fun FacetBrushSizeControl( R.string.paint_brush_size "
             "range = FACET_BRUSH_MIN_RADIUS_DP..FACET_BRUSH_MAX_RADIUS_DP"
         ),
@@ -269,7 +279,8 @@ def valid_sources() -> dict[str, str]:
             "completed?.isRestorableFrom(context.filesDir) == true "
             "val requested = plateSliceResults.resultFor(selectedPlateId) "
             "requested.plateId requested.outcome "
-            "loadPreviewRange(0, Int.MAX_VALUE)"
+            "loadPreviewRange(0, Int.MAX_VALUE) previousAnnotation.paintAll( "
+            "exactPaintFacetsToClear("
         ),
         "ProjectState.kt": (
             "fun updateExactSupportPaint( fun commitExactSupportPaint( "
@@ -331,6 +342,8 @@ def valid_sources() -> dict[str, str]:
             "densePreparePickingStaysWithinTapBudget "
             "p95Ms <= 50.0 renderer.geometryUploadCountForTest() == 1 "
             "p95Ms <= 16.0 objectP95Ms <= 16.0 facetP95Ms <= 16.0 "
+            "brushP95Ms <= 16.0 "
+            "12k-triangle 37-point brush selection must stay inside one frame "
             "denseDefaultPlacementStaysWithinLoadBudget "
             "denseUnpaintedOverlayBuildStaysWithinLoadBudget "
             "lastMeshVertexCountForTest() interactionActive = true p95Ms <= 1.0 "
@@ -342,7 +355,8 @@ def valid_sources() -> dict[str, str]:
         "PrepareModelPickingTest.kt": (
             "spatialIndexCullsArbitraryFacetOrderWithoutChangingExactHits "
             "candidates.size in 1 until model.triangles assertTrue(index.leafCount > 1) "
-            "pickingIndices = indices"
+            "pickingIndices = indices "
+            "batchedBrushPickingKeepsEachSampleOnTheFrontmostSelectableSurface"
         ),
         "ModelInfoTest.kt": (
             "nativePayloadDecodesBoundedGeometryAndSourceFacetMapping "
@@ -445,7 +459,8 @@ def valid_sources() -> dict[str, str]:
         ),
         "OrcaFacetEditingTest.kt": (
             "partialEditsPaintAndEraseIndependentRegionsThenCompress "
-            "importedIrregularChildrenRemainWhenOneRegionIsRefined"
+            "importedIrregularChildrenRemainWhenOneRegionIsRefined "
+            "batchedFacetPaintMatchesSequentialEditsAndResolvesFallbackOncePerFacet"
         ),
         "ProjectStateTest.kt": (
             "partialFacetPaintingCommitsOneUndoEntryAndPreservesOtherExactCategories "
@@ -455,7 +470,8 @@ def valid_sources() -> dict[str, str]:
             "facetBrushUsesViewAwareBoundedSubdivisionAndStableRegions "
             "facetBrushClampsNearbyEdgeHitsToValidBarycentricCoordinates "
             "facetBrushFootprintUsesABoundedCircularSamplePattern "
-            "facetBrushStrokeFillsNormalPointerGapsAndCapsExtremeJumps"
+            "facetBrushStrokeFillsNormalPointerGapsAndCapsExtremeJumps "
+            "compatibilityBrushBatchKeepsEverySampleFrontmostWithoutTemporarySorting"
         ),
         "lib.rs": (
             "Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRangeInto "

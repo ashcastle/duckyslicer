@@ -326,6 +326,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     for marker in (
         "MAX_SUBDIVISION_DEPTH = 4",
         "fun OrcaFacetAnnotation.paintAt(",
+        "fun OrcaFacetAnnotation.paintAll(",
+        "internal fun exactPaintFacetsToClear(",
+        "MAX_FACET_PAINT_BATCH_TARGETS = 256",
         "preserving every untouched recursive child",
         "children = List(4) { FacetNode.Leaf(this.state) }",
         ").compressed()",
@@ -345,9 +348,15 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "multiColorAnnotationStart",
         "internal fun facetBrushSampleOffsets(",
         "internal fun facetBrushStrokeCenters(",
-        "FACET_BRUSH_SAMPLE_COUNT = 7",
+        "FACET_BRUSH_SAMPLE_COUNT = 37",
         "MAX_FACET_BRUSH_STROKE_CENTERS = 6",
+        "FACET_BRUSH_SAMPLE_HIT_RADIUS_RATIO = 0.28f",
         "brushSampleHitRadiusPx",
+        "findPrepareFacetsAtScreenSamples(",
+        "internal fun closestModelTrianglesAtPoints(",
+        "paintFootprintsAt(centers: List<Offset>)",
+        "List<FacetPaintTarget>",
+        "MAX_FACET_PAINT_BATCH_TARGETS",
         "fun drawFacetBrushCursor()",
         "private fun FacetBrushSizeControl(",
         "R.string.paint_brush_size",
@@ -355,6 +364,12 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     ):
         if marker not in workspace:
             raise VerificationError(f"partial-facet brush routing is missing: {marker}")
+    for marker in (
+        "previousAnnotation.paintAll(",
+        "exactPaintFacetsToClear(",
+    ):
+        if marker not in model:
+            raise VerificationError(f"batched facet state routing is missing: {marker}")
 
     project_state = sources["ProjectState.kt"]
     for marker in (
@@ -373,6 +388,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "OrcaFacetEditingTest.kt": (
             "partialEditsPaintAndEraseIndependentRegionsThenCompress",
             "importedIrregularChildrenRemainWhenOneRegionIsRefined",
+            "batchedFacetPaintMatchesSequentialEditsAndResolvesFallbackOncePerFacet",
         ),
         "ProjectStateTest.kt": (
             "partialFacetPaintingCommitsOneUndoEntryAndPreservesOtherExactCategories",
@@ -383,6 +399,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
             "facetBrushClampsNearbyEdgeHitsToValidBarycentricCoordinates",
             "facetBrushFootprintUsesABoundedCircularSamplePattern",
             "facetBrushStrokeFillsNormalPointerGapsAndCapsExtremeJumps",
+            "compatibilityBrushBatchKeepsEverySampleFrontmostWithoutTemporarySorting",
         ),
     }.items():
         for marker in markers:
@@ -405,6 +422,10 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "candidates?.get(candidatePosition) ?: candidatePosition",
         "PREPARE_PICKING_CANCELLATION_INTERVAL = 256",
         "checkCancellation()",
+        "internal fun findPrepareFacetsAtScreenSamples(",
+        "MAX_PREPARE_BRUSH_SAMPLES = 64",
+        "val candidateRadius = footprintRadius + touchRadiusPx",
+        "samplePositions.forEachIndexed",
     ):
         if marker not in prepare_picking:
             raise VerificationError(f"exact Prepare picking acceleration is missing: {marker}")
@@ -445,6 +466,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "p95Ms <= 16.0",
         "objectP95Ms <= 16.0",
         "facetP95Ms <= 16.0",
+        "brushP95Ms <= 16.0",
+        "12k-triangle 37-point brush selection must stay inside one frame",
         "denseDefaultPlacementStaysWithinLoadBudget",
         "denseUnpaintedOverlayBuildStaysWithinLoadBudget",
         "lastMeshVertexCountForTest()",
@@ -464,6 +487,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "candidates.size in 1 until model.triangles",
         "assertTrue(index.leafCount > 1)",
         "pickingIndices = indices",
+        "batchedBrushPickingKeepsEachSampleOnTheFrontmostSelectableSurface",
     ):
         if marker not in picking_tests:
             raise VerificationError(f"exact Prepare picking regression is missing: {marker}")

@@ -297,6 +297,11 @@ internal data class PrepareHitTestViewport(
     val panY: Float,
 )
 
+internal data class PrepareFacetSampleHit(
+    val position: Offset,
+    val triangle: ModelScreenTriangle,
+)
+
 /**
  * Performs exact Prepare-model picking only when the user touches the scene. The projection and
  * object transforms intentionally mirror [PrepareModelRenderer], so ordinary camera movement does
@@ -489,6 +494,178 @@ internal fun findPrepareFacetAtScreen(
 }
 
 /**
+ * Resolves a bounded brush footprint without repeating BVH traversal and vertex projection for
+ * every screen sample. Each sample still owns an independent depth test so back-facing geometry
+ * cannot be selected through a visible surface.
+ */
+internal fun findPrepareFacetsAtScreenSamples(
+    projectObject: ProjectObject,
+    placement: PrepareObjectPlacement,
+    viewport: PrepareHitTestViewport,
+    centerX: Float,
+    centerY: Float,
+    samplePositions: List<Offset>,
+    touchRadiusPx: Float,
+    selectableVolumeIds: Set<String>? = null,
+    pickingIndices: Map<PreparePickingIndexKey, PrepareVolumePickingIndex> = emptyMap(),
+): List<PrepareFacetSampleHit> {
+    if (
+        viewport.widthPx <= 0f || viewport.heightPx <= 0f || viewport.bedSizeX <= 0f ||
+        viewport.bedSizeY <= 0f || viewport.zoom <= 0f || !centerX.isFinite() ||
+        !centerY.isFinite() || touchRadiusPx < 0f || samplePositions.isEmpty() ||
+        samplePositions.size > MAX_PREPARE_BRUSH_SAMPLES ||
+        samplePositions.any { !it.x.isFinite() || !it.y.isFinite() }
+    ) {
+        return emptyList()
+    }
+    val projection = PreparePickingProjection(viewport)
+    val transform = PreparePickingTransform(
+        transform = projectObject.transform,
+        geometry = placement.geometry,
+        minimumRotatedZ = placement.minimumRotatedZ,
+        bedSizeX = viewport.bedSizeX,
+        bedSizeY = viewport.bedSizeY,
+    )
+    var footprintRadius = 0f
+    samplePositions.forEach { position ->
+        val dx = position.x - centerX
+        val dy = position.y - centerY
+        footprintRadius = max(footprintRadius, sqrt(dx * dx + dy * dy))
+    }
+    val candidateRadius = footprintRadius + touchRadiusPx
+    val sampleCount = samplePositions.size
+    val bestInside = BooleanArray(sampleCount)
+    val bestInsideDepth = FloatArray(sampleCount) { Float.NEGATIVE_INFINITY }
+    val bestNearbyDistance = FloatArray(sampleCount) { Float.POSITIVE_INFINITY }
+    val bestNearbyDepth = FloatArray(sampleCount) { Float.NEGATIVE_INFINITY }
+    val bestVolumePosition = IntArray(sampleCount) { -1 }
+    val bestPreviewTriangleIndex = IntArray(sampleCount) { -1 }
+    val bestSourceFacetIndex = IntArray(sampleCount) { -1 }
+    val bestProjected = FloatArray(sampleCount * 9)
+    val projected = FloatArray(9)
+
+    projectObject.volumes.forEachIndexed { volumePosition, volume ->
+        if (selectableVolumeIds != null && volume.id !in selectableVolumeIds) {
+            return@forEachIndexed
+        }
+        val vertices = volume.model.previewTriangles
+        val triangleCount = vertices.size / 9
+        val candidates = pickingIndices[
+            PreparePickingIndexKey(projectObject.id, volume.id)
+        ]?.candidateTriangles(
+            transform = transform,
+            projection = projection,
+            screenX = centerX,
+            screenY = centerY,
+            touchRadiusPx = candidateRadius,
+        )
+        val candidateCount = candidates?.size ?: triangleCount
+        var candidatePosition = 0
+        while (candidatePosition < candidateCount) {
+            val previewTriangleIndex = candidates?.get(candidatePosition) ?: candidatePosition
+            val source = previewTriangleIndex * 9
+            transform.project(vertices, source, projection, projected, 0)
+            transform.project(vertices, source + 3, projection, projected, 3)
+            transform.project(vertices, source + 6, projection, projected, 6)
+            val averageDepth = (projected[2] + projected[5] + projected[8]) / 3f
+            val sampleLeft = minOf(projected[0], projected[3], projected[6]) - touchRadiusPx
+            val sampleTop = minOf(projected[1], projected[4], projected[7]) - touchRadiusPx
+            val sampleRight = maxOf(projected[0], projected[3], projected[6]) + touchRadiusPx
+            val sampleBottom = maxOf(projected[1], projected[4], projected[7]) + touchRadiusPx
+            samplePositions.forEachIndexed { sampleIndex, position ->
+                if (
+                    position.x < sampleLeft || position.x > sampleRight ||
+                    position.y < sampleTop || position.y > sampleBottom
+                ) {
+                    return@forEachIndexed
+                }
+                val surfaceDepth = triangleDepthAtPoint(position.x, position.y, projected)
+                val nearbyDistance = if (
+                    surfaceDepth == null && !bestInside[sampleIndex] && touchRadiusPx > 0f
+                ) {
+                    minOf(
+                        pointToSegmentDistance(position.x, position.y, projected, 0, 3),
+                        pointToSegmentDistance(position.x, position.y, projected, 3, 6),
+                        pointToSegmentDistance(position.x, position.y, projected, 6, 0),
+                    )
+                } else {
+                    Float.POSITIVE_INFINITY
+                }
+                val stableTie = volumePosition < bestVolumePosition[sampleIndex] ||
+                    (
+                        volumePosition == bestVolumePosition[sampleIndex] &&
+                            previewTriangleIndex < bestPreviewTriangleIndex[sampleIndex]
+                        )
+                val replace = if (surfaceDepth != null) {
+                    !bestInside[sampleIndex] ||
+                        surfaceDepth > bestInsideDepth[sampleIndex] + 0.0001f ||
+                        (
+                            abs(surfaceDepth - bestInsideDepth[sampleIndex]) <= 0.0001f &&
+                                stableTie
+                            )
+                } else {
+                    !bestInside[sampleIndex] && nearbyDistance <= touchRadiusPx &&
+                        (
+                            nearbyDistance < bestNearbyDistance[sampleIndex] - 0.001f ||
+                                (
+                                    abs(nearbyDistance - bestNearbyDistance[sampleIndex]) <=
+                                        0.001f &&
+                                        (
+                                            averageDepth > bestNearbyDepth[sampleIndex] + 0.0001f ||
+                                                (
+                                                    abs(
+                                                        averageDepth -
+                                                            bestNearbyDepth[sampleIndex],
+                                                    ) <= 0.0001f && stableTie
+                                                    )
+                                            )
+                                    )
+                            )
+                }
+                if (replace) {
+                    bestInside[sampleIndex] = surfaceDepth != null
+                    if (surfaceDepth != null) bestInsideDepth[sampleIndex] = surfaceDepth
+                    bestNearbyDistance[sampleIndex] = nearbyDistance
+                    bestNearbyDepth[sampleIndex] = averageDepth
+                    bestVolumePosition[sampleIndex] = volumePosition
+                    bestPreviewTriangleIndex[sampleIndex] = previewTriangleIndex
+                    bestSourceFacetIndex[sampleIndex] = volume.model.previewTriangleIndices
+                        .getOrElse(previewTriangleIndex) { previewTriangleIndex }
+                    projected.copyInto(bestProjected, sampleIndex * 9)
+                }
+            }
+            candidatePosition += 1
+        }
+    }
+
+    return buildList(sampleCount) {
+        samplePositions.forEachIndexed { sampleIndex, position ->
+            val volumePosition = bestVolumePosition[sampleIndex]
+            if (volumePosition < 0) return@forEachIndexed
+            val offset = sampleIndex * 9
+            add(
+                PrepareFacetSampleHit(
+                    position = position,
+                    triangle = ModelScreenTriangle(
+                        sourceFacetIndex = bestSourceFacetIndex[sampleIndex],
+                        previewTriangleIndex = bestPreviewTriangleIndex[sampleIndex],
+                        a = Offset(bestProjected[offset], bestProjected[offset + 1]),
+                        b = Offset(bestProjected[offset + 3], bestProjected[offset + 4]),
+                        c = Offset(bestProjected[offset + 6], bestProjected[offset + 7]),
+                        depth = if (bestInside[sampleIndex]) {
+                            bestInsideDepth[sampleIndex]
+                        } else {
+                            bestNearbyDepth[sampleIndex]
+                        },
+                        volumeId = projectObject.volumes[volumePosition].id,
+                    ),
+                ),
+            )
+        }
+    }
+}
+
+/**
  * Candidate planes are a visual aid, not an input gate. A valid visible triangle must remain
  * selectable while suggestions are still being prepared and for models that have no large,
  * connected planar candidate at all.
@@ -647,6 +824,7 @@ private const val PREPARE_PICKING_CANCELLATION_INTERVAL = 256
 private const val PREPARE_PICKING_BOUNDS_FLOATS = 6
 private const val PREPARE_PICKING_NODE_INTS = 4
 private const val PREPARE_PICKING_INITIAL_CANDIDATES = 256
+internal const val MAX_PREPARE_BRUSH_SAMPLES = 64
 
 private fun triangleDepthAtPoint(
     x: Float,
