@@ -114,7 +114,20 @@ class ProjectStoreTest {
         val options = multiFilamentSettingsFixture()
         val snapshot = ProjectSnapshot(
             listOf(
-                ProjectObject("settings", inspectedModel(modelFile), filamentSlot = 1).let {
+                ProjectObject(
+                    "settings",
+                    inspectedModel(modelFile),
+                    heightRangeModifiers = HeightRangeModifiers(
+                        listOf(
+                            HeightRangeModifier(
+                                1f,
+                                4f,
+                                ObjectProcessOverrides(wallLoops = 4),
+                            ),
+                        ),
+                    ),
+                    filamentSlot = 1,
+                ).let {
                     it.copy(
                         volumes = listOf(
                             it.singleVolume.copy(
@@ -133,7 +146,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(69, persisted.getInt("schemaVersion"))
+        assertEquals(70, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),
@@ -148,7 +161,7 @@ class ProjectStoreTest {
         assertEquals(
             setOf(
                 "id", "transform", "variableLayerHeights", "processOverrides",
-                "brimPoints", "volumes",
+                "heightRangeModifiers", "brimPoints", "volumes",
             ),
             persistedObject.keys().asSequence().toSet(),
         )
@@ -173,6 +186,10 @@ class ProjectStoreTest {
             restored.snapshot.objects.single().singleVolume.id,
         )
         assertEquals(snapshot.objects.single().transform, restored.snapshot.objects.single().transform)
+        assertEquals(
+            snapshot.objects.single().heightRangeModifiers,
+            restored.snapshot.objects.single().heightRangeModifiers,
+        )
         assertEquals(1, restored.snapshot.objects.single().filamentSlot)
         assertEquals(
             options.toProjectJson().toString(),

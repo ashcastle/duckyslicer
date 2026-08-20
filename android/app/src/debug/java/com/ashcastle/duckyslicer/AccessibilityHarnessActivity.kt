@@ -46,6 +46,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                             plateCount = 2,
                         )
                         SCREEN_OBJECT_SETTINGS -> ObjectSettingsAccessibilityHarness()
+                        SCREEN_HEIGHT_RANGE_MODIFIERS -> HeightRangeModifiersAccessibilityHarness()
                         SCREEN_SHAPES -> BasicShapeSheet(
                             bedSizeX = 220f,
                             bedSizeY = 220f,
@@ -145,6 +146,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_WORKSPACE = "workspace"
         const val SCREEN_WORKSPACE_PROFILES = "workspace-profiles"
         const val SCREEN_OBJECT_SETTINGS = "object-settings"
+        const val SCREEN_HEIGHT_RANGE_MODIFIERS = "height-range-modifiers"
         const val SCREEN_SHAPES = "shapes"
         const val SCREEN_AUXILIARY_SHAPE = "auxiliary-shape"
         const val SCREEN_AUXILIARY_VOLUMES = "auxiliary-volumes"
@@ -193,6 +195,19 @@ private fun ObjectSettingsAccessibilityHarness() {
         current = overrides,
         options = SliceOptions(),
         onApply = { overrides = it },
+        onDismiss = {},
+    )
+}
+
+@Composable
+private fun HeightRangeModifiersAccessibilityHarness() {
+    var modifiers by remember { mutableStateOf(HeightRangeModifiers()) }
+    HeightRangeModifiersSheet(
+        current = modifiers,
+        objectOverrides = ObjectProcessOverrides(),
+        objectHeightMm = 20f,
+        options = SliceOptions(),
+        onApply = { modifiers = it },
         onDismiss = {},
     )
 }
@@ -472,6 +487,7 @@ private fun WorkspaceAccessibilityHarness(
         onMultiColorPaintCommitted = { _, _, _, _ -> },
         onVariableLayerHeightsChanged = {},
         onObjectProcessOverridesChanged = {},
+        onHeightRangeModifiersChanged = {},
         onRemoveAuxiliaryVolume = {},
         onRemoveModel = {},
         onSlice = {},

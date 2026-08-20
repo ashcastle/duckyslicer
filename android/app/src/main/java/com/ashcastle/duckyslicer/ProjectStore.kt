@@ -173,6 +173,7 @@ internal class ProjectStore(
                                 transform = archived.transform,
                                 variableLayerHeights = archived.variableLayerHeights,
                                 processOverrides = archived.processOverrides,
+                                heightRangeModifiers = archived.heightRangeModifiers,
                                 brimPoints = archived.brimPoints,
                             )
                         },
@@ -415,6 +416,11 @@ internal class ProjectStore(
         val processOverrides = value.optJSONObject("processOverrides")
             ?.toObjectProcessOverrides()
             ?: ObjectProcessOverrides()
+        val heightRangeModifiers = if (schemaVersion >= 70) {
+            value.getJSONArray("heightRangeModifiers").toHeightRangeModifiers()
+        } else {
+            HeightRangeModifiers()
+        }
         val brimPoints = if (schemaVersion >= 10) {
             value.getJSONArray("brimPoints").toBrimPoints()
         } else {
@@ -435,6 +441,7 @@ internal class ProjectStore(
             transform = transform,
             variableLayerHeights = variableLayerHeights,
             processOverrides = processOverrides,
+            heightRangeModifiers = heightRangeModifiers,
             brimPoints = brimPoints,
         )
     }
@@ -630,6 +637,9 @@ internal class ProjectStore(
             if (schemaVersion >= 10) {
                 require(value.optJSONArray("brimPoints")?.isValidBrimPointsArray() == true)
             }
+            if (schemaVersion >= 70) {
+                require(value.optJSONArray("heightRangeModifiers")?.toHeightRangeModifiers() != null)
+            }
         }
         return localIds
     }
@@ -707,6 +717,7 @@ internal class ProjectStore(
             .put("transform", transform.toStoredJson())
             .put("variableLayerHeights", variableLayerHeights.toStoredJson())
             .put("processOverrides", processOverrides.toProjectJson())
+            .put("heightRangeModifiers", heightRangeModifiers.toProjectJson())
             .put("brimPoints", brimPoints.toStoredJson())
             .put("volumes", JSONArray().also { values ->
                 volumes.forEach { volume -> values.put(volume.toStoredJson()) }
@@ -989,7 +1000,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 69
+        const val SCHEMA_VERSION = 70
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"

@@ -203,6 +203,7 @@ class ProjectVolumeSemanticsTest {
                 transform = ModelTransform(),
                 variableLayerHeights = VariableLayerHeights(),
                 processOverrides = ObjectProcessOverrides(),
+                heightRangeModifiers = HeightRangeModifiers(),
                 brimPoints = BrimPoints(),
             )
         }

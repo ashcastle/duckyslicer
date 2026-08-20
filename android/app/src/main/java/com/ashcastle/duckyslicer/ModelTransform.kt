@@ -617,6 +617,31 @@ internal fun ModelTransform.minimumRotatedZ(projectObject: ProjectObject): Float
     return minimum.takeIf { it.isFinite() } ?: 0f
 }
 
+internal fun ModelTransform.placedHeight(projectObject: ProjectObject): Float {
+    val geometry = projectObject.geometry()
+    val minimumRotatedZ = minimumRotatedZ(projectObject)
+    var maximum = Float.NEGATIVE_INFINITY
+    projectObject.modelPartVolumes.forEach { volume ->
+        val vertices = volume.model.placementVertices
+        var index = 0
+        while (index + 2 < vertices.size) {
+            val placed = placeVertex(
+                vertices[index],
+                vertices[index + 1],
+                vertices[index + 2],
+                geometry,
+                bedSizeX = 0f,
+                bedSizeY = 0f,
+                minimumRotatedZ = minimumRotatedZ,
+            )
+            maximum = maxOf(maximum, placed[2])
+            index += 3
+        }
+    }
+    return (maximum - offsetZmm).takeIf { it.isFinite() && it > 0f }
+        ?: ((geometry.maxZ - geometry.minZ) * scaleZ).coerceAtLeast(HeightRangeModifiers.MIN_RANGE_MM)
+}
+
 internal fun ModelTransform.minimumRotatedZ(model: ModelInfo): Float {
     val centerX = ((model.minMm[0] + model.maxMm[0]) / 2.0).toFloat()
     val centerY = ((model.minMm[1] + model.maxMm[1]) / 2.0).toFloat()

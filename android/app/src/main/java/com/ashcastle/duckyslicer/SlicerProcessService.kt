@@ -72,6 +72,7 @@ internal object SlicerProcessClient {
         List(objectVolumeCounts.size) { null },
         List(objectVolumeCounts.size) { null },
         List(objectVolumeCounts.size) { null },
+        List(objectVolumeCounts.size) { null },
         options,
         inputFilenameBase,
         objectVolumeCounts,
@@ -91,6 +92,7 @@ internal object SlicerProcessClient {
         multiColorPaintFiles: List<File?>,
         variableLayerHeightFiles: List<File?>,
         processOverrideFiles: List<File?>,
+        heightRangeModifierFiles: List<File?>,
         brimPointFiles: List<File?>,
         options: SliceOptions,
         inputFilenameBase: String = "model",
@@ -116,6 +118,7 @@ internal object SlicerProcessClient {
         orcaMultiColorAnnotationFiles,
         variableLayerHeightFiles,
         processOverrideFiles,
+        heightRangeModifierFiles,
         brimPointFiles,
         options,
         inputFilenameBase,
@@ -141,6 +144,7 @@ internal object SlicerProcessClient {
         }
         return sliceInternal(
             transformedModels,
+            List(transformedModels.size) { null },
             List(transformedModels.size) { null },
             List(transformedModels.size) { null },
             List(transformedModels.size) { null },
@@ -666,6 +670,7 @@ internal object SlicerProcessClient {
         orcaMultiColorAnnotationFiles: List<File?>,
         variableLayerHeightFiles: List<File?>,
         processOverrideFiles: List<File?>,
+        heightRangeModifierFiles: List<File?>,
         brimPointFiles: List<File?>,
         options: SliceOptions,
         inputFilenameBase: String,
@@ -709,6 +714,9 @@ internal object SlicerProcessClient {
         require(processOverrideFiles.size == objectVolumeCounts.size) {
             "Object settings count does not match objects"
         }
+        require(heightRangeModifierFiles.size == objectVolumeCounts.size) {
+            "Height range setting count does not match objects"
+        }
         require(brimPointFiles.size == objectVolumeCounts.size) {
             "Brim point count does not match objects"
         }
@@ -725,6 +733,7 @@ internal object SlicerProcessClient {
         val orcaMultiColorAnnotationPaths = orcaMultiColorAnnotationFiles.map { it?.absolutePath.orEmpty() }
         val variableLayerHeightPaths = variableLayerHeightFiles.map { it?.absolutePath.orEmpty() }
         val processOverridePaths = processOverrideFiles.map { it?.absolutePath.orEmpty() }
+        val heightRangeModifierPaths = heightRangeModifierFiles.map { it?.absolutePath.orEmpty() }
         val brimPointPaths = brimPointFiles.map { it?.absolutePath.orEmpty() }
         val volumeConfigPaths = volumeConfigFiles.map { it?.absolutePath.orEmpty() }
         require(
@@ -736,7 +745,8 @@ internal object SlicerProcessClient {
                 modelPaths + supportPaintPaths + seamPaintPaths + multiColorPaintPaths +
                     orcaSupportAnnotationPaths + orcaSeamAnnotationPaths +
                     orcaMultiColorAnnotationPaths +
-                    variableLayerHeightPaths + processOverridePaths + brimPointPaths +
+                    variableLayerHeightPaths + processOverridePaths +
+                    heightRangeModifierPaths + brimPointPaths +
                     volumeConfigPaths + inputFilenameBase,
                 optionsText,
             ) <=
@@ -781,6 +791,10 @@ internal object SlicerProcessClient {
             putStringArrayList(
                 SlicerProcessContract.KEY_PROCESS_OVERRIDE_PATHS,
                 ArrayList(processOverridePaths),
+            )
+            putStringArrayList(
+                SlicerProcessContract.KEY_HEIGHT_RANGE_MODIFIER_PATHS,
+                ArrayList(heightRangeModifierPaths),
             )
             putStringArrayList(
                 SlicerProcessContract.KEY_BRIM_POINT_PATHS,
@@ -2114,6 +2128,15 @@ class SlicerProcessService : Service() {
         val processOverrideFiles = processOverridePaths.map { path ->
             path.takeIf(String::isNotEmpty)?.let(::validateObjectProcessOverrides)
         }
+        val heightRangeModifierPaths = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_HEIGHT_RANGE_MODIFIER_PATHS),
+        ) { "Height range setting paths are unavailable" }
+        require(heightRangeModifierPaths.size == objectVolumeCounts.size) {
+            "Height range setting count does not match objects"
+        }
+        val heightRangeModifierFiles = heightRangeModifierPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let(::validateHeightRangeModifiers)
+        }
         val brimPointPaths = requireNotNull(
             extras.getStringArrayList(SlicerProcessContract.KEY_BRIM_POINT_PATHS),
         ) { "Brim point paths are unavailable" }
@@ -2149,7 +2172,8 @@ class SlicerProcessService : Service() {
                 paths + supportPaintPaths + seamPaintPaths + multiColorPaintPaths +
                     orcaSupportAnnotationPaths + orcaSeamAnnotationPaths +
                     orcaMultiColorAnnotationPaths +
-                    variableLayerHeightPaths + processOverridePaths + brimPointPaths +
+                    variableLayerHeightPaths + processOverridePaths +
+                    heightRangeModifierPaths + brimPointPaths +
                     volumeConfigPaths + inputFilenameBase,
                 optionsText,
             ) <=
@@ -2223,6 +2247,7 @@ class SlicerProcessService : Service() {
                 orcaMultiColorAnnotations,
                 variableLayerHeightFiles,
                 processOverrideFiles,
+                heightRangeModifierFiles,
                 brimPointFiles,
                 objectVolumeCounts,
                 filamentSlots,
@@ -2646,6 +2671,7 @@ class SlicerProcessService : Service() {
         orcaMultiColorAnnotations: List<ValidatedOrcaFacetAnnotation?>,
         variableLayerHeightFiles: List<ValidatedVariableLayerHeights?>,
         processOverrideFiles: List<ValidatedObjectProcessOverrides?>,
+        heightRangeModifierFiles: List<ValidatedHeightRangeModifiers?>,
         brimPointFiles: List<ValidatedBrimPoints?>,
         objectVolumeCounts: IntArray,
         filamentSlots: IntArray,
@@ -2756,6 +2782,16 @@ class SlicerProcessService : Service() {
                             overrides.file.absolutePath,
                         ),
                     ) { "Object settings could not be applied" }
+                }
+            }
+            heightRangeModifierFiles.forEachIndexed { objectIndex, modifiers ->
+                if (modifiers != null) {
+                    check(
+                        runtime.applyHeightRangeModifiers(
+                            objectIndex,
+                            modifiers.file.absolutePath,
+                        ),
+                    ) { "Height range settings could not be applied" }
                 }
             }
             brimPointFiles.forEachIndexed { objectIndex, brimPoints ->
@@ -3120,6 +3156,17 @@ class SlicerProcessService : Service() {
         return ValidatedObjectProcessOverrides(sidecar)
     }
 
+    private fun validateHeightRangeModifiers(path: String): ValidatedHeightRangeModifiers {
+        require(path.length in 1..MAX_PATH_LENGTH) { "Invalid height range settings path" }
+        val sidecar = File(path).canonicalFile
+        val allowedRoots = listOf(filesDir.canonicalFile, cacheDir.canonicalFile)
+        require(allowedRoots.any(sidecar::isInside)) {
+            "Height range settings are outside private storage"
+        }
+        HeightRangeModifiers.readSidecar(sidecar)
+        return ValidatedHeightRangeModifiers(sidecar)
+    }
+
     private fun validateVolumeConfig(path: String): File {
         require(path.length in 1..MAX_PATH_LENGTH) { "Invalid volume setting path" }
         val sidecar = File(path).canonicalFile
@@ -3256,6 +3303,7 @@ class SlicerProcessService : Service() {
     private data class ValidatedBrimPoints(val file: File)
 
     private data class ValidatedObjectProcessOverrides(val file: File)
+    private data class ValidatedHeightRangeModifiers(val file: File)
 
     private data class NativeVolumeMapping(
         val objectIndices: IntArray,
@@ -3305,6 +3353,7 @@ private object SlicerProcessContract {
     const val KEY_ORCA_MULTI_COLOR_ANNOTATION_PATHS = "orcaMultiColorAnnotationPaths"
     const val KEY_VARIABLE_LAYER_HEIGHT_PATHS = "variableLayerHeightPaths"
     const val KEY_PROCESS_OVERRIDE_PATHS = "processOverridePaths"
+    const val KEY_HEIGHT_RANGE_MODIFIER_PATHS = "heightRangeModifierPaths"
     const val KEY_BRIM_POINT_PATHS = "brimPointPaths"
     const val KEY_OPTIONS = "options"
     const val KEY_INPUT_FILENAME_BASE = "inputFilenameBase"

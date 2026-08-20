@@ -919,6 +919,14 @@
     <string name="filament_slot_unavailable">이 프린터에서 사용할 수 있는 필라멘트 슬롯이 없습니다.</string>
     <string name="object_process_settings">오브젝트 설정</string>
     <string name="object_process_settings_summary">이 오브젝트에만 다른 값을 적용하고 나머지는 선택한 프로필을 그대로 사용합니다.</string>
+    <string name="height_range_modifiers">높이 구간 설정</string>
+    <string name="height_range_modifiers_summary">선택한 높이에서만 품질·강도·속도·서포트 설정을 다르게 적용합니다.</string>
+    <string name="height_range_summary">%1$.2f–%2$.2f mm · 설정 %3$d개</string>
+    <string name="remove_height_range">%1$.2f~%2$.2f mm 구간 삭제</string>
+    <string name="add_height_range">높이 구간 추가</string>
+    <string name="update_height_range">높이 구간 수정</string>
+    <string name="height_range_values">%1$.2f–%2$.2f mm</string>
+    <string name="height_range_invalid">겹치지 않는 높이 구간을 선택하고 설정을 하나 이상 켜세요.</string>
     <string name="object_setting_profile_value">프로필 · %1$s</string>
     <string name="object_setting_override_value">이 오브젝트 · %1$s</string>
     <string name="object_setting_on">켜짐</string>

@@ -53,6 +53,8 @@ class NativeLibrary(
     ): Boolean
     external fun applyVariableLayerHeights(objectIndex: Int, sidecarPath: String): Boolean
     external fun applyObjectProcessOverrides(objectIndex: Int, sidecarPath: String): Boolean
+
+    external fun applyHeightRangeModifiers(objectIndex: Int, sidecarPath: String): Boolean
     external fun applyBrimPoints(objectIndex: Int, sidecarPath: String): Boolean
     external fun getObjectBoundingBoxes(): FloatArray
     external fun nativeGetObjectWorldAABBMins(): FloatArray

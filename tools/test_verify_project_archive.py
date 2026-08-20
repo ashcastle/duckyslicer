@@ -22,7 +22,7 @@ def valid_sources() -> dict[str, str]:
                 "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
                 'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
                 "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-                "PROJECT_ARCHIVE_SCHEMA_VERSION = 67",
+                "PROJECT_ARCHIVE_SCHEMA_VERSION = 68",
                 'ArchivedProjectPlate ArchivedProjectVolume put("role", volume.role.name) '
                 'put("config", volume.config.toJson()) ProjectVolumeRole.valueOf '
                 "ProjectVolumeConfig.fromJson",
@@ -43,12 +43,20 @@ def valid_sources() -> dict[str, str]:
                 'getJSONArray("variableLayerHeights").toArchiveVariableLayerHeights()',
                 'getJSONArray("brimPoints").toArchiveBrimPoints()',
                 'getJSONObject("processOverrides").toObjectProcessOverrides()',
+                'put("heightRangeModifiers", heightRangeModifiers.toProjectJson())',
+                "schemaVersion >= 68",
+                'getJSONArray("heightRangeModifiers").toHeightRangeModifiers()',
                 "checkCancellation: () -> Unit = {}",
                 "copyArchiveBytes(input, archive, model.length(), checkCancellation)",
                 "val copied = copyArchiveBytes(",
                 "val info = inspectModel(file)",
                 "catch (failure: DocumentTransferCancelledException)",
             )
+        ),
+        "HeightRangeModifiers.kt": (
+            "data class HeightRangeModifier data class HeightRangeModifiers "
+            "MAX_RANGES = 32 MIN_RANGE_MM = 0.01f fun writeSidecar fun readSidecar "
+            "fun HeightRangeModifiers.toProjectJson fun JSONArray.toHeightRangeModifiers"
         ),
         "ProjectVolumeSemantics.kt": (
             "enum class ProjectVolumeRole NEGATIVE_VOLUME(1) PARAMETER_MODIFIER(2) "
@@ -72,7 +80,9 @@ def valid_sources() -> dict[str, str]:
                 "checkCancellation: () -> Unit = {}",
                 "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
                 "beginCommit: () -> Unit = {} beginCommit()",
-                'SCHEMA_VERSION = 69 put("role", role.name) put("config", config.toJson())',
+                'SCHEMA_VERSION = 70 schemaVersion >= 70 '
+                'put("heightRangeModifiers", heightRangeModifiers.toProjectJson()) '
+                'put("role", role.name) put("config", config.toJson())',
             )
         ),
         "OrcaFacetAnnotations.kt": (
@@ -193,7 +203,13 @@ def valid_sources() -> dict[str, str]:
             "if (exporting) onCancelProjectExport() else onSaveProject() "
             "AuxiliaryVolumesSheet( AuxiliaryShapeSheet( "
             "CREATABLE_AUXILIARY_VOLUME_ROLES onRemoveAuxiliaryVolume "
-            "AuxiliaryVolumeEditSheet( onEditAuxiliaryVolume R.string.apply_region_changes"
+            "AuxiliaryVolumeEditSheet( onEditAuxiliaryVolume R.string.apply_region_changes "
+            "HeightRangeModifiersSheet( onHeightRangeModifiersChanged"
+        ),
+        "ObjectProcessSettingsSheet.kt": (
+            "fun HeightRangeModifiersSheet( ObjectSettingCategory.QUALITY "
+            "ObjectSettingCategory.STRENGTH ObjectSettingCategory.SPEED "
+            "ObjectSettingCategory.SUPPORT ObjectSettingsDirtyBar("
         ),
         "ProjectArchiveTest.kt": (
             "projectArchiveRoundTripsModelsTransformsPaintAndResolvedProfilesDeterministically "
@@ -262,7 +278,8 @@ def valid_sources() -> dict[str, str]:
             "plateSwitcherExposesSelectionAddAndConfirmedRemovalActions "
             "auxiliaryShapePickerExposesRolesPlacementAndModifierDensity "
             "auxiliaryVolumeManagerExposesExistingRegionsRemovalAndAdd "
-            "auxiliaryVolumeEditorExposesScalePlacementDensityAndApply"
+            "auxiliaryVolumeEditorExposesScalePlacementDensityAndApply "
+            "heightRangeModifiersExposeRangeSettingsAndStickyActions"
         ),
         "NativeEngineInstrumentedTest.kt": (
             "projectArchiveRoundTripReinspectsAndSlicesOnArm64 "
@@ -276,6 +293,12 @@ def valid_sources() -> dict[str, str]:
             "editOrcaAuxiliaryVolume( "
             "withEditedCutout.filamentMm > withCutout.filamentMm * 1.05f "
             "withEditedSettingsRegion.filamentMm < withSettingsRegion.filamentMm * 0.9f"
+        ),
+        "OrcaHeightRangeModifiersInstrumentedTest.kt": (
+            "selectedHeightUsesRealOrcaLayerConfigWithoutChangingTheRestOfTheObject "
+            "HeightRangeModifier( modified.layers > baseline.layers + 40 "
+            "Expected 0.10 mm layers in selected range "
+            "Expected 0.20 mm layers above selected range"
         ),
         "strings.xml": string_resources(),
         "strings-ko.xml": string_resources(),
@@ -316,18 +339,20 @@ def valid_sources() -> dict[str, str]:
         "PRIVACY.md": (
             "Exported DuckySlicer project files contain plate organization, model geometry\n"
             "support, seam, and multi-color painting, manual Brim-ear points, variable layer-height ranges,\n"
+            "height-range process modifiers, and each plate's active printer\n"
             "They do not contain G-code, saved printer addresses, or printer\n"
             "형상, 오브젝트 배치, 서포트·심·다중 색상 채색, 수동 Brim 이어 점, 가변 레이어\n"
             "프린터 접속 키는 포함되지"
         ),
         "SUPPORT.md": "`.duckyproject` model geometry include saved printer addresses, access keys, or G-code",
         "PROJECT_FORMAT.md": (
-            "manifest.json models/000.stl schema version `67` "
-            "Schema 1 through 67 projects remain readable up to 16 plates "
+            "manifest.json models/000.stl schema version `68` "
+            "Schema 1 through 68 projects remain readable up to 16 plates "
             "parameter modifier support blocker support enforcer "
             "plate-local objects and settings stable, bounded `volumes` list "
             "up to 64 volumes per object independent X, Y, and Z scale "
             "multi-color painting manual Brim-ear points variable layer-height ranges "
+            "height-range process modifiers "
             "rejects duplicate, directory, traversal, and unknown entries "
             "A failed import leaves the current project unchanged and removes staged data "
             "it in Files. External opening accepts only a granted `content://` URI "

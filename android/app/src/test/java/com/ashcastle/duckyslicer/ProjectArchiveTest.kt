@@ -124,6 +124,15 @@ class ProjectArchiveTest {
                 variableLayerHeights = VariableLayerHeights(
                     listOf(VariableLayerRange(0.1f, 0.4f, 0.12f)),
                 ),
+                heightRangeModifiers = HeightRangeModifiers(
+                    listOf(
+                        HeightRangeModifier(
+                            2f,
+                            7f,
+                            ObjectProcessOverrides(sparseInfillDensityPercent = 60f),
+                        ),
+                    ),
+                ),
             )
             val snapshot = ProjectSnapshot(listOf(first, second), selectedObjectId = second.id)
             val options = multiFilamentSettingsFixture()
@@ -144,7 +153,7 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(67, manifest.getInt("schemaVersion"))
+            assertEquals(68, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(
@@ -154,7 +163,7 @@ class ProjectArchiveTest {
             assertEquals(
                 setOf(
                     "id", "transform", "variableLayerHeights", "processOverrides",
-                    "brimPoints", "volumes",
+                    "heightRangeModifiers", "brimPoints", "volumes",
                 ),
                 manifestPlate.getJSONArray("objects").getJSONObject(0).keys().asSequence().toSet(),
             )
@@ -215,6 +224,14 @@ class ProjectArchiveTest {
             )
             assertEquals(first.processOverrides, imported.snapshot.objects[0].processOverrides)
             assertEquals(second.processOverrides, imported.snapshot.objects[1].processOverrides)
+            assertEquals(
+                first.heightRangeModifiers,
+                imported.snapshot.objects[0].heightRangeModifiers,
+            )
+            assertEquals(
+                second.heightRangeModifiers,
+                imported.snapshot.objects[1].heightRangeModifiers,
+            )
             assertEquals(first.brimPoints, imported.snapshot.objects[0].brimPoints)
             assertEquals(second.brimPoints, imported.snapshot.objects[1].brimPoints)
             assertEquals(0, imported.snapshot.objects[0].filamentSlot)

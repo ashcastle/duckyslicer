@@ -46,6 +46,7 @@ internal data class ArchivedProjectObject(
     val transform: ModelTransform,
     val variableLayerHeights: VariableLayerHeights,
     val processOverrides: ObjectProcessOverrides,
+    val heightRangeModifiers: HeightRangeModifiers,
     val brimPoints: BrimPoints,
 ) {
     init {
@@ -376,6 +377,11 @@ internal object ProjectArchiveCodec {
                 } else {
                     ObjectProcessOverrides()
                 },
+                heightRangeModifiers = if (schemaVersion >= 68) {
+                    value.getJSONArray("heightRangeModifiers").toHeightRangeModifiers()
+                } else {
+                    HeightRangeModifiers()
+                },
                 brimPoints = if (schemaVersion >= 8) {
                     value.getJSONArray("brimPoints").toArchiveBrimPoints()
                 } else {
@@ -480,6 +486,7 @@ private fun ProjectObject.toArchiveJson(modelEntries: Map<File, String>): JSONOb
         .put("transform", transform.toArchiveJson())
         .put("variableLayerHeights", variableLayerHeights.toArchiveJson())
         .put("processOverrides", processOverrides.toProjectJson())
+        .put("heightRangeModifiers", heightRangeModifiers.toProjectJson())
         .put("brimPoints", brimPoints.toArchiveJson())
         .put(
             "volumes",
@@ -790,6 +797,6 @@ private const val MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES
 private const val MAX_PROJECT_ARCHIVE_ENTRY_NAME = 128
 private const val PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"
 private const val MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1
-private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 67
+private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 68
 private const val PROJECT_ARCHIVE_MANIFEST = "manifest.json"
 private val PROJECT_ARCHIVE_MODEL_ENTRY = Regex("models/[0-9]{3}\\.stl")

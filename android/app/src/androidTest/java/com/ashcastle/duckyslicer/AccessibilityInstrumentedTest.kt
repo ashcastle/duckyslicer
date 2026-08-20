@@ -604,6 +604,57 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun heightRangeModifiersExposeRangeSettingsAndStickyActions() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val title = context.getString(R.string.height_range_modifiers)
+        val add = context.getString(R.string.add_height_range)
+        val strength = context.getString(R.string.strength)
+        val infill = context.getString(R.string.sparse_infill_density)
+        val revert = context.getString(R.string.revert_changes)
+        val apply = context.getString(R.string.apply_changes)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_HEIGHT_RANGE_MODIFIERS).use {
+            val addButton = waitForNodes(setOf(title, add)).firstOrNull {
+                it.isClickable && it.effectiveLabel() == add
+            }
+            assertNotNull("Height ranges must expose an Add action", addButton)
+            assertTrue(checkNotNull(addButton).performAction(AccessibilityNodeInfo.ACTION_CLICK))
+
+            val editorNodes = waitForNodes(setOf(strength))
+            assertTrue(
+                "A range must expose Orca-style setting categories",
+                editorNodes.any { it.isClickable && it.effectiveLabel() == strength },
+            )
+            val infillControl = scrollUntilNode(
+                infill,
+                scrollAnchorLabel = strength,
+                timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
+            ) { it.isCheckable && it.isClickable }
+            assertTrue("A range must expose its sparse infill override", infillControl.isVisibleToUser)
+            val stageButton = scrollUntilClickable(
+                add,
+                scrollAnchorLabel = infill,
+                timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
+            )
+            assertTrue(stageButton.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+
+            val dirtyNodes = waitForNodes(setOf(revert, apply))
+            val revertButton = dirtyNodes.firstOrNull {
+                it.isClickable && it.effectiveLabel().contains(revert)
+            }
+            val applyButton = dirtyNodes.firstOrNull {
+                it.isClickable && it.effectiveLabel().contains(apply)
+            }
+            assertNotNull("A staged range must expose Revert", revertButton)
+            assertNotNull("A staged range must expose Apply", applyButton)
+            assertTrue(
+                "Apply must retain the requested 70/30 visual priority",
+                checkNotNull(applyButton).screenBounds().width() >
+                    checkNotNull(revertButton).screenBounds().width() * 2,
+            )
+        }
+    }
+
+    @Test
     fun shapePickerExposesEveryOrcaPrimitiveAndSizeControl() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val title = context.getString(R.string.add_shape)

@@ -91,6 +91,7 @@ internal suspend fun splitProjectObject(
                 projectObject.seamPaint.facets.isNotEmpty() ||
                 projectObject.multiColorPaint.facets.isNotEmpty() ||
                 projectObject.variableLayerHeights.ranges.isNotEmpty() ||
+                projectObject.heightRangeModifiers.ranges.isNotEmpty() ||
                 projectObject.brimPoints.points.isNotEmpty(),
         )
     } catch (failure: Throwable) {

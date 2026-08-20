@@ -15,17 +15,26 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -206,6 +215,360 @@ internal fun ObjectProcessSettingsSheet(
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun HeightRangeModifiersSheet(
+    current: HeightRangeModifiers,
+    objectOverrides: ObjectProcessOverrides,
+    objectHeightMm: Float,
+    options: SliceOptions,
+    onApply: (HeightRangeModifiers) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val safeHeight = objectHeightMm.coerceAtLeast(HeightRangeModifiers.MIN_RANGE_MM)
+    var staged by remember(current) { mutableStateOf(current) }
+    var selectedIndex by remember(current) { mutableStateOf<Int?>(null) }
+    var selectedRange by remember(current, safeHeight) {
+        mutableStateOf((safeHeight * 0.25f)..(safeHeight * 0.75f))
+    }
+    var selectedOverrides by remember(current) {
+        mutableStateOf(
+            ObjectProcessOverrides(
+                sparseInfillDensityPercent = objectOverrides.sparseInfillDensityPercent
+                    ?: options.fillDensity * 100f,
+            ),
+        )
+    }
+    var category by remember { mutableStateOf(ObjectSettingCategory.STRENGTH) }
+    var rangeError by remember { mutableStateOf(false) }
+    val sheetHeight = with(LocalDensity.current) {
+        LocalWindowInfo.current.containerSize.height.toDp()
+    } * 0.94f
+
+    fun resetEditor() {
+        selectedIndex = null
+        selectedRange = (safeHeight * 0.25f)..(safeHeight * 0.75f)
+        selectedOverrides = ObjectProcessOverrides(
+            sparseInfillDensityPercent = objectOverrides.sparseInfillDensityPercent
+                ?: options.fillDensity * 100f,
+        )
+        category = ObjectSettingCategory.STRENGTH
+        rangeError = false
+    }
+
+    fun stageSelectedRange() {
+        val candidate = runCatching {
+            HeightRangeModifier(
+                startZmm = selectedRange.start,
+                endZmm = selectedRange.endInclusive,
+                overrides = selectedOverrides,
+            )
+        }.getOrElse {
+            rangeError = true
+            return
+        }
+        val next = staged.ranges.toMutableList().apply {
+            selectedIndex?.takeIf { it in indices }?.let { removeAt(it) }
+            add(candidate)
+            sortBy(HeightRangeModifier::startZmm)
+        }
+        runCatching { HeightRangeModifiers(next).constrainedToHeight(safeHeight) }
+            .onSuccess {
+                staged = it
+                resetEditor()
+            }
+            .onFailure { rangeError = true }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Color(0xFF282925),
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(sheetHeight)
+                .navigationBarsPadding(),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.height_range_modifiers),
+                    modifier = Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = stringResource(R.string.height_range_modifiers_summary),
+                    color = Color(0xFFC8C9C3),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                staged.ranges.forEachIndexed { index, range ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = ObjectSettingsPanel),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(start = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    selectedIndex = index
+                                    selectedRange = range.startZmm..range.endZmm
+                                    selectedOverrides = range.overrides
+                                    rangeError = false
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(
+                                    stringResource(
+                                        R.string.height_range_summary,
+                                        range.startZmm,
+                                        range.endZmm,
+                                        range.overrides.enabledSettingCount(),
+                                    ),
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    staged = HeightRangeModifiers(
+                                        staged.ranges.filterIndexed { itemIndex, _ ->
+                                            itemIndex != index
+                                        },
+                                    )
+                                    resetEditor()
+                                },
+                            ) {
+                                Icon(
+                                    Icons.Default.DeleteOutline,
+                                    contentDescription = stringResource(
+                                        R.string.remove_height_range,
+                                        range.startZmm,
+                                        range.endZmm,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+                if (selectedIndex == null) {
+                    Button(
+                        onClick = {
+                            selectedIndex = -1
+                            rangeError = false
+                        },
+                        enabled = staged.ranges.size < HeightRangeModifiers.MAX_RANGES,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF3A3B37),
+                            contentColor = Color(0xFFF4F4EE),
+                        ),
+                    ) {
+                        Text(stringResource(R.string.add_height_range))
+                    }
+                } else {
+                    Text(
+                        text = stringResource(
+                            R.string.height_range_values,
+                            selectedRange.start,
+                            selectedRange.endInclusive,
+                        ),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = ObjectSettingsYellow,
+                    )
+                    RangeSlider(
+                        value = selectedRange,
+                        onValueChange = {
+                            selectedRange = it
+                            rangeError = false
+                        },
+                        valueRange = 0f..safeHeight,
+                        colors = SliderDefaults.colors(
+                            thumbColor = ObjectSettingsYellow,
+                            activeTrackColor = ObjectSettingsYellow,
+                            inactiveTrackColor = Color(0xFF555650),
+                        ),
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        ObjectSettingCategory.entries.forEach { entry ->
+                            FilterChip(
+                                selected = category == entry,
+                                onClick = { category = entry },
+                                label = { Text(stringResource(entry.label)) },
+                            )
+                        }
+                    }
+                    HeightRangeOverrideFields(
+                        category = category,
+                        draft = selectedOverrides,
+                        objectOverrides = objectOverrides,
+                        options = options,
+                        onDraftChanged = {
+                            selectedOverrides = it
+                            rangeError = false
+                        },
+                    )
+                    if (rangeError) {
+                        Text(
+                            stringResource(R.string.height_range_invalid),
+                            color = Color(0xFFFF8A80),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        TextButton(onClick = ::resetEditor, modifier = Modifier.weight(0.3f)) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                        Button(
+                            onClick = ::stageSelectedRange,
+                            enabled = !selectedOverrides.isEmpty,
+                            modifier = Modifier.weight(0.7f),
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (selectedIndex == -1) R.string.add_height_range
+                                    else R.string.update_height_range,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+            if (staged != current) {
+                ObjectSettingsDirtyBar(
+                    onRevert = {
+                        staged = current
+                        resetEditor()
+                    },
+                    onApply = { onApply(staged) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeightRangeOverrideFields(
+    category: ObjectSettingCategory,
+    draft: ObjectProcessOverrides,
+    objectOverrides: ObjectProcessOverrides,
+    options: SliceOptions,
+    onDraftChanged: (ObjectProcessOverrides) -> Unit,
+) {
+    val maximumLayerHeight = options.printerProfile.maxLayerHeight.coerceAtLeast(0.04f)
+    when (category) {
+        ObjectSettingCategory.QUALITY -> NullableFloatObjectSetting(
+            label = stringResource(R.string.layer_height),
+            value = draft.layerHeightMm,
+            inheritedValue = objectOverrides.layerHeightMm
+                ?: options.layerHeight.coerceIn(0.04f, maximumLayerHeight),
+            range = 0.04f..maximumLayerHeight,
+            valueText = ::millimeterText,
+            onValueChanged = { onDraftChanged(draft.copy(layerHeightMm = it)) },
+        )
+
+        ObjectSettingCategory.STRENGTH -> {
+            NullableIntObjectSetting(
+                label = stringResource(R.string.wall_loops),
+                value = draft.wallLoops,
+                inheritedValue = objectOverrides.wallLoops ?: options.perimeters,
+                range = 0..20,
+                onValueChanged = { onDraftChanged(draft.copy(wallLoops = it)) },
+            )
+            NullableIntObjectSetting(
+                label = stringResource(R.string.top_shell_layers),
+                value = draft.topShellLayers,
+                inheritedValue = objectOverrides.topShellLayers ?: options.topSolidLayers,
+                range = 0..100,
+                onValueChanged = { onDraftChanged(draft.copy(topShellLayers = it)) },
+            )
+            NullableIntObjectSetting(
+                label = stringResource(R.string.bottom_shell_layers),
+                value = draft.bottomShellLayers,
+                inheritedValue = objectOverrides.bottomShellLayers ?: options.bottomSolidLayers,
+                range = 0..100,
+                onValueChanged = { onDraftChanged(draft.copy(bottomShellLayers = it)) },
+            )
+            NullableFloatObjectSetting(
+                label = stringResource(R.string.sparse_infill_density),
+                value = draft.sparseInfillDensityPercent,
+                inheritedValue = objectOverrides.sparseInfillDensityPercent
+                    ?: options.fillDensity * 100f,
+                range = 0f..100f,
+                steps = 99,
+                valueText = ::percentText,
+                onValueChanged = {
+                    onDraftChanged(draft.copy(sparseInfillDensityPercent = it))
+                },
+            )
+        }
+
+        ObjectSettingCategory.SPEED -> {
+            NullableFloatObjectSetting(
+                label = stringResource(R.string.outer_wall_speed),
+                value = draft.outerWallSpeedMmS,
+                inheritedValue = objectOverrides.outerWallSpeedMmS ?: options.printSpeed,
+                range = 1f..500f,
+                valueText = ::speedText,
+                onValueChanged = { onDraftChanged(draft.copy(outerWallSpeedMmS = it)) },
+            )
+            NullableFloatObjectSetting(
+                label = stringResource(R.string.inner_wall_speed),
+                value = draft.innerWallSpeedMmS,
+                inheritedValue = objectOverrides.innerWallSpeedMmS ?: options.innerWallSpeed,
+                range = 1f..500f,
+                valueText = ::speedText,
+                onValueChanged = { onDraftChanged(draft.copy(innerWallSpeedMmS = it)) },
+            )
+            NullableFloatObjectSetting(
+                label = stringResource(R.string.sparse_infill_speed),
+                value = draft.sparseInfillSpeedMmS,
+                inheritedValue = objectOverrides.sparseInfillSpeedMmS ?: options.sparseInfillSpeed,
+                range = 1f..500f,
+                valueText = ::speedText,
+                onValueChanged = { onDraftChanged(draft.copy(sparseInfillSpeedMmS = it)) },
+            )
+        }
+
+        ObjectSettingCategory.SUPPORT -> BooleanObjectSetting(
+            label = stringResource(R.string.enable_supports),
+            value = draft.supportEnabled,
+            inheritedValue = objectOverrides.supportEnabled ?: options.supportEnabled,
+            onValueChanged = { onDraftChanged(draft.copy(supportEnabled = it)) },
+        )
+    }
+}
+
+private fun ObjectProcessOverrides.enabledSettingCount(): Int = listOf(
+    layerHeightMm,
+    wallLoops,
+    topShellLayers,
+    bottomShellLayers,
+    sparseInfillDensityPercent,
+    outerWallSpeedMmS,
+    innerWallSpeedMmS,
+    sparseInfillSpeedMmS,
+    supportEnabled,
+).count { it != null }
 
 @Composable
 private fun NullableIntObjectSetting(

@@ -1617,6 +1617,18 @@ private fun DuckySlicerScreen(
                 error = null
             }
         },
+        onHeightRangeModifiersChanged = { modifiers ->
+            val current = projectTransferModel.state.value.history
+            val nextHistory = current.updateSelectedHeightRangeModifiers(modifiers)
+            if (
+                nextHistory != current &&
+                projectTransferModel.updateHistory(current, nextHistory)
+            ) {
+                clearCompletedSlice()
+                notice = null
+                error = null
+            }
+        },
         onRemoveAuxiliaryVolume = { volumeId ->
             val current = projectTransferModel.state.value.history
             val nextHistory = current.removeSelectedAuxiliaryVolume(volumeId)

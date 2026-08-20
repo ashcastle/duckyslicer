@@ -534,6 +534,7 @@ internal fun WorkspaceScreen(
     onMultiColorPaintCommitted: (String, String, MultiColorPaint, OrcaFacetAnnotation) -> Unit,
     onVariableLayerHeightsChanged: (VariableLayerHeights) -> Unit,
     onObjectProcessOverridesChanged: (ObjectProcessOverrides) -> Unit,
+    onHeightRangeModifiersChanged: (HeightRangeModifiers) -> Unit,
     onRemoveAuxiliaryVolume: (String) -> Unit,
     onRemoveModel: () -> Unit,
     onSlice: () -> Unit,
@@ -578,6 +579,7 @@ internal fun WorkspaceScreen(
     var showSplitPartsTool by remember { mutableStateOf(false) }
     var showVariableLayerHeightTool by remember { mutableStateOf(false) }
     var showObjectProcessSettings by remember { mutableStateOf(false) }
+    var showHeightRangeModifiers by remember { mutableStateOf(false) }
     var showPrimitivePicker by remember { mutableStateOf(false) }
     var showAuxiliaryVolumes by remember { mutableStateOf(false) }
     var showAuxiliaryPrimitivePicker by remember { mutableStateOf(false) }
@@ -634,6 +636,7 @@ internal fun WorkspaceScreen(
         showAuxiliaryVolumes = false
         showAuxiliaryPrimitivePicker = false
         editingAuxiliaryVolumeId = null
+        showHeightRangeModifiers = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) layingOnFace = false
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) {
             measuring = false
@@ -1183,6 +1186,10 @@ internal fun WorkspaceScreen(
                 showModelTools = false
                 showVariableLayerHeightTool = true
             },
+            onHeightRangeModifiers = {
+                showModelTools = false
+                showHeightRangeModifiers = true
+            },
             onObjectSettings = {
                 showModelTools = false
                 showObjectProcessSettings = true
@@ -1278,6 +1285,19 @@ internal fun WorkspaceScreen(
                 onObjectProcessOverridesChanged(it)
             },
             onDismiss = { showObjectProcessSettings = false },
+        )
+    }
+    if (showHeightRangeModifiers && selectedObject != null) {
+        HeightRangeModifiersSheet(
+            current = selectedObject.heightRangeModifiers,
+            objectOverrides = selectedObject.processOverrides,
+            objectHeightMm = selectedObject.transform.placedHeight(selectedObject),
+            options = sliceOptions,
+            onApply = {
+                showHeightRangeModifiers = false
+                onHeightRangeModifiersChanged(it)
+            },
+            onDismiss = { showHeightRangeModifiers = false },
         )
     }
     if (showAuxiliaryVolumes && selectedObject != null) {
@@ -2130,6 +2150,7 @@ private fun ModelTransformSheet(
     onSeamPaint: () -> Unit,
     onBrimEars: () -> Unit,
     onVariableLayerHeight: () -> Unit,
+    onHeightRangeModifiers: () -> Unit,
     onObjectSettings: () -> Unit,
     auxiliaryVolumeCount: Int,
     canAddAuxiliaryVolume: Boolean,
@@ -2539,6 +2560,19 @@ private fun ModelTransformSheet(
                 Icon(Icons.Default.Layers, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.variable_layer_height))
+            }
+            Button(
+                onClick = onHeightRangeModifiers,
+                enabled = !modelEditBusy,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF3A3B37),
+                    contentColor = Color(0xFFF4F4EE),
+                ),
+            ) {
+                Icon(Icons.Default.Layers, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.height_range_modifiers))
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),

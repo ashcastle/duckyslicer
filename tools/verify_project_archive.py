@@ -71,6 +71,7 @@ def _strings(name: str, source: str) -> dict[str, str]:
 def verify_project_archive(sources: dict[str, str]) -> None:
     required_files = {
         "ProjectArchive.kt",
+        "HeightRangeModifiers.kt",
         "OrcaFacetAnnotations.kt",
         "ProjectVolumeSemantics.kt",
         "ProjectStore.kt",
@@ -81,6 +82,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "CreatedDocument.kt",
         "MainActivity.kt",
         "WorkspaceScreen.kt",
+        "ObjectProcessSettingsSheet.kt",
         "AndroidManifest.xml",
         "AndroidTestManifest.xml",
         "ProjectArchiveTest.kt",
@@ -94,6 +96,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "AccessibilityInstrumentedTest.kt",
         "NativeEngineInstrumentedTest.kt",
         "OrcaVolumeSemanticsInstrumentedTest.kt",
+        "OrcaHeightRangeModifiersInstrumentedTest.kt",
         "strings.xml",
         "strings-ko.xml",
         "PRIVACY.md",
@@ -118,7 +121,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
             'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
             "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-            "PROJECT_ARCHIVE_SCHEMA_VERSION = 67",
+            "PROJECT_ARCHIVE_SCHEMA_VERSION = 68",
             "ArchivedProjectPlate",
             "ArchivedProjectVolume",
             'put("role", volume.role.name)',
@@ -149,6 +152,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             'getJSONArray("variableLayerHeights").toArchiveVariableLayerHeights()',
             'getJSONArray("brimPoints").toArchiveBrimPoints()',
             'getJSONObject("processOverrides").toObjectProcessOverrides()',
+            'put("heightRangeModifiers", heightRangeModifiers.toProjectJson())',
+            "schemaVersion >= 68",
+            'getJSONArray("heightRangeModifiers").toHeightRangeModifiers()',
             "checkCancellation: () -> Unit = {}",
             "copyArchiveBytes(input, archive, model.length(), checkCancellation)",
             "val copied = copyArchiveBytes(",
@@ -182,9 +188,25 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
             "beginCommit: () -> Unit = {}",
             "beginCommit()",
-            "SCHEMA_VERSION = 69",
+            "SCHEMA_VERSION = 70",
+            "schemaVersion >= 70",
+            'put("heightRangeModifiers", heightRangeModifiers.toProjectJson())',
             'put("role", role.name)',
             'put("config", config.toJson())',
+        ),
+    )
+    _require_markers(
+        "HeightRangeModifiers.kt",
+        sources["HeightRangeModifiers.kt"],
+        (
+            "data class HeightRangeModifier",
+            "data class HeightRangeModifiers",
+            "MAX_RANGES = 32",
+            "MIN_RANGE_MM = 0.01f",
+            "fun writeSidecar",
+            "fun readSidecar",
+            "fun HeightRangeModifiers.toProjectJson",
+            "fun JSONArray.toHeightRangeModifiers",
         ),
     )
     _require_markers(
@@ -527,6 +549,20 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "AuxiliaryVolumeEditSheet(",
             "onEditAuxiliaryVolume",
             "R.string.apply_region_changes",
+            "HeightRangeModifiersSheet(",
+            "onHeightRangeModifiersChanged",
+        ),
+    )
+    _require_markers(
+        "ObjectProcessSettingsSheet.kt",
+        sources["ObjectProcessSettingsSheet.kt"],
+        (
+            "fun HeightRangeModifiersSheet(",
+            "ObjectSettingCategory.QUALITY",
+            "ObjectSettingCategory.STRENGTH",
+            "ObjectSettingCategory.SPEED",
+            "ObjectSettingCategory.SUPPORT",
+            "ObjectSettingsDirtyBar(",
         ),
     )
 
@@ -545,6 +581,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         (
             "Exported DuckySlicer project files contain plate organization, model geometry",
             "support, seam, and multi-color painting, manual Brim-ear points, variable layer-height ranges,",
+            "height-range process modifiers, and each plate's active printer",
             "They do not contain G-code, saved printer addresses, or printer",
             "형상, 오브젝트 배치, 서포트·심·다중 색상 채색, 수동 Brim 이어 점, 가변 레이어",
             "프린터 접속 키는 포함되지",
@@ -561,8 +598,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         (
             "manifest.json",
             "models/000.stl",
-            "schema version `67`",
-            "Schema 1 through 67 projects remain readable",
+            "schema version `68`",
+            "Schema 1 through 68 projects remain readable",
             "parameter modifier",
             "support blocker",
             "support enforcer",
@@ -574,6 +611,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "multi-color painting",
             "manual Brim-ear points",
             "variable layer-height",
+            "height-range process modifiers",
             "rejects duplicate, directory, traversal, and unknown entries",
             "A failed import leaves the",
             "current project unchanged and removes staged data",
@@ -705,6 +743,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "auxiliaryShapePickerExposesRolesPlacementAndModifierDensity",
             "auxiliaryVolumeManagerExposesExistingRegionsRemovalAndAdd",
             "auxiliaryVolumeEditorExposesScalePlacementDensityAndApply",
+            "heightRangeModifiersExposeRangeSettingsAndStickyActions",
         ),
     )
     _require_markers(
@@ -744,6 +783,17 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "withEditedSettingsRegion.filamentMm < withSettingsRegion.filamentMm * 0.9f",
         ),
     )
+    _require_markers(
+        "OrcaHeightRangeModifiersInstrumentedTest.kt",
+        sources["OrcaHeightRangeModifiersInstrumentedTest.kt"],
+        (
+            "selectedHeightUsesRealOrcaLayerConfigWithoutChangingTheRestOfTheObject",
+            "HeightRangeModifier(",
+            "modified.layers > baseline.layers + 40",
+            "Expected 0.10 mm layers in selected range",
+            "Expected 0.20 mm layers above selected range",
+        ),
+    )
 
 
 def read_sources() -> dict[str, str]:
@@ -751,6 +801,9 @@ def read_sources() -> dict[str, str]:
     tests = ROOT / "android/app/src"
     return {
         "ProjectArchive.kt": (package / "ProjectArchive.kt").read_text(encoding="utf-8"),
+        "HeightRangeModifiers.kt": (package / "HeightRangeModifiers.kt").read_text(
+            encoding="utf-8"
+        ),
         "OrcaFacetAnnotations.kt": (package / "OrcaFacetAnnotations.kt").read_text(
             encoding="utf-8"
         ),
@@ -765,6 +818,9 @@ def read_sources() -> dict[str, str]:
         "CreatedDocument.kt": (package / "CreatedDocument.kt").read_text(encoding="utf-8"),
         "MainActivity.kt": (package / "MainActivity.kt").read_text(encoding="utf-8"),
         "WorkspaceScreen.kt": (package / "WorkspaceScreen.kt").read_text(encoding="utf-8"),
+        "ObjectProcessSettingsSheet.kt": (
+            package / "ObjectProcessSettingsSheet.kt"
+        ).read_text(encoding="utf-8"),
         "AndroidManifest.xml": (tests / "main/AndroidManifest.xml").read_text(encoding="utf-8"),
         "AndroidTestManifest.xml": (tests / "androidTest/AndroidManifest.xml").read_text(
             encoding="utf-8"
@@ -805,6 +861,10 @@ def read_sources() -> dict[str, str]:
         "OrcaVolumeSemanticsInstrumentedTest.kt": (
             tests
             / "androidTest/java/com/ashcastle/duckyslicer/OrcaVolumeSemanticsInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "OrcaHeightRangeModifiersInstrumentedTest.kt": (
+            tests
+            / "androidTest/java/com/ashcastle/duckyslicer/OrcaHeightRangeModifiersInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "strings.xml": (tests / "main/res/values/strings.xml").read_text(encoding="utf-8"),
         "strings-ko.xml": (tests / "main/res/values-ko/strings.xml").read_text(encoding="utf-8"),

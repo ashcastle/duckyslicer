@@ -2820,7 +2820,11 @@ object OnDeviceSlicer {
                 it in 0.04f..options.printerProfile.maxLayerHeight
             } != false
         }) { "Object layer height is unavailable for this nozzle" }
-
+        require(objects.all { projectObject ->
+            projectObject.heightRangeModifiers.ranges.all { range ->
+                range.overrides.layerHeightMm?.let { it in layerHeightRange } != false
+            }
+        }) { "Height range layer height is unavailable for this nozzle" }
         return withTransformedModels(
             objects,
             options,
@@ -2915,6 +2919,17 @@ object OnDeviceSlicer {
                         ).also(it::writeSidecar)
                     }
             }
+            val heightRangeModifierFiles = objects.mapIndexed { index, projectObject ->
+                projectObject.heightRangeModifiers
+                    .takeIf { it.ranges.isNotEmpty() }
+                    ?.let {
+                        File.createTempFile(
+                            "slice-height-ranges-$index-",
+                            ".bin",
+                            File(projectObject.primaryModelPart.model.localPath).parentFile,
+                        ).also(it::writeSidecar)
+                    }
+            }
             val brimPointFiles = transformedModels.brimPoints.mapIndexed { index, points ->
                 points.takeIf { it.points.isNotEmpty() }?.let {
                     File.createTempFile(
@@ -2941,6 +2956,7 @@ object OnDeviceSlicer {
                     multiColorPaintFiles,
                     variableLayerHeightFiles,
                     processOverrideFiles,
+                    heightRangeModifierFiles,
                     brimPointFiles,
                     options,
                     inputFilenameBase = if (objects.size > 1) {
@@ -2970,6 +2986,7 @@ object OnDeviceSlicer {
                 orcaMultiColorAnnotationFiles.filterNotNull().forEach(File::delete)
                 variableLayerHeightFiles.filterNotNull().forEach(File::delete)
                 processOverrideFiles.filterNotNull().forEach(File::delete)
+                heightRangeModifierFiles.filterNotNull().forEach(File::delete)
                 brimPointFiles.filterNotNull().forEach(File::delete)
                 volumeConfigFiles.filterNotNull().forEach(File::delete)
             }

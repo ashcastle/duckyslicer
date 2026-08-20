@@ -1,6 +1,7 @@
 package com.ashcastle.duckyslicer
 
 import java.io.BufferedOutputStream
+import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -53,16 +54,7 @@ data class ObjectProcessOverrides(
         FileOutputStream(output).use { fileStream ->
             DataOutputStream(BufferedOutputStream(fileStream)).use { writer ->
                 writer.write(MAGIC)
-                writer.writeInt(mask)
-                writer.writeFloat(layerHeightMm ?: 0f)
-                writer.writeInt(wallLoops ?: 0)
-                writer.writeInt(topShellLayers ?: 0)
-                writer.writeInt(bottomShellLayers ?: 0)
-                writer.writeFloat(sparseInfillDensityPercent ?: 0f)
-                writer.writeFloat(outerWallSpeedMmS ?: 0f)
-                writer.writeFloat(innerWallSpeedMmS ?: 0f)
-                writer.writeFloat(sparseInfillSpeedMmS ?: 0f)
-                writer.writeByte(if (supportEnabled == true) 1 else 0)
+                writePayload(writer)
                 writer.flush()
                 fileStream.fd.sync()
             }
@@ -81,6 +73,19 @@ data class ObjectProcessOverrides(
             (if (sparseInfillSpeedMmS != null) INFILL_SPEED_BIT else 0) or
             (if (supportEnabled != null) SUPPORT_ENABLED_BIT else 0)
 
+    internal fun writePayload(writer: DataOutputStream) {
+        writer.writeInt(mask)
+        writer.writeFloat(layerHeightMm ?: 0f)
+        writer.writeInt(wallLoops ?: 0)
+        writer.writeInt(topShellLayers ?: 0)
+        writer.writeInt(bottomShellLayers ?: 0)
+        writer.writeFloat(sparseInfillDensityPercent ?: 0f)
+        writer.writeFloat(outerWallSpeedMmS ?: 0f)
+        writer.writeFloat(innerWallSpeedMmS ?: 0f)
+        writer.writeFloat(sparseInfillSpeedMmS ?: 0f)
+        writer.writeByte(if (supportEnabled == true) 1 else 0)
+    }
+
     companion object {
         val MAGIC = byteArrayOf('D'.code.toByte(), 'P'.code.toByte(), 'O'.code.toByte(), '1'.code.toByte())
         const val LAYER_HEIGHT_BIT = 1 shl 0
@@ -93,6 +98,7 @@ data class ObjectProcessOverrides(
         const val INFILL_SPEED_BIT = 1 shl 7
         const val SUPPORT_ENABLED_BIT = 1 shl 8
         const val ALL_BITS = (1 shl 9) - 1
+        const val PAYLOAD_BYTES = 37L
         const val SIDECAR_BYTES = 41L
 
         const val MIN_LAYER_HEIGHT_MM = 0.01f
@@ -105,6 +111,39 @@ data class ObjectProcessOverrides(
         const val MAX_INFILL_PERCENT = 100f
         const val MIN_SPEED_MM_S = 1f
         const val MAX_SPEED_MM_S = 1_000f
+
+        internal fun readPayload(reader: DataInputStream): ObjectProcessOverrides {
+            val mask = reader.readInt()
+            require(mask != 0 && mask and ALL_BITS == mask) {
+                "Object setting mask is invalid"
+            }
+            return ObjectProcessOverrides(
+                layerHeightMm = reader.readFloat().takeIf { mask and LAYER_HEIGHT_BIT != 0 },
+                wallLoops = reader.readInt().takeIf { mask and WALL_LOOPS_BIT != 0 },
+                topShellLayers = reader.readInt().takeIf {
+                    mask and TOP_SHELL_LAYERS_BIT != 0
+                },
+                bottomShellLayers = reader.readInt().takeIf {
+                    mask and BOTTOM_SHELL_LAYERS_BIT != 0
+                },
+                sparseInfillDensityPercent = reader.readFloat().takeIf {
+                    mask and INFILL_DENSITY_BIT != 0
+                },
+                outerWallSpeedMmS = reader.readFloat().takeIf {
+                    mask and OUTER_WALL_SPEED_BIT != 0
+                },
+                innerWallSpeedMmS = reader.readFloat().takeIf {
+                    mask and INNER_WALL_SPEED_BIT != 0
+                },
+                sparseInfillSpeedMmS = reader.readFloat().takeIf {
+                    mask and INFILL_SPEED_BIT != 0
+                },
+                supportEnabled = reader.readUnsignedByte().let { enabled ->
+                    require(enabled in 0..1) { "Object support setting is invalid" }
+                    (enabled == 1).takeIf { mask and SUPPORT_ENABLED_BIT != 0 }
+                },
+            ).also { require(!it.isEmpty) { "Object settings are empty" } }
+        }
     }
 }
 

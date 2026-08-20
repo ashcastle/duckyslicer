@@ -40,7 +40,8 @@ DuckySlicer sends data only when you choose an action that requires it:
 
 - Exported DuckySlicer project files contain plate organization, model geometry, object placement,
   support, seam, and multi-color painting, manual Brim-ear points, variable layer-height ranges,
-  and each plate's active printer, filament, and slicing settings needed to
+  height-range process modifiers, and each plate's active printer, filament, and slicing settings
+  needed to
   reopen the project. They do not contain G-code, saved printer addresses, or printer
   access keys. Project files and exported G-code are written only to the location you
   select. A storage provider you select may process that file under its own privacy
@@ -132,7 +133,8 @@ DuckySlicer는 사용자가 다음 동작을 선택한 경우에만 필요한 �
 
 - 내보낸 DuckySlicer 프로젝트 파일에는 프로젝트를 다시 여는 데 필요한 플레이트
   구성, 모델 형상, 오브젝트 배치, 서포트·심·다중 색상 채색, 수동 Brim 이어 점, 가변 레이어
-  높이 구간, 각 플레이트의 현재 프린터·필라멘트·슬라이싱 설정이 포함됩니다. G-code, 저장된 프린터 주소 또는
+  높이 구간, 높이 구간별 공정 설정, 각 플레이트의 현재 프린터·필라멘트·슬라이싱
+  설정이 포함됩니다. G-code, 저장된 프린터 주소 또는
   프린터 접속 키는 포함되지 않습니다. 프로젝트 파일과 내보낸 G-code는
   사용자가 선택한 위치에만 저장됩니다. 선택한 저장 공간 제공자는 자체
   개인정보처리방침에 따라 파일을 처리할 수 있습니다.

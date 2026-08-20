@@ -479,6 +479,34 @@ class ProjectStateTest {
     }
 
     @Test
+    fun heightRangeModifiersAreObjectScopedAndUndoable() {
+        var state = ProjectHistoryState()
+            .add(projectObject("first"))
+            .add(projectObject("second"))
+        val modifiers = HeightRangeModifiers(
+            listOf(
+                HeightRangeModifier(
+                    startZmm = 2f,
+                    endZmm = 8f,
+                    overrides = ObjectProcessOverrides(
+                        wallLoops = 4,
+                        sparseInfillDensityPercent = 55f,
+                    ),
+                ),
+            ),
+        )
+
+        state = state.updateSelectedHeightRangeModifiers(modifiers)
+        assertTrue(state.current.objects.first().heightRangeModifiers.ranges.isEmpty())
+        assertEquals(modifiers, state.current.selectedObject!!.heightRangeModifiers)
+
+        state = state.undo()
+        assertTrue(state.current.selectedObject!!.heightRangeModifiers.ranges.isEmpty())
+        state = state.redo()
+        assertEquals(modifiers, state.current.selectedObject!!.heightRangeModifiers)
+    }
+
+    @Test
     fun filamentAssignmentUpdatesEverySelectedObjectVolumeAndRemainsUndoable() {
         val second = projectObject("second")
         var state = ProjectHistoryState()

@@ -1999,7 +1999,7 @@ new file mode 100644
 index 00000000..34483c04
 --- /dev/null
 +++ b/app/src/main/cpp/src/sapil_object_process_overrides.cpp
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,241 @@
 +#include <jni.h>
 +
 +#include <array>
@@ -2018,6 +2018,7 @@ index 00000000..34483c04
 +namespace {
 +
 +constexpr std::array<unsigned char, 4> MAGIC{'D', 'P', 'O', '1'};
++constexpr std::array<unsigned char, 4> HEIGHT_RANGE_MAGIC{'D', 'H', 'R', '1'};
 +constexpr std::uint32_t LAYER_HEIGHT_BIT = 1U << 0;
 +constexpr std::uint32_t WALL_LOOPS_BIT = 1U << 1;
 +constexpr std::uint32_t TOP_SHELL_LAYERS_BIT = 1U << 2;
@@ -2029,6 +2030,9 @@ index 00000000..34483c04
 +constexpr std::uint32_t SUPPORT_ENABLED_BIT = 1U << 8;
 +constexpr std::uint32_t ALL_BITS = (1U << 9) - 1U;
 +constexpr std::uint64_t SIDECAR_BYTES = 41;
++constexpr std::uint32_t MAX_HEIGHT_RANGES = 32U;
++constexpr std::uint64_t HEIGHT_RANGE_HEADER_BYTES = 8U;
++constexpr std::uint64_t HEIGHT_RANGE_ENTRY_BYTES = 45U;
 +
 +bool read_u32_be(std::istream& input, std::uint32_t& value)
 +{
@@ -2118,6 +2122,98 @@ index 00000000..34483c04
 +    return true;
 +}
 +
++bool apply_height_range_modifiers(int object_index, const std::string& sidecar_path)
++{
++    if (object_index < 0 || static_cast<std::size_t>(object_index) >= sapil::g_model.objects.size()) {
++        return false;
++    }
++    Slic3r::ModelObject* object = sapil::g_model.objects[static_cast<std::size_t>(object_index)];
++    if (object == nullptr) return false;
++
++    std::ifstream input(sidecar_path, std::ios::binary | std::ios::ate);
++    if (!input) return false;
++    const auto bytes = static_cast<std::uint64_t>(input.tellg());
++    input.seekg(0, std::ios::beg);
++    std::array<unsigned char, 4> magic{};
++    std::uint32_t count = 0;
++    if (!input.read(reinterpret_cast<char*>(magic.data()), magic.size()) ||
++        magic != HEIGHT_RANGE_MAGIC || !read_u32_be(input, count) || count == 0U ||
++        count > MAX_HEIGHT_RANGES ||
++        bytes != HEIGHT_RANGE_HEADER_BYTES + count * HEIGHT_RANGE_ENTRY_BYTES) {
++        return false;
++    }
++
++    Slic3r::t_layer_config_ranges parsed;
++    float previous_end = 0.0F;
++    for (std::uint32_t index = 0; index < count; ++index) {
++        float start_z = 0.0F;
++        float end_z = 0.0F;
++        std::uint32_t mask = 0;
++        std::uint32_t wall_loops = 0;
++        std::uint32_t top_shell_layers = 0;
++        std::uint32_t bottom_shell_layers = 0;
++        float layer_height = 0.0F;
++        float infill_density = 0.0F;
++        float outer_wall_speed = 0.0F;
++        float inner_wall_speed = 0.0F;
++        float infill_speed = 0.0F;
++        unsigned char support_enabled = 0;
++        if (!read_f32_be(input, start_z) || !read_f32_be(input, end_z) ||
++            !read_u32_be(input, mask) || mask == 0U || (mask & ~ALL_BITS) != 0U ||
++            !read_f32_be(input, layer_height) || !read_u32_be(input, wall_loops) ||
++            !read_u32_be(input, top_shell_layers) || !read_u32_be(input, bottom_shell_layers) ||
++            !read_f32_be(input, infill_density) || !read_f32_be(input, outer_wall_speed) ||
++            !read_f32_be(input, inner_wall_speed) || !read_f32_be(input, infill_speed) ||
++            !input.read(reinterpret_cast<char*>(&support_enabled), 1)) {
++            return false;
++        }
++        if (!std::isfinite(start_z) || !std::isfinite(end_z) || start_z < 0.0F ||
++            end_z > 10000.0F || end_z - start_z < 0.01F ||
++            (index > 0U && start_z < previous_end)) {
++            return false;
++        }
++        if ((mask & LAYER_HEIGHT_BIT) &&
++            (!std::isfinite(layer_height) || layer_height < 0.01F || layer_height > 2.0F)) return false;
++        if ((mask & WALL_LOOPS_BIT) && wall_loops > 20U) return false;
++        if ((mask & TOP_SHELL_LAYERS_BIT) && top_shell_layers > 100U) return false;
++        if ((mask & BOTTOM_SHELL_LAYERS_BIT) && bottom_shell_layers > 100U) return false;
++        if ((mask & INFILL_DENSITY_BIT) &&
++            (!std::isfinite(infill_density) || infill_density < 0.0F || infill_density > 100.0F)) return false;
++        const auto invalid_speed = [](float speed) {
++            return !std::isfinite(speed) || speed < 1.0F || speed > 1000.0F;
++        };
++        if ((mask & OUTER_WALL_SPEED_BIT) && invalid_speed(outer_wall_speed)) return false;
++        if ((mask & INNER_WALL_SPEED_BIT) && invalid_speed(inner_wall_speed)) return false;
++        if ((mask & INFILL_SPEED_BIT) && invalid_speed(infill_speed)) return false;
++        if (support_enabled > 1U) return false;
++
++        Slic3r::DynamicPrintConfig range_config;
++        if (mask & LAYER_HEIGHT_BIT) range_config.set_key_value(
++            "layer_height", new Slic3r::ConfigOptionFloat(static_cast<double>(layer_height)));
++        if (mask & WALL_LOOPS_BIT) range_config.set_key_value(
++            "wall_loops", new Slic3r::ConfigOptionInt(static_cast<int>(wall_loops)));
++        if (mask & TOP_SHELL_LAYERS_BIT) range_config.set_key_value(
++            "top_shell_layers", new Slic3r::ConfigOptionInt(static_cast<int>(top_shell_layers)));
++        if (mask & BOTTOM_SHELL_LAYERS_BIT) range_config.set_key_value(
++            "bottom_shell_layers", new Slic3r::ConfigOptionInt(static_cast<int>(bottom_shell_layers)));
++        if (mask & INFILL_DENSITY_BIT) range_config.set_key_value(
++            "sparse_infill_density", new Slic3r::ConfigOptionPercent(static_cast<double>(infill_density)));
++        if (mask & OUTER_WALL_SPEED_BIT) range_config.set_key_value(
++            "outer_wall_speed", new Slic3r::ConfigOptionFloat(static_cast<double>(outer_wall_speed)));
++        if (mask & INNER_WALL_SPEED_BIT) range_config.set_key_value(
++            "inner_wall_speed", new Slic3r::ConfigOptionFloat(static_cast<double>(inner_wall_speed)));
++        if (mask & INFILL_SPEED_BIT) range_config.set_key_value(
++            "sparse_infill_speed", new Slic3r::ConfigOptionFloat(static_cast<double>(infill_speed)));
++        if (mask & SUPPORT_ENABLED_BIT) range_config.set_key_value(
++            "enable_support", new Slic3r::ConfigOptionBool(support_enabled != 0));
++        parsed[{static_cast<double>(start_z), static_cast<double>(end_z)}]
++            .assign_config(std::move(range_config));
++        previous_end = end_z;
++    }
++    object->layer_config_ranges = std::move(parsed);
++    return true;
++}
++
 +} // namespace
 +
 +extern "C" JNIEXPORT jboolean JNICALL
@@ -2128,6 +2224,19 @@ index 00000000..34483c04
 +    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
 +    if (path == nullptr) return JNI_FALSE;
 +    const bool result = apply_object_process_overrides(
++        static_cast<int>(object_index), std::string(path));
++    env->ReleaseStringUTFChars(sidecar_path, path);
++    return result ? JNI_TRUE : JNI_FALSE;
++}
++
++extern "C" JNIEXPORT jboolean JNICALL
++Java_com_u1_slicer_NativeLibrary_applyHeightRangeModifiers(
++        JNIEnv* env, jobject, jint object_index, jstring sidecar_path)
++{
++    if (sidecar_path == nullptr) return JNI_FALSE;
++    const char* path = env->GetStringUTFChars(sidecar_path, nullptr);
++    if (path == nullptr) return JNI_FALSE;
++    const bool result = apply_height_range_modifiers(
 +        static_cast<int>(object_index), std::string(path));
 +    env->ReleaseStringUTFChars(sidecar_path, path);
 +    return result ? JNI_TRUE : JNI_FALSE;

@@ -919,6 +919,14 @@
     <string name="filament_slot_unavailable">No filament slot is available for this printer.</string>
     <string name="object_process_settings">Object settings</string>
     <string name="object_process_settings_summary">Use different process values for this object while the rest of the plate keeps the selected profile.</string>
+    <string name="height_range_modifiers">Height range modifiers</string>
+    <string name="height_range_modifiers_summary">Use different quality, strength, speed, or support settings only within selected heights.</string>
+    <string name="height_range_summary">%1$.2f–%2$.2f mm · %3$d settings</string>
+    <string name="remove_height_range">Remove range %1$.2f to %2$.2f mm</string>
+    <string name="add_height_range">Add height range</string>
+    <string name="update_height_range">Update height range</string>
+    <string name="height_range_values">%1$.2f–%2$.2f mm</string>
+    <string name="height_range_invalid">Choose a non-overlapping range and enable at least one setting.</string>
     <string name="object_setting_profile_value">Profile · %1$s</string>
     <string name="object_setting_override_value">This object · %1$s</string>
     <string name="object_setting_on">On</string>

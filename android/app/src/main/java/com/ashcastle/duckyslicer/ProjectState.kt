@@ -71,6 +71,7 @@ data class ProjectObject(
     val transform: ModelTransform = ModelTransform(),
     val variableLayerHeights: VariableLayerHeights = VariableLayerHeights(),
     val processOverrides: ObjectProcessOverrides = ObjectProcessOverrides(),
+    val heightRangeModifiers: HeightRangeModifiers = HeightRangeModifiers(),
     val brimPoints: BrimPoints = BrimPoints(),
 ) {
     init {
@@ -94,6 +95,7 @@ data class ProjectObject(
         multiColorPaint: MultiColorPaint = MultiColorPaint(),
         variableLayerHeights: VariableLayerHeights = VariableLayerHeights(),
         processOverrides: ObjectProcessOverrides = ObjectProcessOverrides(),
+        heightRangeModifiers: HeightRangeModifiers = HeightRangeModifiers(),
         brimPoints: BrimPoints = BrimPoints(),
         filamentSlot: Int = 0,
     ) : this(
@@ -111,6 +113,7 @@ data class ProjectObject(
         transform = transform,
         variableLayerHeights = variableLayerHeights,
         processOverrides = processOverrides,
+        heightRangeModifiers = heightRangeModifiers,
         brimPoints = brimPoints,
     )
 
@@ -1012,6 +1015,24 @@ data class ProjectHistoryState(
                 objects = current.objects.map { projectObject ->
                     if (projectObject.id == selected.id) {
                         projectObject.copy(processOverrides = processOverrides)
+                    } else {
+                        projectObject
+                    }
+                },
+            ),
+        )
+    }
+
+    fun updateSelectedHeightRangeModifiers(
+        heightRangeModifiers: HeightRangeModifiers,
+    ): ProjectHistoryState {
+        val selected = current.selectedObject ?: return this
+        if (selected.heightRangeModifiers == heightRangeModifiers) return this
+        return record(
+            current.updateActivePlate(
+                objects = current.objects.map { projectObject ->
+                    if (projectObject.id == selected.id) {
+                        projectObject.copy(heightRangeModifiers = heightRangeModifiers)
                     } else {
                         projectObject
                     }
