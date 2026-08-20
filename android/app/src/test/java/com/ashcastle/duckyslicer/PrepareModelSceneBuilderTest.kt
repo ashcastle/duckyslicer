@@ -81,8 +81,9 @@ class PrepareModelSceneBuilderTest {
         )
 
         assertSame(scene.meshes[0].vertices, scene.meshes[1].vertices)
+        assertSame(scene.meshes[0].coarseVertices, scene.meshes[1].coarseVertices)
         assertSame(scene.meshes[0].detailVertices, scene.meshes[1].detailVertices)
-        assertEquals(2, uniquePrepareVertexArrays(scene.meshes).size)
+        assertEquals(3, uniquePrepareVertexArrays(scene.meshes).size)
     }
 
     @Test
@@ -160,7 +161,7 @@ class PrepareModelSceneBuilderTest {
             second.previewTriangles,
             scene.meshes[1].detailVertices,
         )
-        assertEquals(3, uniquePrepareVertexArrays(scene.meshes).size)
+        assertEquals(5, uniquePrepareVertexArrays(scene.meshes).size)
     }
 
     @Test
@@ -223,6 +224,45 @@ class PrepareModelSceneBuilderTest {
 
         assertSame(auxiliary.coarsePreviewTriangles, scene.meshes[0].vertices)
         assertSame(printable.previewTriangles, scene.meshes[1].vertices)
+    }
+
+    @Test
+    fun prepareRenderTierUsesConnectedCoarseGeometryOnlyForBedFitGestures() {
+        assertEquals(
+            PrepareModelRenderTier.COARSE,
+            prepareModelRenderTier(interactionActive = true, overlaysActive = false, zoom = 1f),
+        )
+        assertEquals(
+            PrepareModelRenderTier.PREVIEW,
+            prepareModelRenderTier(interactionActive = true, overlaysActive = false, zoom = 2f),
+        )
+        assertEquals(
+            PrepareModelRenderTier.PREVIEW,
+            prepareModelRenderTier(interactionActive = true, overlaysActive = true, zoom = 1f),
+        )
+        assertEquals(
+            PrepareModelRenderTier.DETAIL,
+            prepareModelRenderTier(interactionActive = false, overlaysActive = false, zoom = 1f),
+        )
+    }
+
+    @Test
+    fun prepareRotationMatrixMatchesTheCanonicalModelTransformOrder() {
+        val transform = ModelTransform(
+            rotationXdeg = 37f,
+            rotationYdeg = -23f,
+            rotationZdeg = 81f,
+        )
+        val point = floatArrayOf(4f, -7f, 11f)
+        val expected = transform.rotate(point)
+        val matrix = transform.prepareRotationMatrix()
+        val actual = floatArrayOf(
+            matrix[0] * point[0] + matrix[3] * point[1] + matrix[6] * point[2],
+            matrix[1] * point[0] + matrix[4] * point[1] + matrix[7] * point[2],
+            matrix[2] * point[0] + matrix[5] * point[1] + matrix[8] * point[2],
+        )
+
+        assertArrayEquals(expected, actual, 0.0001f)
     }
 
     private fun modelWithDetail(name: String): ModelInfo = ModelInfo(

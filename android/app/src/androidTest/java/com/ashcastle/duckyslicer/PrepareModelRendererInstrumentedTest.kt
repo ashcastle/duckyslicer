@@ -321,6 +321,12 @@ class PrepareModelRendererInstrumentedTest {
     fun densePrepareCameraFramesReuseOneUploadedMesh() {
         withGles3Pbuffer(720, 1280) {
             val triangles = denseGridTriangles(columns = 100, rows = 60)
+            val coarseTriangles = denseGridTriangles(
+                columns = 40,
+                rows = 25,
+                width = 200f,
+                height = 180f,
+            )
             val model = ModelInfo(
                 fileName = "dense-grid.stl",
                 triangles = triangles.size / 9,
@@ -329,6 +335,7 @@ class PrepareModelRendererInstrumentedTest {
                 minMm = listOf(0.0, 0.0, 0.0),
                 maxMm = listOf(200.0, 180.0, 20.0),
                 previewTriangles = triangles,
+                coarsePreviewTriangles = coarseTriangles,
             )
             val projectObject = ProjectObject(id = "dense", model = model)
             val geometry = PrepareModelSceneBuilder.build(
@@ -372,6 +379,7 @@ class PrepareModelRendererInstrumentedTest {
                     objectStates,
                     projectObject.id,
                     PrepareModelCamera(-45f + frame * 2f, 55f, 1f, 0f, 0f),
+                    interactionActive = true,
                 )
                 val started = SystemClock.elapsedRealtimeNanos()
                 renderer.onDrawFrame(null)
@@ -386,6 +394,7 @@ class PrepareModelRendererInstrumentedTest {
             )
             assertTrue(GLES30.glGetError() == GLES30.GL_NO_ERROR)
             assertTrue("Camera changes must not re-upload topology", renderer.geometryUploadCountForTest() == 1)
+            assertEquals(2_000 * 3, renderer.lastMeshVertexCountForTest())
             val sorted = durations.drop(2).sorted()
             val p50Ms = sorted[sorted.size / 2] / 1_000_000.0
             val p95Ms = sorted.last() / 1_000_000.0
@@ -394,7 +403,7 @@ class PrepareModelRendererInstrumentedTest {
                     "p50Ms=$p50Ms p95Ms=$p95Ms uploads=1",
             )
             assertTrue(
-                "12k-triangle camera frames must remain interactive: p95=$p95Ms ms",
+                "Connected 2k-triangle gesture frames must remain interactive: p95=$p95Ms ms",
                 p95Ms <= 50.0,
             )
             renderer.releaseGpuGeometryForMemoryPressure()
@@ -411,22 +420,37 @@ class PrepareModelRendererInstrumentedTest {
         )
         val fullMetrics = measureDensePrepareInteraction(logical, logical)
         val reducedMetrics = measureDensePrepareInteraction(reduced, logical)
+        val settledDetailMetrics = measureDensePrepareInteraction(
+            logical,
+            logical,
+            interactionActive = false,
+        )
         println(
             "DuckyPrepare raster full=${logical.width}x${logical.height} " +
                 "reduced=${reduced.width}x${reduced.height} " +
                 "fullP50Ms=${fullMetrics.p50Ms} fullP95Ms=${fullMetrics.p95Ms} " +
                 "reducedP50Ms=${reducedMetrics.p50Ms} reducedP95Ms=${reducedMetrics.p95Ms} " +
-                "vertices=${reducedMetrics.vertexCount}",
+                "detailP50Ms=${settledDetailMetrics.p50Ms} " +
+                "detailP95Ms=${settledDetailMetrics.p95Ms} " +
+                "gestureVertices=${reducedMetrics.vertexCount} " +
+                "detailVertices=${settledDetailMetrics.vertexCount}",
         )
         assertTrue(reduced.width * reduced.height < logical.width * logical.height * 0.55f)
-        assertEquals(12_000 * 3, fullMetrics.vertexCount)
+        assertEquals(2_000 * 3, fullMetrics.vertexCount)
         assertEquals(fullMetrics.vertexCount, reducedMetrics.vertexCount)
         assertEquals(1, fullMetrics.geometryUploads)
         assertEquals(1, reducedMetrics.geometryUploads)
+        assertEquals(48_000 * 3, settledDetailMetrics.vertexCount)
+        assertEquals(1, settledDetailMetrics.geometryUploads)
         assertTrue(
             "Reduced Prepare raster must not regress interaction completion: " +
                 "full=${fullMetrics.p95Ms} reduced=${reducedMetrics.p95Ms}",
             reducedMetrics.p95Ms <= fullMetrics.p95Ms * 1.35 + 2.0,
+        )
+        assertTrue(
+            "The restored 48k-triangle detail frame must remain responsive: " +
+                "p95=${settledDetailMetrics.p95Ms}",
+            settledDetailMetrics.p95Ms <= 50.0,
         )
     }
 
@@ -437,8 +461,9 @@ class PrepareModelRendererInstrumentedTest {
         val unavailable = AtomicBoolean(false)
         val memoryPressureCalls = AtomicInteger()
         val memoryRecoveryCalls = AtomicInteger()
-        val previewTriangles = denseGridTriangles(columns = 100, rows = 60)
-        val detailTriangles = denseGridTriangles(columns = 200, rows = 120)
+        val previewTriangles = denseGridTriangles(100, 60, 400f, 360f)
+        val coarseTriangles = denseGridTriangles(40, 25, 400f, 360f)
+        val detailTriangles = denseGridTriangles(200, 120, 400f, 360f)
         val model = ModelInfo(
             fileName = "production-dense-raster.stl",
             triangles = 200_000,
@@ -447,6 +472,7 @@ class PrepareModelRendererInstrumentedTest {
             minMm = listOf(0.0, 0.0, 0.0),
             maxMm = listOf(400.0, 360.0, 20.0),
             previewTriangles = previewTriangles,
+            coarsePreviewTriangles = coarseTriangles,
             detailPreviewTriangles = detailTriangles,
         )
         val projectObject = ProjectObject(id = "production-dense", model = model)
@@ -518,9 +544,23 @@ class PrepareModelRendererInstrumentedTest {
             )
             waitForPrepareSurface(surface) {
                 it.renderBufferSizeForTest() == interaction &&
-                    it.lastMeshVertexCountForTest() == 12_000 * 3
+                    it.lastMeshVertexCountForTest() == 2_000 * 3
             }
             assertEquals(interaction, surface.renderBufferSizeForTest())
+
+            scenario.onActivity {
+                surface.submit(
+                    geometry,
+                    objectStates,
+                    projectObject.id,
+                    camera.copy(yawDegrees = -37f, zoom = 2f),
+                    interactionActive = true,
+                    overlays = emptyList(),
+                )
+            }
+            waitForPrepareSurface(surface) {
+                it.lastMeshVertexCountForTest() == 12_000 * 3
+            }
 
             scenario.onActivity {
                 surface.submit(
@@ -679,12 +719,11 @@ class PrepareModelRendererInstrumentedTest {
 
             assertEquals(
                 "Four bed buffers, one preview, and two distinct coarse meshes are retained",
-                7,
+                8,
                 renderer.retainedTopologyBufferCountForTest(),
             )
             assertEquals(
-                models.first().previewTriangles.size / 3 +
-                    models.drop(1).sumOf { it.coarsePreviewTriangles.size / 3 },
+                models.sumOf { it.coarsePreviewTriangles.size / 3 },
                 renderer.lastMeshVertexCountForTest(),
             )
             assertEquals(GLES30.GL_NO_ERROR, GLES30.glGetError())
@@ -933,9 +972,11 @@ class PrepareModelRendererInstrumentedTest {
     private fun measureDensePrepareInteraction(
         bufferSize: PreviewSurfaceSize,
         logicalSize: PreviewSurfaceSize,
+        interactionActive: Boolean = true,
     ): DenseFrameMetrics = withGles3Pbuffer(bufferSize.width, bufferSize.height) {
-        val previewTriangles = denseGridTriangles(columns = 100, rows = 60)
-        val detailTriangles = denseGridTriangles(columns = 200, rows = 120)
+        val previewTriangles = denseGridTriangles(100, 60, 400f, 360f)
+        val coarseTriangles = denseGridTriangles(40, 25, 400f, 360f)
+        val detailTriangles = denseGridTriangles(200, 120, 400f, 360f)
         val model = ModelInfo(
             fileName = "dense-raster.stl",
             triangles = 200_000,
@@ -944,6 +985,7 @@ class PrepareModelRendererInstrumentedTest {
             minMm = listOf(0.0, 0.0, 0.0),
             maxMm = listOf(400.0, 360.0, 20.0),
             previewTriangles = previewTriangles,
+            coarsePreviewTriangles = coarseTriangles,
             detailPreviewTriangles = detailTriangles,
         )
         val projectObject = ProjectObject(id = "dense-raster", model = model)
@@ -971,7 +1013,7 @@ class PrepareModelRendererInstrumentedTest {
                 objectStates,
                 projectObject.id,
                 PrepareModelCamera(-45f + frame * 1.5f, 55f, 1f, 0f, 0f),
-                interactionActive = true,
+                interactionActive = interactionActive,
             )
             val started = SystemClock.elapsedRealtimeNanos()
             renderer.onDrawFrame(null)
@@ -1001,15 +1043,23 @@ class PrepareModelRendererInstrumentedTest {
         assertTrue("Prepare production Surface did not reach the expected state", condition(surface))
     }
 
-    private fun denseGridTriangles(columns: Int, rows: Int): FloatArray {
+    private fun denseGridTriangles(
+        columns: Int,
+        rows: Int,
+        width: Float = columns * 2f,
+        height: Float = rows * 3f,
+    ): FloatArray {
+        require(columns > 0 && rows > 0 && width > 0f && height > 0f)
         val result = FloatArray(columns * rows * 2 * 9)
         var output = 0
+        val stepX = width / columns
+        val stepY = height / rows
         repeat(rows) { row ->
             repeat(columns) { column ->
-                val x0 = column * 2f
-                val x1 = x0 + 2f
-                val y0 = row * 3f
-                val y1 = y0 + 3f
+                val x0 = column * stepX
+                val x1 = x0 + stepX
+                val y0 = row * stepY
+                val y1 = y0 + stepY
                 fun z(x: Float, y: Float) = (kotlin.math.sin(x * 0.04f) + kotlin.math.cos(y * 0.05f)) * 5f + 10f
                 floatArrayOf(
                     x0, y0, z(x0, y0), x1, y0, z(x1, y0), x1, y1, z(x1, y1),

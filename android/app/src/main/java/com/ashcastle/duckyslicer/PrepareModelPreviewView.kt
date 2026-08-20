@@ -33,7 +33,9 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.math.cos
 import kotlin.math.max
+import kotlin.math.sin
 
 @Composable
 internal fun DepthTestedPrepareModelScene(
@@ -180,13 +182,18 @@ internal data class PrepareModelSceneGeometry(
     val bedOutline: FloatArray,
     val bedExcludeOutline: FloatArray,
     val meshes: List<PrepareModelMeshData>,
-)
+) {
+    /** Stable draw ordering avoids sorting every camera frame in high-volume projects. */
+    val meshDrawOrder: IntArray = meshes.indices
+        .sortedBy { index -> meshes[index].role != ProjectVolumeRole.MODEL_PART }
+        .toIntArray()
+}
 
 internal fun uniquePrepareVertexArrays(meshes: List<PrepareModelMeshData>): List<FloatArray> {
     val seen = IdentityHashMap<FloatArray, Unit>()
     val unique = ArrayList<FloatArray>()
     meshes.forEach { mesh ->
-        listOf(mesh.vertices, mesh.detailVertices).forEach { vertices ->
+        listOf(mesh.coarseVertices, mesh.vertices, mesh.detailVertices).forEach { vertices ->
             if (seen.put(vertices, Unit) == null) unique += vertices
         }
     }
@@ -812,7 +819,47 @@ internal data class PrepareObjectDrawState(
     val objectId: String,
     val transform: ModelTransform,
     val minimumRotatedZ: Float,
-)
+) {
+    val rotationMatrix: FloatArray = transform.prepareRotationMatrix()
+}
+
+internal enum class PrepareModelRenderTier { COARSE, PREVIEW, DETAIL }
+
+internal fun prepareModelRenderTier(
+    interactionActive: Boolean,
+    overlaysActive: Boolean,
+    zoom: Float,
+): PrepareModelRenderTier = when {
+    overlaysActive -> PrepareModelRenderTier.PREVIEW
+    interactionActive && zoom.isFinite() && zoom <= PREPARE_COARSE_INTERACTION_MAX_ZOOM ->
+        PrepareModelRenderTier.COARSE
+    interactionActive -> PrepareModelRenderTier.PREVIEW
+    else -> PrepareModelRenderTier.DETAIL
+}
+
+internal fun ModelTransform.prepareRotationMatrix(): FloatArray {
+    val rx = Math.toRadians(rotationXdeg.toDouble()).toFloat()
+    val ry = Math.toRadians(rotationYdeg.toDouble()).toFloat()
+    val rz = Math.toRadians(rotationZdeg.toDouble()).toFloat()
+    val sx = sin(rx)
+    val cx = cos(rx)
+    val sy = sin(ry)
+    val cy = cos(ry)
+    val sz = sin(rz)
+    val cz = cos(rz)
+    // OpenGL consumes column-major matrices. This is Rz * Ry * Rx, matching transformLocal().
+    return floatArrayOf(
+        cz * cy,
+        sz * cy,
+        -sy,
+        cz * sy * sx - sz * cx,
+        sz * sy * sx + cz * cx,
+        cy * sx,
+        cz * sy * cx + sz * sx,
+        sz * sy * cx - cz * sx,
+        cy * cx,
+    )
+}
 
 internal data class PrepareModelFrame(
     val geometry: PrepareModelSceneGeometry,
@@ -835,6 +882,7 @@ internal class PrepareModelRenderer(
     private var bedGridBuffer = 0
     private var bedOutlineBuffer = 0
     private var bedExcludeOutlineBuffer = 0
+    private val coarseMeshBuffers = ArrayList<Int>()
     private val meshBuffers = ArrayList<Int>()
     private val detailMeshBuffers = ArrayList<Int>()
     private val overlayBuffers = ArrayList<PrepareOverlayGpuBuffers>()
@@ -845,13 +893,12 @@ internal class PrepareModelRenderer(
     private var sceneCenterLocation = -1
     private var bedSizeLocation = -1
     private var sceneScaleLocation = -1
-    private var yawLocation = -1
-    private var pitchLocation = -1
+    private var cameraRotationLocation = -1
     private var depthScaleLocation = -1
     private var objectModeLocation = -1
     private var sourceCenterLocation = -1
     private var signedScaleLocation = -1
-    private var rotationLocation = -1
+    private var objectRotationLocation = -1
     private var translationLocation = -1
     private var baseColorLocation = -1
     private var opacityLocation = -1
@@ -918,13 +965,12 @@ internal class PrepareModelRenderer(
         sceneCenterLocation = GLES30.glGetUniformLocation(program, "uSceneCenter")
         bedSizeLocation = GLES30.glGetUniformLocation(program, "uBedSize")
         sceneScaleLocation = GLES30.glGetUniformLocation(program, "uSceneScale")
-        yawLocation = GLES30.glGetUniformLocation(program, "uYaw")
-        pitchLocation = GLES30.glGetUniformLocation(program, "uPitch")
+        cameraRotationLocation = GLES30.glGetUniformLocation(program, "uCameraRotation")
         depthScaleLocation = GLES30.glGetUniformLocation(program, "uDepthScale")
         objectModeLocation = GLES30.glGetUniformLocation(program, "uObjectMode")
         sourceCenterLocation = GLES30.glGetUniformLocation(program, "uSourceCenter")
         signedScaleLocation = GLES30.glGetUniformLocation(program, "uSignedScale")
-        rotationLocation = GLES30.glGetUniformLocation(program, "uRotation")
+        objectRotationLocation = GLES30.glGetUniformLocation(program, "uObjectRotation")
         translationLocation = GLES30.glGetUniformLocation(program, "uTranslation")
         baseColorLocation = GLES30.glGetUniformLocation(program, "uBaseColor")
         opacityLocation = GLES30.glGetUniformLocation(program, "uOpacity")
@@ -937,13 +983,12 @@ internal class PrepareModelRenderer(
                 sceneCenterLocation,
                 bedSizeLocation,
                 sceneScaleLocation,
-                yawLocation,
-                pitchLocation,
+                cameraRotationLocation,
                 depthScaleLocation,
                 objectModeLocation,
                 sourceCenterLocation,
                 signedScaleLocation,
-                rotationLocation,
+                objectRotationLocation,
                 translationLocation,
                 baseColorLocation,
                 opacityLocation,
@@ -992,6 +1037,7 @@ internal class PrepareModelRenderer(
             if (bedGridBuffer != 0) add(bedGridBuffer)
             if (bedOutlineBuffer != 0) add(bedOutlineBuffer)
             if (bedExcludeOutlineBuffer != 0) add(bedExcludeOutlineBuffer)
+            addAll(coarseMeshBuffers)
             addAll(meshBuffers)
             addAll(detailMeshBuffers)
             overlayBuffers.forEach { buffers ->
@@ -1005,6 +1051,7 @@ internal class PrepareModelRenderer(
         bedGridBuffer = 0
         bedOutlineBuffer = 0
         bedExcludeOutlineBuffer = 0
+        coarseMeshBuffers.clear()
         meshBuffers.clear()
         detailMeshBuffers.clear()
         overlayBuffers.clear()
@@ -1039,6 +1086,7 @@ internal class PrepareModelRenderer(
             uploadBuffer(buffer, vertices)
         }
         geometry.meshes.forEach { mesh ->
+            coarseMeshBuffers += checkNotNull(vertexBuffers[mesh.coarseVertices])
             meshBuffers += checkNotNull(vertexBuffers[mesh.vertices])
             detailMeshBuffers += checkNotNull(vertexBuffers[mesh.detailVertices])
         }
@@ -1152,8 +1200,15 @@ internal class PrepareModelRenderer(
         )
         GLES30.glUniform2f(bedSizeLocation, frame.geometry.bedSizeX, frame.geometry.bedSizeY)
         GLES30.glUniform1f(sceneScaleLocation, sceneScale)
-        GLES30.glUniform1f(yawLocation, Math.toRadians(camera.yawDegrees.toDouble()).toFloat())
-        GLES30.glUniform1f(pitchLocation, Math.toRadians(camera.pitchDegrees.toDouble()).toFloat())
+        val yaw = Math.toRadians(camera.yawDegrees.toDouble()).toFloat()
+        val pitch = Math.toRadians(camera.pitchDegrees.toDouble()).toFloat()
+        GLES30.glUniform4f(
+            cameraRotationLocation,
+            cos(yaw),
+            sin(yaw),
+            sin(pitch),
+            cos(pitch),
+        )
         GLES30.glUniform1f(
             depthScaleLocation,
             max(frame.geometry.bedSizeX, frame.geometry.bedSizeY) * 8f,
@@ -1168,37 +1223,46 @@ internal class PrepareModelRenderer(
             bedFillBuffer,
             geometry.bedFill.size / PREPARE_VERTEX_FLOATS,
             GLES30.GL_TRIANGLES,
-            floatArrayOf(0.204f, 0.216f, 0.196f),
+            0.204f,
+            0.216f,
+            0.196f,
         )
         drawBuffer(
             bedGridBuffer,
             geometry.bedGrid.size / PREPARE_VERTEX_FLOATS,
             GLES30.GL_LINES,
-            floatArrayOf(0.333f, 0.349f, 0.314f),
+            0.333f,
+            0.349f,
+            0.314f,
         )
         drawBuffer(
             bedOutlineBuffer,
             geometry.bedOutline.size / PREPARE_VERTEX_FLOATS,
             GLES30.GL_LINE_LOOP,
-            floatArrayOf(0.965f, 0.788f, 0.271f),
+            0.965f,
+            0.788f,
+            0.271f,
         )
         drawBuffer(
             bedExcludeOutlineBuffer,
             geometry.bedExcludeOutline.size / PREPARE_VERTEX_FLOATS,
             GLES30.GL_LINES,
-            floatArrayOf(0.95f, 0.25f, 0.18f),
+            0.95f,
+            0.25f,
+            0.18f,
         )
     }
 
     private fun drawMeshes(frame: PrepareModelFrame) {
         GLES30.glUniform1i(lightingLocation, 1)
         setObjectMode(true)
-        val useDetail = !frame.interactionActive && frame.overlays.isEmpty()
+        val renderTier = prepareModelRenderTier(
+            interactionActive = frame.interactionActive,
+            overlaysActive = frame.overlays.isNotEmpty(),
+            zoom = frame.camera.zoom,
+        )
         lastMeshVertexCount = 0
-        val drawOrder = frame.geometry.meshes.indices.sortedBy { index ->
-            frame.geometry.meshes[index].role != ProjectVolumeRole.MODEL_PART
-        }
-        drawOrder.forEach { index ->
+        frame.geometry.meshDrawOrder.forEach { index ->
             val mesh = frame.geometry.meshes[index]
             val objectState = frame.objects[mesh.objectId] ?: return@forEach
             applyObject(objectState, mesh.sourceCenter, frame.geometry)
@@ -1207,8 +1271,16 @@ internal class PrepareModelRenderer(
                 selectedLocation,
                 if (mesh.objectId == frame.selectedObjectId) 1 else 0,
             )
-            val vertices = if (useDetail) mesh.detailVertices else mesh.vertices
-            val buffer = if (useDetail) detailMeshBuffers[index] else meshBuffers[index]
+            val vertices = when (renderTier) {
+                PrepareModelRenderTier.COARSE -> mesh.coarseVertices
+                PrepareModelRenderTier.PREVIEW -> mesh.vertices
+                PrepareModelRenderTier.DETAIL -> mesh.detailVertices
+            }
+            val buffer = when (renderTier) {
+                PrepareModelRenderTier.COARSE -> coarseMeshBuffers[index]
+                PrepareModelRenderTier.PREVIEW -> meshBuffers[index]
+                PrepareModelRenderTier.DETAIL -> detailMeshBuffers[index]
+            }
             lastMeshVertexCount += vertices.size / PREPARE_VERTEX_FLOATS
             val auxiliary = mesh.role != ProjectVolumeRole.MODEL_PART
             if (auxiliary) {
@@ -1220,7 +1292,9 @@ internal class PrepareModelRenderer(
                 buffer,
                 vertices.size / PREPARE_VERTEX_FLOATS,
                 GLES30.GL_TRIANGLES,
-                floatArrayOf(color.red, color.green, color.blue),
+                color.red,
+                color.green,
+                color.blue,
                 if (auxiliary) 0.48f else 1f,
             )
             if (auxiliary) {
@@ -1259,11 +1333,9 @@ internal class PrepareModelRenderer(
                     buffers.vertices,
                     customVertices.size / PREPARE_VERTEX_FLOATS,
                     GLES30.GL_TRIANGLES,
-                    floatArrayOf(
-                        overlay.fillColor.red,
-                        overlay.fillColor.green,
-                        overlay.fillColor.blue,
-                    ),
+                    overlay.fillColor.red,
+                    overlay.fillColor.green,
+                    overlay.fillColor.blue,
                     overlay.fillColor.alpha,
                 )
             }
@@ -1310,11 +1382,12 @@ internal class PrepareModelRenderer(
             transform.scaleY * if (transform.mirrorY) -1f else 1f,
             transform.scaleZ * if (transform.mirrorZ) -1f else 1f,
         )
-        GLES30.glUniform3f(
-            rotationLocation,
-            Math.toRadians(transform.rotationXdeg.toDouble()).toFloat(),
-            Math.toRadians(transform.rotationYdeg.toDouble()).toFloat(),
-            Math.toRadians(transform.rotationZdeg.toDouble()).toFloat(),
+        GLES30.glUniformMatrix3fv(
+            objectRotationLocation,
+            1,
+            false,
+            objectState.rotationMatrix,
+            0,
         )
         GLES30.glUniform3f(
             translationLocation,
@@ -1329,7 +1402,13 @@ internal class PrepareModelRenderer(
         if (!enabled) {
             GLES30.glUniform3f(sourceCenterLocation, 0f, 0f, 0f)
             GLES30.glUniform3f(signedScaleLocation, 1f, 1f, 1f)
-            GLES30.glUniform3f(rotationLocation, 0f, 0f, 0f)
+            GLES30.glUniformMatrix3fv(
+                objectRotationLocation,
+                1,
+                false,
+                PREPARE_IDENTITY_ROTATION_MATRIX,
+                0,
+            )
             GLES30.glUniform3f(translationLocation, 0f, 0f, 0f)
         }
     }
@@ -1338,11 +1417,13 @@ internal class PrepareModelRenderer(
         id: Int,
         vertexCount: Int,
         mode: Int,
-        color: FloatArray,
+        red: Float,
+        green: Float,
+        blue: Float,
         opacity: Float = 1f,
     ) {
         if (id == 0 || vertexCount == 0) return
-        GLES30.glUniform3f(baseColorLocation, color[0], color[1], color[2])
+        GLES30.glUniform3f(baseColorLocation, red, green, blue)
         GLES30.glUniform1f(opacityLocation, opacity)
         bindVertexBuffer(id)
         GLES30.glDrawArrays(mode, 0, vertexCount)
@@ -1452,49 +1533,38 @@ private const val PREPARE_RENDERER_RELEASE_TIMEOUT_MS = 1_000L
 private const val PREPARE_RENDERER_LOG_TAG = "DuckyPrepareRenderer"
 internal const val MAX_PREPARE_ADDITIONAL_DETAIL_GPU_BYTES = 16L * 1_024L * 1_024L
 internal const val MAX_PREPARE_LOW_DETAIL_GPU_BYTES = 24L * 1_024L * 1_024L
+internal const val PREPARE_COARSE_INTERACTION_MAX_ZOOM = 1.6f
+private val PREPARE_IDENTITY_ROTATION_MATRIX = floatArrayOf(
+    1f, 0f, 0f,
+    0f, 1f, 0f,
+    0f, 0f, 1f,
+)
 
 private const val PREPARE_VERTEX_SHADER = """#version 300 es
     uniform vec2 uViewport;
     uniform vec2 uSceneCenter;
     uniform vec2 uBedSize;
     uniform float uSceneScale;
-    uniform float uYaw;
-    uniform float uPitch;
+    uniform vec4 uCameraRotation;
     uniform float uDepthScale;
     uniform int uObjectMode;
     uniform vec3 uSourceCenter;
     uniform vec3 uSignedScale;
-    uniform vec3 uRotation;
+    uniform mat3 uObjectRotation;
     uniform vec3 uTranslation;
     in vec3 aPosition;
     out vec3 vWorldPosition;
 
-    vec3 rotatePoint(vec3 point) {
-        float sx = sin(uRotation.x);
-        float cx = cos(uRotation.x);
-        float sy = sin(uRotation.y);
-        float cy = cos(uRotation.y);
-        float sz = sin(uRotation.z);
-        float cz = cos(uRotation.z);
-        vec3 afterX = vec3(point.x, point.y * cx - point.z * sx, point.y * sx + point.z * cx);
-        vec3 afterY = vec3(
-            afterX.x * cy + afterX.z * sy,
-            afterX.y,
-            -afterX.x * sy + afterX.z * cy
-        );
-        return vec3(afterY.x * cz - afterY.y * sz, afterY.x * sz + afterY.y * cz, afterY.z);
-    }
-
     void main() {
         vec3 world = aPosition;
         if (uObjectMode != 0) {
-            world = rotatePoint((aPosition - uSourceCenter) * uSignedScale) + uTranslation;
+            world = uObjectRotation * ((aPosition - uSourceCenter) * uSignedScale) + uTranslation;
         }
         vec2 delta = world.xy - uBedSize * 0.5;
-        float yawCos = cos(uYaw);
-        float yawSin = sin(uYaw);
-        float pitchSin = sin(uPitch);
-        float pitchCos = cos(uPitch);
+        float yawCos = uCameraRotation.x;
+        float yawSin = uCameraRotation.y;
+        float pitchSin = uCameraRotation.z;
+        float pitchCos = uCameraRotation.w;
         float rotatedX = delta.x * yawCos - delta.y * yawSin;
         float rotatedY = delta.x * yawSin + delta.y * yawCos;
         vec2 screen = uSceneCenter + vec2(
