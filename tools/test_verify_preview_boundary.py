@@ -143,7 +143,13 @@ def valid_sources() -> dict[str, str]:
             "prepareSurfaceSize( texture.setDefaultBufferSize(target.width, target.height) "
             "resizeEglSurface(texture, target) EGL14.eglDestroySurface(eglDisplay, eglSurface) "
             "renderer.setLogicalViewportSize(logicalSurfaceWidth, logicalSurfaceHeight) "
-            "GLES30.glUniform2f(viewportLocation, logicalWidth.toFloat(), logicalHeight.toFloat())"
+            "GLES30.glUniform2f(viewportLocation, logicalWidth.toFloat(), logicalHeight.toFloat()) "
+            "memoryPressureActive: Boolean = false onMemoryPressure: () -> Unit = {} "
+            "onMemoryPressureRecovered: () -> Unit = {} "
+            "view.setMemoryPressureActive(memoryPressureActive) "
+            "override fun onLowMemory() = releasePrepareMemory() "
+            "if (memoryPressureActive) return private fun requestMemoryPressureRecovery() "
+            "retainedTopologyBufferCountForTest()"
         ),
         "PrepareModelOverlays.kt": (
             "orcaFacetAnnotations: OrcaFacetAnnotations "
@@ -217,11 +223,11 @@ def valid_sources() -> dict[str, str]:
             "onUnavailable = { depthPreviewRuntimeAvailable = false }"
             " placements = modelPlacements currentModelPlacements[activeObject.id] "
             "val placement = checkNotNull(modelPlacements[projectObject.id])"
-            " LaunchedEffect(modelTopology, interactionActive, layOnFaceObjectId)"
-            " interactionActive || layOnFaceObjectId != null"
+            " LaunchedEffect(\n        modelTopology,\n        interactionActive,\n        layOnFaceObjectId,\n        prepareDerivedCacheLifecycle,"
+            " prepareDerivedCacheLifecycle.suspended || interactionActive ||"
             " delay(PREPARE_PICKING_PREWARM_DELAY_MS)"
             " modelPickingIndices = withModelPreparationContext"
-            " LaunchedEffect(modelTopology, layOnFaceObjectId)"
+            " LaunchedEffect(modelTopology, layOnFaceObjectId, prepareDerivedCacheLifecycle)"
             " buildPreparePickingIndices(listOf(selected))"
             " modelPickingIndices = modelPickingIndices + selectedIndices"
             " findLayOnFaceFacetAtScreen("
@@ -273,7 +279,11 @@ def valid_sources() -> dict[str, str]:
             "paintFootprintsAt(centers: List<Offset>) List<FacetPaintTarget> "
             "MAX_FACET_PAINT_BATCH_TARGETS fun drawFacetBrushCursor() "
             "private fun FacetBrushSizeControl( R.string.paint_brush_size "
-            "range = FACET_BRUSH_MIN_RADIUS_DP..FACET_BRUSH_MAX_RADIUS_DP"
+            "range = FACET_BRUSH_MIN_RADIUS_DP..FACET_BRUSH_MAX_RADIUS_DP "
+            "internal data class PrepareDerivedCacheLifecycle( "
+            "prepareDerivedCacheLifecycle.suspended modelPickingIndices = emptyMap() "
+            "layOnFaceCandidates = emptyMap() prepareOverlays = emptyList() "
+            "onMemoryPressureRecovered = { currentResumePrepareDerivedCaches()"
         ),
         "MainActivity.kt": (
             "fun fromNative(raw: FloatArray?, localPath: String) "
@@ -359,7 +369,9 @@ def valid_sources() -> dict[str, str]:
             "densePrepareInteractionReducesRasterWorkWithoutDroppingTheLowDetailShape "
             "productionPrepareSurfaceRestoresFullDetailAfterReducedRasterInteraction "
             "reducedMetrics.vertexCount "
-            "reducedMetrics.p95Ms <= fullMetrics.p95Ms * 1.35 + 2.0"
+            "reducedMetrics.p95Ms <= fullMetrics.p95Ms * 1.35 + 2.0 "
+            "Repeated memory callbacks must be deduplicated until foreground recovery "
+            "Recovered Prepare rendering must remain available"
         ),
         "PrepareModelPickingTest.kt": (
             "spatialIndexCullsArbitraryFacetOrderWithoutChangingExactHits "
@@ -468,7 +480,8 @@ def valid_sources() -> dict[str, str]:
             "thresholdRequiresTheShortestSideToBeTabletSized "
             "largeFontUsesIconNavigationWithoutClippedVisibleLabels "
             "workspacePanelAlwaysLeavesTheTopOverlayReachable "
-            "activeSliceAndInitialPreviewLockModelEditing"
+            "activeSliceAndInitialPreviewLockModelEditing "
+            "prepareDerivedCachesReleaseAndResumeOncePerPressureEpisode"
         ),
         "OrcaFacetEditingTest.kt": (
             "partialEditsPaintAndEraseIndependentRegionsThenCompress "

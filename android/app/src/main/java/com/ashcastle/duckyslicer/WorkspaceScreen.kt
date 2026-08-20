@@ -176,6 +176,17 @@ private const val FACET_BRUSH_SAMPLE_HIT_RADIUS_RATIO = 0.28f
 internal const val FACET_BRUSH_SAMPLE_COUNT = 37
 internal const val MAX_FACET_BRUSH_STROKE_CENTERS = 6
 
+internal data class PrepareDerivedCacheLifecycle(
+    val suspended: Boolean = false,
+    val generation: Long = 0L,
+) {
+    fun release(): PrepareDerivedCacheLifecycle =
+        if (suspended) this else copy(suspended = true, generation = generation + 1L)
+
+    fun resume(): PrepareDerivedCacheLifecycle =
+        if (!suspended) this else copy(suspended = false, generation = generation + 1L)
+}
+
 internal fun useWorkspaceNavigationRail(widthDp: Float, heightDp: Float): Boolean =
     minOf(widthDp, heightDp) >= TabletShortestSideDp
 
@@ -3018,6 +3029,9 @@ private fun BedScene(
     val modelTopology = projectObjects.flatMap { projectObject ->
         projectObject.volumes.map { volume -> (projectObject.id to volume.id) to volume.model }
     }
+    var prepareDerivedCacheLifecycle by remember(modelTopology) {
+        mutableStateOf(PrepareDerivedCacheLifecycle())
+    }
     val modelMeshEdges = remember(modelTopology, useDepthTestedPrepare) {
         if (useDepthTestedPrepare) {
             emptyMap()
@@ -3044,9 +3058,15 @@ private fun BedScene(
     var modelPickingIndices by remember(modelTopology) {
         mutableStateOf<Map<PreparePickingIndexKey, PrepareVolumePickingIndex>>(emptyMap())
     }
-    LaunchedEffect(modelTopology, interactionActive, layOnFaceObjectId) {
+    LaunchedEffect(
+        modelTopology,
+        interactionActive,
+        layOnFaceObjectId,
+        prepareDerivedCacheLifecycle,
+    ) {
         if (
-            interactionActive || layOnFaceObjectId != null ||
+            prepareDerivedCacheLifecycle.suspended || interactionActive ||
+            layOnFaceObjectId != null ||
             modelPickingIndices.size == modelTopology.size
         ) {
             return@LaunchedEffect
@@ -3057,7 +3077,8 @@ private fun BedScene(
             buildPreparePickingIndices(snapshot) { ensureActive() }
         }
     }
-    LaunchedEffect(modelTopology, layOnFaceObjectId) {
+    LaunchedEffect(modelTopology, layOnFaceObjectId, prepareDerivedCacheLifecycle) {
+        if (prepareDerivedCacheLifecycle.suspended) return@LaunchedEffect
         val selected = projectObjects.firstOrNull { it.id == layOnFaceObjectId }
             ?: return@LaunchedEffect
         val missingIndex = selected.volumes.any { volume ->
@@ -3072,7 +3093,11 @@ private fun BedScene(
     var layOnFaceCandidates by remember(layOnFaceObjectId, modelTopology) {
         mutableStateOf<Map<String, List<LayOnFaceCandidate>>>(emptyMap())
     }
-    LaunchedEffect(layOnFaceObjectId, modelTopology) {
+    LaunchedEffect(layOnFaceObjectId, modelTopology, prepareDerivedCacheLifecycle) {
+        if (prepareDerivedCacheLifecycle.suspended) {
+            layOnFaceCandidates = emptyMap()
+            return@LaunchedEffect
+        }
         val selected = projectObjects.firstOrNull { it.id == layOnFaceObjectId }
         layOnFaceCandidates = if (selected == null) {
             emptyMap()
@@ -3135,7 +3160,12 @@ private fun BedScene(
         prepareOverlayTopology,
         layOnFaceObjectId,
         layOnFaceCandidateFacets,
+        prepareDerivedCacheLifecycle,
     ) {
+        if (prepareDerivedCacheLifecycle.suspended) {
+            prepareOverlays = emptyList()
+            return@LaunchedEffect
+        }
         val snapshot = projectObjects
         prepareOverlays = withModelPreparationContext {
             PrepareModelOverlayBuilder.build(
@@ -3165,6 +3195,9 @@ private fun BedScene(
     val currentObjects by rememberUpdatedState(projectObjects)
     val currentModelPlacements by rememberUpdatedState(modelPlacements)
     val currentModelPickingIndices by rememberUpdatedState(modelPickingIndices)
+    val currentResumePrepareDerivedCaches by rememberUpdatedState<() -> Unit> {
+        prepareDerivedCacheLifecycle = prepareDerivedCacheLifecycle.resume()
+    }
     val currentSelectionCallback by rememberUpdatedState(onObjectSelected)
     val currentTransformCallback by rememberUpdatedState(onModelTransformPreview)
     val currentTransformCommitCallback by rememberUpdatedState(onModelTransformCommitted)
@@ -3261,6 +3294,19 @@ private fun BedScene(
                 interactionActive = interactionActive,
                 overlays = prepareOverlays,
                 onUnavailable = { prepareRendererRuntimeAvailable = false },
+                memoryPressureActive = prepareDerivedCacheLifecycle.suspended,
+                onMemoryPressure = {
+                    val released = prepareDerivedCacheLifecycle.release()
+                    if (released != prepareDerivedCacheLifecycle) {
+                        prepareDerivedCacheLifecycle = released
+                        modelPickingIndices = emptyMap()
+                        layOnFaceCandidates = emptyMap()
+                        prepareOverlays = emptyList()
+                    }
+                },
+                onMemoryPressureRecovered = {
+                    prepareDerivedCacheLifecycle = prepareDerivedCacheLifecycle.resume()
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -3285,6 +3331,7 @@ private fun BedScene(
         ) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
+                currentResumePrepareDerivedCaches()
                 val brimEditingObject = brimEditObjectId?.let { objectId ->
                     currentObjects.firstOrNull { it.id == objectId }
                 }

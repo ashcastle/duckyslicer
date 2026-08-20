@@ -435,6 +435,8 @@ class PrepareModelRendererInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val surfaceReference = AtomicReference<PrepareModelSurfaceView>()
         val unavailable = AtomicBoolean(false)
+        val memoryPressureCalls = AtomicInteger()
+        val memoryRecoveryCalls = AtomicInteger()
         val previewTriangles = denseGridTriangles(columns = 100, rows = 60)
         val detailTriangles = denseGridTriangles(columns = 200, rows = 120)
         val model = ModelInfo(
@@ -466,7 +468,15 @@ class PrepareModelRendererInstrumentedTest {
             Intent(context, AccessibilityHarnessActivity::class.java),
         ).use { scenario ->
             scenario.onActivity { activity ->
-                val surface = PrepareModelSurfaceView(activity) { unavailable.set(true) }
+                val surface = PrepareModelSurfaceView(
+                    context = activity,
+                    onUnavailable = { unavailable.set(true) },
+                    onMemoryPressure = { memoryPressureCalls.incrementAndGet() },
+                    onMemoryPressureRecovered = {
+                        memoryRecoveryCalls.incrementAndGet()
+                        surfaceReference.get()?.setMemoryPressureActive(false)
+                    },
+                )
                 activity.setContentView(
                     surface,
                     ViewGroup.LayoutParams(
@@ -527,6 +537,30 @@ class PrepareModelRendererInstrumentedTest {
                     it.lastMeshVertexCountForTest() == 48_000 * 3
             }
             assertEquals(logical, surface.renderBufferSizeForTest())
+
+            val uploadsBeforeMemoryPressure = surface.geometryUploadCountForTest()
+            assertTrue(surface.retainedTopologyBufferCountForTest() > 0)
+            scenario.onActivity {
+                surface.releasePrepareMemoryForTest()
+                surface.releasePrepareMemoryForTest()
+            }
+            waitForPrepareSurface(surface) {
+                memoryPressureCalls.get() == 1 &&
+                    it.retainedTopologyBufferCountForTest() == 0
+            }
+            assertEquals(
+                "Repeated memory callbacks must be deduplicated until foreground recovery",
+                1,
+                memoryPressureCalls.get(),
+            )
+
+            scenario.onActivity { surface.requestMemoryPressureRecoveryForTest() }
+            waitForPrepareSurface(surface) {
+                memoryRecoveryCalls.get() == 1 &&
+                    it.geometryUploadCountForTest() > uploadsBeforeMemoryPressure &&
+                    it.retainedTopologyBufferCountForTest() > 0
+            }
+            assertFalse("Recovered Prepare rendering must remain available", unavailable.get())
         }
     }
 

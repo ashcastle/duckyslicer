@@ -306,6 +306,14 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "EGL14.eglDestroySurface(eglDisplay, eglSurface)",
         "renderer.setLogicalViewportSize(logicalSurfaceWidth, logicalSurfaceHeight)",
         "GLES30.glUniform2f(viewportLocation, logicalWidth.toFloat(), logicalHeight.toFloat())",
+        "memoryPressureActive: Boolean = false",
+        "onMemoryPressure: () -> Unit = {}",
+        "onMemoryPressureRecovered: () -> Unit = {}",
+        "view.setMemoryPressureActive(memoryPressureActive)",
+        "override fun onLowMemory() = releasePrepareMemory()",
+        "if (memoryPressureActive) return",
+        "private fun requestMemoryPressureRecovery()",
+        "retainedTopologyBufferCountForTest()",
     ):
         if marker not in prepare_renderer:
             raise VerificationError(f"Prepare model loading contract is missing: {marker}")
@@ -374,6 +382,13 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "private fun FacetBrushSizeControl(",
         "R.string.paint_brush_size",
         "range = FACET_BRUSH_MIN_RADIUS_DP..FACET_BRUSH_MAX_RADIUS_DP",
+        "internal data class PrepareDerivedCacheLifecycle(",
+        "prepareDerivedCacheLifecycle.suspended",
+        "modelPickingIndices = emptyMap()",
+        "layOnFaceCandidates = emptyMap()",
+        "prepareOverlays = emptyList()",
+        "onMemoryPressureRecovered = {",
+        "currentResumePrepareDerivedCaches()",
     ):
         if marker not in workspace:
             raise VerificationError(f"partial-facet brush routing is missing: {marker}")
@@ -490,6 +505,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "productionPrepareSurfaceRestoresFullDetailAfterReducedRasterInteraction",
         "reducedMetrics.vertexCount",
         "reducedMetrics.p95Ms <= fullMetrics.p95Ms * 1.35 + 2.0",
+        "Repeated memory callbacks must be deduplicated until foreground recovery",
+        "Recovered Prepare rendering must remain available",
     ):
         if marker not in prepare_tests:
             raise VerificationError(f"Prepare performance regression is missing: {marker}")
@@ -611,11 +628,11 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "placements = modelPlacements",
         "currentModelPlacements[activeObject.id]",
         "val placement = checkNotNull(modelPlacements[projectObject.id])",
-        "LaunchedEffect(modelTopology, interactionActive, layOnFaceObjectId)",
-        "interactionActive || layOnFaceObjectId != null",
+        "LaunchedEffect(\n        modelTopology,\n        interactionActive,\n        layOnFaceObjectId,\n        prepareDerivedCacheLifecycle,",
+        "prepareDerivedCacheLifecycle.suspended || interactionActive ||",
         "delay(PREPARE_PICKING_PREWARM_DELAY_MS)",
         "modelPickingIndices = withModelPreparationContext",
-        "LaunchedEffect(modelTopology, layOnFaceObjectId)",
+        "LaunchedEffect(modelTopology, layOnFaceObjectId, prepareDerivedCacheLifecycle)",
         "buildPreparePickingIndices(listOf(selected))",
         "modelPickingIndices = modelPickingIndices + selectedIndices",
         "findLayOnFaceFacetAtScreen(",
@@ -741,6 +758,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "largeFontUsesIconNavigationWithoutClippedVisibleLabels",
         "workspacePanelAlwaysLeavesTheTopOverlayReachable",
         "activeSliceAndInitialPreviewLockModelEditing",
+        "prepareDerivedCachesReleaseAndResumeOncePerPressureEpisode",
     ):
         if marker not in layout_tests:
             raise VerificationError(f"responsive workspace regression is missing: {marker}")

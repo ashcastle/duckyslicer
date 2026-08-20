@@ -46,6 +46,22 @@ class WorkspaceLayoutPolicyTest {
     }
 
     @Test
+    fun prepareDerivedCachesReleaseAndResumeOncePerPressureEpisode() {
+        val active = PrepareDerivedCacheLifecycle()
+        val released = active.release()
+
+        assertTrue(released.suspended)
+        assertEquals(1L, released.generation)
+        assertEquals(released, released.release())
+
+        val resumed = released.resume()
+        assertFalse(resumed.suspended)
+        assertEquals(2L, resumed.generation)
+        assertEquals(resumed, resumed.resume())
+        assertEquals(3L, resumed.release().generation)
+    }
+
+    @Test
     fun pinchKeepsTheTouchedScenePointUnderTheFingerCentroid() {
         val result = anchoredWorkspacePanZoom(
             pan = Offset.Zero,

@@ -51,6 +51,9 @@ internal fun DepthTestedPrepareModelScene(
     interactionActive: Boolean,
     overlays: List<PrepareModelOverlayData>,
     onUnavailable: () -> Unit,
+    memoryPressureActive: Boolean = false,
+    onMemoryPressure: () -> Unit = {},
+    onMemoryPressureRecovered: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val topology = projectObjects.flatMap { projectObject ->
@@ -102,11 +105,19 @@ internal fun DepthTestedPrepareModelScene(
         }
     }
     val currentOnUnavailable = rememberUpdatedState(onUnavailable)
+    val currentOnMemoryPressure = rememberUpdatedState(onMemoryPressure)
+    val currentOnMemoryPressureRecovered = rememberUpdatedState(onMemoryPressureRecovered)
     AndroidView(
         factory = { context ->
-            PrepareModelSurfaceView(context) { currentOnUnavailable.value() }
+            PrepareModelSurfaceView(
+                context = context,
+                onUnavailable = { currentOnUnavailable.value() },
+                onMemoryPressure = { currentOnMemoryPressure.value() },
+                onMemoryPressureRecovered = { currentOnMemoryPressureRecovered.value() },
+            )
         },
         update = { view ->
+            view.setMemoryPressureActive(memoryPressureActive)
             view.submit(
                 geometry = sceneLoad.geometry,
                 objects = objectDrawStates,
@@ -291,6 +302,8 @@ internal object PrepareModelSceneBuilder {
 internal class PrepareModelSurfaceView(
     context: Context,
     private val onUnavailable: () -> Unit,
+    private val onMemoryPressure: () -> Unit = {},
+    private val onMemoryPressureRecovered: () -> Unit = {},
 ) : TextureView(context), TextureView.SurfaceTextureListener {
     private val applicationContext = context.applicationContext
     private var renderThread: HandlerThread? = null
@@ -303,6 +316,8 @@ internal class PrepareModelSurfaceView(
     private var logicalSurfaceWidth = 1
     private var logicalSurfaceHeight = 1
     private var interactionActive = false
+    private var memoryPressureActive = false
+    private var memoryRecoveryPosted = false
     private var appliedBufferSize: PreviewSurfaceSize? = null
     @Volatile
     private var textureAvailable = false
@@ -323,10 +338,10 @@ internal class PrepareModelSurfaceView(
         override fun onConfigurationChanged(newConfig: Configuration) = Unit
 
         @Suppress("OVERRIDE_DEPRECATION")
-        override fun onLowMemory() = releaseGpuMemory()
+        override fun onLowMemory() = releasePrepareMemory()
 
         override fun onTrimMemory(level: Int) {
-            if (shouldReleaseToolpathGpuMemory(level)) releaseGpuMemory()
+            if (shouldReleaseToolpathGpuMemory(level)) releasePrepareMemory()
         }
     }
     private var memoryCallbacksRegistered = false
@@ -357,8 +372,19 @@ internal class PrepareModelSurfaceView(
         )
         applyRenderBufferSize()
         removeCallbacks(startupWatchdog)
+        if (memoryPressureActive) return
         if (!rendererReady) postDelayed(startupWatchdog, PREPARE_RENDERER_STARTUP_TIMEOUT_MS)
         requestTextureRender()
+    }
+
+    fun setMemoryPressureActive(active: Boolean) {
+        if (memoryPressureActive == active) return
+        memoryPressureActive = active
+        memoryRecoveryPosted = false
+        if (!active) {
+            applyRenderBufferSize()
+            requestTextureRender()
+        }
     }
 
     internal fun rendererReadyForTest(): Boolean = rendererReady
@@ -372,6 +398,13 @@ internal class PrepareModelSurfaceView(
 
     internal fun lastMeshVertexCountForTest(): Int = renderer.lastMeshVertexCountForTest()
 
+    internal fun geometryUploadCountForTest(): Int = renderer.geometryUploadCountForTest()
+
+    internal fun retainedTopologyBufferCountForTest(): Int =
+        renderer.retainedTopologyBufferCountForTest()
+
+    internal fun releasePrepareMemoryForTest() = releasePrepareMemory()
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         ensureRenderThread()
@@ -380,6 +413,13 @@ internal class PrepareModelSurfaceView(
             memoryCallbacksRegistered = true
         }
     }
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        if (visibility == VISIBLE) requestMemoryPressureRecovery()
+    }
+
+    internal fun requestMemoryPressureRecoveryForTest() = requestMemoryPressureRecovery()
 
     override fun onDetachedFromWindow() {
         removeCallbacks(startupWatchdog)
@@ -459,10 +499,22 @@ internal class PrepareModelSurfaceView(
         applyRenderBufferSize()
     }
 
-    private fun releaseGpuMemory() {
+    private fun releasePrepareMemory() {
+        if (!memoryPressureActive) {
+            memoryPressureActive = true
+            memoryRecoveryPosted = false
+            post(onMemoryPressure)
+        }
+        removeCallbacks(startupWatchdog)
         renderHandler?.post {
             if (makeCurrent()) renderer.releaseGpuGeometryForMemoryPressure()
         }
+    }
+
+    private fun requestMemoryPressureRecovery() {
+        if (!memoryPressureActive || memoryRecoveryPosted) return
+        memoryRecoveryPosted = true
+        post(onMemoryPressureRecovered)
     }
 
     private fun requestTextureRender() {
@@ -718,11 +770,16 @@ internal class PrepareModelRenderer(
     private var logicalViewportHeight = 0
     private var unavailable = false
     private var frameReadyReported = false
+    @Volatile
     private var geometryUploadCount = 0
+    @Volatile
+    private var retainedTopologyBufferCount = 0
     @Volatile
     private var lastMeshVertexCount = 0
 
     internal fun geometryUploadCountForTest(): Int = geometryUploadCount
+
+    internal fun retainedTopologyBufferCountForTest(): Int = retainedTopologyBufferCount
 
     internal fun lastMeshVertexCountForTest(): Int = lastMeshVertexCount
 
@@ -858,6 +915,7 @@ internal class PrepareModelRenderer(
         overlayBuffers.clear()
         uploadedGeometry = null
         uploadedOverlays = null
+        retainedTopologyBufferCount = 0
     }
 
     private fun upload(geometry: PrepareModelSceneGeometry): Boolean {
@@ -904,6 +962,7 @@ internal class PrepareModelRenderer(
         }
         uploadedGeometry = geometry
         geometryUploadCount += 1
+        retainedTopologyBufferCount = bufferCount
         return true
     }
 
