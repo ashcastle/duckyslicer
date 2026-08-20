@@ -149,7 +149,12 @@ def valid_sources() -> dict[str, str]:
             "view.setMemoryPressureActive(memoryPressureActive) "
             "override fun onLowMemory() = releasePrepareMemory() "
             "if (memoryPressureActive) return private fun requestMemoryPressureRecovery() "
-            "retainedTopologyBufferCountForTest()"
+            "retainedTopologyBufferCountForTest() "
+            "uniquePrepareVertexArrays(geometry.meshes) IdentityHashMap<FloatArray, Int>() "
+            "additionalDetailBudgetBytes: Long = MAX_PREPARE_ADDITIONAL_DETAIL_GPU_BYTES "
+            "boundedPrepareDetailMeshes(rawMeshes, additionalDetailBudgetBytes) "
+            ".sortedBy { indexed -> indexed.value.role != ProjectVolumeRole.MODEL_PART } "
+            "MAX_PREPARE_ADDITIONAL_DETAIL_GPU_BYTES = 16L * 1_024L * 1_024L"
         ),
         "PrepareModelOverlays.kt": (
             "orcaFacetAnnotations: OrcaFacetAnnotations "
@@ -371,7 +376,9 @@ def valid_sources() -> dict[str, str]:
             "reducedMetrics.vertexCount "
             "reducedMetrics.p95Ms <= fullMetrics.p95Ms * 1.35 + 2.0 "
             "Repeated memory callbacks must be deduplicated until foreground recovery "
-            "Recovered Prepare rendering must remain available"
+            "Recovered Prepare rendering must remain available "
+            "repeatedPlacementsUploadOneSharedLowAndDetailTopologyPair "
+            "Four bed buffers plus one shared low/detail pair must be retained"
         ),
         "PrepareModelPickingTest.kt": (
             "spatialIndexCullsArbitraryFacetOrderWithoutChangingExactHits "

@@ -565,6 +565,62 @@ class PrepareModelRendererInstrumentedTest {
     }
 
     @Test
+    fun repeatedPlacementsUploadOneSharedLowAndDetailTopologyPair() =
+        withGles3Pbuffer(128, 128) {
+            val preview = denseGridTriangles(columns = 2, rows = 2)
+            val detail = denseGridTriangles(columns = 4, rows = 4)
+            val model = ModelInfo(
+                fileName = "shared-topology.stl",
+                triangles = detail.size / 9,
+                dimensions = listOf(4.0, 4.0, 1.0),
+                localPath = "",
+                minMm = listOf(0.0, 0.0, 0.0),
+                maxMm = listOf(4.0, 4.0, 1.0),
+                previewTriangles = preview,
+                detailPreviewTriangles = detail,
+            )
+            val first = ProjectObject(id = "shared-first", model = model)
+            val second = ProjectObject(
+                id = "shared-second",
+                model = model,
+                transform = ModelTransform(offsetXmm = 8f),
+            )
+            val geometry = PrepareModelSceneBuilder.build(
+                projectObjects = listOf(first, second),
+                bedSizeX = 40f,
+                bedSizeY = 40f,
+                requestedBedPolygon = rectangularBedPolygon(40f, 40f),
+            )
+            val renderer = PrepareModelRenderer()
+            renderer.setLogicalViewportSize(128, 128)
+            renderer.onSurfaceCreated(null, null)
+            renderer.onSurfaceChanged(null, 128, 128)
+            renderer.submit(
+                geometry = geometry,
+                objects = listOf(first, second).associate { projectObject ->
+                    projectObject.id to PrepareObjectDrawState(
+                        objectId = projectObject.id,
+                        transform = projectObject.transform,
+                        minimumRotatedZ = projectObject.transform.minimumRotatedZ(projectObject),
+                    )
+                },
+                selectedObjectId = first.id,
+                camera = PrepareModelCamera(-45f, 55f, 1f, 0f, 0f),
+            )
+            renderer.onDrawFrame(null)
+            GLES30.glFinish()
+
+            assertEquals(
+                "Four bed buffers plus one shared low/detail pair must be retained",
+                6,
+                renderer.retainedTopologyBufferCountForTest(),
+            )
+            assertEquals(detail.size / 3 * 2, renderer.lastMeshVertexCountForTest())
+            assertEquals(GLES30.GL_NO_ERROR, GLES30.glGetError())
+            renderer.releaseGpuGeometryForMemoryPressure()
+        }
+
+    @Test
     fun prepareRendererDrawsModelThroughRealGles3Context() {
         val framebufferSize = 256
         val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)

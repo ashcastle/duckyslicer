@@ -314,6 +314,12 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "if (memoryPressureActive) return",
         "private fun requestMemoryPressureRecovery()",
         "retainedTopologyBufferCountForTest()",
+        "uniquePrepareVertexArrays(geometry.meshes)",
+        "IdentityHashMap<FloatArray, Int>()",
+        "additionalDetailBudgetBytes: Long = MAX_PREPARE_ADDITIONAL_DETAIL_GPU_BYTES",
+        "boundedPrepareDetailMeshes(rawMeshes, additionalDetailBudgetBytes)",
+        ".sortedBy { indexed -> indexed.value.role != ProjectVolumeRole.MODEL_PART }",
+        "MAX_PREPARE_ADDITIONAL_DETAIL_GPU_BYTES = 16L * 1_024L * 1_024L",
     ):
         if marker not in prepare_renderer:
             raise VerificationError(f"Prepare model loading contract is missing: {marker}")
@@ -507,6 +513,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "reducedMetrics.p95Ms <= fullMetrics.p95Ms * 1.35 + 2.0",
         "Repeated memory callbacks must be deduplicated until foreground recovery",
         "Recovered Prepare rendering must remain available",
+        "repeatedPlacementsUploadOneSharedLowAndDetailTopologyPair",
+        "Four bed buffers plus one shared low/detail pair must be retained",
     ):
         if marker not in prepare_tests:
             raise VerificationError(f"Prepare performance regression is missing: {marker}")

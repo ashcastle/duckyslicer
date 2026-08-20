@@ -25,6 +25,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import java.nio.IntBuffer
+import java.util.IdentityHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -180,6 +181,53 @@ internal data class PrepareModelSceneGeometry(
     val meshes: List<PrepareModelMeshData>,
 )
 
+internal fun uniquePrepareVertexArrays(meshes: List<PrepareModelMeshData>): List<FloatArray> {
+    val seen = IdentityHashMap<FloatArray, Unit>()
+    val unique = ArrayList<FloatArray>()
+    meshes.forEach { mesh ->
+        listOf(mesh.vertices, mesh.detailVertices).forEach { vertices ->
+            if (seen.put(vertices, Unit) == null) unique += vertices
+        }
+    }
+    return unique
+}
+
+private fun boundedPrepareDetailMeshes(
+    meshes: List<PrepareModelMeshData>,
+    additionalDetailBudgetBytes: Long,
+): List<PrepareModelMeshData> {
+    require(additionalDetailBudgetBytes >= 0L)
+    val lowDetailArrays = IdentityHashMap<FloatArray, Unit>()
+    meshes.forEach { mesh -> lowDetailArrays[mesh.vertices] = Unit }
+    val visitedDetailArrays = IdentityHashMap<FloatArray, Unit>()
+    val retainedDetailArrays = IdentityHashMap<FloatArray, Unit>()
+    var retainedBytes = 0L
+    meshes
+        .withIndex()
+        .sortedBy { indexed -> indexed.value.role != ProjectVolumeRole.MODEL_PART }
+        .forEach { indexed ->
+            val detail = indexed.value.detailVertices
+            if (
+                detail !== indexed.value.vertices &&
+                !lowDetailArrays.containsKey(detail) &&
+                visitedDetailArrays.put(detail, Unit) == null
+            ) {
+                val detailBytes = detail.size.toLong() * Float.SIZE_BYTES
+                if (detailBytes <= additionalDetailBudgetBytes - retainedBytes) {
+                    retainedDetailArrays[detail] = Unit
+                    retainedBytes += detailBytes
+                }
+            }
+        }
+    return meshes.map { mesh ->
+        val detail = mesh.detailVertices
+        if (
+            detail === mesh.vertices || lowDetailArrays.containsKey(detail) ||
+            retainedDetailArrays.containsKey(detail)
+        ) mesh else mesh.copy(detailVertices = mesh.vertices)
+    }
+}
+
 private fun prepareVolumeColor(mesh: PrepareModelMeshData) =
     projectVolumeColor(mesh.role, mesh.filamentSlot)
 
@@ -190,6 +238,7 @@ internal object PrepareModelSceneBuilder {
         bedSizeY: Float,
         requestedBedPolygon: List<Float>,
         requestedBedExcludeArea: List<Float> = listOf(0f, 0f),
+        additionalDetailBudgetBytes: Long = MAX_PREPARE_ADDITIONAL_DETAIL_GPU_BYTES,
     ): PrepareModelSceneGeometry {
         require(bedSizeX.isFinite() && bedSizeX > 0f && bedSizeY.isFinite() && bedSizeY > 0f)
         val bedPolygon = requestedBedPolygon.takeIf {
@@ -246,7 +295,7 @@ internal object PrepareModelSceneBuilder {
                 )
             }
         }
-        val meshes = projectObjects.flatMap { projectObject ->
+        val rawMeshes = projectObjects.flatMap { projectObject ->
             val center = projectObject.geometry().center
             projectObject.volumes.map { volume ->
                 PrepareModelMeshData(
@@ -264,6 +313,7 @@ internal object PrepareModelSceneBuilder {
                 )
             }
         }
+        val meshes = boundedPrepareDetailMeshes(rawMeshes, additionalDetailBudgetBytes)
         return PrepareModelSceneGeometry(
             bedSizeX = bedSizeX,
             bedSizeY = bedSizeY,
@@ -920,10 +970,8 @@ internal class PrepareModelRenderer(
 
     private fun upload(geometry: PrepareModelSceneGeometry): Boolean {
         releaseGpuGeometryForMemoryPressure()
-        val detailBufferCount = geometry.meshes.count { mesh ->
-            mesh.detailVertices !== mesh.vertices
-        }
-        val bufferCount = 4 + geometry.meshes.size + detailBufferCount
+        val uniqueVertexArrays = uniquePrepareVertexArrays(geometry.meshes)
+        val bufferCount = 4 + uniqueVertexArrays.size
         val buffers = IntArray(bufferCount)
         GLES30.glGenBuffers(bufferCount, buffers, 0)
         if (buffers.any { it == 0 }) {
@@ -935,24 +983,19 @@ internal class PrepareModelRenderer(
         bedGridBuffer = buffers[1]
         bedOutlineBuffer = buffers[2]
         bedExcludeOutlineBuffer = buffers[3]
-        meshBuffers += buffers.drop(4)
-            .take(geometry.meshes.size)
         uploadBuffer(bedFillBuffer, geometry.bedFill)
         uploadBuffer(bedGridBuffer, geometry.bedGrid)
         uploadBuffer(bedOutlineBuffer, geometry.bedOutline)
         uploadBuffer(bedExcludeOutlineBuffer, geometry.bedExcludeOutline)
-        geometry.meshes.forEachIndexed { index, mesh ->
-            uploadBuffer(meshBuffers[index], mesh.vertices)
+        val vertexBuffers = IdentityHashMap<FloatArray, Int>()
+        uniqueVertexArrays.forEachIndexed { index, vertices ->
+            val buffer = buffers[4 + index]
+            vertexBuffers[vertices] = buffer
+            uploadBuffer(buffer, vertices)
         }
-        var nextDetailBuffer = 4 + geometry.meshes.size
-        geometry.meshes.forEachIndexed { index, mesh ->
-            if (mesh.detailVertices === mesh.vertices) {
-                detailMeshBuffers += meshBuffers[index]
-            } else {
-                val detailBuffer = buffers[nextDetailBuffer++]
-                detailMeshBuffers += detailBuffer
-                uploadBuffer(detailBuffer, mesh.detailVertices)
-            }
+        geometry.meshes.forEach { mesh ->
+            meshBuffers += checkNotNull(vertexBuffers[mesh.vertices])
+            detailMeshBuffers += checkNotNull(vertexBuffers[mesh.detailVertices])
         }
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
         if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
@@ -1362,6 +1405,7 @@ private const val PREPARE_BED_EXCLUDE_Z = -0.02f
 private const val PREPARE_RENDERER_STARTUP_TIMEOUT_MS = 5_000L
 private const val PREPARE_RENDERER_RELEASE_TIMEOUT_MS = 1_000L
 private const val PREPARE_RENDERER_LOG_TAG = "DuckyPrepareRenderer"
+internal const val MAX_PREPARE_ADDITIONAL_DETAIL_GPU_BYTES = 16L * 1_024L * 1_024L
 
 private const val PREPARE_VERTEX_SHADER = """#version 300 es
     uniform vec2 uViewport;
