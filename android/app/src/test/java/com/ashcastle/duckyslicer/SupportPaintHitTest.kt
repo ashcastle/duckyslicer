@@ -41,6 +41,45 @@ class SupportPaintHitTest {
     }
 
     @Test
+    fun facetBrushUsesViewAwareBoundedSubdivisionAndStableRegions() {
+        val large = ModelScreenTriangle(
+            sourceFacetIndex = 12,
+            a = Offset(0f, 0f),
+            b = Offset(576f, 0f),
+            c = Offset(0f, 576f),
+            depth = 1f,
+        )
+        val first = facetPaintTarget(large, Offset(48f, 48f), brushRadius = 18f)
+        val nearby = facetPaintTarget(large, Offset(50f, 49f), brushRadius = 18f)
+        val small = facetPaintTarget(
+            large.copy(b = Offset(30f, 0f), c = Offset(0f, 30f)),
+            Offset(5f, 5f),
+            brushRadius = 18f,
+        )
+
+        assertEquals(4, first.subdivisionDepth)
+        assertEquals(first.regionKey, nearby.regionKey)
+        assertEquals(1, small.subdivisionDepth)
+        assertEquals(12, first.facetIndex)
+    }
+
+    @Test
+    fun facetBrushClampsNearbyEdgeHitsToValidBarycentricCoordinates() {
+        val triangle = ModelScreenTriangle(
+            sourceFacetIndex = 4,
+            a = Offset(0f, 0f),
+            b = Offset(100f, 0f),
+            c = Offset(0f, 100f),
+            depth = 1f,
+        )
+
+        val target = facetPaintTarget(triangle, Offset(50f, -8f), brushRadius = 18f)
+
+        assertEquals(0f, target.weightC, 0.0001f)
+        assertEquals(1f, target.weightA + target.weightB + target.weightC, 0.0001f)
+    }
+
+    @Test
     fun solidModelFacesReceiveDirectionalShadingInsteadOfUniformWireframeColor() {
         val upward = modelSurfaceShade(
             floatArrayOf(0f, 0f, 0f),

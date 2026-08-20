@@ -796,6 +796,119 @@ data class ProjectHistoryState(
         )
     }
 
+    fun updateExactSupportPaint(
+        objectId: String,
+        volumeId: String,
+        supportPaint: SupportPaint,
+        annotation: OrcaFacetAnnotation,
+        recordHistory: Boolean = true,
+    ): ProjectHistoryState = updateExactFacetPaint(
+        objectId = objectId,
+        volumeId = volumeId,
+        validate = { volume ->
+            require(annotation.maximumState <= 2) { "Support facet annotation state is invalid" }
+            validateExactFacetPaint(volume, supportPaint.facets.keys, annotation)
+        },
+        update = { volume ->
+            volume.copy(
+                supportPaint = supportPaint,
+                orcaFacetAnnotations = volume.orcaFacetAnnotations.copy(support = annotation),
+            )
+        },
+        recordHistory = recordHistory,
+    )
+
+    fun commitExactSupportPaint(
+        objectId: String,
+        volumeId: String,
+        previousPaint: SupportPaint,
+        previousAnnotation: OrcaFacetAnnotation,
+    ): ProjectHistoryState = commitExactFacetPaint(
+        objectId,
+        volumeId,
+    ) { volume ->
+        volume.copy(
+            supportPaint = previousPaint,
+            orcaFacetAnnotations = volume.orcaFacetAnnotations.copy(support = previousAnnotation),
+        )
+    }
+
+    fun updateExactSeamPaint(
+        objectId: String,
+        volumeId: String,
+        seamPaint: SeamPaint,
+        annotation: OrcaFacetAnnotation,
+        recordHistory: Boolean = true,
+    ): ProjectHistoryState = updateExactFacetPaint(
+        objectId = objectId,
+        volumeId = volumeId,
+        validate = { volume ->
+            require(annotation.maximumState <= 2) { "Seam facet annotation state is invalid" }
+            validateExactFacetPaint(volume, seamPaint.facets.keys, annotation)
+        },
+        update = { volume ->
+            volume.copy(
+                seamPaint = seamPaint,
+                orcaFacetAnnotations = volume.orcaFacetAnnotations.copy(seam = annotation),
+            )
+        },
+        recordHistory = recordHistory,
+    )
+
+    fun commitExactSeamPaint(
+        objectId: String,
+        volumeId: String,
+        previousPaint: SeamPaint,
+        previousAnnotation: OrcaFacetAnnotation,
+    ): ProjectHistoryState = commitExactFacetPaint(
+        objectId,
+        volumeId,
+    ) { volume ->
+        volume.copy(
+            seamPaint = previousPaint,
+            orcaFacetAnnotations = volume.orcaFacetAnnotations.copy(seam = previousAnnotation),
+        )
+    }
+
+    fun updateExactMultiColorPaint(
+        objectId: String,
+        volumeId: String,
+        multiColorPaint: MultiColorPaint,
+        annotation: OrcaFacetAnnotation,
+        recordHistory: Boolean = true,
+    ): ProjectHistoryState = updateExactFacetPaint(
+        objectId = objectId,
+        volumeId = volumeId,
+        validate = { volume ->
+            require(annotation.maximumState <= MAX_FILAMENT_SLOTS) {
+                "Multi-color facet annotation state is invalid"
+            }
+            validateExactFacetPaint(volume, multiColorPaint.facets.keys, annotation)
+        },
+        update = { volume ->
+            volume.copy(
+                multiColorPaint = multiColorPaint,
+                orcaFacetAnnotations = volume.orcaFacetAnnotations.copy(multiColor = annotation),
+            )
+        },
+        recordHistory = recordHistory,
+    )
+
+    fun commitExactMultiColorPaint(
+        objectId: String,
+        volumeId: String,
+        previousPaint: MultiColorPaint,
+        previousAnnotation: OrcaFacetAnnotation,
+    ): ProjectHistoryState = commitExactFacetPaint(
+        objectId,
+        volumeId,
+    ) { volume ->
+        volume.copy(
+            multiColorPaint = previousPaint,
+            orcaFacetAnnotations = volume.orcaFacetAnnotations.copy(multiColor = previousAnnotation),
+        )
+    }
+
     fun updateSelectedVariableLayerHeights(
         variableLayerHeights: VariableLayerHeights,
     ): ProjectHistoryState {
@@ -863,6 +976,74 @@ data class ProjectHistoryState(
             redoStates = redoStates.dropLast(1),
         )
     }
+
+    private fun updateExactFacetPaint(
+        objectId: String,
+        volumeId: String,
+        validate: (ProjectVolume) -> Unit,
+        update: (ProjectVolume) -> ProjectVolume,
+        recordHistory: Boolean,
+    ): ProjectHistoryState {
+        val target = current.objects.firstOrNull { it.id == objectId } ?: return this
+        val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
+        require(targetVolume.role.acceptsFacetPaint) {
+            "Facet paint is unavailable for auxiliary project volumes"
+        }
+        validate(targetVolume)
+        val replacement = update(targetVolume)
+        if (replacement == targetVolume) return this
+        val next = replaceVolume(current, objectId, volumeId, replacement)
+        return if (recordHistory) record(next) else copy(current = next)
+    }
+
+    private fun commitExactFacetPaint(
+        objectId: String,
+        volumeId: String,
+        restore: (ProjectVolume) -> ProjectVolume,
+    ): ProjectHistoryState {
+        val target = current.objects.firstOrNull { it.id == objectId } ?: return this
+        val targetVolume = target.volumes.firstOrNull { it.id == volumeId } ?: return this
+        require(targetVolume.role.acceptsFacetPaint) {
+            "Facet paint is unavailable for auxiliary project volumes"
+        }
+        val previousVolume = restore(targetVolume)
+        if (previousVolume == targetVolume) return this
+        val previousSnapshot = replaceVolume(current, objectId, volumeId, previousVolume)
+        return copy(
+            undoStates = (undoStates + previousSnapshot).takeLast(HISTORY_LIMIT),
+            redoStates = emptyList(),
+        )
+    }
+
+    private fun validateExactFacetPaint(
+        volume: ProjectVolume,
+        wholeFacetIndices: Set<Int>,
+        annotation: OrcaFacetAnnotation,
+    ) {
+        require(wholeFacetIndices.all { it in 0 until volume.model.triangles }) {
+            "Facet paint references an unavailable facet"
+        }
+        annotation.constrainedToTriangleCount(volume.model.triangles)
+    }
+
+    private fun replaceVolume(
+        snapshot: ProjectSnapshot,
+        objectId: String,
+        volumeId: String,
+        replacement: ProjectVolume,
+    ): ProjectSnapshot = snapshot.updateActivePlate(
+        objects = snapshot.objects.map { projectObject ->
+            if (projectObject.id == objectId) {
+                projectObject.copy(
+                    volumes = projectObject.volumes.map { volume ->
+                        if (volume.id == volumeId) replacement else volume
+                    },
+                )
+            } else {
+                projectObject
+            }
+        },
+    )
 
     private fun record(next: ProjectSnapshot): ProjectHistoryState = if (next == current) {
         this

@@ -1334,19 +1334,33 @@ private fun DuckySlicerScreen(
         onCancelProjectEdit = projectTransferModel::cancelActiveEdit,
         onCancelProjectImport = projectTransferModel::cancelProjectImport,
         onCancelProjectExport = projectTransferModel::cancelProjectExport,
-        onSupportPaintPreview = { objectId, volumeId, facetIndex, state ->
+        onSupportPaintPreview = { objectId, volumeId, target, state ->
             val current = projectTransferModel.state.value.history
             val projectObject = current.current.objects.firstOrNull { it.id == objectId }
             val volume = projectObject?.volumes?.firstOrNull { it.id == volumeId }
             if (
                 volume?.role?.acceptsFacetPaint == true &&
-                facetIndex in 0 until volume.model.triangles
+                target.facetIndex in 0 until volume.model.triangles
             ) {
-                val nextPaint = volume.supportPaint.paint(facetIndex, state)
-                val nextHistory = current.updateSupportPaint(
+                val fallbackState = volume.supportPaint.facets[target.facetIndex]?.code ?: 0
+                val nextAnnotation = volume.orcaFacetAnnotations.support.paintAt(
+                    target,
+                    state?.code ?: 0,
+                    fallbackState,
+                )
+                val nextPaint = if (
+                    nextAnnotation != volume.orcaFacetAnnotations.support ||
+                    target.facetIndex in nextAnnotation.triangles
+                ) {
+                    volume.supportPaint.paint(target.facetIndex, null)
+                } else {
+                    volume.supportPaint
+                }
+                val nextHistory = current.updateExactSupportPaint(
                     objectId,
                     volumeId,
                     nextPaint,
+                    nextAnnotation,
                     recordHistory = false,
                 )
                 if (
@@ -1358,26 +1372,45 @@ private fun DuckySlicerScreen(
                 }
             }
         },
-        onSupportPaintCommitted = { objectId, volumeId, previous ->
+        onSupportPaintCommitted = { objectId, volumeId, previousPaint, previousAnnotation ->
             val current = projectTransferModel.state.value.history
             projectTransferModel.updateHistory(
                 current,
-                current.commitSupportPaint(objectId, volumeId, previous),
+                current.commitExactSupportPaint(
+                    objectId,
+                    volumeId,
+                    previousPaint,
+                    previousAnnotation,
+                ),
             )
         },
-        onSeamPaintPreview = { objectId, volumeId, facetIndex, state ->
+        onSeamPaintPreview = { objectId, volumeId, target, state ->
             val current = projectTransferModel.state.value.history
             val projectObject = current.current.objects.firstOrNull { it.id == objectId }
             val volume = projectObject?.volumes?.firstOrNull { it.id == volumeId }
             if (
                 volume?.role?.acceptsFacetPaint == true &&
-                facetIndex in 0 until volume.model.triangles
+                target.facetIndex in 0 until volume.model.triangles
             ) {
-                val nextPaint = volume.seamPaint.paint(facetIndex, state)
-                val nextHistory = current.updateSeamPaint(
+                val fallbackState = volume.seamPaint.facets[target.facetIndex]?.code ?: 0
+                val nextAnnotation = volume.orcaFacetAnnotations.seam.paintAt(
+                    target,
+                    state?.code ?: 0,
+                    fallbackState,
+                )
+                val nextPaint = if (
+                    nextAnnotation != volume.orcaFacetAnnotations.seam ||
+                    target.facetIndex in nextAnnotation.triangles
+                ) {
+                    volume.seamPaint.paint(target.facetIndex, null)
+                } else {
+                    volume.seamPaint
+                }
+                val nextHistory = current.updateExactSeamPaint(
                     objectId,
                     volumeId,
                     nextPaint,
+                    nextAnnotation,
                     recordHistory = false,
                 )
                 if (
@@ -1389,11 +1422,16 @@ private fun DuckySlicerScreen(
                 }
             }
         },
-        onSeamPaintCommitted = { objectId, volumeId, previous ->
+        onSeamPaintCommitted = { objectId, volumeId, previousPaint, previousAnnotation ->
             val current = projectTransferModel.state.value.history
             projectTransferModel.updateHistory(
                 current,
-                current.commitSeamPaint(objectId, volumeId, previous),
+                current.commitExactSeamPaint(
+                    objectId,
+                    volumeId,
+                    previousPaint,
+                    previousAnnotation,
+                ),
             )
         },
         onBrimPointsChanged = { objectId, brimPoints ->
@@ -1405,7 +1443,7 @@ private fun DuckySlicerScreen(
                 error = null
             }
         },
-        onMultiColorPaintPreview = { objectId, volumeId, facetIndex, slot ->
+        onMultiColorPaintPreview = { objectId, volumeId, target, slot ->
             val session = projectTransferModel.state.value
             val current = session.history
             val projectObject = current.current.objects.firstOrNull { it.id == objectId }
@@ -1414,14 +1452,29 @@ private fun DuckySlicerScreen(
             if (
                 volume != null &&
                 volume.role.acceptsFacetPaint &&
-                facetIndex in 0 until volume.model.triangles &&
+                target.facetIndex in 0 until volume.model.triangles &&
                 (slot == null || slot in availableSlots)
             ) {
-                val nextPaint = volume.multiColorPaint.paint(facetIndex, slot)
-                val nextHistory = current.updateMultiColorPaint(
+                val fallbackState = volume.multiColorPaint.facets[target.facetIndex]
+                    ?.plus(1) ?: 0
+                val nextAnnotation = volume.orcaFacetAnnotations.multiColor.paintAt(
+                    target,
+                    slot?.plus(1) ?: 0,
+                    fallbackState,
+                )
+                val nextPaint = if (
+                    nextAnnotation != volume.orcaFacetAnnotations.multiColor ||
+                    target.facetIndex in nextAnnotation.triangles
+                ) {
+                    volume.multiColorPaint.paint(target.facetIndex, null)
+                } else {
+                    volume.multiColorPaint
+                }
+                val nextHistory = current.updateExactMultiColorPaint(
                     objectId,
                     volumeId,
                     nextPaint,
+                    nextAnnotation,
                     recordHistory = false,
                 )
                 if (
@@ -1433,11 +1486,16 @@ private fun DuckySlicerScreen(
                 }
             }
         },
-        onMultiColorPaintCommitted = { objectId, volumeId, previous ->
+        onMultiColorPaintCommitted = { objectId, volumeId, previousPaint, previousAnnotation ->
             val current = projectTransferModel.state.value.history
             projectTransferModel.updateHistory(
                 current,
-                current.commitMultiColorPaint(objectId, volumeId, previous),
+                current.commitExactMultiColorPaint(
+                    objectId,
+                    volumeId,
+                    previousPaint,
+                    previousAnnotation,
+                ),
             )
         },
         onVariableLayerHeightsChanged = { variableLayerHeights ->

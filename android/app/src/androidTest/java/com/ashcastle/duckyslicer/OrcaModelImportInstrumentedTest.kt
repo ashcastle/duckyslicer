@@ -253,11 +253,29 @@ class OrcaModelImportInstrumentedTest {
             assertEquals("841", painted.support.triangles[0])
             assertEquals("8", painted.seam.triangles[0])
             assertEquals("8", painted.multiColor.triangles[0])
-            store.save(ProjectSnapshot(imported, imported.first().id), options)
+            val editedMultiColor = painted.multiColor.paintAt(
+                FacetPaintTarget(0, 0.8f, 0.1f, 0.1f, subdivisionDepth = 2),
+                state = 1,
+            )
+            val editedObjects = imported.mapIndexed { index, projectObject ->
+                if (index != 0) {
+                    projectObject
+                } else {
+                    projectObject.updateSingleVolume { volume ->
+                        volume.copy(
+                            orcaFacetAnnotations = volume.orcaFacetAnnotations.copy(
+                                multiColor = editedMultiColor,
+                            ),
+                        )
+                    }
+                }
+            }
+            assertTrue(editedMultiColor != painted.multiColor)
+            store.save(ProjectSnapshot(editedObjects, editedObjects.first().id), options)
             val restored = store.loadProject().snapshot.objects
             assertEquals(
-                painted,
-                restored.first().singleVolume.orcaFacetAnnotations,
+                editedMultiColor,
+                restored.first().singleVolume.orcaFacetAnnotations.multiColor,
             )
 
             val outcome = OnDeviceSlicer.slice(restored, options)

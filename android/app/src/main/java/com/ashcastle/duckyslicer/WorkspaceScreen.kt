@@ -133,7 +133,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.log2
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -502,13 +504,13 @@ internal fun WorkspaceScreen(
     onCancelProjectEdit: () -> Unit,
     onCancelProjectImport: () -> Unit,
     onCancelProjectExport: () -> Unit,
-    onSupportPaintPreview: (String, String, Int, SupportPaintState?) -> Unit,
-    onSupportPaintCommitted: (String, String, SupportPaint) -> Unit,
-    onSeamPaintPreview: (String, String, Int, SeamPaintState?) -> Unit,
-    onSeamPaintCommitted: (String, String, SeamPaint) -> Unit,
+    onSupportPaintPreview: (String, String, FacetPaintTarget, SupportPaintState?) -> Unit,
+    onSupportPaintCommitted: (String, String, SupportPaint, OrcaFacetAnnotation) -> Unit,
+    onSeamPaintPreview: (String, String, FacetPaintTarget, SeamPaintState?) -> Unit,
+    onSeamPaintCommitted: (String, String, SeamPaint, OrcaFacetAnnotation) -> Unit,
     onBrimPointsChanged: (String, BrimPoints) -> Unit,
-    onMultiColorPaintPreview: (String, String, Int, Int?) -> Unit,
-    onMultiColorPaintCommitted: (String, String, MultiColorPaint) -> Unit,
+    onMultiColorPaintPreview: (String, String, FacetPaintTarget, Int?) -> Unit,
+    onMultiColorPaintCommitted: (String, String, MultiColorPaint, OrcaFacetAnnotation) -> Unit,
     onVariableLayerHeightsChanged: (VariableLayerHeights) -> Unit,
     onObjectProcessOverridesChanged: (ObjectProcessOverrides) -> Unit,
     onRemoveModel: () -> Unit,
@@ -2941,16 +2943,16 @@ private fun BedScene(
     onModelTransformCommitted: (ModelTransform) -> Unit,
     onLayOnFace: (String, FloatArray) -> Unit,
     onMeasurePoint: (ModelPoint3) -> Unit,
-    onSupportPaintPreview: (String, String, Int, SupportPaintState?) -> Unit,
-    onSupportPaintCommitted: (String, String, SupportPaint) -> Unit,
-    onSeamPaintPreview: (String, String, Int, SeamPaintState?) -> Unit,
-    onSeamPaintCommitted: (String, String, SeamPaint) -> Unit,
+    onSupportPaintPreview: (String, String, FacetPaintTarget, SupportPaintState?) -> Unit,
+    onSupportPaintCommitted: (String, String, SupportPaint, OrcaFacetAnnotation) -> Unit,
+    onSeamPaintPreview: (String, String, FacetPaintTarget, SeamPaintState?) -> Unit,
+    onSeamPaintCommitted: (String, String, SeamPaint, OrcaFacetAnnotation) -> Unit,
     onBrimPointSelected: (Int?) -> Unit,
     onBrimPointAdded: (BrimPoint) -> Unit,
     onBrimPointMoved: (Int, BrimPoint) -> Unit,
     onBrimPointInvalid: () -> Unit,
-    onMultiColorPaintPreview: (String, String, Int, Int?) -> Unit,
-    onMultiColorPaintCommitted: (String, String, MultiColorPaint) -> Unit,
+    onMultiColorPaintPreview: (String, String, FacetPaintTarget, Int?) -> Unit,
+    onMultiColorPaintCommitted: (String, String, MultiColorPaint, OrcaFacetAnnotation) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -3237,6 +3239,8 @@ private fun BedScene(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+        val facetPaintingActive = supportPaintObjectId != null || seamPaintObjectId != null ||
+            multiColorPaintObjectId != null
         Canvas(
             Modifier.fillMaxSize().pointerInput(
             objectIds,
@@ -3535,9 +3539,12 @@ private fun BedScene(
                     ?.transform
                 var paintedVolumeId: String? = null
                 var supportPaintStart: SupportPaint? = null
+                var supportAnnotationStart: OrcaFacetAnnotation? = null
                 var seamPaintStart: SeamPaint? = null
+                var seamAnnotationStart: OrcaFacetAnnotation? = null
                 var multiColorPaintStart: MultiColorPaint? = null
-                val paintedFacets = HashSet<Pair<String, Int>>()
+                var multiColorAnnotationStart: OrcaFacetAnnotation? = null
+                val paintedTargets = HashSet<FacetPaintTarget>()
                 fun paintAt(position: Offset) {
                     val objectId = paintingObject?.id ?: return
                     val hit = if (useDepthTestedPrepare) {
@@ -3578,33 +3585,42 @@ private fun BedScene(
                         if (!volume.role.acceptsFacetPaint) return
                         paintedVolumeId = volume.id
                         supportPaintStart = volume.supportPaint.takeIf { supportPaintingObject != null }
+                        supportAnnotationStart = volume.orcaFacetAnnotations.support.takeIf {
+                            supportPaintingObject != null
+                        }
                         seamPaintStart = volume.seamPaint.takeIf { seamPaintingObject != null }
+                        seamAnnotationStart = volume.orcaFacetAnnotations.seam.takeIf {
+                            seamPaintingObject != null
+                        }
                         multiColorPaintStart = volume.multiColorPaint.takeIf {
+                            multiColorPaintingObject != null
+                        }
+                        multiColorAnnotationStart = volume.orcaFacetAnnotations.multiColor.takeIf {
                             multiColorPaintingObject != null
                         }
                     }
                     if (paintedVolumeId != hit.volumeId) return
-                    val paintedFacet = hit.volumeId to hit.sourceFacetIndex
-                    if (paintedFacets.add(paintedFacet)) {
+                    val target = facetPaintTarget(hit, position, 18.dp.toPx())
+                    if (paintedTargets.add(target)) {
                         if (supportPaintingObject != null) {
                             currentSupportPaintPreviewCallback(
                                 objectId,
                                 hit.volumeId,
-                                hit.sourceFacetIndex,
+                                target,
                                 supportPaintState,
                             )
                         } else if (seamPaintingObject != null) {
                             currentSeamPaintPreviewCallback(
                                 objectId,
                                 hit.volumeId,
-                                hit.sourceFacetIndex,
+                                target,
                                 seamPaintState,
                             )
                         } else if (multiColorPaintingObject != null) {
                             currentMultiColorPaintPreviewCallback(
                                 objectId,
                                 hit.volumeId,
-                                hit.sourceFacetIndex,
+                                target,
                                 multiColorPaintSlot,
                             )
                         }
@@ -3671,30 +3687,36 @@ private fun BedScene(
                     interactionActive = false
                     if (
                         supportPaintingObject != null && supportPaintStart != null &&
-                        paintedFacets.isNotEmpty() && paintedVolumeId != null
+                        supportAnnotationStart != null && paintedTargets.isNotEmpty() &&
+                        paintedVolumeId != null
                     ) {
                         currentSupportPaintCommitCallback(
                             supportPaintingObject.id,
                             checkNotNull(paintedVolumeId),
                             checkNotNull(supportPaintStart),
+                            checkNotNull(supportAnnotationStart),
                         )
                     } else if (
                         seamPaintingObject != null && seamPaintStart != null &&
-                        paintedFacets.isNotEmpty() && paintedVolumeId != null
+                        seamAnnotationStart != null && paintedTargets.isNotEmpty() &&
+                        paintedVolumeId != null
                     ) {
                         currentSeamPaintCommitCallback(
                             seamPaintingObject.id,
                             checkNotNull(paintedVolumeId),
                             checkNotNull(seamPaintStart),
+                            checkNotNull(seamAnnotationStart),
                         )
                     } else if (
                         multiColorPaintingObject != null && multiColorPaintStart != null &&
-                        paintedFacets.isNotEmpty() && paintedVolumeId != null
+                        multiColorAnnotationStart != null && paintedTargets.isNotEmpty() &&
+                        paintedVolumeId != null
                     ) {
                         currentMultiColorPaintCommitCallback(
                             multiColorPaintingObject.id,
                             checkNotNull(paintedVolumeId),
                             checkNotNull(multiColorPaintStart),
+                            checkNotNull(multiColorAnnotationStart),
                         )
                     } else if (hitObjectId != null && dragStartTransform != null && movement >= 1f) {
                         currentTransformCommitCallback(dragStartTransform)
@@ -4044,7 +4066,11 @@ private fun BedScene(
                     )
                     prepareOverlaysByMesh[overlayMeshIndex].orEmpty().forEach { overlay ->
                         val customVertices = overlay.customVertices
-                        if (interactionActive && customVertices != null) return@forEach
+                        if (
+                            interactionActive && !facetPaintingActive && customVertices != null
+                        ) {
+                            return@forEach
+                        }
                         val path = Path()
                         if (customVertices == null) {
                             for (indexOffset in overlay.fillIndices.indices step 3) {
@@ -4401,6 +4427,34 @@ private fun triangleWeights(triangle: ModelScreenTriangle, point: Offset): Trian
         edge(triangle.b, triangle.c, 1, 2),
         edge(triangle.c, triangle.a, 2, 0),
     ).minBy(EdgeCandidate::distance).weights
+}
+
+internal fun facetPaintTarget(
+    triangle: ModelScreenTriangle,
+    point: Offset,
+    brushRadius: Float,
+): FacetPaintTarget {
+    require(brushRadius.isFinite() && brushRadius > 0f) { "Facet brush radius is invalid" }
+    val weights = triangleWeights(triangle, point)
+    val longestEdge = maxOf(
+        (triangle.a - triangle.b).getDistance(),
+        (triangle.b - triangle.c).getDistance(),
+        (triangle.c - triangle.a).getDistance(),
+    )
+    val targetDiameter = brushRadius * 2f
+    val depth = if (longestEdge <= targetDiameter || longestEdge <= 0f) {
+        1
+    } else {
+        ceil(log2((longestEdge / targetDiameter).toDouble())).toInt()
+            .coerceIn(1, FacetPaintTarget.MAX_SUBDIVISION_DEPTH)
+    }
+    return FacetPaintTarget(
+        facetIndex = triangle.sourceFacetIndex,
+        weightA = weights.a,
+        weightB = weights.b,
+        weightC = weights.c,
+        subdivisionDepth = depth,
+    )
 }
 
 internal fun measurementBetween(first: ModelPoint3, second: ModelPoint3): ModelMeasurement? {

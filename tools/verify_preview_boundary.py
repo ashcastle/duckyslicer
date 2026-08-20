@@ -25,17 +25,20 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "PrepareModelPreviewView.kt",
         "PrepareModelOverlays.kt",
         "OrcaFacetPreview.kt",
+        "OrcaFacetEditing.kt",
         "PrepareModelPicking.kt",
         "ModelPreparationScheduler.kt",
         "PreviewPerformanceHarnessActivity.kt",
         "WorkspaceScreen.kt",
         "MainActivity.kt",
+        "ProjectState.kt",
         "ProjectStore.kt",
         "OrcaModelCut.kt",
         "SliceOperationViewModel.kt",
         "OnDeviceSlicer.kt",
         "SlicerProcessService.kt",
         "NativeEngineInstrumentedTest.kt",
+        "OrcaModelImportInstrumentedTest.kt",
         "PrepareModelRendererInstrumentedTest.kt",
         "PrepareModelPickingTest.kt",
         "ModelInfoTest.kt",
@@ -50,6 +53,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "PreviewPerformancePolicyTest.kt",
         "ToolpathMeshBuilderTest.kt",
         "WorkspaceLayoutPolicyTest.kt",
+        "OrcaFacetEditingTest.kt",
+        "ProjectStateTest.kt",
+        "SupportPaintHitTest.kt",
         "strings.xml",
         "strings-ko.xml",
         "lib.rs",
@@ -316,6 +322,66 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         if marker not in facet_preview:
             raise VerificationError(f"bounded exact facet tessellation is missing: {marker}")
 
+    facet_editing = sources["OrcaFacetEditing.kt"]
+    for marker in (
+        "MAX_SUBDIVISION_DEPTH = 4",
+        "fun OrcaFacetAnnotation.paintAt(",
+        "preserving every untouched recursive child",
+        "children = List(4) { FacetNode.Leaf(this.state) }",
+        ").compressed()",
+        "encoded.length > OrcaFacetAnnotation.MAX_TRIANGLE_VALUE_BYTES",
+        "next.size >= OrcaFacetAnnotation.MAX_ANNOTATED_TRIANGLES",
+        "split(splitSides: Int, specialSide: Int)",
+    ):
+        if marker not in facet_editing:
+            raise VerificationError(f"bounded exact facet editing is missing: {marker}")
+
+    workspace = sources["WorkspaceScreen.kt"]
+    for marker in (
+        "internal fun facetPaintTarget(",
+        "ceil(log2((longestEdge / targetDiameter).toDouble()))",
+        "val paintedTargets = HashSet<FacetPaintTarget>()",
+        "supportAnnotationStart",
+        "multiColorAnnotationStart",
+    ):
+        if marker not in workspace:
+            raise VerificationError(f"partial-facet brush routing is missing: {marker}")
+
+    project_state = sources["ProjectState.kt"]
+    for marker in (
+        "fun updateExactSupportPaint(",
+        "fun commitExactSupportPaint(",
+        "fun updateExactSeamPaint(",
+        "fun commitExactSeamPaint(",
+        "fun updateExactMultiColorPaint(",
+        "fun commitExactMultiColorPaint(",
+        "private fun commitExactFacetPaint(",
+    ):
+        if marker not in project_state:
+            raise VerificationError(f"partial-facet history routing is missing: {marker}")
+
+    for test_file, markers in {
+        "OrcaFacetEditingTest.kt": (
+            "partialEditsPaintAndEraseIndependentRegionsThenCompress",
+            "importedIrregularChildrenRemainWhenOneRegionIsRefined",
+        ),
+        "ProjectStateTest.kt": (
+            "partialFacetPaintingCommitsOneUndoEntryAndPreservesOtherExactCategories",
+            "seamAndMultiColorPartialPaintUseTheirOwnExactChannels",
+        ),
+        "SupportPaintHitTest.kt": (
+            "facetBrushUsesViewAwareBoundedSubdivisionAndStableRegions",
+            "facetBrushClampsNearbyEdgeHitsToValidBarycentricCoordinates",
+        ),
+    }.items():
+        for marker in markers:
+            if marker not in sources[test_file]:
+                raise VerificationError(f"partial-facet regression is missing: {marker}")
+    if "editedMultiColor = painted.multiColor.paintAt(" not in sources[
+        "OrcaModelImportInstrumentedTest.kt"
+    ]:
+        raise VerificationError("edited partial-facet native slicing regression is missing")
+
     prepare_picking = sources["PrepareModelPicking.kt"]
     for marker in (
         "buildPreparePickingIndices(",
@@ -509,7 +575,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "prepareOverlays = withModelPreparationContext",
         "PrepareModelOverlayBuilder.build(",
         "overlays = prepareOverlays",
-        "if (interactionActive && customVertices != null)",
+        "interactionActive && !facetPaintingActive && customVertices != null",
         "customVertices.indices step 9",
     ):
         if marker not in workspace:
@@ -899,6 +965,9 @@ def read_sources() -> dict[str, str]:
         "OrcaFacetPreview.kt": (main / "OrcaFacetPreview.kt").read_text(
             encoding="utf-8"
         ),
+        "OrcaFacetEditing.kt": (main / "OrcaFacetEditing.kt").read_text(
+            encoding="utf-8"
+        ),
         "PrepareModelPicking.kt": (main / "PrepareModelPicking.kt").read_text(
             encoding="utf-8"
         ),
@@ -911,6 +980,7 @@ def read_sources() -> dict[str, str]:
         ).read_text(encoding="utf-8"),
         "WorkspaceScreen.kt": (main / "WorkspaceScreen.kt").read_text(encoding="utf-8"),
         "MainActivity.kt": (main / "MainActivity.kt").read_text(encoding="utf-8"),
+        "ProjectState.kt": (main / "ProjectState.kt").read_text(encoding="utf-8"),
         "ProjectStore.kt": (main / "ProjectStore.kt").read_text(encoding="utf-8"),
         "OrcaModelCut.kt": (main / "OrcaModelCut.kt").read_text(encoding="utf-8"),
         "SliceOperationViewModel.kt": (main / "SliceOperationViewModel.kt").read_text(
@@ -922,6 +992,9 @@ def read_sources() -> dict[str, str]:
         ),
         "NativeEngineInstrumentedTest.kt": (
             device / "NativeEngineInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "OrcaModelImportInstrumentedTest.kt": (
+            device / "OrcaModelImportInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "PrepareModelRendererInstrumentedTest.kt": (
             device / "PrepareModelRendererInstrumentedTest.kt"
@@ -961,6 +1034,15 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "WorkspaceLayoutPolicyTest.kt": (tests / "WorkspaceLayoutPolicyTest.kt").read_text(
+            encoding="utf-8"
+        ),
+        "OrcaFacetEditingTest.kt": (tests / "OrcaFacetEditingTest.kt").read_text(
+            encoding="utf-8"
+        ),
+        "ProjectStateTest.kt": (tests / "ProjectStateTest.kt").read_text(
+            encoding="utf-8"
+        ),
+        "SupportPaintHitTest.kt": (tests / "SupportPaintHitTest.kt").read_text(
             encoding="utf-8"
         ),
         "lib.rs": (ROOT / "rust/duckyslicer-jni/src/lib.rs").read_text(encoding="utf-8"),

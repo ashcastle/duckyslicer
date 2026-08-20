@@ -389,12 +389,12 @@ private fun WorkspaceAccessibilityHarness(
         onSupportPaintPreview = { _, _, _, _ ->
             harnessNotice = TEST_SUPPORT_PAINTED_LABEL
         },
-        onSupportPaintCommitted = { _, _, _ -> },
+        onSupportPaintCommitted = { _, _, _, _ -> },
         onSeamPaintPreview = { _, _, _, _ -> },
-        onSeamPaintCommitted = { _, _, _ -> },
+        onSeamPaintCommitted = { _, _, _, _ -> },
         onBrimPointsChanged = { _, _ -> },
         onMultiColorPaintPreview = { _, _, _, _ -> },
-        onMultiColorPaintCommitted = { _, _, _ -> },
+        onMultiColorPaintCommitted = { _, _, _, _ -> },
         onVariableLayerHeightsChanged = {},
         onObjectProcessOverridesChanged = {},
         onRemoveModel = {},

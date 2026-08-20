@@ -150,6 +150,14 @@ def valid_sources() -> dict[str, str]:
             "ArrayDeque<FacetTriangle>() children.forEach(pending::addLast) "
             "splitSides == 3 && specialSide == 0"
         ),
+        "OrcaFacetEditing.kt": (
+            "MAX_SUBDIVISION_DEPTH = 4 fun OrcaFacetAnnotation.paintAt( "
+            "preserving every untouched recursive child "
+            "children = List(4) { FacetNode.Leaf(this.state) } ).compressed() "
+            "encoded.length > OrcaFacetAnnotation.MAX_TRIANGLE_VALUE_BYTES "
+            "next.size >= OrcaFacetAnnotation.MAX_ANNOTATED_TRIANGLES "
+            "split(splitSides: Int, specialSide: Int)"
+        ),
         "PrepareModelPicking.kt": (
             "buildPreparePickingIndices( PreparePickingIndexBuilder( "
             "PREPARE_PICKING_TRIANGLES_PER_LEAF = 48 intersectsProjectedBounds( "
@@ -209,7 +217,7 @@ def valid_sources() -> dict[str, str]:
             " prepareOverlays = withModelPreparationContext"
             " PrepareModelOverlayBuilder.build("
             " overlays = prepareOverlays"
-            " if (interactionActive && customVertices != null)"
+            " interactionActive && !facetPaintingActive && customVertices != null"
             " customVertices.indices step 9"
             " pickingIndices = currentModelPickingIndices"
             " pickingIndices = currentModelPickingIndices"
@@ -237,6 +245,10 @@ def valid_sources() -> dict[str, str]:
             "contentDescription = if (showLabels) null else labelText "
             "alwaysShowLabel = showLabels "
             "workspaceEditingBusy(autoLaying, arranging, slicing, previewLoading)"
+            " internal fun facetPaintTarget( "
+            "ceil(log2((longestEdge / targetDiameter).toDouble())) "
+            "val paintedTargets = HashSet<FacetPaintTarget>() "
+            "supportAnnotationStart multiColorAnnotationStart"
         ),
         "MainActivity.kt": (
             "fun fromNative(raw: FloatArray?, localPath: String) "
@@ -251,6 +263,12 @@ def valid_sources() -> dict[str, str]:
             "val requested = plateSliceResults.resultFor(selectedPlateId) "
             "requested.plateId requested.outcome "
             "loadPreviewRange(0, Int.MAX_VALUE)"
+        ),
+        "ProjectState.kt": (
+            "fun updateExactSupportPaint( fun commitExactSupportPaint( "
+            "fun updateExactSeamPaint( fun commitExactSeamPaint( "
+            "fun updateExactMultiColorPaint( fun commitExactMultiColorPaint( "
+            "private fun commitExactFacetPaint("
         ),
         "ProjectStore.kt": "inspectModel(",
         "OrcaModelCut.kt": "inspectModel(",
@@ -295,6 +313,9 @@ def valid_sources() -> dict[str, str]:
             " Automatic calibration must settle after bounded completed-frame samples"
             " The last compatible GPU frame must remain visible during refinement"
             " Background refinement must not clear the visible Preview"
+        ),
+        "OrcaModelImportInstrumentedTest.kt": (
+            "editedMultiColor = painted.multiColor.paintAt("
         ),
         "PrepareModelRendererInstrumentedTest.kt": (
             "densePrepareSceneBuildStaysWithinLoadBudget "
@@ -413,6 +434,18 @@ def valid_sources() -> dict[str, str]:
             "largeFontUsesIconNavigationWithoutClippedVisibleLabels "
             "workspacePanelAlwaysLeavesTheTopOverlayReachable "
             "activeSliceAndInitialPreviewLockModelEditing"
+        ),
+        "OrcaFacetEditingTest.kt": (
+            "partialEditsPaintAndEraseIndependentRegionsThenCompress "
+            "importedIrregularChildrenRemainWhenOneRegionIsRefined"
+        ),
+        "ProjectStateTest.kt": (
+            "partialFacetPaintingCommitsOneUndoEntryAndPreservesOtherExactCategories "
+            "seamAndMultiColorPartialPaintUseTheirOwnExactChannels"
+        ),
+        "SupportPaintHitTest.kt": (
+            "facetBrushUsesViewAwareBoundedSubdivisionAndStableRegions "
+            "facetBrushClampsNearbyEdgeHitsToValidBarycentricCoordinates"
         ),
         "lib.rs": (
             "Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRangeInto "

@@ -215,6 +215,104 @@ class ProjectStateTest {
     }
 
     @Test
+    fun partialFacetPaintingCommitsOneUndoEntryAndPreservesOtherExactCategories() {
+        val base = projectObject("partial")
+        val previousSupport = OrcaFacetAnnotation(mapOf(0 to "8"))
+        val seam = OrcaFacetAnnotation(mapOf(0 to "4"))
+        val multiColor = OrcaFacetAnnotation(mapOf(0 to "8"))
+        val initialVolume = base.singleVolume.copy(
+            supportPaint = SupportPaint().paint(0, SupportPaintState.BLOCK),
+            orcaFacetAnnotations = OrcaFacetAnnotations(
+                support = previousSupport,
+                seam = seam,
+                multiColor = multiColor,
+            ),
+        )
+        var state = ProjectHistoryState().add(base.copy(volumes = listOf(initialVolume)))
+        val editedSupport = previousSupport.paintAt(
+            FacetPaintTarget(0, 0.8f, 0.1f, 0.1f, 2),
+            SupportPaintState.ENFORCE.code,
+        )
+
+        state = state.updateExactSupportPaint(
+            objectId = base.id,
+            volumeId = initialVolume.id,
+            supportPaint = SupportPaint(),
+            annotation = editedSupport,
+            recordHistory = false,
+        )
+        state = state.commitExactSupportPaint(
+            objectId = base.id,
+            volumeId = initialVolume.id,
+            previousPaint = initialVolume.supportPaint,
+            previousAnnotation = previousSupport,
+        )
+
+        val edited = state.current.selectedObject!!.singleVolume
+        assertEquals(editedSupport, edited.orcaFacetAnnotations.support)
+        assertEquals(seam, edited.orcaFacetAnnotations.seam)
+        assertEquals(multiColor, edited.orcaFacetAnnotations.multiColor)
+        assertTrue(edited.supportPaint.facets.isEmpty())
+
+        state = state.undo()
+        assertEquals(initialVolume, state.current.selectedObject!!.singleVolume)
+        state = state.redo()
+        assertEquals(edited, state.current.selectedObject!!.singleVolume)
+    }
+
+    @Test
+    fun exactFacetPaintingRejectsUnavailableGeometryAndCategoryStates() {
+        val base = projectObject("invalid-partial")
+        val state = ProjectHistoryState().add(base)
+
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            state.updateExactSeamPaint(
+                base.id,
+                base.singleVolume.id,
+                SeamPaint(),
+                OrcaFacetAnnotation(mapOf(1 to "4")),
+            )
+        }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            state.updateExactSupportPaint(
+                base.id,
+                base.singleVolume.id,
+                SupportPaint(),
+                OrcaFacetAnnotation(mapOf(0 to "0C")),
+            )
+        }
+    }
+
+    @Test
+    fun seamAndMultiColorPartialPaintUseTheirOwnExactChannels() {
+        val base = projectObject("partial-channels")
+        var state = ProjectHistoryState().add(base)
+        val target = FacetPaintTarget(0, 0.2f, 0.7f, 0.1f, 2)
+        val seam = OrcaFacetAnnotation().paintAt(target, SeamPaintState.BLOCK.code)
+        val multiColor = OrcaFacetAnnotation().paintAt(target, state = 3)
+
+        state = state.updateExactSeamPaint(
+            base.id,
+            base.singleVolume.id,
+            SeamPaint(),
+            seam,
+            recordHistory = false,
+        )
+        state = state.updateExactMultiColorPaint(
+            base.id,
+            base.singleVolume.id,
+            MultiColorPaint(),
+            multiColor,
+            recordHistory = false,
+        )
+
+        val volume = state.current.selectedObject!!.singleVolume
+        assertEquals(seam, volume.orcaFacetAnnotations.seam)
+        assertEquals(multiColor, volume.orcaFacetAnnotations.multiColor)
+        assertTrue(volume.orcaFacetAnnotations.support.triangles.isEmpty())
+    }
+
+    @Test
     fun seamPaintingIsObjectScopedAndUndoable() {
         var state = ProjectHistoryState().add(projectObject("part"))
         state = state.updateSeamPaint(

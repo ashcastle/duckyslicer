@@ -119,7 +119,7 @@ class ProjectStoreTest {
                         volumes = listOf(
                             it.singleVolume.copy(
                                 orcaFacetAnnotations = OrcaFacetAnnotations(
-                                    support = OrcaFacetAnnotation(mapOf(0 to "4")),
+                                    support = OrcaFacetAnnotation(mapOf(0 to "40003")),
                                 ),
                             ),
                         ),
