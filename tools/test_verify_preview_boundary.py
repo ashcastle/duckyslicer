@@ -370,10 +370,17 @@ def valid_sources() -> dict[str, str]:
         ),
         "OrcaMultiColorPaintInstrumentedTest.kt": (
             "fourColorFacetPaintProducesObjectAndPrimeTowerExtrusionOnEveryTool "
+            "primeTowerWallTypesProduceDistinctExtrusionGeometry "
+            "purgeRoutingChangesRealInfillAndObjectExtrusionPaths "
+            "supportPurgeRoutingAndSolubleInterfaceChangeRealMaterialPaths "
             "setOf(0, 1, 2, 3) analysis.objectExtrusionByTool.filterValues "
             "analysis.primeTowerExtrusionByTool.filterValues "
             "analysis.primeTowerMotions >= 40 analysis.toolChanges >= 6 "
-            "withoutTowerAnalysis.primeTowerMotions"
+            "withoutTowerAnalysis.primeTowerMotions "
+            "rectangle.primeTowerMotionSignature "
+            "intoInfill.extrusionMotionsByRoleAndTool[\"Sparse infill\"] "
+            "intoObjects.nonTowerMotionSignature() routed.supportMotionSignature() "
+            "soluble.supportExtrusionTools()"
         ),
         "PrepareModelRendererInstrumentedTest.kt": (
             "densePrepareSceneBuildStaysWithinLoadBudget "

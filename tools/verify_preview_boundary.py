@@ -448,12 +448,20 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         ),
         "OrcaMultiColorPaintInstrumentedTest.kt": (
             "fourColorFacetPaintProducesObjectAndPrimeTowerExtrusionOnEveryTool",
+            "primeTowerWallTypesProduceDistinctExtrusionGeometry",
+            "purgeRoutingChangesRealInfillAndObjectExtrusionPaths",
+            "supportPurgeRoutingAndSolubleInterfaceChangeRealMaterialPaths",
             "setOf(0, 1, 2, 3)",
             "analysis.objectExtrusionByTool.filterValues",
             "analysis.primeTowerExtrusionByTool.filterValues",
             "analysis.primeTowerMotions >= 40",
             "analysis.toolChanges >= 6",
             "withoutTowerAnalysis.primeTowerMotions",
+            "rectangle.primeTowerMotionSignature",
+            "intoInfill.extrusionMotionsByRoleAndTool[\"Sparse infill\"]",
+            "intoObjects.nonTowerMotionSignature()",
+            "routed.supportMotionSignature()",
+            "soluble.supportExtrusionTools()",
         ),
     }.items():
         for marker in markers:

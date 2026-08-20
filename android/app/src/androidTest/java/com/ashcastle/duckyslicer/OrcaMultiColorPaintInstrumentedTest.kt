@@ -12,6 +12,332 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class OrcaMultiColorPaintInstrumentedTest {
     @Test
+    fun purgeRoutingChangesRealInfillAndObjectExtrusionPaths() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val modelFile = File(context.cacheDir, "purge-routing-box.stl")
+        val outputs = mutableListOf<File>()
+        try {
+            instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
+                modelFile.outputStream().use(input::copyTo)
+            }
+            val model = inspectModel(modelFile.absolutePath)
+            val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(
+                id = "purge-routing-semm",
+                name = "Purge routing SEMM",
+                singleExtruderMultiMaterial = true,
+                extruderCount = 2,
+            )
+            val primary = FilamentProfile.GENERIC_PLA.copy(
+                id = "purge-routing-primary",
+                name = "Purge routing primary",
+                builtIn = false,
+                compatiblePrinters = listOf(printer.name),
+            )
+            val secondary = primary.copy(
+                id = "purge-routing-secondary",
+                name = "Purge routing secondary",
+            )
+            val objects = listOf(
+                ProjectObject(
+                    id = "purge-routing-left",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = -20f),
+                    filamentSlot = 0,
+                ),
+                ProjectObject(
+                    id = "purge-routing-right",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = 20f),
+                    filamentSlot = 1,
+                ),
+            )
+            val base = SliceOptions()
+                .selectPrinter(printer)
+                .selectFilament(primary)
+                .selectQuality(QualityProfile.DRAFT)
+                .copy(
+                    filamentSlots = listOf(primary, secondary),
+                    fillDensity = 0.35f,
+                    wipeTowerEnabled = true,
+                    brimType = "no_brim",
+                    brimWidth = 0f,
+                    skirtLoops = 0,
+                    multiMaterial = MultiMaterialSettings(
+                        purgeVolumes = listOf(0f, 260f, 260f, 0f),
+                        flushIntoInfill = false,
+                        flushIntoSupport = false,
+                        flushIntoObjects = false,
+                    ),
+                )
+
+            fun slice(settings: MultiMaterialSettings): Pair<String, MultiColorGcodeAnalysis> {
+                val outcome = OnDeviceSlicer.slice(
+                    objects,
+                    base.copy(multiMaterial = settings),
+                ).also { outputs += it.output }
+                val gcode = outcome.output.readText()
+                return gcode to analyzePositiveExtrusion(gcode)
+            }
+
+            val (baselineGcode, baseline) = slice(base.multiMaterial)
+            val (infillGcode, intoInfill) = slice(
+                base.multiMaterial.copy(flushIntoInfill = true),
+            )
+            val (objectsGcode, intoObjects) = slice(
+                base.multiMaterial.copy(flushIntoObjects = true),
+            )
+            val baselineTower = baseline.primeTowerExtrusionByTool.values.sum()
+            val infillTower = intoInfill.primeTowerExtrusionByTool.values.sum()
+            val objectTower = intoObjects.primeTowerExtrusionByTool.values.sum()
+
+            assertTrue(baselineGcode.contains("; flush_into_infill = 0"))
+            assertTrue(infillGcode.contains("; flush_into_infill = 1"))
+            assertTrue(objectsGcode.contains("; flush_into_objects = 1"))
+            assertTrue(
+                "Infill routing must consume purge in real model paths instead of only changing metadata",
+                infillTower < baselineTower - 5.0 &&
+                    intoInfill.extrusionMotionsByRoleAndTool["Sparse infill"] !=
+                    baseline.extrusionMotionsByRoleAndTool["Sparse infill"],
+            )
+            assertTrue(
+                "Object routing must consume purge in real model paths instead of only changing metadata",
+                objectTower < baselineTower - 5.0 &&
+                    intoObjects.nonTowerMotionSignature() != baseline.nonTowerMotionSignature(),
+            )
+        } finally {
+            outputs.forEach(File::delete)
+            modelFile.delete()
+        }
+    }
+
+    @Test
+    fun supportPurgeRoutingAndSolubleInterfaceChangeRealMaterialPaths() {
+        val modelFile = supportOverhangModel()
+        val outputs = mutableListOf<File>()
+        try {
+            val model = inspectModel(modelFile.absolutePath)
+            val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(
+                id = "support-routing-semm",
+                name = "Support routing SEMM",
+                singleExtruderMultiMaterial = true,
+                extruderCount = 2,
+            )
+            val primary = FilamentProfile.GENERIC_PLA.copy(
+                id = "support-routing-primary",
+                name = "Support routing primary",
+                builtIn = false,
+                compatiblePrinters = listOf(printer.name),
+            )
+            val regularInterface = primary.copy(
+                id = "support-routing-interface",
+                name = "Support routing interface",
+            )
+            val solubleInterface = regularInterface.copy(
+                id = "soluble-support-interface",
+                name = "Soluble support interface",
+                soluble = true,
+                supportMaterial = true,
+            )
+            val routedObjects = listOf(
+                ProjectObject(
+                    id = "support-routing-left",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = -20f),
+                    filamentSlot = 0,
+                ),
+                ProjectObject(
+                    id = "support-routing-right",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = 20f),
+                    filamentSlot = 1,
+                ),
+            )
+            val dedicatedObject = ProjectObject(id = "dedicated-soluble-interface", model = model)
+            val base = SliceOptions()
+                .selectPrinter(printer)
+                .selectFilament(primary)
+                .selectQuality(QualityProfile.DRAFT)
+                .copy(
+                    filamentSlots = listOf(primary, regularInterface),
+                    supportEnabled = true,
+                    supportType = "normal(auto)",
+                    supportFilament = 0,
+                    supportInterfaceFilament = 0,
+                    supportInterfaceTopLayers = 3,
+                    supportInterfaceBottomLayers = 0,
+                    wipeTowerEnabled = true,
+                    brimType = "no_brim",
+                    brimWidth = 0f,
+                    skirtLoops = 0,
+                    multiMaterial = MultiMaterialSettings(
+                        purgeVolumes = listOf(0f, 260f, 260f, 0f),
+                        flushIntoInfill = false,
+                        flushIntoSupport = false,
+                        flushIntoObjects = false,
+                    ),
+                )
+
+            fun slice(
+                objects: List<ProjectObject>,
+                options: SliceOptions,
+            ): Pair<String, MultiColorGcodeAnalysis> {
+                val outcome = OnDeviceSlicer.slice(objects, options).also {
+                    outputs += it.output
+                }
+                val gcode = outcome.output.readText()
+                return gcode to analyzePositiveExtrusion(gcode)
+            }
+
+            val (disabledGcode, disabled) = slice(routedObjects, base)
+            val (routedGcode, routed) = slice(
+                routedObjects,
+                base.copy(multiMaterial = base.multiMaterial.copy(flushIntoSupport = true)),
+            )
+            val (solubleGcode, soluble) = slice(
+                listOf(dedicatedObject),
+                base.selectFilament(primary).copy(
+                    filamentSlots = listOf(primary, solubleInterface),
+                    supportFilament = 1,
+                    supportInterfaceFilament = 2,
+                    multiMaterial = base.multiMaterial.copy(flushIntoSupport = true),
+                ),
+            )
+            val disabledTower = disabled.primeTowerExtrusionByTool.values.sum()
+            val routedTower = routed.primeTowerExtrusionByTool.values.sum()
+            val solubleTower = soluble.primeTowerExtrusionByTool.values.sum()
+
+            assertTrue(disabledGcode.contains("; flush_into_support = 0"))
+            assertTrue(routedGcode.contains("; flush_into_support = 1"))
+            assertTrue(solubleGcode.contains("; filament_soluble = 0,1"))
+            assertTrue(solubleGcode.contains("; filament_is_support = 0,1"))
+            assertEquals(
+                "Dedicated support base and interface must physically extrude with both tools",
+                setOf(0, 1),
+                soluble.supportExtrusionTools(),
+            )
+            assertTrue(
+                "Support routing must replace tower purge with real support extrusion",
+                routedTower < disabledTower - 5.0 &&
+                    routed.supportMotionSignature() != disabled.supportMotionSignature(),
+            )
+            assertTrue(
+                "Soluble/support interface must retain a material prime tower for real tool changes",
+                solubleTower > 5.0 && soluble.primeTowerMotions >= 20,
+            )
+        } finally {
+            outputs.forEach(File::delete)
+            modelFile.delete()
+        }
+    }
+
+    @Test
+    fun primeTowerWallTypesProduceDistinctExtrusionGeometry() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val modelFile = File(context.cacheDir, "prime-tower-wall-types-box.stl")
+        val outputs = mutableListOf<File>()
+        try {
+            instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
+                modelFile.outputStream().use(input::copyTo)
+            }
+            val model = inspectModel(modelFile.absolutePath)
+            val primary = FilamentProfile.GENERIC_PLA.copy(
+                id = "tower-wall-primary",
+                name = "Tower wall primary",
+                builtIn = false,
+                compatiblePrinters = listOf(PrinterProfile.U1_04.name),
+            )
+            val secondary = primary.copy(
+                id = "tower-wall-secondary",
+                name = "Tower wall secondary",
+            )
+            val objects = listOf(
+                ProjectObject(
+                    id = "tower-wall-left",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = -20f),
+                    filamentSlot = 0,
+                ),
+                ProjectObject(
+                    id = "tower-wall-right",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = 20f),
+                    filamentSlot = 1,
+                ),
+            )
+            val base = SliceOptions()
+                .selectPrinter(PrinterProfile.U1_04)
+                .selectFilament(primary)
+                .selectQuality(QualityProfile.DRAFT)
+                .copy(
+                    filamentSlots = listOf(primary, secondary),
+                    wipeTowerEnabled = true,
+                    wipeTowerWidth = 40f,
+                    brimType = "no_brim",
+                    brimWidth = 0f,
+                    skirtLoops = 0,
+                    multiMaterial = MultiMaterialSettings(
+                        purgeVolumes = listOf(0f, 90f, 90f, 0f),
+                    ),
+                )
+
+            fun slice(wallType: String): Pair<String, MultiColorGcodeAnalysis> {
+                val settings = when (wallType) {
+                    "cone" -> base.multiMaterial.copy(
+                        wipeTowerWallType = wallType,
+                        wipeTowerConeAngle = 48f,
+                    )
+                    "rib" -> base.multiMaterial.copy(
+                        wipeTowerWallType = wallType,
+                        wipeTowerExtraRibLength = 12f,
+                        wipeTowerRibWidth = 10f,
+                        wipeTowerFilletWall = false,
+                    )
+                    else -> base.multiMaterial.copy(wipeTowerWallType = wallType)
+                }
+                val outcome = OnDeviceSlicer.slice(
+                    objects,
+                    base.copy(multiMaterial = settings),
+                ).also { outputs += it.output }
+                val gcode = outcome.output.readText()
+                return gcode to analyzePositiveExtrusion(gcode)
+            }
+
+            val (rectangleGcode, rectangle) = slice("rectangle")
+            val (coneGcode, cone) = slice("cone")
+            val (ribGcode, rib) = slice("rib")
+
+            assertTrue(rectangleGcode.contains("; wipe_tower_wall_type = rectangle"))
+            assertTrue(coneGcode.contains("; wipe_tower_wall_type = cone"))
+            assertTrue(coneGcode.contains("; wipe_tower_cone_angle = 48"))
+            assertTrue(ribGcode.contains("; wipe_tower_wall_type = rib"))
+            assertTrue(ribGcode.contains("; wipe_tower_extra_rib_length = 12"))
+            assertTrue(ribGcode.contains("; wipe_tower_rib_width = 10"))
+            assertTrue(ribGcode.contains("; wipe_tower_fillet_wall = 0"))
+            listOf(rectangle, cone, rib).forEach { analysis ->
+                assertTrue(
+                    "Every wall type must generate a material prime tower",
+                    analysis.primeTowerMotions >= 20 &&
+                        analysis.primeTowerExtrusionByTool.values.sum() >= 5.0,
+                )
+            }
+            assertEquals(
+                "Rectangle, cone, and rib must produce three distinct physical tower paths",
+                3,
+                setOf(
+                    rectangle.primeTowerMotionSignature,
+                    cone.primeTowerMotionSignature,
+                    rib.primeTowerMotionSignature,
+                ).size,
+            )
+        } finally {
+            outputs.forEach(File::delete)
+            modelFile.delete()
+        }
+    }
+
+    @Test
     fun fourColorFacetPaintProducesObjectAndPrimeTowerExtrusionOnEveryTool() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -254,11 +580,14 @@ class OrcaMultiColorPaintInstrumentedTest {
     private fun analyzePositiveExtrusion(gcode: String): MultiColorGcodeAnalysis {
         val objectExtrusionByTool = mutableMapOf<Int, Double>()
         val primeTowerExtrusionByTool = mutableMapOf<Int, Double>()
+        val extrusionMotionsByRoleAndTool = mutableMapOf<String, MutableMap<Int, MutableList<String>>>()
+        val primeTowerMotionSignature = mutableListOf<String>()
         val absoluteExtruders = mutableMapOf(0 to 0.0)
         var activeTool = 0
         var toolChanges = 0
         var relativeExtrusion = false
         var primeTower = false
+        var activeRole = "Unclassified"
         var primeTowerMotions = 0
         gcode.lineSequence().forEach { raw ->
             val line = raw.trim()
@@ -271,6 +600,7 @@ class OrcaMultiColorPaintInstrumentedTest {
             when {
                 line.startsWith(";TYPE:") || line.startsWith("; FEATURE:") -> {
                     val label = line.substringAfter(':').trim()
+                    activeRole = label
                     primeTower = label.equals("Prime tower", ignoreCase = true) ||
                         label.equals("Wipe tower", ignoreCase = true)
                 }
@@ -299,7 +629,15 @@ class OrcaMultiColorPaintInstrumentedTest {
                     if (extrusion > MINIMUM_EXTRUSION_MM && spatialMotion) {
                         val output = if (primeTower) primeTowerExtrusionByTool else objectExtrusionByTool
                         output[activeTool] = output.getOrDefault(activeTool, 0.0) + extrusion
-                        if (primeTower) primeTowerMotions += 1
+                        val canonicalMotion = "T$activeTool|${line.substringBefore(';').trim()}"
+                        extrusionMotionsByRoleAndTool
+                            .getOrPut(activeRole) { mutableMapOf() }
+                            .getOrPut(activeTool) { mutableListOf() }
+                            .add(canonicalMotion)
+                        if (primeTower) {
+                            primeTowerMotions += 1
+                            primeTowerMotionSignature += canonicalMotion
+                        }
                     }
                 }
             }
@@ -307,6 +645,10 @@ class OrcaMultiColorPaintInstrumentedTest {
         return MultiColorGcodeAnalysis(
             objectExtrusionByTool = objectExtrusionByTool,
             primeTowerExtrusionByTool = primeTowerExtrusionByTool,
+            extrusionMotionsByRoleAndTool = extrusionMotionsByRoleAndTool.mapValues { (_, tools) ->
+                tools.mapValues { (_, motions) -> motions.toList() }
+            },
+            primeTowerMotionSignature = primeTowerMotionSignature,
             primeTowerMotions = primeTowerMotions,
             toolChanges = toolChanges,
         )
@@ -319,6 +661,78 @@ class OrcaMultiColorPaintInstrumentedTest {
         ?.substring(1)
         ?.toDoubleOrNull()
 
+    private fun MultiColorGcodeAnalysis.nonTowerMotionSignature(): List<String> =
+        extrusionMotionsByRoleAndTool
+            .filterKeys { role ->
+                !role.equals("Prime tower", ignoreCase = true) &&
+                    !role.equals("Wipe tower", ignoreCase = true)
+            }
+            .toSortedMap()
+            .flatMap { (role, tools) ->
+                tools.toSortedMap().flatMap { (tool, motions) ->
+                    motions.map { motion -> "$role|T$tool|$motion" }
+                }
+            }
+
+    private fun MultiColorGcodeAnalysis.supportMotionSignature(): List<String> =
+        extrusionMotionsByRoleAndTool
+            .filterKeys { role -> role.contains("support", ignoreCase = true) }
+            .toSortedMap()
+            .flatMap { (role, tools) ->
+                tools.toSortedMap().flatMap { (tool, motions) ->
+                    motions.map { motion -> "$role|T$tool|$motion" }
+                }
+            }
+
+    private fun MultiColorGcodeAnalysis.supportExtrusionTools(): Set<Int> =
+        extrusionMotionsByRoleAndTool
+            .filterKeys { role -> role.contains("support", ignoreCase = true) }
+            .values
+            .flatMap(Map<Int, List<String>>::keys)
+            .toSet()
+
+    private fun supportOverhangModel(): File {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val destination = File(context.cacheDir, "multi-material-support-overhang.stl")
+        val facets = mutableListOf<List<Triple<Float, Float, Float>>>()
+
+        fun vertex(x: Float, y: Float, z: Float) = Triple(x, y, z)
+        fun quad(
+            a: Triple<Float, Float, Float>,
+            b: Triple<Float, Float, Float>,
+            c: Triple<Float, Float, Float>,
+            d: Triple<Float, Float, Float>,
+        ) {
+            facets += listOf(a, b, c)
+            facets += listOf(a, c, d)
+        }
+        fun box(x0: Float, x1: Float, y0: Float, y1: Float, z0: Float, z1: Float) {
+            quad(vertex(x0, y0, z0), vertex(x1, y0, z0), vertex(x1, y0, z1), vertex(x0, y0, z1))
+            quad(vertex(x1, y0, z0), vertex(x1, y1, z0), vertex(x1, y1, z1), vertex(x1, y0, z1))
+            quad(vertex(x1, y1, z0), vertex(x0, y1, z0), vertex(x0, y1, z1), vertex(x1, y1, z1))
+            quad(vertex(x0, y1, z0), vertex(x0, y0, z0), vertex(x0, y0, z1), vertex(x0, y1, z1))
+            quad(vertex(x0, y0, z1), vertex(x1, y0, z1), vertex(x1, y1, z1), vertex(x0, y1, z1))
+            quad(vertex(x0, y1, z0), vertex(x1, y1, z0), vertex(x1, y0, z0), vertex(x0, y0, z0))
+        }
+
+        box(8f, 12f, 8f, 12f, 0f, 18f)
+        box(0f, 20f, 0f, 20f, 18f, 22f)
+        destination.bufferedWriter().use { writer ->
+            writer.appendLine("solid multi_material_support_overhang")
+            facets.forEach { triangle ->
+                writer.appendLine("facet normal 0 0 0")
+                writer.appendLine("outer loop")
+                triangle.forEach { point ->
+                    writer.appendLine("vertex ${point.first} ${point.second} ${point.third}")
+                }
+                writer.appendLine("endloop")
+                writer.appendLine("endfacet")
+            }
+            writer.appendLine("endsolid multi_material_support_overhang")
+        }
+        return destination
+    }
+
     private companion object {
         const val MINIMUM_EXTRUSION_MM = 0.000_000_1
     }
@@ -327,6 +741,8 @@ class OrcaMultiColorPaintInstrumentedTest {
 private data class MultiColorGcodeAnalysis(
     val objectExtrusionByTool: Map<Int, Double>,
     val primeTowerExtrusionByTool: Map<Int, Double>,
+    val extrusionMotionsByRoleAndTool: Map<String, Map<Int, List<String>>>,
+    val primeTowerMotionSignature: List<String>,
     val primeTowerMotions: Int,
     val toolChanges: Int,
 )
