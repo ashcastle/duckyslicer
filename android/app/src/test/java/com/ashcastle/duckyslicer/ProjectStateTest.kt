@@ -538,6 +538,31 @@ class ProjectStateTest {
     }
 
     @Test
+    fun createdAuxiliaryVolumesCanBeRemovedAndRestoredWithoutChangingTheModelPart() {
+        val base = projectObject("volume-owner")
+        val cutout = base.singleVolume.copy(
+            id = "created-cutout",
+            role = ProjectVolumeRole.NEGATIVE_VOLUME,
+        )
+        var state = ProjectHistoryState().add(base)
+
+        state = state.addAuxiliaryVolumeToSelected(cutout)
+        assertEquals(listOf(base.singleVolume.id, cutout.id), state.current.selectedObject!!.volumes.map {
+            it.id
+        })
+        assertEquals(base.singleVolume.id, state.current.selectedObject!!.primaryModelPart.id)
+
+        state = state.removeSelectedAuxiliaryVolume(cutout.id)
+        assertEquals(listOf(base.singleVolume.id), state.current.selectedObject!!.volumes.map { it.id })
+        state = state.undo()
+        assertEquals(listOf(base.singleVolume.id, cutout.id), state.current.selectedObject!!.volumes.map {
+            it.id
+        })
+        state = state.redo()
+        assertEquals(listOf(base.singleVolume.id), state.current.selectedObject!!.volumes.map { it.id })
+    }
+
+    @Test
     fun platesKeepObjectsAndSelectionIsolatedAcrossRemovalUndoAndRedo() {
         var state = ProjectHistoryState()
             .add(projectObject("first-plate-object"))

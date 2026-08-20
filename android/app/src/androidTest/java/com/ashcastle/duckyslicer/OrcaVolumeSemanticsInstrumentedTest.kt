@@ -4,12 +4,85 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import java.util.UUID
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class OrcaVolumeSemanticsInstrumentedTest {
+    @Test
+    fun mobileCreatedCutoutAndSettingsRegionChangeRealOrcaExtrusion() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        val store = ProjectStore(context)
+        val outputs = mutableListOf<File>()
+        projectRoot.deleteRecursively()
+        try {
+            val base = createOrcaPrimitive(OrcaPrimitive.CUBE, 30f, "base", store)
+            val cutout = createOrcaAuxiliaryPrimitive(
+                draft = OrcaAuxiliaryPrimitiveDraft(
+                    primitive = OrcaPrimitive.CUBE,
+                    role = ProjectVolumeRole.NEGATIVE_VOLUME,
+                    sizeMm = 20f,
+                    centerOffsetXmm = 3f,
+                ),
+                displayName = "cutout",
+                target = base,
+                projectStore = store,
+            )
+            val settingsRegion = createOrcaAuxiliaryPrimitive(
+                draft = OrcaAuxiliaryPrimitiveDraft(
+                    primitive = OrcaPrimitive.CUBE,
+                    role = ProjectVolumeRole.PARAMETER_MODIFIER,
+                    sizeMm = 20f,
+                    centerOffsetXmm = -3f,
+                    modifierInfillPercent = 100,
+                ),
+                displayName = "settings-region",
+                target = base,
+                projectStore = store,
+            )
+            val baseCenterX = base.geometry().center[0]
+            assertEquals(baseCenterX + 3f, cutout.modelCenterX(), 0.25f)
+            assertEquals(baseCenterX - 3f, settingsRegion.modelCenterX(), 0.25f)
+            assertEquals("100%", settingsRegion.config.values["sparse_infill_density"])
+
+            fun slice(projectObject: ProjectObject, options: SliceOptions): SliceOutcome = OnDeviceSlicer
+                .slice(listOf(projectObject), options)
+                .also { outputs += it.output }
+            val solidOptions = denseSliceOptions()
+            val sparseOptions = denseSliceOptions().copy(fillDensity = 0.05f)
+            val solidBaseline = slice(base, solidOptions)
+            val withCutout = slice(
+                base.copy(volumes = base.volumes + cutout),
+                solidOptions,
+            )
+            val sparseBaseline = slice(base, sparseOptions)
+            val withSettingsRegion = slice(
+                base.copy(volumes = base.volumes + settingsRegion),
+                sparseOptions,
+            )
+
+            assertTrue("Solid baseline extrusion must be meaningful", solidBaseline.filamentMm > 100f)
+            assertTrue(
+                "A mobile-created cutout must remove real extrusion: " +
+                    "base=${solidBaseline.filamentMm}, cutout=${withCutout.filamentMm}",
+                withCutout.filamentMm < solidBaseline.filamentMm * 0.9f,
+            )
+            assertTrue("Sparse baseline extrusion must be meaningful", sparseBaseline.filamentMm > 100f)
+            assertTrue(
+                "A mobile-created dense settings region must add real extrusion: " +
+                    "base=${sparseBaseline.filamentMm}, region=${withSettingsRegion.filamentMm}",
+                withSettingsRegion.filamentMm > sparseBaseline.filamentMm * 1.12f,
+            )
+        } finally {
+            outputs.forEach(File::delete)
+            projectRoot.deleteRecursively()
+        }
+    }
+
     @Test
     fun negativeVolumeRemovesMaterialInRealOrcaSlice() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -93,6 +166,9 @@ class OrcaVolumeSemanticsInstrumentedTest {
         id = UUID.randomUUID().toString(),
         model = inspectModel(file.absolutePath),
     )
+
+    private fun ProjectVolume.modelCenterX(): Float =
+        ((model.minMm[0] + model.maxMm[0]) / 2.0).toFloat()
 
     private fun denseSliceOptions(): SliceOptions = SliceOptions().copy(
         fillDensity = 1f,

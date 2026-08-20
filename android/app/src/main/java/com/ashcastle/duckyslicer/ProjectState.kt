@@ -269,6 +269,52 @@ data class ProjectHistoryState(
         )
     }
 
+    fun addAuxiliaryVolumeToSelected(volume: ProjectVolume): ProjectHistoryState {
+        require(volume.role in CREATABLE_AUXILIARY_VOLUME_ROLES) {
+            "Only an auxiliary volume can be attached to an object"
+        }
+        val selected = current.selectedObject ?: return this
+        require(selected.volumes.size < MAX_PROJECT_VOLUMES_PER_OBJECT) {
+            "Project object has too many volumes"
+        }
+        require(current.allObjects.sumOf { it.volumes.size } < ProjectStore.MAX_PROJECT_VOLUMES) {
+            "Project has too many volumes"
+        }
+        require(selected.volumes.none { it.id == volume.id }) { "Duplicate project volume id" }
+        return record(
+            current.updateActivePlate(
+                objects = current.objects.map { projectObject ->
+                    if (projectObject.id == selected.id) {
+                        projectObject.copy(volumes = projectObject.volumes + volume)
+                    } else {
+                        projectObject
+                    }
+                },
+            ),
+        )
+    }
+
+    fun removeSelectedAuxiliaryVolume(volumeId: String): ProjectHistoryState {
+        val selected = current.selectedObject ?: return this
+        val target = selected.volumes.firstOrNull { it.id == volumeId } ?: return this
+        require(target.role != ProjectVolumeRole.MODEL_PART) {
+            "Printable model parts cannot be removed as auxiliary volumes"
+        }
+        return record(
+            current.updateActivePlate(
+                objects = current.objects.map { projectObject ->
+                    if (projectObject.id == selected.id) {
+                        projectObject.copy(
+                            volumes = projectObject.volumes.filterNot { it.id == volumeId },
+                        )
+                    } else {
+                        projectObject
+                    }
+                },
+            ),
+        )
+    }
+
     fun replaceSelected(replacements: List<ProjectObject>): ProjectHistoryState {
         val selectedId = current.selectedObjectId ?: return this
         require(replacements.isNotEmpty()) { "Replacement objects are empty" }

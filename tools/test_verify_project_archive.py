@@ -90,6 +90,17 @@ def valid_sources() -> dict[str, str]:
                 "SavedStateHandle StateFlow<ExternalProjectRequest?>",
             )
         ),
+        "OrcaPrimitive.kt": (
+            "CREATABLE_AUXILIARY_VOLUME_ROLES ProjectVolumeRole.NEGATIVE_VOLUME "
+            "ProjectVolumeRole.PARAMETER_MODIFIER ProjectVolumeRole.SUPPORT_BLOCKER "
+            "ProjectVolumeRole.SUPPORT_ENFORCER data class OrcaAuxiliaryPrimitiveDraft "
+            'mapOf("sparse_infill_density" to "$modifierInfillPercent%") '
+            "createOrcaAuxiliaryPrimitive( target.geometry() NativeEngine.transformStl("
+        ),
+        "ProjectState.kt": (
+            "fun addAuxiliaryVolumeToSelected( fun removeSelectedAuxiliaryVolume( "
+            "ProjectVolumeRole.MODEL_PART"
+        ),
         "ProjectTransfer.kt": " ".join(
             (
                 "AndroidViewModel(application)",
@@ -131,6 +142,8 @@ def valid_sources() -> dict[str, str]:
                 "deleteFailedCreatedDocument(application, uri) "
                 "SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED",
                 "catch (failure: CancellationException) consumeCompletion",
+                "fun createAuxiliaryPrimitive( createOrcaAuxiliaryPrimitive( "
+                "addAuxiliaryVolumeToSelected",
             )
         ),
         "CreatedDocument.kt": (
@@ -159,6 +172,9 @@ def valid_sources() -> dict[str, str]:
                 "projectTransferModel.updateHistory( projectTransferModel::cancelProjectImport "
                 "projectTransferModel::cancelProjectExport "
                 "ProjectTransferCompletion.Canceled",
+                "fun addAuxiliaryPrimitive( "
+                "onCreateAuxiliaryPrimitive = ::addAuxiliaryPrimitive "
+                "removeSelectedAuxiliaryVolume",
             )
         ),
         "WorkspaceScreen.kt": (
@@ -169,7 +185,9 @@ def valid_sources() -> dict[str, str]:
             "onCancelProjectImport: () -> Unit onCancelProjectExport: () -> Unit "
             "R.string.cancel_project_import R.string.canceling_project_import "
             "R.string.cancel_project_export R.string.canceling_project_export "
-            "if (exporting) onCancelProjectExport() else onSaveProject()"
+            "if (exporting) onCancelProjectExport() else onSaveProject() "
+            "AuxiliaryVolumesSheet( AuxiliaryShapeSheet( "
+            "CREATABLE_AUXILIARY_VOLUME_ROLES onRemoveAuxiliaryVolume"
         ),
         "ProjectArchiveTest.kt": (
             "projectArchiveRoundTripsModelsTransformsPaintAndResolvedProfilesDeterministically "
@@ -184,7 +202,8 @@ def valid_sources() -> dict[str, str]:
             "nativeRoleValuesAreStableAndComplete "
             "volumeConfigSidecarAndJsonRoundTripExactly "
             "auxiliaryVolumesRejectPrintableOnlyState "
-            "projectAndArchiveObjectsRequirePrintableModelParts"
+            "projectAndArchiveObjectsRequirePrintableModelParts "
+            "mobileAuxiliaryShapeDraftsCoverEveryCreatableRoleAndBoundTheirInputs"
         ),
         "ProjectTransferStateTest.kt": (
             "retainedSessionMutationKeepsHistoryAndOptionsTogether "
@@ -233,11 +252,19 @@ def valid_sources() -> dict[str, str]:
         ),
         "AccessibilityInstrumentedTest.kt": (
             "cancelProjectImportActionIsReachable cancelProjectExportActionIsReachable "
-            "plateSwitcherExposesSelectionAddAndConfirmedRemovalActions"
+            "plateSwitcherExposesSelectionAddAndConfirmedRemovalActions "
+            "auxiliaryShapePickerExposesRolesPlacementAndModifierDensity "
+            "auxiliaryVolumeManagerExposesExistingRegionsRemovalAndAdd"
         ),
         "NativeEngineInstrumentedTest.kt": (
             "projectArchiveRoundTripReinspectsAndSlicesOnArm64 "
             "inspectModel( OnDeviceSlicer.slice("
+        ),
+        "OrcaVolumeSemanticsInstrumentedTest.kt": (
+            "mobileCreatedCutoutAndSettingsRegionChangeRealOrcaExtrusion "
+            "createOrcaAuxiliaryPrimitive( "
+            "withCutout.filamentMm < solidBaseline.filamentMm * 0.9f "
+            "withSettingsRegion.filamentMm > sparseBaseline.filamentMm * 1.12f"
         ),
         "strings.xml": string_resources(),
         "strings-ko.xml": string_resources(),
@@ -514,6 +541,17 @@ class VerifyProjectArchiveTest(unittest.TestCase):
         sources["AccessibilityInstrumentedTest.kt"] = sources[
             "AccessibilityInstrumentedTest.kt"
         ].replace("cancelProjectImportActionIsReachable", "missing_import_accessibility")
+        with self.assertRaisesRegex(VerificationError, "safeguards"):
+            verify_project_archive(sources)
+
+    def test_rejects_missing_auxiliary_volume_native_semantics_regression(self) -> None:
+        sources = valid_sources()
+        sources["OrcaVolumeSemanticsInstrumentedTest.kt"] = sources[
+            "OrcaVolumeSemanticsInstrumentedTest.kt"
+        ].replace(
+            "mobileCreatedCutoutAndSettingsRegionChangeRealOrcaExtrusion",
+            "missing_auxiliary_volume_native_semantics_regression",
+        )
         with self.assertRaisesRegex(VerificationError, "safeguards"):
             verify_project_archive(sources)
 

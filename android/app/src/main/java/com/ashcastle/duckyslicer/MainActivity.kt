@@ -444,7 +444,6 @@ private fun DuckySlicerScreen(
     val projectObjects = projectHistory.current.objects
     val selectedProjectObject = projectHistory.current.selectedObject
     val sliceOutcome = plateSliceResults.outcomeFor(selectedPlateId)
-    val model = selectedProjectObject?.model ?: projectObjects.firstOrNull()?.model
     val modelTransform = selectedProjectObject?.transform ?: ModelTransform()
     val profileCatalog = profileLibraryState.catalog
     val profileRecents = profileLibraryState.recents
@@ -920,9 +919,10 @@ private fun DuckySlicerScreen(
 
     fun simplifySelectedModel(keepPercent: Int) {
         val selected = projectHistory.current.selectedObject
+        val selectedVolume = selected?.singleVolumeOrNull
         if (
-            selected == null || projectTransferBusy || importing || slicing || previewLoading ||
-            selected.model.triangles < MINIMUM_SIMPLIFIABLE_TRIANGLES
+            selectedVolume == null || projectTransferBusy || importing || slicing ||
+            previewLoading || selectedVolume.model.triangles < MINIMUM_SIMPLIFIABLE_TRIANGLES
         ) return
         if (projectTransferModel.simplifySelectedModel(keepPercent)) {
             clearCompletedSlice()
@@ -942,6 +942,34 @@ private fun DuckySlicerScreen(
         }
         val displayName = resources.getString(primitive.label)
         if (projectTransferModel.createPrimitive(primitive, sizeMm, displayName)) {
+            error = null
+            notice = null
+        }
+    }
+
+    fun addAuxiliaryPrimitive(draft: OrcaAuxiliaryPrimitiveDraft) {
+        val selected = projectHistory.current.selectedObject ?: return
+        if (
+            projectTransferBusy || !projectRestored || slicing || previewLoading ||
+            selected.volumes.size >= MAX_PROJECT_VOLUMES_PER_OBJECT ||
+            projectHistory.current.allObjects.sumOf { it.volumes.size } >=
+            ProjectStore.MAX_PROJECT_VOLUMES
+        ) return
+        val roleLabel = resources.getString(
+            when (draft.role) {
+                ProjectVolumeRole.NEGATIVE_VOLUME -> R.string.region_cutout
+                ProjectVolumeRole.PARAMETER_MODIFIER -> R.string.region_settings
+                ProjectVolumeRole.SUPPORT_BLOCKER -> R.string.region_support_blocker
+                ProjectVolumeRole.SUPPORT_ENFORCER -> R.string.region_support_enforcer
+                ProjectVolumeRole.MODEL_PART -> return
+            },
+        )
+        val displayName = resources.getString(
+            R.string.auxiliary_shape_name,
+            roleLabel,
+            resources.getString(draft.primitive.label),
+        )
+        if (projectTransferModel.createAuxiliaryPrimitive(draft, displayName)) {
             error = null
             notice = null
         }
@@ -1241,6 +1269,7 @@ private fun DuckySlicerScreen(
         onExportProfiles = { profileExportPicker.launch(DEFAULT_PROFILE_BUNDLE_NAME) },
         onCancelProfileTransfer = profileLibraryModel::cancelTransfer,
         onCreatePrimitive = ::addPrimitive,
+        onCreateAuxiliaryPrimitive = ::addAuxiliaryPrimitive,
         onOpenProject = {
             projectOpenPicker.launch(
                 arrayOf(PROJECT_ARCHIVE_MIME_TYPE, "application/zip"),
@@ -1549,6 +1578,18 @@ private fun DuckySlicerScreen(
         onObjectProcessOverridesChanged = { processOverrides ->
             val current = projectTransferModel.state.value.history
             val nextHistory = current.updateSelectedProcessOverrides(processOverrides)
+            if (
+                nextHistory != current &&
+                projectTransferModel.updateHistory(current, nextHistory)
+            ) {
+                clearCompletedSlice()
+                notice = null
+                error = null
+            }
+        },
+        onRemoveAuxiliaryVolume = { volumeId ->
+            val current = projectTransferModel.state.value.history
+            val nextHistory = current.removeSelectedAuxiliaryVolume(volumeId)
             if (
                 nextHistory != current &&
                 projectTransferModel.updateHistory(current, nextHistory)

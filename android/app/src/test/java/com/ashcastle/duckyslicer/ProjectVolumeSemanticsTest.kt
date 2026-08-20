@@ -71,6 +71,60 @@ class ProjectVolumeSemanticsTest {
     }
 
     @Test
+    fun mobileAuxiliaryShapeDraftsCoverEveryCreatableRoleAndBoundTheirInputs() {
+        assertEquals(
+            listOf(
+                ProjectVolumeRole.NEGATIVE_VOLUME,
+                ProjectVolumeRole.PARAMETER_MODIFIER,
+                ProjectVolumeRole.SUPPORT_BLOCKER,
+                ProjectVolumeRole.SUPPORT_ENFORCER,
+            ),
+            CREATABLE_AUXILIARY_VOLUME_ROLES,
+        )
+        CREATABLE_AUXILIARY_VOLUME_ROLES.forEach { role ->
+            val draft = OrcaAuxiliaryPrimitiveDraft(
+                primitive = OrcaPrimitive.CYLINDER,
+                role = role,
+                sizeMm = 25f,
+                centerOffsetXmm = 2f,
+                centerOffsetYmm = -3f,
+                centerOffsetZmm = 4f,
+                modifierInfillPercent = 73,
+            )
+            assertEquals(
+                if (role == ProjectVolumeRole.PARAMETER_MODIFIER) {
+                    mapOf("sparse_infill_density" to "73%")
+                } else {
+                    emptyMap()
+                },
+                draft.config.values,
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            OrcaAuxiliaryPrimitiveDraft(
+                primitive = OrcaPrimitive.CUBE,
+                role = ProjectVolumeRole.MODEL_PART,
+                sizeMm = 20f,
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            OrcaAuxiliaryPrimitiveDraft(
+                primitive = OrcaPrimitive.CUBE,
+                role = ProjectVolumeRole.NEGATIVE_VOLUME,
+                sizeMm = Float.NaN,
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            OrcaAuxiliaryPrimitiveDraft(
+                primitive = OrcaPrimitive.CUBE,
+                role = ProjectVolumeRole.PARAMETER_MODIFIER,
+                sizeMm = 20f,
+                modifierInfillPercent = 101,
+            )
+        }
+    }
+
+    @Test
     fun projectAndArchiveObjectsRequirePrintableModelParts() {
         val model = ModelInfo(
             fileName = "cutout.stl",

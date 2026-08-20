@@ -52,6 +52,18 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                             onAdd = { _, _ -> },
                             onDismiss = {},
                         )
+                        SCREEN_AUXILIARY_SHAPE -> AuxiliaryShapeSheet(
+                            projectObject = accessibilityLayOnFaceProjectObject(),
+                            onAdd = {},
+                            onDismiss = {},
+                        )
+                        SCREEN_AUXILIARY_VOLUMES -> AuxiliaryVolumesSheet(
+                            projectObject = accessibilityAuxiliaryVolumeProjectObject(),
+                            canAdd = true,
+                            onAdd = {},
+                            onRemove = {},
+                            onDismiss = {},
+                        )
                         SCREEN_SIMPLIFY -> SimplifyModelSheet(
                             originalTriangleCount = 100_000,
                             hasSurfacePaint = true,
@@ -124,6 +136,8 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_WORKSPACE_PROFILES = "workspace-profiles"
         const val SCREEN_OBJECT_SETTINGS = "object-settings"
         const val SCREEN_SHAPES = "shapes"
+        const val SCREEN_AUXILIARY_SHAPE = "auxiliary-shape"
+        const val SCREEN_AUXILIARY_VOLUMES = "auxiliary-volumes"
         const val SCREEN_SIMPLIFY = "simplify"
         const val SCREEN_SPLIT_PARTS = "split-parts"
         const val SCREEN_MODEL_TRANSFORM = "model-transform"
@@ -356,6 +370,7 @@ private fun WorkspaceAccessibilityHarness(
         onExportProfiles = {},
         onCancelProfileTransfer = {},
         onCreatePrimitive = { _, _ -> },
+        onCreateAuxiliaryPrimitive = {},
         onOpenProject = {},
         onSaveProject = {},
         onPlateSelected = { selectedPlateId = it },
@@ -445,6 +460,7 @@ private fun WorkspaceAccessibilityHarness(
         onMultiColorPaintCommitted = { _, _, _, _ -> },
         onVariableLayerHeightsChanged = {},
         onObjectProcessOverridesChanged = {},
+        onRemoveAuxiliaryVolume = {},
         onRemoveModel = {},
         onSlice = {},
         onCancelSlice = {},
@@ -525,6 +541,26 @@ private fun accessibilityLayOnFaceProjectObject() = ProjectObject(
         ),
     ),
 )
+
+private fun accessibilityAuxiliaryVolumeProjectObject(): ProjectObject {
+    val base = accessibilityLayOnFaceProjectObject()
+    return base.copy(
+        volumes = listOf(
+            base.singleVolume,
+            base.singleVolume.copy(
+                id = "accessibility-cutout",
+                role = ProjectVolumeRole.NEGATIVE_VOLUME,
+            ),
+            base.singleVolume.copy(
+                id = "accessibility-settings-region",
+                role = ProjectVolumeRole.PARAMETER_MODIFIER,
+                config = ProjectVolumeConfig(
+                    mapOf("sparse_infill_density" to "80%"),
+                ),
+            ),
+        ),
+    )
+}
 
 internal const val TEST_SETTING_LABEL = "Accessibility setting"
 internal const val TEST_SWITCH_LABEL = "Accessibility switch"

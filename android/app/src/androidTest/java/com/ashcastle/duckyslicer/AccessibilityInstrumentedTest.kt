@@ -639,6 +639,63 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun auxiliaryShapePickerExposesRolesPlacementAndModifierDensity() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val title = context.getString(R.string.add_region)
+        val cutout = context.getString(R.string.region_cutout)
+        val settings = context.getString(R.string.region_settings)
+        val blocker = context.getString(R.string.region_support_blocker)
+        val enforcer = context.getString(R.string.region_support_enforcer)
+        val size = context.getString(R.string.shape_size)
+        val leftRight = context.getString(R.string.region_left_right)
+        val frontBack = context.getString(R.string.region_front_back)
+        val upDown = context.getString(R.string.region_up_down)
+        val infill = context.getString(R.string.region_infill)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_AUXILIARY_SHAPE).use {
+            val nodes = waitForNodes(
+                setOf(title, cutout, settings, blocker, enforcer),
+            )
+            listOf(cutout, settings, blocker, enforcer).forEach { label ->
+                assertTrue(
+                    "$label must be selectable",
+                    nodes.any { it.isClickable && it.effectiveLabel() == label },
+                )
+            }
+            val settingsButton = nodes.first { it.isClickable && it.effectiveLabel() == settings }
+            tapCenter(settingsButton)
+            var scrollAnchor = settings
+            listOf(size, leftRight, frontBack, upDown, infill).forEach { label ->
+                val control = scrollUntilNode(
+                    label,
+                    scrollAnchorLabel = scrollAnchor,
+                    timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
+                ) { it.className?.toString() == SEEK_BAR_CLASS }
+                assertTrue("$label must remain visible and adjustable", control.isVisibleToUser)
+                scrollAnchor = label
+            }
+        }
+    }
+
+    @Test
+    fun auxiliaryVolumeManagerExposesExistingRegionsRemovalAndAdd() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val title = context.getString(R.string.parts_and_regions)
+        val cutout = context.getString(R.string.region_cutout)
+        val settings = context.getString(R.string.region_settings)
+        val add = context.getString(R.string.add_region)
+        val removeCutout = context.getString(R.string.remove_region, cutout)
+        val removeSettings = context.getString(R.string.remove_region, settings)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_AUXILIARY_VOLUMES).use {
+            val nodes = waitForNodes(
+                setOf(title, cutout, settings, add, removeCutout, removeSettings),
+            )
+            assertTrue(nodes.any { it.isClickable && it.effectiveLabel() == add })
+            assertTrue(nodes.any { it.isClickable && it.effectiveLabel().contains(removeCutout) })
+            assertTrue(nodes.any { it.isClickable && it.effectiveLabel().contains(removeSettings) })
+        }
+    }
+
+    @Test
     fun modelTransformExposesIndependentAxesAndProportionLock() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val more = context.getString(R.string.more_settings)

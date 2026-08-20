@@ -499,6 +499,7 @@ internal fun WorkspaceScreen(
     onExportProfiles: () -> Unit,
     onCancelProfileTransfer: () -> Unit,
     onCreatePrimitive: (OrcaPrimitive, Float) -> Unit,
+    onCreateAuxiliaryPrimitive: (OrcaAuxiliaryPrimitiveDraft) -> Unit,
     onOpenProject: () -> Unit,
     onSaveProject: () -> Unit,
     onPlateSelected: (String) -> Unit,
@@ -531,6 +532,7 @@ internal fun WorkspaceScreen(
     onMultiColorPaintCommitted: (String, String, MultiColorPaint, OrcaFacetAnnotation) -> Unit,
     onVariableLayerHeightsChanged: (VariableLayerHeights) -> Unit,
     onObjectProcessOverridesChanged: (ObjectProcessOverrides) -> Unit,
+    onRemoveAuxiliaryVolume: (String) -> Unit,
     onRemoveModel: () -> Unit,
     onSlice: () -> Unit,
     onCancelSlice: () -> Unit,
@@ -575,6 +577,8 @@ internal fun WorkspaceScreen(
     var showVariableLayerHeightTool by remember { mutableStateOf(false) }
     var showObjectProcessSettings by remember { mutableStateOf(false) }
     var showPrimitivePicker by remember { mutableStateOf(false) }
+    var showAuxiliaryVolumes by remember { mutableStateOf(false) }
+    var showAuxiliaryPrimitivePicker by remember { mutableStateOf(false) }
     var layingOnFace by remember { mutableStateOf(false) }
     var measuring by remember { mutableStateOf(false) }
     var measurementPoints by remember { mutableStateOf<List<ModelPoint3>>(emptyList()) }
@@ -640,6 +644,8 @@ internal fun WorkspaceScreen(
         if (selectedObjectId == null || selectedTab != WorkspaceTab.SLICE) {
             showVariableLayerHeightTool = false
             showObjectProcessSettings = false
+            showAuxiliaryVolumes = false
+            showAuxiliaryPrimitivePicker = false
         }
     }
     LaunchedEffect(selectedTab) {
@@ -1177,6 +1183,15 @@ internal fun WorkspaceScreen(
                 showModelTools = false
                 showObjectProcessSettings = true
             },
+            auxiliaryVolumeCount = selectedObject.volumes.count {
+                it.role != ProjectVolumeRole.MODEL_PART
+            },
+            canAddAuxiliaryVolume = selectedObject.volumes.size < MAX_PROJECT_VOLUMES_PER_OBJECT &&
+                projectObjects.sumOf { it.volumes.size } < ProjectStore.MAX_PROJECT_VOLUMES,
+            onManageAuxiliaryVolumes = {
+                showModelTools = false
+                showAuxiliaryVolumes = true
+            },
             onChooseFilament = {
                 showModelTools = false
                 showFilamentPicker = true
@@ -1259,6 +1274,29 @@ internal fun WorkspaceScreen(
                 onObjectProcessOverridesChanged(it)
             },
             onDismiss = { showObjectProcessSettings = false },
+        )
+    }
+    if (showAuxiliaryVolumes && selectedObject != null) {
+        AuxiliaryVolumesSheet(
+            projectObject = selectedObject,
+            canAdd = selectedObject.volumes.size < MAX_PROJECT_VOLUMES_PER_OBJECT &&
+                projectObjects.sumOf { it.volumes.size } < ProjectStore.MAX_PROJECT_VOLUMES,
+            onAdd = {
+                showAuxiliaryVolumes = false
+                showAuxiliaryPrimitivePicker = true
+            },
+            onRemove = onRemoveAuxiliaryVolume,
+            onDismiss = { showAuxiliaryVolumes = false },
+        )
+    }
+    if (showAuxiliaryPrimitivePicker && selectedObject != null) {
+        AuxiliaryShapeSheet(
+            projectObject = selectedObject,
+            onAdd = {
+                showAuxiliaryPrimitivePicker = false
+                onCreateAuxiliaryPrimitive(it)
+            },
+            onDismiss = { showAuxiliaryPrimitivePicker = false },
         )
     }
     if (showPrimitivePicker) {
@@ -1367,6 +1405,295 @@ internal fun BasicShapeSheet(
                 ),
             ) {
                 Text(stringResource(R.string.add_shape))
+            }
+        }
+    }
+}
+
+private fun auxiliaryVolumeRoleLabel(role: ProjectVolumeRole): Int = when (role) {
+    ProjectVolumeRole.NEGATIVE_VOLUME -> R.string.region_cutout
+    ProjectVolumeRole.PARAMETER_MODIFIER -> R.string.region_settings
+    ProjectVolumeRole.SUPPORT_BLOCKER -> R.string.region_support_blocker
+    ProjectVolumeRole.SUPPORT_ENFORCER -> R.string.region_support_enforcer
+    ProjectVolumeRole.MODEL_PART -> error("Printable parts are not auxiliary volumes")
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun AuxiliaryVolumesSheet(
+    projectObject: ProjectObject,
+    canAdd: Boolean,
+    onAdd: () -> Unit,
+    onRemove: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val volumes = projectObject.volumes.filter { it.role != ProjectVolumeRole.MODEL_PART }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF282925),
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                stringResource(R.string.parts_and_regions),
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                stringResource(R.string.parts_and_regions_summary),
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (volumes.isEmpty()) {
+                Text(
+                    stringResource(R.string.region_none),
+                    color = Color(0xFFC8C9C2),
+                    modifier = Modifier.padding(vertical = 12.dp),
+                )
+            }
+            volumes.forEach { volume ->
+                val roleLabel = stringResource(auxiliaryVolumeRoleLabel(volume.role))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF343530)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(roleLabel, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                volume.model.fileName,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = Color(0xFFC8C9C2),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            volume.config.values["sparse_infill_density"]?.let { density ->
+                                Text(
+                                    stringResource(R.string.region_infill) + " · " + density,
+                                    color = WorkspaceYellow,
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = { onRemove(volume.id) },
+                        ) {
+                            Icon(
+                                Icons.Default.DeleteOutline,
+                                contentDescription = stringResource(
+                                    R.string.remove_region,
+                                    roleLabel,
+                                ),
+                                tint = Color(0xFFFF8A80),
+                            )
+                        }
+                    }
+                }
+            }
+            Button(
+                onClick = onAdd,
+                enabled = canAdd,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = WorkspaceYellow,
+                    contentColor = WorkspaceBlack,
+                ),
+            ) {
+                Icon(Icons.Default.AddBox, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.add_region))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun AuxiliaryShapeSheet(
+    projectObject: ProjectObject,
+    onAdd: (OrcaAuxiliaryPrimitiveDraft) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val geometry = projectObject.geometry()
+    val width = geometry.maxX - geometry.minX
+    val depth = geometry.maxY - geometry.minY
+    val height = geometry.maxZ - geometry.minZ
+    val initialSize = (minOf(width, depth, height) * 0.35f)
+        .coerceIn(MIN_PRIMITIVE_SIZE_MM, MAX_PRIMITIVE_SIZE_MM)
+    var selectedPrimitive by remember { mutableStateOf(OrcaPrimitive.CUBE) }
+    var selectedRole by remember { mutableStateOf(ProjectVolumeRole.NEGATIVE_VOLUME) }
+    var sizeMm by rememberSaveable(projectObject.id) { mutableFloatStateOf(initialSize) }
+    var offsetXmm by rememberSaveable(projectObject.id) { mutableFloatStateOf(0f) }
+    var offsetYmm by rememberSaveable(projectObject.id) { mutableFloatStateOf(0f) }
+    var offsetZmm by rememberSaveable(projectObject.id) { mutableFloatStateOf(0f) }
+    var infillPercent by rememberSaveable(projectObject.id) { mutableFloatStateOf(100f) }
+    val sizeLabel = stringResource(R.string.shape_size)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF282925),
+        contentColor = Color(0xFFF4F4EE),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                stringResource(R.string.add_region),
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                stringResource(R.string.add_region_hint),
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            CREATABLE_AUXILIARY_VOLUME_ROLES.chunked(2).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    row.forEach { role ->
+                        Button(
+                            onClick = { selectedRole = role },
+                            modifier = Modifier.weight(1f).semantics {
+                                selected = selectedRole == role
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (selectedRole == role) {
+                                    WorkspaceYellow
+                                } else {
+                                    Color(0xFF3A3B37)
+                                },
+                                contentColor = if (selectedRole == role) {
+                                    WorkspaceBlack
+                                } else {
+                                    Color(0xFFF4F4EE)
+                                },
+                            ),
+                        ) {
+                            Text(
+                                stringResource(auxiliaryVolumeRoleLabel(role)),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+            OrcaPrimitive.entries.chunked(3).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    row.forEach { primitive ->
+                        Button(
+                            onClick = { selectedPrimitive = primitive },
+                            modifier = Modifier.weight(1f).semantics {
+                                selected = selectedPrimitive == primitive
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (selectedPrimitive == primitive) {
+                                    WorkspaceYellow
+                                } else {
+                                    Color(0xFF3A3B37)
+                                },
+                                contentColor = if (selectedPrimitive == primitive) {
+                                    WorkspaceBlack
+                                } else {
+                                    Color(0xFFF4F4EE)
+                                },
+                            ),
+                        ) {
+                            Text(
+                                stringResource(primitive.label),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+            TransformSlider(
+                label = sizeLabel,
+                valueText = stringResource(R.string.millimeters_value, sizeMm),
+                value = sizeMm,
+                range = MIN_PRIMITIVE_SIZE_MM..MAX_PRIMITIVE_SIZE_MM,
+                steps = 38,
+                onValueChange = { sizeMm = it },
+            )
+            TransformSlider(
+                label = stringResource(R.string.region_left_right),
+                valueText = stringResource(R.string.millimeters_value, offsetXmm),
+                value = offsetXmm,
+                range = -max(1f, width / 2f)..max(1f, width / 2f),
+                onValueChange = { offsetXmm = it },
+            )
+            TransformSlider(
+                label = stringResource(R.string.region_front_back),
+                valueText = stringResource(R.string.millimeters_value, offsetYmm),
+                value = offsetYmm,
+                range = -max(1f, depth / 2f)..max(1f, depth / 2f),
+                onValueChange = { offsetYmm = it },
+            )
+            TransformSlider(
+                label = stringResource(R.string.region_up_down),
+                valueText = stringResource(R.string.millimeters_value, offsetZmm),
+                value = offsetZmm,
+                range = -max(1f, height / 2f)..max(1f, height / 2f),
+                onValueChange = { offsetZmm = it },
+            )
+            if (selectedRole == ProjectVolumeRole.PARAMETER_MODIFIER) {
+                TransformSlider(
+                    label = stringResource(R.string.region_infill),
+                    valueText = stringResource(
+                        R.string.percent_value,
+                        infillPercent.roundToInt(),
+                    ),
+                    value = infillPercent,
+                    range = 0f..100f,
+                    steps = 99,
+                    onValueChange = { infillPercent = it },
+                )
+            }
+            Button(
+                onClick = {
+                    onAdd(
+                        OrcaAuxiliaryPrimitiveDraft(
+                            primitive = selectedPrimitive,
+                            role = selectedRole,
+                            sizeMm = sizeMm,
+                            centerOffsetXmm = offsetXmm,
+                            centerOffsetYmm = offsetYmm,
+                            centerOffsetZmm = offsetZmm,
+                            modifierInfillPercent = infillPercent.roundToInt(),
+                        ),
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = WorkspaceYellow,
+                    contentColor = WorkspaceBlack,
+                ),
+            ) {
+                Text(stringResource(R.string.add_region))
             }
         }
     }
@@ -1619,6 +1946,9 @@ private fun ModelTransformSheet(
     onBrimEars: () -> Unit,
     onVariableLayerHeight: () -> Unit,
     onObjectSettings: () -> Unit,
+    auxiliaryVolumeCount: Int,
+    canAddAuxiliaryVolume: Boolean,
+    onManageAuxiliaryVolumes: () -> Unit,
     onChooseFilament: () -> Unit,
     onTransformChanged: (ModelTransform) -> Unit,
     onTransformPreview: (ModelTransform) -> Unit,
@@ -1845,6 +2175,19 @@ private fun ModelTransformSheet(
                 Icon(Icons.Default.Tune, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.object_process_settings))
+            }
+            Button(
+                onClick = onManageAuxiliaryVolumes,
+                enabled = !modelEditBusy && (canAddAuxiliaryVolume || auxiliaryVolumeCount > 0),
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF3A3B37),
+                    contentColor = Color(0xFFF4F4EE),
+                ),
+            ) {
+                Icon(Icons.Default.Layers, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.parts_and_regions_count, auxiliaryVolumeCount))
             }
             Button(
                 onClick = onChooseFilament,

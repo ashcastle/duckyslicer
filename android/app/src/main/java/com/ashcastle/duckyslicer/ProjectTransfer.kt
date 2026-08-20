@@ -680,6 +680,54 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     }
 
     @Synchronized
+    fun createAuxiliaryPrimitive(
+        draft: OrcaAuxiliaryPrimitiveDraft,
+        displayName: String,
+    ): Boolean {
+        val snapshot = mutableState.value.history.current
+        val target = snapshot.selectedObject ?: return false
+        if (
+            target.volumes.size >= MAX_PROJECT_VOLUMES_PER_OBJECT ||
+            snapshot.allObjects.sumOf { it.volumes.size } >= ProjectStore.MAX_PROJECT_VOLUMES
+        ) {
+            return false
+        }
+        val baseline = startEditLocked(ProjectEditKind.PRIMITIVE) ?: return false
+        viewModelScope.launch(Dispatchers.IO) {
+            var installed: File? = null
+            try {
+                val created = createOrcaAuxiliaryPrimitive(
+                    draft = draft,
+                    displayName = displayName,
+                    target = target,
+                    projectStore = projectStore,
+                    requestId = baseline.operation.requestId,
+                )
+                installed = File(created.model.localPath)
+                val nextHistory = baseline.history.addAuxiliaryVolumeToSelected(created)
+                if (
+                    !completeEditSuccess(
+                        baseline,
+                        nextHistory,
+                        displayName = displayName,
+                    )
+                ) {
+                    installed.delete()
+                }
+            } catch (failure: CancellationException) {
+                installed?.delete()
+                throw failure
+            } catch (failure: Exception) {
+                installed?.delete()
+                completeEditFailure(baseline, failure)
+            } finally {
+                SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId)
+            }
+        }
+        return true
+    }
+
+    @Synchronized
     fun importModels(uri: Uri): Boolean {
         if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
         val snapshot = mutableState.value.history.current

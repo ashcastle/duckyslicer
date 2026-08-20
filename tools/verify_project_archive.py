@@ -70,6 +70,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "ProjectVolumeSemantics.kt",
         "ProjectStore.kt",
         "ProjectOpenRequest.kt",
+        "OrcaPrimitive.kt",
+        "ProjectState.kt",
         "ProjectTransfer.kt",
         "CreatedDocument.kt",
         "MainActivity.kt",
@@ -86,6 +88,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         "BlockingImportProvider.java",
         "AccessibilityInstrumentedTest.kt",
         "NativeEngineInstrumentedTest.kt",
+        "OrcaVolumeSemanticsInstrumentedTest.kt",
         "strings.xml",
         "strings-ko.xml",
         "PRIVACY.md",
@@ -290,10 +293,39 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "SupportEvent.PROJECT_ARCHIVE_EXPORT_FAILED",
             "catch (failure: CancellationException)",
             "consumeCompletion",
+            "fun createAuxiliaryPrimitive(",
+            "createOrcaAuxiliaryPrimitive(",
+            "addAuxiliaryVolumeToSelected",
         ),
     )
     if "catch (_: Throwable)" in transfer or "catch (failure: Throwable)" in transfer:
         raise VerificationError("ProjectTransfer.kt must not swallow process-level failures")
+
+    _require_markers(
+        "OrcaPrimitive.kt",
+        sources["OrcaPrimitive.kt"],
+        (
+            "CREATABLE_AUXILIARY_VOLUME_ROLES",
+            "ProjectVolumeRole.NEGATIVE_VOLUME",
+            "ProjectVolumeRole.PARAMETER_MODIFIER",
+            "ProjectVolumeRole.SUPPORT_BLOCKER",
+            "ProjectVolumeRole.SUPPORT_ENFORCER",
+            "data class OrcaAuxiliaryPrimitiveDraft",
+            'mapOf("sparse_infill_density" to "$modifierInfillPercent%")',
+            "createOrcaAuxiliaryPrimitive(",
+            "target.geometry()",
+            "NativeEngine.transformStl(",
+        ),
+    )
+    _require_markers(
+        "ProjectState.kt",
+        sources["ProjectState.kt"],
+        (
+            "fun addAuxiliaryVolumeToSelected(",
+            "fun removeSelectedAuxiliaryVolume(",
+            "ProjectVolumeRole.MODEL_PART",
+        ),
+    )
 
     _require_markers(
         "CreatedDocument.kt",
@@ -431,6 +463,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "projectTransferModel::cancelProjectExport",
             "ProjectTransferCompletion.Canceled",
             "ProjectReplacementDialog(",
+            "fun addAuxiliaryPrimitive(",
+            "onCreateAuxiliaryPrimitive = ::addAuxiliaryPrimitive",
+            "removeSelectedAuxiliaryVolume",
         ),
     )
     for forbidden in (
@@ -469,6 +504,10 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "R.string.cancel_project_export",
             "R.string.canceling_project_export",
             "if (exporting) onCancelProjectExport() else onSaveProject()",
+            "AuxiliaryVolumesSheet(",
+            "AuxiliaryShapeSheet(",
+            "CREATABLE_AUXILIARY_VOLUME_ROLES",
+            "onRemoveAuxiliaryVolume",
         ),
     )
 
@@ -548,6 +587,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "volumeConfigSidecarAndJsonRoundTripExactly",
             "auxiliaryVolumesRejectPrintableOnlyState",
             "projectAndArchiveObjectsRequirePrintableModelParts",
+            "mobileAuxiliaryShapeDraftsCoverEveryCreatableRoleAndBoundTheirInputs",
         ),
     )
     _require_markers(
@@ -642,6 +682,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "cancelProjectImportActionIsReachable",
             "cancelProjectExportActionIsReachable",
             "plateSwitcherExposesSelectionAddAndConfirmedRemovalActions",
+            "auxiliaryShapePickerExposesRolesPlacementAndModifierDensity",
+            "auxiliaryVolumeManagerExposesExistingRegionsRemovalAndAdd",
         ),
     )
     _require_markers(
@@ -668,6 +710,16 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "OnDeviceSlicer.slice(",
         ),
     )
+    _require_markers(
+        "OrcaVolumeSemanticsInstrumentedTest.kt",
+        sources["OrcaVolumeSemanticsInstrumentedTest.kt"],
+        (
+            "mobileCreatedCutoutAndSettingsRegionChangeRealOrcaExtrusion",
+            "createOrcaAuxiliaryPrimitive(",
+            "withCutout.filamentMm < solidBaseline.filamentMm * 0.9f",
+            "withSettingsRegion.filamentMm > sparseBaseline.filamentMm * 1.12f",
+        ),
+    )
 
 
 def read_sources() -> dict[str, str]:
@@ -683,6 +735,8 @@ def read_sources() -> dict[str, str]:
         ),
         "ProjectStore.kt": (package / "ProjectStore.kt").read_text(encoding="utf-8"),
         "ProjectOpenRequest.kt": (package / "ProjectOpenRequest.kt").read_text(encoding="utf-8"),
+        "OrcaPrimitive.kt": (package / "OrcaPrimitive.kt").read_text(encoding="utf-8"),
+        "ProjectState.kt": (package / "ProjectState.kt").read_text(encoding="utf-8"),
         "ProjectTransfer.kt": (package / "ProjectTransfer.kt").read_text(encoding="utf-8"),
         "CreatedDocument.kt": (package / "CreatedDocument.kt").read_text(encoding="utf-8"),
         "MainActivity.kt": (package / "MainActivity.kt").read_text(encoding="utf-8"),
@@ -723,6 +777,10 @@ def read_sources() -> dict[str, str]:
         ).read_text(encoding="utf-8"),
         "NativeEngineInstrumentedTest.kt": (
             tests / "androidTest/java/com/ashcastle/duckyslicer/NativeEngineInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "OrcaVolumeSemanticsInstrumentedTest.kt": (
+            tests
+            / "androidTest/java/com/ashcastle/duckyslicer/OrcaVolumeSemanticsInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "strings.xml": (tests / "main/res/values/strings.xml").read_text(encoding="utf-8"),
         "strings-ko.xml": (tests / "main/res/values-ko/strings.xml").read_text(encoding="utf-8"),
