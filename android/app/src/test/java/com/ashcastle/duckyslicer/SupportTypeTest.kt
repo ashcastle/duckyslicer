@@ -24,14 +24,27 @@ class SupportTypeTest {
 
     @Test
     fun supportStylesFollowTheSelectedSupportAlgorithm() {
-        assertEquals(listOf("default", "grid", "snug"), compatibleSupportStyles("normal(auto)"))
+        assertEquals(listOf("grid", "snug"), compatibleSupportStyles("normal(auto)"))
         assertEquals(
-            listOf("default", "organic", "tree_slim", "tree_strong", "tree_hybrid"),
+            listOf("organic", "tree_slim", "tree_strong", "tree_hybrid"),
             compatibleSupportStyles("tree(manual)"),
         )
-        assertEquals("default", normalizedSupportStyle("normal(auto)", "organic"))
-        assertEquals("default", normalizedSupportStyle("tree(auto)", "snug"))
+        assertEquals("grid", normalizedSupportStyle("normal(auto)", "default"))
+        assertEquals("organic", normalizedSupportStyle("tree(auto)", "default"))
+        assertEquals("grid", normalizedSupportStyle("normal(auto)", "organic"))
+        assertEquals("organic", normalizedSupportStyle("tree(auto)", "snug"))
         assertEquals("tree_strong", normalizedSupportStyle("tree(auto)", "TREE_STRONG"))
+        assertTrue(ProfileValidation.slicing(QualityProfile.STANDARD))
+        assertTrue(
+            ProfileValidation.slicing(
+                QualityProfile.STANDARD.copy(supportType = "tree(auto)", supportStyle = "default"),
+            ),
+        )
+        assertFalse(
+            ProfileValidation.slicing(
+                QualityProfile.STANDARD.copy(supportType = "normal(auto)", supportStyle = "organic"),
+            ),
+        )
     }
 
     @Test

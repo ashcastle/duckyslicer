@@ -3583,6 +3583,126 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun paintedEnforcersAndBlockersControlRealManualSupportModes() {
+        val modelFile = supportPaintOverhangModel()
+        val model = inspectModel(modelFile.absolutePath)
+        val outputs = mutableListOf<File>()
+        val overhangFacets = listOf(22, 23)
+        val enforced = overhangFacets.fold(SupportPaint()) { paint, facet ->
+            paint.paint(facet, SupportPaintState.ENFORCE)
+        }
+        val blocked = overhangFacets.fold(SupportPaint()) { paint, facet ->
+            paint.paint(facet, SupportPaintState.BLOCK)
+        }
+        val base = SliceOptions()
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                supportEnabled = true,
+                supportType = "normal(auto)",
+                supportStyle = "snug",
+            )
+
+        fun slice(
+            id: String,
+            options: SliceOptions,
+            paint: SupportPaint = SupportPaint(),
+        ): Pair<String, GcodeLayerPreview> {
+            val outcome = OnDeviceSlicer.slice(
+                listOf(ProjectObject(id, model, supportPaint = paint)),
+                options,
+            ).also { outputs += it.output }
+            return outcome.output.readText() to loadGcodePreview(
+                outcome.output.absolutePath,
+                0,
+                Int.MAX_VALUE,
+            )
+        }
+
+        try {
+            val (automaticGcode, automatic) = slice("automatic-normal", base)
+            val (blockedGcode, automaticBlocked) = slice("blocked-normal", base, blocked)
+            val (normalManualGcode, normalManual) = slice(
+                "painted-normal-manual",
+                base.copy(supportEnabled = false),
+                enforced,
+            )
+            val (treeManualGcode, treeManual) = slice(
+                "painted-tree-manual",
+                base.copy(
+                    supportEnabled = false,
+                    supportType = "tree(auto)",
+                    supportStyle = "tree_slim",
+                ),
+                enforced,
+            )
+
+            assertTrue(automaticGcode.contains("; support_type = normal(auto)"))
+            assertTrue(automatic.roleSegmentCounts[5] > 0)
+            assertTrue(blockedGcode.contains("; support_type = normal(auto)"))
+            assertTrue(
+                "Blocking both overhang facets must remove the automatic support beneath them",
+                automaticBlocked.roleSegmentCounts[5] == 0,
+            )
+            assertTrue(normalManualGcode.contains("; enable_support = 1"))
+            assertTrue(normalManualGcode.contains("; support_type = normal(manual)"))
+            assertTrue(normalManual.roleSegmentCounts[5] > 0)
+            assertTrue(treeManualGcode.contains("; enable_support = 1"))
+            assertTrue(treeManualGcode.contains("; support_type = tree(manual)"))
+            assertTrue(treeManualGcode.contains("; support_style = tree_slim"))
+            assertTrue(treeManual.roleSegmentCounts[5] > 0)
+            assertNotEquals(
+                "Painted normal and tree modes must produce different physical support paths",
+                supportExtrusionMotion(normalManualGcode),
+                supportExtrusionMotion(treeManualGcode),
+            )
+        } finally {
+            outputs.forEach(File::delete)
+            modelFile.delete()
+        }
+    }
+
+    @Test
+    fun everyTreeSupportStyleProducesDistinctPhysicalSupportGeometry() {
+        val modelFile = supportPaintOverhangModel()
+        val model = inspectModel(modelFile.absolutePath)
+        val outputs = mutableListOf<File>()
+        val base = SliceOptions()
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                supportEnabled = true,
+                supportType = "tree(auto)",
+            )
+        val styles = compatibleSupportStyles("tree(auto)")
+
+        try {
+            val signatures = styles.associateWith { style ->
+                val outcome = OnDeviceSlicer.slice(
+                    listOf(ProjectObject("tree-style-$style", model)),
+                    base.copy(supportStyle = style),
+                ).also { outputs += it.output }
+                val gcode = outcome.output.readText()
+                val preview = loadGcodePreview(outcome.output.absolutePath, 0, Int.MAX_VALUE)
+                assertTrue(gcode.contains("; support_type = tree(auto)"))
+                assertTrue(gcode.contains("; support_style = $style"))
+                assertTrue("$style must generate real support paths", preview.roleSegmentCounts[5] > 0)
+                supportExtrusionMotion(gcode).also { motions ->
+                    assertTrue("$style support geometry must contain extrusion motion", motions.isNotEmpty())
+                }
+            }
+
+            assertEquals(
+                "Every selectable tree style must produce its own physical support geometry: " +
+                    signatures.mapValues { (_, motions) -> motions.hashCode() },
+                styles.size,
+                signatures.values.toSet().size,
+            )
+        } finally {
+            outputs.forEach(File::delete)
+            modelFile.delete()
+        }
+    }
+
+    @Test
     fun enforcedFirstLayersCreateRealSupportWithAutomaticSupportDisabled() {
         val model = inspectModel(supportPaintOverhangModel().absolutePath)
         val options = SliceOptions()
@@ -7343,7 +7463,7 @@ class NativeEngineInstrumentedTest {
                     "internal_solid_infill_pattern" to "monotonic",
                     "ironing_speed" to "30",
                     "overhang_3_4_speed" to "40",
-                    "support_style" to "default",
+                    "support_style" to "grid",
                     "is_infill_first" to "0",
                     "infill_wall_overlap" to "15%",
                     "internal_bridge_speed" to "150%",
@@ -7497,6 +7617,23 @@ class NativeEngineInstrumentedTest {
             }
         }
         return total
+    }
+
+    private fun supportExtrusionMotion(gcode: String): List<String> {
+        var support = false
+        return gcode.lineSequence().mapNotNull { raw ->
+            val line = raw.trim()
+            if (line.startsWith(";TYPE:") || line.startsWith("; FEATURE:")) {
+                support = line.substringAfter(':').contains("support", ignoreCase = true)
+            }
+            line.substringBefore(';').trim().takeIf { command ->
+                support &&
+                    (command.startsWith("G1 ") || command.startsWith("G2 ") || command.startsWith("G3 ")) &&
+                    command.contains(" E") &&
+                    (command.contains(" X") || command.contains(" Y") ||
+                        command.contains(" I") || command.contains(" J"))
+            }
+        }.toList()
     }
 
     private fun filamentUsedMm(gcode: String): List<Float> = gcode.lineSequence()

@@ -327,7 +327,10 @@ def valid_sources() -> dict[str, str]:
             "inspectModel( val filamentMm: Float ) : Serializable "
             "fun SliceOutcome.isRestorableFrom(filesRoot: File) "
             "canonicalOutput.parentFile == outputRoot "
-            "canonicalOutput.length() in 1..SliceArtifactStore.MAXIMUM_OUTPUT_BYTES"
+            "canonicalOutput.length() in 1..SliceArtifactStore.MAXIMUM_OUTPUT_BYTES "
+            'listOf("organic", "tree_slim", "tree_strong", "tree_hybrid") '
+            'listOf("grid", "snug") '
+            'val fallback = if (supportType.isTreeSupportType()) "organic" else "grid"'
         ),
         "SlicerProcessService.kt": (
             "result.estimatedFilamentMm KEY_FILAMENT_MM "
@@ -364,6 +367,13 @@ def valid_sources() -> dict[str, str]:
             " The last compatible GPU frame must remain visible during refinement"
             " Background refinement must not clear the visible Preview"
             " A geometry result started before memory pressure must not repopulate CPU buffers"
+            " paintedEnforcersAndBlockersControlRealManualSupportModes"
+            " automaticBlocked.roleSegmentCounts[5] == 0"
+            " ; support_type = normal(manual)"
+            " ; support_type = tree(manual)"
+            " everyTreeSupportStyleProducesDistinctPhysicalSupportGeometry"
+            " signatures.values.toSet().size"
+            " supportExtrusionMotion"
         ),
         "OrcaModelImportInstrumentedTest.kt": (
             "editedMultiColor = painted.multiColor.paintAt("
@@ -1020,6 +1030,22 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "NativeEngineInstrumentedTest.kt"
         ].replace("Slice outcome must retain Orca's filament-length estimate", "")
         with self.assertRaisesRegex(VerificationError, "filament-length estimate"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_reintroduced_duplicate_default_support_style(self) -> None:
+        sources = valid_sources()
+        sources["OnDeviceSlicer.kt"] = sources["OnDeviceSlicer.kt"].replace(
+            'listOf("grid", "snug")', 'listOf("default", "grid", "snug")'
+        )
+        with self.assertRaisesRegex(VerificationError, "canonical support style"):
+            verify_preview_boundary(sources)
+
+    def test_requires_physical_manual_support_mode_regression(self) -> None:
+        sources = valid_sources()
+        sources["NativeEngineInstrumentedTest.kt"] = sources[
+            "NativeEngineInstrumentedTest.kt"
+        ].replace("paintedEnforcersAndBlockersControlRealManualSupportModes", "")
+        with self.assertRaisesRegex(VerificationError, "physical support"):
             verify_preview_boundary(sources)
 
     def test_rejects_marker_only_four_color_prime_tower_regression(self) -> None:

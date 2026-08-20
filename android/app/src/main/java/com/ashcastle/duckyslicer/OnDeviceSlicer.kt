@@ -133,14 +133,15 @@ internal fun String.isAutomaticSupportType(): Boolean = normalizedSupportType(th
 
 internal fun compatibleSupportStyles(supportType: String): List<String> =
     if (supportType.isTreeSupportType()) {
-        listOf("default", "organic", "tree_slim", "tree_strong", "tree_hybrid")
+        listOf("organic", "tree_slim", "tree_strong", "tree_hybrid")
     } else {
-        listOf("default", "grid", "snug")
+        listOf("grid", "snug")
     }
 
 internal fun normalizedSupportStyle(supportType: String, supportStyle: String): String {
     val candidate = supportStyle.trim().lowercase()
-    return candidate.takeIf { it in compatibleSupportStyles(supportType) } ?: "default"
+    val fallback = if (supportType.isTreeSupportType()) "organic" else "grid"
+    return candidate.takeIf { it in compatibleSupportStyles(supportType) } ?: fallback
 }
 
 internal enum class TreeSupportSettingsKind {

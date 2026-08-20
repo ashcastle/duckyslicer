@@ -359,7 +359,8 @@ internal object ProfileValidation {
             profile.supportBasePattern in SUPPORT_BASE_PATTERNS &&
             profile.supportInterfacePattern in SUPPORT_INTERFACE_PATTERNS &&
             profile.supportStyle in SUPPORT_STYLES &&
-            profile.supportStyle in compatibleSupportStyles(profile.supportType) &&
+            (profile.supportStyle == "default" ||
+                profile.supportStyle in compatibleSupportStyles(profile.supportType)) &&
             profile.fuzzySkin.type in setOf("none", "external", "all", "allwalls") &&
             profile.fuzzySkin.pointDistance in 0f..5f &&
             profile.fuzzySkin.thickness in 0f..1f &&

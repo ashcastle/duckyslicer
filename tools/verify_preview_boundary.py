@@ -831,6 +831,13 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     ):
         if marker not in outcome:
             raise VerificationError(f"restorable slice outcome contract is missing: {marker}")
+    for marker in (
+        'listOf("organic", "tree_slim", "tree_strong", "tree_hybrid")',
+        'listOf("grid", "snug")',
+        'val fallback = if (supportType.isTreeSupportType()) "organic" else "grid"',
+    ):
+        if marker not in outcome:
+            raise VerificationError(f"canonical support style contract is missing: {marker}")
 
     main_activity = sources["MainActivity.kt"]
     for marker in (
@@ -971,6 +978,17 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     ):
         if marker not in device:
             raise VerificationError(f"ARM64 GPU preview regression is missing: {marker}")
+    for marker in (
+        "paintedEnforcersAndBlockersControlRealManualSupportModes",
+        "automaticBlocked.roleSegmentCounts[5] == 0",
+        "; support_type = normal(manual)",
+        "; support_type = tree(manual)",
+        "everyTreeSupportStyleProducesDistinctPhysicalSupportGeometry",
+        "signatures.values.toSet().size",
+        "supportExtrusionMotion",
+    ):
+        if marker not in device:
+            raise VerificationError(f"physical support regression is missing: {marker}")
 
     host_tests = sources["PreviewModelsTest.kt"]
     for marker in (
