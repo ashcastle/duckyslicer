@@ -368,6 +368,13 @@ def valid_sources() -> dict[str, str]:
         "OrcaModelImportInstrumentedTest.kt": (
             "editedMultiColor = painted.multiColor.paintAt("
         ),
+        "OrcaMultiColorPaintInstrumentedTest.kt": (
+            "fourColorFacetPaintProducesObjectAndPrimeTowerExtrusionOnEveryTool "
+            "setOf(0, 1, 2, 3) analysis.objectExtrusionByTool.filterValues "
+            "analysis.primeTowerExtrusionByTool.filterValues "
+            "analysis.primeTowerMotions >= 40 analysis.toolChanges >= 6 "
+            "withoutTowerAnalysis.primeTowerMotions"
+        ),
         "PrepareModelRendererInstrumentedTest.kt": (
             "densePrepareSceneBuildStaysWithinLoadBudget "
             "denseMinimumRotatedZStaysWithinTransformBudget "
@@ -1006,6 +1013,14 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "NativeEngineInstrumentedTest.kt"
         ].replace("Slice outcome must retain Orca's filament-length estimate", "")
         with self.assertRaisesRegex(VerificationError, "filament-length estimate"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_marker_only_four_color_prime_tower_regression(self) -> None:
+        sources = valid_sources()
+        sources["OrcaMultiColorPaintInstrumentedTest.kt"] = sources[
+            "OrcaMultiColorPaintInstrumentedTest.kt"
+        ].replace("analysis.primeTowerExtrusionByTool.filterValues", "commands.any")
+        with self.assertRaisesRegex(VerificationError, "partial-facet regression"):
             verify_preview_boundary(sources)
 
 

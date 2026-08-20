@@ -39,6 +39,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "SlicerProcessService.kt",
         "NativeEngineInstrumentedTest.kt",
         "OrcaModelImportInstrumentedTest.kt",
+        "OrcaMultiColorPaintInstrumentedTest.kt",
         "PrepareModelRendererInstrumentedTest.kt",
         "PrepareModelPickingTest.kt",
         "ModelInfoTest.kt",
@@ -444,6 +445,15 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
             "facetBrushFootprintUsesABoundedCircularSamplePattern",
             "facetBrushStrokeFillsNormalPointerGapsAndCapsExtremeJumps",
             "compatibilityBrushBatchKeepsEverySampleFrontmostWithoutTemporarySorting",
+        ),
+        "OrcaMultiColorPaintInstrumentedTest.kt": (
+            "fourColorFacetPaintProducesObjectAndPrimeTowerExtrusionOnEveryTool",
+            "setOf(0, 1, 2, 3)",
+            "analysis.objectExtrusionByTool.filterValues",
+            "analysis.primeTowerExtrusionByTool.filterValues",
+            "analysis.primeTowerMotions >= 40",
+            "analysis.toolChanges >= 6",
+            "withoutTowerAnalysis.primeTowerMotions",
         ),
     }.items():
         for marker in markers:
@@ -1087,6 +1097,9 @@ def read_sources() -> dict[str, str]:
         ).read_text(encoding="utf-8"),
         "OrcaModelImportInstrumentedTest.kt": (
             device / "OrcaModelImportInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "OrcaMultiColorPaintInstrumentedTest.kt": (
+            device / "OrcaMultiColorPaintInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "PrepareModelRendererInstrumentedTest.kt": (
             device / "PrepareModelRendererInstrumentedTest.kt"
