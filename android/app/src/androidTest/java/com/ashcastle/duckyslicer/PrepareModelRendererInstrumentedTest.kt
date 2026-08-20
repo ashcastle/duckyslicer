@@ -621,6 +621,77 @@ class PrepareModelRendererInstrumentedTest {
         }
 
     @Test
+    fun distinctPlacementsRenderCompleteCoarseMeshesAfterTheInteractionBudget() =
+        withGles3Pbuffer(128, 128) {
+            val models = (0 until 3).map { index ->
+                val preview = denseGridTriangles(columns = 2, rows = 2)
+                val coarse = denseGridTriangles(columns = 1, rows = 1)
+                ModelInfo(
+                    fileName = "bounded-$index.stl",
+                    triangles = preview.size / 9,
+                    dimensions = listOf(4.0, 4.0, 1.0),
+                    localPath = "",
+                    minMm = listOf(0.0, 0.0, 0.0),
+                    maxMm = listOf(4.0, 4.0, 1.0),
+                    previewTriangles = preview,
+                    coarsePreviewTriangles = coarse,
+                    detailPreviewTriangles = denseGridTriangles(columns = 4, rows = 4),
+                )
+            }
+            val objects = models.mapIndexed { index, model ->
+                ProjectObject(
+                    id = "bounded-$index",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = index * 6f),
+                )
+            }
+            val baselineBytes = models.sumOf {
+                it.coarsePreviewTriangles.size.toLong() * Float.SIZE_BYTES
+            }
+            val geometry = PrepareModelSceneBuilder.build(
+                projectObjects = objects,
+                bedSizeX = 40f,
+                bedSizeY = 40f,
+                requestedBedPolygon = rectangularBedPolygon(40f, 40f),
+                additionalDetailBudgetBytes = 0L,
+                lowDetailBudgetBytes = baselineBytes +
+                    models.first().previewTriangles.size.toLong() * Float.SIZE_BYTES,
+            )
+            val renderer = PrepareModelRenderer()
+            renderer.setLogicalViewportSize(128, 128)
+            renderer.onSurfaceCreated(null, null)
+            renderer.onSurfaceChanged(null, 128, 128)
+            renderer.submit(
+                geometry = geometry,
+                objects = objects.associate { projectObject ->
+                    projectObject.id to PrepareObjectDrawState(
+                        objectId = projectObject.id,
+                        transform = projectObject.transform,
+                        minimumRotatedZ = projectObject.transform.minimumRotatedZ(projectObject),
+                    )
+                },
+                selectedObjectId = objects.first().id,
+                camera = PrepareModelCamera(-45f, 55f, 1f, 0f, 0f),
+                interactionActive = true,
+            )
+            renderer.onDrawFrame(null)
+            GLES30.glFinish()
+
+            assertEquals(
+                "Four bed buffers, one preview, and two distinct coarse meshes are retained",
+                7,
+                renderer.retainedTopologyBufferCountForTest(),
+            )
+            assertEquals(
+                models.first().previewTriangles.size / 3 +
+                    models.drop(1).sumOf { it.coarsePreviewTriangles.size / 3 },
+                renderer.lastMeshVertexCountForTest(),
+            )
+            assertEquals(GLES30.GL_NO_ERROR, GLES30.glGetError())
+            renderer.releaseGpuGeometryForMemoryPressure()
+        }
+
+    @Test
     fun prepareRendererDrawsModelThroughRealGles3Context() {
         val framebufferSize = 256
         val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)

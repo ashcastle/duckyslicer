@@ -139,13 +139,15 @@ fn probe_vulkan() -> VulkanCapabilities {
 const MAX_MODEL_IMPORT_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_TEXT_LINE_BYTES: usize = 64 * 1024;
 const MAX_STL_COORDINATE_ABS_MM: f32 = 1_000_000.0;
+const COARSE_PREVIEW_TRIANGLE_LIMIT: usize = 2_000;
 const PREVIEW_TRIANGLE_LIMIT: usize = 12_000;
 const DETAIL_PREVIEW_TRIANGLE_LIMIT: usize = 48_000;
+const COARSE_PREVIEW_CLUSTER_START_RESOLUTION: u16 = 18;
 const PREVIEW_CLUSTER_START_RESOLUTION: u16 = 36;
 const DETAIL_PREVIEW_CLUSTER_START_RESOLUTION: u16 = 72;
 const MODEL_PREVIEW_PAYLOAD_MAGIC: f32 = 17_492.0;
-const MODEL_PREVIEW_PAYLOAD_VERSION: f32 = 2.0;
-const MODEL_PREVIEW_HEADER_FLOATS: usize = 11;
+const MODEL_PREVIEW_PAYLOAD_VERSION: f32 = 3.0;
+const MODEL_PREVIEW_HEADER_FLOATS: usize = 12;
 const MODEL_PREVIEW_MAX_EXACT_INTEGER: usize = 1 << 24;
 const MAX_GCODE_COORDINATE_ABS_MM: f32 = 1_000_000.0;
 const MAX_PREVIEW_SEGMENTS: usize = 120_000;
@@ -382,6 +384,8 @@ struct StlInspection {
     preview_triangle_indices: Vec<usize>,
     /// Empty when the interaction mesh already contains every retained surface triangle.
     detail_preview_triangles: Vec<[f32; 9]>,
+    /// Empty when the interaction mesh is already within the coarse scene budget per volume.
+    coarse_preview_triangles: Vec<[f32; 9]>,
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -1034,6 +1038,17 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
         )?
         .triangles;
     }
+    let coarse_preview_triangles = if preview_triangles.len() > COARSE_PREVIEW_TRIANGLE_LIMIT {
+        clustered_packed_preview(
+            &preview_triangles,
+            min,
+            max,
+            COARSE_PREVIEW_TRIANGLE_LIMIT,
+            COARSE_PREVIEW_CLUSTER_START_RESOLUTION,
+        )?
+    } else {
+        Vec::new()
+    };
 
     Ok(StlInspection {
         triangles: triangle_count,
@@ -1042,6 +1057,7 @@ fn inspect_stl(path: &str) -> Result<StlInspection, EngineError> {
         preview_triangles,
         preview_triangle_indices,
         detail_preview_triangles,
+        coarse_preview_triangles,
     })
 }
 
@@ -1071,6 +1087,95 @@ fn clustered_stl_preview(
             resolution = (resolution / 2).max(2);
         }
     }
+}
+
+fn clustered_packed_preview(
+    triangles: &[[f32; 9]],
+    min: [f32; 3],
+    max: [f32; 3],
+    triangle_limit: usize,
+    start_resolution: u16,
+) -> Result<Vec<[f32; 9]>, EngineError> {
+    let mut resolution = start_resolution;
+    loop {
+        if let Some(result) =
+            clustered_packed_preview_at_resolution(triangles, min, max, resolution, triangle_limit)?
+        {
+            if result.len() <= triangle_limit || resolution <= 2 {
+                return Ok(result);
+            }
+            let ratio = (triangle_limit as f64 / result.len() as f64).sqrt() * 0.9;
+            resolution =
+                ((resolution as f64 * ratio).floor() as u16).clamp(2, resolution.saturating_sub(1));
+        } else {
+            resolution = (resolution / 2).max(2);
+        }
+    }
+}
+
+fn clustered_packed_preview_at_resolution(
+    triangles: &[[f32; 9]],
+    min: [f32; 3],
+    max: [f32; 3],
+    resolution: u16,
+    triangle_limit: usize,
+) -> Result<Option<Vec<[f32; 9]>>, EngineError> {
+    let mut cells = HashMap::<PreviewCell, PreviewCellAccumulator>::new();
+    let mut seen_triangles = HashSet::<[PreviewCell; 3]>::new();
+    let mut clustered_triangles = Vec::new();
+    for packed in triangles {
+        let vertices = [
+            [packed[0], packed[1], packed[2]],
+            [packed[3], packed[4], packed[5]],
+            [packed[6], packed[7], packed[8]],
+        ];
+        let triangle_cells = vertices.map(|vertex| preview_cell(vertex, min, max, resolution));
+        for (cell, vertex) in triangle_cells.into_iter().zip(vertices) {
+            let accumulator = cells.entry(cell).or_default();
+            for (axis, value) in vertex.into_iter().enumerate() {
+                accumulator.sums[axis] += value as f64;
+            }
+            accumulator.samples = accumulator.samples.saturating_add(1);
+        }
+        if triangle_cells[0] == triangle_cells[1]
+            || triangle_cells[1] == triangle_cells[2]
+            || triangle_cells[2] == triangle_cells[0]
+        {
+            continue;
+        }
+        let mut canonical = triangle_cells;
+        canonical.sort_unstable();
+        if seen_triangles.insert(canonical) {
+            clustered_triangles.push(triangle_cells);
+            if clustered_triangles.len() > triangle_limit.saturating_mul(8) {
+                return Ok(None);
+            }
+        }
+    }
+
+    let mut result = Vec::with_capacity(clustered_triangles.len());
+    for triangle_cells in clustered_triangles {
+        let mut vertices = [[0.0_f32; 3]; 3];
+        for (index, cell) in triangle_cells.into_iter().enumerate() {
+            let accumulator = cells.get(&cell).ok_or_else(|| {
+                EngineError::Parse("Coarse STL preview lost vertex state".to_owned())
+            })?;
+            if accumulator.samples == 0 {
+                return Err(EngineError::Parse(
+                    "Coarse STL preview produced an empty vertex".to_owned(),
+                ));
+            }
+            vertices[index] = accumulator
+                .sums
+                .map(|sum| (sum / accumulator.samples as f64) as f32);
+        }
+        if triangle_area_squared(vertices) <= f32::EPSILON {
+            continue;
+        }
+        let [a, b, c] = vertices;
+        result.push([a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]]);
+    }
+    Ok(Some(result))
 }
 
 fn clustered_stl_preview_at_resolution(
@@ -1170,11 +1275,14 @@ fn preview_cell(vertex: [f32; 3], min: [f32; 3], max: [f32; 3], resolution: u16)
 fn model_preview_payload(inspection: StlInspection) -> Result<Vec<f32>, EngineError> {
     let preview_count = inspection.preview_triangles.len();
     let detail_preview_count = inspection.detail_preview_triangles.len();
+    let coarse_preview_count = inspection.coarse_preview_triangles.len();
     if preview_count == 0
         || preview_count > PREVIEW_TRIANGLE_LIMIT
         || preview_count != inspection.preview_triangle_indices.len()
         || detail_preview_count > DETAIL_PREVIEW_TRIANGLE_LIMIT
         || (detail_preview_count != 0 && detail_preview_count < preview_count)
+        || coarse_preview_count > COARSE_PREVIEW_TRIANGLE_LIMIT
+        || (coarse_preview_count != 0 && coarse_preview_count > preview_count)
         || inspection.triangles > MODEL_PREVIEW_MAX_EXACT_INTEGER
     {
         return Err(EngineError::Parse(
@@ -1188,6 +1296,7 @@ fn model_preview_payload(inspection: StlInspection) -> Result<Vec<f32>, EngineEr
                 .ok_or_else(|| EngineError::Parse("STL preview payload is too large".to_owned()))?,
         )
         .and_then(|size| size.checked_add(detail_preview_count.checked_mul(9)?))
+        .and_then(|size| size.checked_add(coarse_preview_count.checked_mul(9)?))
         .ok_or_else(|| EngineError::Parse("STL preview payload is too large".to_owned()))?;
     let mut payload = Vec::with_capacity(payload_floats);
     payload.extend_from_slice(&[
@@ -1202,6 +1311,7 @@ fn model_preview_payload(inspection: StlInspection) -> Result<Vec<f32>, EngineEr
         inspection.max_mm[2],
         preview_count as f32,
         detail_preview_count as f32,
+        coarse_preview_count as f32,
     ]);
     for triangle in inspection.preview_triangles {
         payload.extend_from_slice(&triangle);
@@ -1210,6 +1320,9 @@ fn model_preview_payload(inspection: StlInspection) -> Result<Vec<f32>, EngineEr
         payload.push(source_index as f32);
     }
     for triangle in inspection.detail_preview_triangles {
+        payload.extend_from_slice(&triangle);
+    }
+    for triangle in inspection.coarse_preview_triangles {
         payload.extend_from_slice(&triangle);
     }
     if payload.len() != payload_floats {
@@ -2647,18 +2760,23 @@ mod tests {
                 [-10.0, -20.0, -30.0, 10.0, -20.0, -30.0, 10.0, 10.0, -30.0],
                 [-10.0, -20.0, 10.0, 10.0, 10.0, 10.0, -10.0, 10.0, 10.0],
             ],
+            coarse_preview_triangles: vec![[
+                -10.0, -20.0, -30.0, 10.0, -20.0, -30.0, 10.0, 10.0, -30.0,
+            ]],
         })
         .expect("encode model preview payload");
 
-        assert_eq!(payload.len(), MODEL_PREVIEW_HEADER_FLOATS + 20 + 18);
+        assert_eq!(payload.len(), MODEL_PREVIEW_HEADER_FLOATS + 20 + 18 + 9);
         assert_eq!(payload[0], MODEL_PREVIEW_PAYLOAD_MAGIC);
         assert_eq!(payload[1], MODEL_PREVIEW_PAYLOAD_VERSION);
         assert_eq!(payload[2], 5.0);
         assert_eq!(&payload[3..9], &[-10.0, -20.0, -30.0, 10.0, 10.0, 10.0]);
         assert_eq!(payload[9], 2.0);
         assert_eq!(payload[10], 2.0);
-        assert_eq!(&payload[29..31], &[0.0, 4.0]);
-        assert_eq!(&payload[31..40], &payload[11..20]);
+        assert_eq!(payload[11], 1.0);
+        assert_eq!(&payload[30..32], &[0.0, 4.0]);
+        assert_eq!(&payload[32..41], &payload[12..21]);
+        assert_eq!(&payload[50..59], &payload[12..21]);
     }
 
     #[test]
@@ -2670,6 +2788,7 @@ mod tests {
             preview_triangles: vec![[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0]],
             preview_triangle_indices: Vec::new(),
             detail_preview_triangles: Vec::new(),
+            coarse_preview_triangles: Vec::new(),
         });
 
         assert!(matches!(result, Err(EngineError::Parse(_))));
@@ -2807,6 +2926,7 @@ mod tests {
             inspection.preview_triangles.len(),
             inspection.preview_triangle_indices.len()
         );
+        assert!(inspection.coarse_preview_triangles.len() <= COARSE_PREVIEW_TRIANGLE_LIMIT);
         assert!(
             inspection
                 .preview_triangle_indices
@@ -2862,6 +2982,9 @@ mod tests {
         );
         assert!(!inspection.preview_triangles.is_empty());
         assert!(inspection.preview_triangles.len() <= PREVIEW_TRIANGLE_LIMIT);
+        assert!(!inspection.coarse_preview_triangles.is_empty());
+        assert!(inspection.coarse_preview_triangles.len() <= COARSE_PREVIEW_TRIANGLE_LIMIT);
+        assert!(inspection.coarse_preview_triangles.len() < inspection.preview_triangles.len());
         assert!(inspection.detail_preview_triangles.len() > inspection.preview_triangles.len());
         assert!(inspection.detail_preview_triangles.len() <= DETAIL_PREVIEW_TRIANGLE_LIMIT);
         assert_eq!(inspection.detail_preview_triangles.len(), 80 * 80 * 2);
@@ -2889,6 +3012,24 @@ mod tests {
         assert!(
             shared_edges > inspection.preview_triangles.len() / 2,
             "clustered preview should retain a visibly connected surface",
+        );
+        let mut coarse_edges = HashMap::new();
+        for triangle in &inspection.coarse_preview_triangles {
+            let vertices = [
+                vertex(triangle, 0),
+                vertex(triangle, 3),
+                vertex(triangle, 6),
+            ];
+            for edge in [(0, 1), (1, 2), (2, 0)] {
+                let mut endpoints = [vertices[edge.0], vertices[edge.1]];
+                endpoints.sort_unstable();
+                *coarse_edges.entry(endpoints).or_insert(0usize) += 1;
+            }
+        }
+        let coarse_shared_edges = coarse_edges.values().filter(|count| **count >= 2).count();
+        assert!(
+            coarse_shared_edges > inspection.coarse_preview_triangles.len() / 2,
+            "coarse preview should retain a visibly connected surface",
         );
         let preview_x = inspection
             .preview_triangles
@@ -2985,6 +3126,9 @@ mod tests {
                 });
                 if let Ok(inspection) = parsed {
                     assert!(inspection.preview_triangles.len() <= PREVIEW_TRIANGLE_LIMIT);
+                    assert!(
+                        inspection.coarse_preview_triangles.len() <= COARSE_PREVIEW_TRIANGLE_LIMIT
+                    );
                     assert_eq!(
                         inspection.preview_triangles.len(),
                         inspection.preview_triangle_indices.len(),
@@ -2999,6 +3143,14 @@ mod tests {
                     assert!(inspection.preview_triangles.iter().flatten().all(|value| {
                         value.is_finite() && value.abs() <= MAX_STL_COORDINATE_ABS_MM
                     }));
+                    assert!(
+                        inspection
+                            .coarse_preview_triangles
+                            .iter()
+                            .flatten()
+                            .all(|value| value.is_finite()
+                                && value.abs() <= MAX_STL_COORDINATE_ABS_MM)
+                    );
                 }
             }
         }

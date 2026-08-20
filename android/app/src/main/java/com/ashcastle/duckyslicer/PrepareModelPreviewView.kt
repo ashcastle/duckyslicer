@@ -166,6 +166,7 @@ internal data class PrepareModelMeshData(
     val role: ProjectVolumeRole,
     val sourceCenter: FloatArray,
     val vertices: FloatArray,
+    val coarseVertices: FloatArray = vertices,
     val detailVertices: FloatArray = vertices,
 ) {
     val vertexCount: Int get() = vertices.size / PREPARE_VERTEX_FLOATS
@@ -190,6 +191,47 @@ internal fun uniquePrepareVertexArrays(meshes: List<PrepareModelMeshData>): List
         }
     }
     return unique
+}
+
+private fun boundedPrepareLowMeshes(
+    meshes: List<PrepareModelMeshData>,
+    lowDetailBudgetBytes: Long,
+): List<PrepareModelMeshData> {
+    require(lowDetailBudgetBytes >= 0L)
+    val baselineArrays = IdentityHashMap<FloatArray, Unit>()
+    var baselineBytes = 0L
+    meshes.forEach { mesh ->
+        if (baselineArrays.put(mesh.coarseVertices, Unit) == null) {
+            baselineBytes += mesh.coarseVertices.size.toLong() * Float.SIZE_BYTES
+        }
+    }
+    var retainedBytes = baselineBytes
+    val visitedPreviewArrays = IdentityHashMap<FloatArray, Unit>()
+    val retainedPreviewArrays = IdentityHashMap<FloatArray, Unit>()
+    meshes
+        .withIndex()
+        .sortedBy { indexed -> indexed.value.role != ProjectVolumeRole.MODEL_PART }
+        .forEach { indexed ->
+            val preview = indexed.value.vertices
+            if (
+                preview !== indexed.value.coarseVertices &&
+                !baselineArrays.containsKey(preview) &&
+                visitedPreviewArrays.put(preview, Unit) == null
+            ) {
+                val previewBytes = preview.size.toLong() * Float.SIZE_BYTES
+                if (previewBytes <= lowDetailBudgetBytes - retainedBytes) {
+                    retainedPreviewArrays[preview] = Unit
+                    retainedBytes += previewBytes
+                }
+            }
+        }
+    return meshes.map { mesh ->
+        val preview = mesh.vertices
+        if (
+            preview === mesh.coarseVertices || baselineArrays.containsKey(preview) ||
+            retainedPreviewArrays.containsKey(preview)
+        ) mesh else mesh.copy(vertices = mesh.coarseVertices)
+    }
 }
 
 private fun boundedPrepareDetailMeshes(
@@ -239,6 +281,7 @@ internal object PrepareModelSceneBuilder {
         requestedBedPolygon: List<Float>,
         requestedBedExcludeArea: List<Float> = listOf(0f, 0f),
         additionalDetailBudgetBytes: Long = MAX_PREPARE_ADDITIONAL_DETAIL_GPU_BYTES,
+        lowDetailBudgetBytes: Long = MAX_PREPARE_LOW_DETAIL_GPU_BYTES,
     ): PrepareModelSceneGeometry {
         require(bedSizeX.isFinite() && bedSizeX > 0f && bedSizeY.isFinite() && bedSizeY > 0f)
         val bedPolygon = requestedBedPolygon.takeIf {
@@ -309,11 +352,13 @@ internal object PrepareModelSceneBuilder {
                     // duplicated CPU normals per triangle. Flat normals are derived by the
                     // fragment shader from the transformed surface.
                     vertices = volume.model.previewTriangles,
+                    coarseVertices = volume.model.coarsePreviewTriangles,
                     detailVertices = volume.model.detailPreviewTriangles,
                 )
             }
         }
-        val meshes = boundedPrepareDetailMeshes(rawMeshes, additionalDetailBudgetBytes)
+        val lowMeshes = boundedPrepareLowMeshes(rawMeshes, lowDetailBudgetBytes)
+        val meshes = boundedPrepareDetailMeshes(lowMeshes, additionalDetailBudgetBytes)
         return PrepareModelSceneGeometry(
             bedSizeX = bedSizeX,
             bedSizeY = bedSizeY,
@@ -1406,6 +1451,7 @@ private const val PREPARE_RENDERER_STARTUP_TIMEOUT_MS = 5_000L
 private const val PREPARE_RENDERER_RELEASE_TIMEOUT_MS = 1_000L
 private const val PREPARE_RENDERER_LOG_TAG = "DuckyPrepareRenderer"
 internal const val MAX_PREPARE_ADDITIONAL_DETAIL_GPU_BYTES = 16L * 1_024L * 1_024L
+internal const val MAX_PREPARE_LOW_DETAIL_GPU_BYTES = 24L * 1_024L * 1_024L
 
 private const val PREPARE_VERTEX_SHADER = """#version 300 es
     uniform vec2 uViewport;

@@ -86,6 +86,57 @@ class PrepareModelSceneBuilderTest {
     }
 
     @Test
+    fun distinctInteractionLodsFallBackToCompleteCoarseMeshesAtTheSceneBudget() {
+        val first = modelWithDetail("first")
+        val second = modelWithDetail("second")
+        val baselineBytes =
+            (first.coarsePreviewTriangles.size + second.coarsePreviewTriangles.size).toLong() *
+                Float.SIZE_BYTES
+        val onePreviewBytes = first.previewTriangles.size.toLong() * Float.SIZE_BYTES
+        val scene = PrepareModelSceneBuilder.build(
+            projectObjects = listOf(
+                ProjectObject(id = "first", model = first),
+                ProjectObject(id = "second", model = second),
+            ),
+            bedSizeX = 100f,
+            bedSizeY = 100f,
+            requestedBedPolygon = rectangularBedPolygon(100f, 100f),
+            additionalDetailBudgetBytes = 0L,
+            lowDetailBudgetBytes = baselineBytes + onePreviewBytes,
+        )
+
+        assertSame(first.previewTriangles, scene.meshes[0].vertices)
+        assertSame(
+            "Overflow must use a complete connected coarse LOD, not truncate triangles",
+            second.coarsePreviewTriangles,
+            scene.meshes[1].vertices,
+        )
+        assertSame(scene.meshes[0].vertices, scene.meshes[0].detailVertices)
+        assertSame(scene.meshes[1].vertices, scene.meshes[1].detailVertices)
+    }
+
+    @Test
+    fun repeatedPlacementsChargeSharedInteractionTopologyOnlyOnce() {
+        val shared = modelWithDetail("shared")
+        val budget = shared.coarsePreviewTriangles.size.toLong() * Float.SIZE_BYTES +
+            shared.previewTriangles.size.toLong() * Float.SIZE_BYTES
+        val scene = PrepareModelSceneBuilder.build(
+            projectObjects = listOf(
+                ProjectObject(id = "first", model = shared),
+                ProjectObject(id = "second", model = shared),
+            ),
+            bedSizeX = 100f,
+            bedSizeY = 100f,
+            requestedBedPolygon = rectangularBedPolygon(100f, 100f),
+            additionalDetailBudgetBytes = 0L,
+            lowDetailBudgetBytes = budget,
+        )
+
+        assertSame(shared.previewTriangles, scene.meshes[0].vertices)
+        assertSame(scene.meshes[0].vertices, scene.meshes[1].vertices)
+    }
+
+    @Test
     fun distinctDetailLodsObeyTheSceneBudgetWithoutTruncatingLowLods() {
         val first = modelWithDetail("first")
         val second = modelWithDetail("second")
@@ -141,14 +192,55 @@ class PrepareModelSceneBuilderTest {
         assertSame(printable.detailPreviewTriangles, scene.meshes[1].detailVertices)
     }
 
+    @Test
+    fun printableInteractionMeshTakesPriorityOverEarlierAuxiliaryVolumes() {
+        val auxiliary = modelWithDetail("auxiliary-low")
+        val printable = modelWithDetail("printable-low")
+        val baselineBytes =
+            (auxiliary.coarsePreviewTriangles.size + printable.coarsePreviewTriangles.size)
+                .toLong() * Float.SIZE_BYTES
+        val scene = PrepareModelSceneBuilder.build(
+            projectObjects = listOf(
+                ProjectObject(
+                    id = "compound",
+                    volumes = listOf(
+                        ProjectVolume(
+                            id = "modifier",
+                            model = auxiliary,
+                            role = ProjectVolumeRole.PARAMETER_MODIFIER,
+                        ),
+                        ProjectVolume(id = "model", model = printable),
+                    ),
+                ),
+            ),
+            bedSizeX = 100f,
+            bedSizeY = 100f,
+            requestedBedPolygon = rectangularBedPolygon(100f, 100f),
+            additionalDetailBudgetBytes = 0L,
+            lowDetailBudgetBytes = baselineBytes +
+                printable.previewTriangles.size.toLong() * Float.SIZE_BYTES,
+        )
+
+        assertSame(auxiliary.coarsePreviewTriangles, scene.meshes[0].vertices)
+        assertSame(printable.previewTriangles, scene.meshes[1].vertices)
+    }
+
     private fun modelWithDetail(name: String): ModelInfo = ModelInfo(
         fileName = "$name.stl",
-        triangles = 2,
+        triangles = 3,
         dimensions = listOf(2.0, 2.0, 0.0),
         localPath = "",
         minMm = listOf(0.0, 0.0, 0.0),
         maxMm = listOf(2.0, 2.0, 0.0),
         previewTriangles = floatArrayOf(
+            0f, 0f, 0f,
+            2f, 0f, 0f,
+            0f, 2f, 0f,
+            2f, 0f, 0f,
+            2f, 2f, 0f,
+            0f, 2f, 0f,
+        ),
+        coarsePreviewTriangles = floatArrayOf(
             0f, 0f, 0f,
             2f, 0f, 0f,
             0f, 2f, 0f,
@@ -158,6 +250,9 @@ class PrepareModelSceneBuilderTest {
             2f, 0f, 0f,
             0f, 2f, 0f,
             2f, 0f, 0f,
+            2f, 2f, 0f,
+            0f, 2f, 0f,
+            0f, 0f, 0f,
             2f, 2f, 0f,
             0f, 2f, 0f,
         ),

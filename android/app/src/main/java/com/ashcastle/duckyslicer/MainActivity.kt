@@ -59,7 +59,9 @@ data class ModelInfo(
     val maxMm: List<Double>,
     val previewTriangles: FloatArray,
     val previewTriangleIndices: IntArray = IntArray(previewTriangles.size / 9) { it },
-    /** A bounded visual-only LOD; editing and exact source-facet mapping keep the connected mesh. */
+    /** A scene-budget fallback LOD. Editing and exact source-facet mapping keep previewTriangles. */
+    val coarsePreviewTriangles: FloatArray = previewTriangles,
+    /** A bounded visual-only LOD for nearby rendering. */
     val detailPreviewTriangles: FloatArray = previewTriangles,
 ) {
     /**
@@ -102,9 +104,17 @@ data class ModelInfo(
                         detailPreviewTriangleCount in
                         previewTriangleCount..MODEL_MAX_DETAIL_PREVIEW_TRIANGLES),
             ) { "model_invalid" }
+            val coarsePreviewTriangleCount = raw[11].exactModelIntegerOrNull()
+            check(
+                coarsePreviewTriangleCount != null &&
+                    (coarsePreviewTriangleCount == 0 ||
+                        coarsePreviewTriangleCount in
+                        1..minOf(previewTriangleCount, MODEL_MAX_COARSE_PREVIEW_TRIANGLES)),
+            ) { "model_invalid" }
             val expectedFloats = MODEL_PREVIEW_HEADER_FLOATS.toLong() +
                 previewTriangleCount.toLong() * MODEL_PREVIEW_FLOATS_PER_TRIANGLE +
-                detailPreviewTriangleCount.toLong() * MODEL_PREVIEW_VERTEX_FLOATS
+                detailPreviewTriangleCount.toLong() * MODEL_PREVIEW_VERTEX_FLOATS +
+                coarsePreviewTriangleCount.toLong() * MODEL_PREVIEW_VERTEX_FLOATS
             check(expectedFloats == raw.size.toLong()) { "model_invalid" }
             val vertexStart = MODEL_PREVIEW_HEADER_FLOATS
             val vertexEnd = vertexStart + previewTriangleCount * MODEL_PREVIEW_VERTEX_FLOATS
@@ -122,12 +132,29 @@ data class ModelInfo(
                 sourceIndex
             }
             val detailVertexStart = vertexEnd + previewTriangleCount
+            val detailVertexEnd =
+                detailVertexStart + detailPreviewTriangleCount * MODEL_PREVIEW_VERTEX_FLOATS
             val detailPreviewTriangles = if (detailPreviewTriangleCount == 0) {
                 previewTriangles
             } else {
                 raw.copyOfRange(
                     detailVertexStart,
-                    detailVertexStart + detailPreviewTriangleCount * MODEL_PREVIEW_VERTEX_FLOATS,
+                    detailVertexEnd,
+                ).also { values ->
+                    check(
+                        values.all { value ->
+                            value.isFinite() &&
+                                kotlin.math.abs(value) <= MODEL_MAX_COORDINATE_ABS_MM
+                        },
+                    ) { "model_invalid" }
+                }
+            }
+            val coarsePreviewTriangles = if (coarsePreviewTriangleCount == 0) {
+                previewTriangles
+            } else {
+                raw.copyOfRange(
+                    detailVertexEnd,
+                    detailVertexEnd + coarsePreviewTriangleCount * MODEL_PREVIEW_VERTEX_FLOATS,
                 ).also { values ->
                     check(
                         values.all { value ->
@@ -146,6 +173,7 @@ data class ModelInfo(
                 maxMm = maxMm,
                 previewTriangles = previewTriangles,
                 previewTriangleIndices = previewTriangleIndices,
+                coarsePreviewTriangles = coarsePreviewTriangles,
                 detailPreviewTriangles = detailPreviewTriangles,
             )
         }
@@ -214,11 +242,12 @@ private fun Float.exactModelIntegerOrNull(): Int? {
 }
 
 private const val MODEL_PREVIEW_PAYLOAD_MAGIC = 17_492f
-private const val MODEL_PREVIEW_PAYLOAD_VERSION = 2f
-private const val MODEL_PREVIEW_HEADER_FLOATS = 11
+private const val MODEL_PREVIEW_PAYLOAD_VERSION = 3f
+private const val MODEL_PREVIEW_HEADER_FLOATS = 12
 private const val MODEL_PREVIEW_VERTEX_FLOATS = 9
 private const val MODEL_PREVIEW_FLOATS_PER_TRIANGLE = 10
 private const val MODEL_MAX_PREVIEW_TRIANGLES = 12_000
+private const val MODEL_MAX_COARSE_PREVIEW_TRIANGLES = 2_000
 private const val MODEL_MAX_DETAIL_PREVIEW_TRIANGLES = 48_000
 private const val MODEL_MAX_SOURCE_TRIANGLES = 11_000_000
 private const val MODEL_MAX_EXACT_FLOAT_INTEGER = 16_777_216

@@ -138,7 +138,7 @@ def valid_sources() -> dict[str, str]:
             "overlays.takeIf { sceneLoad.complete }.orEmpty() "
             "overlays: List<PrepareModelOverlayData> overlay.customVertices buffers.vertices "
             "customVertices.size / PREPARE_VERTEX_FLOATS "
-            "detailVertices: FloatArray = vertices "
+            "detailVertices: FloatArray = vertices coarseVertices: FloatArray = vertices "
             "val useDetail = !frame.interactionActive && frame.overlays.isEmpty() "
             "prepareSurfaceSize( texture.setDefaultBufferSize(target.width, target.height) "
             "resizeEglSurface(texture, target) EGL14.eglDestroySurface(eglDisplay, eglSurface) "
@@ -152,9 +152,12 @@ def valid_sources() -> dict[str, str]:
             "retainedTopologyBufferCountForTest() "
             "uniquePrepareVertexArrays(geometry.meshes) IdentityHashMap<FloatArray, Int>() "
             "additionalDetailBudgetBytes: Long = MAX_PREPARE_ADDITIONAL_DETAIL_GPU_BYTES "
-            "boundedPrepareDetailMeshes(rawMeshes, additionalDetailBudgetBytes) "
+            "lowDetailBudgetBytes: Long = MAX_PREPARE_LOW_DETAIL_GPU_BYTES "
+            "boundedPrepareLowMeshes(rawMeshes, lowDetailBudgetBytes) "
+            "boundedPrepareDetailMeshes(lowMeshes, additionalDetailBudgetBytes) "
             ".sortedBy { indexed -> indexed.value.role != ProjectVolumeRole.MODEL_PART } "
-            "MAX_PREPARE_ADDITIONAL_DETAIL_GPU_BYTES = 16L * 1_024L * 1_024L"
+            "MAX_PREPARE_ADDITIONAL_DETAIL_GPU_BYTES = 16L * 1_024L * 1_024L "
+            "MAX_PREPARE_LOW_DETAIL_GPU_BYTES = 24L * 1_024L * 1_024L"
         ),
         "PrepareModelOverlays.kt": (
             "orcaFacetAnnotations: OrcaFacetAnnotations "
@@ -293,8 +296,10 @@ def valid_sources() -> dict[str, str]:
         "MainActivity.kt": (
             "fun fromNative(raw: FloatArray?, localPath: String) "
             "MODEL_PREVIEW_PAYLOAD_MAGIC MODEL_PREVIEW_PAYLOAD_VERSION "
-            "MODEL_PREVIEW_HEADER_FLOATS = 11 MODEL_MAX_PREVIEW_TRIANGLES = 12_000 "
-            "MODEL_MAX_DETAIL_PREVIEW_TRIANGLES = 48_000 detailPreviewTriangles "
+            "MODEL_PREVIEW_HEADER_FLOATS = 12 MODEL_MAX_PREVIEW_TRIANGLES = 12_000 "
+            "MODEL_MAX_COARSE_PREVIEW_TRIANGLES = 2_000 "
+            "MODEL_MAX_DETAIL_PREVIEW_TRIANGLES = 48_000 coarsePreviewTriangles "
+            "detailPreviewTriangles "
             "raw.copyOfRange(vertexStart, vertexEnd) exactModelIntegerOrNull() "
             "MODEL_MAX_COORDINATE_ABS_MM "
             "var plateSliceResults by rememberSaveable var selectedTab by rememberSaveable "
@@ -519,7 +524,8 @@ def valid_sources() -> dict[str, str]:
             '"G-code preview direct buffer is too small" '
             "MODEL_PREVIEW_PAYLOAD_MAGIC MODEL_PREVIEW_PAYLOAD_VERSION "
             "MODEL_PREVIEW_HEADER_FLOATS DETAIL_PREVIEW_TRIANGLE_LIMIT "
-            "detail_preview_triangles fn model_preview_payload( "
+            "COARSE_PREVIEW_TRIANGLE_LIMIT detail_preview_triangles "
+            "coarse_preview_triangles fn model_preview_payload( "
             "NativeEngine_inspectStlPayload get_direct_buffer_capacity(&output) "
             "get_direct_buffer_address(&output) std::ptr::copy_nonoverlapping( "
             '"Toolpath direct buffer is too small" '
