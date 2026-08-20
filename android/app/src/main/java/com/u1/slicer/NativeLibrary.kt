@@ -44,6 +44,13 @@ class NativeLibrary(
     external fun applySupportPaint(objectIndex: Int, volumeIndex: Int, sidecarPath: String): Boolean
     external fun applySeamPaint(objectIndex: Int, volumeIndex: Int, sidecarPath: String): Boolean
     external fun applyMultiColorPaint(objectIndex: Int, volumeIndex: Int, sidecarPath: String): Boolean
+    external fun nativeApplyOrcaFacetAnnotations(
+        objectIndex: Int,
+        volumeIndex: Int,
+        supportPath: String,
+        seamPath: String,
+        multiColorPath: String,
+    ): Boolean
     external fun applyVariableLayerHeights(objectIndex: Int, sidecarPath: String): Boolean
     external fun applyObjectProcessOverrides(objectIndex: Int, sidecarPath: String): Boolean
     external fun applyBrimPoints(objectIndex: Int, sidecarPath: String): Boolean

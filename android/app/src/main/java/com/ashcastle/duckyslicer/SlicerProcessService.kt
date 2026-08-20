@@ -66,6 +66,9 @@ internal object SlicerProcessClient {
         List(transformedModels.size) { null },
         List(transformedModels.size) { null },
         List(transformedModels.size) { null },
+        List(transformedModels.size) { null },
+        List(transformedModels.size) { null },
+        List(transformedModels.size) { null },
         List(objectVolumeCounts.size) { null },
         List(objectVolumeCounts.size) { null },
         List(objectVolumeCounts.size) { null },
@@ -97,6 +100,9 @@ internal object SlicerProcessClient {
             ProjectVolumeRole.MODEL_PART.nativeValue
         },
         volumeConfigFiles: List<File?> = List(transformedModels.size) { null },
+        orcaSupportAnnotationFiles: List<File?> = List(transformedModels.size) { null },
+        orcaSeamAnnotationFiles: List<File?> = List(transformedModels.size) { null },
+        orcaMultiColorAnnotationFiles: List<File?> = List(transformedModels.size) { null },
         foregroundSession: ForegroundSliceSession? = null,
         cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit,
@@ -105,6 +111,9 @@ internal object SlicerProcessClient {
         supportPaintFiles,
         seamPaintFiles,
         multiColorPaintFiles,
+        orcaSupportAnnotationFiles,
+        orcaSeamAnnotationFiles,
+        orcaMultiColorAnnotationFiles,
         variableLayerHeightFiles,
         processOverrideFiles,
         brimPointFiles,
@@ -132,6 +141,9 @@ internal object SlicerProcessClient {
         }
         return sliceInternal(
             transformedModels,
+            List(transformedModels.size) { null },
+            List(transformedModels.size) { null },
+            List(transformedModels.size) { null },
             List(transformedModels.size) { null },
             List(transformedModels.size) { null },
             List(transformedModels.size) { null },
@@ -445,10 +457,11 @@ internal object SlicerProcessClient {
         val canonicalStaging = stagingDirectory.canonicalFile
         val seen = HashSet<File>()
         val seenConfigs = HashSet<File>()
+        val seenAnnotations = HashSet<File>()
         val grouped = ArrayList<MutableList<OrcaImportedProjectVolumeRecord>>()
         records.forEach { record ->
-            val values = record.split('\t', limit = 9)
-            require(values.size == 9) { "Slicer returned invalid project model metadata" }
+            val values = record.split('\t', limit = 12)
+            require(values.size == 12) { "Slicer returned invalid project model metadata" }
             val output = checkedImportedModelFile(values[0], canonicalStaging, seen)
             val objectName = values[1].trim().takeIf { it.length in 1..200 } ?: "model"
             val volumeName = values[2].trim().takeIf { it.length in 1..200 } ?: "part.stl"
@@ -473,6 +486,21 @@ internal object SlicerProcessClient {
                 ) { "Slicer returned an unsafe volume setting file" }
                 ProjectVolumeConfig.readSidecar(file)
             } ?: ProjectVolumeConfig()
+            fun annotationAt(index: Int): OrcaFacetAnnotation =
+                values[index].takeIf(String::isNotEmpty)?.let { path ->
+                    val file = File(path).canonicalFile
+                    require(
+                        file.parentFile == canonicalStaging && seenAnnotations.add(file) &&
+                            file.isFile && file.length() in
+                            8..OrcaFacetAnnotation.MAX_SIDECAR_BYTES.toLong(),
+                    ) { "Slicer returned an unsafe facet annotation file" }
+                    OrcaFacetAnnotation.readSidecar(file)
+                } ?: OrcaFacetAnnotation()
+            val annotations = OrcaFacetAnnotations(
+                support = annotationAt(9),
+                seam = annotationAt(10),
+                multiColor = annotationAt(11),
+            )
             require(filamentSlot in 0 until MAX_FILAMENT_SLOTS) {
                 "Slicer returned an invalid volume filament"
             }
@@ -494,6 +522,7 @@ internal object SlicerProcessClient {
                     if (role.acceptsFilament) filamentSlot else 0,
                     role,
                     config,
+                    annotations,
                 ),
                 objectName = objectName,
                 centerXmm = centerX,
@@ -632,6 +661,9 @@ internal object SlicerProcessClient {
         supportPaintFiles: List<File?>,
         seamPaintFiles: List<File?>,
         multiColorPaintFiles: List<File?>,
+        orcaSupportAnnotationFiles: List<File?>,
+        orcaSeamAnnotationFiles: List<File?>,
+        orcaMultiColorAnnotationFiles: List<File?>,
         variableLayerHeightFiles: List<File?>,
         processOverrideFiles: List<File?>,
         brimPointFiles: List<File?>,
@@ -657,6 +689,15 @@ internal object SlicerProcessClient {
         require(multiColorPaintFiles.size == transformedModels.size) {
             "Multi-color paint count does not match models"
         }
+        require(orcaSupportAnnotationFiles.size == transformedModels.size) {
+            "Support annotation count does not match models"
+        }
+        require(orcaSeamAnnotationFiles.size == transformedModels.size) {
+            "Seam annotation count does not match models"
+        }
+        require(orcaMultiColorAnnotationFiles.size == transformedModels.size) {
+            "Multi-color annotation count does not match models"
+        }
         require(
             objectVolumeCounts.isNotEmpty() &&
                 objectVolumeCounts.all { it in 1..MAX_PROJECT_VOLUMES_PER_OBJECT } &&
@@ -679,6 +720,9 @@ internal object SlicerProcessClient {
         val supportPaintPaths = supportPaintFiles.map { it?.absolutePath.orEmpty() }
         val seamPaintPaths = seamPaintFiles.map { it?.absolutePath.orEmpty() }
         val multiColorPaintPaths = multiColorPaintFiles.map { it?.absolutePath.orEmpty() }
+        val orcaSupportAnnotationPaths = orcaSupportAnnotationFiles.map { it?.absolutePath.orEmpty() }
+        val orcaSeamAnnotationPaths = orcaSeamAnnotationFiles.map { it?.absolutePath.orEmpty() }
+        val orcaMultiColorAnnotationPaths = orcaMultiColorAnnotationFiles.map { it?.absolutePath.orEmpty() }
         val variableLayerHeightPaths = variableLayerHeightFiles.map { it?.absolutePath.orEmpty() }
         val processOverridePaths = processOverrideFiles.map { it?.absolutePath.orEmpty() }
         val brimPointPaths = brimPointFiles.map { it?.absolutePath.orEmpty() }
@@ -690,6 +734,8 @@ internal object SlicerProcessClient {
         require(
             encodedRequestBytes(
                 modelPaths + supportPaintPaths + seamPaintPaths + multiColorPaintPaths +
+                    orcaSupportAnnotationPaths + orcaSeamAnnotationPaths +
+                    orcaMultiColorAnnotationPaths +
                     variableLayerHeightPaths + processOverridePaths + brimPointPaths +
                     volumeConfigPaths + inputFilenameBase,
                 optionsText,
@@ -715,6 +761,18 @@ internal object SlicerProcessClient {
             putStringArrayList(
                 SlicerProcessContract.KEY_MULTI_COLOR_PAINT_PATHS,
                 ArrayList(multiColorPaintPaths),
+            )
+            putStringArrayList(
+                SlicerProcessContract.KEY_ORCA_SUPPORT_ANNOTATION_PATHS,
+                ArrayList(orcaSupportAnnotationPaths),
+            )
+            putStringArrayList(
+                SlicerProcessContract.KEY_ORCA_SEAM_ANNOTATION_PATHS,
+                ArrayList(orcaSeamAnnotationPaths),
+            )
+            putStringArrayList(
+                SlicerProcessContract.KEY_ORCA_MULTI_COLOR_ANNOTATION_PATHS,
+                ArrayList(orcaMultiColorAnnotationPaths),
             )
             putStringArrayList(
                 SlicerProcessContract.KEY_VARIABLE_LAYER_HEIGHT_PATHS,
@@ -1368,6 +1426,7 @@ internal data class OrcaImportedProjectVolume(
     val filamentSlot: Int,
     val role: ProjectVolumeRole = ProjectVolumeRole.MODEL_PART,
     val config: ProjectVolumeConfig = ProjectVolumeConfig(),
+    val orcaFacetAnnotations: OrcaFacetAnnotations = OrcaFacetAnnotations(),
 )
 
 internal data class OrcaImportedProjectObject(
@@ -2008,6 +2067,35 @@ class SlicerProcessService : Service() {
         val multiColorPaintFiles = multiColorPaintPaths.map { path ->
             path.takeIf(String::isNotEmpty)?.let(::validateMultiColorPaint)
         }
+        val orcaSupportAnnotationPaths = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_ORCA_SUPPORT_ANNOTATION_PATHS),
+        ) { "Support annotation paths are unavailable" }
+        require(orcaSupportAnnotationPaths.size == models.size) {
+            "Support annotation count does not match models"
+        }
+        val orcaSupportAnnotations = orcaSupportAnnotationPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let { validateOrcaFacetAnnotation(it, 2) }
+        }
+        val orcaSeamAnnotationPaths = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_ORCA_SEAM_ANNOTATION_PATHS),
+        ) { "Seam annotation paths are unavailable" }
+        require(orcaSeamAnnotationPaths.size == models.size) {
+            "Seam annotation count does not match models"
+        }
+        val orcaSeamAnnotations = orcaSeamAnnotationPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let { validateOrcaFacetAnnotation(it, 2) }
+        }
+        val orcaMultiColorAnnotationPaths = requireNotNull(
+            extras.getStringArrayList(SlicerProcessContract.KEY_ORCA_MULTI_COLOR_ANNOTATION_PATHS),
+        ) { "Multi-color annotation paths are unavailable" }
+        require(orcaMultiColorAnnotationPaths.size == models.size) {
+            "Multi-color annotation count does not match models"
+        }
+        val orcaMultiColorAnnotations = orcaMultiColorAnnotationPaths.map { path ->
+            path.takeIf(String::isNotEmpty)?.let {
+                validateOrcaFacetAnnotation(it, MAX_FILAMENT_SLOTS)
+            }
+        }
         val variableLayerHeightPaths = requireNotNull(
             extras.getStringArrayList(SlicerProcessContract.KEY_VARIABLE_LAYER_HEIGHT_PATHS),
         ) { "Variable layer height paths are unavailable" }
@@ -2059,6 +2147,8 @@ class SlicerProcessService : Service() {
         require(
             encodedRequestBytes(
                 paths + supportPaintPaths + seamPaintPaths + multiColorPaintPaths +
+                    orcaSupportAnnotationPaths + orcaSeamAnnotationPaths +
+                    orcaMultiColorAnnotationPaths +
                     variableLayerHeightPaths + processOverridePaths + brimPointPaths +
                     volumeConfigPaths + inputFilenameBase,
                 optionsText,
@@ -2086,7 +2176,9 @@ class SlicerProcessService : Service() {
         require(volumeRoles.indices.all { index ->
             volumeRoles[index].acceptsFacetPaint || (
                 supportPaintFiles[index] == null && seamPaintFiles[index] == null &&
-                    multiColorPaintFiles[index] == null
+                    multiColorPaintFiles[index] == null &&
+                    orcaSupportAnnotations[index] == null && orcaSeamAnnotations[index] == null &&
+                    orcaMultiColorAnnotations[index] == null
             )
         }) { "Auxiliary project volumes cannot carry facet paint" }
         val filamentSlots = requireNotNull(
@@ -2104,6 +2196,8 @@ class SlicerProcessService : Service() {
                 } &&
                 multiColorPaintFiles.filterNotNull().all { paint ->
                     paint.filamentSlots.all { it in availableFilaments.indices }
+                } && orcaMultiColorAnnotations.filterNotNull().all { annotation ->
+                    annotation.annotation.maximumState <= availableFilaments.size
                 },
         ) { "Filament assignments are invalid" }
         val maximumGcodeBytes = if (
@@ -2124,6 +2218,9 @@ class SlicerProcessService : Service() {
                 supportPaintFiles,
                 seamPaintFiles,
                 multiColorPaintFiles,
+                orcaSupportAnnotations,
+                orcaSeamAnnotations,
+                orcaMultiColorAnnotations,
                 variableLayerHeightFiles,
                 processOverrideFiles,
                 brimPointFiles,
@@ -2187,7 +2284,7 @@ class SlicerProcessService : Service() {
         try {
             check(runtime.loadModel(source.absolutePath)) { "Model could not be prepared" }
             check(runtime.nativeGetUnsupportedProjectSemanticCount() == 0) {
-                "Model contains facet paint data that is not importable yet"
+                "Model contains unsupported fuzzy-skin facet paint"
             }
             val records = requireNotNull(
                 runtime.nativeExportLoadedProjectVolumes(outputDirectory.absolutePath),
@@ -2544,6 +2641,9 @@ class SlicerProcessService : Service() {
         supportPaintFiles: List<ValidatedSupportPaint?>,
         seamPaintFiles: List<ValidatedSeamPaint?>,
         multiColorPaintFiles: List<ValidatedMultiColorPaint?>,
+        orcaSupportAnnotations: List<ValidatedOrcaFacetAnnotation?>,
+        orcaSeamAnnotations: List<ValidatedOrcaFacetAnnotation?>,
+        orcaMultiColorAnnotations: List<ValidatedOrcaFacetAnnotation?>,
         variableLayerHeightFiles: List<ValidatedVariableLayerHeights?>,
         processOverrideFiles: List<ValidatedObjectProcessOverrides?>,
         brimPointFiles: List<ValidatedBrimPoints?>,
@@ -2583,6 +2683,22 @@ class SlicerProcessService : Service() {
                     ) {
                         "Volume filament could not be applied"
                     }
+                }
+            }
+            models.indices.forEach { volumeIndex ->
+                val support = orcaSupportAnnotations[volumeIndex]
+                val seam = orcaSeamAnnotations[volumeIndex]
+                val multiColor = orcaMultiColorAnnotations[volumeIndex]
+                if (support != null || seam != null || multiColor != null) {
+                    check(
+                        runtime.nativeApplyOrcaFacetAnnotations(
+                            volumeObjectIndices[volumeIndex],
+                            nativeVolumeIndices[volumeIndex],
+                            support?.file?.absolutePath.orEmpty(),
+                            seam?.file?.absolutePath.orEmpty(),
+                            multiColor?.file?.absolutePath.orEmpty(),
+                        ),
+                    ) { "Imported facet annotations could not be applied" }
                 }
             }
             supportPaintFiles.forEachIndexed { volumeIndex, supportPaint ->
@@ -2794,6 +2910,21 @@ class SlicerProcessService : Service() {
             }
         }
         return ValidatedSupportPaint(sidecar, hasEnforcer)
+    }
+
+    private fun validateOrcaFacetAnnotation(
+        path: String,
+        maximumState: Int,
+    ): ValidatedOrcaFacetAnnotation {
+        require(path.length in 1..MAX_PATH_LENGTH) { "Invalid facet annotation path" }
+        val sidecar = File(path).canonicalFile
+        val allowedRoots = listOf(filesDir.canonicalFile, cacheDir.canonicalFile)
+        require(allowedRoots.any(sidecar::isInside)) {
+            "Facet annotation is outside private storage"
+        }
+        val annotation = OrcaFacetAnnotation.readSidecar(sidecar)
+        require(annotation.maximumState <= maximumState) { "Facet annotation state is invalid" }
+        return ValidatedOrcaFacetAnnotation(sidecar, annotation)
     }
 
     private fun validateSeamPaint(path: String): ValidatedSeamPaint {
@@ -3115,6 +3246,11 @@ class SlicerProcessService : Service() {
         val filamentSlots: Set<Int>,
     )
 
+    private data class ValidatedOrcaFacetAnnotation(
+        val file: File,
+        val annotation: OrcaFacetAnnotation,
+    )
+
     private data class ValidatedVariableLayerHeights(val file: File)
 
     private data class ValidatedBrimPoints(val file: File)
@@ -3164,6 +3300,9 @@ private object SlicerProcessContract {
     const val KEY_SUPPORT_PAINT_PATHS = "supportPaintPaths"
     const val KEY_SEAM_PAINT_PATHS = "seamPaintPaths"
     const val KEY_MULTI_COLOR_PAINT_PATHS = "multiColorPaintPaths"
+    const val KEY_ORCA_SUPPORT_ANNOTATION_PATHS = "orcaSupportAnnotationPaths"
+    const val KEY_ORCA_SEAM_ANNOTATION_PATHS = "orcaSeamAnnotationPaths"
+    const val KEY_ORCA_MULTI_COLOR_ANNOTATION_PATHS = "orcaMultiColorAnnotationPaths"
     const val KEY_VARIABLE_LAYER_HEIGHT_PATHS = "variableLayerHeightPaths"
     const val KEY_PROCESS_OVERRIDE_PATHS = "processOverridePaths"
     const val KEY_BRIM_POINT_PATHS = "brimPointPaths"

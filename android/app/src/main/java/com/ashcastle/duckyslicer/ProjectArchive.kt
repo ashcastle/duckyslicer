@@ -23,6 +23,7 @@ internal data class ArchivedProjectVolume(
     val supportPaint: SupportPaint,
     val seamPaint: SeamPaint,
     val multiColorPaint: MultiColorPaint,
+    val orcaFacetAnnotations: OrcaFacetAnnotations = OrcaFacetAnnotations(),
     val filamentSlot: Int,
     val role: ProjectVolumeRole,
     val config: ProjectVolumeConfig,
@@ -30,9 +31,12 @@ internal data class ArchivedProjectVolume(
     init {
         require(role.acceptsFacetPaint || (
             supportPaint.facets.isEmpty() && seamPaint.facets.isEmpty() &&
-                multiColorPaint.facets.isEmpty()
+                multiColorPaint.facets.isEmpty() && orcaFacetAnnotations.isEmpty
         ))
         require(role.acceptsFilament || filamentSlot == 0)
+        require(orcaFacetAnnotations.support.maximumState <= 2)
+        require(orcaFacetAnnotations.seam.maximumState <= 2)
+        require(orcaFacetAnnotations.multiColor.maximumState <= MAX_FILAMENT_SLOTS)
     }
 }
 
@@ -110,7 +114,9 @@ internal object ProjectArchiveCodec {
                 projectObject.volumes.size <= ProjectStore.SUPPORTED_PROJECT_VOLUMES_PER_OBJECT &&
                     projectObject.volumes.all { volume ->
                         volume.filamentSlot in availableSlots &&
-                            volume.multiColorPaint.facets.values.all { it in availableSlots }
+                            volume.multiColorPaint.facets.values.all { it in availableSlots } &&
+                            volume.orcaFacetAnnotations.multiColor.maximumState <=
+                                availableSlots.count()
                     }
             })
         }
@@ -387,7 +393,8 @@ internal object ProjectArchiveCodec {
         require(objects.all { archived ->
             archived.volumes.all { volume ->
                 volume.filamentSlot in availableSlots &&
-                    volume.multiColorPaint.facets.values.all { it in availableSlots }
+                    volume.multiColorPaint.facets.values.all { it in availableSlots } &&
+                    volume.orcaFacetAnnotations.multiColor.maximumState <= availableSlots.count()
             }
         })
     }
@@ -411,6 +418,7 @@ internal object ProjectArchiveCodec {
         } else {
             MultiColorPaint()
         },
+        orcaFacetAnnotations = OrcaFacetAnnotations(),
         filamentSlot = checkedArchiveFilamentSlot(value.optInt("filamentSlot", 0)),
         role = ProjectVolumeRole.MODEL_PART,
         config = ProjectVolumeConfig(),
@@ -426,6 +434,24 @@ internal object ProjectArchiveCodec {
         supportPaint = value.getJSONArray("supportPaint").toArchiveSupportPaint(),
         seamPaint = value.getJSONArray("seamPaint").toArchiveSeamPaint(),
         multiColorPaint = value.getJSONArray("multiColorPaint").toArchiveMultiColorPaint(),
+        orcaFacetAnnotations = if (schemaVersion >= 67) {
+            OrcaFacetAnnotations(
+                support = OrcaFacetAnnotation.fromJson(
+                    value.getJSONArray("orcaSupportAnnotation"),
+                    Int.MAX_VALUE,
+                ),
+                seam = OrcaFacetAnnotation.fromJson(
+                    value.getJSONArray("orcaSeamAnnotation"),
+                    Int.MAX_VALUE,
+                ),
+                multiColor = OrcaFacetAnnotation.fromJson(
+                    value.getJSONArray("orcaMultiColorAnnotation"),
+                    Int.MAX_VALUE,
+                ),
+            )
+        } else {
+            OrcaFacetAnnotations()
+        },
         filamentSlot = checkedArchiveFilamentSlot(value.getInt("filamentSlot")),
         role = if (schemaVersion >= 27) {
             runCatching { ProjectVolumeRole.valueOf(value.getString("role")) }
@@ -468,6 +494,9 @@ private fun ProjectObject.toArchiveJson(modelEntries: Map<File, String>): JSONOb
                             .put("supportPaint", volume.supportPaint.toArchiveJson())
                             .put("seamPaint", volume.seamPaint.toArchiveJson())
                             .put("multiColorPaint", volume.multiColorPaint.toArchiveJson())
+                            .put("orcaSupportAnnotation", volume.orcaFacetAnnotations.support.toJson())
+                            .put("orcaSeamAnnotation", volume.orcaFacetAnnotations.seam.toJson())
+                            .put("orcaMultiColorAnnotation", volume.orcaFacetAnnotations.multiColor.toJson())
                             .put("filamentSlot", volume.filamentSlot)
                             .put("role", volume.role.name)
                             .put("config", volume.config.toJson()),
@@ -754,13 +783,13 @@ private class NonClosingOutputStream(output: OutputStream) : FilterOutputStream(
 
 internal const val PROJECT_ARCHIVE_MIME_TYPE = "application/vnd.duckyslicer.project+zip"
 internal const val PROJECT_ARCHIVE_FILE_EXTENSION = ".duckyproject"
-internal const val MAX_PROJECT_ARCHIVE_MANIFEST_BYTES = 1_048_576
+internal const val MAX_PROJECT_ARCHIVE_MANIFEST_BYTES = 8_388_608
 internal const val MAX_PROJECT_ARCHIVE_CONTENT_BYTES = 1_073_741_824L
 internal const val MAX_PROJECT_ARCHIVE_FILE_BYTES = 1_082_130_432L
 private const val MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1
 private const val MAX_PROJECT_ARCHIVE_ENTRY_NAME = 128
 private const val PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"
 private const val MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1
-private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 66
+private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 67
 private const val PROJECT_ARCHIVE_MANIFEST = "manifest.json"
 private val PROJECT_ARCHIVE_MODEL_ENTRY = Regex("models/[0-9]{3}\\.stl")

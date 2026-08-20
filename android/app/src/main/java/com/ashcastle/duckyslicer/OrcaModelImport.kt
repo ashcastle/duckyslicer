@@ -95,6 +95,10 @@ internal suspend fun importOrcaModels(
                     )
                     val volumes = normalized.volumes.mapIndexed { volumeIndex, volume ->
                         throwIfCancellationRequested()
+                        require(
+                            volume.orcaFacetAnnotations.multiColor.maximumState <=
+                                availableFilamentSlots,
+                        ) { "Model uses unavailable filament slots" }
                         val displayName = importedVolumeName(
                             objectName = objectName,
                             volumeName = volume.displayName,
@@ -110,6 +114,7 @@ internal suspend fun importOrcaModels(
                             } ?: 0,
                             role = volume.role,
                             config = volume.config,
+                            orcaFacetAnnotations = volume.orcaFacetAnnotations,
                         )
                     }
                     ImportedGeometry(
@@ -131,6 +136,7 @@ internal suspend fun importOrcaModels(
                                 filamentSlot = volume.filamentSlot,
                                 role = volume.role,
                                 config = volume.config,
+                                orcaFacetAnnotations = volume.orcaFacetAnnotations,
                             )
                         },
                         transform = transforms[index],
@@ -159,6 +165,7 @@ private data class ImportedVolumeGeometry(
     val filamentSlot: Int,
     val role: ProjectVolumeRole = ProjectVolumeRole.MODEL_PART,
     val config: ProjectVolumeConfig = ProjectVolumeConfig(),
+    val orcaFacetAnnotations: OrcaFacetAnnotations = OrcaFacetAnnotations(),
 )
 
 private data class ImportedGeometry(

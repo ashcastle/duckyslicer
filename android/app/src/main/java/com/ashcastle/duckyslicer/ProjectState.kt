@@ -11,6 +11,7 @@ data class ProjectVolume(
     val supportPaint: SupportPaint = SupportPaint(),
     val seamPaint: SeamPaint = SeamPaint(),
     val multiColorPaint: MultiColorPaint = MultiColorPaint(),
+    val orcaFacetAnnotations: OrcaFacetAnnotations = OrcaFacetAnnotations(),
     val filamentSlot: Int = 0,
     val role: ProjectVolumeRole = ProjectVolumeRole.MODEL_PART,
     val config: ProjectVolumeConfig = ProjectVolumeConfig(),
@@ -19,8 +20,20 @@ data class ProjectVolume(
         require(id.length in 1..ProjectStore.MAX_ID_LENGTH) { "Invalid project volume id" }
         require(role.acceptsFacetPaint || (
             supportPaint.facets.isEmpty() && seamPaint.facets.isEmpty() &&
-                multiColorPaint.facets.isEmpty()
+                multiColorPaint.facets.isEmpty() && orcaFacetAnnotations.isEmpty
         )) { "Auxiliary project volumes cannot carry facet paint" }
+        orcaFacetAnnotations.support.constrainedToTriangleCount(model.triangles)
+        orcaFacetAnnotations.seam.constrainedToTriangleCount(model.triangles)
+        orcaFacetAnnotations.multiColor.constrainedToTriangleCount(model.triangles)
+        require(orcaFacetAnnotations.support.maximumState <= 2) {
+            "Support facet annotation state is invalid"
+        }
+        require(orcaFacetAnnotations.seam.maximumState <= 2) {
+            "Seam facet annotation state is invalid"
+        }
+        require(orcaFacetAnnotations.multiColor.maximumState <= MAX_FILAMENT_SLOTS) {
+            "Multi-color facet annotation state is invalid"
+        }
         require(role.acceptsFilament || filamentSlot == 0) {
             "Auxiliary project volume filament assignment is invalid"
         }
@@ -452,6 +465,11 @@ data class ProjectHistoryState(
                     volume.copy(
                         filamentSlot = volume.filamentSlot.takeIf { it < slotCount } ?: 0,
                         multiColorPaint = volume.multiColorPaint.constrainedToSlotCount(slotCount),
+                        orcaFacetAnnotations = volume.orcaFacetAnnotations.copy(
+                            multiColor = volume.orcaFacetAnnotations.multiColor.takeIf {
+                                it.maximumState <= slotCount
+                            } ?: OrcaFacetAnnotation(),
+                        ),
                     )
                 },
             )
@@ -492,7 +510,18 @@ data class ProjectHistoryState(
                 if (projectObject.id == objectId) {
                     projectObject.copy(
                         volumes = projectObject.volumes.map { volume ->
-                            if (volume.id == volumeId) volume.copy(supportPaint = supportPaint) else volume
+                            if (volume.id == volumeId) {
+                                volume.copy(
+                                    supportPaint = supportPaint,
+                                    orcaFacetAnnotations = if (recordHistory) {
+                                        volume.orcaFacetAnnotations.copy(
+                                            support = OrcaFacetAnnotation(),
+                                        )
+                                    } else {
+                                        volume.orcaFacetAnnotations
+                                    },
+                                )
+                            } else volume
                         },
                     )
                 } else {
@@ -532,7 +561,25 @@ data class ProjectHistoryState(
                 }
             },
         )
+        val finalized = current.updateActivePlate(
+            objects = current.objects.map { projectObject ->
+                if (projectObject.id == objectId) {
+                    projectObject.copy(
+                        volumes = projectObject.volumes.map { volume ->
+                            if (volume.id == volumeId) {
+                                volume.copy(
+                                    orcaFacetAnnotations = volume.orcaFacetAnnotations.copy(
+                                        support = OrcaFacetAnnotation(),
+                                    ),
+                                )
+                            } else volume
+                        },
+                    )
+                } else projectObject
+            },
+        )
         return copy(
+            current = finalized,
             undoStates = (undoStates + previousSnapshot).takeLast(HISTORY_LIMIT),
             redoStates = emptyList(),
         )
@@ -567,7 +614,18 @@ data class ProjectHistoryState(
                 if (projectObject.id == objectId) {
                     projectObject.copy(
                         volumes = projectObject.volumes.map { volume ->
-                            if (volume.id == volumeId) volume.copy(seamPaint = seamPaint) else volume
+                            if (volume.id == volumeId) {
+                                volume.copy(
+                                    seamPaint = seamPaint,
+                                    orcaFacetAnnotations = if (recordHistory) {
+                                        volume.orcaFacetAnnotations.copy(
+                                            seam = OrcaFacetAnnotation(),
+                                        )
+                                    } else {
+                                        volume.orcaFacetAnnotations
+                                    },
+                                )
+                            } else volume
                         },
                     )
                 } else {
@@ -607,7 +665,25 @@ data class ProjectHistoryState(
                 }
             },
         )
+        val finalized = current.updateActivePlate(
+            objects = current.objects.map { projectObject ->
+                if (projectObject.id == objectId) {
+                    projectObject.copy(
+                        volumes = projectObject.volumes.map { volume ->
+                            if (volume.id == volumeId) {
+                                volume.copy(
+                                    orcaFacetAnnotations = volume.orcaFacetAnnotations.copy(
+                                        seam = OrcaFacetAnnotation(),
+                                    ),
+                                )
+                            } else volume
+                        },
+                    )
+                } else projectObject
+            },
+        )
         return copy(
+            current = finalized,
             undoStates = (undoStates + previousSnapshot).takeLast(HISTORY_LIMIT),
             redoStates = emptyList(),
         )
@@ -642,7 +718,18 @@ data class ProjectHistoryState(
                 if (projectObject.id == objectId) {
                     projectObject.copy(
                         volumes = projectObject.volumes.map { volume ->
-                            if (volume.id == volumeId) volume.copy(multiColorPaint = multiColorPaint) else volume
+                            if (volume.id == volumeId) {
+                                volume.copy(
+                                    multiColorPaint = multiColorPaint,
+                                    orcaFacetAnnotations = if (recordHistory) {
+                                        volume.orcaFacetAnnotations.copy(
+                                            multiColor = OrcaFacetAnnotation(),
+                                        )
+                                    } else {
+                                        volume.orcaFacetAnnotations
+                                    },
+                                )
+                            } else volume
                         },
                     )
                 } else {
@@ -685,7 +772,25 @@ data class ProjectHistoryState(
                 }
             },
         )
+        val finalized = current.updateActivePlate(
+            objects = current.objects.map { projectObject ->
+                if (projectObject.id == objectId) {
+                    projectObject.copy(
+                        volumes = projectObject.volumes.map { volume ->
+                            if (volume.id == volumeId) {
+                                volume.copy(
+                                    orcaFacetAnnotations = volume.orcaFacetAnnotations.copy(
+                                        multiColor = OrcaFacetAnnotation(),
+                                    ),
+                                )
+                            } else volume
+                        },
+                    )
+                } else projectObject
+            },
+        )
         return copy(
+            current = finalized,
             undoStates = (undoStates + previousSnapshot).takeLast(HISTORY_LIMIT),
             redoStates = emptyList(),
         )

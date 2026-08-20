@@ -37,7 +37,8 @@ internal fun ProjectObject.withSimplifiedModel(model: ModelInfo): SimplifyProjec
         "Simplified model did not reduce detail"
     }
     val clearedSurfacePaint = supportPaint.facets.isNotEmpty() ||
-        seamPaint.facets.isNotEmpty() || multiColorPaint.facets.isNotEmpty()
+        seamPaint.facets.isNotEmpty() || multiColorPaint.facets.isNotEmpty() ||
+        !singleVolume.orcaFacetAnnotations.isEmpty
     return SimplifyProjectResult(
         projectObject = updateSingleVolume { volume ->
             volume.copy(
@@ -45,6 +46,7 @@ internal fun ProjectObject.withSimplifiedModel(model: ModelInfo): SimplifyProjec
                 supportPaint = SupportPaint(),
                 seamPaint = SeamPaint(),
                 multiColorPaint = MultiColorPaint(),
+                orcaFacetAnnotations = OrcaFacetAnnotations(),
             )
         },
         clearedSurfacePaint = clearedSurfacePaint,

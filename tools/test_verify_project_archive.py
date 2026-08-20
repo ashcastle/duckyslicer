@@ -16,13 +16,13 @@ def valid_sources() -> dict[str, str]:
             (
                 'PROJECT_ARCHIVE_MIME_TYPE = "application/vnd.duckyslicer.project+zip"',
                 'PROJECT_ARCHIVE_FILE_EXTENSION = ".duckyproject"',
-                "MAX_PROJECT_ARCHIVE_MANIFEST_BYTES = 1_048_576",
+                "MAX_PROJECT_ARCHIVE_MANIFEST_BYTES = 8_388_608",
                 "MAX_PROJECT_ARCHIVE_CONTENT_BYTES = 1_073_741_824L",
                 "MAX_PROJECT_ARCHIVE_FILE_BYTES = 1_082_130_432L",
                 "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
                 'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
                 "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-                "PROJECT_ARCHIVE_SCHEMA_VERSION = 66",
+                "PROJECT_ARCHIVE_SCHEMA_VERSION = 67",
                 'ArchivedProjectPlate ArchivedProjectVolume put("role", volume.role.name) '
                 'put("config", volume.config.toJson()) ProjectVolumeRole.valueOf '
                 "ProjectVolumeConfig.fromJson",
@@ -72,8 +72,13 @@ def valid_sources() -> dict[str, str]:
                 "checkCancellation: () -> Unit = {}",
                 "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
                 "beginCommit: () -> Unit = {} beginCommit()",
-                'SCHEMA_VERSION = 68 put("role", role.name) put("config", config.toJson())',
+                'SCHEMA_VERSION = 69 put("role", role.name) put("config", config.toJson())',
             )
+        ),
+        "OrcaFacetAnnotations.kt": (
+            "data class OrcaFacetAnnotation MAX_ANNOTATED_TRIANGLES = 100_000 "
+            "MAX_TRIANGLE_VALUE_BYTES = 4_096 MAX_SIDECAR_BYTES = 8 * 1_024 * 1_024 "
+            "fun readSidecar fun fromJson maximumTriangleState"
         ),
         "ProjectOpenRequest.kt": " ".join(
             (
@@ -279,8 +284,8 @@ def valid_sources() -> dict[str, str]:
         ),
         "SUPPORT.md": "`.duckyproject` model geometry include saved printer addresses, access keys, or G-code",
         "PROJECT_FORMAT.md": (
-            "manifest.json models/000.stl schema version `31` "
-            "Schema 1 through 31 projects remain readable up to 16 plates "
+            "manifest.json models/000.stl schema version `67` "
+            "Schema 1 through 67 projects remain readable up to 16 plates "
             "parameter modifier support blocker support enforcer "
             "plate-local objects and settings stable, bounded `volumes` list "
             "up to 64 volumes per object independent X, Y, and Z scale "

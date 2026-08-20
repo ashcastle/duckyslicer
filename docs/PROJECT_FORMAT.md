@@ -4,7 +4,7 @@ DuckySlicer saves portable projects with the `.duckyproject` extension and the M
 type `application/vnd.duckyslicer.project+zip`. The format is a versioned ZIP archive
 so a project can be inspected and recovered with standard tools.
 
-## Schema 31
+## Schema 67
 
 An archive contains exactly:
 
@@ -16,14 +16,16 @@ models/001.stl
 ```
 
 `manifest.json` identifies the format as `com.ashcastle.duckyslicer.project`, declares
-schema version `31`, and stores the selected plate plus a bounded `plates` list. Each plate
+schema version `67`, and stores the selected plate plus a bounded `plates` list. Each plate
 owns its stable identity, selected object, objects, and resolved printer, filament, and
 slicing settings. Each object owns a stable, bounded `volumes` list. The object owns its
 transform (including independent X, Y, and Z scale), variable layer-height ranges, and
 object-specific process overrides. It also owns up to 256 validated manual Brim-ear points
 in model-local coordinates and millimetre radius units. Each volume owns its stable identity,
 display name, model-entry reference, filament assignment, support and seam painting, and
-multi-color painting. A volume also records its Orca role (model part, negative volume,
+multi-color painting. Imported Orca/BBS projects additionally preserve the exact recursive
+facet annotations for support, seam, and multi-color painting instead of flattening a partially
+painted triangle into a whole-face edit. A volume also records its Orca role (model part, negative volume,
 parameter modifier, support blocker, or support enforcer) and bounded per-volume Orca overrides.
 Objects or volumes that share one source model also share one model entry. Resolved filament
 profiles preserve the diameter used to calculate E-axis extrusion plus the material density and
@@ -32,7 +34,7 @@ material semantics used by multi-material tool ordering and purging. Per-filamen
 wipe-tower purge volume and auxiliary cooling speed are retained alongside the printer's
 auxiliary-fan capability, so portable projects preserve tool-change and cooling output.
 
-Schema 1 through 31 projects remain readable and migrate deterministically to one plate.
+Schema 1 through 67 projects remain readable and migrate deterministically to one plate.
 Their single object-level model, filament, and paint fields migrate deterministically to
 one stable volume; older uniform-scale transforms, missing object-specific settings, and
 missing Brim points receive safe defaults. Current projects may contain up to 16 plates and
@@ -66,7 +68,7 @@ The current bounds are:
 
 - 16 plates
 - 256 objects, volumes, and unique models across the project
-- 1 MiB manifest
+- 8 MiB manifest
 - 512 MiB per model
 - 1 GiB total uncompressed content
 - 1,082,130,432 bytes for the compressed input stream

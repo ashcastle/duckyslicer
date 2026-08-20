@@ -2848,6 +2848,28 @@ object OnDeviceSlicer {
                         ).also(it::writeSidecar)
                     }
             }
+            val orcaSupportAnnotationFiles = volumes.mapIndexed { index, volume ->
+                volume.orcaFacetAnnotations.support
+                    .takeIf { it.triangles.isNotEmpty() }
+                    ?.let {
+                        File.createTempFile(
+                            "slice-orca-support-$index-",
+                            ".bin",
+                            File(volume.model.localPath).parentFile,
+                        ).also(it::writeSidecar)
+                    }
+            }
+            val orcaSeamAnnotationFiles = volumes.mapIndexed { index, volume ->
+                volume.orcaFacetAnnotations.seam
+                    .takeIf { it.triangles.isNotEmpty() }
+                    ?.let {
+                        File.createTempFile(
+                            "slice-orca-seam-$index-",
+                            ".bin",
+                            File(volume.model.localPath).parentFile,
+                        ).also(it::writeSidecar)
+                    }
+            }
             val variableLayerHeightFiles = objects.mapIndexed { index, projectObject ->
                 projectObject.variableLayerHeights
                     .takeIf { it.ranges.isNotEmpty() }
@@ -2865,6 +2887,17 @@ object OnDeviceSlicer {
                     ?.let {
                         File.createTempFile(
                             "slice-colors-$index-",
+                            ".bin",
+                            File(volume.model.localPath).parentFile,
+                        ).also(it::writeSidecar)
+                    }
+            }
+            val orcaMultiColorAnnotationFiles = volumes.mapIndexed { index, volume ->
+                volume.orcaFacetAnnotations.multiColor
+                    .takeIf { it.triangles.isNotEmpty() }
+                    ?.let {
+                        File.createTempFile(
+                            "slice-orca-colors-$index-",
                             ".bin",
                             File(volume.model.localPath).parentFile,
                         ).also(it::writeSidecar)
@@ -2920,6 +2953,9 @@ object OnDeviceSlicer {
                     filamentSlots = volumes.map(ProjectVolume::filamentSlot).toIntArray(),
                     volumeRoles = volumes.map { it.role.nativeValue }.toIntArray(),
                     volumeConfigFiles = volumeConfigFiles,
+                    orcaSupportAnnotationFiles = orcaSupportAnnotationFiles,
+                    orcaSeamAnnotationFiles = orcaSeamAnnotationFiles,
+                    orcaMultiColorAnnotationFiles = orcaMultiColorAnnotationFiles,
                     foregroundSession = foregroundSession,
                     cancellationRequested = cancellationRequested,
                     onProgress = onProgress,
@@ -2928,6 +2964,9 @@ object OnDeviceSlicer {
                 supportPaintFiles.filterNotNull().forEach(File::delete)
                 seamPaintFiles.filterNotNull().forEach(File::delete)
                 multiColorPaintFiles.filterNotNull().forEach(File::delete)
+                orcaSupportAnnotationFiles.filterNotNull().forEach(File::delete)
+                orcaSeamAnnotationFiles.filterNotNull().forEach(File::delete)
+                orcaMultiColorAnnotationFiles.filterNotNull().forEach(File::delete)
                 variableLayerHeightFiles.filterNotNull().forEach(File::delete)
                 processOverrideFiles.filterNotNull().forEach(File::delete)
                 brimPointFiles.filterNotNull().forEach(File::delete)

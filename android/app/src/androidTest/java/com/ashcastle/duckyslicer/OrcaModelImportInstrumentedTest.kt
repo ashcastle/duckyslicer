@@ -226,6 +226,100 @@ class OrcaModelImportInstrumentedTest {
     }
 
     @Test
+    fun standard3mfPreservesExactFacetPaintThroughStorageAndNativeSlice() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        val archive = File(context.cacheDir, "painted-object.3mf")
+        var gcode: File? = null
+        projectRoot.deleteRecursively()
+        archive.delete()
+        try {
+            writeStandard3mf(archive, painted = true)
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.debug-files",
+                archive,
+            )
+            val options = SliceOptions().copy(
+                filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+                bedSizeX = 100f,
+                bedSizeY = 100f,
+                bedPolygon = rectangularBedPolygon(100f, 100f),
+            )
+            val store = ProjectStore(context)
+            val imported = importOrcaModels(context, uri, store, options)
+            val painted = imported.first().singleVolume.orcaFacetAnnotations
+
+            assertEquals("841", painted.support.triangles[0])
+            assertEquals("8", painted.seam.triangles[0])
+            assertEquals("8", painted.multiColor.triangles[0])
+            store.save(ProjectSnapshot(imported, imported.first().id), options)
+            val restored = store.loadProject().snapshot.objects
+            assertEquals(
+                painted,
+                restored.first().singleVolume.orcaFacetAnnotations,
+            )
+
+            val outcome = OnDeviceSlicer.slice(restored, options)
+            gcode = outcome.output
+            val commands = outcome.output.readLines().map(String::trim)
+            assertTrue("Exact imported facet paint must produce real G-code", outcome.layers > 0)
+            assertTrue("Imported color annotation must reach Orca as tool 1", commands.any { it == "T1" })
+        } finally {
+            gcode?.delete()
+            archive.delete()
+            projectRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun bbs3mfPreservesExactFacetPaintThroughStorageAndNativeSlice() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        val archive = File(context.cacheDir, "bbs-painted-object.3mf")
+        var gcode: File? = null
+        projectRoot.deleteRecursively()
+        archive.delete()
+        try {
+            writeStandard3mf(archive, bbsPainted = true)
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.debug-files",
+                archive,
+            )
+            val options = SliceOptions().copy(
+                filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+                bedSizeX = 100f,
+                bedSizeY = 100f,
+                bedPolygon = rectangularBedPolygon(100f, 100f),
+            )
+            val store = ProjectStore(context)
+            val imported = importOrcaModels(context, uri, store, options)
+            val painted = imported.first().singleVolume.orcaFacetAnnotations
+
+            assertEquals("841", painted.support.triangles[0])
+            assertEquals("8", painted.seam.triangles[0])
+            assertEquals("8", painted.multiColor.triangles[0])
+            store.save(ProjectSnapshot(imported, imported.first().id), options)
+            val restored = store.loadProject().snapshot.objects
+            assertEquals(
+                painted,
+                restored.first().singleVolume.orcaFacetAnnotations,
+            )
+
+            val outcome = OnDeviceSlicer.slice(restored, options)
+            gcode = outcome.output
+            val commands = outcome.output.readLines().map(String::trim)
+            assertTrue("Exact BBS facet paint must produce real G-code", outcome.layers > 0)
+            assertTrue("Imported BBS color annotation must reach Orca as tool 1", commands.any { it == "T1" })
+        } finally {
+            gcode?.delete()
+            archive.delete()
+            projectRoot.deleteRecursively()
+        }
+    }
+
+    @Test
     fun standard3mfPreservesOneMultiVolumeObjectAndSlicesThroughOrca() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
@@ -382,7 +476,13 @@ class OrcaModelImportInstrumentedTest {
         }
     }
 
-    private fun writeStandard3mf(destination: File, pauseAtZ: Float? = null) {
+    private fun writeStandard3mf(
+        destination: File,
+        pauseAtZ: Float? = null,
+        painted: Boolean = false,
+        bbsPainted: Boolean = false,
+    ) {
+        require(!(painted && bbsPainted))
         ZipOutputStream(destination.outputStream().buffered()).use { zip ->
             zip.writeEntry(
                 "[Content_Types].xml",
@@ -404,9 +504,15 @@ class OrcaModelImportInstrumentedTest {
             zip.writeEntry(
                 "3D/3dmodel.model",
                 """<?xml version="1.0" encoding="UTF-8"?>
-                    <model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+                    <model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06">
+                      ${if (painted) """<metadata name="Application">PrusaSlicer-2.9.0</metadata>
+                      <metadata name="slic3rpe:Version3mf">1</metadata>
+                      <metadata name="slic3rpe:FdmSupportsPaintingVersion">1</metadata>
+                      <metadata name="slic3rpe:SeamPaintingVersion">1</metadata>
+                      <metadata name="slic3rpe:MmPaintingVersion">1</metadata>""" else if (bbsPainted) """<metadata name="Application">BambuStudio-01.09.00.00</metadata>
+                      <metadata name="BambuStudio:3mfVersion">1</metadata>""" else ""}
                       <resources>
-                        ${tetrahedronObject(1, "Left")}
+                        ${tetrahedronObject(1, "Left", painted = painted, bbsPainted = bbsPainted)}
                         ${tetrahedronObject(2, "Right")}
                       </resources>
                       <build>
@@ -525,7 +631,12 @@ class OrcaModelImportInstrumentedTest {
         }
     }
 
-    private fun tetrahedronObject(id: Int, name: String): String =
+    private fun tetrahedronObject(
+        id: Int,
+        name: String,
+        painted: Boolean = false,
+        bbsPainted: Boolean = false,
+    ): String =
         """<object id="$id" type="model" name="$name">
              <mesh>
                <vertices>
@@ -533,7 +644,7 @@ class OrcaModelImportInstrumentedTest {
                  <vertex x="0" y="10" z="0"/><vertex x="0" y="0" z="10"/>
                </vertices>
                <triangles>
-                 <triangle v1="0" v2="2" v3="1"/><triangle v1="0" v2="1" v3="3"/>
+                 <triangle v1="0" v2="2" v3="1"${if (painted) " slic3rpe:custom_supports=\"841\" slic3rpe:custom_seam=\"8\" slic3rpe:mmu_segmentation=\"8\"" else if (bbsPainted) " paint_supports=\"841\" paint_seam=\"8\" paint_color=\"8\"" else ""}/><triangle v1="0" v2="1" v3="3"/>
                  <triangle v1="0" v2="3" v3="2"/><triangle v1="1" v2="2" v3="3"/>
                </triangles>
              </mesh>

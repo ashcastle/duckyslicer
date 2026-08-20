@@ -113,7 +113,19 @@ class ProjectStoreTest {
         val modelFile = store.createModelDestination("settings.stl").apply { writeText("solid part") }
         val options = multiFilamentSettingsFixture()
         val snapshot = ProjectSnapshot(
-            listOf(ProjectObject("settings", inspectedModel(modelFile), filamentSlot = 1)),
+            listOf(
+                ProjectObject("settings", inspectedModel(modelFile), filamentSlot = 1).let {
+                    it.copy(
+                        volumes = listOf(
+                            it.singleVolume.copy(
+                                orcaFacetAnnotations = OrcaFacetAnnotations(
+                                    support = OrcaFacetAnnotation(mapOf(0 to "4")),
+                                ),
+                            ),
+                        ),
+                    )
+                },
+            ),
             "settings",
         )
         store.save(snapshot, options)
@@ -121,7 +133,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(68, persisted.getInt("schemaVersion"))
+        assertEquals(69, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),
@@ -144,12 +156,17 @@ class ProjectStoreTest {
         assertEquals(
             setOf(
                 "id", "displayName", "modelFile", "supportPaint", "seamPaint",
-                "multiColorPaint", "filamentSlot", "role", "config",
+                "multiColorPaint", "orcaSupportAnnotation", "orcaSeamAnnotation",
+                "orcaMultiColorAnnotation", "filamentSlot", "role", "config",
             ),
             persistedVolume.keys().asSequence().toSet(),
         )
         assertEquals(legacyProjectVolumeId("settings"), persistedVolume.getString("id"))
         assertEquals(snapshot.selectedObjectId, restored.snapshot.selectedObjectId)
+        assertEquals(
+            snapshot.selectedObject!!.singleVolume.orcaFacetAnnotations,
+            restored.snapshot.selectedObject!!.singleVolume.orcaFacetAnnotations,
+        )
         assertEquals(snapshot.objects.single().id, restored.snapshot.objects.single().id)
         assertEquals(
             snapshot.objects.single().singleVolume.id,

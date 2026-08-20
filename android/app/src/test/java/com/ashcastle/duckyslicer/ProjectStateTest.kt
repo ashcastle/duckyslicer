@@ -181,6 +181,40 @@ class ProjectStateTest {
     }
 
     @Test
+    fun editingImportedExactPaintReplacesOnlyThatCategoryAndUndoRestoresIt() {
+        val base = projectObject("imported")
+        val exactSupport = OrcaFacetAnnotation(mapOf(0 to "4"))
+        var state = ProjectHistoryState().add(
+            base.copy(
+                volumes = listOf(
+                    base.singleVolume.copy(
+                        orcaFacetAnnotations = OrcaFacetAnnotations(
+                            support = exactSupport,
+                            seam = OrcaFacetAnnotation(mapOf(0 to "8")),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        state = state.updateSupportPaint(
+            "imported",
+            SupportPaint().paint(0, SupportPaintState.BLOCK),
+            recordHistory = false,
+        )
+        assertEquals(exactSupport, state.current.selectedObject!!.singleVolume.orcaFacetAnnotations.support)
+        state = state.commitSupportPaint("imported", SupportPaint())
+
+        val edited = state.current.selectedObject!!.singleVolume
+        assertTrue(edited.orcaFacetAnnotations.support.triangles.isEmpty())
+        assertTrue(edited.orcaFacetAnnotations.seam.triangles.isNotEmpty())
+        state = state.undo()
+        val restored = state.current.selectedObject!!.singleVolume
+        assertEquals(exactSupport, restored.orcaFacetAnnotations.support)
+        assertTrue(restored.supportPaint.facets.isEmpty())
+    }
+
+    @Test
     fun seamPaintingIsObjectScopedAndUndoable() {
         var state = ProjectHistoryState().add(projectObject("part"))
         state = state.updateSeamPaint(

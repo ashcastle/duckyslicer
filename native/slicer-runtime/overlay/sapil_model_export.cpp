@@ -26,6 +26,9 @@ constexpr std::size_t MAX_VOLUME_CONFIG_ENTRIES = 128;
 constexpr std::size_t MAX_VOLUME_CONFIG_KEY_BYTES = 128;
 constexpr std::size_t MAX_VOLUME_CONFIG_VALUE_BYTES = 4 * 1024;
 constexpr std::uint64_t MAX_VOLUME_CONFIG_BYTES = 64 * 1024;
+constexpr std::size_t MAX_ANNOTATED_TRIANGLES = 100000;
+constexpr std::size_t MAX_ANNOTATION_VALUE_BYTES = 4 * 1024;
+constexpr std::uint64_t MAX_ANNOTATION_BYTES = 8ULL * 1024ULL * 1024ULL;
 constexpr int MAX_FILAMENT_SLOTS = 16;
 constexpr std::uint64_t MAX_EXPORTED_BYTES = 512ULL * 1024ULL * 1024ULL;
 constexpr std::uint64_t BINARY_STL_HEADER_BYTES = 84;
@@ -48,6 +51,13 @@ struct ProjectExportRecord {
     std::size_t object_ordinal;
     int volume_type;
     std::string config_path;
+    std::string support_annotation_path;
+    std::string seam_annotation_path;
+    std::string multi_color_annotation_path;
+};
+
+struct ParsedAnnotation {
+    std::vector<std::pair<std::uint32_t, std::string>> triangles;
 };
 
 bool valid_config_key(const std::string& key)
@@ -62,7 +72,7 @@ bool valid_config_key(const std::string& key)
     });
 }
 
-void write_u32_be(std::ofstream& output, std::uint32_t value)
+void write_u32_be(std::ostream& output, std::uint32_t value)
 {
     const std::array<unsigned char, 4> encoded{
         static_cast<unsigned char>((value >> 24U) & 0xFFU),
@@ -71,6 +81,178 @@ void write_u32_be(std::ofstream& output, std::uint32_t value)
         static_cast<unsigned char>(value & 0xFFU),
     };
     output.write(reinterpret_cast<const char*>(encoded.data()), encoded.size());
+}
+
+bool read_u32_be(std::istream& input, std::uint32_t& value)
+{
+    std::array<unsigned char, 4> bytes{};
+    if (!input.read(reinterpret_cast<char*>(bytes.data()), bytes.size())) return false;
+    value = (static_cast<std::uint32_t>(bytes[0]) << 24U) |
+            (static_cast<std::uint32_t>(bytes[1]) << 16U) |
+            (static_cast<std::uint32_t>(bytes[2]) << 8U) |
+            static_cast<std::uint32_t>(bytes[3]);
+    return true;
+}
+
+int hex_value(char value)
+{
+    if (value >= '0' && value <= '9') return value - '0';
+    if (value >= 'A' && value <= 'F') return value - 'A' + 10;
+    return -1;
+}
+
+bool valid_annotation_value(const std::string& value, int maximum_allowed_state)
+{
+    if (value.empty() || value.size() > MAX_ANNOTATION_VALUE_BYTES) return false;
+    std::size_t cursor = value.size();
+    std::size_t pending_nodes = 1;
+    while (pending_nodes > 0) {
+        if (cursor == 0) return false;
+        const int code = hex_value(value[--cursor]);
+        if (code < 0) return false;
+        --pending_nodes;
+        const int split_sides = code & 0b11;
+        if (split_sides != 0) {
+            pending_nodes += static_cast<std::size_t>(split_sides + 1);
+            if (pending_nodes > MAX_ANNOTATION_VALUE_BYTES * 4) return false;
+            continue;
+        }
+        int state = code >> 2;
+        if ((code & 0b1100) == 0b1100) {
+            int extensions = 0;
+            int next = 0;
+            do {
+                if (cursor == 0) return false;
+                next = hex_value(value[--cursor]);
+                if (next < 0) return false;
+                if (next == 0xF && ++extensions > 16) return false;
+            } while (next == 0xF);
+            state = next + 15 * extensions + 3;
+        }
+        if (state > maximum_allowed_state) return false;
+    }
+    return cursor == 0;
+}
+
+bool append_facet_annotation(
+    const std::string& directory,
+    std::size_t file_index,
+    const char* kind,
+    const Slic3r::FacetsAnnotation& annotation,
+    std::size_t triangle_count,
+    int maximum_allowed_state,
+    std::string& path,
+    std::vector<std::string>& outputs)
+{
+    if (annotation.empty()) {
+        path.clear();
+        return true;
+    }
+    std::vector<std::pair<std::uint32_t, std::string>> values;
+    std::uint64_t encoded_bytes = 8;
+    for (std::size_t triangle_index = 0; triangle_index < triangle_count; ++triangle_index) {
+        std::string value = annotation.get_triangle_as_string(static_cast<int>(triangle_index));
+        if (value.empty()) continue;
+        if (values.size() >= MAX_ANNOTATED_TRIANGLES ||
+            triangle_index > std::numeric_limits<std::uint32_t>::max() ||
+            !valid_annotation_value(value, maximum_allowed_state)) {
+            return false;
+        }
+        encoded_bytes += 8 + value.size();
+        if (encoded_bytes > MAX_ANNOTATION_BYTES) return false;
+        values.emplace_back(static_cast<std::uint32_t>(triangle_index), std::move(value));
+    }
+    if (values.empty()) {
+        path.clear();
+        return true;
+    }
+    char file_name[72];
+    std::snprintf(
+        file_name,
+        sizeof(file_name),
+        "project-volume-%s-annotation-%03zu.bin",
+        kind,
+        file_index);
+    path = directory + "/" + file_name;
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    if (!output) return false;
+    output.write("DOA1", 4);
+    write_u32_be(output, static_cast<std::uint32_t>(values.size()));
+    for (const auto& [triangle_index, value] : values) {
+        write_u32_be(output, triangle_index);
+        write_u32_be(output, static_cast<std::uint32_t>(value.size()));
+        output.write(value.data(), static_cast<std::streamsize>(value.size()));
+    }
+    output.close();
+    std::ifstream written(path, std::ios::binary | std::ios::ate);
+    if (!written || static_cast<std::uint64_t>(written.tellg()) != encoded_bytes) {
+        std::remove(path.c_str());
+        path.clear();
+        return false;
+    }
+    outputs.push_back(path);
+    return true;
+}
+
+bool read_facet_annotation(
+    const std::string& path,
+    std::size_t triangle_count,
+    int maximum_allowed_state,
+    ParsedAnnotation& parsed)
+{
+    parsed.triangles.clear();
+    if (path.empty()) return true;
+    std::ifstream input(path, std::ios::binary | std::ios::ate);
+    if (!input) return false;
+    const std::streamoff size = input.tellg();
+    if (size < 8 || static_cast<std::uint64_t>(size) > MAX_ANNOTATION_BYTES) return false;
+    input.seekg(0, std::ios::beg);
+    std::array<char, 4> magic{};
+    if (!input.read(magic.data(), magic.size()) || magic != std::array<char, 4>{'D', 'O', 'A', '1'}) {
+        return false;
+    }
+    std::uint32_t count = 0;
+    if (!read_u32_be(input, count) || count > MAX_ANNOTATED_TRIANGLES) return false;
+    parsed.triangles.reserve(count);
+    std::uint64_t consumed = 8;
+    std::uint32_t previous_index = 0;
+    bool has_previous = false;
+    for (std::uint32_t entry = 0; entry < count; ++entry) {
+        std::uint32_t triangle_index = 0;
+        std::uint32_t value_size = 0;
+        if (!read_u32_be(input, triangle_index) || !read_u32_be(input, value_size) ||
+            triangle_index >= triangle_count || (has_previous && triangle_index <= previous_index) ||
+            value_size == 0 || value_size > MAX_ANNOTATION_VALUE_BYTES) {
+            return false;
+        }
+        consumed += 8 + value_size;
+        if (consumed > static_cast<std::uint64_t>(size) || consumed > MAX_ANNOTATION_BYTES) {
+            return false;
+        }
+        std::string value(value_size, '\0');
+        if (!input.read(value.data(), static_cast<std::streamsize>(value.size())) ||
+            !valid_annotation_value(value, maximum_allowed_state)) {
+            return false;
+        }
+        parsed.triangles.emplace_back(triangle_index, std::move(value));
+        previous_index = triangle_index;
+        has_previous = true;
+    }
+    return consumed == static_cast<std::uint64_t>(size) && input.peek() == EOF;
+}
+
+void apply_facet_annotation(
+    Slic3r::FacetsAnnotation& annotation,
+    std::size_t triangle_count,
+    const ParsedAnnotation& parsed)
+{
+    annotation.reset();
+    if (parsed.triangles.empty()) return;
+    annotation.reserve(triangle_count);
+    for (const auto& [triangle_index, value] : parsed.triangles) {
+        annotation.set_triangle_from_string(static_cast<int>(triangle_index), value);
+    }
+    annotation.shrink_to_fit();
 }
 
 bool append_volume_config(
@@ -243,7 +425,9 @@ jobjectArray encode_project_records(
             record.volume_name + "\t" + std::to_string(record.center_x) + "\t" +
             std::to_string(record.center_y) + "\t" + std::to_string(record.filament_slot) +
             "\t" + std::to_string(record.object_ordinal) + "\t" +
-            std::to_string(record.volume_type) + "\t" + record.config_path;
+            std::to_string(record.volume_type) + "\t" + record.config_path + "\t" +
+            record.support_annotation_path + "\t" + record.seam_annotation_path + "\t" +
+            record.multi_color_annotation_path;
         jstring value = env->NewStringUTF(encoded.c_str());
         if (value == nullptr) {
             remove_outputs(outputs);
@@ -430,6 +614,39 @@ Java_com_u1_slicer_NativeLibrary_nativeExportLoadedProjectVolumes(
                     remove_outputs(outputs);
                     return nullptr;
                 }
+                std::string support_annotation_path;
+                std::string seam_annotation_path;
+                std::string multi_color_annotation_path;
+                if (!append_facet_annotation(
+                        directory,
+                        project_records.size(),
+                        "support",
+                        volume->supported_facets,
+                        triangles,
+                        2,
+                        support_annotation_path,
+                        outputs) ||
+                    !append_facet_annotation(
+                        directory,
+                        project_records.size(),
+                        "seam",
+                        volume->seam_facets,
+                        triangles,
+                        2,
+                        seam_annotation_path,
+                        outputs) ||
+                    !append_facet_annotation(
+                        directory,
+                        project_records.size(),
+                        "color",
+                        volume->mmu_segmentation_facets,
+                        triangles,
+                        MAX_FILAMENT_SLOTS,
+                        multi_color_annotation_path,
+                        outputs)) {
+                    remove_outputs(outputs);
+                    return nullptr;
+                }
                 project_records.push_back({
                     flat.path,
                     object_name,
@@ -440,6 +657,9 @@ Java_com_u1_slicer_NativeLibrary_nativeExportLoadedProjectVolumes(
                     object_ordinal,
                     static_cast<int>(volume->type()),
                     std::move(config_path),
+                    std::move(support_annotation_path),
+                    std::move(seam_annotation_path),
+                    std::move(multi_color_annotation_path),
                 });
                 ++volume_ordinal;
             }
@@ -469,17 +689,69 @@ Java_com_u1_slicer_NativeLibrary_nativeGetUnsupportedProjectSemanticCount(
     for (const Slic3r::ModelObject* object : model.objects) {
         if (object == nullptr) continue;
         for (const Slic3r::ModelVolume* volume : object->volumes) {
-            if (volume != nullptr && (
-                    volume->is_fdm_support_painted() ||
-                    volume->is_seam_painted() ||
-                    volume->is_mm_painted() ||
-                    volume->is_fuzzy_skin_painted())) {
+            if (volume != nullptr && volume->is_fuzzy_skin_painted()) {
                 ++unsupported;
             }
         }
     }
     if (unsupported > static_cast<std::size_t>(std::numeric_limits<jint>::max())) return -1;
     return static_cast<jint>(unsupported);
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_u1_slicer_NativeLibrary_nativeApplyOrcaFacetAnnotations(
+    JNIEnv* env,
+    jobject,
+    jint object_index,
+    jint volume_index,
+    jstring support_path,
+    jstring seam_path,
+    jstring multi_color_path)
+{
+    if (!sapil::isModelLoaded() || object_index < 0 || volume_index < 0 ||
+        support_path == nullptr || seam_path == nullptr || multi_color_path == nullptr) {
+        return JNI_FALSE;
+    }
+    Slic3r::Model& model = sapil::getGlobalModel();
+    if (static_cast<std::size_t>(object_index) >= model.objects.size()) return JNI_FALSE;
+    Slic3r::ModelObject* object = model.objects[static_cast<std::size_t>(object_index)];
+    if (object == nullptr || static_cast<std::size_t>(volume_index) >= object->volumes.size()) {
+        return JNI_FALSE;
+    }
+    Slic3r::ModelVolume* volume = object->volumes[static_cast<std::size_t>(volume_index)];
+    if (volume == nullptr || !volume->is_model_part()) return JNI_FALSE;
+
+    auto string_value = [env](jstring value, std::string& output) -> bool {
+        const char* chars = env->GetStringUTFChars(value, nullptr);
+        if (chars == nullptr) return false;
+        output.assign(chars);
+        env->ReleaseStringUTFChars(value, chars);
+        return output.size() <= 900;
+    };
+    std::string support;
+    std::string seam;
+    std::string multi_color;
+    if (!string_value(support_path, support) || !string_value(seam_path, seam) ||
+        !string_value(multi_color_path, multi_color)) {
+        return JNI_FALSE;
+    }
+    const std::size_t triangle_count = volume->mesh().facets_count();
+    ParsedAnnotation parsed_support;
+    ParsedAnnotation parsed_seam;
+    ParsedAnnotation parsed_multi_color;
+    if (!read_facet_annotation(support, triangle_count, 2, parsed_support) ||
+        !read_facet_annotation(seam, triangle_count, 2, parsed_seam) ||
+        !read_facet_annotation(
+            multi_color,
+            triangle_count,
+            MAX_FILAMENT_SLOTS,
+            parsed_multi_color)) {
+        return JNI_FALSE;
+    }
+    apply_facet_annotation(volume->supported_facets, triangle_count, parsed_support);
+    apply_facet_annotation(volume->seam_facets, triangle_count, parsed_seam);
+    apply_facet_annotation(volume->mmu_segmentation_facets, triangle_count, parsed_multi_color);
+    return JNI_TRUE;
 }
 
 extern "C" JNIEXPORT jobjectArray JNICALL

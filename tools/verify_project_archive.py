@@ -66,6 +66,7 @@ def _strings(name: str, source: str) -> dict[str, str]:
 def verify_project_archive(sources: dict[str, str]) -> None:
     required_files = {
         "ProjectArchive.kt",
+        "OrcaFacetAnnotations.kt",
         "ProjectVolumeSemantics.kt",
         "ProjectStore.kt",
         "ProjectOpenRequest.kt",
@@ -103,13 +104,13 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         (
             'PROJECT_ARCHIVE_MIME_TYPE = "application/vnd.duckyslicer.project+zip"',
             'PROJECT_ARCHIVE_FILE_EXTENSION = ".duckyproject"',
-            "MAX_PROJECT_ARCHIVE_MANIFEST_BYTES = 1_048_576",
+            "MAX_PROJECT_ARCHIVE_MANIFEST_BYTES = 8_388_608",
             "MAX_PROJECT_ARCHIVE_CONTENT_BYTES = 1_073_741_824L",
             "MAX_PROJECT_ARCHIVE_FILE_BYTES = 1_082_130_432L",
             "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
             'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
             "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-            "PROJECT_ARCHIVE_SCHEMA_VERSION = 66",
+            "PROJECT_ARCHIVE_SCHEMA_VERSION = 67",
             "ArchivedProjectPlate",
             "ArchivedProjectVolume",
             'put("role", volume.role.name)',
@@ -173,9 +174,22 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
             "beginCommit: () -> Unit = {}",
             "beginCommit()",
-            "SCHEMA_VERSION = 68",
+            "SCHEMA_VERSION = 69",
             'put("role", role.name)',
             'put("config", config.toJson())',
+        ),
+    )
+    _require_markers(
+        "OrcaFacetAnnotations.kt",
+        sources["OrcaFacetAnnotations.kt"],
+        (
+            "data class OrcaFacetAnnotation",
+            "MAX_ANNOTATED_TRIANGLES = 100_000",
+            "MAX_TRIANGLE_VALUE_BYTES = 4_096",
+            "MAX_SIDECAR_BYTES = 8 * 1_024 * 1_024",
+            "fun readSidecar",
+            "fun fromJson",
+            "maximumTriangleState",
         ),
     )
     if store.index("save(snapshot, plateOptions)") > store.index(
@@ -489,8 +503,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         (
             "manifest.json",
             "models/000.stl",
-            "schema version `31`",
-            "Schema 1 through 31 projects remain readable",
+            "schema version `67`",
+            "Schema 1 through 67 projects remain readable",
             "parameter modifier",
             "support blocker",
             "support enforcer",
@@ -661,6 +675,9 @@ def read_sources() -> dict[str, str]:
     tests = ROOT / "android/app/src"
     return {
         "ProjectArchive.kt": (package / "ProjectArchive.kt").read_text(encoding="utf-8"),
+        "OrcaFacetAnnotations.kt": (package / "OrcaFacetAnnotations.kt").read_text(
+            encoding="utf-8"
+        ),
         "ProjectVolumeSemantics.kt": (package / "ProjectVolumeSemantics.kt").read_text(
             encoding="utf-8"
         ),

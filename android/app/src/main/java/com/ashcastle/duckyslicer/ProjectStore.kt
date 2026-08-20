@@ -164,6 +164,7 @@ internal class ProjectStore(
                                         supportPaint = volume.supportPaint,
                                         seamPaint = volume.seamPaint,
                                         multiColorPaint = volume.multiColorPaint,
+                                        orcaFacetAnnotations = volume.orcaFacetAnnotations,
                                         filamentSlot = volume.filamentSlot,
                                         role = volume.role,
                                         config = volume.config,
@@ -298,7 +299,8 @@ internal class ProjectStore(
             require(plate.objects.none { projectObject ->
                 projectObject.volumes.any { volume ->
                     volume.filamentSlot !in availableSlots ||
-                        volume.multiColorPaint.facets.values.any { it !in availableSlots }
+                        volume.multiColorPaint.facets.values.any { it !in availableSlots } ||
+                        volume.orcaFacetAnnotations.multiColor.maximumState > availableSlots.count()
                 }
             })
         }
@@ -339,7 +341,8 @@ internal class ProjectStore(
             require(plate.objects.all { projectObject ->
                 projectObject.volumes.all { volume ->
                     volume.filamentSlot in availableSlots &&
-                        volume.multiColorPaint.facets.values.all { it in availableSlots }
+                        volume.multiColorPaint.facets.values.all { it in availableSlots } &&
+                        volume.orcaFacetAnnotations.multiColor.maximumState <= availableSlots.count()
                 }
             }) { "Project filament assignment is invalid" }
         }
@@ -471,6 +474,24 @@ internal class ProjectStore(
         val multiColorPaint = value.optJSONArray("multiColorPaint")
             ?.toMultiColorPaint(model.triangles)
             ?: MultiColorPaint()
+        val orcaFacetAnnotations = if (schemaVersion >= 69) {
+            OrcaFacetAnnotations(
+                support = OrcaFacetAnnotation.fromJson(
+                    value.getJSONArray("orcaSupportAnnotation"),
+                    model.triangles,
+                ),
+                seam = OrcaFacetAnnotation.fromJson(
+                    value.getJSONArray("orcaSeamAnnotation"),
+                    model.triangles,
+                ),
+                multiColor = OrcaFacetAnnotation.fromJson(
+                    value.getJSONArray("orcaMultiColorAnnotation"),
+                    model.triangles,
+                ),
+            )
+        } else {
+            OrcaFacetAnnotations()
+        }
         val filamentSlot = value.optInt("filamentSlot", 0)
         require(filamentSlot in 0 until MAX_FILAMENT_SLOTS) { "Filament slot is invalid" }
         val role = if (schemaVersion >= 29) {
@@ -489,6 +510,7 @@ internal class ProjectStore(
             supportPaint = supportPaint,
             seamPaint = seamPaint,
             multiColorPaint = multiColorPaint,
+            orcaFacetAnnotations = orcaFacetAnnotations,
             filamentSlot = filamentSlot,
             role = role,
             config = config,
@@ -640,6 +662,20 @@ internal class ProjectStore(
         require(value.optJSONArray("supportPaint")?.isValidSupportPaintArray() == true)
         require(value.optJSONArray("seamPaint")?.isValidSeamPaintArray() == true)
         require(value.optJSONArray("multiColorPaint")?.isValidMultiColorPaintArray() == true)
+        if (schemaVersion >= 69) {
+            require(
+                value.optJSONArray("orcaSupportAnnotation")
+                    ?.let(OrcaFacetAnnotation::isValidJson) == true,
+            )
+            require(
+                value.optJSONArray("orcaSeamAnnotation")
+                    ?.let(OrcaFacetAnnotation::isValidJson) == true,
+            )
+            require(
+                value.optJSONArray("orcaMultiColorAnnotation")
+                    ?.let(OrcaFacetAnnotation::isValidJson) == true,
+            )
+        }
         require(value.optInt("filamentSlot", -1) in 0 until MAX_FILAMENT_SLOTS)
         if (schemaVersion >= 29) {
             val role = ProjectVolumeRole.valueOf(value.getString("role"))
@@ -648,6 +684,11 @@ internal class ProjectStore(
                 require(value.getJSONArray("supportPaint").length() == 0)
                 require(value.getJSONArray("seamPaint").length() == 0)
                 require(value.getJSONArray("multiColorPaint").length() == 0)
+                if (schemaVersion >= 69) {
+                    require(value.getJSONArray("orcaSupportAnnotation").length() == 0)
+                    require(value.getJSONArray("orcaSeamAnnotation").length() == 0)
+                    require(value.getJSONArray("orcaMultiColorAnnotation").length() == 0)
+                }
             }
             if (!role.acceptsFilament) require(value.getInt("filamentSlot") == 0)
         }
@@ -685,6 +726,9 @@ internal class ProjectStore(
             .put("supportPaint", supportPaint.toStoredJson())
             .put("seamPaint", seamPaint.toStoredJson())
             .put("multiColorPaint", multiColorPaint.toStoredJson())
+            .put("orcaSupportAnnotation", orcaFacetAnnotations.support.toJson())
+            .put("orcaSeamAnnotation", orcaFacetAnnotations.seam.toJson())
+            .put("orcaMultiColorAnnotation", orcaFacetAnnotations.multiColor.toJson())
             .put("role", role.name)
             .put("config", config.toJson())
             .put(
@@ -945,13 +989,13 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 68
+        const val SCHEMA_VERSION = 69
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"
         const val MODELS_DIRECTORY = "models"
         const val PROJECT_FILE = "current_project.json"
-        const val MAX_PROJECT_BYTES = 1_048_576L
+        const val MAX_PROJECT_BYTES = 8_388_608L
         const val MAX_PROJECT_OBJECTS = 256
         const val MAX_PROJECT_VOLUMES = 256
         const val SUPPORTED_PROJECT_VOLUMES_PER_OBJECT = MAX_PROJECT_VOLUMES_PER_OBJECT

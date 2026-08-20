@@ -88,6 +88,11 @@ class ProjectArchiveTest {
                             config = ProjectVolumeConfig(
                                 mapOf("wall_loops" to "5", "sparse_infill_density" to "31%"),
                             ),
+                            orcaFacetAnnotations = OrcaFacetAnnotations(
+                                support = OrcaFacetAnnotation(mapOf(0 to "841")),
+                                seam = OrcaFacetAnnotation(mapOf(1 to "8")),
+                                multiColor = OrcaFacetAnnotation(mapOf(0 to "8")),
+                            ),
                         ),
                     ),
                 )
@@ -109,6 +114,7 @@ class ProjectArchiveTest {
                         supportPaint = SupportPaint(),
                         seamPaint = SeamPaint(),
                         multiColorPaint = MultiColorPaint(),
+                        orcaFacetAnnotations = OrcaFacetAnnotations(),
                         filamentSlot = 0,
                         role = ProjectVolumeRole.NEGATIVE_VOLUME,
                         config = ProjectVolumeConfig(),
@@ -138,7 +144,7 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(66, manifest.getInt("schemaVersion"))
+            assertEquals(67, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(
@@ -157,7 +163,8 @@ class ProjectArchiveTest {
             assertEquals(
                 setOf(
                     "id", "displayName", "modelEntry", "supportPaint", "seamPaint",
-                    "multiColorPaint", "filamentSlot", "role", "config",
+                    "multiColorPaint", "orcaSupportAnnotation", "orcaSeamAnnotation",
+                    "orcaMultiColorAnnotation", "filamentSlot", "role", "config",
                 ),
                 manifestVolume.keys().asSequence().toSet(),
             )
@@ -188,6 +195,10 @@ class ProjectArchiveTest {
             assertEquals(first.seamPaint, imported.snapshot.objects[0].seamPaint)
             assertEquals(second.volumes[0].seamPaint, imported.snapshot.objects[1].volumes[0].seamPaint)
             assertEquals(first.multiColorPaint, imported.snapshot.objects[0].multiColorPaint)
+            assertEquals(
+                first.singleVolume.orcaFacetAnnotations,
+                imported.snapshot.objects[0].singleVolume.orcaFacetAnnotations,
+            )
             assertEquals(second.volumes[0].multiColorPaint, imported.snapshot.objects[1].volumes[0].multiColorPaint)
             assertEquals(first.singleVolume.config, imported.snapshot.objects[0].singleVolume.config)
             assertEquals(

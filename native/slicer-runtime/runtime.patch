@@ -4422,3 +4422,38 @@ index 1158e2c4..1f4c23e3 100644
  JNIEXPORT jint JNICALL
  Java_com_u1_slicer_NativeLibrary_nativeSplitVolume(JNIEnv*, jobject, jint objIdx, jint volIdx) {
      if (!g_engine) return -1;
+diff --git a/app/src/main/cpp/src/sapil_model.cpp b/app/src/main/cpp/src/sapil_model.cpp
+index 34d6650d..7b9dc90e 100644
+--- a/app/src/main/cpp/src/sapil_model.cpp
++++ b/app/src/main/cpp/src/sapil_model.cpp
+@@ -181,11 +181,25 @@ bool SlicerEngine::loadModel(const std::string& filepath, int plate_id) {
+         // default for STL / OBJ / STEP and for the existing loadModel(path)
+         // overload.
+         std::vector<Slic3r::Preset*> project_presets;
+-        g_model = Slic3r::Model::read_from_file(
+-            filepath, &config, &config_substitutions,
+-            Slic3r::LoadStrategy::LoadModel | Slic3r::LoadStrategy::LoadConfig | Slic3r::LoadStrategy::AddDefaultInstances,
+-            &g_plate_data_list, &project_presets, &g_is_bbl, &g_file_version,
+-            /*proFn=*/nullptr, /*stlFn=*/nullptr, /*project=*/nullptr, plate_id);
++        const Slic3r::LoadStrategy load_strategy =
++            Slic3r::LoadStrategy::LoadModel |
++            Slic3r::LoadStrategy::LoadConfig |
++            Slic3r::LoadStrategy::AddDefaultInstances;
++        if (ext == "3mf" && plate_id == 0) {
++            // Use Orca's archive discriminator so Prusa/Slic3rPE projects retain
++            // their native facet annotations instead of being forced through the
++            // BBS attribute vocabulary. Plate-filtered loads remain BBS-specific.
++            Slic3r::En3mfType file_type = Slic3r::En3mfType::From_Other;
++            g_model = Slic3r::Model::read_from_archive(
++                filepath, &config, &config_substitutions, file_type, load_strategy,
++                &g_plate_data_list, &project_presets, &g_file_version);
++            g_is_bbl = file_type == Slic3r::En3mfType::From_BBS;
++        } else {
++            g_model = Slic3r::Model::read_from_file(
++                filepath, &config, &config_substitutions, load_strategy,
++                &g_plate_data_list, &project_presets, &g_is_bbl, &g_file_version,
++                /*proFn=*/nullptr, /*stlFn=*/nullptr, /*project=*/nullptr, plate_id);
++        }
+ 
+         // Store the embedded config (from 3MF project_settings.config).
+         // This contains machine_start_gcode, change_filament_gcode, and all profile
