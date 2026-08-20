@@ -392,6 +392,11 @@ def valid_sources() -> dict[str, str]:
             "intoObjects.nonTowerMotionSignature() routed.supportMotionSignature() "
             "soluble.supportExtrusionTools()"
         ),
+        "OrcaSeamPaintInstrumentedTest.kt": (
+            "enforcedAndBlockedSeamFacetsControlRealOuterWallStarts "
+            "outerWallStartPoints extrusionMotions(enforced) extrusionMotions(blocked) "
+            "x <= 40.5f x > 40.5f"
+        ),
         "PrepareModelRendererInstrumentedTest.kt": (
             "densePrepareSceneBuildStaysWithinLoadBudget "
             "denseMinimumRotatedZStaysWithinTransformBudget "
@@ -1054,6 +1059,14 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "OrcaMultiColorPaintInstrumentedTest.kt"
         ].replace("analysis.primeTowerExtrusionByTool.filterValues", "commands.any")
         with self.assertRaisesRegex(VerificationError, "partial-facet regression"):
+            verify_preview_boundary(sources)
+
+    def test_requires_physical_seam_paint_placement_regression(self) -> None:
+        sources = valid_sources()
+        sources["OrcaSeamPaintInstrumentedTest.kt"] = sources[
+            "OrcaSeamPaintInstrumentedTest.kt"
+        ].replace("extrusionMotions(blocked)", "extrusionMotions(baseline)")
+        with self.assertRaisesRegex(VerificationError, "physical seam-paint"):
             verify_preview_boundary(sources)
 
 

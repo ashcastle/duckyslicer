@@ -40,6 +40,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "NativeEngineInstrumentedTest.kt",
         "OrcaModelImportInstrumentedTest.kt",
         "OrcaMultiColorPaintInstrumentedTest.kt",
+        "OrcaSeamPaintInstrumentedTest.kt",
         "PrepareModelRendererInstrumentedTest.kt",
         "PrepareModelPickingTest.kt",
         "ModelInfoTest.kt",
@@ -471,6 +472,18 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "OrcaModelImportInstrumentedTest.kt"
     ]:
         raise VerificationError("edited partial-facet native slicing regression is missing")
+
+    seam_paint_test = sources["OrcaSeamPaintInstrumentedTest.kt"]
+    for marker in (
+        "enforcedAndBlockedSeamFacetsControlRealOuterWallStarts",
+        "outerWallStartPoints",
+        "extrusionMotions(enforced)",
+        "extrusionMotions(blocked)",
+        "x <= 40.5f",
+        "x > 40.5f",
+    ):
+        if marker not in seam_paint_test:
+            raise VerificationError(f"physical seam-paint regression is missing: {marker}")
 
     prepare_picking = sources["PrepareModelPicking.kt"]
     for marker in (
@@ -1126,6 +1139,9 @@ def read_sources() -> dict[str, str]:
         ).read_text(encoding="utf-8"),
         "OrcaMultiColorPaintInstrumentedTest.kt": (
             device / "OrcaMultiColorPaintInstrumentedTest.kt"
+        ).read_text(encoding="utf-8"),
+        "OrcaSeamPaintInstrumentedTest.kt": (
+            device / "OrcaSeamPaintInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),
         "PrepareModelRendererInstrumentedTest.kt": (
             device / "PrepareModelRendererInstrumentedTest.kt"
