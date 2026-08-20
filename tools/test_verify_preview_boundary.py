@@ -127,14 +127,28 @@ def valid_sources() -> dict[str, str]:
             "PrepareModelTopologyKey( filamentSlot = volume.filamentSlot "
             "withContext(Dispatchers.Default) PrepareModelSceneBuilder.build(\n                    projectObjects, "
             "PrepareModelSceneBuilder.build(\n                    emptyList() "
-            "overlays.takeIf { sceneLoad.complete }.orEmpty() PrepareModelOverlayKey( "
-            "overlays = withContext(Dispatchers.Default) "
+            "overlays.takeIf { sceneLoad.complete }.orEmpty() "
+            "overlays: List<PrepareModelOverlayData> overlay.customVertices buffers.vertices "
+            "customVertices.size / PREPARE_VERTEX_FLOATS "
             "detailVertices: FloatArray = vertices "
             "val useDetail = !frame.interactionActive && frame.overlays.isEmpty() "
             "prepareSurfaceSize( texture.setDefaultBufferSize(target.width, target.height) "
             "resizeEglSurface(texture, target) EGL14.eglDestroySurface(eglDisplay, eglSurface) "
             "renderer.setLogicalViewportSize(logicalSurfaceWidth, logicalSurfaceHeight) "
             "GLES30.glUniform2f(viewportLocation, logicalWidth.toFloat(), logicalHeight.toFloat())"
+        ),
+        "PrepareModelOverlays.kt": (
+            "orcaFacetAnnotations: OrcaFacetAnnotations "
+            "sourceFacetIndex !in volume.multiColorPaint.facets "
+            "sourceFacetIndex !in volume.supportPaint.facets "
+            "sourceFacetIndex !in volume.seamPaint.facets "
+            "OrcaFacetPreviewTessellator.tessellate( "
+            "MAX_EXACT_SPLIT_OVERLAY_TRIANGLES = 48_000 customVertices = packed"
+        ),
+        "OrcaFacetPreview.kt": (
+            "maximumTriangles: Int paintedLeaves > maximumTriangles dominantState "
+            "ArrayDeque<FacetTriangle>() children.forEach(pending::addLast) "
+            "splitSides == 3 && specialSide == 0"
         ),
         "PrepareModelPicking.kt": (
             "buildPreparePickingIndices( PreparePickingIndexBuilder( "
@@ -190,6 +204,13 @@ def valid_sources() -> dict[str, str]:
             " modelPickingIndices = modelPickingIndices + selectedIndices"
             " findLayOnFaceFacetAtScreen("
             " checkCancellation = { ensureActive() }"
+            " PrepareModelOverlayKey("
+            " orcaFacetAnnotations = volume.orcaFacetAnnotations"
+            " prepareOverlays = withModelPreparationContext"
+            " PrepareModelOverlayBuilder.build("
+            " overlays = prepareOverlays"
+            " if (interactionActive && customVertices != null)"
+            " customVertices.indices step 9"
             " pickingIndices = currentModelPickingIndices"
             " pickingIndices = currentModelPickingIndices"
             " pickingIndices = currentModelPickingIndices"
@@ -532,6 +553,24 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "withContext(Dispatchers.Default)", "run"
         )
         with self.assertRaisesRegex(VerificationError, "Prepare model loading"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_exact_prepare_overlay_that_ignores_imported_annotations(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            "orcaFacetAnnotations = volume.orcaFacetAnnotations",
+            "orcaFacetAnnotations = OrcaFacetAnnotations()",
+        )
+        with self.assertRaisesRegex(VerificationError, "preview device policy"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_unbounded_exact_prepare_tessellation(self) -> None:
+        sources = valid_sources()
+        sources["PrepareModelOverlays.kt"] = sources["PrepareModelOverlays.kt"].replace(
+            "MAX_EXACT_SPLIT_OVERLAY_TRIANGLES = 48_000",
+            "MAX_EXACT_SPLIT_OVERLAY_TRIANGLES = Int.MAX_VALUE",
+        )
+        with self.assertRaisesRegex(VerificationError, "bounded exact Prepare overlay"):
             verify_preview_boundary(sources)
 
     def test_rejects_prepare_cache_that_ignores_filament_color(self) -> None:

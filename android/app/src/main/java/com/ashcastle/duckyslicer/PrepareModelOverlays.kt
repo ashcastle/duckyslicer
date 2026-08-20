@@ -13,6 +13,17 @@ internal data class PrepareModelOverlayData(
     val lineIndices: IntArray,
     val fillColor: PrepareOverlayColor,
     val lineColor: PrepareOverlayColor,
+    val customVertices: FloatArray? = null,
+)
+
+internal data class PrepareModelOverlayKey(
+    val objectId: String,
+    val volumeId: String,
+    val model: ModelInfo,
+    val supportPaint: SupportPaint,
+    val seamPaint: SeamPaint,
+    val multiColorPaint: MultiColorPaint,
+    val orcaFacetAnnotations: OrcaFacetAnnotations,
 )
 
 internal object PrepareModelOverlayBuilder {
@@ -26,17 +37,20 @@ internal object PrepareModelOverlayBuilder {
                 projectObject.volumes.any { volume ->
                     volume.multiColorPaint.facets.isNotEmpty() ||
                         volume.supportPaint.facets.isNotEmpty() ||
-                        volume.seamPaint.facets.isNotEmpty()
+                        volume.seamPaint.facets.isNotEmpty() ||
+                        !volume.orcaFacetAnnotations.isEmpty
                 }
             }
         ) {
             return emptyList()
         }
         val overlays = ArrayList<PrepareModelOverlayData>()
+        var remainingSplitTriangles = MAX_EXACT_SPLIT_OVERLAY_TRIANGLES
         var meshIndex = 0
         projectObjects.forEach { projectObject ->
             projectObject.volumes.forEach { volume ->
                 val trianglesByStyle = linkedMapOf<PrepareOverlayStyle, MutableList<Int>>()
+                val splitTrianglesByStyle = linkedMapOf<PrepareOverlayStyle, MutableList<Float>>()
                 val previewTriangleCount = volume.model.previewTriangles.size / 9
                 repeat(previewTriangleCount) { previewTriangleIndex ->
                     val sourceFacetIndex = volume.model.previewTriangleIndices
@@ -51,6 +65,22 @@ internal object PrepareModelOverlayBuilder {
                     volume.multiColorPaint.facets[sourceFacetIndex]?.let { slot ->
                         trianglesByStyle.add(PrepareOverlayStyle.MultiColor(slot), previewTriangleIndex)
                     }
+                    if (sourceFacetIndex !in volume.multiColorPaint.facets) {
+                        volume.orcaFacetAnnotations.multiColor.triangles[sourceFacetIndex]?.let { value ->
+                            addExactAnnotation(
+                                value = value,
+                                styleForState = { state ->
+                                    state.takeIf { it > 0 }
+                                        ?.let { PrepareOverlayStyle.MultiColor(it - 1) }
+                                },
+                                previewTriangles = volume.model.previewTriangles,
+                                previewTriangleIndex = previewTriangleIndex,
+                                trianglesByStyle = trianglesByStyle,
+                                splitTrianglesByStyle = splitTrianglesByStyle,
+                                remainingSplitTriangles = remainingSplitTriangles,
+                            ).also { remainingSplitTriangles -= it }
+                        }
+                    }
                     when (volume.supportPaint.facets[sourceFacetIndex]) {
                         SupportPaintState.ENFORCE -> trianglesByStyle.add(
                             PrepareOverlayStyle.SupportEnforce,
@@ -61,6 +91,25 @@ internal object PrepareModelOverlayBuilder {
                             previewTriangleIndex,
                         )
                         null -> Unit
+                    }
+                    if (sourceFacetIndex !in volume.supportPaint.facets) {
+                        volume.orcaFacetAnnotations.support.triangles[sourceFacetIndex]?.let { value ->
+                            addExactAnnotation(
+                                value = value,
+                                styleForState = { state ->
+                                    when (SupportPaintState.fromCode(state)) {
+                                        SupportPaintState.ENFORCE -> PrepareOverlayStyle.SupportEnforce
+                                        SupportPaintState.BLOCK -> PrepareOverlayStyle.SupportBlock
+                                        null -> null
+                                    }
+                                },
+                                previewTriangles = volume.model.previewTriangles,
+                                previewTriangleIndex = previewTriangleIndex,
+                                trianglesByStyle = trianglesByStyle,
+                                splitTrianglesByStyle = splitTrianglesByStyle,
+                                remainingSplitTriangles = remainingSplitTriangles,
+                            ).also { remainingSplitTriangles -= it }
+                        }
                     }
                     when (volume.seamPaint.facets[sourceFacetIndex]) {
                         SeamPaintState.ENFORCE -> trianglesByStyle.add(
@@ -73,6 +122,25 @@ internal object PrepareModelOverlayBuilder {
                         )
                         null -> Unit
                     }
+                    if (sourceFacetIndex !in volume.seamPaint.facets) {
+                        volume.orcaFacetAnnotations.seam.triangles[sourceFacetIndex]?.let { value ->
+                            addExactAnnotation(
+                                value = value,
+                                styleForState = { state ->
+                                    when (SeamPaintState.fromCode(state)) {
+                                        SeamPaintState.ENFORCE -> PrepareOverlayStyle.SeamEnforce
+                                        SeamPaintState.BLOCK -> PrepareOverlayStyle.SeamBlock
+                                        null -> null
+                                    }
+                                },
+                                previewTriangles = volume.model.previewTriangles,
+                                previewTriangleIndex = previewTriangleIndex,
+                                trianglesByStyle = trianglesByStyle,
+                                splitTrianglesByStyle = splitTrianglesByStyle,
+                                remainingSplitTriangles = remainingSplitTriangles,
+                            ).also { remainingSplitTriangles -= it }
+                        }
+                    }
                 }
                 trianglesByStyle.forEach { (style, triangleIndices) ->
                     overlays += PrepareModelOverlayData(
@@ -83,10 +151,52 @@ internal object PrepareModelOverlayBuilder {
                         lineColor = style.lineColor,
                     )
                 }
+                splitTrianglesByStyle.forEach { (style, vertices) ->
+                    val packed = vertices.toFloatArray()
+                    overlays += PrepareModelOverlayData(
+                        meshIndex = meshIndex,
+                        fillIndices = IntArray(0),
+                        lineIndices = packed.toSplitLineIndices(),
+                        fillColor = style.fillColor,
+                        lineColor = style.lineColor,
+                        customVertices = packed,
+                    )
+                }
                 meshIndex += 1
             }
         }
         return overlays
+    }
+
+    private fun addExactAnnotation(
+        value: String,
+        styleForState: (Int) -> PrepareOverlayStyle?,
+        previewTriangles: FloatArray,
+        previewTriangleIndex: Int,
+        trianglesByStyle: MutableMap<PrepareOverlayStyle, MutableList<Int>>,
+        splitTrianglesByStyle: MutableMap<PrepareOverlayStyle, MutableList<Float>>,
+        remainingSplitTriangles: Int,
+    ): Int {
+        val rootState = OrcaFacetPreviewTessellator.rootLeafState(value)
+        if (rootState != null) {
+            styleForState(rootState)?.let { style ->
+                trianglesByStyle.add(style, previewTriangleIndex)
+            }
+            return 0
+        }
+        if (remainingSplitTriangles <= 0) return 0
+        val leaves = OrcaFacetPreviewTessellator.tessellate(
+            value = value,
+            sourceVertices = previewTriangles,
+            sourceOffset = previewTriangleIndex * 9,
+            maximumTriangles = remainingSplitTriangles,
+        )
+        leaves.forEach { leaf ->
+            val style = styleForState(leaf.state) ?: return@forEach
+            val output = splitTrianglesByStyle.getOrPut(style, ::ArrayList)
+            leaf.vertices.forEach(output::add)
+        }
+        return leaves.size
     }
 
     private fun MutableMap<PrepareOverlayStyle, MutableList<Int>>.add(
@@ -113,6 +223,22 @@ internal object PrepareModelOverlayBuilder {
         forEachIndexed { outputTriangle, triangleIndex ->
             val vertex = triangleIndex * 3
             val output = outputTriangle * 6
+            result[output] = vertex
+            result[output + 1] = vertex + 1
+            result[output + 2] = vertex + 1
+            result[output + 3] = vertex + 2
+            result[output + 4] = vertex + 2
+            result[output + 5] = vertex
+        }
+        return result
+    }
+
+    private fun FloatArray.toSplitLineIndices(): IntArray {
+        require(size % 9 == 0)
+        val result = IntArray(size / 9 * 6)
+        repeat(size / 9) { triangleIndex ->
+            val vertex = triangleIndex * 3
+            val output = triangleIndex * 6
             result[output] = vertex
             result[output + 1] = vertex + 1
             result[output + 2] = vertex + 1
@@ -177,3 +303,5 @@ private sealed class PrepareOverlayStyle(
         )
     }
 }
+
+internal const val MAX_EXACT_SPLIT_OVERLAY_TRIANGLES = 48_000

@@ -40,6 +40,12 @@ class OrcaFacetAnnotationTest {
             OrcaFacetAnnotation(mapOf(0 to "c"))
         }
         assertThrows(IllegalArgumentException::class.java) {
+            OrcaFacetAnnotation(mapOf(0 to "44D"))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            OrcaFacetAnnotation(mapOf(0 to "4444F"))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
             OrcaFacetAnnotation.fromJson(JSONArray().put(4).put("4"), 4)
         }
     }

@@ -157,6 +157,11 @@ data class OrcaFacetAnnotation(
                 pendingNodes -= 1
                 val splitSides = code and 0b11
                 if (splitSides != 0) {
+                    val specialSide = code ushr 2
+                    require(
+                        (splitSides == 3 && specialSide == 0) ||
+                            (splitSides < 3 && specialSide in 0..2),
+                    ) { "Facet annotation split side is invalid" }
                     pendingNodes += splitSides + 1
                     require(pendingNodes <= MAX_TRIANGLE_VALUE_BYTES * 4) {
                         "Facet annotation split tree is too deep"

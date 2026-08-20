@@ -3081,6 +3081,53 @@ private fun BedScene(
             }
             .orEmpty()
     }
+    val prepareOverlayTopology = projectObjects.flatMap { projectObject ->
+        projectObject.volumes.map { volume ->
+            PrepareModelOverlayKey(
+                objectId = projectObject.id,
+                volumeId = volume.id,
+                model = volume.model,
+                supportPaint = volume.supportPaint,
+                seamPaint = volume.seamPaint,
+                multiColorPaint = volume.multiColorPaint,
+                orcaFacetAnnotations = volume.orcaFacetAnnotations,
+            )
+        }
+    }
+    val prepareMeshIndices = remember(modelTopology) {
+        buildMap {
+            var meshIndex = 0
+            projectObjects.forEach { projectObject ->
+                projectObject.volumes.forEach { volume ->
+                    put(projectObject.id to volume.id, meshIndex++)
+                }
+            }
+        }
+    }
+    var prepareOverlays by remember(
+        prepareOverlayTopology,
+        layOnFaceObjectId,
+        layOnFaceCandidateFacets,
+    ) {
+        mutableStateOf<List<PrepareModelOverlayData>>(emptyList())
+    }
+    LaunchedEffect(
+        prepareOverlayTopology,
+        layOnFaceObjectId,
+        layOnFaceCandidateFacets,
+    ) {
+        val snapshot = projectObjects
+        prepareOverlays = withModelPreparationContext {
+            PrepareModelOverlayBuilder.build(
+                projectObjects = snapshot,
+                layOnFaceObjectId = layOnFaceObjectId,
+                layOnFaceCandidateFacets = layOnFaceCandidateFacets,
+            )
+        }
+    }
+    val prepareOverlaysByMesh = remember(prepareOverlays) {
+        prepareOverlays.groupBy(PrepareModelOverlayData::meshIndex)
+    }
     var modelScreenBounds by remember(objectIds) { mutableStateOf<Map<String, Rect>>(emptyMap()) }
     var modelScreenTriangles by remember(objectIds) {
         mutableStateOf<Map<String, List<ModelScreenTriangle>>>(emptyMap())
@@ -3185,8 +3232,7 @@ private fun BedScene(
                 panX = pan.x,
                 panY = pan.y,
                 interactionActive = interactionActive,
-                layOnFaceObjectId = layOnFaceObjectId,
-                layOnFaceCandidateFacets = layOnFaceCandidateFacets,
+                overlays = prepareOverlays,
                 onUnavailable = { prepareRendererRuntimeAvailable = false },
                 modifier = Modifier.fillMaxSize(),
             )
@@ -3916,11 +3962,7 @@ private fun BedScene(
                 val placement = checkNotNull(modelPlacements[projectObject.id])
                 val objectGeometry = placement.geometry
                 val minimumRotatedZ = placement.minimumRotatedZ
-                val enforcePaintPath = Path()
-                val blockPaintPath = Path()
-                val seamEnforcePaintPath = Path()
-                val seamBlockPaintPath = Path()
-                val multiColorPaintPaths = mutableMapOf<Int, Path>()
+                val objectOverlayPaths = ArrayList<Pair<PrepareModelOverlayData, Path>>()
                 val screenTriangles = ArrayList<ModelScreenTriangle>(
                     projectObject.volumes.sumOf { it.model.previewTriangleIndices.size },
                 )
@@ -3994,22 +4036,46 @@ private fun BedScene(
                     minimumScreenY = min(minimumScreenY, min(a.y, min(b.y, c.y)))
                     maximumScreenX = max(maximumScreenX, max(a.x, max(b.x, c.x)))
                     maximumScreenY = max(maximumScreenY, max(a.y, max(b.y, c.y)))
-                    when (volume.supportPaint.facets[sourceFacetIndex]) {
-                        SupportPaintState.ENFORCE -> enforcePaintPath.addTriangle(a, b, c)
-                        SupportPaintState.BLOCK -> blockPaintPath.addTriangle(a, b, c)
-                        null -> Unit
-                    }
-                    when (volume.seamPaint.facets[sourceFacetIndex]) {
-                        SeamPaintState.ENFORCE -> seamEnforcePaintPath.addTriangle(a, b, c)
-                        SeamPaintState.BLOCK -> seamBlockPaintPath.addTriangle(a, b, c)
-                        null -> Unit
-                    }
-                    volume.multiColorPaint.facets[sourceFacetIndex]?.let { filamentSlot ->
-                        multiColorPaintPaths.getOrPut(filamentSlot, ::Path).addTriangle(a, b, c)
-                    }
                     triangleIndex += 9
                     }
                     screenTrianglesByVolume[volume.id] = volumeScreenTriangles
+                    val overlayMeshIndex = checkNotNull(
+                        prepareMeshIndices[projectObject.id to volume.id],
+                    )
+                    prepareOverlaysByMesh[overlayMeshIndex].orEmpty().forEach { overlay ->
+                        val customVertices = overlay.customVertices
+                        if (interactionActive && customVertices != null) return@forEach
+                        val path = Path()
+                        if (customVertices == null) {
+                            for (indexOffset in overlay.fillIndices.indices step 3) {
+                                val previewTriangleIndex = overlay.fillIndices[indexOffset] / 3
+                                volumeScreenTriangles.getOrNull(previewTriangleIndex)?.let { triangle ->
+                                    path.addTriangle(triangle.a, triangle.b, triangle.c)
+                                }
+                            }
+                        } else {
+                            for (vertexOffset in customVertices.indices step 9) {
+                                fun projectedVertex(offset: Int): Offset {
+                                    val world = modelTransform.placeVertex(
+                                        customVertices[vertexOffset],
+                                        customVertices[vertexOffset + 1],
+                                        customVertices[vertexOffset + 2],
+                                        objectGeometry,
+                                        bedSizeX,
+                                        bedSizeY,
+                                        minimumRotatedZ,
+                                    )
+                                    return project(world[0], world[1], world[2])
+                                }
+                                path.addTriangle(
+                                    projectedVertex(vertexOffset),
+                                    projectedVertex(vertexOffset + 3),
+                                    projectedVertex(vertexOffset + 6),
+                                )
+                            }
+                        }
+                        objectOverlayPaths += overlay to path
+                    }
                 }
                 if (minimumScreenX.isFinite()) {
                     nextBounds[projectObject.id] = Rect(
@@ -4075,25 +4141,6 @@ private fun BedScene(
                             ),
                     )
                     }
-                if (projectObject.id == layOnFaceObjectId) {
-                    projectObject.modelPartVolumes.forEach { volume ->
-                        val volumeTriangles = screenTrianglesByVolume[volume.id].orEmpty()
-                        layOnFaceCandidates[volume.id].orEmpty().forEach { candidate ->
-                            val candidatePath = Path()
-                            candidate.previewTriangleIndices.forEach { triangleIndex ->
-                                volumeTriangles.getOrNull(triangleIndex)?.let { triangle ->
-                                    candidatePath.addTriangle(triangle.a, triangle.b, triangle.c)
-                                }
-                            }
-                            drawPath(candidatePath, WorkspaceYellow.copy(alpha = 0.16f))
-                            drawPath(
-                                candidatePath,
-                                WorkspaceYellow.copy(alpha = 0.86f),
-                                style = Stroke(1.1.dp.toPx()),
-                            )
-                        }
-                    }
-                }
                 val featureEdgePath = Path()
                 projectObject.volumes.forEach { volume ->
                     val volumeTriangles = screenTrianglesByVolume[volume.id].orEmpty()
@@ -4115,38 +4162,14 @@ private fun BedScene(
                     color = Color(0xFF12130F).copy(alpha = if (objectSelected) 0.34f else 0.22f),
                     style = Stroke(if (objectSelected) 0.7.dp.toPx() else 0.55.dp.toPx()),
                 )
-                multiColorPaintPaths.toSortedMap().forEach { (filamentSlot, path) ->
-                    drawPath(path, filamentSlotColor(filamentSlot).copy(alpha = 0.94f))
+                objectOverlayPaths.forEach { (overlay, path) ->
+                    drawPath(path, overlay.fillColor.toComposeColor())
                     drawPath(
                         path,
-                        Color.Black.copy(alpha = 0.62f),
-                        style = Stroke(0.9.dp.toPx()),
+                        overlay.lineColor.toComposeColor(),
+                        style = Stroke(1.dp.toPx()),
                     )
                 }
-                drawPath(enforcePaintPath, Color(0xFF5EE6A8).copy(alpha = 0.9f))
-                drawPath(
-                    enforcePaintPath,
-                    Color(0xFF163C2E),
-                    style = Stroke(1.2.dp.toPx()),
-                )
-                drawPath(blockPaintPath, Color(0xFFFF6B6B).copy(alpha = 0.9f))
-                drawPath(
-                    blockPaintPath,
-                    Color(0xFF541F1F),
-                    style = Stroke(1.2.dp.toPx()),
-                )
-                drawPath(seamEnforcePaintPath, Color(0xFF4CC9F0).copy(alpha = 0.9f))
-                drawPath(
-                    seamEnforcePaintPath,
-                    Color(0xFF153B4A),
-                    style = Stroke(1.2.dp.toPx()),
-                )
-                drawPath(seamBlockPaintPath, Color(0xFFFF9F43).copy(alpha = 0.9f))
-                drawPath(
-                    seamBlockPaintPath,
-                    Color(0xFF563217),
-                    style = Stroke(1.2.dp.toPx()),
-                )
                 if (projectObject.id == brimEditObjectId) {
                     brimPoints.points.forEachIndexed { index, brimPoint ->
                         val world = modelTransform.placeBrimPoint(
@@ -4222,6 +4245,8 @@ private fun Path.addTriangle(a: Offset, b: Offset, c: Offset) {
     lineTo(c.x, c.y)
     close()
 }
+
+private fun PrepareOverlayColor.toComposeColor() = Color(red, green, blue, alpha)
 
 private fun ModelScreenTriangle.vertex(index: Int): Offset = when (index) {
     0 -> a

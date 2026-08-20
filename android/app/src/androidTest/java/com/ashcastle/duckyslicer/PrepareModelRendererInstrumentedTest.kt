@@ -666,10 +666,44 @@ class PrepareModelRendererInstrumentedTest {
             val withOverlay = framebufferRgba(framebufferSize)
             assertEquals(3, renderer.lastMeshVertexCountForTest())
 
+            renderer.submit(
+                geometry = geometry,
+                objects = mapOf(
+                    projectObject.id to PrepareObjectDrawState(
+                        objectId = projectObject.id,
+                        transform = projectObject.transform,
+                        minimumRotatedZ = projectObject.transform.minimumRotatedZ(projectObject),
+                    ),
+                ),
+                selectedObjectId = projectObject.id,
+                camera = camera,
+                overlays = listOf(
+                    PrepareModelOverlayData(
+                        meshIndex = 0,
+                        fillIndices = IntArray(0),
+                        lineIndices = intArrayOf(0, 1, 1, 2, 2, 0),
+                        fillColor = PrepareOverlayColor(1f, 0.42f, 0.42f, 0.90f),
+                        lineColor = PrepareOverlayColor(0.33f, 0.12f, 0.12f, 1f),
+                        customVertices = floatArrayOf(
+                            0f, 0f, 0f,
+                            25f, 0f, 0f,
+                            12.5f, 25f, 5f,
+                        ),
+                    ),
+                ),
+            )
+            renderer.onDrawFrame(null)
+            GLES30.glFinish()
+            val withSplitOverlay = framebufferRgba(framebufferSize)
+
             assertFalse("Model geometry must alter the rendered framebuffer", bedOnly.contentEquals(withModel))
             assertFalse(
                 "Painted facet overlays must alter the rendered model",
                 withModel.contentEquals(withOverlay),
+            )
+            assertFalse(
+                "Exact split-facet geometry must be rendered as a partial overlay",
+                withOverlay.contentEquals(withSplitOverlay),
             )
             assertEquals(
                 "Changing paint overlays must not re-upload immutable model topology",

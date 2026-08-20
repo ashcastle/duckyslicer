@@ -49,8 +49,7 @@ internal fun DepthTestedPrepareModelScene(
     panX: Float,
     panY: Float,
     interactionActive: Boolean,
-    layOnFaceObjectId: String?,
-    layOnFaceCandidateFacets: Map<String, BooleanArray>,
+    overlays: List<PrepareModelOverlayData>,
     onUnavailable: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -102,31 +101,6 @@ internal fun DepthTestedPrepareModelScene(
             )
         }
     }
-    val overlayTopology = projectObjects.flatMap { projectObject ->
-        projectObject.volumes.map { volume ->
-            PrepareModelOverlayKey(
-                objectId = projectObject.id,
-                volumeId = volume.id,
-                model = volume.model,
-                supportPaint = volume.supportPaint,
-                seamPaint = volume.seamPaint,
-                multiColorPaint = volume.multiColorPaint,
-            )
-        }
-    }
-    var overlays by remember(overlayTopology, layOnFaceObjectId, layOnFaceCandidateFacets) {
-        mutableStateOf<List<PrepareModelOverlayData>>(emptyList())
-    }
-    LaunchedEffect(overlayTopology, layOnFaceObjectId, layOnFaceCandidateFacets) {
-        val snapshot = projectObjects
-        overlays = withContext(Dispatchers.Default) {
-            PrepareModelOverlayBuilder.build(
-                projectObjects = snapshot,
-                layOnFaceObjectId = layOnFaceObjectId,
-                layOnFaceCandidateFacets = layOnFaceCandidateFacets,
-            )
-        }
-    }
     val currentOnUnavailable = rememberUpdatedState(onUnavailable)
     AndroidView(
         factory = { context ->
@@ -158,15 +132,6 @@ private data class PrepareModelTopologyKey(
     val filamentSlot: Int,
     val role: ProjectVolumeRole,
     val model: ModelInfo,
-)
-
-private data class PrepareModelOverlayKey(
-    val objectId: String,
-    val volumeId: String,
-    val model: ModelInfo,
-    val supportPaint: SupportPaint,
-    val seamPaint: SeamPaint,
-    val multiColorPaint: MultiColorPaint,
 )
 
 private data class PrepareModelSceneLoad(
@@ -878,6 +843,7 @@ internal class PrepareModelRenderer(
             addAll(meshBuffers)
             addAll(detailMeshBuffers)
             overlayBuffers.forEach { buffers ->
+                if (buffers.vertices != 0) add(buffers.vertices)
                 if (buffers.fill != 0) add(buffers.fill)
                 if (buffers.lines != 0) add(buffers.lines)
             }
@@ -953,7 +919,9 @@ internal class PrepareModelRenderer(
     }
 
     private fun uploadOverlays(frame: PrepareModelFrame): Boolean {
-        val existing = overlayBuffers.flatMap { buffers -> listOf(buffers.fill, buffers.lines) }
+        val existing = overlayBuffers.flatMap { buffers ->
+            listOf(buffers.vertices, buffers.fill, buffers.lines)
+        }
             .filter { it != 0 }
             .toIntArray()
         if (existing.isNotEmpty()) GLES30.glDeleteBuffers(existing.size, existing, 0)
@@ -965,15 +933,22 @@ internal class PrepareModelRenderer(
         }
         val valid = frame.overlays.all { overlay ->
             val mesh = frame.geometry.meshes.getOrNull(overlay.meshIndex)
-            mesh != null && overlay.fillIndices.isNotEmpty() && overlay.lineIndices.isNotEmpty() &&
-                overlay.fillIndices.all { it in 0 until mesh.vertexCount } &&
-                overlay.lineIndices.all { it in 0 until mesh.vertexCount }
+            val customVertexCount = overlay.customVertices?.size?.div(PREPARE_VERTEX_FLOATS)
+            mesh != null && overlay.lineIndices.isNotEmpty() && if (customVertexCount != null) {
+                overlay.customVertices.isNotEmpty() && overlay.customVertices.size % 9 == 0 &&
+                    overlay.customVertices.all(Float::isFinite) && overlay.fillIndices.isEmpty() &&
+                    overlay.lineIndices.all { it in 0 until customVertexCount }
+            } else {
+                overlay.fillIndices.isNotEmpty() &&
+                    overlay.fillIndices.all { it in 0 until mesh.vertexCount } &&
+                    overlay.lineIndices.all { it in 0 until mesh.vertexCount }
+            }
         }
         if (!valid) {
             failRenderer("overlay_indices")
             return false
         }
-        val ids = IntArray(frame.overlays.size * 2)
+        val ids = IntArray(frame.overlays.size * 3)
         GLES30.glGenBuffers(ids.size, ids, 0)
         if (ids.any { it == 0 }) {
             GLES30.glDeleteBuffers(ids.size, ids, 0)
@@ -981,14 +956,21 @@ internal class PrepareModelRenderer(
             return false
         }
         frame.overlays.forEachIndexed { index, overlay ->
-            val buffers = PrepareOverlayGpuBuffers(ids[index * 2], ids[index * 2 + 1])
+            val buffers = PrepareOverlayGpuBuffers(
+                vertices = ids[index * 3],
+                fill = ids[index * 3 + 1],
+                lines = ids[index * 3 + 2],
+            )
             overlayBuffers += buffers
-            uploadIndexBuffer(buffers.fill, overlay.fillIndices)
+            overlay.customVertices?.let { uploadBuffer(buffers.vertices, it) }
+                ?: uploadIndexBuffer(buffers.fill, overlay.fillIndices)
             uploadIndexBuffer(buffers.lines, overlay.lineIndices)
         }
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
         GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, 0)
         if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
-            val generated = overlayBuffers.flatMap { listOf(it.fill, it.lines) }.toIntArray()
+            val generated = overlayBuffers.flatMap { listOf(it.vertices, it.fill, it.lines) }
+                .toIntArray()
             GLES30.glDeleteBuffers(generated.size, generated, 0)
             overlayBuffers.clear()
             failRenderer("overlay_upload")
@@ -1114,11 +1096,34 @@ internal class PrepareModelRenderer(
             val objectState = frame.objects[mesh.objectId] ?: return@forEachIndexed
             val buffers = overlayBuffers.getOrNull(index) ?: return@forEachIndexed
             applyObject(objectState, mesh.sourceCenter, frame.geometry)
-            bindVertexBuffer(meshBuffers[overlay.meshIndex])
             GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
             GLES30.glPolygonOffset(-1f, -1f)
-            drawElements(buffers.fill, overlay.fillIndices.size, GLES30.GL_TRIANGLES, overlay.fillColor)
+            val customVertices = overlay.customVertices
+            if (customVertices == null) {
+                bindVertexBuffer(meshBuffers[overlay.meshIndex])
+                drawElements(
+                    buffers.fill,
+                    overlay.fillIndices.size,
+                    GLES30.GL_TRIANGLES,
+                    overlay.fillColor,
+                )
+            } else {
+                drawBuffer(
+                    buffers.vertices,
+                    customVertices.size / PREPARE_VERTEX_FLOATS,
+                    GLES30.GL_TRIANGLES,
+                    floatArrayOf(
+                        overlay.fillColor.red,
+                        overlay.fillColor.green,
+                        overlay.fillColor.blue,
+                    ),
+                    overlay.fillColor.alpha,
+                )
+            }
             GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
+            bindVertexBuffer(
+                if (customVertices == null) meshBuffers[overlay.meshIndex] else buffers.vertices,
+            )
             drawElements(buffers.lines, overlay.lineIndices.size, GLES30.GL_LINES, overlay.lineColor)
         }
         GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, 0)
@@ -1284,6 +1289,7 @@ private fun IntArray.toDirectIntBuffer(): IntBuffer = ByteBuffer
     }
 
 private data class PrepareOverlayGpuBuffers(
+    val vertices: Int,
     val fill: Int,
     val lines: Int,
 )

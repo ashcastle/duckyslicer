@@ -113,6 +113,11 @@ bool valid_annotation_value(const std::string& value, int maximum_allowed_state)
         --pending_nodes;
         const int split_sides = code & 0b11;
         if (split_sides != 0) {
+            const int special_side = code >> 2;
+            if ((split_sides == 3 && special_side != 0) ||
+                (split_sides < 3 && (special_side < 0 || special_side > 2))) {
+                return false;
+            }
             pending_nodes += static_cast<std::size_t>(split_sides + 1);
             if (pending_nodes > MAX_ANNOTATION_VALUE_BYTES * 4) return false;
             continue;

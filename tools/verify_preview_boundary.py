@@ -23,6 +23,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "ToolpathPreviewView.kt",
         "ModelTransform.kt",
         "PrepareModelPreviewView.kt",
+        "PrepareModelOverlays.kt",
+        "OrcaFacetPreview.kt",
         "PrepareModelPicking.kt",
         "ModelPreparationScheduler.kt",
         "PreviewPerformanceHarnessActivity.kt",
@@ -273,8 +275,10 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "PrepareModelSceneBuilder.build(\n                    projectObjects,",
         "PrepareModelSceneBuilder.build(\n                    emptyList()",
         "overlays.takeIf { sceneLoad.complete }.orEmpty()",
-        "PrepareModelOverlayKey(",
-        "overlays = withContext(Dispatchers.Default)",
+        "overlays: List<PrepareModelOverlayData>",
+        "overlay.customVertices",
+        "buffers.vertices",
+        "customVertices.size / PREPARE_VERTEX_FLOATS",
         "detailVertices: FloatArray = vertices",
         "val useDetail = !frame.interactionActive && frame.overlays.isEmpty()",
         "prepareSurfaceSize(",
@@ -286,6 +290,31 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     ):
         if marker not in prepare_renderer:
             raise VerificationError(f"Prepare model loading contract is missing: {marker}")
+
+    prepare_overlays = sources["PrepareModelOverlays.kt"]
+    for marker in (
+        "orcaFacetAnnotations: OrcaFacetAnnotations",
+        "sourceFacetIndex !in volume.multiColorPaint.facets",
+        "sourceFacetIndex !in volume.supportPaint.facets",
+        "sourceFacetIndex !in volume.seamPaint.facets",
+        "OrcaFacetPreviewTessellator.tessellate(",
+        "MAX_EXACT_SPLIT_OVERLAY_TRIANGLES = 48_000",
+        "customVertices = packed",
+    ):
+        if marker not in prepare_overlays:
+            raise VerificationError(f"bounded exact Prepare overlay contract is missing: {marker}")
+
+    facet_preview = sources["OrcaFacetPreview.kt"]
+    for marker in (
+        "maximumTriangles: Int",
+        "paintedLeaves > maximumTriangles",
+        "dominantState",
+        "ArrayDeque<FacetTriangle>()",
+        "children.forEach(pending::addLast)",
+        "splitSides == 3 && specialSide == 0",
+    ):
+        if marker not in facet_preview:
+            raise VerificationError(f"bounded exact facet tessellation is missing: {marker}")
 
     prepare_picking = sources["PrepareModelPicking.kt"]
     for marker in (
@@ -475,6 +504,13 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "modelPickingIndices = modelPickingIndices + selectedIndices",
         "findLayOnFaceFacetAtScreen(",
         "checkCancellation = { ensureActive() }",
+        "PrepareModelOverlayKey(",
+        "orcaFacetAnnotations = volume.orcaFacetAnnotations",
+        "prepareOverlays = withModelPreparationContext",
+        "PrepareModelOverlayBuilder.build(",
+        "overlays = prepareOverlays",
+        "if (interactionActive && customVertices != null)",
+        "customVertices.indices step 9",
     ):
         if marker not in workspace:
             raise VerificationError(f"preview device policy is not connected to the UI: {marker}")
@@ -855,6 +891,12 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "PrepareModelPreviewView.kt": (main / "PrepareModelPreviewView.kt").read_text(
+            encoding="utf-8"
+        ),
+        "PrepareModelOverlays.kt": (main / "PrepareModelOverlays.kt").read_text(
+            encoding="utf-8"
+        ),
+        "OrcaFacetPreview.kt": (main / "OrcaFacetPreview.kt").read_text(
             encoding="utf-8"
         ),
         "PrepareModelPicking.kt": (main / "PrepareModelPicking.kt").read_text(
