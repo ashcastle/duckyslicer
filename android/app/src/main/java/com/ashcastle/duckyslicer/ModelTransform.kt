@@ -145,6 +145,96 @@ internal fun ModelTransform.withFaceOnBed(triangle: FloatArray): ModelTransform 
     )
 }
 
+/**
+ * Places a selected surface on the bed without trusting the source mesh's triangle winding.
+ *
+ * STL files in the wild frequently contain locally reversed facets. The native alignment uses the
+ * facet normal, so evaluate both possible normals and keep only an orientation where the selected
+ * plane is also the printable object's lowest plane. This prevents reporting success when some
+ * unrelated part of the object is actually touching the bed.
+ */
+internal fun ProjectObject.withFaceOnBed(triangle: FloatArray): ModelTransform {
+    require(triangle.size == 9 && triangle.all(Float::isFinite)) {
+        "Selected face is invalid"
+    }
+    val reversed = triangle.copyOf().also { values ->
+        repeat(3) { axis ->
+            val second = values[3 + axis]
+            values[3 + axis] = values[6 + axis]
+            values[6 + axis] = second
+        }
+    }
+    return selectSupportingFaceTransform(
+        triangle = triangle,
+        candidates = listOf(
+            transform.withFaceOnBed(triangle),
+            transform.withFaceOnBed(reversed),
+        ),
+    )
+}
+
+internal fun ProjectObject.selectSupportingFaceTransform(
+    triangle: FloatArray,
+    candidates: List<ModelTransform>,
+    bedToleranceMm: Float = LAY_ON_FACE_BED_TOLERANCE_MM,
+): ModelTransform {
+    require(triangle.size == 9 && triangle.all(Float::isFinite)) {
+        "Selected face is invalid"
+    }
+    require(candidates.isNotEmpty() && bedToleranceMm.isFinite() && bedToleranceMm >= 0f) {
+        "Selected face candidates are invalid"
+    }
+    val center = geometry().center
+    return candidates
+        .asSequence()
+        .mapNotNull { candidate ->
+            if (!candidate.hasFinitePlacement()) return@mapNotNull null
+            val minimumZ = candidate.minimumRotatedZ(this)
+            if (!minimumZ.isFinite()) return@mapNotNull null
+            val faceZ = FloatArray(3) { vertex ->
+                candidate.transformLocal(
+                    FloatArray(3) { axis -> triangle[vertex * 3 + axis] - center[axis] },
+                )[2]
+            }
+            if (faceZ.any { !it.isFinite() }) return@mapNotNull null
+            val planeError = faceZ.max() - faceZ.min()
+            val bedGap = faceZ.average().toFloat() - minimumZ
+            if (planeError > bedToleranceMm || bedGap < -bedToleranceMm) {
+                return@mapNotNull null
+            }
+            SupportingFaceCandidate(candidate, bedGap.coerceAtLeast(0f), planeError)
+        }
+        .filter { candidate -> candidate.bedGapMm <= bedToleranceMm }
+        .minWithOrNull(
+            compareBy(
+                SupportingFaceCandidate::bedGapMm,
+                SupportingFaceCandidate::planeErrorMm,
+            ),
+        )
+        ?.transform
+        ?: throw IllegalArgumentException("Selected surface is not a supporting bed face")
+}
+
+private data class SupportingFaceCandidate(
+    val transform: ModelTransform,
+    val bedGapMm: Float,
+    val planeErrorMm: Float,
+)
+
+private fun ModelTransform.hasFinitePlacement(): Boolean = listOf(
+    offsetXmm,
+    offsetYmm,
+    offsetZmm,
+    rotationXdeg,
+    rotationYdeg,
+    rotationZdeg,
+    scale,
+    scaleY,
+    scaleZ,
+).all(Float::isFinite) && scale > 0f && scaleY > 0f && scaleZ > 0f
+
+private const val LAY_ON_FACE_BED_TOLERANCE_MM = 0.05f
+
 internal data class OrcaOrientation(
     val rotationRadians: DoubleArray,
 ) {

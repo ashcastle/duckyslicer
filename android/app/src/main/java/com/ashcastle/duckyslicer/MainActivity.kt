@@ -828,15 +828,18 @@ private fun DuckySlicerScreen(
 
     fun laySelectedFaceOnBed(objectId: String, triangle: FloatArray) {
         if (projectTransferBusy || importing || slicing || previewLoading) return
-        val target = projectHistory.current.objects.firstOrNull { it.id == objectId } ?: return
-        runCatching { target.transform.withFaceOnBed(triangle) }
-            .onSuccess { transform ->
-                val current = projectTransferModel.state.value.history
-                val nextHistory = current.updateTransform(objectId, transform)
-                if (
-                    nextHistory != current &&
-                    projectTransferModel.updateHistory(current, nextHistory)
-                ) {
+        val current = projectTransferModel.state.value.history
+        val target = current.current.objects.firstOrNull { it.id == objectId } ?: return
+        runCatching {
+            val transform = target.withFaceOnBed(triangle)
+            val nextHistory = current.updateTransform(objectId, transform)
+            val applied = nextHistory == current ||
+                projectTransferModel.updateHistory(current, nextHistory)
+            check(applied) { "Selected face transform was not applied" }
+            nextHistory != current
+        }
+            .onSuccess { changed ->
+                if (changed) {
                     clearCompletedSlice()
                 }
                 notice = layOnFaceDone

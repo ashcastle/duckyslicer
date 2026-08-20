@@ -730,7 +730,7 @@ class AccessibilityInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val placeOnFace = context.getString(R.string.lay_on_face)
         val hint = context.getString(R.string.lay_on_face_hint)
-        launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use {
+        launchHarness(AccessibilityHarnessActivity.SCREEN_LAY_ON_FACE).use {
             val tool = waitForNodes(setOf(placeOnFace)).firstOrNull {
                 it.isClickable && it.effectiveLabel().contains(placeOnFace)
             }
@@ -742,9 +742,19 @@ class AccessibilityInstrumentedTest {
             )
             tapPrepareFixtureCenter()
             assertTrue(
-                "GPU facet picking must invoke Place on face for the touched model surface",
+                "GPU facet picking must apply Place on face for the touched model surface",
                 waitForNodes(setOf(TEST_LAY_ON_FACE_SELECTED_LABEL)).any {
                     it.effectiveLabel().contains(TEST_LAY_ON_FACE_SELECTED_LABEL)
+                },
+            )
+            val undo = waitForNode(context.getString(R.string.undo)) {
+                it.isClickable && it.isEnabled
+            }
+            tapCenter(undo)
+            assertTrue(
+                "The applied face placement must be undoable",
+                waitForNodes(setOf(TEST_LAY_ON_FACE_UNDONE_LABEL)).any {
+                    it.effectiveLabel().contains(TEST_LAY_ON_FACE_UNDONE_LABEL)
                 },
             )
         }

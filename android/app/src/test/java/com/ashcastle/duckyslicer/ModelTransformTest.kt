@@ -306,6 +306,104 @@ class ModelTransformTest {
     }
 
     @Test
+    fun facePlacementChoosesTheOrientationWhoseSelectedPlaneActuallyTouchesTheBed() {
+        val model = boxPlacementModel()
+        val projectObject = ProjectObject("box", model)
+        val topFace = floatArrayOf(
+            0f, 0f, 10f,
+            10f, 0f, 10f,
+            10f, 10f, 10f,
+        )
+
+        val selected = projectObject.selectSupportingFaceTransform(
+            triangle = topFace,
+            candidates = listOf(ModelTransform(), ModelTransform(rotationXdeg = 180f)),
+        )
+
+        assertEquals(180f, selected.rotationXdeg, 0.0001f)
+        val center = projectObject.geometry().center
+        val selectedPlaneZ = selected.transformLocal(
+            floatArrayOf(
+                topFace[0] - center[0],
+                topFace[1] - center[1],
+                topFace[2] - center[2],
+            ),
+        )[2]
+        assertEquals(selected.minimumRotatedZ(projectObject), selectedPlaneZ, 0.0001f)
+    }
+
+    @Test
+    fun facePlacementRejectsAPlaneThatWouldLeaveOtherGeometryBelowIt() {
+        val model = boxPlacementModel()
+        val projectObject = ProjectObject("box", model)
+        val interiorPlane = floatArrayOf(
+            0f, 0f, 5f,
+            10f, 0f, 5f,
+            10f, 10f, 5f,
+        )
+
+        assertTrue(
+            runCatching {
+                projectObject.selectSupportingFaceTransform(
+                    triangle = interiorPlane,
+                    candidates = listOf(
+                        ModelTransform(),
+                        ModelTransform(rotationXdeg = 180f),
+                    ),
+                )
+            }.isFailure,
+        )
+    }
+
+    @Test
+    fun facePlacementUsesAllPrintableVolumesWhenCheckingBedSupport() {
+        val base = boxPlacementModel()
+        val elevated = base.copy(
+            fileName = "elevated.stl",
+            minMm = listOf(0.0, 0.0, 20.0),
+            maxMm = listOf(10.0, 10.0, 30.0),
+            previewTriangles = base.previewTriangles.copyOf().also { vertices ->
+                for (index in 2 until vertices.size step 3) vertices[index] += 20f
+            },
+        )
+        val projectObject = ProjectObject(
+            id = "assembly",
+            volumes = listOf(
+                ProjectVolume("base", base),
+                ProjectVolume("elevated", elevated),
+            ),
+        )
+        val elevatedTop = floatArrayOf(
+            0f, 0f, 30f,
+            10f, 0f, 30f,
+            10f, 10f, 30f,
+        )
+
+        val selected = projectObject.selectSupportingFaceTransform(
+            triangle = elevatedTop,
+            candidates = listOf(ModelTransform(), ModelTransform(rotationXdeg = 180f)),
+        )
+
+        assertEquals(180f, selected.rotationXdeg, 0.0001f)
+        assertEquals(-15f, selected.minimumRotatedZ(projectObject), 0.0001f)
+    }
+
+    private fun boxPlacementModel(): ModelInfo = ModelInfo(
+        fileName = "box.stl",
+        triangles = 4,
+        dimensions = listOf(10.0, 10.0, 10.0),
+        localPath = "/tmp/box.stl",
+        minMm = listOf(0.0, 0.0, 0.0),
+        maxMm = listOf(10.0, 10.0, 10.0),
+        previewTriangles = floatArrayOf(
+            0f, 0f, 0f, 10f, 0f, 0f, 10f, 10f, 0f,
+            0f, 0f, 0f, 10f, 10f, 0f, 0f, 10f, 0f,
+            0f, 0f, 10f, 10f, 10f, 10f, 10f, 0f, 10f,
+            0f, 0f, 10f, 0f, 10f, 10f, 10f, 10f, 10f,
+        ),
+    )
+
+    @Test
     fun orcaArrangementRejectsCountAndGeometryMismatches() {
         val malformed = listOf(
             { OrcaArrangement(floatArrayOf(), floatArrayOf(), floatArrayOf()) },

@@ -3328,7 +3328,7 @@ class NativeEngineInstrumentedTest {
         val source = fixtureModel()
         val model = inspectModel(source.absolutePath)
         val triangle = model.previewTriangles.copyOfRange(0, 9)
-        val transform = ModelTransform(
+        val initialTransform = ModelTransform(
             rotationXdeg = 19f,
             rotationYdeg = -31f,
             rotationZdeg = 12f,
@@ -3336,7 +3336,9 @@ class NativeEngineInstrumentedTest {
             scaleY = 0.85f,
             scaleZ = 1.4f,
             mirrorX = true,
-        ).withFaceOnBed(triangle)
+        )
+        val projectObject = ProjectObject("selected-face", model, initialTransform)
+        val transform = projectObject.withFaceOnBed(triangle)
         val center = FloatArray(3) { axis ->
             ((model.minMm[axis] + model.maxMm[axis]) / 2.0).toFloat()
         }
@@ -3396,6 +3398,49 @@ class NativeEngineInstrumentedTest {
             transformedModel.delete()
             slicedOutput?.delete()
         }
+    }
+
+    @Test
+    fun selectedFacePlacementDoesNotTrustReversedStlWinding() {
+        val model = inspectModel(fixtureModel().absolutePath)
+        val triangle = model.previewTriangles.copyOfRange(0, 9)
+        val reversed = triangle.copyOf().also { values ->
+            repeat(3) { axis ->
+                val second = values[3 + axis]
+                values[3 + axis] = values[6 + axis]
+                values[6 + axis] = second
+            }
+        }
+        val projectObject = ProjectObject(
+            id = "reversed-face",
+            model = model,
+            transform = ModelTransform(
+                rotationXdeg = 19f,
+                rotationYdeg = -31f,
+                rotationZdeg = 12f,
+                scale = 1.2f,
+                scaleY = 0.85f,
+                scaleZ = 1.4f,
+                mirrorX = true,
+            ),
+        )
+
+        val transform = projectObject.withFaceOnBed(reversed)
+        val center = projectObject.geometry().center
+        val selectedFaceZ = FloatArray(3) { vertex ->
+            transform.transformLocal(
+                FloatArray(3) { axis -> reversed[vertex * 3 + axis] - center[axis] },
+            )[2]
+        }
+
+        assertTrue(
+            "The tapped plane must be the actual bed-supporting plane even with reversed winding",
+            abs(selectedFaceZ.average() - transform.minimumRotatedZ(projectObject)) < 0.05,
+        )
+        assertTrue(
+            "The selected triangle must be horizontal after placement",
+            selectedFaceZ.max() - selectedFaceZ.min() < 0.05f,
+        )
     }
 
     @Test
