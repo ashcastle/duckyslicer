@@ -10,6 +10,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.u1.slicer.NativeLibrary
 import java.io.File
 import java.security.MessageDigest
+import java.util.Locale
 import kotlin.math.roundToInt
 import org.json.JSONArray
 import org.json.JSONObject
@@ -87,6 +88,7 @@ class OrcaQualificationCorpusInstrumentedTest {
                 val identifier = case.getString("id")
                 val modelPaths = case.getJSONArray("models").strings()
                 val offsets = case.optJSONArray("offsetsXmm")
+                val modelFilamentSlots = case.optJSONArray("modelFilamentSlots")
                 val objects = modelPaths.mapIndexed { index, assetPath ->
                     val source = File(context.cacheDir, "qualification-$identifier-$index.stl")
                     instrumentation.context.assets.open(assetPath).use { input ->
@@ -100,12 +102,10 @@ class OrcaQualificationCorpusInstrumentedTest {
                         transform = ModelTransform(
                             offsetXmm = offsets?.getDouble(index)?.toFloat() ?: 0f,
                         ),
+                        filamentSlot = modelFilamentSlots?.getInt(index) ?: 0,
                     )
                 }
-                val options = baseOptions.copy(
-                    supportEnabled = case.optBoolean("supportEnabled", false),
-                    supportType = "normal(auto)",
-                )
+                val options = qualificationOptions(baseOptions, case)
                 val soakCycles = JSONArray()
                 var finalMetrics: JSONObject? = null
                 repeat(qualificationCycles) { cycleIndex ->
@@ -246,6 +246,48 @@ class OrcaQualificationCorpusInstrumentedTest {
         return options
     }
 
+    private fun qualificationOptions(base: SliceOptions, case: JSONObject): SliceOptions {
+        val filamentIds = case.optJSONArray("filamentIds")?.strings() ?: listOf("generic-pla")
+        val filaments = filamentIds.map { identifier ->
+            val filament = when (identifier) {
+                "generic-pla" -> FilamentProfile.GENERIC_PLA
+                "generic-petg" -> FilamentProfile.GENERIC_PETG
+                else -> error("Unsupported qualification filament: $identifier")
+            }
+            filament.copy(compatiblePrinters = listOf(PrinterProfile.U1_04.name))
+        }
+        val feature = case.optJSONObject("featureFilaments")?.let { routing ->
+            FeatureFilamentSettings(
+                infillOverrideEnabled = routing.getBoolean("infillOverrideEnabled"),
+                baseFirstLayers = routing.getInt("baseFirstLayers"),
+                baseLastLayers = routing.getInt("baseLastLayers"),
+                sparseInfillFilament = routing.getInt("sparseInfillFilament"),
+                wallFilament = routing.getInt("wallFilament"),
+                solidInfillFilament = routing.getInt("solidInfillFilament"),
+            )
+        } ?: FeatureFilamentSettings()
+        return base
+            .selectFilament(filaments.first())
+            .copy(
+                filamentSlots = filaments,
+                supportEnabled = case.optBoolean("supportEnabled", false),
+                supportType = case.optString("supportType", "normal(auto)"),
+                supportStyle = case.optString("supportStyle", "default"),
+                supportFilament = case.optInt("supportFilament", 0),
+                supportInterfaceFilament = case.optInt("supportInterfaceFilament", 0),
+                supportInterfaceTopLayers = case.optInt(
+                    "supportInterfaceTopLayers",
+                    base.supportInterfaceTopLayers,
+                ),
+                supportInterfaceBottomLayers = case.optInt(
+                    "supportInterfaceBottomLayers",
+                    base.supportInterfaceBottomLayers,
+                ),
+                featureFilaments = feature,
+                wipeTowerEnabled = false,
+            )
+    }
+
     private fun metrics(
         identifier: String,
         modelCount: Int,
@@ -266,12 +308,23 @@ class OrcaQualificationCorpusInstrumentedTest {
         val roleFirstLayerJson = JSONObject()
         val roleLastLayerJson = JSONObject()
         val roleExtrusionJson = JSONObject()
+        val roleToolsJson = JSONObject()
+        val roleToolExtrusionJson = JSONObject()
         ROLE_NAMES.forEach { role ->
             roleMotionJson.put(role, analysis.roleMotions.getValue(role))
             roleLayerJson.put(role, analysis.roleLayers.getValue(role))
             roleFirstLayerJson.put(role, analysis.roleFirstLayers.getValue(role))
             roleLastLayerJson.put(role, analysis.roleLastLayers.getValue(role))
             roleExtrusionJson.put(role, analysis.roleExtrusionMm.getValue(role))
+            roleToolsJson.put(role, JSONArray(analysis.roleTools.getValue(role).sorted()))
+            roleToolExtrusionJson.put(
+                role,
+                JSONObject().also { tools ->
+                    analysis.roleToolExtrusionMm.getValue(role).toSortedMap().forEach { (tool, value) ->
+                        tools.put(tool.toString(), value)
+                    }
+                },
+            )
         }
         val coveredZ = HashSet<Int>()
         preview.segments.indices.step(GcodeLayerPreview.SEGMENT_STRIDE).forEach { offset ->
@@ -308,6 +361,11 @@ class OrcaQualificationCorpusInstrumentedTest {
             .put("roleFirstLayers", roleFirstLayerJson)
             .put("roleLastLayers", roleLastLayerJson)
             .put("roleExtrusionMm", roleExtrusionJson)
+            .put("usedTools", JSONArray(analysis.usedTools.sorted()))
+            .put("toolChanges", analysis.toolChanges)
+            .put("roleTools", roleToolsJson)
+            .put("roleToolExtrusionMm", roleToolExtrusionJson)
+            .put("supportGeometryFingerprint", analysis.supportGeometryFingerprint)
             .put("previewLayerCount", preview.layerCount)
             .put("previewStartLayer", preview.startLayer)
             .put("previewEndLayer", preview.endLayer)
@@ -468,6 +526,28 @@ class OrcaQualificationCorpusInstrumentedTest {
                 roleLastLayers.getInt(before) < roleFirstLayers.getInt(after),
             )
         }
+        val usedTools = metrics.getJSONArray("usedTools").ints().toSet()
+        (expected.optJSONArray("requiredTools")?.ints() ?: listOf(0)).forEach { tool ->
+            assertTrue("$identifier must positively extrude with T$tool", tool in usedTools)
+        }
+        assertTrue(
+            "$identifier must perform enough real tool changes",
+            metrics.getInt("toolChanges") >= expected.optInt("minToolChanges", 0),
+        )
+        expected.optJSONObject("exactRoleTools")?.let { exactRoleTools ->
+            exactRoleTools.keys().forEach { role ->
+                val expectedTools = exactRoleTools.getJSONArray(role).ints().toSet()
+                val actualTools = metrics.getJSONObject("roleTools").getJSONArray(role).ints().toSet()
+                assertEquals("$identifier must route $role to the selected tools", expectedTools, actualTools)
+                val toolExtrusion = metrics.getJSONObject("roleToolExtrusionMm").getJSONObject(role)
+                expectedTools.forEach { tool ->
+                    assertTrue(
+                        "$identifier must positively extrude $role with T$tool",
+                        toolExtrusion.getDouble(tool.toString()) > MINIMUM_POSITIVE_EXTRUSION_MM,
+                    )
+                }
+            }
+        }
     }
 
     private fun analyzeGcode(
@@ -477,16 +557,25 @@ class OrcaQualificationCorpusInstrumentedTest {
         val roleMotions = ROLE_NAMES.associateWith { 0 }.toMutableMap()
         val roleLayerSets = ROLE_NAMES.associateWith { mutableSetOf<Int>() }
         val roleExtrusionMm = ROLE_NAMES.associateWith { 0.0 }.toMutableMap()
+        val roleTools = ROLE_NAMES.associateWith { mutableSetOf<Int>() }
+        val roleToolExtrusionMm = ROLE_NAMES.associateWith { mutableMapOf<Int, Double>() }
         val profileValues = mutableMapOf<String, String>()
+        val supportGeometry = MessageDigest.getInstance("SHA-256")
         var activeRole = "other"
+        var activeTool = 0
+        var toolChanges = 0
         var relativeExtrusion = false
-        var absoluteExtruder = 0f
+        val absoluteExtruders = mutableMapOf(0 to 0f)
         var emittedLayer = -1
         var extrusionMotions = 0
         var minX = Float.POSITIVE_INFINITY
         var maxX = Float.NEGATIVE_INFINITY
+        var currentX = 0f
+        var currentY = 0f
+        var currentZ = 0f
         file.useLines { lines ->
             lines.forEach { line ->
+                val selectedTool = toolIndex(line)
                 if (line.startsWith(";") && " = " in line) {
                     val key = line.removePrefix(";").trim().substringBefore(" = ")
                     if (key in fingerprintKeys) {
@@ -498,21 +587,33 @@ class OrcaQualificationCorpusInstrumentedTest {
                     line.startsWith(";TYPE:") -> activeRole = roleName(line.substringAfter(";TYPE:"))
                     line.startsWith("; FEATURE:") ->
                         activeRole = roleName(line.substringAfter("; FEATURE:"))
+                    selectedTool != null -> {
+                        val tool = selectedTool
+                        if (tool != activeTool) toolChanges += 1
+                        activeTool = tool
+                        absoluteExtruders.putIfAbsent(tool, 0f)
+                    }
                     line.startsWith("M82") -> relativeExtrusion = false
                     line.startsWith("M83") -> relativeExtrusion = true
                     line.startsWith("G92") ->
-                        axisValue(line, 'E')?.let { absoluteExtruder = it }
+                        axisValue(line, 'E')?.let { absoluteExtruders[activeTool] = it }
                     line.startsWith("G1 ") || line.startsWith("G2 ") || line.startsWith("G3 ") -> {
+                        val x = axisValue(line, 'X')
+                        val y = axisValue(line, 'Y')
+                        val z = axisValue(line, 'Z')
+                        x?.let { currentX = it }
+                        y?.let { currentY = it }
+                        z?.let { currentZ = it }
                         val encodedExtrusion = axisValue(line, 'E') ?: return@forEach
+                        val absoluteExtruder = absoluteExtruders.getValue(activeTool)
                         val extrusionDelta = if (relativeExtrusion) {
                             encodedExtrusion
                         } else {
                             encodedExtrusion - absoluteExtruder
                         }
-                        if (!relativeExtrusion) absoluteExtruder = encodedExtrusion
-                        val x = axisValue(line, 'X')
-                        val spatialMotion = x != null ||
-                            listOf('Y', 'Z', 'I', 'J').any { axis -> axisValue(line, axis) != null }
+                        if (!relativeExtrusion) absoluteExtruders[activeTool] = encodedExtrusion
+                        val spatialMotion = x != null || y != null || z != null ||
+                            listOf('I', 'J').any { axis -> axisValue(line, axis) != null }
                         if (
                             extrusionDelta > MINIMUM_POSITIVE_EXTRUSION_MM &&
                             spatialMotion && emittedLayer >= 0
@@ -522,6 +623,23 @@ class OrcaQualificationCorpusInstrumentedTest {
                             roleLayerSets.getValue(activeRole) += emittedLayer
                             roleExtrusionMm[activeRole] =
                                 roleExtrusionMm.getValue(activeRole) + extrusionDelta
+                            roleTools.getValue(activeRole) += activeTool
+                            val extrusionByTool = roleToolExtrusionMm.getValue(activeRole)
+                            extrusionByTool[activeTool] =
+                                extrusionByTool.getOrDefault(activeTool, 0.0) + extrusionDelta
+                            if (activeRole == "support") {
+                                val signature = String.format(
+                                    Locale.ROOT,
+                                    "%d|%d|%.4f|%.4f|%.4f|%.7f\n",
+                                    emittedLayer,
+                                    activeTool,
+                                    currentX,
+                                    currentY,
+                                    currentZ,
+                                    extrusionDelta,
+                                )
+                                supportGeometry.update(signature.toByteArray(Charsets.UTF_8))
+                            }
                             x?.let {
                                 minX = minOf(minX, it)
                                 maxX = maxOf(maxX, it)
@@ -546,6 +664,12 @@ class OrcaQualificationCorpusInstrumentedTest {
             roleFirstLayers = roleFirstLayers,
             roleLastLayers = roleLastLayers,
             roleExtrusionMm = roleExtrusionMm,
+            usedTools = roleTools.values.flatten().toSet(),
+            toolChanges = toolChanges,
+            roleTools = roleTools.mapValues { (_, tools) -> tools.toSet() },
+            roleToolExtrusionMm = roleToolExtrusionMm.mapValues { (_, values) -> values.toMap() },
+            supportGeometryFingerprint = supportGeometry.digest()
+                .joinToString("") { byte -> "%02x".format(byte) },
             profileValues = profileValues,
         )
     }
@@ -603,6 +727,12 @@ class OrcaQualificationCorpusInstrumentedTest {
         return null
     }
 
+    private fun toolIndex(line: String): Int? {
+        val command = line.substringBefore(';').trim()
+        if (!command.startsWith('T') || command.length < 2) return null
+        return command.substring(1).toIntOrNull()?.takeIf { it in 0..15 }
+    }
+
     private fun sha256(payload: ByteArray): String = MessageDigest.getInstance("SHA-256")
         .digest(payload)
         .joinToString("") { byte -> "%02x".format(byte) }
@@ -623,6 +753,8 @@ class OrcaQualificationCorpusInstrumentedTest {
     private fun JSONArray.objects(): List<JSONObject> = List(length()) { index -> getJSONObject(index) }
 
     private fun JSONArray.strings(): List<String> = List(length()) { index -> getString(index) }
+
+    private fun JSONArray.ints(): List<Int> = List(length()) { index -> getInt(index) }
 
     companion object {
         private const val MANIFEST_ASSET = "manifest.json"
@@ -659,5 +791,10 @@ private data class QualificationGcodeAnalysis(
     val roleFirstLayers: Map<String, Int>,
     val roleLastLayers: Map<String, Int>,
     val roleExtrusionMm: Map<String, Double>,
+    val usedTools: Set<Int>,
+    val toolChanges: Int,
+    val roleTools: Map<String, Set<Int>>,
+    val roleToolExtrusionMm: Map<String, Map<Int, Double>>,
+    val supportGeometryFingerprint: String,
     val profileValues: Map<String, String>,
 )

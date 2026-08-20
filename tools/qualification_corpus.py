@@ -20,6 +20,9 @@ REQUIRED_CASES = {
     "hollow-topology",
     "bridge-overhang",
     "automatic-supports",
+    "feature-filament-routing",
+    "dual-support-filaments",
+    "tree-supports",
     "multi-object",
     "dense-preview",
 }
@@ -233,7 +236,10 @@ def validate(manifest: dict[str, object], *, check_files: bool = True) -> None:
         raise CorpusError("Qualification cases are missing")
     identifiers = [case.get("id") for case in cases if isinstance(case, dict)]
     if len(identifiers) != len(cases) or set(identifiers) != REQUIRED_CASES:
-        raise CorpusError("Qualification cases must cover the six required scenarios exactly once")
+        raise CorpusError(
+            f"Qualification cases must cover the {len(REQUIRED_CASES)} required scenarios exactly once"
+        )
+    case_by_id = {str(case["id"]): case for case in cases if isinstance(case, dict)}
     for case in cases:
         assert isinstance(case, dict)
         case_models = case.get("models")
@@ -242,6 +248,93 @@ def validate(manifest: dict[str, object], *, check_files: bool = True) -> None:
             raise CorpusError(f"Qualification case has no models: {case.get('id')}")
         if any(path not in generated for path in case_models):
             raise CorpusError(f"Qualification case references an unknown model: {case.get('id')}")
+        filament_ids = case.get("filamentIds", ["generic-pla"])
+        if (
+            not isinstance(filament_ids, list)
+            or not 1 <= len(filament_ids) <= 4
+            or filament_ids[0] != "generic-pla"
+            or any(value not in {"generic-pla", "generic-petg"} for value in filament_ids)
+        ):
+            raise CorpusError(f"Qualification case has invalid filament slots: {case.get('id')}")
+        model_slots = case.get("modelFilamentSlots", [0] * len(case_models))
+        if (
+            not isinstance(model_slots, list)
+            or len(model_slots) != len(case_models)
+            or any(
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value not in range(len(filament_ids))
+                for value in model_slots
+            )
+        ):
+            raise CorpusError(f"Qualification case has invalid model filament routing: {case.get('id')}")
+        support_enabled = case.get("supportEnabled", False)
+        support_type = case.get("supportType", "normal(auto)")
+        if not isinstance(support_enabled, bool) or support_type not in {
+            "normal(auto)",
+            "tree(auto)",
+        }:
+            raise CorpusError(f"Qualification case has invalid support mode: {case.get('id')}")
+        support_style = case.get("supportStyle", "default")
+        compatible_styles = (
+            {"default", "organic", "tree_slim", "tree_strong", "tree_hybrid"}
+            if support_type == "tree(auto)"
+            else {"default", "grid", "snug"}
+        )
+        if support_style not in compatible_styles:
+            raise CorpusError(f"Qualification case has invalid support style: {case.get('id')}")
+        if not support_enabled and any(
+            key in case
+            for key in (
+                "supportType",
+                "supportStyle",
+                "supportFilament",
+                "supportInterfaceFilament",
+            )
+        ):
+            raise CorpusError(f"Qualification case configures disabled support: {case.get('id')}")
+        for key in ("supportFilament", "supportInterfaceFilament"):
+            value = case.get(key, 0)
+            if (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value not in range(len(filament_ids) + 1)
+            ):
+                raise CorpusError(f"Qualification case has invalid {key}: {case.get('id')}")
+        for key in ("supportInterfaceTopLayers", "supportInterfaceBottomLayers"):
+            value = case.get(key, 0)
+            if (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value not in range(101)
+            ):
+                raise CorpusError(f"Qualification case has invalid {key}: {case.get('id')}")
+        feature_filaments = case.get("featureFilaments")
+        if feature_filaments is not None:
+            required_feature_keys = {
+                "infillOverrideEnabled",
+                "baseFirstLayers",
+                "baseLastLayers",
+                "sparseInfillFilament",
+                "wallFilament",
+                "solidInfillFilament",
+            }
+            if not isinstance(feature_filaments, dict) or set(feature_filaments) != required_feature_keys:
+                raise CorpusError(f"Qualification case has invalid feature routing: {case.get('id')}")
+            if not isinstance(feature_filaments["infillOverrideEnabled"], bool):
+                raise CorpusError(f"Qualification case has invalid feature routing: {case.get('id')}")
+            if any(
+                not isinstance(feature_filaments[key], int)
+                or isinstance(feature_filaments[key], bool)
+                or feature_filaments[key] < 0
+                for key in ("baseFirstLayers", "baseLastLayers")
+            ) or any(
+                not isinstance(feature_filaments[key], int)
+                or isinstance(feature_filaments[key], bool)
+                or feature_filaments[key] not in range(1, len(filament_ids) + 1)
+                for key in ("sparseInfillFilament", "wallFilament", "solidInfillFilament")
+            ):
+                raise CorpusError(f"Qualification case has invalid feature routing: {case.get('id')}")
         if not isinstance(expected, dict) or not expected.get("requiredRoles"):
             raise CorpusError(f"Qualification case has no observable expectations: {case.get('id')}")
         required_roles = expected["requiredRoles"]
@@ -292,6 +385,50 @@ def validate(manifest: dict[str, object], *, check_files: bool = True) -> None:
             for rule in precedence
         ):
             raise CorpusError(f"Qualification case has invalid role precedence: {case.get('id')}")
+        required_tools = expected.get("requiredTools", [0])
+        exact_role_tools = expected.get("exactRoleTools", {})
+        minimum_tool_changes = expected.get("minToolChanges", 0)
+        if (
+            not isinstance(required_tools, list)
+            or not required_tools
+            or len(set(required_tools)) != len(required_tools)
+            or any(
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value not in range(len(filament_ids))
+                for value in required_tools
+            )
+            or not isinstance(exact_role_tools, dict)
+            or not set(exact_role_tools) <= set(required_roles)
+            or any(
+                not isinstance(values, list)
+                or not values
+                or len(set(values)) != len(values)
+                or any(
+                    not isinstance(value, int)
+                    or isinstance(value, bool)
+                    or value not in range(len(filament_ids))
+                    for value in values
+                )
+                for values in exact_role_tools.values()
+            )
+            or not isinstance(minimum_tool_changes, int)
+            or isinstance(minimum_tool_changes, bool)
+            or minimum_tool_changes < 0
+        ):
+            raise CorpusError(f"Qualification case has invalid tool-routing expectations: {case.get('id')}")
+        different_from = expected.get("supportGeometryDifferentFrom")
+        if different_from is not None:
+            baseline = case_by_id.get(str(different_from))
+            if (
+                not support_enabled
+                or not isinstance(different_from, str)
+                or different_from == case.get("id")
+                or not isinstance(baseline, dict)
+                or not baseline.get("supportEnabled", False)
+                or baseline.get("models") != case_models
+            ):
+                raise CorpusError(f"Qualification case has invalid support comparison: {case.get('id')}")
     dense = next(case for case in cases if case["id"] == "dense-preview")
     dense_expected = dense["expected"]
     if dense_expected.get("minPreviewLayerCoverage", 0) < 0.9:

@@ -146,6 +146,29 @@ def validate_report(
     actual_ids = {case.get("id") for case in actual_case_entries}
     if actual_ids != required_ids or len(actual_case_entries) != len(actual_ids):
         raise RunnerError("Device qualification report does not contain every corpus case")
+    actual_by_id = {str(case["id"]): case for case in actual_case_entries}
+    manifest_by_id = {
+        str(case["id"]): case for case in cases if isinstance(case, dict)
+    }
+    for identifier in required_ids:
+        expected = manifest_by_id[identifier].get("expected", {})
+        if not isinstance(expected, dict):
+            continue
+        baseline_id = expected.get("supportGeometryDifferentFrom")
+        if baseline_id not in required_ids:
+            continue
+        current_fingerprint = actual_by_id[identifier].get("supportGeometryFingerprint")
+        baseline_fingerprint = actual_by_id[str(baseline_id)].get("supportGeometryFingerprint")
+        if (
+            not isinstance(current_fingerprint, str)
+            or len(current_fingerprint) != 64
+            or not isinstance(baseline_fingerprint, str)
+            or len(baseline_fingerprint) != 64
+            or current_fingerprint == baseline_fingerprint
+        ):
+            raise RunnerError(
+                f"{identifier} support geometry does not differ from {baseline_id}"
+            )
     return report
 
 

@@ -32,6 +32,7 @@ from tools.run_desktop_orca_qualification import (
     bed_center,
     compare_case,
     parse_config_block,
+    write_assembly,
 )
 
 
@@ -65,6 +66,13 @@ class QualificationCorpusTest(unittest.TestCase):
         with self.assertRaisesRegex(CorpusError, "role-layer bounds"):
             validate(weak_structure, check_files=False)
 
+        invalid_routing = copy.deepcopy(load_manifest())
+        next(
+            case for case in invalid_routing["cases"] if case["id"] == "feature-filament-routing"
+        )["featureFilaments"]["sparseInfillFilament"] = 3
+        with self.assertRaisesRegex(CorpusError, "feature routing"):
+            validate(invalid_routing, check_files=False)
+
     def test_adb_selection_is_explicit_when_ambiguous(self) -> None:
         output = """List of devices attached
 phone device product:test
@@ -82,7 +90,19 @@ emulator-5554 device product:test
             "schemaVersion": 1,
             "engineRevision": manifest["engine"]["revision"],
             "manifestSha256": hashlib.sha256(MANIFEST.read_bytes()).hexdigest(),
-            "cases": [{"id": case["id"]} for case in manifest["cases"]],
+            "cases": [
+                {
+                    "id": case["id"],
+                    **(
+                        {"supportGeometryFingerprint": "a" * 64}
+                        if case["id"] == "automatic-supports"
+                        else {"supportGeometryFingerprint": "b" * 64}
+                        if case["id"] == "tree-supports"
+                        else {}
+                    ),
+                }
+                for case in manifest["cases"]
+            ],
         }
         self.assertEqual(report, validate_report(json.dumps(report), manifest))
         report["cases"].append(dict(report["cases"][0]))
@@ -92,6 +112,15 @@ emulator-5554 device product:test
         report["manifestSha256"] = "0" * 64
         with self.assertRaisesRegex(RunnerError, "stale corpus manifest"):
             validate_report(json.dumps(report), manifest)
+
+        report["manifestSha256"] = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()
+        reports = {case["id"]: case for case in report["cases"]}
+        reports["automatic-supports"]["supportGeometryFingerprint"] = "a" * 64
+        reports["tree-supports"]["supportGeometryFingerprint"] = "a" * 64
+        with self.assertRaisesRegex(RunnerError, "support geometry does not differ"):
+            validate_report(json.dumps(report), manifest)
+        reports["tree-supports"]["supportGeometryFingerprint"] = "b" * 64
+        self.assertEqual(report, validate_report(json.dumps(report), manifest))
 
     def test_target_metadata_is_typed_and_rejects_unsupported_targets(self) -> None:
         self.assertEqual(
@@ -130,6 +159,13 @@ emulator-5554 device product:test
                         "gcodeSha256": nonce,
                         "sliceElapsedMs": 1.0,
                         "previewParseElapsedMs": 2.0,
+                        **(
+                            {"supportGeometryFingerprint": "a" * 64}
+                            if case["id"] == "automatic-supports"
+                            else {"supportGeometryFingerprint": "b" * 64}
+                            if case["id"] == "tree-supports"
+                            else {}
+                        ),
                     }
                     for case in manifest["cases"]
                 ],
@@ -195,6 +231,10 @@ G1 E-0.2
 ;TYPE:Inner wall
 G1 X3 E0.1
 G2 I1 J0 E0.1
+;TYPE:Support
+T1
+G1 X4 E0.1
+T0
 ; CONFIG_BLOCK_START
 ; layer_height = 0.2
 ; wall_loops = 2
@@ -208,16 +248,20 @@ G2 I1 J0 E0.1
             )
             metrics = analyze_gcode(gcode, ["layer_height", "wall_loops"])
             self.assertEqual(2, metrics["layers"])
-            self.assertEqual(3, metrics["extrusionMotions"])
-            self.assertEqual(2.0, metrics["extrusionXSpanMm"])
+            self.assertEqual(4, metrics["extrusionMotions"])
+            self.assertEqual(3.0, metrics["extrusionXSpanMm"])
             self.assertEqual(1, metrics["roleMotions"]["outerWall"])
             self.assertEqual(2, metrics["emittedLayers"])
             self.assertEqual(1, metrics["roleLayers"]["outerWall"])
             self.assertEqual(0, metrics["roleFirstLayers"]["outerWall"])
             self.assertEqual(1, metrics["roleLastLayers"]["innerWall"])
             self.assertAlmostEqual(0.2, metrics["roleExtrusionMm"]["innerWall"])
+            self.assertEqual([0, 1], metrics["usedTools"])
+            self.assertEqual(2, metrics["toolChanges"])
+            self.assertEqual([1], metrics["roleTools"]["support"])
+            self.assertAlmostEqual(0.1, metrics["roleToolExtrusionMm"]["support"]["1"])
             android = dict(metrics)
-            self.assertEqual([], compare_case(metrics, android, ["outerWall", "innerWall"]))
+            self.assertEqual([], compare_case(metrics, android, ["outerWall", "innerWall", "support"]))
             android["layers"] = 3
             android["previewLayerCount"] = 2
             self.assertEqual([], compare_case(metrics, android, ["outerWall"]))
@@ -234,6 +278,25 @@ G2 I1 J0 E0.1
 
     def test_desktop_comparison_uses_effective_bed_center(self) -> None:
         self.assertEqual((135.0, 135.0), bed_center({"bed_shape": "0x0,270x0,270x270,0x270"}))
+
+    def test_desktop_assembly_preserves_feature_and_object_filament_routing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "assembly.json"
+            feature_case = next(
+                case for case in load_manifest()["cases"] if case["id"] == "feature-filament-routing"
+            )
+            write_assembly(path, feature_case, (135.0, 135.0))
+            feature_object = json.loads(path.read_text(encoding="utf-8"))["plates"][0]["objects"][0]
+            self.assertEqual([0], feature_object["filaments"])
+
+            object_case = copy.deepcopy(
+                next(case for case in load_manifest()["cases"] if case["id"] == "multi-object")
+            )
+            object_case["filamentIds"] = ["generic-pla", "generic-petg"]
+            object_case["modelFilamentSlots"] = [0, 1]
+            write_assembly(path, object_case, (135.0, 135.0))
+            objects = json.loads(path.read_text(encoding="utf-8"))["plates"][0]["objects"]
+            self.assertEqual([[1], [2]], [value["filaments"] for value in objects])
 
 
 if __name__ == "__main__":

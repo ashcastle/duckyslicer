@@ -120,19 +120,38 @@ def axis_value(line: str, axis: str) -> float | None:
     return None
 
 
+def tool_index(line: str) -> int | None:
+    command = line.partition(";")[0].strip()
+    if not command.startswith("T"):
+        return None
+    try:
+        value = int(command[1:])
+    except ValueError:
+        return None
+    return value if 0 <= value <= 15 else None
+
+
 def analyze_gcode(path: Path, fingerprint_keys: Sequence[str]) -> dict[str, object]:
     role_motions = {role: 0 for role in ROLE_NAMES}
     role_layers: dict[str, set[int]] = {role: set() for role in ROLE_NAMES}
     role_extrusion_mm = {role: 0.0 for role in ROLE_NAMES}
+    role_tools: dict[str, set[int]] = {role: set() for role in ROLE_NAMES}
+    role_tool_extrusion_mm: dict[str, dict[int, float]] = {role: {} for role in ROLE_NAMES}
     profile_values: dict[str, str] = {}
+    support_geometry = hashlib.sha256()
     active_role = "other"
+    active_tool = 0
+    tool_changes = 0
     relative_extrusion = False
-    absolute_extruder = 0.0
+    absolute_extruders = {0: 0.0}
     emitted_layer = -1
     extrusion_motions = 0
     layers = 0
     min_x = math.inf
     max_x = -math.inf
+    current_x = 0.0
+    current_y = 0.0
+    current_z = 0.0
     digest = hashlib.sha256()
     try:
         with path.open("rb") as raw:
@@ -156,25 +175,41 @@ def analyze_gcode(path: Path, fingerprint_keys: Sequence[str]) -> dict[str, obje
                     label = line.removeprefix("; FEATURE:")
                 if label is not None:
                     active_role = role_name(label)
-                if line.startswith("M82"):
+                selected_tool = tool_index(line)
+                if selected_tool is not None:
+                    if selected_tool != active_tool:
+                        tool_changes += 1
+                    active_tool = selected_tool
+                    absolute_extruders.setdefault(active_tool, 0.0)
+                elif line.startswith("M82"):
                     relative_extrusion = False
                 elif line.startswith("M83"):
                     relative_extrusion = True
                 elif line.startswith("G92"):
                     reset = axis_value(line, "E")
                     if reset is not None:
-                        absolute_extruder = reset
+                        absolute_extruders[active_tool] = reset
                 if line.startswith(("G1 ", "G2 ", "G3 ")):
+                    x = axis_value(line, "X")
+                    y = axis_value(line, "Y")
+                    z = axis_value(line, "Z")
+                    if x is not None:
+                        current_x = x
+                    if y is not None:
+                        current_y = y
+                    if z is not None:
+                        current_z = z
                     encoded_extrusion = axis_value(line, "E")
                     if encoded_extrusion is None:
                         continue
+                    absolute_extruder = absolute_extruders[active_tool]
                     extrusion_delta = (
                         encoded_extrusion
                         if relative_extrusion
                         else encoded_extrusion - absolute_extruder
                     )
                     if not relative_extrusion:
-                        absolute_extruder = encoded_extrusion
+                        absolute_extruders[active_tool] = encoded_extrusion
                     spatial_motion = any(axis_value(line, axis) is not None for axis in "XYZIJ")
                     if extrusion_delta <= 1e-7 or not spatial_motion or emitted_layer < 0:
                         continue
@@ -182,7 +217,16 @@ def analyze_gcode(path: Path, fingerprint_keys: Sequence[str]) -> dict[str, obje
                     role_motions[active_role] += 1
                     role_layers[active_role].add(emitted_layer)
                     role_extrusion_mm[active_role] += extrusion_delta
-                    x = axis_value(line, "X")
+                    role_tools[active_role].add(active_tool)
+                    role_tool_extrusion_mm[active_role][active_tool] = (
+                        role_tool_extrusion_mm[active_role].get(active_tool, 0.0) + extrusion_delta
+                    )
+                    if active_role == "support":
+                        signature = (
+                            f"{emitted_layer}|{active_tool}|{current_x:.4f}|{current_y:.4f}|"
+                            f"{current_z:.4f}|{extrusion_delta:.7f}\n"
+                        )
+                        support_geometry.update(signature.encode())
                     if x is not None:
                         min_x = min(min_x, x)
                         max_x = max(max_x, x)
@@ -210,6 +254,14 @@ def analyze_gcode(path: Path, fingerprint_keys: Sequence[str]) -> dict[str, obje
             role: max(values) if values else -1 for role, values in role_layers.items()
         },
         "roleExtrusionMm": role_extrusion_mm,
+        "usedTools": sorted(set().union(*role_tools.values())),
+        "toolChanges": tool_changes,
+        "roleTools": {role: sorted(values) for role, values in role_tools.items()},
+        "roleToolExtrusionMm": {
+            role: {str(tool): value for tool, value in sorted(values.items())}
+            for role, values in role_tool_extrusion_mm.items()
+        },
+        "supportGeometryFingerprint": support_geometry.hexdigest(),
         "profileFingerprint": hashlib.sha256(fingerprint.encode()).hexdigest(),
         "profileValues": dict(sorted(profile_values.items())),
     }
@@ -258,13 +310,27 @@ def write_assembly(
 ) -> None:
     model_paths = [str(value) for value in case["models"]]
     offsets = [float(value) for value in case.get("offsetsXmm", [0.0] * len(model_paths))]
+    project_slots = [int(value) for value in case.get("modelFilamentSlots", [0] * len(model_paths))]
+    feature_routing = case.get("featureFilaments")
+    routes_default_volume_by_feature = isinstance(feature_routing, Mapping) and (
+        int(feature_routing.get("wallFilament", 1)) != 1
+        or int(feature_routing.get("solidInfillFilament", 1))
+        != int(feature_routing.get("wallFilament", 1))
+        or (
+            bool(feature_routing.get("infillOverrideEnabled", False))
+            and int(feature_routing.get("sparseInfillFilament", 1))
+            != int(feature_routing.get("wallFilament", 1))
+        )
+    )
     objects: list[dict[str, object]] = []
     for index, relative in enumerate(model_paths):
+        project_slot = project_slots[index]
+        native_slot = 0 if project_slot == 0 and routes_default_volume_by_feature else project_slot + 1
         objects.append(
             {
                 "path": str((CORPUS_ROOT / relative).resolve()),
                 "count": 1,
-                "filaments": [1],
+                "filaments": [native_slot],
                 "assemble_index": [0],
                 # Android's transform pipeline converts the project-relative
                 # offset into bed space before the pinned core sees the STL.
@@ -356,6 +422,37 @@ def compare_case(
                 f"{role} positive extrusion: desktop={desktop_mm:.4f} "
                 f"android={android_mm:.4f} tolerance={extrusion_tolerance:.4f}"
             )
+    for field in ("usedTools", "roleTools"):
+        if desktop.get(field) != android.get(field):
+            differences.append(f"{field}: desktop={desktop.get(field)} android={android.get(field)}")
+    if desktop.get("toolChanges") != android.get("toolChanges"):
+        differences.append(
+            f"tool changes: desktop={desktop.get('toolChanges')} android={android.get('toolChanges')}"
+        )
+    desktop_tool_extrusion = desktop.get("roleToolExtrusionMm", {})
+    android_tool_extrusion = android.get("roleToolExtrusionMm", {})
+    assert isinstance(desktop_tool_extrusion, Mapping)
+    assert isinstance(android_tool_extrusion, Mapping)
+    for role in ROLE_NAMES:
+        desktop_values = desktop_tool_extrusion.get(role, {})
+        android_values = android_tool_extrusion.get(role, {})
+        assert isinstance(desktop_values, Mapping)
+        assert isinstance(android_values, Mapping)
+        if set(desktop_values) != set(android_values):
+            differences.append(
+                f"{role} extrusion tools: desktop={sorted(desktop_values)} "
+                f"android={sorted(android_values)}"
+            )
+            continue
+        for tool in desktop_values:
+            desktop_mm = float(desktop_values[tool])
+            android_mm = float(android_values[tool])
+            tolerance = max(0.02, abs(android_mm) * 0.001)
+            if abs(desktop_mm - android_mm) > tolerance:
+                differences.append(
+                    f"{role} T{tool} extrusion: desktop={desktop_mm:.4f} "
+                    f"android={android_mm:.4f} tolerance={tolerance:.4f}"
+                )
     return differences
 
 
@@ -376,8 +473,7 @@ def run(
         )
     if not binary.is_file():
         raise DesktopQualificationError(f"Pinned desktop Orca binary is missing: {binary}")
-    config = parse_config_block(android_gcode)
-    center = bed_center(config)
+    base_config = parse_config_block(android_gcode)
     try:
         android_report = json.loads(android_report_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
@@ -402,9 +498,6 @@ def run(
         shutil.rmtree(output)
     profiles = output / "profiles"
     profiles.mkdir(parents=True)
-    machine = profiles / "machine.json"
-    write_profile(machine, "machine", config)
-
     reports: list[dict[str, object]] = []
     failures: list[str] = []
     fingerprint_keys = [str(value) for value in manifest["profileFingerprintKeys"]]
@@ -412,12 +505,12 @@ def run(
         identifier = str(case["id"])
         case_dir = output / identifier
         case_dir.mkdir()
+        case_gcode = android_gcode.parent / f"{identifier}.gcode"
+        case_config = parse_config_block(case_gcode) if case_gcode.is_file() else dict(base_config)
+        center = bed_center(case_config)
+        machine = profiles / f"machine-{identifier}.json"
+        write_profile(machine, "machine", case_config)
         process = case_dir / "process.json"
-        case_config = dict(config)
-        case_config["enable_support"] = "1" if case.get("supportEnabled", False) else "0"
-        if case.get("supportEnabled", False):
-            case_config["support_threshold_angle"] = "45"
-            case_config["support_type"] = "normal(auto)"
         write_profile(process, "process", case_config)
         assembly = case_dir / "assembly.json"
         write_assembly(assembly, case, center)
@@ -448,6 +541,23 @@ def run(
         metrics["differences"] = differences
         reports.append(metrics)
         failures.extend(f"{identifier}: {difference}" for difference in differences)
+
+    reports_by_id = {str(report["id"]): report for report in reports}
+    for case in selected:
+        expected = case.get("expected", {})
+        if not isinstance(expected, Mapping):
+            continue
+        baseline_id = expected.get("supportGeometryDifferentFrom")
+        identifier = str(case["id"])
+        if baseline_id not in reports_by_id:
+            continue
+        if (
+            reports_by_id[identifier].get("supportGeometryFingerprint")
+            == reports_by_id[str(baseline_id)].get("supportGeometryFingerprint")
+        ):
+            failures.append(
+                f"{identifier}: desktop support geometry does not differ from {baseline_id}"
+            )
 
     report = {
         "schemaVersion": 1,
