@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.cos
 import kotlin.math.max
@@ -98,6 +99,13 @@ internal fun DepthTestedPrepareModelScene(
             sceneLoad = PrepareModelSceneLoad(geometry, complete = true)
         }
     }
+    var detailRefinementReady by remember(topology) { mutableStateOf(false) }
+    LaunchedEffect(topology, sceneLoad.complete, interactionActive, memoryPressureActive) {
+        detailRefinementReady = false
+        if (!sceneLoad.complete || interactionActive || memoryPressureActive) return@LaunchedEffect
+        delay(PREPARE_DETAIL_REFINEMENT_DELAY_MS)
+        detailRefinementReady = true
+    }
     val objectDrawStates = remember(projectObjects, placements) {
         projectObjects.associate { projectObject ->
             projectObject.id to PrepareObjectDrawState(
@@ -133,6 +141,7 @@ internal fun DepthTestedPrepareModelScene(
                     panY = panY,
                 ),
                 interactionActive = interactionActive,
+                refinementReady = detailRefinementReady,
                 overlays = overlays.takeIf { sceneLoad.complete }.orEmpty(),
             )
         },
@@ -460,6 +469,7 @@ internal class PrepareModelSurfaceView(
         selectedObjectId: String?,
         camera: PrepareModelCamera,
         interactionActive: Boolean,
+        refinementReady: Boolean = true,
         overlays: List<PrepareModelOverlayData>,
     ) {
         sceneSubmitted = true
@@ -470,6 +480,7 @@ internal class PrepareModelSurfaceView(
             selectedObjectId,
             camera,
             interactionActive,
+            refinementReady,
             overlays,
         )
         applyRenderBufferSize()
@@ -829,11 +840,13 @@ internal fun prepareModelRenderTier(
     interactionActive: Boolean,
     overlaysActive: Boolean,
     zoom: Float,
+    refinementReady: Boolean = true,
 ): PrepareModelRenderTier = when {
     overlaysActive -> PrepareModelRenderTier.PREVIEW
     interactionActive && zoom.isFinite() && zoom <= PREPARE_COARSE_INTERACTION_MAX_ZOOM ->
         PrepareModelRenderTier.COARSE
     interactionActive -> PrepareModelRenderTier.PREVIEW
+    !refinementReady -> PrepareModelRenderTier.PREVIEW
     else -> PrepareModelRenderTier.DETAIL
 }
 
@@ -867,6 +880,7 @@ internal data class PrepareModelFrame(
     val selectedObjectId: String?,
     val camera: PrepareModelCamera,
     val interactionActive: Boolean,
+    val refinementReady: Boolean,
     val overlays: List<PrepareModelOverlayData>,
 )
 
@@ -885,6 +899,7 @@ internal class PrepareModelRenderer(
     private val coarseMeshBuffers = ArrayList<Int>()
     private val meshBuffers = ArrayList<Int>()
     private val detailMeshBuffers = ArrayList<Int>()
+    private val meshVertexBuffers = IdentityHashMap<FloatArray, Int>()
     private val overlayBuffers = ArrayList<PrepareOverlayGpuBuffers>()
     private var uploadedOverlays: List<PrepareModelOverlayData>? = null
     private var program = 0
@@ -936,6 +951,7 @@ internal class PrepareModelRenderer(
         selectedObjectId: String?,
         camera: PrepareModelCamera,
         interactionActive: Boolean = false,
+        refinementReady: Boolean = true,
         overlays: List<PrepareModelOverlayData> = emptyList(),
     ) {
         latestFrame = PrepareModelFrame(
@@ -944,6 +960,7 @@ internal class PrepareModelRenderer(
             selectedObjectId = selectedObjectId,
             camera = camera,
             interactionActive = interactionActive,
+            refinementReady = refinementReady,
             overlays = overlays,
         )
     }
@@ -1014,12 +1031,19 @@ internal class PrepareModelRenderer(
         if (unavailable) return
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         val frame = latestFrame ?: return
-        if (uploadedGeometry !== frame.geometry && !upload(frame.geometry)) return
+        val renderTier = prepareModelRenderTier(
+            interactionActive = frame.interactionActive,
+            overlaysActive = frame.overlays.isNotEmpty(),
+            zoom = frame.camera.zoom,
+            refinementReady = frame.refinementReady,
+        )
+        if (uploadedGeometry !== frame.geometry && !initializeGeometry(frame.geometry)) return
+        if (!ensureMeshTierUploaded(frame.geometry, renderTier)) return
         if (uploadedOverlays !== frame.overlays && !uploadOverlays(frame)) return
         GLES30.glUseProgram(program)
         applyCamera(frame)
         drawBed(frame.geometry)
-        drawMeshes(frame)
+        drawMeshes(frame, renderTier)
         drawOverlays(frame)
         if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
             failRenderer("frame_draw")
@@ -1037,9 +1061,7 @@ internal class PrepareModelRenderer(
             if (bedGridBuffer != 0) add(bedGridBuffer)
             if (bedOutlineBuffer != 0) add(bedOutlineBuffer)
             if (bedExcludeOutlineBuffer != 0) add(bedExcludeOutlineBuffer)
-            addAll(coarseMeshBuffers)
-            addAll(meshBuffers)
-            addAll(detailMeshBuffers)
+            addAll(meshVertexBuffers.values)
             overlayBuffers.forEach { buffers ->
                 if (buffers.vertices != 0) add(buffers.vertices)
                 if (buffers.fill != 0) add(buffers.fill)
@@ -1054,20 +1076,19 @@ internal class PrepareModelRenderer(
         coarseMeshBuffers.clear()
         meshBuffers.clear()
         detailMeshBuffers.clear()
+        meshVertexBuffers.clear()
         overlayBuffers.clear()
         uploadedGeometry = null
         uploadedOverlays = null
         retainedTopologyBufferCount = 0
     }
 
-    private fun upload(geometry: PrepareModelSceneGeometry): Boolean {
+    private fun initializeGeometry(geometry: PrepareModelSceneGeometry): Boolean {
         releaseGpuGeometryForMemoryPressure()
-        val uniqueVertexArrays = uniquePrepareVertexArrays(geometry.meshes)
-        val bufferCount = 4 + uniqueVertexArrays.size
-        val buffers = IntArray(bufferCount)
-        GLES30.glGenBuffers(bufferCount, buffers, 0)
+        val buffers = IntArray(PREPARE_BED_BUFFER_COUNT)
+        GLES30.glGenBuffers(buffers.size, buffers, 0)
         if (buffers.any { it == 0 }) {
-            GLES30.glDeleteBuffers(bufferCount, buffers, 0)
+            GLES30.glDeleteBuffers(buffers.size, buffers, 0)
             failRenderer("buffer_allocation")
             return false
         }
@@ -1079,16 +1100,10 @@ internal class PrepareModelRenderer(
         uploadBuffer(bedGridBuffer, geometry.bedGrid)
         uploadBuffer(bedOutlineBuffer, geometry.bedOutline)
         uploadBuffer(bedExcludeOutlineBuffer, geometry.bedExcludeOutline)
-        val vertexBuffers = IdentityHashMap<FloatArray, Int>()
-        uniqueVertexArrays.forEachIndexed { index, vertices ->
-            val buffer = buffers[4 + index]
-            vertexBuffers[vertices] = buffer
-            uploadBuffer(buffer, vertices)
-        }
-        geometry.meshes.forEach { mesh ->
-            coarseMeshBuffers += checkNotNull(vertexBuffers[mesh.coarseVertices])
-            meshBuffers += checkNotNull(vertexBuffers[mesh.vertices])
-            detailMeshBuffers += checkNotNull(vertexBuffers[mesh.detailVertices])
+        repeat(geometry.meshes.size) {
+            coarseMeshBuffers += 0
+            meshBuffers += 0
+            detailMeshBuffers += 0
         }
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
         if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
@@ -1098,7 +1113,54 @@ internal class PrepareModelRenderer(
         }
         uploadedGeometry = geometry
         geometryUploadCount += 1
-        retainedTopologyBufferCount = bufferCount
+        retainedTopologyBufferCount = PREPARE_BED_BUFFER_COUNT
+        return true
+    }
+
+    /** Uploads one coherent LOD on demand; camera-only frames reuse the identity-shared VBOs. */
+    private fun ensureMeshTierUploaded(
+        geometry: PrepareModelSceneGeometry,
+        tier: PrepareModelRenderTier,
+    ): Boolean {
+        val requested = geometry.meshes.map { mesh ->
+            when (tier) {
+                PrepareModelRenderTier.COARSE -> mesh.coarseVertices
+                PrepareModelRenderTier.PREVIEW -> mesh.vertices
+                PrepareModelRenderTier.DETAIL -> mesh.detailVertices
+            }
+        }
+        val seen = IdentityHashMap<FloatArray, Unit>()
+        val missing = requested.filter { vertices ->
+            !meshVertexBuffers.containsKey(vertices) && seen.put(vertices, Unit) == null
+        }
+        if (missing.isNotEmpty()) {
+            val buffers = IntArray(missing.size)
+            GLES30.glGenBuffers(buffers.size, buffers, 0)
+            if (buffers.any { it == 0 }) {
+                GLES30.glDeleteBuffers(buffers.size, buffers, 0)
+                failRenderer("mesh_buffer_allocation")
+                return false
+            }
+            missing.forEachIndexed { index, vertices -> uploadBuffer(buffers[index], vertices) }
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+            if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
+                GLES30.glDeleteBuffers(buffers.size, buffers, 0)
+                failRenderer("mesh_buffer_upload")
+                return false
+            }
+            missing.forEachIndexed { index, vertices ->
+                meshVertexBuffers[vertices] = buffers[index]
+            }
+            retainedTopologyBufferCount = PREPARE_BED_BUFFER_COUNT + meshVertexBuffers.size
+        }
+        val targets = when (tier) {
+            PrepareModelRenderTier.COARSE -> coarseMeshBuffers
+            PrepareModelRenderTier.PREVIEW -> meshBuffers
+            PrepareModelRenderTier.DETAIL -> detailMeshBuffers
+        }
+        requested.forEachIndexed { index, vertices ->
+            targets[index] = checkNotNull(meshVertexBuffers[vertices])
+        }
         return true
     }
 
@@ -1253,14 +1315,9 @@ internal class PrepareModelRenderer(
         )
     }
 
-    private fun drawMeshes(frame: PrepareModelFrame) {
+    private fun drawMeshes(frame: PrepareModelFrame, renderTier: PrepareModelRenderTier) {
         GLES30.glUniform1i(lightingLocation, 1)
         setObjectMode(true)
-        val renderTier = prepareModelRenderTier(
-            interactionActive = frame.interactionActive,
-            overlaysActive = frame.overlays.isNotEmpty(),
-            zoom = frame.camera.zoom,
-        )
         lastMeshVertexCount = 0
         frame.geometry.meshDrawOrder.forEach { index ->
             val mesh = frame.geometry.meshes[index]
@@ -1530,6 +1587,8 @@ private const val PREPARE_BED_OUTLINE_Z = -0.04f
 private const val PREPARE_BED_EXCLUDE_Z = -0.02f
 private const val PREPARE_RENDERER_STARTUP_TIMEOUT_MS = 5_000L
 private const val PREPARE_RENDERER_RELEASE_TIMEOUT_MS = 1_000L
+internal const val PREPARE_DETAIL_REFINEMENT_DELAY_MS = 240L
+private const val PREPARE_BED_BUFFER_COUNT = 4
 private const val PREPARE_RENDERER_LOG_TAG = "DuckyPrepareRenderer"
 internal const val MAX_PREPARE_ADDITIONAL_DETAIL_GPU_BYTES = 16L * 1_024L * 1_024L
 internal const val MAX_PREPARE_LOW_DETAIL_GPU_BYTES = 24L * 1_024L * 1_024L

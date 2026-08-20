@@ -143,7 +143,13 @@ def valid_sources() -> dict[str, str]:
             "PrepareModelRenderTier.COARSE -> mesh.coarseVertices "
             "PrepareModelRenderTier.PREVIEW -> mesh.vertices "
             "PrepareModelRenderTier.DETAIL -> mesh.detailVertices "
-            "coarseMeshBuffers += checkNotNull(vertexBuffers[mesh.coarseVertices]) "
+            "var detailRefinementReady by remember(topology) { mutableStateOf(false) } "
+            "interactionActive, memoryPressureActive) interactionActive || memoryPressureActive "
+            "delay(PREPARE_DETAIL_REFINEMENT_DELAY_MS) refinementReady = detailRefinementReady "
+            "!refinementReady -> PrepareModelRenderTier.PREVIEW "
+            "ensureMeshTierUploaded(frame.geometry, renderTier) "
+            "private val meshVertexBuffers = IdentityHashMap<FloatArray, Int>() "
+            "retainedTopologyBufferCount = PREPARE_BED_BUFFER_COUNT + meshVertexBuffers.size "
             "prepareSurfaceSize( texture.setDefaultBufferSize(target.width, target.height) "
             "resizeEglSurface(texture, target) EGL14.eglDestroySurface(eglDisplay, eglSurface) "
             "renderer.setLogicalViewportSize(logicalSurfaceWidth, logicalSurfaceHeight) "
@@ -154,7 +160,8 @@ def valid_sources() -> dict[str, str]:
             "override fun onLowMemory() = releasePrepareMemory() "
             "if (memoryPressureActive) return private fun requestMemoryPressureRecovery() "
             "retainedTopologyBufferCountForTest() "
-            "uniquePrepareVertexArrays(geometry.meshes) IdentityHashMap<FloatArray, Int>() "
+            "private fun initializeGeometry(geometry: PrepareModelSceneGeometry) "
+            "private fun ensureMeshTierUploaded( "
             "additionalDetailBudgetBytes: Long = MAX_PREPARE_ADDITIONAL_DETAIL_GPU_BYTES "
             "lowDetailBudgetBytes: Long = MAX_PREPARE_LOW_DETAIL_GPU_BYTES "
             "boundedPrepareLowMeshes(rawMeshes, lowDetailBudgetBytes) "
@@ -410,13 +417,17 @@ def valid_sources() -> dict[str, str]:
             "denseUnpaintedOverlayBuildStaysWithinLoadBudget "
             "lastMeshVertexCountForTest() interactionActive = true p95Ms <= 1.0 "
             "densePrepareInteractionReducesRasterWorkWithoutDroppingTheLowDetailShape "
+            "densePrepareLazilyUploadsPreviewThenDetailAndGestureTopology "
+            "The first useful frame must retain only four bed buffers and one preview VBO "
+            "Idle refinement must append one detail VBO without recreating the scene "
+            "Gesture entry must append one connected coarse VBO and reuse every other buffer "
             "productionPrepareSurfaceRestoresFullDetailAfterReducedRasterInteraction "
             "reducedMetrics.vertexCount "
             "reducedMetrics.p95Ms <= fullMetrics.p95Ms * 1.35 + 2.0 "
             "Repeated memory callbacks must be deduplicated until foreground recovery "
             "Recovered Prepare rendering must remain available "
-            "repeatedPlacementsUploadOneSharedLowAndDetailTopologyPair "
-            "Four bed buffers plus one shared low/detail pair must be retained"
+            "repeatedPlacementsShareOneLazilyRequestedDetailTopology "
+            "Four bed buffers plus one lazily requested shared detail topology must be retained"
         ),
         "PrepareModelPickingTest.kt": (
             "spatialIndexCullsArbitraryFacetOrderWithoutChangingExactHits "
@@ -734,6 +745,23 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
         sources["PrepareModelPreviewView.kt"] = sources["PrepareModelPreviewView.kt"].replace(
             "texture.setDefaultBufferSize(target.width, target.height)",
             "texture.setDefaultBufferSize(logicalSurfaceWidth, logicalSurfaceHeight)",
+        )
+        with self.assertRaisesRegex(VerificationError, "Prepare model loading"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_prepare_renderer_without_deferred_detail_refinement(self) -> None:
+        sources = valid_sources()
+        sources["PrepareModelPreviewView.kt"] = sources["PrepareModelPreviewView.kt"].replace(
+            "delay(PREPARE_DETAIL_REFINEMENT_DELAY_MS)", "detailRefinementReady = true"
+        )
+        with self.assertRaisesRegex(VerificationError, "Prepare model loading"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_prepare_renderer_that_eagerly_uploads_every_lod(self) -> None:
+        sources = valid_sources()
+        sources["PrepareModelPreviewView.kt"] = sources["PrepareModelPreviewView.kt"].replace(
+            "ensureMeshTierUploaded(frame.geometry, renderTier)",
+            "uploadEveryMeshTier(frame.geometry)",
         )
         with self.assertRaisesRegex(VerificationError, "Prepare model loading"):
             verify_preview_boundary(sources)

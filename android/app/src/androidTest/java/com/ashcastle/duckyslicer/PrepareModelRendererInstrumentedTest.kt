@@ -455,6 +455,97 @@ class PrepareModelRendererInstrumentedTest {
     }
 
     @Test
+    fun densePrepareLazilyUploadsPreviewThenDetailAndGestureTopology() =
+        withGles3Pbuffer(256, 256) {
+            val preview = denseGridTriangles(100, 60, 400f, 360f)
+            val coarse = denseGridTriangles(40, 25, 400f, 360f)
+            val detail = denseGridTriangles(200, 120, 400f, 360f)
+            val model = ModelInfo(
+                fileName = "progressive-dense.stl",
+                triangles = 200_000,
+                dimensions = listOf(400.0, 360.0, 20.0),
+                localPath = "",
+                minMm = listOf(0.0, 0.0, 0.0),
+                maxMm = listOf(400.0, 360.0, 20.0),
+                previewTriangles = preview,
+                coarsePreviewTriangles = coarse,
+                detailPreviewTriangles = detail,
+            )
+            val projectObject = ProjectObject(id = "progressive-dense", model = model)
+            val geometry = PrepareModelSceneBuilder.build(
+                listOf(projectObject),
+                440f,
+                440f,
+                rectangularBedPolygon(440f, 440f),
+            )
+            val objectStates = mapOf(
+                projectObject.id to PrepareObjectDrawState(
+                    projectObject.id,
+                    projectObject.transform,
+                    projectObject.transform.minimumRotatedZ(projectObject),
+                ),
+            )
+            val renderer = PrepareModelRenderer()
+            renderer.setLogicalViewportSize(256, 256)
+            renderer.onSurfaceCreated(null, null)
+            renderer.onSurfaceChanged(null, 256, 256)
+
+            renderer.submit(
+                geometry,
+                objectStates,
+                projectObject.id,
+                PrepareModelCamera(-45f, 55f, 1f, 0f, 0f),
+                refinementReady = false,
+            )
+            renderer.onDrawFrame(null)
+            GLES30.glFinish()
+            assertEquals(preview.size / 3, renderer.lastMeshVertexCountForTest())
+            assertEquals(
+                "The first useful frame must retain only four bed buffers and one preview VBO",
+                5,
+                renderer.retainedTopologyBufferCountForTest(),
+            )
+            assertEquals(1, renderer.geometryUploadCountForTest())
+
+            renderer.submit(
+                geometry,
+                objectStates,
+                projectObject.id,
+                PrepareModelCamera(-45f, 55f, 1f, 0f, 0f),
+                refinementReady = true,
+            )
+            renderer.onDrawFrame(null)
+            GLES30.glFinish()
+            assertEquals(detail.size / 3, renderer.lastMeshVertexCountForTest())
+            assertEquals(
+                "Idle refinement must append one detail VBO without recreating the scene",
+                6,
+                renderer.retainedTopologyBufferCountForTest(),
+            )
+            assertEquals(1, renderer.geometryUploadCountForTest())
+
+            renderer.submit(
+                geometry,
+                objectStates,
+                projectObject.id,
+                PrepareModelCamera(-40f, 55f, 1f, 0f, 0f),
+                interactionActive = true,
+                refinementReady = false,
+            )
+            renderer.onDrawFrame(null)
+            GLES30.glFinish()
+            assertEquals(coarse.size / 3, renderer.lastMeshVertexCountForTest())
+            assertEquals(
+                "Gesture entry must append one connected coarse VBO and reuse every other buffer",
+                7,
+                renderer.retainedTopologyBufferCountForTest(),
+            )
+            assertEquals(1, renderer.geometryUploadCountForTest())
+            assertEquals(GLES30.GL_NO_ERROR, GLES30.glGetError())
+            renderer.releaseGpuGeometryForMemoryPressure()
+        }
+
+    @Test
     fun productionPrepareSurfaceRestoresFullDetailAfterReducedRasterInteraction() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val surfaceReference = AtomicReference<PrepareModelSurfaceView>()
@@ -605,7 +696,7 @@ class PrepareModelRendererInstrumentedTest {
     }
 
     @Test
-    fun repeatedPlacementsUploadOneSharedLowAndDetailTopologyPair() =
+    fun repeatedPlacementsShareOneLazilyRequestedDetailTopology() =
         withGles3Pbuffer(128, 128) {
             val preview = denseGridTriangles(columns = 2, rows = 2)
             val detail = denseGridTriangles(columns = 4, rows = 4)
@@ -651,8 +742,8 @@ class PrepareModelRendererInstrumentedTest {
             GLES30.glFinish()
 
             assertEquals(
-                "Four bed buffers plus one shared low/detail pair must be retained",
-                6,
+                "Four bed buffers plus one lazily requested shared detail topology must be retained",
+                5,
                 renderer.retainedTopologyBufferCountForTest(),
             )
             assertEquals(detail.size / 3 * 2, renderer.lastMeshVertexCountForTest())
@@ -718,8 +809,8 @@ class PrepareModelRendererInstrumentedTest {
             GLES30.glFinish()
 
             assertEquals(
-                "Four bed buffers, one preview, and two distinct coarse meshes are retained",
-                8,
+                "Four bed buffers and three distinct coarse meshes are retained lazily",
+                7,
                 renderer.retainedTopologyBufferCountForTest(),
             )
             assertEquals(

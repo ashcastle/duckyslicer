@@ -244,6 +244,15 @@ class PrepareModelSceneBuilderTest {
             PrepareModelRenderTier.DETAIL,
             prepareModelRenderTier(interactionActive = false, overlaysActive = false, zoom = 1f),
         )
+        assertEquals(
+            PrepareModelRenderTier.PREVIEW,
+            prepareModelRenderTier(
+                interactionActive = false,
+                overlaysActive = false,
+                zoom = 1f,
+                refinementReady = false,
+            ),
+        )
     }
 
     @Test
