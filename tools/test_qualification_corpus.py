@@ -58,6 +58,13 @@ class QualificationCorpusTest(unittest.TestCase):
         with self.assertRaisesRegex(CorpusError, "broad layer coverage"):
             validate(weak_dense, check_files=False)
 
+        weak_structure = copy.deepcopy(load_manifest())
+        del next(
+            case for case in weak_structure["cases"] if case["id"] == "simple-part"
+        )["expected"]["minRoleLayers"]["innerWall"]
+        with self.assertRaisesRegex(CorpusError, "role-layer bounds"):
+            validate(weak_structure, check_files=False)
+
     def test_adb_selection_is_explicit_when_ambiguous(self) -> None:
         output = """List of devices attached
 phone device product:test
@@ -177,10 +184,17 @@ emulator-5554 device product:test
             gcode = Path(directory) / "sample.gcode"
             gcode.write_text(
                 """; total layer number: 2
+M83
+;LAYER_CHANGE
+;Z:0.2
 ;TYPE:Outer wall
 G1 X1 E0.1
+G1 E-0.2
+;LAYER_CHANGE
+;Z:0.4
 ;TYPE:Inner wall
 G1 X3 E0.1
+G2 I1 J0 E0.1
 ; CONFIG_BLOCK_START
 ; layer_height = 0.2
 ; wall_loops = 2
@@ -194,9 +208,14 @@ G1 X3 E0.1
             )
             metrics = analyze_gcode(gcode, ["layer_height", "wall_loops"])
             self.assertEqual(2, metrics["layers"])
-            self.assertEqual(2, metrics["extrusionMotions"])
+            self.assertEqual(3, metrics["extrusionMotions"])
             self.assertEqual(2.0, metrics["extrusionXSpanMm"])
             self.assertEqual(1, metrics["roleMotions"]["outerWall"])
+            self.assertEqual(2, metrics["emittedLayers"])
+            self.assertEqual(1, metrics["roleLayers"]["outerWall"])
+            self.assertEqual(0, metrics["roleFirstLayers"]["outerWall"])
+            self.assertEqual(1, metrics["roleLastLayers"]["innerWall"])
+            self.assertAlmostEqual(0.2, metrics["roleExtrusionMm"]["innerWall"])
             android = dict(metrics)
             self.assertEqual([], compare_case(metrics, android, ["outerWall", "innerWall"]))
             android["layers"] = 3

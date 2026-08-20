@@ -23,6 +23,18 @@ REQUIRED_CASES = {
     "multi-object",
     "dense-preview",
 }
+ROLE_NAMES = {
+    "outerWall",
+    "innerWall",
+    "sparseInfill",
+    "topSurface",
+    "internalSolid",
+    "support",
+    "bridge",
+    "adhesion",
+    "other",
+    "bottomSurface",
+}
 Vec3 = tuple[float, float, float]
 Triangle = tuple[Vec3, Vec3, Vec3]
 
@@ -232,6 +244,54 @@ def validate(manifest: dict[str, object], *, check_files: bool = True) -> None:
             raise CorpusError(f"Qualification case references an unknown model: {case.get('id')}")
         if not isinstance(expected, dict) or not expected.get("requiredRoles"):
             raise CorpusError(f"Qualification case has no observable expectations: {case.get('id')}")
+        required_roles = expected["requiredRoles"]
+        if (
+            not isinstance(required_roles, list)
+            or len(set(required_roles)) != len(required_roles)
+            or not set(required_roles) <= ROLE_NAMES
+        ):
+            raise CorpusError(f"Qualification case has invalid required roles: {case.get('id')}")
+        minimum_layers = expected.get("minRoleLayers")
+        minimum_extrusion = expected.get("minRoleExtrusionMm")
+        if (
+            not isinstance(minimum_layers, dict)
+            or set(minimum_layers) != set(required_roles)
+            or any(not isinstance(value, int) or value <= 0 for value in minimum_layers.values())
+        ):
+            raise CorpusError(f"Qualification case has incomplete role-layer bounds: {case.get('id')}")
+        if (
+            not isinstance(minimum_extrusion, dict)
+            or set(minimum_extrusion) != set(required_roles)
+            or any(
+                not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0
+                for value in minimum_extrusion.values()
+            )
+        ):
+            raise CorpusError(f"Qualification case has incomplete role-extrusion bounds: {case.get('id')}")
+        forbidden = expected.get("forbiddenRoles")
+        first = expected.get("firstLayerRoles")
+        last = expected.get("lastLayerRoles")
+        interior = expected.get("interiorRoles")
+        if (
+            not isinstance(forbidden, list)
+            or not set(forbidden) <= ROLE_NAMES - set(required_roles)
+            or any(
+                not isinstance(values, list) or not set(values) <= set(required_roles)
+                for values in (first, last, interior)
+            )
+            or not set(interior).isdisjoint(set(first) | set(last))
+        ):
+            raise CorpusError(f"Qualification case has invalid role windows: {case.get('id')}")
+        precedence = expected.get("rolePrecedence")
+        if not isinstance(precedence, list) or any(
+            not isinstance(rule, dict)
+            or set(rule) != {"before", "after"}
+            or rule["before"] not in required_roles
+            or rule["after"] not in required_roles
+            or rule["before"] == rule["after"]
+            for rule in precedence
+        ):
+            raise CorpusError(f"Qualification case has invalid role precedence: {case.get('id')}")
     dense = next(case for case in cases if case["id"] == "dense-preview")
     dense_expected = dense["expected"]
     if dense_expected.get("minPreviewLayerCoverage", 0) < 0.9:

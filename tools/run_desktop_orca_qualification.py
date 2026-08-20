@@ -122,8 +122,13 @@ def axis_value(line: str, axis: str) -> float | None:
 
 def analyze_gcode(path: Path, fingerprint_keys: Sequence[str]) -> dict[str, object]:
     role_motions = {role: 0 for role in ROLE_NAMES}
+    role_layers: dict[str, set[int]] = {role: set() for role in ROLE_NAMES}
+    role_extrusion_mm = {role: 0.0 for role in ROLE_NAMES}
     profile_values: dict[str, str] = {}
     active_role = "other"
+    relative_extrusion = False
+    absolute_extruder = 0.0
+    emitted_layer = -1
     extrusion_motions = 0
     layers = 0
     min_x = math.inf
@@ -138,6 +143,8 @@ def analyze_gcode(path: Path, fingerprint_keys: Sequence[str]) -> dict[str, obje
                 line = raw.rstrip("\r\n")
                 if line.startswith("; total layer number:"):
                     layers = int(line.rsplit(":", 1)[1].strip())
+                if line.startswith(";LAYER_CHANGE"):
+                    emitted_layer += 1
                 if line.startswith(";") and " = " in line:
                     key, separator, value = line.removeprefix(";").lstrip().partition(" = ")
                     if separator and key in fingerprint_keys:
@@ -149,9 +156,32 @@ def analyze_gcode(path: Path, fingerprint_keys: Sequence[str]) -> dict[str, obje
                     label = line.removeprefix("; FEATURE:")
                 if label is not None:
                     active_role = role_name(label)
-                if line.startswith(("G1 ", "G2 ", "G3 ")) and axis_value(line, "E") is not None:
+                if line.startswith("M82"):
+                    relative_extrusion = False
+                elif line.startswith("M83"):
+                    relative_extrusion = True
+                elif line.startswith("G92"):
+                    reset = axis_value(line, "E")
+                    if reset is not None:
+                        absolute_extruder = reset
+                if line.startswith(("G1 ", "G2 ", "G3 ")):
+                    encoded_extrusion = axis_value(line, "E")
+                    if encoded_extrusion is None:
+                        continue
+                    extrusion_delta = (
+                        encoded_extrusion
+                        if relative_extrusion
+                        else encoded_extrusion - absolute_extruder
+                    )
+                    if not relative_extrusion:
+                        absolute_extruder = encoded_extrusion
+                    spatial_motion = any(axis_value(line, axis) is not None for axis in "XYZIJ")
+                    if extrusion_delta <= 1e-7 or not spatial_motion or emitted_layer < 0:
+                        continue
                     extrusion_motions += 1
                     role_motions[active_role] += 1
+                    role_layers[active_role].add(emitted_layer)
+                    role_extrusion_mm[active_role] += extrusion_delta
                     x = axis_value(line, "X")
                     if x is not None:
                         min_x = min(min_x, x)
@@ -170,7 +200,16 @@ def analyze_gcode(path: Path, fingerprint_keys: Sequence[str]) -> dict[str, obje
         "gcodeSha256": digest.hexdigest(),
         "extrusionMotions": extrusion_motions,
         "extrusionXSpanMm": max_x - min_x if math.isfinite(min_x) and math.isfinite(max_x) else 0.0,
+        "emittedLayers": emitted_layer + 1,
         "roleMotions": role_motions,
+        "roleLayers": {role: len(values) for role, values in role_layers.items()},
+        "roleFirstLayers": {
+            role: min(values) if values else -1 for role, values in role_layers.items()
+        },
+        "roleLastLayers": {
+            role: max(values) if values else -1 for role, values in role_layers.items()
+        },
+        "roleExtrusionMm": role_extrusion_mm,
         "profileFingerprint": hashlib.sha256(fingerprint.encode()).hexdigest(),
         "profileValues": dict(sorted(profile_values.items())),
     }
@@ -259,6 +298,11 @@ def compare_case(
     android_layers = android.get("previewLayerCount", android["layers"])
     if desktop["layers"] != android_layers:
         differences.append(f"G-code layers: desktop={desktop['layers']} android={android_layers}")
+    if desktop["emittedLayers"] != android.get("emittedLayers"):
+        differences.append(
+            f"emitted layers: desktop={desktop['emittedLayers']} "
+            f"android={android.get('emittedLayers')}"
+        )
     if desktop["profileFingerprint"] != android["profileFingerprint"]:
         differences.append("effective profile fingerprint differs")
     desktop_span = float(desktop["extrusionXSpanMm"])
@@ -287,6 +331,30 @@ def compare_case(
             differences.append(
                 f"{role} motions: desktop={desktop_count} android={android_count} "
                 f"tolerance={role_tolerance}"
+            )
+    for field in ("roleLayers", "roleFirstLayers", "roleLastLayers"):
+        desktop_values = desktop[field]
+        android_values = android[field]
+        assert isinstance(desktop_values, Mapping)
+        assert isinstance(android_values, Mapping)
+        for role in ROLE_NAMES:
+            if int(desktop_values.get(role, -1)) != int(android_values.get(role, -1)):
+                differences.append(
+                    f"{field} {role}: desktop={desktop_values.get(role)} "
+                    f"android={android_values.get(role)}"
+                )
+    desktop_extrusion = desktop["roleExtrusionMm"]
+    android_extrusion = android["roleExtrusionMm"]
+    assert isinstance(desktop_extrusion, Mapping)
+    assert isinstance(android_extrusion, Mapping)
+    for role in ROLE_NAMES:
+        desktop_mm = float(desktop_extrusion.get(role, 0.0))
+        android_mm = float(android_extrusion.get(role, 0.0))
+        extrusion_tolerance = max(0.02, abs(android_mm) * 0.001)
+        if abs(desktop_mm - android_mm) > extrusion_tolerance:
+            differences.append(
+                f"{role} positive extrusion: desktop={desktop_mm:.4f} "
+                f"android={android_mm:.4f} tolerance={extrusion_tolerance:.4f}"
             )
     return differences
 

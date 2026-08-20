@@ -20,6 +20,7 @@ DEBUG_APK = ANDROID / "app/build/outputs/apk/debug/app-debug.apk"
 DEBUG_DEPENDENCY_INVENTORY = ANDROID / "app/build/reports/dependencies/debug.txt"
 DEBUG_LICENSE_INVENTORY = ANDROID / "app/build/reports/dependencies/debug-licenses.json"
 DEBUG_SBOM = ANDROID / "app/build/outputs/duckyslicer-debug.cdx.json"
+QUALIFICATION_REPORT = ROOT / "build/qualification/local-gate-report.json"
 MINIMUM_FUNCTIONAL_API = 35
 RELEASE_RUNTIME_API = 36
 STATIC_VERIFIERS = (
@@ -272,6 +273,20 @@ def device_steps(
             "Android 16 KB device suite",
             (gradlew, "--dependency-verification=strict", ":app:connectedDebugAndroidTest"),
             ANDROID,
+            environment,
+        ),
+        GateStep(
+            "Pinned slicing fidelity corpus",
+            (
+                python,
+                str(ROOT / "tools/run_qualification_corpus.py"),
+                "--serial",
+                serial,
+                "--skip-build",
+                "--output",
+                str(QUALIFICATION_REPORT),
+            ),
+            ROOT,
             environment,
         ),
         GateStep(

@@ -190,10 +190,13 @@ physical unauthorized transport_id:3
 
     def test_device_plan_pins_gradle_and_recovery_to_one_serial(self) -> None:
         steps = device_steps("device-16k", python="python-for-test", windows=False)
-        self.assertEqual(2, len(steps))
+        self.assertEqual(3, len(steps))
         self.assertEqual("device-16k", steps[0].environment["ANDROID_SERIAL"])
         self.assertIn(":app:connectedDebugAndroidTest", steps[0].command)
-        self.assertEqual("device-16k", steps[1].command[-1])
+        self.assertTrue(steps[1].command[1].endswith("run_qualification_corpus.py"))
+        self.assertIn("--skip-build", steps[1].command)
+        self.assertEqual("device-16k", steps[1].environment["ANDROID_SERIAL"])
+        self.assertEqual("device-16k", steps[2].command[-1])
 
     def test_runner_stops_at_the_first_failed_step_without_a_shell(self) -> None:
         calls: list[tuple[list[str], Path]] = []

@@ -256,41 +256,23 @@ class OrcaQualificationCorpusInstrumentedTest {
         previewParseElapsedMs: Double,
         renderMetrics: JSONObject?,
     ): JSONObject {
-        val roleMotions = ROLE_NAMES.associateWith { 0 }.toMutableMap()
-        var activeRole = "other"
-        var extrusionMotions = 0
-        var minX = Float.POSITIVE_INFINITY
-        var maxX = Float.NEGATIVE_INFINITY
-        val profileValues = mutableMapOf<String, String>()
-        outcome.output.useLines { lines -> lines.forEach { raw ->
-            val line = raw
-            if (line.startsWith(";") && " = " in line) {
-                val key = line.removePrefix(";").trim().substringBefore(" = ")
-                if (key in fingerprintKeys) profileValues[key] = line.substringAfter(" = ").trim()
-            }
-            val label = when {
-                line.startsWith(";TYPE:") -> line.substringAfter(";TYPE:")
-                line.startsWith("; FEATURE:") -> line.substringAfter("; FEATURE:")
-                else -> null
-            }
-            if (label != null) activeRole = roleName(label)
-            val isExtrusion = (line.startsWith("G1 ") || line.startsWith("G2 ") || line.startsWith("G3 ")) &&
-                axisValue(line, 'E') != null
-            if (isExtrusion) {
-                extrusionMotions += 1
-                roleMotions[activeRole] = roleMotions.getValue(activeRole) + 1
-                axisValue(line, 'X')?.let { x ->
-                    minX = minOf(minX, x)
-                    maxX = maxOf(maxX, x)
-                }
-            }
-        } }
+        val analysis = analyzeGcode(outcome.output, fingerprintKeys)
         val roleSegments = JSONObject()
         ROLE_NAMES.forEachIndexed { index, role ->
             roleSegments.put(role, preview.roleSegmentCounts[index])
         }
         val roleMotionJson = JSONObject()
-        ROLE_NAMES.forEach { role -> roleMotionJson.put(role, roleMotions.getValue(role)) }
+        val roleLayerJson = JSONObject()
+        val roleFirstLayerJson = JSONObject()
+        val roleLastLayerJson = JSONObject()
+        val roleExtrusionJson = JSONObject()
+        ROLE_NAMES.forEach { role ->
+            roleMotionJson.put(role, analysis.roleMotions.getValue(role))
+            roleLayerJson.put(role, analysis.roleLayers.getValue(role))
+            roleFirstLayerJson.put(role, analysis.roleFirstLayers.getValue(role))
+            roleLastLayerJson.put(role, analysis.roleLastLayers.getValue(role))
+            roleExtrusionJson.put(role, analysis.roleExtrusionMm.getValue(role))
+        }
         val coveredZ = HashSet<Int>()
         preview.segments.indices.step(GcodeLayerPreview.SEGMENT_STRIDE).forEach { offset ->
             coveredZ += (preview.segments[offset + 4] * 1_000f).roundToInt()
@@ -298,13 +280,15 @@ class OrcaQualificationCorpusInstrumentedTest {
         assertEquals(
             "Every pinned profile key must be observable in G-code",
             fingerprintKeys.sorted(),
-            profileValues.keys.sorted(),
+            analysis.profileValues.keys.sorted(),
         )
         val profileJson = JSONObject().also { output ->
-            fingerprintKeys.sorted().forEach { key -> output.put(key, profileValues.getValue(key)) }
+            fingerprintKeys.sorted().forEach { key ->
+                output.put(key, analysis.profileValues.getValue(key))
+            }
         }
         val fingerprint = fingerprintKeys.sorted().joinToString("\n") { key ->
-            "$key=${profileValues.getValue(key)}"
+            "$key=${analysis.profileValues.getValue(key)}"
         }.toByteArray()
         return JSONObject()
             .put("id", identifier)
@@ -316,9 +300,14 @@ class OrcaQualificationCorpusInstrumentedTest {
             .put("filamentGrams", outcome.filamentGrams.toDouble())
             .put("gcodeBytes", outcome.output.length())
             .put("gcodeSha256", sha256(outcome.output))
-            .put("extrusionMotions", extrusionMotions)
-            .put("extrusionXSpanMm", if (minX.isFinite() && maxX.isFinite()) maxX - minX else 0f)
+            .put("extrusionMotions", analysis.extrusionMotions)
+            .put("extrusionXSpanMm", analysis.extrusionXSpanMm)
+            .put("emittedLayers", analysis.emittedLayers)
             .put("roleMotions", roleMotionJson)
+            .put("roleLayers", roleLayerJson)
+            .put("roleFirstLayers", roleFirstLayerJson)
+            .put("roleLastLayers", roleLastLayerJson)
+            .put("roleExtrusionMm", roleExtrusionJson)
             .put("previewLayerCount", preview.layerCount)
             .put("previewStartLayer", preview.startLayer)
             .put("previewEndLayer", preview.endLayer)
@@ -425,12 +414,140 @@ class OrcaQualificationCorpusInstrumentedTest {
             "$identifier Preview must expose a bounded non-empty layer range",
             metrics.getInt("previewLayerCount") in 1..metrics.getInt("layers"),
         )
+        assertEquals(metrics.getInt("emittedLayers"), metrics.getInt("previewLayerCount"))
         assertEquals(0, metrics.getInt("previewStartLayer"))
         assertEquals(metrics.getInt("previewLayerCount") - 1, metrics.getInt("previewEndLayer"))
         val roleSegments = metrics.getJSONObject("roleSegments")
         expected.getJSONArray("requiredRoles").strings().forEach { role ->
             assertTrue("$identifier must retain $role Preview paths", roleSegments.getInt(role) > 0)
         }
+        val roleLayers = metrics.getJSONObject("roleLayers")
+        val roleFirstLayers = metrics.getJSONObject("roleFirstLayers")
+        val roleLastLayers = metrics.getJSONObject("roleLastLayers")
+        val roleExtrusion = metrics.getJSONObject("roleExtrusionMm")
+        expected.getJSONObject("minRoleLayers").keys().forEach { role ->
+            val required = expected.getJSONObject("minRoleLayers").getInt(role)
+            assertTrue(
+                "$identifier must emit $role on enough distinct layers",
+                roleLayers.getInt(role) >= required,
+            )
+        }
+        expected.getJSONObject("minRoleExtrusionMm").keys().forEach { role ->
+            val required = expected.getJSONObject("minRoleExtrusionMm").getDouble(role)
+            assertTrue(
+                "$identifier must emit enough positive $role extrusion",
+                roleExtrusion.getDouble(role) >= required,
+            )
+        }
+        expected.getJSONArray("forbiddenRoles").strings().forEach { role ->
+            assertEquals("$identifier must not emit $role", 0, roleLayers.getInt(role))
+            assertEquals("$identifier must not extrude $role", 0.0, roleExtrusion.getDouble(role), 0.0)
+        }
+        val finalLayer = metrics.getInt("emittedLayers") - 1
+        expected.getJSONArray("firstLayerRoles").strings().forEach { role ->
+            assertEquals("$identifier $role must begin on the first layer", 0, roleFirstLayers.getInt(role))
+        }
+        expected.getJSONArray("lastLayerRoles").strings().forEach { role ->
+            assertEquals(
+                "$identifier $role must reach the final emitted layer",
+                finalLayer,
+                roleLastLayers.getInt(role),
+            )
+        }
+        expected.getJSONArray("interiorRoles").strings().forEach { role ->
+            assertTrue(
+                "$identifier $role must remain between the first and final layers",
+                roleFirstLayers.getInt(role) > 0 && roleLastLayers.getInt(role) < finalLayer,
+            )
+        }
+        expected.getJSONArray("rolePrecedence").objects().forEach { rule ->
+            val before = rule.getString("before")
+            val after = rule.getString("after")
+            assertTrue(
+                "$identifier $before must finish before $after begins",
+                roleLastLayers.getInt(before) < roleFirstLayers.getInt(after),
+            )
+        }
+    }
+
+    private fun analyzeGcode(
+        file: File,
+        fingerprintKeys: List<String>,
+    ): QualificationGcodeAnalysis {
+        val roleMotions = ROLE_NAMES.associateWith { 0 }.toMutableMap()
+        val roleLayerSets = ROLE_NAMES.associateWith { mutableSetOf<Int>() }
+        val roleExtrusionMm = ROLE_NAMES.associateWith { 0.0 }.toMutableMap()
+        val profileValues = mutableMapOf<String, String>()
+        var activeRole = "other"
+        var relativeExtrusion = false
+        var absoluteExtruder = 0f
+        var emittedLayer = -1
+        var extrusionMotions = 0
+        var minX = Float.POSITIVE_INFINITY
+        var maxX = Float.NEGATIVE_INFINITY
+        file.useLines { lines ->
+            lines.forEach { line ->
+                if (line.startsWith(";") && " = " in line) {
+                    val key = line.removePrefix(";").trim().substringBefore(" = ")
+                    if (key in fingerprintKeys) {
+                        profileValues[key] = line.substringAfter(" = ").trim()
+                    }
+                }
+                when {
+                    line.startsWith(";LAYER_CHANGE") -> emittedLayer += 1
+                    line.startsWith(";TYPE:") -> activeRole = roleName(line.substringAfter(";TYPE:"))
+                    line.startsWith("; FEATURE:") ->
+                        activeRole = roleName(line.substringAfter("; FEATURE:"))
+                    line.startsWith("M82") -> relativeExtrusion = false
+                    line.startsWith("M83") -> relativeExtrusion = true
+                    line.startsWith("G92") ->
+                        axisValue(line, 'E')?.let { absoluteExtruder = it }
+                    line.startsWith("G1 ") || line.startsWith("G2 ") || line.startsWith("G3 ") -> {
+                        val encodedExtrusion = axisValue(line, 'E') ?: return@forEach
+                        val extrusionDelta = if (relativeExtrusion) {
+                            encodedExtrusion
+                        } else {
+                            encodedExtrusion - absoluteExtruder
+                        }
+                        if (!relativeExtrusion) absoluteExtruder = encodedExtrusion
+                        val x = axisValue(line, 'X')
+                        val spatialMotion = x != null ||
+                            listOf('Y', 'Z', 'I', 'J').any { axis -> axisValue(line, axis) != null }
+                        if (
+                            extrusionDelta > MINIMUM_POSITIVE_EXTRUSION_MM &&
+                            spatialMotion && emittedLayer >= 0
+                        ) {
+                            extrusionMotions += 1
+                            roleMotions[activeRole] = roleMotions.getValue(activeRole) + 1
+                            roleLayerSets.getValue(activeRole) += emittedLayer
+                            roleExtrusionMm[activeRole] =
+                                roleExtrusionMm.getValue(activeRole) + extrusionDelta
+                            x?.let {
+                                minX = minOf(minX, it)
+                                maxX = maxOf(maxX, it)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        val roleFirstLayers = ROLE_NAMES.associateWith { role ->
+            roleLayerSets.getValue(role).minOrNull() ?: -1
+        }
+        val roleLastLayers = ROLE_NAMES.associateWith { role ->
+            roleLayerSets.getValue(role).maxOrNull() ?: -1
+        }
+        return QualificationGcodeAnalysis(
+            extrusionMotions = extrusionMotions,
+            extrusionXSpanMm = if (minX.isFinite() && maxX.isFinite()) maxX - minX else 0f,
+            emittedLayers = emittedLayer + 1,
+            roleMotions = roleMotions,
+            roleLayers = ROLE_NAMES.associateWith { role -> roleLayerSets.getValue(role).size },
+            roleFirstLayers = roleFirstLayers,
+            roleLastLayers = roleLastLayers,
+            roleExtrusionMm = roleExtrusionMm,
+            profileValues = profileValues,
+        )
     }
 
     private fun roleName(label: String): String {
@@ -517,6 +634,7 @@ class OrcaQualificationCorpusInstrumentedTest {
         private const val PREVIEW_MEASUREMENT_TIMEOUT_SECONDS = 90L
         private const val MAXIMUM_QUALIFICATION_CYCLES = 3
         private const val SOAK_SETTLE_MILLIS = 250L
+        private const val MINIMUM_POSITIVE_EXTRUSION_MM = 0.000_000_1f
         private val ROLE_NAMES = listOf(
             "outerWall",
             "innerWall",
@@ -531,3 +649,15 @@ class OrcaQualificationCorpusInstrumentedTest {
         )
     }
 }
+
+private data class QualificationGcodeAnalysis(
+    val extrusionMotions: Int,
+    val extrusionXSpanMm: Float,
+    val emittedLayers: Int,
+    val roleMotions: Map<String, Int>,
+    val roleLayers: Map<String, Int>,
+    val roleFirstLayers: Map<String, Int>,
+    val roleLastLayers: Map<String, Int>,
+    val roleExtrusionMm: Map<String, Double>,
+    val profileValues: Map<String, String>,
+)

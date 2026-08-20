@@ -62,7 +62,14 @@
         "minPreviewSegments": 10000,
         "minPreviewLayerCoverage": 0.9,
         "minExtrusionXSpanMm": 18.0,
-        "requiredRoles": ["outerWall", "innerWall", "sparseInfill", "topSurface", "internalSolid", "bottomSurface"]
+        "requiredRoles": ["outerWall", "innerWall", "sparseInfill", "topSurface", "internalSolid", "bottomSurface"],
+        "minRoleLayers": {"outerWall": 95, "innerWall": 95, "sparseInfill": 85, "topSurface": 1, "internalSolid": 6, "bottomSurface": 1},
+        "minRoleExtrusionMm": {"outerWall": 200.0, "innerWall": 200.0, "sparseInfill": 350.0, "topSurface": 20.0, "internalSolid": 120.0, "bottomSurface": 25.0},
+        "forbiddenRoles": ["support", "adhesion"],
+        "firstLayerRoles": ["outerWall", "innerWall", "bottomSurface"],
+        "lastLayerRoles": ["outerWall", "innerWall", "topSurface"],
+        "interiorRoles": ["sparseInfill", "internalSolid"],
+        "rolePrecedence": [{"before": "bottomSurface", "after": "topSurface"}]
       }
     },
     {
@@ -76,7 +83,14 @@
         "minPreviewSegments": 30000,
         "minPreviewLayerCoverage": 0.9,
         "minExtrusionXSpanMm": 28.0,
-        "requiredRoles": ["outerWall", "innerWall", "topSurface", "internalSolid", "bottomSurface"]
+        "requiredRoles": ["outerWall", "innerWall", "sparseInfill", "topSurface", "internalSolid", "bottomSurface"],
+        "minRoleLayers": {"outerWall": 145, "innerWall": 145, "sparseInfill": 135, "topSurface": 1, "internalSolid": 6, "bottomSurface": 1},
+        "minRoleExtrusionMm": {"outerWall": 450.0, "innerWall": 450.0, "sparseInfill": 1200.0, "topSurface": 50.0, "internalSolid": 300.0, "bottomSurface": 60.0},
+        "forbiddenRoles": ["support", "adhesion"],
+        "firstLayerRoles": ["outerWall", "innerWall", "bottomSurface"],
+        "lastLayerRoles": ["outerWall", "innerWall", "topSurface"],
+        "interiorRoles": ["sparseInfill", "internalSolid"],
+        "rolePrecedence": [{"before": "bottomSurface", "after": "topSurface"}]
       }
     },
     {
@@ -90,7 +104,14 @@
         "minPreviewSegments": 10000,
         "minPreviewLayerCoverage": 0.9,
         "minExtrusionXSpanMm": 48.0,
-        "requiredRoles": ["outerWall", "innerWall", "bridge"]
+        "requiredRoles": ["outerWall", "innerWall", "sparseInfill", "topSurface", "internalSolid", "bottomSurface", "bridge"],
+        "minRoleLayers": {"outerWall": 115, "innerWall": 115, "sparseInfill": 105, "topSurface": 1, "internalSolid": 8, "bottomSurface": 1, "bridge": 2},
+        "minRoleExtrusionMm": {"outerWall": 300.0, "innerWall": 300.0, "sparseInfill": 350.0, "topSurface": 40.0, "internalSolid": 250.0, "bottomSurface": 15.0, "bridge": 90.0},
+        "forbiddenRoles": ["support", "adhesion"],
+        "firstLayerRoles": ["outerWall", "innerWall", "bottomSurface"],
+        "lastLayerRoles": ["outerWall", "innerWall", "topSurface"],
+        "interiorRoles": ["sparseInfill", "internalSolid", "bridge"],
+        "rolePrecedence": [{"before": "bottomSurface", "after": "bridge"}, {"before": "bridge", "after": "topSurface"}]
       }
     },
     {
@@ -105,7 +126,14 @@
         "minPreviewSegments": 10000,
         "minPreviewLayerCoverage": 0.9,
         "minExtrusionXSpanMm": 42.0,
-        "requiredRoles": ["outerWall", "innerWall", "support"]
+        "requiredRoles": ["outerWall", "innerWall", "sparseInfill", "topSurface", "internalSolid", "bottomSurface", "support", "bridge"],
+        "minRoleLayers": {"outerWall": 125, "innerWall": 125, "sparseInfill": 115, "topSurface": 1, "internalSolid": 8, "bottomSurface": 1, "support": 60, "bridge": 2},
+        "minRoleExtrusionMm": {"outerWall": 170.0, "innerWall": 170.0, "sparseInfill": 250.0, "topSurface": 100.0, "internalSolid": 700.0, "bottomSurface": 3.0, "support": 2500.0, "bridge": 250.0},
+        "forbiddenRoles": ["adhesion"],
+        "firstLayerRoles": ["outerWall", "innerWall", "bottomSurface", "support"],
+        "lastLayerRoles": ["outerWall", "innerWall", "topSurface"],
+        "interiorRoles": ["sparseInfill", "internalSolid", "bridge"],
+        "rolePrecedence": [{"before": "support", "after": "bridge"}, {"before": "bridge", "after": "topSurface"}]
       }
     },
     {
@@ -120,7 +148,14 @@
         "minPreviewSegments": 20000,
         "minPreviewLayerCoverage": 0.9,
         "minExtrusionXSpanMm": 54.0,
-        "requiredRoles": ["outerWall", "innerWall", "sparseInfill", "topSurface"]
+        "requiredRoles": ["outerWall", "innerWall", "sparseInfill", "topSurface", "internalSolid", "bottomSurface"],
+        "minRoleLayers": {"outerWall": 95, "innerWall": 95, "sparseInfill": 85, "topSurface": 1, "internalSolid": 6, "bottomSurface": 1},
+        "minRoleExtrusionMm": {"outerWall": 400.0, "innerWall": 400.0, "sparseInfill": 700.0, "topSurface": 40.0, "internalSolid": 250.0, "bottomSurface": 50.0},
+        "forbiddenRoles": ["support", "adhesion"],
+        "firstLayerRoles": ["outerWall", "innerWall", "bottomSurface"],
+        "lastLayerRoles": ["outerWall", "innerWall", "topSurface"],
+        "interiorRoles": ["sparseInfill", "internalSolid"],
+        "rolePrecedence": [{"before": "bottomSurface", "after": "topSurface"}]
       }
     },
     {
@@ -134,7 +169,14 @@
         "minPreviewSegments": 100000,
         "minPreviewLayerCoverage": 0.9,
         "minExtrusionXSpanMm": 48.0,
-        "requiredRoles": ["outerWall", "innerWall", "sparseInfill", "topSurface", "internalSolid", "bottomSurface"]
+        "requiredRoles": ["outerWall", "innerWall", "sparseInfill", "topSurface", "internalSolid", "bottomSurface"],
+        "minRoleLayers": {"outerWall": 495, "innerWall": 495, "sparseInfill": 480, "topSurface": 1, "internalSolid": 6, "bottomSurface": 1},
+        "minRoleExtrusionMm": {"outerWall": 2000.0, "innerWall": 2000.0, "sparseInfill": 9000.0, "topSurface": 100.0, "internalSolid": 700.0, "bottomSurface": 150.0},
+        "forbiddenRoles": ["support", "adhesion"],
+        "firstLayerRoles": ["outerWall", "innerWall", "bottomSurface"],
+        "lastLayerRoles": ["outerWall", "innerWall", "topSurface"],
+        "interiorRoles": ["sparseInfill", "internalSolid"],
+        "rolePrecedence": [{"before": "bottomSurface", "after": "topSurface"}]
       }
     }
   ]
