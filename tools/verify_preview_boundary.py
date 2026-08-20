@@ -343,6 +343,15 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "val paintedTargets = HashSet<FacetPaintTarget>()",
         "supportAnnotationStart",
         "multiColorAnnotationStart",
+        "internal fun facetBrushSampleOffsets(",
+        "internal fun facetBrushStrokeCenters(",
+        "FACET_BRUSH_SAMPLE_COUNT = 7",
+        "MAX_FACET_BRUSH_STROKE_CENTERS = 6",
+        "brushSampleHitRadiusPx",
+        "fun drawFacetBrushCursor()",
+        "private fun FacetBrushSizeControl(",
+        "R.string.paint_brush_size",
+        "range = FACET_BRUSH_MIN_RADIUS_DP..FACET_BRUSH_MAX_RADIUS_DP",
     ):
         if marker not in workspace:
             raise VerificationError(f"partial-facet brush routing is missing: {marker}")
@@ -372,6 +381,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "SupportPaintHitTest.kt": (
             "facetBrushUsesViewAwareBoundedSubdivisionAndStableRegions",
             "facetBrushClampsNearbyEdgeHitsToValidBarycentricCoordinates",
+            "facetBrushFootprintUsesABoundedCircularSamplePattern",
+            "facetBrushStrokeFillsNormalPointerGapsAndCapsExtremeJumps",
         ),
     }.items():
         for marker in markers:
@@ -710,6 +721,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "target?.scrollableAncestor()",
         "retainedScrollBounds",
         "AccessibilityNodeInfo.ACTION_SCROLL_FORWARD",
+        "Support brush size must expose an adjustable bounded range",
     ):
         if marker not in accessibility_test:
             raise VerificationError(f"device accessibility regression is missing: {marker}")

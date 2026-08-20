@@ -248,7 +248,14 @@ def valid_sources() -> dict[str, str]:
             " internal fun facetPaintTarget( "
             "ceil(log2((longestEdge / targetDiameter).toDouble())) "
             "val paintedTargets = HashSet<FacetPaintTarget>() "
-            "supportAnnotationStart multiColorAnnotationStart"
+            "supportAnnotationStart multiColorAnnotationStart "
+            "internal fun facetBrushSampleOffsets( "
+            "internal fun facetBrushStrokeCenters( "
+            "FACET_BRUSH_SAMPLE_COUNT = 7 "
+            "MAX_FACET_BRUSH_STROKE_CENTERS = 6 "
+            "brushSampleHitRadiusPx fun drawFacetBrushCursor() "
+            "private fun FacetBrushSizeControl( R.string.paint_brush_size "
+            "range = FACET_BRUSH_MIN_RADIUS_DP..FACET_BRUSH_MAX_RADIUS_DP"
         ),
         "MainActivity.kt": (
             "fun fromNative(raw: FloatArray?, localPath: String) "
@@ -371,7 +378,8 @@ def valid_sources() -> dict[str, str]:
             "it.isHeading menu.isFocusable printerProfile.isFocusable "
             "modelTransformExposesIndependentAxesAndProportionLock "
             "scrollAnchorLabel = placement target?.scrollableAncestor() retainedScrollBounds "
-            "AccessibilityNodeInfo.ACTION_SCROLL_FORWARD"
+            "AccessibilityNodeInfo.ACTION_SCROLL_FORWARD "
+            "Support brush size must expose an adjustable bounded range"
         ),
         "PreviewModelsTest.kt": (
             "nativePayloadKeepsMetadataSegmentsAndRolesWithoutJson "
@@ -445,7 +453,9 @@ def valid_sources() -> dict[str, str]:
         ),
         "SupportPaintHitTest.kt": (
             "facetBrushUsesViewAwareBoundedSubdivisionAndStableRegions "
-            "facetBrushClampsNearbyEdgeHitsToValidBarycentricCoordinates"
+            "facetBrushClampsNearbyEdgeHitsToValidBarycentricCoordinates "
+            "facetBrushFootprintUsesABoundedCircularSamplePattern "
+            "facetBrushStrokeFillsNormalPointerGapsAndCapsExtremeJumps"
         ),
         "lib.rs": (
             "Java_com_ashcastle_duckyslicer_NativeEngine_previewGcodeRangeInto "

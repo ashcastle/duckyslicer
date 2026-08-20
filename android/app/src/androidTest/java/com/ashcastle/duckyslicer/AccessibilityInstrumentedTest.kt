@@ -779,6 +779,7 @@ class AccessibilityInstrumentedTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val paintSupport = context.getString(R.string.paint_support)
+        val brushSize = context.getString(R.string.paint_brush_size)
         val hint = context.getString(R.string.support_paint_hint)
         launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use {
             val tool = waitForNode(paintSupport) { it.isClickable }
@@ -786,6 +787,17 @@ class AccessibilityInstrumentedTest {
             assertTrue(
                 "Support painting must explain its touch controls",
                 waitForNodes(setOf(hint)).any { it.effectiveLabel().contains(hint) },
+            )
+            val brushSlider = waitForNode(brushSize) { node ->
+                node.rangeInfo != null && node.actionList.any { action ->
+                    action.id == AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id
+                }
+            }
+            assertTrue(
+                "Support brush size must expose an adjustable bounded range",
+                checkNotNull(brushSlider.rangeInfo).run {
+                    current in min..max && min == 8f && max == 48f
+                },
             )
             tapPrepareFixtureCenter()
             assertTrue(

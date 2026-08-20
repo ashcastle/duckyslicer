@@ -168,6 +168,12 @@ private const val ModelFaceShadeBands = 8
 // Keep broad curves smooth in the mobile preview while retaining structural creases.
 private const val ModelSharpEdgeCosine = 0.422618f
 private const val PREPARE_PICKING_PREWARM_DELAY_MS = 180L
+private const val FACET_BRUSH_MIN_RADIUS_DP = 8f
+private const val FACET_BRUSH_MAX_RADIUS_DP = 48f
+private const val DEFAULT_FACET_BRUSH_RADIUS_DP = 18f
+private const val FACET_BRUSH_SIZE_STEPS = 9
+internal const val FACET_BRUSH_SAMPLE_COUNT = 7
+internal const val MAX_FACET_BRUSH_STROKE_CENTERS = 6
 
 internal fun useWorkspaceNavigationRail(widthDp: Float, heightDp: Float): Boolean =
     minOf(widthDp, heightDp) >= TabletShortestSideDp
@@ -566,6 +572,9 @@ internal fun WorkspaceScreen(
     var seamPaintTool by remember { mutableStateOf(SeamPaintTool.ENFORCE) }
     var multiColorPainting by remember { mutableStateOf(false) }
     var multiColorPaintSlot by remember { mutableStateOf<Int?>(1) }
+    var facetBrushRadiusDp by rememberSaveable {
+        mutableFloatStateOf(DEFAULT_FACET_BRUSH_RADIUS_DP)
+    }
     var brimEditing by remember { mutableStateOf(false) }
     var brimDraft by remember { mutableStateOf(BrimPoints()) }
     var selectedBrimPointIndex by remember { mutableStateOf<Int?>(null) }
@@ -672,6 +681,7 @@ internal fun WorkspaceScreen(
                     seamPaintState = seamPaintTool.state,
                     multiColorPaintObjectId = selectedObjectId.takeIf { multiColorPainting },
                     multiColorPaintSlot = multiColorPaintSlot,
+                    facetBrushRadiusDp = facetBrushRadiusDp,
                     brimEditObjectId = selectedObjectId.takeIf { brimEditing },
                     brimPoints = brimDraft,
                     selectedBrimPointIndex = selectedBrimPointIndex,
@@ -845,6 +855,8 @@ internal fun WorkspaceScreen(
                 SupportPaintPalette(
                     selectedTool = supportPaintTool,
                     onToolSelected = { supportPaintTool = it },
+                    brushRadiusDp = facetBrushRadiusDp,
+                    onBrushRadiusChanged = { facetBrushRadiusDp = it },
                     onDone = { supportPainting = false },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 132.dp),
                 )
@@ -854,6 +866,8 @@ internal fun WorkspaceScreen(
                 SeamPaintPalette(
                     selectedTool = seamPaintTool,
                     onToolSelected = { seamPaintTool = it },
+                    brushRadiusDp = facetBrushRadiusDp,
+                    onBrushRadiusChanged = { facetBrushRadiusDp = it },
                     onDone = { seamPainting = false },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 132.dp),
                 )
@@ -864,6 +878,8 @@ internal fun WorkspaceScreen(
                     filaments = availableFilaments,
                     selectedSlot = multiColorPaintSlot,
                     onSlotSelected = { multiColorPaintSlot = it },
+                    brushRadiusDp = facetBrushRadiusDp,
+                    onBrushRadiusChanged = { facetBrushRadiusDp = it },
                     onDone = { multiColorPainting = false },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 132.dp),
                 )
@@ -2934,6 +2950,7 @@ private fun BedScene(
     seamPaintState: SeamPaintState?,
     multiColorPaintObjectId: String?,
     multiColorPaintSlot: Int?,
+    facetBrushRadiusDp: Float,
     brimEditObjectId: String?,
     brimPoints: BrimPoints,
     selectedBrimPointIndex: Int?,
@@ -3137,6 +3154,13 @@ private fun BedScene(
     var brimPointScreenPositions by remember(brimEditObjectId) {
         mutableStateOf<Map<Int, Offset>>(emptyMap())
     }
+    var facetBrushCursor by remember(
+        supportPaintObjectId,
+        seamPaintObjectId,
+        multiColorPaintObjectId,
+    ) {
+        mutableStateOf<Offset?>(null)
+    }
     val currentObjects by rememberUpdatedState(projectObjects)
     val currentModelPlacements by rememberUpdatedState(modelPlacements)
     val currentModelPickingIndices by rememberUpdatedState(modelPickingIndices)
@@ -3283,6 +3307,11 @@ private fun BedScene(
                 val paintableVolumeIds = paintingObject?.modelPartVolumes
                     ?.mapTo(HashSet()) { it.id }
                     .orEmpty()
+                val brushRadiusPx = facetBrushRadiusDp
+                    .coerceIn(FACET_BRUSH_MIN_RADIUS_DP, FACET_BRUSH_MAX_RADIUS_DP)
+                    .dp.toPx()
+                val brushSampleOffsets = facetBrushSampleOffsets(brushRadiusPx)
+                val brushSampleHitRadiusPx = max(3.dp.toPx(), brushRadiusPx * 0.35f)
                 if (brimEditingObject != null) {
                     val markerTouchRadius = 24.dp.toPx()
                     val touchedIndex = brimPointScreenPositions
@@ -3545,7 +3574,7 @@ private fun BedScene(
                 var multiColorPaintStart: MultiColorPaint? = null
                 var multiColorAnnotationStart: OrcaFacetAnnotation? = null
                 val paintedTargets = HashSet<FacetPaintTarget>()
-                fun paintAt(position: Offset) {
+                fun paintSampleAt(position: Offset) {
                     val objectId = paintingObject?.id ?: return
                     val hit = if (useDepthTestedPrepare) {
                         currentModelPlacements[objectId]?.let { placement ->
@@ -3565,7 +3594,7 @@ private fun BedScene(
                                 ),
                                 screenX = position.x,
                                 screenY = position.y,
-                                touchRadiusPx = 18.dp.toPx(),
+                                touchRadiusPx = brushSampleHitRadiusPx,
                                 selectableVolumeIds = paintableVolumeIds,
                                 pickingIndices = currentModelPickingIndices,
                             )
@@ -3576,7 +3605,7 @@ private fun BedScene(
                                 it.volumeId in paintableVolumeIds
                             },
                             position,
-                            18.dp.toPx(),
+                            brushSampleHitRadiusPx,
                         )
                     } ?: return
                     if (paintedVolumeId == null) {
@@ -3600,7 +3629,7 @@ private fun BedScene(
                         }
                     }
                     if (paintedVolumeId != hit.volumeId) return
-                    val target = facetPaintTarget(hit, position, 18.dp.toPx())
+                    val target = facetPaintTarget(hit, position, brushRadiusPx)
                     if (paintedTargets.add(target)) {
                         if (supportPaintingObject != null) {
                             currentSupportPaintPreviewCallback(
@@ -3626,8 +3655,15 @@ private fun BedScene(
                         }
                     }
                 }
+                fun paintFootprintAt(center: Offset) {
+                    brushSampleOffsets.forEach { offset -> paintSampleAt(center + offset) }
+                }
                 if (hitObjectId != null) currentSelectionCallback(hitObjectId)
-                if (paintingObject != null) paintAt(down.position)
+                if (paintingObject != null) {
+                    facetBrushCursor = down.position
+                    paintFootprintAt(down.position)
+                }
+                var previousPaintCenter = down.position.takeIf { paintingObject != null }
                 var movement = 0f
                 interactionActive = true
                 try {
@@ -3641,7 +3677,18 @@ private fun BedScene(
                                 val delta = change.position - change.previousPosition
                                 movement += abs(delta.x) + abs(delta.y)
                                 if (paintingObject != null) {
-                                    paintAt(change.position)
+                                    facetBrushCursor = change.position
+                                    val previous = previousPaintCenter
+                                    if (previous == null) {
+                                        paintFootprintAt(change.position)
+                                    } else {
+                                        facetBrushStrokeCenters(
+                                            previous,
+                                            change.position,
+                                            brushRadiusPx,
+                                        ).forEach(::paintFootprintAt)
+                                    }
+                                    previousPaintCenter = change.position
                                 } else if (hitObjectId != null) {
                                     val currentSceneScale = min(
                                         size.width * 0.64f,
@@ -3676,6 +3723,8 @@ private fun BedScene(
                             }
 
                             pressed.size >= 2 -> {
+                                facetBrushCursor = null
+                                previousPaintCenter = null
                                 panAndZoomBy(event, size.width, size.height)
                             }
                         }
@@ -3685,6 +3734,7 @@ private fun BedScene(
                     } while (event.changes.any { it.pressed })
                 } finally {
                     interactionActive = false
+                    facetBrushCursor = null
                     if (
                         supportPaintingObject != null && supportPaintStart != null &&
                         supportAnnotationStart != null && paintedTargets.isNotEmpty() &&
@@ -3749,6 +3799,25 @@ private fun BedScene(
             val dy = y - bedSizeY / 2f
             val rotatedY = dx * sin(yawRadians) + dy * cos(yawRadians)
             return rotatedY * cos(pitchRadians) + z * sin(pitchRadians)
+        }
+
+        fun drawFacetBrushCursor() {
+            val center = facetBrushCursor ?: return
+            val radius = facetBrushRadiusDp
+                .coerceIn(FACET_BRUSH_MIN_RADIUS_DP, FACET_BRUSH_MAX_RADIUS_DP)
+                .dp.toPx()
+            drawCircle(
+                color = Color.Black.copy(alpha = 0.28f),
+                radius = radius,
+                center = center,
+                style = Stroke(3.dp.toPx()),
+            )
+            drawCircle(
+                color = WorkspaceYellow.copy(alpha = 0.96f),
+                radius = radius,
+                center = center,
+                style = Stroke(1.5.dp.toPx()),
+            )
         }
 
         if (useDepthTestedPrepare) {
@@ -3855,6 +3924,7 @@ private fun BedScene(
                     )
                 }
             }
+            drawFacetBrushCursor()
             return@Canvas
         }
 
@@ -4261,6 +4331,7 @@ private fun BedScene(
                 brimPointScreenPositions = nextBrimPositions
             }
         }
+        drawFacetBrushCursor()
         }
     }
 }
@@ -4455,6 +4526,38 @@ internal fun facetPaintTarget(
         weightC = weights.c,
         subdivisionDepth = depth,
     )
+}
+
+internal fun facetBrushSampleOffsets(radiusPx: Float): List<Offset> {
+    require(radiusPx.isFinite() && radiusPx > 0f) { "Facet brush radius is invalid" }
+    val ringRadius = radiusPx * 0.68f
+    return buildList(FACET_BRUSH_SAMPLE_COUNT) {
+        add(Offset.Zero)
+        repeat(FACET_BRUSH_SAMPLE_COUNT - 1) { index ->
+            val angle = 2f * PI.toFloat() * index / (FACET_BRUSH_SAMPLE_COUNT - 1)
+            add(Offset(cos(angle) * ringRadius, sin(angle) * ringRadius))
+        }
+    }
+}
+
+internal fun facetBrushStrokeCenters(
+    previous: Offset,
+    current: Offset,
+    radiusPx: Float,
+): List<Offset> {
+    require(radiusPx.isFinite() && radiusPx > 0f) { "Facet brush radius is invalid" }
+    require(
+        previous.x.isFinite() && previous.y.isFinite() &&
+            current.x.isFinite() && current.y.isFinite(),
+    ) { "Facet brush position is invalid" }
+    val delta = current - previous
+    val distance = delta.getDistance()
+    if (!distance.isFinite() || distance <= 0.001f) return listOf(current)
+    val centerCount = ceil(distance / (radiusPx * 0.72f)).toInt()
+        .coerceIn(1, MAX_FACET_BRUSH_STROKE_CENTERS)
+    return List(centerCount) { index ->
+        previous + delta * ((index + 1f) / centerCount)
+    }
 }
 
 internal fun measurementBetween(first: ModelPoint3, second: ModelPoint3): ModelMeasurement? {
@@ -4856,6 +4959,8 @@ private fun LayOnFacePalette(
 private fun SupportPaintPalette(
     selectedTool: SupportPaintTool,
     onToolSelected: (SupportPaintTool) -> Unit,
+    brushRadiusDp: Float,
+    onBrushRadiusChanged: (Float) -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -4891,6 +4996,7 @@ private fun SupportPaintPalette(
                     Text(stringResource(R.string.done), color = WorkspaceYellow)
                 }
             }
+            FacetBrushSizeControl(brushRadiusDp, onBrushRadiusChanged)
             Text(
                 stringResource(R.string.support_paint_hint),
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
@@ -4905,6 +5011,8 @@ private fun SupportPaintPalette(
 private fun SeamPaintPalette(
     selectedTool: SeamPaintTool,
     onToolSelected: (SeamPaintTool) -> Unit,
+    brushRadiusDp: Float,
+    onBrushRadiusChanged: (Float) -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -4940,6 +5048,7 @@ private fun SeamPaintPalette(
                     Text(stringResource(R.string.done), color = WorkspaceYellow)
                 }
             }
+            FacetBrushSizeControl(brushRadiusDp, onBrushRadiusChanged)
             Text(
                 stringResource(R.string.seam_paint_hint),
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
@@ -4955,6 +5064,8 @@ private fun MultiColorPaintPalette(
     filaments: List<FilamentProfile>,
     selectedSlot: Int?,
     onSlotSelected: (Int?) -> Unit,
+    brushRadiusDp: Float,
+    onBrushRadiusChanged: (Float) -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -5027,6 +5138,7 @@ private fun MultiColorPaintPalette(
                     Text(stringResource(R.string.color_paint_erase))
                 }
             }
+            FacetBrushSizeControl(brushRadiusDp, onBrushRadiusChanged)
             Text(
                 stringResource(R.string.color_paint_hint),
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
@@ -5034,6 +5146,66 @@ private fun MultiColorPaintPalette(
                 style = MaterialTheme.typography.bodySmall,
             )
         }
+    }
+}
+
+@Composable
+private fun FacetBrushSizeControl(
+    radiusDp: Float,
+    onRadiusChanged: (Float) -> Unit,
+) {
+    val label = stringResource(R.string.paint_brush_size)
+    val percent = (
+        (radiusDp - FACET_BRUSH_MIN_RADIUS_DP) /
+            (FACET_BRUSH_MAX_RADIUS_DP - FACET_BRUSH_MIN_RADIUS_DP) * 100f
+        ).roundToInt().coerceIn(0, 100)
+    Row(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Default.Brush,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = Color(0xFFC8C9C2),
+        )
+        Slider(
+            value = radiusDp,
+            onValueChange = {
+                onRadiusChanged(it.coerceIn(FACET_BRUSH_MIN_RADIUS_DP, FACET_BRUSH_MAX_RADIUS_DP))
+            },
+            valueRange = FACET_BRUSH_MIN_RADIUS_DP..FACET_BRUSH_MAX_RADIUS_DP,
+            steps = FACET_BRUSH_SIZE_STEPS,
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 8.dp)
+                .clearAndSetSemantics {
+                    contentDescription = label
+                    stateDescription = "$percent%"
+                    progressBarRangeInfo = ProgressBarRangeInfo(
+                        current = radiusDp,
+                        range = FACET_BRUSH_MIN_RADIUS_DP..FACET_BRUSH_MAX_RADIUS_DP,
+                        steps = FACET_BRUSH_SIZE_STEPS,
+                    )
+                    setProgress { requestedValue ->
+                        onRadiusChanged(
+                            requestedValue.coerceIn(
+                                FACET_BRUSH_MIN_RADIUS_DP,
+                                FACET_BRUSH_MAX_RADIUS_DP,
+                            ),
+                        )
+                        true
+                    }
+                }
+                .focusable(),
+            colors = duckySliderColors(),
+        )
+        Icon(
+            Icons.Default.Brush,
+            contentDescription = null,
+            modifier = Modifier.size(26.dp),
+            tint = WorkspaceYellow,
+        )
     }
 }
 

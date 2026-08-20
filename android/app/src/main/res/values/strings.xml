@@ -150,6 +150,7 @@
     <string name="simplify_error">Couldn’t simplify this model.</string>
     <string name="paint_support">Paint support</string>
     <string name="paint_color">Paint color</string>
+    <string name="paint_brush_size">Brush size</string>
     <string name="color_paint_erase">Erase</string>
     <string name="color_paint_hint">Choose a filament, then paint the model surface.</string>
     <string name="paint_seam">Paint seam</string>

@@ -45,22 +45,60 @@ class SupportPaintHitTest {
         val large = ModelScreenTriangle(
             sourceFacetIndex = 12,
             a = Offset(0f, 0f),
-            b = Offset(576f, 0f),
-            c = Offset(0f, 576f),
+            b = Offset(400f, 0f),
+            c = Offset(0f, 400f),
             depth = 1f,
         )
         val first = facetPaintTarget(large, Offset(48f, 48f), brushRadius = 18f)
-        val nearby = facetPaintTarget(large, Offset(50f, 49f), brushRadius = 18f)
+        val nearby = facetPaintTarget(large, Offset(48.2f, 48.1f), brushRadius = 18f)
         val small = facetPaintTarget(
             large.copy(b = Offset(30f, 0f), c = Offset(0f, 30f)),
             Offset(5f, 5f),
             brushRadius = 18f,
         )
+        val broadBrush = facetPaintTarget(large, Offset(48f, 48f), brushRadius = 48f)
 
         assertEquals(4, first.subdivisionDepth)
+        assertEquals(3, broadBrush.subdivisionDepth)
         assertEquals(first.regionKey, nearby.regionKey)
         assertEquals(1, small.subdivisionDepth)
         assertEquals(12, first.facetIndex)
+    }
+
+    @Test
+    fun facetBrushFootprintUsesABoundedCircularSamplePattern() {
+        val radius = 20f
+        val offsets = facetBrushSampleOffsets(radius)
+
+        assertEquals(FACET_BRUSH_SAMPLE_COUNT, offsets.size)
+        assertEquals(Offset.Zero, offsets.first())
+        offsets.drop(1).forEach { offset ->
+            assertEquals(radius * 0.68f, offset.getDistance(), 0.0001f)
+            assertTrue(offset.getDistance() <= radius)
+        }
+    }
+
+    @Test
+    fun facetBrushStrokeFillsNormalPointerGapsAndCapsExtremeJumps() {
+        val radius = 20f
+        val normal = facetBrushStrokeCenters(
+            previous = Offset.Zero,
+            current = Offset(40f, 0f),
+            radiusPx = radius,
+        )
+        val extreme = facetBrushStrokeCenters(
+            previous = Offset.Zero,
+            current = Offset(10_000f, 0f),
+            radiusPx = radius,
+        )
+
+        assertEquals(Offset(40f, 0f), normal.last())
+        assertTrue(normal.first().x <= radius * 0.72f)
+        normal.zipWithNext().forEach { (first, second) ->
+            assertTrue((second - first).getDistance() <= radius * 0.72f + 0.0001f)
+        }
+        assertEquals(MAX_FACET_BRUSH_STROKE_CENTERS, extreme.size)
+        assertEquals(Offset(10_000f, 0f), extreme.last())
     }
 
     @Test
