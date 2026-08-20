@@ -132,6 +132,29 @@ class ToolpathSurfaceInstrumentedTest {
             }
             waitForBuffer(surface, logical)
             assertEquals("Settled Detail must return to full resolution", logical, surface.renderBufferSizeForTest())
+
+            val uploadsBeforeMemoryPressure = surface.geometryUploadCountForTest()
+            scenario.onActivity {
+                surface.releasePreviewMemoryForTest()
+                assertEquals(
+                    "UI memory pressure must drop rebuildable path and plan caches",
+                    PreviewDerivedCacheState(0, 0),
+                    preview.derivedCacheStateForTest(),
+                )
+                surface.requestRender()
+            }
+            val rebuildDeadline = SystemClock.elapsedRealtime() + 10_000L
+            while (
+                surface.geometryUploadCountForTest() <= uploadsBeforeMemoryPressure &&
+                SystemClock.elapsedRealtime() < rebuildDeadline
+            ) {
+                SystemClock.sleep(20L)
+            }
+            assertTrue(
+                "The same dense Preview must rebuild after memory-pressure reclamation",
+                surface.geometryUploadCountForTest() > uploadsBeforeMemoryPressure,
+            )
+            assertTrue("The rebuilt dense Preview must remain ready", surface.rendererReadyForTest())
         }
     }
 

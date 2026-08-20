@@ -55,29 +55,48 @@ internal fun loadGcodePreview(path: String, startLayer: Int, endLayer: Int): Gco
             path = path,
             startLayer = startLayer,
             endLayer = endLayer,
-            output = payload,
+            output = payload.buffer,
         )
-        GcodeLayerPreview.fromTrustedNative(payload, usedFloats)
+        GcodeLayerPreview.fromTrustedNative(payload.buffer, usedFloats)
     } finally {
         NativePreviewBufferPool.release(payload)
     }
 }
 
-private object NativePreviewBufferPool {
+internal object NativePreviewBufferPool {
     private const val MAX_RETAINED_BUFFERS = 2
     private val available = ArrayDeque<ByteBuffer>(MAX_RETAINED_BUFFERS)
+    private var generation = 0L
 
-    fun acquire(): ByteBuffer = synchronized(available) {
-        available.removeFirstOrNull()
-    } ?: ByteBuffer.allocateDirect(GcodeLayerPreview.MAX_PAYLOAD_BYTES)
-        .order(ByteOrder.nativeOrder())
+    internal data class Lease(
+        val buffer: ByteBuffer,
+        internal val generation: Long,
+    )
 
-    fun release(buffer: ByteBuffer) {
-        buffer.clear()
+    fun acquire(): Lease = synchronized(available) {
+        Lease(
+            buffer = available.removeFirstOrNull()
+                ?: ByteBuffer.allocateDirect(GcodeLayerPreview.MAX_PAYLOAD_BYTES)
+                    .order(ByteOrder.nativeOrder()),
+            generation = generation,
+        )
+    }
+
+    fun release(lease: Lease) {
+        lease.buffer.clear()
         synchronized(available) {
-            if (available.size < MAX_RETAINED_BUFFERS) {
-                available.addLast(buffer)
+            if (lease.generation == generation && available.size < MAX_RETAINED_BUFFERS) {
+                available.addLast(lease.buffer)
             }
         }
     }
+
+    fun trimForMemoryPressure() {
+        synchronized(available) {
+            generation += 1L
+            available.clear()
+        }
+    }
+
+    internal fun retainedBufferCountForTest(): Int = synchronized(available) { available.size }
 }

@@ -113,10 +113,10 @@ internal class ToolpathSurfaceView(
         override fun onConfigurationChanged(newConfig: Configuration) = Unit
 
         @Suppress("OVERRIDE_DEPRECATION")
-        override fun onLowMemory() = releaseGpuMemory()
+        override fun onLowMemory() = releasePreviewMemory()
 
         override fun onTrimMemory(level: Int) {
-            if (shouldReleaseToolpathGpuMemory(level)) releaseGpuMemory()
+            if (shouldReleaseToolpathGpuMemory(level)) releasePreviewMemory()
         }
     }
     private var memoryCallbacksRegistered = false
@@ -266,16 +266,14 @@ internal class ToolpathSurfaceView(
     }
 
     override fun onDetachedFromWindow() {
-        geometryGeneration.incrementAndGet()
-        pendingGeometry.clear()
-        latestSubmittedScene = null
         removeCallbacks(restoreDetail)
         cancelStartupWatchdog()
         if (memoryCallbacksRegistered) {
             applicationContext.unregisterComponentCallbacks(memoryCallbacks)
             memoryCallbacksRegistered = false
         }
-        releaseGpuMemory()
+        releasePreviewMemory()
+        latestSubmittedScene = null
         super.onDetachedFromWindow()
     }
 
@@ -311,11 +309,17 @@ internal class ToolpathSurfaceView(
         super.surfaceDestroyed(holder)
     }
 
-    private fun releaseGpuMemory() {
+    private fun releasePreviewMemory() {
+        geometryGeneration.incrementAndGet()
+        pendingGeometry.clear()
+        latestSubmittedScene?.preview?.releaseDerivedMemoryForMemoryPressure()
+        NativePreviewBufferPool.trimForMemoryPressure()
         queueEvent { toolpathRenderer.releaseGpuGeometryForMemoryPressure() }
     }
 
-    private fun requestGeometryBuild(scene: ToolpathScene) {
+    internal fun releasePreviewMemoryForTest() = releasePreviewMemory()
+
+    private fun requestGeometryBuild(scene: ToolpathScene, rendererGeneration: Int) {
         val generation = geometryGeneration.get()
         val request = PendingToolpathGeometry(scene, generation)
         if (!pendingGeometry.add(request)) return
@@ -324,10 +328,18 @@ internal class ToolpathSurfaceView(
             pendingGeometry.remove(request)
             if (generation != geometryGeneration.get() || !isAttachedToWindow) return@execute
             queueEvent {
-                result.fold(
-                    onSuccess = { payload -> toolpathRenderer.submitPreparedGeometry(scene, payload) },
-                    onFailure = toolpathRenderer::reportGeometryBuildFailure,
-                )
+                if (generation == geometryGeneration.get()) {
+                    result.fold(
+                        onSuccess = { payload ->
+                            toolpathRenderer.submitPreparedGeometry(
+                                scene,
+                                payload,
+                                rendererGeneration,
+                            )
+                        },
+                        onFailure = toolpathRenderer::reportGeometryBuildFailure,
+                    )
+                }
             }
             post { requestRender() }
         }
@@ -501,7 +513,7 @@ internal data class ToolpathRendererTelemetry(
 
 internal class ToolpathRenderer(
     private val requestPrewarmFrame: () -> Unit = {},
-    private val requestGeometryBuild: ((ToolpathScene) -> Unit)? = null,
+    private val requestGeometryBuild: ((ToolpathScene, Int) -> Unit)? = null,
     private val reportRendererStarting: () -> Unit = {},
     private val reportFrameReady: () -> Unit = {},
     private val reportEffectiveDetail: (PreviewDetail) -> Unit = {},
@@ -552,6 +564,7 @@ internal class ToolpathRenderer(
     private var lastEffectiveDetail: PreviewDetail? = null
     private var lastDrawnScene: ToolpathScene? = null
     private var fallbackFrameCount = 0
+    private var geometryGeneration = 0
     @Volatile
     private var frameReadyReported = false
     @Volatile
@@ -569,6 +582,8 @@ internal class ToolpathRenderer(
 
     internal fun cachedGeometryCountForTest(): Int = gpuGeometry.size
 
+    internal fun preparedGeometryCountForTest(): Int = preparedGeometry.size
+
     internal fun fallbackFrameCountForTest(): Int = fallbackFrameCount
 
     internal fun effectiveDetailForTest(): PreviewDetail? = lastEffectiveDetail
@@ -581,6 +596,7 @@ internal class ToolpathRenderer(
     }
 
     internal fun releaseGpuGeometryForMemoryPressure() {
+        geometryGeneration += 1
         gpuGeometry.values.forEach(::deleteGeometry)
         gpuGeometry.clear()
         uploadState.invalidate()
@@ -590,7 +606,12 @@ internal class ToolpathRenderer(
         lastDrawnScene = null
     }
 
-    internal fun submitPreparedGeometry(scene: ToolpathScene, payload: ToolpathUploadPayload) {
+    internal fun submitPreparedGeometry(
+        scene: ToolpathScene,
+        payload: ToolpathUploadPayload,
+        generation: Int,
+    ): Boolean {
+        if (generation != geometryGeneration) return false
         preparedGeometry[scene] = payload
         while (preparedGeometry.size > PREPARED_GEOMETRY_CACHE_SIZE) {
             val iterator = preparedGeometry.entries.iterator()
@@ -599,6 +620,7 @@ internal class ToolpathRenderer(
                 iterator.remove()
             }
         }
+        return true
     }
 
     internal fun reportGeometryBuildFailure(failure: Throwable) {
@@ -635,6 +657,7 @@ internal class ToolpathRenderer(
     }
 
     override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {
+        geometryGeneration += 1
         frameReadyReported = false
         reportRendererStarting()
         bedProgram = 0
@@ -1028,7 +1051,7 @@ internal class ToolpathRenderer(
             return uploadGeometry(scene, payload)
         }
         requestGeometryBuild?.let { request ->
-            request(scene)
+            request(scene, geometryGeneration)
             return null
         }
         return uploadGeometry(scene)
@@ -1207,6 +1230,7 @@ internal class ToolpathRenderer(
     private fun failRenderer(stage: String, failure: Throwable? = null) {
         if (rendererUnavailable) return
         rendererUnavailable = true
+        geometryGeneration += 1
         if (failure == null) {
             Log.w(RENDERER_LOG_TAG, "Depth preview unavailable at $stage")
         } else {
@@ -1215,6 +1239,7 @@ internal class ToolpathRenderer(
         gpuGeometry.values.forEach(::deleteGeometry)
         gpuGeometry.clear()
         uploadState.invalidate()
+        preparedGeometry.clear()
         pendingPrewarmScene = null
         refinementRequestedForScene = null
         lastDrawnScene = null

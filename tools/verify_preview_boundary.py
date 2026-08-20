@@ -76,6 +76,10 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "NativePreviewBufferPool.acquire()",
         "NativePreviewBufferPool.release(payload)",
         "MAX_RETAINED_BUFFERS = 2",
+        "lease.generation == generation",
+        "fun trimForMemoryPressure()",
+        "generation += 1L",
+        "available.clear()",
     ):
         if marker not in native:
             raise VerificationError(f"Android Preview direct-buffer pooling is missing: {marker}")
@@ -134,6 +138,10 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "internal val segmentCount: Int",
         "val segmentOffsets: IntArray by lazy",
         "selectedPathCount = selectedPathCounts.sum()",
+        "releaseDerivedMemoryForMemoryPressure()",
+        "derivedCacheGeneration += 1L",
+        "cachedRenderPlans.clear()",
+        "derivedCacheGeneration != expectedCacheGeneration",
     ):
         if marker not in preview:
             raise VerificationError(f"Android preview payload validation is missing: {marker}")
@@ -208,6 +216,11 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "unregisterComponentCallbacks(memoryCallbacks)",
         "queueEvent { toolpathRenderer.releaseGpuGeometryForMemoryPressure() }",
         "releaseGpuGeometryForMemoryPressure()",
+        "latestSubmittedScene?.preview?.releaseDerivedMemoryForMemoryPressure()",
+        "NativePreviewBufferPool.trimForMemoryPressure()",
+        "geometryGeneration.incrementAndGet()",
+        "generation == geometryGeneration.get()",
+        "if (generation != geometryGeneration) return false",
         "ToolpathUploadPayload",
         "INSTANCE_STRIDE_BYTES = 32",
         "INSTANCE_START_OFFSET_BYTES",
@@ -534,6 +547,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "Detail must restore the logical surface resolution",
         "Detail gestures must lower only raster resolution",
         "Settled Detail must return to full resolution",
+        "UI memory pressure must drop rebuildable path and plan caches",
+        "The same dense Preview must rebuild after memory-pressure reclamation",
     ):
         if marker not in surface_performance:
             raise VerificationError(f"adaptive SurfaceView regression is missing: {marker}")
@@ -896,6 +911,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "Automatic calibration must settle after bounded completed-frame samples",
         "The last compatible GPU frame must remain visible during refinement",
         "Background refinement must not clear the visible Preview",
+        "A geometry result started before memory pressure must not repopulate CPU buffers",
     ):
         if marker not in device:
             raise VerificationError(f"ARM64 GPU preview regression is missing: {marker}")
@@ -905,6 +921,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "nativePayloadKeepsMetadataSegmentsAndRolesWithoutJson",
         "nativePayloadRejectsNullTruncatedOrUnknownFormats",
         "nativePayloadRejectsNonFiniteCoordinatesAndInvalidRoles",
+        "memoryPressureDropsOnlyRebuildablePreviewCaches",
+        "nativePreviewPoolRejectsLeasesReleasedAfterATrim",
     ):
         if marker not in host_tests:
             raise VerificationError(f"preview payload host regression is missing: {marker}")

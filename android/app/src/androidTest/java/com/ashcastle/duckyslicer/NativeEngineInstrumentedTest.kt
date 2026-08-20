@@ -1153,9 +1153,11 @@ class NativeEngineInstrumentedTest {
             )
             adaptiveRenderer.releaseGpuGeometryForMemoryPressure()
 
-            var requestedGeometry: ToolpathScene? = null
+            var requestedGeometry: Pair<ToolpathScene, Int>? = null
             val asynchronousRenderer = ToolpathRenderer(
-                requestGeometryBuild = { requestedGeometry = it },
+                requestGeometryBuild = { requested, generation ->
+                    requestedGeometry = requested to generation
+                },
             )
             asynchronousRenderer.submit(scene)
             asynchronousRenderer.onSurfaceCreated(null, null)
@@ -1166,10 +1168,13 @@ class NativeEngineInstrumentedTest {
                 0,
                 asynchronousRenderer.geometryUploadCountForTest(),
             )
-            val requested = checkNotNull(requestedGeometry)
-            asynchronousRenderer.submitPreparedGeometry(
-                requested,
-                ToolpathMeshBuilder.build(requested),
+            val (requested, requestedGeneration) = checkNotNull(requestedGeometry)
+            assertTrue(
+                asynchronousRenderer.submitPreparedGeometry(
+                    requested,
+                    ToolpathMeshBuilder.build(requested),
+                    requestedGeneration,
+                ),
             )
             asynchronousRenderer.onDrawFrame(null)
             assertEquals(
@@ -1195,7 +1200,18 @@ class NativeEngineInstrumentedTest {
                 GLES30.GL_NO_ERROR,
                 GLES30.glGetError(),
             )
+            val staleRequest = checkNotNull(requestedGeometry)
+            val stalePayload = ToolpathMeshBuilder.build(staleRequest.first)
             asynchronousRenderer.releaseGpuGeometryForMemoryPressure()
+            assertFalse(
+                "A geometry result started before memory pressure must not repopulate CPU buffers",
+                asynchronousRenderer.submitPreparedGeometry(
+                    staleRequest.first,
+                    stalePayload,
+                    staleRequest.second,
+                ),
+            )
+            assertEquals(0, asynchronousRenderer.preparedGeometryCountForTest())
 
             var rendererFailures = 0
             val failingRenderer = ToolpathRenderer(

@@ -58,6 +58,8 @@ data class GcodeLayerPreview(
 ) {
     @Volatile
     private var cachedPathIndex: ContinuousPathIndex? = null
+    @Volatile
+    private var derivedCacheGeneration = 0L
     private val cachedRenderPlans = LinkedHashMap<RenderPlanKey, PreviewRenderPlan>(
         MAX_RENDER_PLAN_CACHE_ENTRIES,
         0.75f,
@@ -65,8 +67,25 @@ data class GcodeLayerPreview(
     )
 
     internal fun prepareRenderIndex(): GcodeLayerPreview {
-        buildPathIndex()
+        buildPathIndex(derivedCacheGeneration)
         return this
+    }
+
+    /** Drops only data that can be rebuilt from [segments] after Android memory pressure. */
+    internal fun releaseDerivedMemoryForMemoryPressure() {
+        synchronized(this) {
+            derivedCacheGeneration += 1L
+            cachedPathIndex = null
+        }
+        synchronized(cachedRenderPlans) {
+            cachedRenderPlans.clear()
+        }
+    }
+
+    internal fun derivedCacheStateForTest(): PreviewDerivedCacheState {
+        val indexedPathCount = synchronized(this) { cachedPathIndex?.pathCount ?: 0 }
+        val renderPlanCount = synchronized(cachedRenderPlans) { cachedRenderPlans.size }
+        return PreviewDerivedCacheState(indexedPathCount, renderPlanCount)
     }
 
     internal fun buildRenderPlan(
@@ -76,12 +95,13 @@ data class GcodeLayerPreview(
         val totalSegments = segments.size / SEGMENT_STRIDE
         if (totalSegments == 0) return PreviewRenderPlan.NONE
 
+        val expectedCacheGeneration = derivedCacheGeneration
         val safeBudget = segmentBudget.coerceAtLeast(1)
         val cacheKey = RenderPlanKey(safeBudget, visibleRoleMask(visibleRoles))
         synchronized(cachedRenderPlans) {
             cachedRenderPlans[cacheKey]?.let { return it }
         }
-        val allPaths = buildPathIndex()
+        val allPaths = buildPathIndex(expectedCacheGeneration)
         val pathsByRole = allPaths.pathsByRole
         val presentRoles = ROLE_PRIORITY.filter { role ->
             (visibleRoles == null || role in visibleRoles) &&
@@ -90,7 +110,11 @@ data class GcodeLayerPreview(
         val visibleSegmentCount = presentRoles.sumOf { role -> pathsByRole[role].segmentCount }
         if (visibleSegmentCount == 0) return PreviewRenderPlan.NONE
         if (visibleSegmentCount <= safeBudget) {
-            return cacheRenderPlan(cacheKey, planForPaths(allPaths, visibleRoles))
+            return cacheRenderPlan(
+                cacheKey,
+                planForPaths(allPaths, visibleRoles),
+                expectedCacheGeneration,
+            )
         }
 
         // Path identity is a bounded primitive ordinal. This avoids per-path objects, boxed
@@ -138,11 +162,17 @@ data class GcodeLayerPreview(
                 selectedSegmentCount = used,
                 selectedPathCount = selectedPathCounts.sum(),
             ),
+            expectedCacheGeneration,
         )
     }
 
-    private fun cacheRenderPlan(key: RenderPlanKey, plan: PreviewRenderPlan): PreviewRenderPlan =
+    private fun cacheRenderPlan(
+        key: RenderPlanKey,
+        plan: PreviewRenderPlan,
+        expectedCacheGeneration: Long,
+    ): PreviewRenderPlan =
         synchronized(cachedRenderPlans) {
+            if (derivedCacheGeneration != expectedCacheGeneration) return@synchronized plan
             cachedRenderPlans[key]?.let { return@synchronized it }
             cachedRenderPlans[key] = plan
             while (cachedRenderPlans.size > MAX_RENDER_PLAN_CACHE_ENTRIES) {
@@ -162,11 +192,15 @@ data class GcodeLayerPreview(
         }
     }
 
-    private fun buildPathIndex(): ContinuousPathIndex {
+    private fun buildPathIndex(expectedCacheGeneration: Long): ContinuousPathIndex {
         cachedPathIndex?.let { return it }
         val built = computePathIndex()
         return synchronized(this) {
-            cachedPathIndex ?: built.also { cachedPathIndex = it }
+            if (derivedCacheGeneration != expectedCacheGeneration) {
+                built
+            } else {
+                cachedPathIndex ?: built.also { cachedPathIndex = it }
+            }
         }
     }
 
@@ -633,6 +667,11 @@ data class GcodeLayerPreview(
         private const val MAX_COORDINATE_ABS_MM = 1_000_000f
     }
 }
+
+internal data class PreviewDerivedCacheState(
+    val indexedPathCount: Int,
+    val renderPlanCount: Int,
+)
 
 private fun FloatArray.exactInt(index: Int, maximum: Int): Int {
     val value = this[index]

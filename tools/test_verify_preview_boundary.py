@@ -12,7 +12,9 @@ def valid_sources() -> dict[str, str]:
             "inspectStlPayload(path: String): FloatArray? external fun packToolpathGeometry( "
             "output: ByteBuffer internal fun loadGcodePreview( "
             "GcodeLayerPreview.fromTrustedNative( NativePreviewBufferPool.acquire() "
-            "NativePreviewBufferPool.release(payload) MAX_RETAINED_BUFFERS = 2"
+            "NativePreviewBufferPool.release(payload) MAX_RETAINED_BUFFERS = 2 "
+            "lease.generation == generation fun trimForMemoryPressure() "
+            "generation += 1L available.clear()"
         ),
         "PreviewModels.kt": (
             "fun fromNative(raw: FloatArray?) PAYLOAD_MAGIC PAYLOAD_VERSION "
@@ -28,7 +30,9 @@ def valid_sources() -> dict[str, str]:
             "selectedPathCounts = IntArray(ROLE_COUNT) "
             "internal val pathStarts: IntArray internal val pathEndsExclusive: IntArray "
             "internal val segmentCount: Int val segmentOffsets: IntArray by lazy "
-            "selectedPathCount = selectedPathCounts.sum()"
+            "selectedPathCount = selectedPathCounts.sum() "
+            "releaseDerivedMemoryForMemoryPressure() derivedCacheGeneration += 1L "
+            "cachedRenderPlans.clear() derivedCacheGeneration != expectedCacheGeneration"
         ),
         "PreviewSummary.kt": (
             "fun SliceOutcome.previewSummary() estimatedSeconds / SECONDS_PER_MINUTE "
@@ -86,6 +90,10 @@ def valid_sources() -> dict[str, str]:
             "unregisterComponentCallbacks(memoryCallbacks) "
             "queueEvent { toolpathRenderer.releaseGpuGeometryForMemoryPressure() } "
             "releaseGpuGeometryForMemoryPressure() "
+            "latestSubmittedScene?.preview?.releaseDerivedMemoryForMemoryPressure() "
+            "NativePreviewBufferPool.trimForMemoryPressure() geometryGeneration.incrementAndGet() "
+            "generation == geometryGeneration.get() "
+            "if (generation != geometryGeneration) return false "
             "ToolpathUploadPayload INSTANCE_STRIDE_BYTES = 32 "
             "INSTANCE_START_OFFSET_BYTES INSTANCE_COLOR_OFFSET_BYTES "
             "val toolpathInstances = when { "
@@ -331,6 +339,7 @@ def valid_sources() -> dict[str, str]:
             " Automatic calibration must settle after bounded completed-frame samples"
             " The last compatible GPU frame must remain visible during refinement"
             " Background refinement must not clear the visible Preview"
+            " A geometry result started before memory pressure must not repopulate CPU buffers"
         ),
         "OrcaModelImportInstrumentedTest.kt": (
             "editedMultiColor = painted.multiColor.paintAt("
@@ -398,7 +407,9 @@ def valid_sources() -> dict[str, str]:
         "PreviewModelsTest.kt": (
             "nativePayloadKeepsMetadataSegmentsAndRolesWithoutJson "
             "nativePayloadRejectsNullTruncatedOrUnknownFormats "
-            "nativePayloadRejectsNonFiniteCoordinatesAndInvalidRoles"
+            "nativePayloadRejectsNonFiniteCoordinatesAndInvalidRoles "
+            "memoryPressureDropsOnlyRebuildablePreviewCaches "
+            "nativePreviewPoolRejectsLeasesReleasedAfterATrim"
         ),
         "PreviewSummaryTest.kt": (
             "sliceResultKeepsTimeMassAndLengthWithoutReadingGcode "
@@ -447,7 +458,9 @@ def valid_sources() -> dict[str, str]:
             "Performance must lower raster resolution without changing Preview geometry "
             "Detail must restore the logical surface resolution "
             "Detail gestures must lower only raster resolution "
-            "Settled Detail must return to full resolution"
+            "Settled Detail must return to full resolution "
+            "UI memory pressure must drop rebuildable path and plan caches "
+            "The same dense Preview must rebuild after memory-pressure reclamation"
         ),
         "WorkspaceLayoutPolicyTest.kt": (
             "landscapePhoneKeepsBottomNavigation "

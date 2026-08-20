@@ -2,7 +2,9 @@ package com.ashcastle.duckyslicer
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -91,5 +93,63 @@ class PreviewModelsTest {
         assertThrows(IllegalStateException::class.java) {
             GcodeLayerPreview.fromNative(valid.copyOf().apply { this[25] = 0f })
         }
+    }
+
+    @Test
+    fun memoryPressureDropsOnlyRebuildablePreviewCaches() {
+        val preview = GcodeLayerPreview(
+            startLayer = 0,
+            endLayer = 1,
+            layerCount = 2,
+            minZMm = 0.2f,
+            maxZMm = 0.4f,
+            segments = floatArrayOf(
+                0f, 0f, 10f, 0f, 0.2f, 0f,
+                10f, 0f, 10f, 10f, 0.2f, 0f,
+                0f, 0f, 0f, 10f, 0.4f, 1f,
+                0f, 10f, 10f, 10f, 0.4f, 1f,
+            ),
+            roleSegmentCounts = intArrayOf(2, 2, 0, 0, 0, 0, 0, 0, 0, 0),
+        )
+        val authoritativeSegments = preview.segments.copyOf()
+        val first = preview.buildRenderPlan(segmentBudget = 4)
+        val firstOffsets = first.segmentOffsets.copyOf()
+        val firstConnections = first.connectsToPrevious.copyOf()
+
+        assertTrue(preview.derivedCacheStateForTest().indexedPathCount > 0)
+        assertEquals(1, preview.derivedCacheStateForTest().renderPlanCount)
+
+        preview.releaseDerivedMemoryForMemoryPressure()
+
+        assertEquals(PreviewDerivedCacheState(0, 0), preview.derivedCacheStateForTest())
+        assertArrayEquals(authoritativeSegments, preview.segments, 0f)
+        val rebuilt = preview.buildRenderPlan(segmentBudget = 4)
+        assertNotSame(first, rebuilt)
+        assertArrayEquals(firstOffsets, rebuilt.segmentOffsets)
+        assertArrayEquals(firstConnections, rebuilt.connectsToPrevious)
+        assertTrue(preview.derivedCacheStateForTest().indexedPathCount > 0)
+        assertEquals(1, preview.derivedCacheStateForTest().renderPlanCount)
+    }
+
+    @Test
+    fun nativePreviewPoolRejectsLeasesReleasedAfterATrim() {
+        NativePreviewBufferPool.trimForMemoryPressure()
+        val retained = NativePreviewBufferPool.acquire()
+        NativePreviewBufferPool.release(retained)
+        assertEquals(1, NativePreviewBufferPool.retainedBufferCountForTest())
+
+        val stale = NativePreviewBufferPool.acquire()
+        NativePreviewBufferPool.trimForMemoryPressure()
+        NativePreviewBufferPool.release(stale)
+        assertEquals(0, NativePreviewBufferPool.retainedBufferCountForTest())
+
+        val fresh = NativePreviewBufferPool.acquire()
+        assertNotSame(stale.buffer, fresh.buffer)
+        assertTrue(fresh.buffer.isDirect)
+        assertEquals(ByteOrder.nativeOrder(), fresh.buffer.order())
+        assertEquals(GcodeLayerPreview.MAX_PAYLOAD_BYTES, fresh.buffer.capacity())
+        NativePreviewBufferPool.release(fresh)
+        assertEquals(1, NativePreviewBufferPool.retainedBufferCountForTest())
+        NativePreviewBufferPool.trimForMemoryPressure()
     }
 }
