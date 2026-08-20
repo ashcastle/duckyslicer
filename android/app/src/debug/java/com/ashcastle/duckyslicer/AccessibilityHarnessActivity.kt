@@ -61,9 +61,19 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                             projectObject = accessibilityAuxiliaryVolumeProjectObject(),
                             canAdd = true,
                             onAdd = {},
+                            onEdit = {},
                             onRemove = {},
                             onDismiss = {},
                         )
+                        SCREEN_AUXILIARY_VOLUME_EDIT -> {
+                            val projectObject = accessibilityAuxiliaryVolumeProjectObject()
+                            AuxiliaryVolumeEditSheet(
+                                projectObject = projectObject,
+                                volume = projectObject.volumes.last(),
+                                onApply = {},
+                                onDismiss = {},
+                            )
+                        }
                         SCREEN_SIMPLIFY -> SimplifyModelSheet(
                             originalTriangleCount = 100_000,
                             hasSurfacePaint = true,
@@ -138,6 +148,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_SHAPES = "shapes"
         const val SCREEN_AUXILIARY_SHAPE = "auxiliary-shape"
         const val SCREEN_AUXILIARY_VOLUMES = "auxiliary-volumes"
+        const val SCREEN_AUXILIARY_VOLUME_EDIT = "auxiliary-volume-edit"
         const val SCREEN_SIMPLIFY = "simplify"
         const val SCREEN_SPLIT_PARTS = "split-parts"
         const val SCREEN_MODEL_TRANSFORM = "model-transform"
@@ -371,6 +382,7 @@ private fun WorkspaceAccessibilityHarness(
         onCancelProfileTransfer = {},
         onCreatePrimitive = { _, _ -> },
         onCreateAuxiliaryPrimitive = {},
+        onEditAuxiliaryVolume = {},
         onOpenProject = {},
         onSaveProject = {},
         onPlateSelected = { selectedPlateId = it },

@@ -35,6 +35,7 @@ internal enum class ProjectPersistenceMessage {
 internal enum class ProjectEditKind {
     MODEL_IMPORT,
     PRIMITIVE,
+    AUXILIARY_VOLUME,
     AUTO_LAY,
     ARRANGE,
     SPLIT,
@@ -705,6 +706,51 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                 )
                 installed = File(created.model.localPath)
                 val nextHistory = baseline.history.addAuxiliaryVolumeToSelected(created)
+                if (
+                    !completeEditSuccess(
+                        baseline,
+                        nextHistory,
+                        displayName = displayName,
+                    )
+                ) {
+                    installed.delete()
+                }
+            } catch (failure: CancellationException) {
+                installed?.delete()
+                throw failure
+            } catch (failure: Exception) {
+                installed?.delete()
+                completeEditFailure(baseline, failure)
+            } finally {
+                SlicerProcessClient.releaseProjectRequest(baseline.operation.requestId)
+            }
+        }
+        return true
+    }
+
+    @Synchronized
+    fun editAuxiliaryVolume(
+        draft: OrcaAuxiliaryVolumeEditDraft,
+        displayName: String,
+    ): Boolean {
+        val target = mutableState.value.history.current.selectedObject ?: return false
+        val source = target.volumes.firstOrNull { it.id == draft.volumeId } ?: return false
+        if (source.role == ProjectVolumeRole.MODEL_PART) return false
+        val baseline = startEditLocked(ProjectEditKind.AUXILIARY_VOLUME) ?: return false
+        viewModelScope.launch(Dispatchers.IO) {
+            var installed: File? = null
+            try {
+                val edited = editOrcaAuxiliaryVolume(
+                    draft = draft,
+                    target = target,
+                    projectStore = projectStore,
+                    requestId = baseline.operation.requestId,
+                )
+                installed = File(edited.model.localPath)
+                val nextHistory = baseline.history.replaceSelectedAuxiliaryVolume(
+                    draft.volumeId,
+                    edited,
+                )
                 if (
                     !completeEditSuccess(
                         baseline,

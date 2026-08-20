@@ -125,6 +125,46 @@ class ProjectVolumeSemanticsTest {
     }
 
     @Test
+    fun auxiliaryVolumeEditDraftBoundsScalePlacementAndPreservesModifierSettings() {
+        val volume = ProjectVolume(
+            id = "settings-region",
+            model = model("settings-region"),
+            role = ProjectVolumeRole.PARAMETER_MODIFIER,
+            config = ProjectVolumeConfig(
+                mapOf(
+                    "sparse_infill_density" to "20%",
+                    "wall_loops" to "4",
+                ),
+            ),
+        )
+        val draft = OrcaAuxiliaryVolumeEditDraft(
+            volumeId = volume.id,
+            scalePercent = 175,
+            centerOffsetXmm = 4f,
+            centerOffsetYmm = -5f,
+            centerOffsetZmm = 6f,
+            modifierInfillPercent = 73,
+        )
+
+        assertEquals(
+            mapOf(
+                "sparse_infill_density" to "73%",
+                "wall_loops" to "4",
+            ),
+            draft.updatedConfig(volume).values,
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            draft.copy(scalePercent = MIN_AUXILIARY_EDIT_SCALE_PERCENT - 1)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            draft.copy(centerOffsetZmm = Float.POSITIVE_INFINITY)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            draft.copy(modifierInfillPercent = -1)
+        }
+    }
+
+    @Test
     fun projectAndArchiveObjectsRequirePrintableModelParts() {
         val model = ModelInfo(
             fileName = "cutout.stl",
@@ -167,4 +207,14 @@ class ProjectVolumeSemanticsTest {
             )
         }
     }
+
+    private fun model(name: String) = ModelInfo(
+        fileName = "$name.stl",
+        triangles = 1,
+        dimensions = listOf(1.0, 1.0, 1.0),
+        localPath = "/tmp/$name.stl",
+        minMm = listOf(0.0, 0.0, 0.0),
+        maxMm = listOf(1.0, 1.0, 1.0),
+        previewTriangles = floatArrayOf(0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f),
+    )
 }

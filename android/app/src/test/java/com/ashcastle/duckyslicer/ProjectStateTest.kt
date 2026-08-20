@@ -563,6 +563,36 @@ class ProjectStateTest {
     }
 
     @Test
+    fun auxiliaryVolumeReplacementPreservesIdentityAndSupportsUndoRedo() {
+        val base = projectObject("editable-volume")
+        val cutout = base.singleVolume.copy(
+            id = "editable-cutout",
+            role = ProjectVolumeRole.NEGATIVE_VOLUME,
+        )
+        var state = ProjectHistoryState().add(base).addAuxiliaryVolumeToSelected(cutout)
+        val edited = cutout.copy(
+            model = cutout.model.copy(fileName = "edited-cutout.stl"),
+        )
+
+        state = state.replaceSelectedAuxiliaryVolume(cutout.id, edited)
+        assertEquals(
+            "edited-cutout.stl",
+            state.current.selectedObject!!.volumes.last().model.fileName,
+        )
+        assertEquals(cutout.id, state.current.selectedObject!!.volumes.last().id)
+        state = state.undo()
+        assertEquals(
+            cutout.model.fileName,
+            state.current.selectedObject!!.volumes.last().model.fileName,
+        )
+        state = state.redo()
+        assertEquals(
+            "edited-cutout.stl",
+            state.current.selectedObject!!.volumes.last().model.fileName,
+        )
+    }
+
+    @Test
     fun platesKeepObjectsAndSelectionIsolatedAcrossRemovalUndoAndRedo() {
         var state = ProjectHistoryState()
             .add(projectObject("first-plate-object"))

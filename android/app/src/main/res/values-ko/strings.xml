@@ -953,6 +953,11 @@
     <string name="region_infill">이 영역의 인필</string>
     <string name="region_none">추가된 파트나 영역 없음</string>
     <string name="remove_region">%1$s 제거</string>
+    <string name="edit_region">%1$s 수정</string>
+    <string name="edit_region_title">%1$s 수정</string>
+    <string name="apply_region_changes">변경 적용</string>
+    <string name="region_updated">%1$s 수정됨</string>
+    <string name="region_update_error">영역을 수정하지 못했습니다.</string>
     <string name="auxiliary_shape_name">%1$s · %2$s</string>
     <string name="support_filament_routing">서포트 필라멘트</string>
     <string name="support_filament">서포트 본체</string>

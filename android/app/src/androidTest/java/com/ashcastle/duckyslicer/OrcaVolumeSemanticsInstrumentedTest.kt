@@ -44,10 +44,31 @@ class OrcaVolumeSemanticsInstrumentedTest {
                 target = base,
                 projectStore = store,
             )
+            val editedCutout = editOrcaAuxiliaryVolume(
+                draft = OrcaAuxiliaryVolumeEditDraft(
+                    volumeId = cutout.id,
+                    scalePercent = 50,
+                    centerOffsetXmm = -4f,
+                ),
+                target = base.copy(volumes = base.volumes + cutout),
+                projectStore = store,
+            )
+            val editedSettingsRegion = editOrcaAuxiliaryVolume(
+                draft = OrcaAuxiliaryVolumeEditDraft(
+                    volumeId = settingsRegion.id,
+                    centerOffsetXmm = -3f,
+                    modifierInfillPercent = 0,
+                ),
+                target = base.copy(volumes = base.volumes + settingsRegion),
+                projectStore = store,
+            )
             val baseCenterX = base.geometry().center[0]
             assertEquals(baseCenterX + 3f, cutout.modelCenterX(), 0.25f)
             assertEquals(baseCenterX - 3f, settingsRegion.modelCenterX(), 0.25f)
             assertEquals("100%", settingsRegion.config.values["sparse_infill_density"])
+            assertEquals(baseCenterX - 4f, editedCutout.modelCenterX(), 0.25f)
+            assertEquals(10.0, editedCutout.model.dimensions[0], 0.25)
+            assertEquals("0%", editedSettingsRegion.config.values["sparse_infill_density"])
 
             fun slice(projectObject: ProjectObject, options: SliceOptions): SliceOutcome = OnDeviceSlicer
                 .slice(listOf(projectObject), options)
@@ -59,9 +80,17 @@ class OrcaVolumeSemanticsInstrumentedTest {
                 base.copy(volumes = base.volumes + cutout),
                 solidOptions,
             )
+            val withEditedCutout = slice(
+                base.copy(volumes = base.volumes + editedCutout),
+                solidOptions,
+            )
             val sparseBaseline = slice(base, sparseOptions)
             val withSettingsRegion = slice(
                 base.copy(volumes = base.volumes + settingsRegion),
+                sparseOptions,
+            )
+            val withEditedSettingsRegion = slice(
+                base.copy(volumes = base.volumes + editedSettingsRegion),
                 sparseOptions,
             )
 
@@ -71,11 +100,23 @@ class OrcaVolumeSemanticsInstrumentedTest {
                     "base=${solidBaseline.filamentMm}, cutout=${withCutout.filamentMm}",
                 withCutout.filamentMm < solidBaseline.filamentMm * 0.9f,
             )
+            assertTrue(
+                "A smaller edited cutout must restore material while remaining a cutout: " +
+                    "large=${withCutout.filamentMm}, edited=${withEditedCutout.filamentMm}, " +
+                    "base=${solidBaseline.filamentMm}",
+                withEditedCutout.filamentMm > withCutout.filamentMm * 1.05f &&
+                    withEditedCutout.filamentMm < solidBaseline.filamentMm * 0.99f,
+            )
             assertTrue("Sparse baseline extrusion must be meaningful", sparseBaseline.filamentMm > 100f)
             assertTrue(
                 "A mobile-created dense settings region must add real extrusion: " +
                     "base=${sparseBaseline.filamentMm}, region=${withSettingsRegion.filamentMm}",
                 withSettingsRegion.filamentMm > sparseBaseline.filamentMm * 1.12f,
+            )
+            assertTrue(
+                "Editing a settings region from 100% to 0% infill must reduce extrusion: " +
+                    "dense=${withSettingsRegion.filamentMm}, edited=${withEditedSettingsRegion.filamentMm}",
+                withEditedSettingsRegion.filamentMm < withSettingsRegion.filamentMm * 0.9f,
             )
         } finally {
             outputs.forEach(File::delete)

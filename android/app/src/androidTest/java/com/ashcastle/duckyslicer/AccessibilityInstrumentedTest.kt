@@ -685,13 +685,58 @@ class AccessibilityInstrumentedTest {
         val add = context.getString(R.string.add_region)
         val removeCutout = context.getString(R.string.remove_region, cutout)
         val removeSettings = context.getString(R.string.remove_region, settings)
+        val editCutout = context.getString(R.string.edit_region, cutout)
+        val editSettings = context.getString(R.string.edit_region, settings)
         launchHarness(AccessibilityHarnessActivity.SCREEN_AUXILIARY_VOLUMES).use {
             val nodes = waitForNodes(
-                setOf(title, cutout, settings, add, removeCutout, removeSettings),
+                setOf(
+                    title,
+                    cutout,
+                    settings,
+                    add,
+                    editCutout,
+                    editSettings,
+                    removeCutout,
+                    removeSettings,
+                ),
             )
             assertTrue(nodes.any { it.isClickable && it.effectiveLabel() == add })
+            assertTrue(nodes.any { it.isClickable && it.effectiveLabel().contains(editCutout) })
+            assertTrue(nodes.any { it.isClickable && it.effectiveLabel().contains(editSettings) })
             assertTrue(nodes.any { it.isClickable && it.effectiveLabel().contains(removeCutout) })
             assertTrue(nodes.any { it.isClickable && it.effectiveLabel().contains(removeSettings) })
+        }
+    }
+
+    @Test
+    fun auxiliaryVolumeEditorExposesScalePlacementDensityAndApply() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val settings = context.getString(R.string.region_settings)
+        val title = context.getString(R.string.edit_region_title, settings)
+        val scale = context.getString(R.string.scale)
+        val leftRight = context.getString(R.string.region_left_right)
+        val frontBack = context.getString(R.string.region_front_back)
+        val upDown = context.getString(R.string.region_up_down)
+        val infill = context.getString(R.string.region_infill)
+        val apply = context.getString(R.string.apply_region_changes)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_AUXILIARY_VOLUME_EDIT).use {
+            waitForNodes(setOf(title))
+            var scrollAnchor = title
+            listOf(scale, leftRight, frontBack, upDown, infill).forEach { label ->
+                val control = scrollUntilNode(
+                    label,
+                    scrollAnchorLabel = scrollAnchor,
+                    timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
+                ) { it.className?.toString() == SEEK_BAR_CLASS }
+                assertTrue("$label must remain visible and adjustable", control.isVisibleToUser)
+                scrollAnchor = label
+            }
+            val applyButton = scrollUntilNode(
+                apply,
+                scrollAnchorLabel = scrollAnchor,
+                timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
+            ) { it.isClickable }
+            assertTrue(applyButton.isVisibleToUser)
         }
     }
 

@@ -315,6 +315,35 @@ data class ProjectHistoryState(
         )
     }
 
+    fun replaceSelectedAuxiliaryVolume(
+        volumeId: String,
+        replacement: ProjectVolume,
+    ): ProjectHistoryState {
+        val selected = current.selectedObject ?: return this
+        val target = selected.volumes.firstOrNull { it.id == volumeId } ?: return this
+        require(target.role != ProjectVolumeRole.MODEL_PART) {
+            "Printable model parts cannot be replaced as auxiliary volumes"
+        }
+        require(replacement.id == volumeId && replacement.role == target.role) {
+            "Auxiliary volume identity or role changed"
+        }
+        return record(
+            current.updateActivePlate(
+                objects = current.objects.map { projectObject ->
+                    if (projectObject.id == selected.id) {
+                        projectObject.copy(
+                            volumes = projectObject.volumes.map { volume ->
+                                if (volume.id == volumeId) replacement else volume
+                            },
+                        )
+                    } else {
+                        projectObject
+                    }
+                },
+            ),
+        )
+    }
+
     fun replaceSelected(replacements: List<ProjectObject>): ProjectHistoryState {
         val selectedId = current.selectedObjectId ?: return this
         require(replacements.isNotEmpty()) { "Replacement objects are empty" }

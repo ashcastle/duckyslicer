@@ -339,6 +339,7 @@ private fun DuckySlicerScreen(
     val modelReadError = stringResource(R.string.model_read_error)
     val modelTooLargeError = stringResource(R.string.model_too_large_error)
     val shapeError = stringResource(R.string.shape_error)
+    val regionUpdateError = stringResource(R.string.region_update_error)
     val autoLayDone = stringResource(R.string.auto_lay_done)
     val autoLayUnchanged = stringResource(R.string.auto_lay_unchanged)
     val autoLayError = stringResource(R.string.auto_lay_error)
@@ -419,7 +420,8 @@ private fun DuckySlicerScreen(
     val visibleEdit = projectTransferState.activeEdit?.kind
         ?: projectTransferState.editCompletion?.kind
     val importing = visibleEdit == ProjectEditKind.MODEL_IMPORT ||
-        visibleEdit == ProjectEditKind.PRIMITIVE
+        visibleEdit == ProjectEditKind.PRIMITIVE ||
+        visibleEdit == ProjectEditKind.AUXILIARY_VOLUME
     val autoLaying = visibleEdit == ProjectEditKind.AUTO_LAY
     val arranging = visibleEdit == ProjectEditKind.ARRANGE
     val splitting = visibleEdit == ProjectEditKind.SPLIT ||
@@ -559,6 +561,10 @@ private fun DuckySlicerScreen(
                     R.string.shape_added,
                     completion.displayName.orEmpty(),
                 )
+                ProjectEditKind.AUXILIARY_VOLUME -> resources.getString(
+                    R.string.region_updated,
+                    completion.displayName.orEmpty(),
+                )
                 ProjectEditKind.AUTO_LAY -> if (completion.sessionChanged) {
                     autoLayDone
                 } else {
@@ -614,6 +620,7 @@ private fun DuckySlicerScreen(
                 ProjectEditFailure.GENERIC -> when (completion.kind) {
                     ProjectEditKind.MODEL_IMPORT -> modelReadError
                     ProjectEditKind.PRIMITIVE -> shapeError
+                    ProjectEditKind.AUXILIARY_VOLUME -> regionUpdateError
                     ProjectEditKind.AUTO_LAY -> autoLayError
                     ProjectEditKind.ARRANGE -> arrangeError
                     ProjectEditKind.SPLIT -> splitError
@@ -975,6 +982,28 @@ private fun DuckySlicerScreen(
         }
     }
 
+    fun editAuxiliaryVolume(draft: OrcaAuxiliaryVolumeEditDraft) {
+        val selected = projectHistory.current.selectedObject ?: return
+        val volume = selected.volumes.firstOrNull { it.id == draft.volumeId } ?: return
+        if (
+            volume.role == ProjectVolumeRole.MODEL_PART || projectTransferBusy ||
+            !projectRestored || slicing || previewLoading
+        ) return
+        val displayName = resources.getString(
+            when (volume.role) {
+                ProjectVolumeRole.NEGATIVE_VOLUME -> R.string.region_cutout
+                ProjectVolumeRole.PARAMETER_MODIFIER -> R.string.region_settings
+                ProjectVolumeRole.SUPPORT_BLOCKER -> R.string.region_support_blocker
+                ProjectVolumeRole.SUPPORT_ENFORCER -> R.string.region_support_enforcer
+                ProjectVolumeRole.MODEL_PART -> return
+            },
+        )
+        if (projectTransferModel.editAuxiliaryVolume(draft, displayName)) {
+            error = null
+            notice = null
+        }
+    }
+
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (
             uri != null && projectRestored && !projectTransferBusy && !slicing &&
@@ -1270,6 +1299,7 @@ private fun DuckySlicerScreen(
         onCancelProfileTransfer = profileLibraryModel::cancelTransfer,
         onCreatePrimitive = ::addPrimitive,
         onCreateAuxiliaryPrimitive = ::addAuxiliaryPrimitive,
+        onEditAuxiliaryVolume = ::editAuxiliaryVolume,
         onOpenProject = {
             projectOpenPicker.launch(
                 arrayOf(PROJECT_ARCHIVE_MIME_TYPE, "application/zip"),

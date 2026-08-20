@@ -38,6 +38,11 @@ REQUIRED_STRINGS = {
     "remove_plate",
     "remove_plate_title",
     "remove_plate_message",
+    "edit_region",
+    "edit_region_title",
+    "apply_region_changes",
+    "region_updated",
+    "region_update_error",
 }
 
 
@@ -296,6 +301,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "fun createAuxiliaryPrimitive(",
             "createOrcaAuxiliaryPrimitive(",
             "addAuxiliaryVolumeToSelected",
+            "fun editAuxiliaryVolume(",
+            "editOrcaAuxiliaryVolume(",
+            "replaceSelectedAuxiliaryVolume",
         ),
     )
     if "catch (_: Throwable)" in transfer or "catch (failure: Throwable)" in transfer:
@@ -315,6 +323,10 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "createOrcaAuxiliaryPrimitive(",
             "target.geometry()",
             "NativeEngine.transformStl(",
+            "data class OrcaAuxiliaryVolumeEditDraft",
+            "MIN_AUXILIARY_EDIT_SCALE_PERCENT",
+            "updatedConfig(volume: ProjectVolume)",
+            "editOrcaAuxiliaryVolume(",
         ),
     )
     _require_markers(
@@ -323,6 +335,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         (
             "fun addAuxiliaryVolumeToSelected(",
             "fun removeSelectedAuxiliaryVolume(",
+            "fun replaceSelectedAuxiliaryVolume(",
             "ProjectVolumeRole.MODEL_PART",
         ),
     )
@@ -466,6 +479,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "fun addAuxiliaryPrimitive(",
             "onCreateAuxiliaryPrimitive = ::addAuxiliaryPrimitive",
             "removeSelectedAuxiliaryVolume",
+            "fun editAuxiliaryVolume(",
+            "onEditAuxiliaryVolume = ::editAuxiliaryVolume",
+            "ProjectEditKind.AUXILIARY_VOLUME",
         ),
     )
     for forbidden in (
@@ -508,6 +524,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "AuxiliaryShapeSheet(",
             "CREATABLE_AUXILIARY_VOLUME_ROLES",
             "onRemoveAuxiliaryVolume",
+            "AuxiliaryVolumeEditSheet(",
+            "onEditAuxiliaryVolume",
+            "R.string.apply_region_changes",
         ),
     )
 
@@ -588,6 +607,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "auxiliaryVolumesRejectPrintableOnlyState",
             "projectAndArchiveObjectsRequirePrintableModelParts",
             "mobileAuxiliaryShapeDraftsCoverEveryCreatableRoleAndBoundTheirInputs",
+            "auxiliaryVolumeEditDraftBoundsScalePlacementAndPreservesModifierSettings",
         ),
     )
     _require_markers(
@@ -684,6 +704,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "plateSwitcherExposesSelectionAddAndConfirmedRemovalActions",
             "auxiliaryShapePickerExposesRolesPlacementAndModifierDensity",
             "auxiliaryVolumeManagerExposesExistingRegionsRemovalAndAdd",
+            "auxiliaryVolumeEditorExposesScalePlacementDensityAndApply",
         ),
     )
     _require_markers(
@@ -718,6 +739,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "createOrcaAuxiliaryPrimitive(",
             "withCutout.filamentMm < solidBaseline.filamentMm * 0.9f",
             "withSettingsRegion.filamentMm > sparseBaseline.filamentMm * 1.12f",
+            "editOrcaAuxiliaryVolume(",
+            "withEditedCutout.filamentMm > withCutout.filamentMm * 1.05f",
+            "withEditedSettingsRegion.filamentMm < withSettingsRegion.filamentMm * 0.9f",
         ),
     )
 

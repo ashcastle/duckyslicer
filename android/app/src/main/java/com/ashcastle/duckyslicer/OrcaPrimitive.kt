@@ -58,6 +58,40 @@ internal data class OrcaAuxiliaryPrimitiveDraft(
         }
 }
 
+internal data class OrcaAuxiliaryVolumeEditDraft(
+    val volumeId: String,
+    val scalePercent: Int = 100,
+    val centerOffsetXmm: Float = 0f,
+    val centerOffsetYmm: Float = 0f,
+    val centerOffsetZmm: Float = 0f,
+    val modifierInfillPercent: Int = 100,
+) {
+    init {
+        require(volumeId.isNotBlank() && volumeId.length <= ProjectStore.MAX_ID_LENGTH) {
+            "Auxiliary volume id is invalid"
+        }
+        require(scalePercent in MIN_AUXILIARY_EDIT_SCALE_PERCENT..MAX_AUXILIARY_EDIT_SCALE_PERCENT) {
+            "Auxiliary volume scale is invalid"
+        }
+        require(
+            listOf(centerOffsetXmm, centerOffsetYmm, centerOffsetZmm).all {
+                it.isFinite() && kotlin.math.abs(it) <= ProjectStore.MAX_OFFSET_MM
+            },
+        ) { "Auxiliary volume position is invalid" }
+        require(modifierInfillPercent in 0..100) { "Modifier infill is invalid" }
+    }
+
+    internal fun updatedConfig(volume: ProjectVolume): ProjectVolumeConfig =
+        if (volume.role == ProjectVolumeRole.PARAMETER_MODIFIER) {
+            ProjectVolumeConfig(
+                volume.config.values +
+                    ("sparse_infill_density" to "$modifierInfillPercent%"),
+            )
+        } else {
+            volume.config
+        }
+}
+
 internal suspend fun createOrcaPrimitive(
     primitive: OrcaPrimitive,
     sizeMm: Float,
@@ -158,5 +192,65 @@ internal suspend fun createOrcaAuxiliaryPrimitive(
     }
 }
 
+internal suspend fun editOrcaAuxiliaryVolume(
+    draft: OrcaAuxiliaryVolumeEditDraft,
+    target: ProjectObject,
+    projectStore: ProjectStore,
+    requestId: String = UUID.randomUUID().toString(),
+): ProjectVolume = withContext(Dispatchers.IO) {
+    val source = target.volumes.firstOrNull { it.id == draft.volumeId }
+        ?: throw IllegalArgumentException("Auxiliary volume is unavailable")
+    require(source.role != ProjectVolumeRole.MODEL_PART) {
+        "Printable model parts cannot be edited as auxiliary volumes"
+    }
+    val targetCenter = target.geometry().center
+    val scale = draft.scalePercent / 100f
+    val scaledHeight = source.model.dimensions[2].toFloat() * scale
+    val staging = projectStore.createModelImportStaging()
+    var installed: File? = null
+    try {
+        if (SlicerProcessClient.projectRequestCancellationRequested(requestId)) {
+            throw ProjectEditCancelledException()
+        }
+        val positioned = File(staging, "edited-volume.stl")
+        val desiredMinZ = targetCenter[2] + draft.centerOffsetZmm - scaledHeight / 2f
+        val transform = ModelTransform(
+            offsetZmm = desiredMinZ,
+            scale = scale,
+        ).toJson(
+            bedSizeX = 0f,
+            bedSizeY = 0f,
+            bedOriginX = targetCenter[0] + draft.centerOffsetXmm,
+            bedOriginY = targetCenter[1] + draft.centerOffsetYmm,
+        )
+        val transformed = JSONObject(
+            NativeEngine.transformStl(
+                source.model.localPath,
+                positioned.absolutePath,
+                transform,
+            ),
+        )
+        check(transformed.optBoolean("ok")) {
+            transformed.optString("error").ifBlank { "Region update failed" }
+        }
+        if (SlicerProcessClient.projectRequestCancellationRequested(requestId)) {
+            throw ProjectEditCancelledException()
+        }
+        val model = projectStore.installImportedModel(positioned, source.model.fileName)
+        installed = File(model.localPath)
+        source.copy(
+            model = model,
+            config = draft.updatedConfig(source),
+        )
+    } catch (failure: Throwable) {
+        installed?.delete()
+        throw failure
+    } finally {
+        staging.deleteRecursively()
+    }
+}
+
 internal const val MIN_PRIMITIVE_SIZE_MM = 5f
 internal const val MAX_PRIMITIVE_SIZE_MM = 200f
+internal const val MIN_AUXILIARY_EDIT_SCALE_PERCENT = 25
+internal const val MAX_AUXILIARY_EDIT_SCALE_PERCENT = 400

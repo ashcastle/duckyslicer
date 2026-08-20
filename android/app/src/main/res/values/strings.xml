@@ -953,6 +953,11 @@
     <string name="region_infill">Infill in this region</string>
     <string name="region_none">No added parts or regions</string>
     <string name="remove_region">Remove %1$s</string>
+    <string name="edit_region">Edit %1$s</string>
+    <string name="edit_region_title">Edit %1$s</string>
+    <string name="apply_region_changes">Apply changes</string>
+    <string name="region_updated">%1$s updated</string>
+    <string name="region_update_error">The region could not be updated.</string>
     <string name="auxiliary_shape_name">%1$s · %2$s</string>
     <string name="support_filament_routing">Support filament</string>
     <string name="support_filament">Support base</string>
