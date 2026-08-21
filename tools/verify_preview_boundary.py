@@ -463,6 +463,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
             "fourColorFacetPaintProducesObjectAndPrimeTowerExtrusionOnEveryTool",
             "primeTowerWallTypesProduceDistinctExtrusionGeometry",
             "primeTowerPositionMovesThePhysicalTowerWithoutMovingTheObjects",
+            "primeTowerBrimChamferChangesPhysicalMultiLayerBrimGeometry",
             "purgeRoutingChangesRealInfillAndObjectExtrusionPaths",
             "supportPurgeRoutingAndSolubleInterfaceChangeRealMaterialPaths",
             "setOf(0, 1, 2, 3)",
@@ -475,6 +476,10 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
             "Changing X must move the physical prime tower by 80 mm",
             "Changing Y must move the physical prime tower by 50 mm",
             "Tower placement must not rewrite object extrusion paths",
+            "Disabling chamfer must leave only the first-layer tower brim",
+            "A wider chamfer must retain the physical brim for more layers",
+            "A wider chamfer must emit more physical brim extrusion motions",
+            "Tower brim chamfer must not rewrite object extrusion paths",
             "intoInfill.extrusionMotionsByRoleAndTool[\"Sparse infill\"]",
             "intoObjects.nonTowerMotionSignature()",
             "routed.supportMotionSignature()",
@@ -933,6 +938,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     for marker in (
         "native.wipeTowerX = multiMaterial.primeTowerPositionX",
         "native.wipeTowerY = multiMaterial.primeTowerPositionY",
+        "native.primeTowerBrimChamfer = multiMaterial.primeTowerBrimChamfer",
+        "native.primeTowerBrimChamferMaxWidth = multiMaterial.primeTowerBrimChamferMaxWidth",
     ):
         if marker not in outcome:
             raise VerificationError(f"prime tower position mapping is missing: {marker}")

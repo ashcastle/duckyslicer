@@ -122,6 +122,8 @@ class ProfileStoreMigrationTest {
                 remove("primeTowerInfillGap")
                 remove("primeTowerPositionX")
                 remove("primeTowerPositionY")
+                remove("primeTowerBrimChamfer")
+                remove("primeTowerBrimChamferMaxWidth")
             }
             file.writeText(
                 JSONObject()
@@ -214,6 +216,8 @@ class ProfileStoreMigrationTest {
             assertEquals(150f, restoredSlicing.multiMaterial.primeTowerInfillGap)
             assertEquals(170f, restoredSlicing.multiMaterial.primeTowerPositionX)
             assertEquals(140f, restoredSlicing.multiMaterial.primeTowerPositionY)
+            assertTrue(restoredSlicing.multiMaterial.primeTowerBrimChamfer)
+            assertEquals(4f, restoredSlicing.multiMaterial.primeTowerBrimChamferMaxWidth)
             assertEquals(BrimEarSettings(), restoredSlicing.precision.brimEars)
             assertEquals(25f, restoredSlicing.skeletonInfillDensity)
             assertEquals(25f, restoredSlicing.skinInfillDensity)
@@ -374,6 +378,8 @@ class ProfileStoreMigrationTest {
                 multiMaterial = MultiMaterialSettings(
                     primeTowerPositionX = 123.5f,
                     primeTowerPositionY = 87.5f,
+                    primeTowerBrimChamfer = false,
+                    primeTowerBrimChamferMaxWidth = 7.5f,
                     primeTowerFramework = true,
                     primeTowerSkipPoints = false,
                     primeTowerFlatIroning = true,
@@ -397,6 +403,8 @@ class ProfileStoreMigrationTest {
             assertEquals(7, restored.supportCoverage.enforcedLayers)
             assertEquals(123.5f, restored.multiMaterial.primeTowerPositionX)
             assertEquals(87.5f, restored.multiMaterial.primeTowerPositionY)
+            assertFalse(restored.multiMaterial.primeTowerBrimChamfer)
+            assertEquals(7.5f, restored.multiMaterial.primeTowerBrimChamferMaxWidth)
             assertTrue(restored.multiMaterial.primeTowerFramework)
             assertFalse(restored.multiMaterial.primeTowerSkipPoints)
             assertTrue(restored.multiMaterial.primeTowerFlatIroning)

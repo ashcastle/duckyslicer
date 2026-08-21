@@ -113,6 +113,9 @@ prepare_runtime_source() {
 
     # Normalize the generated worktree before applying the reviewed patch stack.
     # Reverse in the opposite order so repeated local builds stay reproducible.
+    if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/prime-tower-chamfer.patch" 2>/dev/null; then
+        git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/prime-tower-chamfer.patch"
+    fi
     if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/nozzle-volume.patch" 2>/dev/null; then
         git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/nozzle-volume.patch"
     fi
@@ -164,6 +167,9 @@ prepare_runtime_source() {
     git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/nozzle-volume.patch" 2>/dev/null || \
         die "runtime nozzle-volume bridge contains unreviewed changes"
     git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/nozzle-volume.patch"
+    git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/prime-tower-chamfer.patch" 2>/dev/null || \
+        die "runtime prime-tower chamfer bridge contains unreviewed changes"
+    git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/prime-tower-chamfer.patch"
 
     local engine_root="$SOURCE_ROOT/app/src/main/cpp/orcaslicer"
     if git -C "$engine_root" apply --reverse --check "$SCRIPT_DIR/engine-nozzle-volume.patch" 2>/dev/null; then

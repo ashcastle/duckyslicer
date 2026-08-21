@@ -407,6 +407,7 @@ internal object ProfileValidation {
             profile.multiMaterial.primeTowerPositionX in -1_000f..1_000f &&
             profile.multiMaterial.primeTowerPositionY in -1_000f..1_000f &&
             profile.multiMaterial.primeTowerBrimWidth in 0f..100f &&
+            profile.multiMaterial.primeTowerBrimChamferMaxWidth in 0f..100f &&
             profile.multiMaterial.primeTowerInfillGap in 100f..1_000f &&
             profile.multiMaterial.wipeTowerRotationAngle in 0f..359f &&
             profile.multiMaterial.wipeTowerBridging in 0f..1_000f &&

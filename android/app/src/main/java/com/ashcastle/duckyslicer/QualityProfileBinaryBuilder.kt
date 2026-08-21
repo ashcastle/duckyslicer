@@ -173,6 +173,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var primeTowerPositionX: Float = base.multiMaterial.primeTowerPositionX
     private var primeTowerPositionY: Float = base.multiMaterial.primeTowerPositionY
     private var primeTowerBrimWidth: Float = base.multiMaterial.primeTowerBrimWidth
+    private var primeTowerBrimChamfer: Boolean = base.multiMaterial.primeTowerBrimChamfer
+    private var primeTowerBrimChamferMaxWidth: Float = base.multiMaterial.primeTowerBrimChamferMaxWidth
     private var primeTowerFramework: Boolean = base.multiMaterial.primeTowerFramework
     private var primeTowerSkipPoints: Boolean = base.multiMaterial.primeTowerSkipPoints
     private var primeTowerFlatIroning: Boolean = base.multiMaterial.primeTowerFlatIroning
@@ -635,6 +637,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         primeTowerPositionX = input.readFloat()
         primeTowerPositionY = input.readFloat()
         primeTowerBrimWidth = input.readFloat()
+        primeTowerBrimChamfer = input.readCatalogBoolean()
+        primeTowerBrimChamferMaxWidth = input.readFloat()
         primeTowerFramework = input.readCatalogBoolean()
         primeTowerSkipPoints = input.readCatalogBoolean()
         primeTowerFlatIroning = input.readCatalogBoolean()
@@ -915,6 +919,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
             primeTowerPositionX = primeTowerPositionX,
             primeTowerPositionY = primeTowerPositionY,
             primeTowerBrimWidth = primeTowerBrimWidth,
+            primeTowerBrimChamfer = primeTowerBrimChamfer,
+            primeTowerBrimChamferMaxWidth = primeTowerBrimChamferMaxWidth,
             primeTowerFramework = primeTowerFramework,
             primeTowerSkipPoints = primeTowerSkipPoints,
             primeTowerFlatIroning = primeTowerFlatIroning,
@@ -1361,6 +1367,8 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("primeTowerPositionX", BINARY_FLOAT),
     BinaryField("primeTowerPositionY", BINARY_FLOAT),
     BinaryField("primeTowerBrimWidth", BINARY_FLOAT),
+    BinaryField("primeTowerBrimChamfer", BINARY_BOOL),
+    BinaryField("primeTowerBrimChamferMaxWidth", BINARY_FLOAT),
     BinaryField("primeTowerFramework", BINARY_BOOL),
     BinaryField("primeTowerSkipPoints", BINARY_BOOL),
     BinaryField("primeTowerFlatIroning", BINARY_BOOL),

@@ -364,7 +364,9 @@ def valid_sources() -> dict[str, str]:
             'listOf("grid", "snug") '
             'val fallback = if (supportType.isTreeSupportType()) "organic" else "grid" '
             "native.wipeTowerX = multiMaterial.primeTowerPositionX "
-            "native.wipeTowerY = multiMaterial.primeTowerPositionY"
+            "native.wipeTowerY = multiMaterial.primeTowerPositionY "
+            "native.primeTowerBrimChamfer = multiMaterial.primeTowerBrimChamfer "
+            "native.primeTowerBrimChamferMaxWidth = multiMaterial.primeTowerBrimChamferMaxWidth"
         ),
         "SlicerProcessService.kt": (
             "result.estimatedFilamentMm KEY_FILAMENT_MM "
@@ -416,6 +418,7 @@ def valid_sources() -> dict[str, str]:
             "fourColorFacetPaintProducesObjectAndPrimeTowerExtrusionOnEveryTool "
             "primeTowerWallTypesProduceDistinctExtrusionGeometry "
             "primeTowerPositionMovesThePhysicalTowerWithoutMovingTheObjects "
+            "primeTowerBrimChamferChangesPhysicalMultiLayerBrimGeometry "
             "purgeRoutingChangesRealInfillAndObjectExtrusionPaths "
             "supportPurgeRoutingAndSolubleInterfaceChangeRealMaterialPaths "
             "setOf(0, 1, 2, 3) analysis.objectExtrusionByTool.filterValues "
@@ -426,6 +429,10 @@ def valid_sources() -> dict[str, str]:
             "Changing X must move the physical prime tower by 80 mm "
             "Changing Y must move the physical prime tower by 50 mm "
             "Tower placement must not rewrite object extrusion paths "
+            "Disabling chamfer must leave only the first-layer tower brim "
+            "A wider chamfer must retain the physical brim for more layers "
+            "A wider chamfer must emit more physical brim extrusion motions "
+            "Tower brim chamfer must not rewrite object extrusion paths "
             "intoInfill.extrusionMotionsByRoleAndTool[\"Sparse infill\"] "
             "intoObjects.nonTowerMotionSignature() routed.supportMotionSignature() "
             "soluble.supportExtrusionTools()"
@@ -1174,6 +1181,23 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "native.wipeTowerX = multiMaterial.primeTowerPositionX", "native.wipeTowerX = 170f"
         )
         with self.assertRaisesRegex(VerificationError, "wipeTowerX"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_dropped_prime_tower_brim_chamfer_mapping(self) -> None:
+        sources = valid_sources()
+        sources["OnDeviceSlicer.kt"] = sources["OnDeviceSlicer.kt"].replace(
+            "native.primeTowerBrimChamfer = multiMaterial.primeTowerBrimChamfer",
+            "native.primeTowerBrimChamfer = true",
+        )
+        with self.assertRaisesRegex(VerificationError, "primeTowerBrimChamfer"):
+            verify_preview_boundary(sources)
+
+    def test_requires_physical_prime_tower_brim_chamfer_regression(self) -> None:
+        sources = valid_sources()
+        sources["OrcaMultiColorPaintInstrumentedTest.kt"] = sources[
+            "OrcaMultiColorPaintInstrumentedTest.kt"
+        ].replace("A wider chamfer must emit more physical brim extrusion motions", "")
+        with self.assertRaisesRegex(VerificationError, "partial-facet regression"):
             verify_preview_boundary(sources)
 
     def test_requires_physical_seam_paint_placement_regression(self) -> None:

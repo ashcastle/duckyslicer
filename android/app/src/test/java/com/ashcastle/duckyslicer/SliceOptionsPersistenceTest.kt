@@ -184,6 +184,8 @@ class SliceOptionsPersistenceTest {
                     primeTowerPositionX = 123.5f,
                     primeTowerPositionY = 87.5f,
                     primeTowerBrimWidth = 4.5f,
+                    primeTowerBrimChamfer = false,
+                    primeTowerBrimChamferMaxWidth = 7.5f,
                     primeTowerFramework = true,
                     primeTowerSkipPoints = false,
                     primeTowerFlatIroning = true,
@@ -391,6 +393,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(false, native.singleExtruderMultiMaterial)
         assertEquals(false, native.purgeInPrimeTower)
         assertEquals(4.5f, native.primeTowerBrimWidth)
+        assertFalse(native.primeTowerBrimChamfer)
+        assertEquals(7.5f, native.primeTowerBrimChamferMaxWidth)
         assertTrue(native.primeTowerFramework)
         assertFalse(native.primeTowerSkipPoints)
         assertTrue(native.primeTowerFlatIroning)
@@ -1056,6 +1060,8 @@ class SliceOptionsPersistenceTest {
                 remove("primeTowerInfillGap")
                 remove("primeTowerPositionX")
                 remove("primeTowerPositionY")
+                remove("primeTowerBrimChamfer")
+                remove("primeTowerBrimChamferMaxWidth")
             }
         }
 
@@ -1180,6 +1186,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(150f, restored.multiMaterial.primeTowerInfillGap)
         assertEquals(170f, restored.multiMaterial.primeTowerPositionX)
         assertEquals(140f, restored.multiMaterial.primeTowerPositionY)
+        assertTrue(restored.multiMaterial.primeTowerBrimChamfer)
+        assertEquals(4f, restored.multiMaterial.primeTowerBrimChamferMaxWidth)
         assertEquals(listOf(0f), restored.toNativeConfig().purgeVolumes.toList())
     }
 

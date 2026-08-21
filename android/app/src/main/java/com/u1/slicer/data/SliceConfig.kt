@@ -486,6 +486,8 @@ data class SliceConfig(
     @JvmField var singleExtruderMultiMaterial: Boolean = false
     @JvmField var purgeInPrimeTower: Boolean = false
     @JvmField var primeTowerBrimWidth: Float = 3f
+    @JvmField var primeTowerBrimChamfer: Boolean = true
+    @JvmField var primeTowerBrimChamferMaxWidth: Float = 4f
     @JvmField var wipeTowerNoSparseLayers: Boolean = false
     @JvmField var oozePrevention: Boolean = false
     @JvmField var standbyTemperatureDelta: Int = -5

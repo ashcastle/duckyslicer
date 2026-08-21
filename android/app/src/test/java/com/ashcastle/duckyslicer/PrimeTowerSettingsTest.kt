@@ -69,4 +69,27 @@ class PrimeTowerSettingsTest {
             )
         }
     }
+
+    @Test
+    fun validatesPrimeTowerBrimChamferWidthBoundsAndFiniteValues() {
+        val base = QualityProfile.STANDARD.multiMaterial
+        listOf(0f, 100f).forEach { valid ->
+            assertTrue(
+                ProfileValidation.slicing(
+                    QualityProfile.STANDARD.copy(
+                        multiMaterial = base.copy(primeTowerBrimChamferMaxWidth = valid),
+                    ),
+                ),
+            )
+        }
+        listOf(-0.1f, 100.1f, Float.NaN, Float.POSITIVE_INFINITY).forEach { invalid ->
+            assertFalse(
+                ProfileValidation.slicing(
+                    QualityProfile.STANDARD.copy(
+                        multiMaterial = base.copy(primeTowerBrimChamferMaxWidth = invalid),
+                    ),
+                ),
+            )
+        }
+    }
 }

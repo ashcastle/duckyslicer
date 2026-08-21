@@ -185,6 +185,10 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
         "R.string.prime_tower_position_y",
         "primeTowerPositionX = (it * 2f)",
         "primeTowerPositionY = (it * 2f)",
+        "R.string.prime_tower_brim_chamfer",
+        "R.string.prime_tower_brim_chamfer_max_width",
+        "primeTowerBrimChamfer = it",
+        "primeTowerBrimChamferMaxWidth =",
         "R.string.segmented_region_max_width",
         "R.string.segmented_region_interlocking_depth",
         "segmentedRegionMaxWidth =",
@@ -469,6 +473,14 @@ def verify_profile_editor(sources: dict[str, str]) -> None:
             if resource not in strings:
                 raise VerificationError(
                     f"localized separated profile/settings search label is missing from {source_name}: {resource}"
+                )
+        for resource in (
+            'name="prime_tower_brim_chamfer"',
+            'name="prime_tower_brim_chamfer_max_width"',
+        ):
+            if resource not in strings:
+                raise VerificationError(
+                    f"localized prime-tower brim setting is missing from {source_name}: {resource}"
                 )
         for resource in ('name="revert_changes"', 'name="apply_changes"'):
             if resource not in strings:

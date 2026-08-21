@@ -707,6 +707,8 @@ data class MultiMaterialSettings(
     val primeTowerPositionX: Float = 170f,
     val primeTowerPositionY: Float = 140f,
     val primeTowerBrimWidth: Float = 3f,
+    val primeTowerBrimChamfer: Boolean = true,
+    val primeTowerBrimChamferMaxWidth: Float = 4f,
     val primeTowerFramework: Boolean = false,
     val primeTowerSkipPoints: Boolean = true,
     val primeTowerFlatIroning: Boolean = false,
@@ -2612,6 +2614,8 @@ data class SliceOptions(
                 printerProfile.purgeInPrimeTower &&
                 multiMaterial.purgeVolumes.isNotEmpty()
             native.primeTowerBrimWidth = multiMaterial.primeTowerBrimWidth
+            native.primeTowerBrimChamfer = multiMaterial.primeTowerBrimChamfer
+            native.primeTowerBrimChamferMaxWidth = multiMaterial.primeTowerBrimChamferMaxWidth
             native.primeTowerFramework = multiMaterial.primeTowerFramework
             native.primeTowerSkipPoints = multiMaterial.primeTowerSkipPoints
             native.primeTowerFlatIroning = multiMaterial.primeTowerFlatIroning

@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 97
+SCHEMA_VERSION = 98
 MAX_FILAMENT_SLOTS = 16
 MAX_GCODE_THUMBNAILS = 8
 SUPPORTED_GCODE_THUMBNAIL_FORMATS = {"PNG", "JPG", "QOI", "BTT_TFT", "COLPIC"}
@@ -1494,6 +1494,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "primeTowerPositionX": number(raw.get("wipe_tower_x"), 170),
         "primeTowerPositionY": number(raw.get("wipe_tower_y"), 140),
         "primeTowerBrimWidth": number(raw.get("prime_tower_brim_width"), 3),
+        "primeTowerBrimChamfer": boolean(raw.get("prime_tower_brim_chamfer"), True),
+        "primeTowerBrimChamferMaxWidth": number(
+            raw.get("prime_tower_brim_chamfer_max_width"), 4
+        ),
         "primeTowerFramework": boolean(raw.get("prime_tower_enable_framework")),
         "primeTowerSkipPoints": boolean(raw.get("prime_tower_skip_points"), True),
         "primeTowerFlatIroning": boolean(raw.get("prime_tower_flat_ironing")),
@@ -1700,6 +1704,7 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         and 10 <= profile["wipeTowerWidth"] <= 300
         and 1 <= profile["primeVolume"] <= 1_000
         and 0 <= profile["primeTowerBrimWidth"] <= 100
+        and 0 <= profile["primeTowerBrimChamferMaxWidth"] <= 100
         and 100 <= profile["primeTowerInfillGap"] <= 1_000
         and -500 <= profile["standbyTemperatureDelta"] <= 500
         and 0 <= profile["internalBridgeAngle"] <= 360

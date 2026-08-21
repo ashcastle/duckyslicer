@@ -89,6 +89,8 @@ def valid_sources() -> dict[str, str]:
             " R.string.prime_tower_position R.string.prime_tower_position_x"
             " R.string.prime_tower_position_y"
             " primeTowerPositionX = (it * 2f) primeTowerPositionY = (it * 2f)"
+            " R.string.prime_tower_brim_chamfer R.string.prime_tower_brim_chamfer_max_width"
+            " primeTowerBrimChamfer = it primeTowerBrimChamferMaxWidth ="
             " R.string.segmented_region_max_width R.string.segmented_region_interlocking_depth"
             " segmentedRegionMaxWidth = segmentedRegionInterlockingDepth ="
             " segmentedRegionInterlockingDepth = if (it)"
@@ -277,6 +279,7 @@ def valid_sources() -> dict[str, str]:
             ' name="tree_support_auto_brim" name="tree_support_brim_width"'
             ' name="prime_tower_position" name="prime_tower_position_x"'
             ' name="prime_tower_position_y"'
+            ' name="prime_tower_brim_chamfer" name="prime_tower_brim_chamfer_max_width"'
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="machine_gcode" name="machine_start_gcode" name="machine_end_gcode"'
             ' name="printing_by_object_gcode" name="use_relative_e_distances"'
@@ -346,6 +349,7 @@ def valid_sources() -> dict[str, str]:
             ' name="tree_support_auto_brim" name="tree_support_brim_width"'
             ' name="prime_tower_position" name="prime_tower_position_x"'
             ' name="prime_tower_position_y"'
+            ' name="prime_tower_brim_chamfer" name="prime_tower_brim_chamfer_max_width"'
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="machine_gcode" name="machine_start_gcode" name="machine_end_gcode"'
             ' name="minimum_layer_height" name="maximum_layer_height"'

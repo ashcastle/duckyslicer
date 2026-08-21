@@ -405,6 +405,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "wipe_tower_x": ["123.5"],
                 "wipe_tower_y": ["87.5"],
                 "prime_tower_brim_width": "4.5",
+                "prime_tower_brim_chamfer": "0",
+                "prime_tower_brim_chamfer_max_width": "7.5",
                 "prime_tower_enable_framework": "1",
                 "prime_tower_skip_points": "0",
                 "prime_tower_flat_ironing": "1",
@@ -486,6 +488,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(123.5, profile["primeTowerPositionX"])
         self.assertEqual(87.5, profile["primeTowerPositionY"])
         self.assertEqual(4.5, profile["primeTowerBrimWidth"])
+        self.assertFalse(profile["primeTowerBrimChamfer"])
+        self.assertEqual(7.5, profile["primeTowerBrimChamferMaxWidth"])
         self.assertTrue(profile["primeTowerFramework"])
         self.assertFalse(profile["primeTowerSkipPoints"])
         self.assertTrue(profile["primeTowerFlatIroning"])

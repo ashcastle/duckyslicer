@@ -433,6 +433,114 @@ class OrcaMultiColorPaintInstrumentedTest {
     }
 
     @Test
+    fun primeTowerBrimChamferChangesPhysicalMultiLayerBrimGeometry() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val modelFile = File(context.cacheDir, "chamfered-prime-tower-box.stl")
+        val outputs = mutableListOf<File>()
+        try {
+            instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
+                modelFile.outputStream().use(input::copyTo)
+            }
+            val model = inspectModel(modelFile.absolutePath)
+            val primary = FilamentProfile.GENERIC_PLA.copy(
+                id = "tower-chamfer-primary",
+                name = "Tower chamfer primary",
+                builtIn = false,
+                compatiblePrinters = listOf(PrinterProfile.U1_04.name),
+            )
+            val secondary = primary.copy(
+                id = "tower-chamfer-secondary",
+                name = "Tower chamfer secondary",
+            )
+            val objects = listOf(
+                ProjectObject(
+                    id = "tower-chamfer-left",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = -20f),
+                    filamentSlot = 0,
+                ),
+                ProjectObject(
+                    id = "tower-chamfer-right",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = 20f),
+                    filamentSlot = 1,
+                ),
+            )
+            val base = SliceOptions()
+                .selectPrinter(PrinterProfile.U1_04)
+                .selectFilament(primary)
+                .selectQuality(QualityProfile.DRAFT)
+                .copy(
+                    filamentSlots = listOf(primary, secondary),
+                    wipeTowerEnabled = true,
+                    wipeTowerWidth = 40f,
+                    firstLayerHeight = QualityProfile.DRAFT.layerHeightMm,
+                    brimType = "no_brim",
+                    brimWidth = 0f,
+                    skirtLoops = 0,
+                    multiMaterial = MultiMaterialSettings(
+                        purgeVolumes = listOf(0f, 90f, 90f, 0f),
+                        primeTowerBrimWidth = 6f,
+                    ),
+                )
+
+            fun slice(enabled: Boolean, maximumWidth: Float): Triple<String, PrimeTowerBrimAnalysis, MultiColorGcodeAnalysis> {
+                val outcome = OnDeviceSlicer.slice(
+                    objects,
+                    base.copy(
+                        multiMaterial = base.multiMaterial.copy(
+                            primeTowerBrimChamfer = enabled,
+                            primeTowerBrimChamferMaxWidth = maximumWidth,
+                        ),
+                    ),
+                ).also { outputs += it.output }
+                val gcode = outcome.output.readText()
+                return Triple(gcode, analyzePrimeTowerBrim(gcode), analyzePositiveExtrusion(gcode))
+            }
+
+            val (disabledGcode, disabled, disabledAll) = slice(enabled = false, maximumWidth = 4f)
+            val (narrowGcode, narrow, narrowAll) = slice(enabled = true, maximumWidth = 2f)
+            val (wideGcode, wide, wideAll) = slice(enabled = true, maximumWidth = 4f)
+
+            assertTrue(disabledGcode.contains("; prime_tower_brim_chamfer = 0"))
+            assertTrue(narrowGcode.contains("; prime_tower_brim_chamfer = 1"))
+            assertTrue(narrowGcode.contains("; prime_tower_brim_chamfer_max_width = 2"))
+            assertTrue(wideGcode.contains("; prime_tower_brim_chamfer_max_width = 4"))
+            assertEquals(
+                "Disabling chamfer must leave only the first-layer tower brim",
+                1,
+                disabled.layerCount,
+            )
+            assertTrue(
+                "Enabling chamfer must retain physical brim extrusion on later layers",
+                narrow.layerCount > disabled.layerCount,
+            )
+            assertTrue(
+                "A wider chamfer must retain the physical brim for more layers",
+                wide.layerCount > narrow.layerCount,
+            )
+            assertTrue(
+                "A wider chamfer must emit more physical brim extrusion motions",
+                wide.extrusionMotions > narrow.extrusionMotions,
+            )
+            assertEquals(
+                "Tower brim chamfer must not rewrite object extrusion paths",
+                disabledAll.nonTowerMotionSignature(),
+                narrowAll.nonTowerMotionSignature(),
+            )
+            assertEquals(
+                "Maximum chamfer width must not rewrite object extrusion paths",
+                narrowAll.nonTowerMotionSignature(),
+                wideAll.nonTowerMotionSignature(),
+            )
+        } finally {
+            outputs.forEach(File::delete)
+            modelFile.delete()
+        }
+    }
+
+    @Test
     fun fourColorFacetPaintProducesObjectAndPrimeTowerExtrusionOnEveryTool() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -749,6 +857,57 @@ class OrcaMultiColorPaintInstrumentedTest {
         )
     }
 
+    private fun analyzePrimeTowerBrim(gcode: String): PrimeTowerBrimAnalysis {
+        val absoluteExtruders = mutableMapOf(0 to 0.0)
+        val layers = mutableSetOf<Double>()
+        var activeTool = 0
+        var relativeExtrusion = false
+        var currentZ = 0.0
+        var inBrim = false
+        var extrusionMotions = 0
+        gcode.lineSequence().forEach { raw ->
+            val line = raw.trim()
+            when {
+                line == "; WIPE_TOWER_BRIM_START" -> inBrim = true
+                line == "; WIPE_TOWER_BRIM_END" -> inBrim = false
+                line.substringBefore(';').trim().let { command ->
+                    command.startsWith('T') && command.substring(1).toIntOrNull() != null
+                } -> {
+                    activeTool = line.substringBefore(';').trim().substring(1).toInt()
+                    absoluteExtruders.putIfAbsent(activeTool, 0.0)
+                }
+                line.startsWith("M82") -> relativeExtrusion = false
+                line.startsWith("M83") -> relativeExtrusion = true
+                line.startsWith("G92") -> {
+                    axisValue(line, 'E')?.let { absoluteExtruders[activeTool] = it }
+                }
+                line.startsWith("G0 ") || line.startsWith("G1 ") ||
+                    line.startsWith("G2 ") || line.startsWith("G3 ") -> {
+                    axisValue(line, 'Z')?.let { currentZ = it }
+                    val encodedExtrusion = axisValue(line, 'E') ?: return@forEach
+                    val previousExtrusion = absoluteExtruders.getValue(activeTool)
+                    val extrusion = if (relativeExtrusion) {
+                        encodedExtrusion
+                    } else {
+                        encodedExtrusion - previousExtrusion
+                    }
+                    if (!relativeExtrusion) absoluteExtruders[activeTool] = encodedExtrusion
+                    if (
+                        inBrim && extrusion > MINIMUM_EXTRUSION_MM &&
+                        (axisValue(line, 'X') != null || axisValue(line, 'Y') != null)
+                    ) {
+                        extrusionMotions += 1
+                        layers += currentZ
+                    }
+                }
+            }
+        }
+        return PrimeTowerBrimAnalysis(
+            layerCount = layers.size,
+            extrusionMotions = extrusionMotions,
+        )
+    }
+
     private fun axisValue(line: String, axis: Char): Double? = line
         .substringBefore(';')
         .splitToSequence(' ')
@@ -851,4 +1010,9 @@ private data class MultiColorGcodeAnalysis(
     val primeTowerMotionSignature: List<String>,
     val primeTowerMotions: Int,
     val toolChanges: Int,
+)
+
+private data class PrimeTowerBrimAnalysis(
+    val layerCount: Int,
+    val extrusionMotions: Int,
 )

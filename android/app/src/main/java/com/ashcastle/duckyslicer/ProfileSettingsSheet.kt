@@ -6045,6 +6045,13 @@ private fun SlicingSettingsSheet(
                             )
                         },
                     )
+                    PrimeTowerBrimChamferSettings(
+                        settings = options.multiMaterial,
+                        showInactive = settingsQuery.isNotBlank(),
+                        onChanged = {
+                            onOptionsChanged(options.copy(multiMaterial = it))
+                        },
+                    )
                     PrimeTowerStructureSettings(
                         settings = options.multiMaterial,
                         showInactive = settingsQuery.isNotBlank(),
@@ -7415,6 +7422,39 @@ private fun PrimeTowerStructureSettings(
             checked = settings.primeTowerInterfaceCooldown,
             enabled = settings.primeTowerInterfaceFeatures,
             onCheckedChange = { onChanged(settings.copy(primeTowerInterfaceCooldown = it)) },
+        )
+    }
+}
+
+@Composable
+private fun PrimeTowerBrimChamferSettings(
+    settings: MultiMaterialSettings,
+    showInactive: Boolean,
+    onChanged: (MultiMaterialSettings) -> Unit,
+) {
+    SettingsSwitch(
+        label = stringResource(R.string.prime_tower_brim_chamfer),
+        checked = settings.primeTowerBrimChamfer,
+        onCheckedChange = { onChanged(settings.copy(primeTowerBrimChamfer = it)) },
+    )
+    if (settings.primeTowerBrimChamfer || showInactive) {
+        val maximum = max(20f, settings.primeTowerBrimChamferMaxWidth)
+        SettingSlider(
+            label = stringResource(R.string.prime_tower_brim_chamfer_max_width),
+            valueText = stringResource(
+                R.string.millimeters_value_precise,
+                settings.primeTowerBrimChamferMaxWidth,
+            ),
+            value = settings.primeTowerBrimChamferMaxWidth,
+            range = 0f..maximum,
+            steps = (maximum * 2f).roundToInt().coerceAtLeast(2) - 1,
+            onValueChange = {
+                onChanged(
+                    settings.copy(
+                        primeTowerBrimChamferMaxWidth = (it * 2f).roundToInt() / 2f,
+                    ),
+                )
+            },
         )
     }
 }
