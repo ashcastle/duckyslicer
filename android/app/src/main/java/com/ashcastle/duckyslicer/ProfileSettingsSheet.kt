@@ -5972,6 +5972,59 @@ private fun SlicingSettingsSheet(
                             )
                         },
                     )
+                    val minimumTowerX = options.bedOriginX
+                    val maximumTowerX = (options.bedOriginX + options.bedSizeX)
+                        .coerceAtLeast(minimumTowerX + 1f)
+                    val minimumTowerY = options.bedOriginY
+                    val maximumTowerY = (options.bedOriginY + options.bedSizeY)
+                        .coerceAtLeast(minimumTowerY + 1f)
+                    SettingsGroupTitle(stringResource(R.string.prime_tower_position))
+                    SettingSlider(
+                        label = stringResource(R.string.prime_tower_position_x),
+                        valueText = stringResource(
+                            R.string.millimeters_value_precise,
+                            options.multiMaterial.primeTowerPositionX,
+                        ),
+                        value = options.multiMaterial.primeTowerPositionX.coerceIn(
+                            minimumTowerX,
+                            maximumTowerX,
+                        ),
+                        range = minimumTowerX..maximumTowerX,
+                        steps = ((maximumTowerX - minimumTowerX) * 2f)
+                            .roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        primeTowerPositionX = (it * 2f).roundToInt() / 2f,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
+                    SettingSlider(
+                        label = stringResource(R.string.prime_tower_position_y),
+                        valueText = stringResource(
+                            R.string.millimeters_value_precise,
+                            options.multiMaterial.primeTowerPositionY,
+                        ),
+                        value = options.multiMaterial.primeTowerPositionY.coerceIn(
+                            minimumTowerY,
+                            maximumTowerY,
+                        ),
+                        range = minimumTowerY..maximumTowerY,
+                        steps = ((maximumTowerY - minimumTowerY) * 2f)
+                            .roundToInt().coerceAtLeast(2) - 1,
+                        onValueChange = {
+                            onOptionsChanged(
+                                options.copy(
+                                    multiMaterial = options.multiMaterial.copy(
+                                        primeTowerPositionY = (it * 2f).roundToInt() / 2f,
+                                    ),
+                                ),
+                            )
+                        },
+                    )
                     SettingSlider(
                         label = stringResource(R.string.prime_tower_brim_width),
                         valueText = stringResource(

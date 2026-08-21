@@ -402,6 +402,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "enable_prime_tower": "1",
                 "prime_tower_width": "42",
                 "prime_volume": "61.5",
+                "wipe_tower_x": ["123.5"],
+                "wipe_tower_y": ["87.5"],
                 "prime_tower_brim_width": "4.5",
                 "prime_tower_enable_framework": "1",
                 "prime_tower_skip_points": "0",
@@ -481,6 +483,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(profile["wipeTowerEnabled"])
         self.assertEqual(42.0, profile["wipeTowerWidth"])
         self.assertEqual(61.5, profile["primeVolume"])
+        self.assertEqual(123.5, profile["primeTowerPositionX"])
+        self.assertEqual(87.5, profile["primeTowerPositionY"])
         self.assertEqual(4.5, profile["primeTowerBrimWidth"])
         self.assertTrue(profile["primeTowerFramework"])
         self.assertFalse(profile["primeTowerSkipPoints"])

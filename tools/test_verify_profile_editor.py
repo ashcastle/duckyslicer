@@ -86,6 +86,9 @@ def valid_sources() -> dict[str, str]:
             " R.string.tree_support_organic_branch_diameter R.string.tree_support_branch_diameter_angle"
             " R.string.tree_support_branch_density R.string.tree_support_adaptive_layer_height"
             " R.string.tree_support_auto_brim R.string.tree_support_brim_width"
+            " R.string.prime_tower_position R.string.prime_tower_position_x"
+            " R.string.prime_tower_position_y"
+            " primeTowerPositionX = (it * 2f) primeTowerPositionY = (it * 2f)"
             " R.string.segmented_region_max_width R.string.segmented_region_interlocking_depth"
             " segmentedRegionMaxWidth = segmentedRegionInterlockingDepth ="
             " segmentedRegionInterlockingDepth = if (it)"
@@ -272,6 +275,8 @@ def valid_sources() -> dict[str, str]:
             ' name="tree_support_organic_branch_diameter" name="tree_support_branch_diameter_angle"'
             ' name="tree_support_branch_density" name="tree_support_adaptive_layer_height"'
             ' name="tree_support_auto_brim" name="tree_support_brim_width"'
+            ' name="prime_tower_position" name="prime_tower_position_x"'
+            ' name="prime_tower_position_y"'
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="machine_gcode" name="machine_start_gcode" name="machine_end_gcode"'
             ' name="printing_by_object_gcode" name="use_relative_e_distances"'
@@ -339,6 +344,8 @@ def valid_sources() -> dict[str, str]:
             ' name="tree_support_organic_branch_diameter" name="tree_support_branch_diameter_angle"'
             ' name="tree_support_branch_density" name="tree_support_adaptive_layer_height"'
             ' name="tree_support_auto_brim" name="tree_support_brim_width"'
+            ' name="prime_tower_position" name="prime_tower_position_x"'
+            ' name="prime_tower_position_y"'
             ' name="segmented_region_max_width" name="segmented_region_interlocking_depth"'
             ' name="machine_gcode" name="machine_start_gcode" name="machine_end_gcode"'
             ' name="minimum_layer_height" name="maximum_layer_height"'

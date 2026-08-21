@@ -462,6 +462,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "OrcaMultiColorPaintInstrumentedTest.kt": (
             "fourColorFacetPaintProducesObjectAndPrimeTowerExtrusionOnEveryTool",
             "primeTowerWallTypesProduceDistinctExtrusionGeometry",
+            "primeTowerPositionMovesThePhysicalTowerWithoutMovingTheObjects",
             "purgeRoutingChangesRealInfillAndObjectExtrusionPaths",
             "supportPurgeRoutingAndSolubleInterfaceChangeRealMaterialPaths",
             "setOf(0, 1, 2, 3)",
@@ -471,6 +472,9 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
             "analysis.toolChanges >= 6",
             "withoutTowerAnalysis.primeTowerMotions",
             "rectangle.primeTowerMotionSignature",
+            "Changing X must move the physical prime tower by 80 mm",
+            "Changing Y must move the physical prime tower by 50 mm",
+            "Tower placement must not rewrite object extrusion paths",
             "intoInfill.extrusionMotionsByRoleAndTool[\"Sparse infill\"]",
             "intoObjects.nonTowerMotionSignature()",
             "routed.supportMotionSignature()",
@@ -926,6 +930,12 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     ):
         if marker not in outcome:
             raise VerificationError(f"canonical support style contract is missing: {marker}")
+    for marker in (
+        "native.wipeTowerX = multiMaterial.primeTowerPositionX",
+        "native.wipeTowerY = multiMaterial.primeTowerPositionY",
+    ):
+        if marker not in outcome:
+            raise VerificationError(f"prime tower position mapping is missing: {marker}")
 
     main_activity = sources["MainActivity.kt"]
     for marker in (

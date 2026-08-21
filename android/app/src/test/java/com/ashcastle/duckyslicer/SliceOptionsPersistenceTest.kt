@@ -181,6 +181,8 @@ class SliceOptionsPersistenceTest {
                 multiMaterial = MultiMaterialSettings(
                     primeVolume = 61.5f,
                     purgeVolumes = listOf(0f, 65f, 175f, 0f),
+                    primeTowerPositionX = 123.5f,
+                    primeTowerPositionY = 87.5f,
                     primeTowerBrimWidth = 4.5f,
                     primeTowerFramework = true,
                     primeTowerSkipPoints = false,
@@ -384,6 +386,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(42f, native.wipeTowerWidth)
         assertEquals(61.5f, native.primeVolume)
         assertEquals(listOf(0f, 65f, 175f, 0f), native.purgeVolumes.toList())
+        assertEquals(123.5f, native.wipeTowerX)
+        assertEquals(87.5f, native.wipeTowerY)
         assertEquals(false, native.singleExtruderMultiMaterial)
         assertEquals(false, native.purgeInPrimeTower)
         assertEquals(4.5f, native.primeTowerBrimWidth)
@@ -1050,6 +1054,8 @@ class SliceOptionsPersistenceTest {
                 remove("primeTowerInterfaceFeatures")
                 remove("primeTowerInterfaceCooldown")
                 remove("primeTowerInfillGap")
+                remove("primeTowerPositionX")
+                remove("primeTowerPositionY")
             }
         }
 
@@ -1172,6 +1178,8 @@ class SliceOptionsPersistenceTest {
         assertFalse(restored.multiMaterial.primeTowerInterfaceFeatures)
         assertFalse(restored.multiMaterial.primeTowerInterfaceCooldown)
         assertEquals(150f, restored.multiMaterial.primeTowerInfillGap)
+        assertEquals(170f, restored.multiMaterial.primeTowerPositionX)
+        assertEquals(140f, restored.multiMaterial.primeTowerPositionY)
         assertEquals(listOf(0f), restored.toNativeConfig().purgeVolumes.toList())
     }
 
@@ -1607,6 +1615,8 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         wipeTowerWidth = 48f,
         multiMaterial = MultiMaterialSettings(
             primeVolume = 58f,
+            primeTowerPositionX = 123.5f,
+            primeTowerPositionY = 87.5f,
             primeTowerBrimWidth = 5.5f,
             primeTowerFramework = true,
             primeTowerSkipPoints = false,

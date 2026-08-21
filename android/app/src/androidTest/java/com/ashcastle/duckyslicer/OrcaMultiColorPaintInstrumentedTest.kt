@@ -3,6 +3,7 @@ package com.ashcastle.duckyslicer
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -330,6 +331,100 @@ class OrcaMultiColorPaintInstrumentedTest {
                     cone.primeTowerMotionSignature,
                     rib.primeTowerMotionSignature,
                 ).size,
+            )
+        } finally {
+            outputs.forEach(File::delete)
+            modelFile.delete()
+        }
+    }
+
+    @Test
+    fun primeTowerPositionMovesThePhysicalTowerWithoutMovingTheObjects() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val modelFile = File(context.cacheDir, "positioned-prime-tower-box.stl")
+        val outputs = mutableListOf<File>()
+        try {
+            instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
+                modelFile.outputStream().use(input::copyTo)
+            }
+            val model = inspectModel(modelFile.absolutePath)
+            val primary = FilamentProfile.GENERIC_PLA.copy(
+                id = "tower-position-primary",
+                name = "Tower position primary",
+                builtIn = false,
+                compatiblePrinters = listOf(PrinterProfile.U1_04.name),
+            )
+            val secondary = primary.copy(
+                id = "tower-position-secondary",
+                name = "Tower position secondary",
+            )
+            val objects = listOf(
+                ProjectObject(
+                    id = "tower-position-left",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = -20f),
+                    filamentSlot = 0,
+                ),
+                ProjectObject(
+                    id = "tower-position-right",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = 20f),
+                    filamentSlot = 1,
+                ),
+            )
+            val base = SliceOptions()
+                .selectPrinter(PrinterProfile.U1_04)
+                .selectFilament(primary)
+                .selectQuality(QualityProfile.DRAFT)
+                .copy(
+                    filamentSlots = listOf(primary, secondary),
+                    wipeTowerEnabled = true,
+                    wipeTowerWidth = 40f,
+                    brimType = "no_brim",
+                    brimWidth = 0f,
+                    skirtLoops = 0,
+                    multiMaterial = MultiMaterialSettings(
+                        purgeVolumes = listOf(0f, 90f, 90f, 0f),
+                    ),
+                )
+
+            fun slice(positionX: Float, positionY: Float): Pair<String, MultiColorGcodeAnalysis> {
+                val outcome = OnDeviceSlicer.slice(
+                    objects,
+                    base.copy(
+                        multiMaterial = base.multiMaterial.copy(
+                            primeTowerPositionX = positionX,
+                            primeTowerPositionY = positionY,
+                        ),
+                    ),
+                ).also { outputs += it.output }
+                val gcode = outcome.output.readText()
+                return gcode to analyzePositiveExtrusion(gcode)
+            }
+
+            val (firstGcode, first) = slice(170f, 140f)
+            val (movedGcode, moved) = slice(90f, 190f)
+            val firstCenter = first.primeTowerCenter()
+            val movedCenter = moved.primeTowerCenter()
+
+            assertTrue(firstGcode.contains("; wipe_tower_x = 170"))
+            assertTrue(firstGcode.contains("; wipe_tower_y = 140"))
+            assertTrue(movedGcode.contains("; wipe_tower_x = 90"))
+            assertTrue(movedGcode.contains("; wipe_tower_y = 190"))
+            assertTrue(first.primeTowerMotions >= 20 && moved.primeTowerMotions >= 20)
+            assertTrue(
+                "Changing X must move the physical prime tower by 80 mm",
+                abs((movedCenter.first - firstCenter.first) + 80.0) < 1.0,
+            )
+            assertTrue(
+                "Changing Y must move the physical prime tower by 50 mm",
+                abs((movedCenter.second - firstCenter.second) - 50.0) < 1.0,
+            )
+            assertEquals(
+                "Tower placement must not rewrite object extrusion paths",
+                first.nonTowerMotionSignature(),
+                moved.nonTowerMotionSignature(),
             )
         } finally {
             outputs.forEach(File::delete)
@@ -673,6 +768,17 @@ class OrcaMultiColorPaintInstrumentedTest {
                     motions.map { motion -> "$role|T$tool|$motion" }
                 }
             }
+
+    private fun MultiColorGcodeAnalysis.primeTowerCenter(): Pair<Double, Double> {
+        val points = primeTowerMotionSignature.mapNotNull { encoded ->
+            val motion = encoded.substringAfter('|')
+            val x = axisValue(motion, 'X') ?: return@mapNotNull null
+            val y = axisValue(motion, 'Y') ?: return@mapNotNull null
+            x to y
+        }
+        check(points.isNotEmpty()) { "Prime tower has no physical XY extrusion" }
+        return points.sumOf { it.first } / points.size to points.sumOf { it.second } / points.size
+    }
 
     private fun MultiColorGcodeAnalysis.supportMotionSignature(): List<String> =
         extrusionMotionsByRoleAndTool

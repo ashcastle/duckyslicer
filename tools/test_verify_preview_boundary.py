@@ -362,7 +362,9 @@ def valid_sources() -> dict[str, str]:
             "canonicalOutput.length() in 1..SliceArtifactStore.MAXIMUM_OUTPUT_BYTES "
             'listOf("organic", "tree_slim", "tree_strong", "tree_hybrid") '
             'listOf("grid", "snug") '
-            'val fallback = if (supportType.isTreeSupportType()) "organic" else "grid"'
+            'val fallback = if (supportType.isTreeSupportType()) "organic" else "grid" '
+            "native.wipeTowerX = multiMaterial.primeTowerPositionX "
+            "native.wipeTowerY = multiMaterial.primeTowerPositionY"
         ),
         "SlicerProcessService.kt": (
             "result.estimatedFilamentMm KEY_FILAMENT_MM "
@@ -413,6 +415,7 @@ def valid_sources() -> dict[str, str]:
         "OrcaMultiColorPaintInstrumentedTest.kt": (
             "fourColorFacetPaintProducesObjectAndPrimeTowerExtrusionOnEveryTool "
             "primeTowerWallTypesProduceDistinctExtrusionGeometry "
+            "primeTowerPositionMovesThePhysicalTowerWithoutMovingTheObjects "
             "purgeRoutingChangesRealInfillAndObjectExtrusionPaths "
             "supportPurgeRoutingAndSolubleInterfaceChangeRealMaterialPaths "
             "setOf(0, 1, 2, 3) analysis.objectExtrusionByTool.filterValues "
@@ -420,6 +423,9 @@ def valid_sources() -> dict[str, str]:
             "analysis.primeTowerMotions >= 40 analysis.toolChanges >= 6 "
             "withoutTowerAnalysis.primeTowerMotions "
             "rectangle.primeTowerMotionSignature "
+            "Changing X must move the physical prime tower by 80 mm "
+            "Changing Y must move the physical prime tower by 50 mm "
+            "Tower placement must not rewrite object extrusion paths "
             "intoInfill.extrusionMotionsByRoleAndTool[\"Sparse infill\"] "
             "intoObjects.nonTowerMotionSignature() routed.supportMotionSignature() "
             "soluble.supportExtrusionTools()"
@@ -1152,6 +1158,22 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "OrcaMultiColorPaintInstrumentedTest.kt"
         ].replace("analysis.primeTowerExtrusionByTool.filterValues", "commands.any")
         with self.assertRaisesRegex(VerificationError, "partial-facet regression"):
+            verify_preview_boundary(sources)
+
+    def test_requires_physical_prime_tower_position_regression(self) -> None:
+        sources = valid_sources()
+        sources["OrcaMultiColorPaintInstrumentedTest.kt"] = sources[
+            "OrcaMultiColorPaintInstrumentedTest.kt"
+        ].replace("Tower placement must not rewrite object extrusion paths", "")
+        with self.assertRaisesRegex(VerificationError, "partial-facet regression"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_dropped_prime_tower_position_mapping(self) -> None:
+        sources = valid_sources()
+        sources["OnDeviceSlicer.kt"] = sources["OnDeviceSlicer.kt"].replace(
+            "native.wipeTowerX = multiMaterial.primeTowerPositionX", "native.wipeTowerX = 170f"
+        )
+        with self.assertRaisesRegex(VerificationError, "wipeTowerX"):
             verify_preview_boundary(sources)
 
     def test_requires_physical_seam_paint_placement_regression(self) -> None:

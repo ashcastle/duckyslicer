@@ -704,6 +704,8 @@ data class RetractionSettings(
 data class MultiMaterialSettings(
     val primeVolume: Float = 45f,
     val purgeVolumes: List<Float> = emptyList(),
+    val primeTowerPositionX: Float = 170f,
+    val primeTowerPositionY: Float = 140f,
     val primeTowerBrimWidth: Float = 3f,
     val primeTowerFramework: Boolean = false,
     val primeTowerSkipPoints: Boolean = true,
@@ -2597,6 +2599,8 @@ data class SliceOptions(
                 .map(RetractionSettings::retractionDistanceWhenCut).toFloatArray()
             native.primeVolume = multiMaterial.primeVolume
             native.purgeVolumes = multiMaterial.resolvedPurgeVolumes(nativeFilaments.size).toFloatArray()
+            native.wipeTowerX = multiMaterial.primeTowerPositionX
+            native.wipeTowerY = multiMaterial.primeTowerPositionY
             native.singleExtruderMultiMaterial = printerProfile.singleExtruderMultiMaterial
             native.coolingTubeRetraction = printerProfile.coolingTubeRetraction
             native.coolingTubeLength = printerProfile.coolingTubeLength

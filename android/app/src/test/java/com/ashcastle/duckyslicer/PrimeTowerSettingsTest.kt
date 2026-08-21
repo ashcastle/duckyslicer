@@ -38,4 +38,35 @@ class PrimeTowerSettingsTest {
             ),
         )
     }
+
+    @Test
+    fun validatesPrimeTowerPositionBoundsAndFiniteValues() {
+        val base = QualityProfile.STANDARD.multiMaterial
+        assertTrue(
+            ProfileValidation.slicing(
+                QualityProfile.STANDARD.copy(
+                    multiMaterial = base.copy(
+                        primeTowerPositionX = -1_000f,
+                        primeTowerPositionY = 1_000f,
+                    ),
+                ),
+            ),
+        )
+        listOf(-1_000.1f, 1_000.1f, Float.NaN, Float.POSITIVE_INFINITY).forEach { invalid ->
+            assertFalse(
+                ProfileValidation.slicing(
+                    QualityProfile.STANDARD.copy(
+                        multiMaterial = base.copy(primeTowerPositionX = invalid),
+                    ),
+                ),
+            )
+            assertFalse(
+                ProfileValidation.slicing(
+                    QualityProfile.STANDARD.copy(
+                        multiMaterial = base.copy(primeTowerPositionY = invalid),
+                    ),
+                ),
+            )
+        }
+    }
 }

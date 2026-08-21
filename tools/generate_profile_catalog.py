@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 96
+SCHEMA_VERSION = 97
 MAX_FILAMENT_SLOTS = 16
 MAX_GCODE_THUMBNAILS = 8
 SUPPORTED_GCODE_THUMBNAIL_FORMATS = {"PNG", "JPG", "QOI", "BTT_TFT", "COLPIC"}
@@ -1491,6 +1491,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "wipeTowerEnabled": boolean(raw.get("enable_prime_tower")),
         "wipeTowerWidth": number(raw.get("prime_tower_width"), 60),
         "primeVolume": number(raw.get("prime_volume"), 45),
+        "primeTowerPositionX": number(raw.get("wipe_tower_x"), 170),
+        "primeTowerPositionY": number(raw.get("wipe_tower_y"), 140),
         "primeTowerBrimWidth": number(raw.get("prime_tower_brim_width"), 3),
         "primeTowerFramework": boolean(raw.get("prime_tower_enable_framework")),
         "primeTowerSkipPoints": boolean(raw.get("prime_tower_skip_points"), True),
