@@ -519,7 +519,7 @@ internal fun WorkspaceScreen(
     onDuplicate: () -> Unit,
     onArrange: () -> Unit,
     onAutoLay: () -> Unit,
-    onLayOnFace: (String, FloatArray) -> Unit,
+    onLayOnFace: (String, FloatArray) -> Boolean,
     onSplit: () -> Unit,
     onSplitParts: (String) -> Unit,
     onCut: (Float, Boolean) -> Unit,
@@ -723,8 +723,7 @@ internal fun WorkspaceScreen(
                     onModelTransformPreview = onModelTransformPreview,
                     onModelTransformCommitted = onModelTransformCommitted,
                     onLayOnFace = { objectId, triangle ->
-                        layingOnFace = false
-                        onLayOnFace(objectId, triangle)
+                        if (onLayOnFace(objectId, triangle)) layingOnFace = false
                     },
                     onMeasurePoint = { point ->
                         measurementPoints = nextMeasurementPoints(measurementPoints, point)

@@ -832,31 +832,34 @@ private fun DuckySlicerScreen(
         }
     }
 
-    fun laySelectedFaceOnBed(objectId: String, triangle: FloatArray) {
-        if (projectTransferBusy || importing || slicing || previewLoading) return
+    fun laySelectedFaceOnBed(objectId: String, triangle: FloatArray): Boolean {
+        if (projectTransferBusy || importing || slicing || previewLoading) return false
         val current = projectTransferModel.state.value.history
-        val target = current.current.objects.firstOrNull { it.id == objectId } ?: return
-        runCatching {
+        val target = current.current.objects.firstOrNull { it.id == objectId } ?: return false
+        return runCatching {
             val transform = target.withFaceOnBed(triangle)
             val nextHistory = current.updateTransform(objectId, transform)
             val applied = nextHistory == current ||
                 projectTransferModel.updateHistory(current, nextHistory)
             check(applied) { "Selected face transform was not applied" }
             nextHistory != current
-        }
-            .onSuccess { changed ->
+        }.fold(
+            onSuccess = { changed ->
                 if (changed) {
                     clearCompletedSlice()
                 }
                 notice = layOnFaceDone
                 error = null
-            }
-            .onFailure { failure ->
+                true
+            },
+            onFailure = { failure ->
                 if (BuildConfig.DEBUG) Log.e("DuckySlicer", "Place on face failed", failure)
                 supportEvents.record(SupportEvent.LAY_ON_FACE_FAILED)
                 error = layOnFaceError
                 notice = null
-            }
+                false
+            },
+        )
     }
 
     fun arrangeProjectObjects() {

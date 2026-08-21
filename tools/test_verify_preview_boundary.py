@@ -229,6 +229,11 @@ def valid_sources() -> dict[str, str]:
             "pixelsPerMillimeter = sceneScale * max(projectedLength, 0.08f) "
             "start.withAxisScale(axis.scaleAxis, requested, keepProportions = false, range = range)"
         ),
+        "LayOnFaceCandidates.kt": (
+            "candidatePlaneSupportsMesh( SUPPORT_CHECK_MULTIPLIER = 4 "
+            "SUPPORT_PLANE_TOLERANCE_MM = 0.05f "
+            "if (hasPositive && hasNegative) return false checkCancellation()"
+        ),
         "PreviewPerformanceHarnessActivity.kt": (
             "detail = PreviewDetail.AUTOMATIC "
             "renderer.automaticCalibrationSettledForTest() "
@@ -320,6 +325,8 @@ def valid_sources() -> dict[str, str]:
             " drawSelectedTransformGizmo()"
             " selected = transformGizmoMode == TransformGizmoMode.MOVE"
             " selected = transformGizmoMode == TransformGizmoMode.SCALE"
+            " onLayOnFace: (String, FloatArray) -> Boolean"
+            " if (onLayOnFace(objectId, triangle)) layingOnFace = false"
         ),
         "MainActivity.kt": (
             "fun fromNative(raw: FloatArray?, localPath: String) "
@@ -337,6 +344,7 @@ def valid_sources() -> dict[str, str]:
             "requested.plateId requested.outcome "
             "loadPreviewRange(0, Int.MAX_VALUE) previousAnnotation.paintAll( "
             "exactPaintFacetsToClear("
+            " fun laySelectedFaceOnBed(objectId: String, triangle: FloatArray): Boolean"
         ),
         "ProjectState.kt": (
             "fun updateExactSupportPaint( fun commitExactSupportPaint( "
@@ -466,6 +474,9 @@ def valid_sources() -> dict[str, str]:
             "scaleGestureChangesOnlyTheGrabbedAxisAndStaysBounded "
             "moveGestureConstrainsPlanarAndVerticalAxes"
         ),
+        "LayOnFaceCandidatesTest.kt": (
+            "recessedPlaneThatCannotSupportTheMeshIsNotSuggested"
+        ),
         "ModelImportPerformanceInstrumentedTest.kt": (
             "denseBinaryStlUsesBoundedPrimitiveImportWithinBudget "
             "sourceTriangles=${info.triangles} "
@@ -498,6 +509,7 @@ def valid_sources() -> dict[str, str]:
             "scrollAnchorLabel = placement target?.scrollableAncestor() retainedScrollBounds "
             "AccessibilityNodeInfo.ACTION_SCROLL_FORWARD "
             "Support brush size must expose an adjustable bounded range"
+            " failedPlaceOnFaceTapKeepsTheModeOpenForRetry"
         ),
         "PreviewModelsTest.kt": (
             "nativePayloadKeepsMetadataSegmentsAndRolesWithoutJson "
@@ -651,6 +663,23 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "internal fun missingTransformGizmoHitTest(",
         )
         with self.assertRaisesRegex(VerificationError, "direct transform gizmo contract"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_place_on_face_candidates_that_do_not_support_the_mesh(self) -> None:
+        sources = valid_sources()
+        sources["LayOnFaceCandidates.kt"] = sources["LayOnFaceCandidates.kt"].replace(
+            "candidatePlaneSupportsMesh(", "candidatePlaneAcceptsAnySurface(",
+        )
+        with self.assertRaisesRegex(VerificationError, "supporting place-on-face candidate"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_place_on_face_ui_that_closes_after_a_failed_tap(self) -> None:
+        sources = valid_sources()
+        sources["WorkspaceScreen.kt"] = sources["WorkspaceScreen.kt"].replace(
+            "if (onLayOnFace(objectId, triangle)) layingOnFace = false",
+            "layingOnFace = false",
+        )
+        with self.assertRaisesRegex(VerificationError, "place-on-face retry contract"):
             verify_preview_boundary(sources)
 
     def test_requires_target_anchored_accessibility_scrolling(self) -> None:

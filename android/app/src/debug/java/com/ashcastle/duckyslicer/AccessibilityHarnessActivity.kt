@@ -92,6 +92,10 @@ class AccessibilityHarnessActivity : ComponentActivity() {
                         SCREEN_LAY_ON_FACE -> WorkspaceAccessibilityHarness(
                             projectObjects = listOf(accessibilityLayOnFaceProjectObject()),
                         )
+                        SCREEN_LAY_ON_FACE_FAILURE -> WorkspaceAccessibilityHarness(
+                            projectObjects = listOf(accessibilityLayOnFaceProjectObject()),
+                            layOnFaceForcedFailure = true,
+                        )
                         SCREEN_GCODE_EXPORT -> WorkspaceAccessibilityHarness(
                             selectedTab = WorkspaceTab.PREVIEW,
                             sliceOutcome = SliceOutcome(
@@ -155,6 +159,7 @@ class AccessibilityHarnessActivity : ComponentActivity() {
         const val SCREEN_SPLIT_PARTS = "split-parts"
         const val SCREEN_MODEL_TRANSFORM = "model-transform"
         const val SCREEN_LAY_ON_FACE = "lay-on-face"
+        const val SCREEN_LAY_ON_FACE_FAILURE = "lay-on-face-failure"
         const val SCREEN_GCODE_EXPORT = "gcode-export"
         const val SCREEN_PROJECT_EXPORT = "project-export"
         const val SCREEN_PROJECT_IMPORT = "project-import"
@@ -322,6 +327,7 @@ private fun WorkspaceAccessibilityHarness(
     profileTransferDirection: ProfileTransferDirection? = null,
     profileTransferCancellationRequested: Boolean = false,
     plateCount: Int = 1,
+    layOnFaceForcedFailure: Boolean = false,
 ) {
     var harnessNotice by remember { mutableStateOf<String?>(null) }
     var layOnFaceUndoTransform by remember { mutableStateOf<ModelTransform?>(null) }
@@ -464,29 +470,39 @@ private fun WorkspaceAccessibilityHarness(
         onArrange = {},
         onAutoLay = {},
         onLayOnFace = { objectId, triangle ->
-            val plate = projectPlates.first { it.id == selectedPlateId }
-            val projectObject = plate.objects.first { it.id == objectId }
-            runCatching { projectObject.withFaceOnBed(triangle) }
-                .onSuccess { transform ->
-                    layOnFaceUndoTransform = projectObject.transform
-                    projectPlates = projectPlates.map { candidatePlate ->
-                        if (candidatePlate.id != selectedPlateId) {
-                            candidatePlate
-                        } else {
-                            candidatePlate.copy(
-                                objects = candidatePlate.objects.map { candidateObject ->
-                                    if (candidateObject.id == objectId) {
-                                        candidateObject.copy(transform = transform)
-                                    } else {
-                                        candidateObject
-                                    }
-                                },
-                            )
+            if (layOnFaceForcedFailure) {
+                harnessNotice = TEST_LAY_ON_FACE_FAILED_LABEL
+                false
+            } else {
+                val plate = projectPlates.first { it.id == selectedPlateId }
+                val projectObject = plate.objects.first { it.id == objectId }
+                runCatching { projectObject.withFaceOnBed(triangle) }.fold(
+                    onSuccess = { transform ->
+                        layOnFaceUndoTransform = projectObject.transform
+                        projectPlates = projectPlates.map { candidatePlate ->
+                            if (candidatePlate.id != selectedPlateId) {
+                                candidatePlate
+                            } else {
+                                candidatePlate.copy(
+                                    objects = candidatePlate.objects.map { candidateObject ->
+                                        if (candidateObject.id == objectId) {
+                                            candidateObject.copy(transform = transform)
+                                        } else {
+                                            candidateObject
+                                        }
+                                    },
+                                )
+                            }
                         }
-                    }
-                    harnessNotice = TEST_LAY_ON_FACE_SELECTED_LABEL
-                }
-                .onFailure { harnessNotice = TEST_LAY_ON_FACE_FAILED_LABEL }
+                        harnessNotice = TEST_LAY_ON_FACE_SELECTED_LABEL
+                        true
+                    },
+                    onFailure = {
+                        harnessNotice = TEST_LAY_ON_FACE_FAILED_LABEL
+                        false
+                    },
+                )
+            }
         },
         onSplit = {},
         onSplitParts = {},

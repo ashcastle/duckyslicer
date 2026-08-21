@@ -984,6 +984,25 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun failedPlaceOnFaceTapKeepsTheModeOpenForRetry() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val placeOnFace = context.getString(R.string.lay_on_face)
+        val hint = context.getString(R.string.lay_on_face_hint)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_LAY_ON_FACE_FAILURE).use {
+            val tool = waitForNode(placeOnFace) { it.isClickable }
+            tapCenter(tool)
+            waitForNodes(setOf(hint))
+            tapPrepareFixtureCenter()
+
+            val nodes = waitForNodes(setOf(TEST_LAY_ON_FACE_FAILED_LABEL, hint))
+            assertTrue(
+                "A rejected surface must keep Place on face open so another face can be tapped",
+                nodes.any { it.effectiveLabel().contains(hint) },
+            )
+        }
+    }
+
+    @Test
     fun selectedObjectExposesMeasureModeAndTouchGuidance() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val measure = context.getString(R.string.measure_model)

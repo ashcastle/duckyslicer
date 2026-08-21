@@ -23,6 +23,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "ToolpathPreviewView.kt",
         "ModelTransform.kt",
         "TransformGizmo.kt",
+        "LayOnFaceCandidates.kt",
         "PrepareModelPreviewView.kt",
         "PrepareModelOverlays.kt",
         "OrcaFacetPreview.kt",
@@ -46,6 +47,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "PrepareModelPickingTest.kt",
         "ModelInfoTest.kt",
         "TransformGizmoTest.kt",
+        "LayOnFaceCandidatesTest.kt",
         "ModelImportPerformanceInstrumentedTest.kt",
         "ToolpathRendererPerformanceInstrumentedTest.kt",
         "ToolpathSurfaceInstrumentedTest.kt",
@@ -747,6 +749,38 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         if marker not in workspace:
             raise VerificationError(f"direct transform gizmo is not connected to the UI: {marker}")
 
+    lay_on_face_candidates = sources["LayOnFaceCandidates.kt"]
+    for marker in (
+        "candidatePlaneSupportsMesh(",
+        "SUPPORT_CHECK_MULTIPLIER = 4",
+        "SUPPORT_PLANE_TOLERANCE_MM = 0.05f",
+        "if (hasPositive && hasNegative) return false",
+        "checkCancellation()",
+    ):
+        if marker not in lay_on_face_candidates:
+            raise VerificationError(
+                f"supporting place-on-face candidate contract is missing: {marker}"
+            )
+    for marker in (
+        "onLayOnFace: (String, FloatArray) -> Boolean",
+        "if (onLayOnFace(objectId, triangle)) layingOnFace = false",
+    ):
+        if marker not in workspace:
+            raise VerificationError(f"place-on-face retry contract is missing: {marker}")
+    if (
+        "fun laySelectedFaceOnBed(objectId: String, triangle: FloatArray): Boolean"
+        not in model
+    ):
+        raise VerificationError("place-on-face result is not reported to the UI")
+    lay_on_face_tests = sources["LayOnFaceCandidatesTest.kt"]
+    if "recessedPlaneThatCannotSupportTheMeshIsNotSuggested" not in lay_on_face_tests:
+        raise VerificationError("supporting place-on-face candidate regression is missing")
+    if (
+        "failedPlaceOnFaceTapKeepsTheModeOpenForRetry"
+        not in sources["AccessibilityInstrumentedTest.kt"]
+    ):
+        raise VerificationError("place-on-face retry device regression is missing")
+
     export_controls = workspace.split("private fun PreviewExportSplitButton(", 1)[-1].split(
         "@Composable", 1
     )[0]
@@ -1158,6 +1192,9 @@ def read_sources() -> dict[str, str]:
         ),
         "ModelTransform.kt": (main / "ModelTransform.kt").read_text(encoding="utf-8"),
         "TransformGizmo.kt": (main / "TransformGizmo.kt").read_text(encoding="utf-8"),
+        "LayOnFaceCandidates.kt": (main / "LayOnFaceCandidates.kt").read_text(
+            encoding="utf-8"
+        ),
         "PreviewPerformanceHarnessActivity.kt": (
             debug / "PreviewPerformanceHarnessActivity.kt"
         ).read_text(encoding="utf-8"),
@@ -1193,6 +1230,9 @@ def read_sources() -> dict[str, str]:
         ),
         "ModelInfoTest.kt": (tests / "ModelInfoTest.kt").read_text(encoding="utf-8"),
         "TransformGizmoTest.kt": (tests / "TransformGizmoTest.kt").read_text(
+            encoding="utf-8"
+        ),
+        "LayOnFaceCandidatesTest.kt": (tests / "LayOnFaceCandidatesTest.kt").read_text(
             encoding="utf-8"
         ),
         "ModelImportPerformanceInstrumentedTest.kt": (

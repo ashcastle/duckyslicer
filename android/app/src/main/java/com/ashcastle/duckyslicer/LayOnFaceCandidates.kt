@@ -115,9 +115,52 @@ internal fun detectLayOnFaceCandidates(
         }
         candidates += LayOnFaceCandidate(grouped.toIntArray(), area)
     }
-    return candidates
-        .sortedByDescending(LayOnFaceCandidate::areaMm2)
-        .take(maximumCandidates)
+    val ranked = candidates.sortedByDescending(LayOnFaceCandidate::areaMm2)
+    val maximumSupportChecks = maximumCandidates
+        .coerceAtMost(Int.MAX_VALUE / SUPPORT_CHECK_MULTIPLIER) * SUPPORT_CHECK_MULTIPLIER
+    return buildList(minOf(maximumCandidates, ranked.size)) {
+        ranked.take(maximumSupportChecks).forEach { candidate ->
+            if (size >= maximumCandidates) return@buildList
+            val representative = faces[candidate.previewTriangleIndices.first()] ?: return@forEach
+            if (
+                candidatePlaneSupportsMesh(
+                    previewTriangles,
+                    candidate.previewTriangleIndices.first(),
+                    representative,
+                    checkCancellation,
+                )
+            ) {
+                add(candidate)
+            }
+        }
+    }
+}
+
+private fun candidatePlaneSupportsMesh(
+    values: FloatArray,
+    triangleIndex: Int,
+    face: CandidateFace,
+    checkCancellation: () -> Unit,
+): Boolean {
+    val triangleOffset = triangleIndex * 9
+    val originX = values[triangleOffset]
+    val originY = values[triangleOffset + 1]
+    val originZ = values[triangleOffset + 2]
+    var hasPositive = false
+    var hasNegative = false
+    var offset = 0
+    while (offset + 2 < values.size) {
+        if (offset % (LAY_ON_FACE_CANCELLATION_INTERVAL * 3) == 0) checkCancellation()
+        val distance =
+            (values[offset] - originX) * face.normalX +
+                (values[offset + 1] - originY) * face.normalY +
+                (values[offset + 2] - originZ) * face.normalZ
+        hasPositive = hasPositive || distance > SUPPORT_PLANE_TOLERANCE_MM
+        hasNegative = hasNegative || distance < -SUPPORT_PLANE_TOLERANCE_MM
+        if (hasPositive && hasNegative) return false
+        offset += 3
+    }
+    return true
 }
 
 private fun candidateFace(values: FloatArray, offset: Int): CandidateFace? {
@@ -183,3 +226,5 @@ private const val MINIMUM_CANDIDATE_SIDE_MM = 1f
 private const val NORMAL_COMPONENT_TOLERANCE = 0.001f
 private const val MAXIMUM_FACE_NEIGHBORS = 3
 private const val LAY_ON_FACE_CANCELLATION_INTERVAL = 256
+private const val SUPPORT_CHECK_MULTIPLIER = 4
+private const val SUPPORT_PLANE_TOLERANCE_MM = 0.05f

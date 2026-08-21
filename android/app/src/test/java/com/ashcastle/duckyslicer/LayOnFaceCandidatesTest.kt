@@ -2,6 +2,7 @@ package com.ashcastle.duckyslicer
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LayOnFaceCandidatesTest {
@@ -43,5 +44,25 @@ class LayOnFaceCandidatesTest {
         )
 
         assertEquals(emptyList<LayOnFaceCandidate>(), candidates)
+    }
+
+    @Test
+    fun recessedPlaneThatCannotSupportTheMeshIsNotSuggested() {
+        val candidates = detectLayOnFaceCandidates(
+            floatArrayOf(
+                // Large recessed plane at Z=0, with printable geometry on both sides.
+                -5f, -5f, 0f, 5f, -5f, 0f, 5f, 5f, 0f,
+                -5f, -5f, 0f, 5f, 5f, 0f, -5f, 5f, 0f,
+                // Smaller outer planes above and below the recess.
+                -3f, -3f, 2f, 3f, -3f, 2f, 3f, 3f, 2f,
+                -3f, -3f, -2f, 3f, 3f, -2f, 3f, -3f, -2f,
+            ),
+        )
+
+        assertTrue(candidates.none { candidate ->
+            candidate.previewTriangleIndices.any { it == 0 || it == 1 }
+        })
+        assertEquals(2, candidates.size)
+        assertTrue(candidates.all { it.previewTriangleIndices.single() in 2..3 })
     }
 }
