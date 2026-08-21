@@ -55,10 +55,11 @@ __pycache__/
 .ai/
 .ai-notes/
 .agents/
-**/AGENTS.md
-**/AGENTS.override.md
-**/AGENT.md
-**/CLAUDE.md
+**/[Aa][Gg][Ee][Nn][Tt].md
+**/[Aa][Gg][Ee][Nn][Tt].override.md
+**/[Aa][Gg][Ee][Nn][Tt][Ss].md
+**/[Aa][Gg][Ee][Nn][Tt][Ss].override.md
+**/[Cc][Ll][Aa][Uu][Dd][Ee].md
 **/GEMINI.md
 .aider*
 .continue/
