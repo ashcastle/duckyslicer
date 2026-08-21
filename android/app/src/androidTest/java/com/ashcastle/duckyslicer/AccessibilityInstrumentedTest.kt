@@ -3,6 +3,7 @@ package com.ashcastle.duckyslicer
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.Rect
 import android.os.Bundle
 import android.os.SystemClock
@@ -831,6 +832,75 @@ class AccessibilityInstrumentedTest {
                 )
                 scrollAnchor = label
             }
+        }
+    }
+
+    @Test
+    fun selectedObjectExposesAccessibleMoveAndScaleGizmoModes() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val move = context.getString(R.string.model_placement)
+        val scale = context.getString(R.string.scale)
+        val active = context.getString(R.string.active_transform_mode)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use {
+            val nodes = waitForNodes(setOf(move, scale))
+            val moveButton = nodes.firstOrNull {
+                it.isClickable && it.effectiveLabel() == move
+            }
+            val scaleButton = nodes.firstOrNull {
+                it.isClickable && it.effectiveLabel() == scale
+            }
+            assertNotNull("A selected object must expose direct move handles", moveButton)
+            assertNotNull("A selected object must expose direct scale handles", scaleButton)
+            assertEquals(
+                "Move handles must expose their active state by default",
+                active,
+                checkNotNull(moveButton).stateDescription?.toString(),
+            )
+
+            tapCenter(checkNotNull(scaleButton))
+            assertTrue(
+                "The selected gizmo mode must be exposed to accessibility services",
+                waitForNode(scale) {
+                    it.isClickable && it.stateDescription?.toString() == active
+                }.stateDescription?.toString() == active,
+            )
+        }
+    }
+
+    @Test
+    fun directMoveGizmoDragCommitsOneTransformGesture() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        launchHarness(AccessibilityHarnessActivity.SCREEN_MODEL_TRANSFORM).use {
+            SystemClock.sleep(750)
+            val screenshot = instrumentation.uiAutomation.takeScreenshot()
+            val redPixels = ArrayList<Pair<Int, Int>>()
+            for (y in 0 until screenshot.height) {
+                for (x in 0 until screenshot.width) {
+                    val pixel = screenshot.getPixel(x, y)
+                    if (
+                        Color.red(pixel) >= 235 &&
+                        Color.green(pixel) in 60..125 &&
+                        Color.blue(pixel) in 65..135
+                    ) {
+                        redPixels += x to y
+                    }
+                }
+            }
+            assertTrue("The X move handle must be visible", redPixels.size >= 20)
+            val top = redPixels.minOf { it.second }
+            val endpointPixels = redPixels.filter { (_, y) -> y <= top + 42 }
+            val startX = endpointPixels.sumOf { it.first } / endpointPixels.size
+            val startY = endpointPixels.sumOf { it.second } / endpointPixels.size
+            instrumentation.uiAutomation.executeShellCommand(
+                "input swipe $startX $startY ${startX + 120} ${startY - 95} 300",
+            ).close()
+
+            assertTrue(
+                "Dragging a visible axis handle must commit through project history",
+                waitForNodes(setOf(TEST_TRANSFORM_COMMITTED_LABEL)).any {
+                    it.effectiveLabel().contains(TEST_TRANSFORM_COMMITTED_LABEL)
+                },
+            )
         }
     }
 

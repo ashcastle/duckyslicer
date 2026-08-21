@@ -219,6 +219,16 @@ def valid_sources() -> dict[str, str]:
             "internal fun ModelTransform.minimumRotatedZ(model: ModelInfo) "
             "internal fun ModelTransform.placeVertex("
         ),
+        "TransformGizmo.kt": (
+            "internal enum class TransformGizmoMode { MOVE, SCALE } "
+            "internal fun transformGizmoLayoutForObject( "
+            "internal fun hitTestTransformGizmo( "
+            "internal fun transformGizmoDragMillimeters( "
+            "internal fun moveTransformFromGizmo( "
+            "internal fun scaleTransformFromGizmo( "
+            "pixelsPerMillimeter = sceneScale * max(projectedLength, 0.08f) "
+            "start.withAxisScale(axis.scaleAxis, requested, keepProportions = false, range = range)"
+        ),
         "PreviewPerformanceHarnessActivity.kt": (
             "detail = PreviewDetail.AUTOMATIC "
             "renderer.automaticCalibrationSettledForTest() "
@@ -303,6 +313,13 @@ def valid_sources() -> dict[str, str]:
             "prepareDerivedCacheLifecycle.suspended modelPickingIndices = emptyMap() "
             "layOnFaceCandidates = emptyMap() prepareOverlays = emptyList() "
             "onMemoryPressureRecovered = { currentResumePrepareDerivedCaches()"
+            " transformGizmoMode = transformGizmoMode"
+            " hitTestTransformGizmo(layout, down.position, 22.dp.toPx())"
+            " change.position - down.position"
+            " currentTransformCommitCallback(dragStartTransform)"
+            " drawSelectedTransformGizmo()"
+            " selected = transformGizmoMode == TransformGizmoMode.MOVE"
+            " selected = transformGizmoMode == TransformGizmoMode.SCALE"
         ),
         "MainActivity.kt": (
             "fun fromNative(raw: FloatArray?, localPath: String) "
@@ -441,6 +458,14 @@ def valid_sources() -> dict[str, str]:
             "nativePayloadRejectsNonFiniteOrInconsistentGeometry "
             "nativePayloadRejectsInvalidSourceTriangleIndices"
         ),
+        "TransformGizmoTest.kt": (
+            "moveAxesFollowTheWorkspaceCameraProjection "
+            "scaleAxesUseTheObjectsLocalRotation "
+            "hitTestingPrefersTheNearestTouchSizedAxis "
+            "dragDistanceUsesTheProjectedAxisScale "
+            "scaleGestureChangesOnlyTheGrabbedAxisAndStaysBounded "
+            "moveGestureConstrainsPlanarAndVerticalAxes"
+        ),
         "ModelImportPerformanceInstrumentedTest.kt": (
             "denseBinaryStlUsesBoundedPrimitiveImportWithinBudget "
             "sourceTriangles=${info.triangles} "
@@ -468,6 +493,8 @@ def valid_sources() -> dict[str, str]:
             "!Rect.intersects(menu.screenBounds(), printerProfile.screenBounds()) "
             "it.isHeading menu.isFocusable printerProfile.isFocusable "
             "modelTransformExposesIndependentAxesAndProportionLock "
+            "selectedObjectExposesAccessibleMoveAndScaleGizmoModes "
+            "directMoveGizmoDragCommitsOneTransformGesture "
             "scrollAnchorLabel = placement target?.scrollableAncestor() retainedScrollBounds "
             "AccessibilityNodeInfo.ACTION_SCROLL_FORWARD "
             "Support brush size must expose an adjustable bounded range"
@@ -615,6 +642,15 @@ class VerifyPreviewBoundaryTest(unittest.TestCase):
             "stateDescription = valueText", "missingState = valueText"
         )
         with self.assertRaisesRegex(VerificationError, "transform slider accessibility"):
+            verify_preview_boundary(sources)
+
+    def test_rejects_disconnected_direct_transform_gizmo(self) -> None:
+        sources = valid_sources()
+        sources["TransformGizmo.kt"] = sources["TransformGizmo.kt"].replace(
+            "internal fun hitTestTransformGizmo(",
+            "internal fun missingTransformGizmoHitTest(",
+        )
+        with self.assertRaisesRegex(VerificationError, "direct transform gizmo contract"):
             verify_preview_boundary(sources)
 
     def test_requires_target_anchored_accessibility_scrolling(self) -> None:

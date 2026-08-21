@@ -76,6 +76,7 @@
     <string name="rotate_y">Rotate Y</string>
     <string name="rotate_z">Rotate Z</string>
     <string name="scale">Scale</string>
+    <string name="active_transform_mode">Active transform mode</string>
     <string name="scale_x">Size X</string>
     <string name="scale_y">Size Y</string>
     <string name="scale_z">Size Z</string>

@@ -37,6 +37,7 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AddBox
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Brush
@@ -55,6 +56,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Schedule
@@ -573,6 +575,9 @@ internal fun WorkspaceScreen(
     val tabletLayout = useWorkspaceNavigationRail(maxWidth.value, maxHeight.value)
     val panelAlignment = if (tabletLayout) Alignment.BottomEnd else Alignment.BottomCenter
     var showModelTools by remember { mutableStateOf(false) }
+    var transformGizmoMode by remember(selectedObjectId) {
+        mutableStateOf(TransformGizmoMode.MOVE)
+    }
     var showFilamentPicker by remember { mutableStateOf(false) }
     var showCutTool by remember { mutableStateOf(false) }
     var showSimplifyTool by remember { mutableStateOf(false) }
@@ -685,6 +690,7 @@ internal fun WorkspaceScreen(
                     preview = if (selectedTab == WorkspaceTab.PREVIEW) layerPreview else null,
                     bedSizeX = sliceOptions.bedSizeX,
                     bedSizeY = sliceOptions.bedSizeY,
+                    maxPrintHeight = sliceOptions.maxPrintHeight,
                     bedOriginX = sliceOptions.bedOriginX,
                     bedOriginY = sliceOptions.bedOriginY,
                     bedPolygon = sliceOptions.bedPolygon,
@@ -696,7 +702,9 @@ internal fun WorkspaceScreen(
                     previewRenderingMode = appSettings.previewRenderingMode,
                     objectManipulationEnabled = selectedTab == WorkspaceTab.SLICE &&
                         !importing && !editingBusy && !slicing && !previewLoading &&
-                        !layingOnFace && !measuring && !brimEditing,
+                        !layingOnFace && !measuring && !supportPainting && !seamPainting &&
+                        !multiColorPainting && !brimEditing,
+                    transformGizmoMode = transformGizmoMode,
                     layOnFaceObjectId = selectedObjectId.takeIf { layingOnFace },
                     measureObjectId = selectedObjectId.takeIf { measuring },
                     measurementPoints = measurementPoints,
@@ -810,6 +818,8 @@ internal fun WorkspaceScreen(
                     onUndo = onUndo,
                     onRedo = onRedo,
                     onDuplicate = onDuplicate,
+                    transformGizmoMode = transformGizmoMode,
+                    onTransformGizmoModeChanged = { transformGizmoMode = it },
                     onAutoLay = onAutoLay,
                     canAutoLay = true,
                     onLayOnFace = {
@@ -3505,6 +3515,7 @@ private fun BedScene(
     preview: GcodeLayerPreview?,
     bedSizeX: Float,
     bedSizeY: Float,
+    maxPrintHeight: Float,
     bedOriginX: Float,
     bedOriginY: Float,
     bedPolygon: List<Float>,
@@ -3515,6 +3526,7 @@ private fun BedScene(
     previewDetail: PreviewDetail,
     previewRenderingMode: PreviewRenderingMode,
     objectManipulationEnabled: Boolean,
+    transformGizmoMode: TransformGizmoMode,
     layOnFaceObjectId: String?,
     measureObjectId: String?,
     measurementPoints: List<ModelPoint3>,
@@ -3879,6 +3891,9 @@ private fun BedScene(
             objectIds,
             preview,
             objectManipulationEnabled,
+            selectedObjectId,
+            transformGizmoMode,
+            maxPrintHeight,
             layOnFaceObjectId,
             measureObjectId,
             supportPaintObjectId,
@@ -4154,7 +4169,43 @@ private fun BedScene(
                     }
                     return@awaitEachGesture
                 }
-                val hitObjectId = if (objectManipulationEnabled && paintingObject == null) {
+                val selectedManipulationObject = if (
+                    objectManipulationEnabled && paintingObject == null
+                ) {
+                    selectedObjectId?.let { selectedId ->
+                        currentObjects.firstOrNull { it.id == selectedId }
+                    }
+                } else {
+                    null
+                }
+                val gizmoLayoutAtDown = selectedManipulationObject?.let { projectObject ->
+                    currentModelPlacements[projectObject.id]?.let { placement ->
+                        transformGizmoLayoutForObject(
+                            projectObject = projectObject,
+                            minimumRotatedZ = placement.minimumRotatedZ,
+                            mode = transformGizmoMode,
+                            viewportWidthPx = size.width.toFloat(),
+                            viewportHeightPx = size.height.toFloat(),
+                            bedSizeX = bedSizeX,
+                            bedSizeY = bedSizeY,
+                            yawDegrees = yaw,
+                            pitchDegrees = pitch,
+                            zoom = zoom,
+                            pan = pan,
+                            handleLengthPx = 74.dp.toPx(),
+                            centerClearancePx = 15.dp.toPx(),
+                        )
+                    }
+                }
+                val grabbedGizmoAxis = gizmoLayoutAtDown?.let { layout ->
+                    hitTestTransformGizmo(layout, down.position, 22.dp.toPx())
+                }
+                val grabbedGizmoHandle = gizmoLayoutAtDown?.handles?.firstOrNull {
+                    it.axis == grabbedGizmoAxis
+                }
+                val hitObjectId = if (grabbedGizmoAxis != null) {
+                    selectedManipulationObject.id
+                } else if (objectManipulationEnabled && paintingObject == null) {
                     val touchRadius = 14.dp.toPx()
                     val candidates = modelScreenBounds.filterValues { bounds ->
                         bounds.inflate(touchRadius).contains(down.position)
@@ -4299,6 +4350,7 @@ private fun BedScene(
                 }
                 var previousPaintCenter = down.position.takeIf { paintingObject != null }
                 var movement = 0f
+                var gizmoTransformChanged = false
                 interactionActive = true
                 try {
                     var event: PointerEvent
@@ -4324,6 +4376,44 @@ private fun BedScene(
                                     }
                                     paintFootprintsAt(centers)
                                     previousPaintCenter = change.position
+                                } else if (
+                                    hitObjectId != null && grabbedGizmoAxis != null &&
+                                    grabbedGizmoHandle != null && dragStartTransform != null
+                                ) {
+                                    val dragMillimeters = transformGizmoDragMillimeters(
+                                        grabbedGizmoHandle,
+                                        change.position - down.position,
+                                    )
+                                    val nextTransform = if (
+                                        transformGizmoMode == TransformGizmoMode.SCALE
+                                    ) {
+                                        val geometry = selectedManipulationObject.geometry()
+                                        val sourceDimension = when (grabbedGizmoAxis) {
+                                            TransformGizmoAxis.X -> geometry.maxX - geometry.minX
+                                            TransformGizmoAxis.Y -> geometry.maxY - geometry.minY
+                                            TransformGizmoAxis.Z -> geometry.maxZ - geometry.minZ
+                                        }
+                                        scaleTransformFromGizmo(
+                                            start = dragStartTransform,
+                                            axis = grabbedGizmoAxis,
+                                            dragMillimeters = dragMillimeters,
+                                            sourceDimensionMm = sourceDimension,
+                                        )
+                                    } else {
+                                        moveTransformFromGizmo(
+                                            start = dragStartTransform,
+                                            axis = grabbedGizmoAxis,
+                                            dragMillimeters = dragMillimeters,
+                                            bedSizeX = bedSizeX,
+                                            bedSizeY = bedSizeY,
+                                            bedPolygon = effectiveBedPolygon,
+                                            maxPrintHeight = maxPrintHeight,
+                                        )
+                                    }
+                                    if (nextTransform != dragStartTransform) {
+                                        gizmoTransformChanged = true
+                                        currentTransformCallback(nextTransform)
+                                    }
                                 } else if (hitObjectId != null) {
                                     val currentSceneScale = min(
                                         size.width * 0.64f,
@@ -4403,7 +4493,10 @@ private fun BedScene(
                             checkNotNull(multiColorPaintStart),
                             checkNotNull(multiColorAnnotationStart),
                         )
-                    } else if (hitObjectId != null && dragStartTransform != null && movement >= 1f) {
+                    } else if (
+                        hitObjectId != null && dragStartTransform != null &&
+                        (movement >= 1f || gizmoTransformChanged)
+                    ) {
                         currentTransformCommitCallback(dragStartTransform)
                     } else if (hitObjectId == null && paintingObject == null && movement < 12f) {
                         currentSelectionCallback(null)
@@ -4453,6 +4546,72 @@ private fun BedScene(
                 center = center,
                 style = Stroke(1.5.dp.toPx()),
             )
+        }
+
+        fun drawSelectedTransformGizmo() {
+            if (!objectManipulationEnabled || preview != null) return
+            val selected = projectObjects.firstOrNull { it.id == selectedObjectId } ?: return
+            val placement = modelPlacements[selected.id] ?: return
+            val layout = transformGizmoLayoutForObject(
+                projectObject = selected,
+                minimumRotatedZ = placement.minimumRotatedZ,
+                mode = transformGizmoMode,
+                viewportWidthPx = size.width,
+                viewportHeightPx = size.height,
+                bedSizeX = bedSizeX,
+                bedSizeY = bedSizeY,
+                yawDegrees = yaw,
+                pitchDegrees = pitch,
+                zoom = zoom,
+                pan = pan,
+                handleLengthPx = 74.dp.toPx(),
+                centerClearancePx = 15.dp.toPx(),
+            )
+            layout.handles.forEach { handle ->
+                val color = when (handle.axis) {
+                    TransformGizmoAxis.X -> Color(0xFFFF5A5F)
+                    TransformGizmoAxis.Y -> Color(0xFF55D98A)
+                    TransformGizmoAxis.Z -> Color(0xFF55A7FF)
+                }
+                drawLine(
+                    color = Color.Black.copy(alpha = 0.86f),
+                    start = handle.start,
+                    end = handle.end,
+                    strokeWidth = 7.dp.toPx(),
+                )
+                drawLine(
+                    color = color,
+                    start = handle.start,
+                    end = handle.end,
+                    strokeWidth = 3.5.dp.toPx(),
+                )
+                drawCircle(
+                    color = Color.Black.copy(alpha = 0.9f),
+                    radius = 10.dp.toPx(),
+                    center = handle.end,
+                )
+                if (transformGizmoMode == TransformGizmoMode.MOVE) {
+                    drawCircle(color = color, radius = 6.5.dp.toPx(), center = handle.end)
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.82f),
+                        radius = 2.dp.toPx(),
+                        center = handle.end,
+                    )
+                } else {
+                    val half = 6.5.dp.toPx()
+                    drawRect(
+                        color = color,
+                        topLeft = handle.end - Offset(half, half),
+                        size = androidx.compose.ui.geometry.Size(half * 2f, half * 2f),
+                    )
+                }
+            }
+            drawCircle(
+                color = Color.Black.copy(alpha = 0.9f),
+                radius = 9.dp.toPx(),
+                center = layout.anchor,
+            )
+            drawCircle(color = WorkspaceYellow, radius = 5.5.dp.toPx(), center = layout.anchor)
         }
 
         if (useDepthTestedPrepare) {
@@ -4559,6 +4718,7 @@ private fun BedScene(
                     )
                 }
             }
+            drawSelectedTransformGizmo()
             drawFacetBrushCursor()
             return@Canvas
         }
@@ -4966,6 +5126,7 @@ private fun BedScene(
                 brimPointScreenPositions = nextBrimPositions
             }
         }
+        drawSelectedTransformGizmo()
         drawFacetBrushCursor()
         }
     }
@@ -5955,6 +6116,8 @@ private fun ObjectToolRail(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onDuplicate: () -> Unit,
+    transformGizmoMode: TransformGizmoMode,
+    onTransformGizmoModeChanged: (TransformGizmoMode) -> Unit,
     onAutoLay: () -> Unit,
     canAutoLay: Boolean,
     onLayOnFace: () -> Unit,
@@ -5969,57 +6132,109 @@ private fun ObjectToolRail(
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val activeTransformMode = stringResource(R.string.active_transform_mode)
     Surface(
         modifier = modifier.fillMaxWidth(0.96f).widthIn(max = 560.dp),
         shape = RoundedCornerShape(18.dp),
         color = Color.Black.copy(alpha = 0.82f),
         contentColor = Color(0xFFF4F4EE),
     ) {
-        Row(
-            modifier = Modifier
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onUndo, enabled = canUndo && !editingBusy) {
-                Icon(Icons.AutoMirrored.Filled.Undo, stringResource(R.string.undo))
-            }
-            IconButton(onClick = onRedo, enabled = canRedo && !editingBusy) {
-                Icon(Icons.AutoMirrored.Filled.Redo, stringResource(R.string.redo))
-            }
-            IconButton(onClick = onDuplicate, enabled = !editingBusy) {
-                Icon(Icons.Default.ContentCopy, stringResource(R.string.duplicate_object))
-            }
-            IconButton(onClick = onMore, enabled = !editingBusy) {
-                Icon(Icons.Default.Tune, stringResource(R.string.more_settings))
-            }
-            IconButton(onClick = onSupportPaint, enabled = !editingBusy) {
-                Icon(Icons.Default.Brush, stringResource(R.string.paint_support))
-            }
-            IconButton(onClick = onAutoLay, enabled = canAutoLay && !editingBusy) {
-                if (autoLaying) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                } else {
-                    Icon(Icons.Default.AutoFixHigh, stringResource(R.string.auto_lay))
+        Column(Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                IconButton(onClick = onUndo, enabled = canUndo && !editingBusy) {
+                    Icon(Icons.AutoMirrored.Filled.Undo, stringResource(R.string.undo))
+                }
+                IconButton(onClick = onRedo, enabled = canRedo && !editingBusy) {
+                    Icon(Icons.AutoMirrored.Filled.Redo, stringResource(R.string.redo))
+                }
+                IconButton(
+                    onClick = { onTransformGizmoModeChanged(TransformGizmoMode.MOVE) },
+                    enabled = !editingBusy,
+                    modifier = Modifier.semantics {
+                        selected = transformGizmoMode == TransformGizmoMode.MOVE
+                        if (transformGizmoMode == TransformGizmoMode.MOVE) {
+                            stateDescription = activeTransformMode
+                        }
+                    },
+                ) {
+                    Icon(
+                        Icons.Default.OpenWith,
+                        stringResource(R.string.model_placement),
+                        tint = if (transformGizmoMode == TransformGizmoMode.MOVE) {
+                            WorkspaceYellow
+                        } else {
+                            Color(0xFFF4F4EE)
+                        },
+                    )
+                }
+                IconButton(
+                    onClick = { onTransformGizmoModeChanged(TransformGizmoMode.SCALE) },
+                    enabled = !editingBusy,
+                    modifier = Modifier.semantics {
+                        selected = transformGizmoMode == TransformGizmoMode.SCALE
+                        if (transformGizmoMode == TransformGizmoMode.SCALE) {
+                            stateDescription = activeTransformMode
+                        }
+                    },
+                ) {
+                    Icon(
+                        Icons.Default.AspectRatio,
+                        stringResource(R.string.scale),
+                        tint = if (transformGizmoMode == TransformGizmoMode.SCALE) {
+                            WorkspaceYellow
+                        } else {
+                            Color(0xFFF4F4EE)
+                        },
+                    )
+                }
+                IconButton(onClick = onAutoLay, enabled = canAutoLay && !editingBusy) {
+                    if (autoLaying) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.AutoFixHigh, stringResource(R.string.auto_lay))
+                    }
+                }
+                IconButton(onClick = onLayOnFace, enabled = !editingBusy) {
+                    Icon(Icons.Default.VerticalAlignBottom, stringResource(R.string.lay_on_face))
                 }
             }
-            IconButton(onClick = onLayOnFace, enabled = !editingBusy) {
-                Icon(Icons.Default.VerticalAlignBottom, stringResource(R.string.lay_on_face))
-            }
-            IconButton(onClick = onMeasure, enabled = !editingBusy) {
-                Icon(Icons.Default.Straighten, stringResource(R.string.measure_model))
-            }
-            IconButton(onClick = onBrimEars, enabled = !editingBusy) {
-                Icon(Icons.Default.AddBox, stringResource(R.string.manual_brim_ears))
-            }
-            IconButton(
-                onClick = onMultiColorPaint,
-                enabled = canPaintColor && !editingBusy,
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
-                Icon(Icons.Default.Palette, stringResource(R.string.paint_color))
-            }
-            IconButton(onClick = onRemove, enabled = !editingBusy) {
-                Icon(Icons.Default.DeleteOutline, stringResource(R.string.remove_model), tint = Color(0xFFFF8A80))
+                IconButton(onClick = onMeasure, enabled = !editingBusy) {
+                    Icon(Icons.Default.Straighten, stringResource(R.string.measure_model))
+                }
+                IconButton(onClick = onDuplicate, enabled = !editingBusy) {
+                    Icon(Icons.Default.ContentCopy, stringResource(R.string.duplicate_object))
+                }
+                IconButton(onClick = onMore, enabled = !editingBusy) {
+                    Icon(Icons.Default.Tune, stringResource(R.string.more_settings))
+                }
+                IconButton(onClick = onSupportPaint, enabled = !editingBusy) {
+                    Icon(Icons.Default.Brush, stringResource(R.string.paint_support))
+                }
+                IconButton(onClick = onBrimEars, enabled = !editingBusy) {
+                    Icon(Icons.Default.AddBox, stringResource(R.string.manual_brim_ears))
+                }
+                IconButton(
+                    onClick = onMultiColorPaint,
+                    enabled = canPaintColor && !editingBusy,
+                ) {
+                    Icon(Icons.Default.Palette, stringResource(R.string.paint_color))
+                }
+                IconButton(onClick = onRemove, enabled = !editingBusy) {
+                    Icon(
+                        Icons.Default.DeleteOutline,
+                        stringResource(R.string.remove_model),
+                        tint = Color(0xFFFF8A80),
+                    )
+                }
             }
         }
     }

@@ -417,8 +417,27 @@ private fun WorkspaceAccessibilityHarness(
         },
         onObjectSelected = {},
         onModelTransformChanged = {},
-        onModelTransformPreview = {},
-        onModelTransformCommitted = {},
+        onModelTransformPreview = { nextTransform ->
+            projectPlates = projectPlates.map { plate ->
+                if (plate.id != selectedPlateId) {
+                    plate
+                } else {
+                    plate.copy(
+                        objects = plate.objects.map { projectObject ->
+                            if (projectObject.id == plate.selectedObjectId) {
+                                projectObject.copy(transform = nextTransform)
+                            } else {
+                                projectObject
+                            }
+                        },
+                    )
+                }
+            }
+        },
+        onModelTransformCommitted = { previousTransform ->
+            layOnFaceUndoTransform = previousTransform
+            harnessNotice = TEST_TRANSFORM_COMMITTED_LABEL
+        },
         onObjectFilamentSelected = {},
         onUndo = {
             val previous = layOnFaceUndoTransform ?: return@WorkspaceScreen
@@ -596,4 +615,5 @@ internal const val TEST_DEVICE_LABEL = "Accessibility test printer"
 internal const val TEST_LAY_ON_FACE_SELECTED_LABEL = "Accessibility face selected"
 internal const val TEST_LAY_ON_FACE_FAILED_LABEL = "Accessibility face placement failed"
 internal const val TEST_LAY_ON_FACE_UNDONE_LABEL = "Accessibility face placement undone"
+internal const val TEST_TRANSFORM_COMMITTED_LABEL = "Accessibility transform committed"
 internal const val TEST_SUPPORT_PAINTED_LABEL = "Accessibility support painted"

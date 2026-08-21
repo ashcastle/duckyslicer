@@ -22,6 +22,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "AppSettingsSheet.kt",
         "ToolpathPreviewView.kt",
         "ModelTransform.kt",
+        "TransformGizmo.kt",
         "PrepareModelPreviewView.kt",
         "PrepareModelOverlays.kt",
         "OrcaFacetPreview.kt",
@@ -44,6 +45,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "PrepareModelRendererInstrumentedTest.kt",
         "PrepareModelPickingTest.kt",
         "ModelInfoTest.kt",
+        "TransformGizmoTest.kt",
         "ModelImportPerformanceInstrumentedTest.kt",
         "ToolpathRendererPerformanceInstrumentedTest.kt",
         "ToolpathSurfaceInstrumentedTest.kt",
@@ -720,6 +722,31 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
     if workspace.count("pickingIndices = currentModelPickingIndices") < 3:
         raise VerificationError("all GPU Prepare touch paths must use the immutable picking index")
 
+    gizmo = sources["TransformGizmo.kt"]
+    for marker in (
+        "internal enum class TransformGizmoMode { MOVE, SCALE }",
+        "internal fun transformGizmoLayoutForObject(",
+        "internal fun hitTestTransformGizmo(",
+        "internal fun transformGizmoDragMillimeters(",
+        "internal fun moveTransformFromGizmo(",
+        "internal fun scaleTransformFromGizmo(",
+        "pixelsPerMillimeter = sceneScale * max(projectedLength, 0.08f)",
+        "start.withAxisScale(axis.scaleAxis, requested, keepProportions = false, range = range)",
+    ):
+        if marker not in gizmo:
+            raise VerificationError(f"direct transform gizmo contract is missing: {marker}")
+    for marker in (
+        "transformGizmoMode = transformGizmoMode",
+        "hitTestTransformGizmo(layout, down.position, 22.dp.toPx())",
+        "change.position - down.position",
+        "currentTransformCommitCallback(dragStartTransform)",
+        "drawSelectedTransformGizmo()",
+        "selected = transformGizmoMode == TransformGizmoMode.MOVE",
+        "selected = transformGizmoMode == TransformGizmoMode.SCALE",
+    ):
+        if marker not in workspace:
+            raise VerificationError(f"direct transform gizmo is not connected to the UI: {marker}")
+
     export_controls = workspace.split("private fun PreviewExportSplitButton(", 1)[-1].split(
         "@Composable", 1
     )[0]
@@ -837,6 +864,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "menu.isFocusable",
         "printerProfile.isFocusable",
         "modelTransformExposesIndependentAxesAndProportionLock",
+        "selectedObjectExposesAccessibleMoveAndScaleGizmoModes",
+        "directMoveGizmoDragCommitsOneTransformGesture",
         "scrollAnchorLabel = placement",
         "target?.scrollableAncestor()",
         "retainedScrollBounds",
@@ -1128,6 +1157,7 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "ModelTransform.kt": (main / "ModelTransform.kt").read_text(encoding="utf-8"),
+        "TransformGizmo.kt": (main / "TransformGizmo.kt").read_text(encoding="utf-8"),
         "PreviewPerformanceHarnessActivity.kt": (
             debug / "PreviewPerformanceHarnessActivity.kt"
         ).read_text(encoding="utf-8"),
@@ -1162,6 +1192,9 @@ def read_sources() -> dict[str, str]:
             encoding="utf-8"
         ),
         "ModelInfoTest.kt": (tests / "ModelInfoTest.kt").read_text(encoding="utf-8"),
+        "TransformGizmoTest.kt": (tests / "TransformGizmoTest.kt").read_text(
+            encoding="utf-8"
+        ),
         "ModelImportPerformanceInstrumentedTest.kt": (
             device / "ModelImportPerformanceInstrumentedTest.kt"
         ).read_text(encoding="utf-8"),

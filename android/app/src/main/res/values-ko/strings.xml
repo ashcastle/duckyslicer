@@ -76,6 +76,7 @@
     <string name="rotate_y">Y 회전</string>
     <string name="rotate_z">Z 회전</string>
     <string name="scale">크기</string>
+    <string name="active_transform_mode">현재 변환 모드</string>
     <string name="scale_x">X 크기</string>
     <string name="scale_y">Y 크기</string>
     <string name="scale_z">Z 크기</string>
