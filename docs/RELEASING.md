@@ -61,6 +61,12 @@ key prevents publishing a compatible update under the same Android identity.
 
 ## Release procedure
 
+Before starting, run `python3 tools/audit_release_readiness.py`. It reports repository
+synchronization, GitHub authentication, keyless Play variables, a representative
+physical ARM64 device, and source-bound qualification evidence together without
+changing repository, device, GitHub, or Play state. Resolve every `BLOCKED` line
+before preparing a candidate.
+
 1. Switch to a clean `main`, initialize recursive submodules, and run the physical
    rendering/slicing and startup qualifications on an awake, unlocked representative
    ARM64 phone. Retain the physical corpus G-code, then compare all nine cases with a
