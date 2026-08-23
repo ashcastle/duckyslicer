@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import fnmatch
+import hashlib
+import tarfile
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 
 class NativeLicenseError(ValueError):
@@ -66,10 +69,16 @@ ARCHIVE_COMPONENTS = (
         ),
         "1.0",
     ),
-    (NativePolicy("CGAL", "CGAL", "GPL-3.0-or-later OR LGPL-3.0-or-later", ("build/native-slicer/build/cgal-source/LICENSE*",)), "5.6"),
-    (NativePolicy("GMP", "GMP", "GPL-2.0-or-later OR LGPL-3.0-or-later", ("build/native-slicer/build/gmp-source/COPYING*",)), "6.3.0"),
-    (NativePolicy("MPFR", "MPFR", "LGPL-3.0-or-later", ("build/native-slicer/build/mpfr-source/COPYING*",)), "4.2.1"),
+    (NativePolicy("CGAL", "CGAL", "GPL-3.0-or-later OR LGPL-3.0-or-later", ("LICENSE*",)), "5.6"),
+    (NativePolicy("GMP", "GMP", "GPL-2.0-or-later OR LGPL-3.0-or-later", ("COPYING*",)), "6.3.0"),
+    (NativePolicy("MPFR", "MPFR", "LGPL-3.0-or-later", ("COPYING*",)), "4.2.1"),
 )
+
+ARCHIVE_NOTICE_PATHS = {
+    "CGAL": "build/native-slicer/dependency-sources/CGAL-5.6.tar.xz",
+    "GMP": "build/native-slicer/dependency-sources/gmp-6.3.0.tar.xz",
+    "MPFR": "build/native-slicer/dependency-sources/mpfr-4.2.1.tar.xz",
+}
 
 # These directories were observed in the completed Ninja dependency graph for
 # libprusaslicer-jni.so. A new vendored input must be reviewed here or packaging
@@ -170,6 +179,81 @@ def _resolve_patterns(root: Path, patterns: tuple[str, ...]) -> tuple[Path, ...]
     return tuple(dict.fromkeys(resolved))
 
 
+def _resolve_archive_notices(
+    root: Path,
+    policy: NativePolicy,
+    expected_sha256: str,
+) -> tuple[Path, ...]:
+    relative_archive = ARCHIVE_NOTICE_PATHS[policy.key]
+    archive_path = root / relative_archive
+    try:
+        digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+    except OSError as error:
+        raise NativeLicenseError(
+            f"native license archive is missing: {relative_archive}"
+        ) from error
+    if digest != expected_sha256:
+        raise NativeLicenseError(
+            f"native license archive checksum mismatch: {relative_archive}"
+        )
+
+    matched_patterns: set[str] = set()
+    documents: dict[str, bytes] = {}
+    try:
+        with tarfile.open(archive_path, mode="r:xz") as archive:
+            for member in archive.getmembers():
+                member_path = PurePosixPath(member.name)
+                if member_path.is_absolute() or ".." in member_path.parts:
+                    raise NativeLicenseError(
+                        f"unsafe native license archive member: {member.name}"
+                    )
+                if not member.isfile() or len(member_path.parts) != 2:
+                    continue
+                name = member_path.name
+                patterns = tuple(
+                    pattern
+                    for pattern in policy.notice_patterns
+                    if fnmatch.fnmatchcase(name, pattern)
+                )
+                if not patterns:
+                    continue
+                source = archive.extractfile(member)
+                if source is None:
+                    raise NativeLicenseError(
+                        f"cannot read native license archive member: {member.name}"
+                    )
+                content = source.read()
+                if not content:
+                    raise NativeLicenseError(
+                        f"empty native license archive member: {member.name}"
+                    )
+                if name in documents and documents[name] != content:
+                    raise NativeLicenseError(
+                        f"duplicate native license archive member: {name}"
+                    )
+                documents[name] = content
+                matched_patterns.update(patterns)
+    except (OSError, tarfile.TarError) as error:
+        raise NativeLicenseError(
+            f"cannot inspect native license archive: {relative_archive}"
+        ) from error
+
+    missing = sorted(set(policy.notice_patterns) - matched_patterns)
+    if missing:
+        raise NativeLicenseError(
+            f"native license archive has no reviewed notices: {policy.key} {missing}"
+        )
+
+    output_root = root / "build/native-slicer/archive-license-sources" / policy.key.lower()
+    output_root.mkdir(parents=True, exist_ok=True)
+    resolved: list[Path] = []
+    for name, content in sorted(documents.items()):
+        output = output_root / name
+        output.write_bytes(content)
+        resolved.append(output)
+    return tuple(resolved)
+
+
 def native_notice_sources(root: Path, ndk_root: Path) -> dict[str, tuple[Path, ...]]:
     values = parse_versions(root)
     notices: dict[str, tuple[Path, ...]] = {}
@@ -177,7 +261,15 @@ def native_notice_sources(root: Path, ndk_root: Path) -> dict[str, tuple[Path, .
         revision = values[f"{policy.key}_COMMIT"]
         notices[f"native:{policy.key.lower()}@{revision}"] = _resolve_patterns(root, policy.notice_patterns)
     for policy, version in ARCHIVE_COMPONENTS:
-        notices[f"native:{policy.key.lower()}@{version}"] = _resolve_patterns(root, policy.notice_patterns)
+        if policy.key in ARCHIVE_NOTICE_PATHS:
+            sources = _resolve_archive_notices(
+                root,
+                policy,
+                values[f"{policy.key}_SHA256"],
+            )
+        else:
+            sources = _resolve_patterns(root, policy.notice_patterns)
+        notices[f"native:{policy.key.lower()}@{version}"] = sources
     engine_revision = values["SLICER_ENGINE_COMMIT"]
     for policy in VENDORED_COMPONENTS:
         notices[f"native:orca-vendored-{policy.key.lower()}@{engine_revision}"] = _resolve_patterns(root, policy.notice_patterns)
