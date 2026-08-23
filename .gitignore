@@ -55,6 +55,11 @@ __pycache__/
 .ai/
 .ai-notes/
 .agents/
+# Keep these exact policy markers in addition to the case-insensitive variants below.
+**/AGENT.md
+**/AGENTS.md
+**/AGENTS.override.md
+**/CLAUDE.md
 **/[Aa][Gg][Ee][Nn][Tt].md
 **/[Aa][Gg][Ee][Nn][Tt].override.md
 **/[Aa][Gg][Ee][Nn][Tt][Ss].md

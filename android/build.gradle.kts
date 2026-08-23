@@ -18,7 +18,7 @@ allprojects {
             val identity = "${requested.group}:${requested.name}"
             when {
                 requested.group == "io.netty" -> {
-                    useVersion("4.1.136.Final")
+                    useVersion("4.1.137.Final")
                     because("align Android build tooling to the vulnerability-free Netty line")
                 }
                 requested.group == "org.bouncycastle" -> {
