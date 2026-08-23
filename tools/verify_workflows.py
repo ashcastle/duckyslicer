@@ -143,6 +143,17 @@ def main() -> None:
         "Rust JNI failure containment is verified": (
             "python3 tools/verify_native_safety.py"
         ),
+        "locked native dependency sources are cached": (
+            "build/native-slicer/dependency-sources"
+        ),
+        "locked native dependency outputs are cached": (
+            "build/native-slicer/dependency-output"
+        ),
+        "native dependency cache follows its build inputs": (
+            "android-native-dependencies-v2-${{ runner.os }}-${{ "
+            "hashFiles('native/slicer-runtime/versions.env', "
+            "'native/slicer-runtime/build.sh') }}"
+        ),
         "Orca runtime process isolation is verified": (
             "python3 tools/verify_android_isolation.py"
         ),
@@ -272,6 +283,11 @@ def main() -> None:
     for description, marker in required_android_gates.items():
         if marker not in android_source:
             errors.append(f"android.yml: missing gate: {description}")
+    if "            build/native-slicer/build\n" in android_source:
+        errors.append(
+            "android.yml: mutable CMake scratch must not displace the reusable "
+            "native dependency output cache"
+        )
 
     verify_job = android_jobs.get("verify", "")
     codeql_fork_guard = (

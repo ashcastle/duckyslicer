@@ -11,10 +11,15 @@ UPSTREAM_ROOT="$REPOSITORY_ROOT/third_party/android-slicer-runtime"
 WORK_ROOT="${DUCKYSLICER_NATIVE_BUILD_DIR:-$REPOSITORY_ROOT/build/native-slicer}"
 SOURCE_ROOT="$WORK_ROOT/source"
 DEPENDENCY_SOURCE_ROOT="$WORK_ROOT/dependency-sources"
+DEPENDENCY_OUTPUT_CACHE_ROOT="$WORK_ROOT/dependency-output"
 BUILD_ROOT="$WORK_ROOT/build"
 OUTPUT_ROOT="$WORK_ROOT/output/$ANDROID_ABI"
 EXTERN_ROOT="$SOURCE_ROOT/app/src/main/cpp/extern"
 JOBS="${DUCKYSLICER_NATIVE_JOBS:-2}"
+DEPENDENCY_OUTPUTS=(
+    boost cereal cgal clipper2 eigen expat gmp jpeg libnoise mpfr
+    nlohmann nlopt occt tbb zlib
+)
 
 die() {
     echo "error: $*" >&2
@@ -241,12 +246,56 @@ copy_static_libraries() {
     find "$search_root" -type f -name '*.a' -exec cp {} "$destination/" \;
 }
 
+dependency_tree_is_complete() {
+    local root="$1" dependency
+    [ -f "$root/.duckyslicer-dependencies" ] || return 1
+    for dependency in "${DEPENDENCY_OUTPUTS[@]}"; do
+        [ -d "$root/$dependency" ] || return 1
+    done
+}
+
+copy_dependency_tree() {
+    local source="$1" destination="$2" dependency
+    mkdir -p "$destination"
+    for dependency in "${DEPENDENCY_OUTPUTS[@]}"; do
+        rm -rf "$destination/$dependency"
+        cp -a "$source/$dependency" "$destination/$dependency"
+    done
+    cp "$source/.duckyslicer-dependencies" "$destination/.duckyslicer-dependencies"
+}
+
+store_dependency_output_cache() {
+    local lock_sha="$1"
+    rm -rf "$DEPENDENCY_OUTPUT_CACHE_ROOT"
+    mkdir -p "$DEPENDENCY_OUTPUT_CACHE_ROOT"
+    copy_dependency_tree "$EXTERN_ROOT" "$DEPENDENCY_OUTPUT_CACHE_ROOT"
+    printf '%s\n' "$lock_sha" > "$DEPENDENCY_OUTPUT_CACHE_ROOT/.duckyslicer-dependencies"
+    dependency_tree_is_complete "$DEPENDENCY_OUTPUT_CACHE_ROOT" || \
+        die "native dependency output cache is incomplete"
+}
+
+restore_dependency_output_cache() {
+    local lock_sha="$1" cached_lock
+    dependency_tree_is_complete "$DEPENDENCY_OUTPUT_CACHE_ROOT" || return 1
+    cached_lock="$(tr -d '\n' < "$DEPENDENCY_OUTPUT_CACHE_ROOT/.duckyslicer-dependencies")"
+    [ "$cached_lock" = "$lock_sha" ] || return 1
+    copy_dependency_tree "$DEPENDENCY_OUTPUT_CACHE_ROOT" "$EXTERN_ROOT"
+    echo "Restored locked native dependency outputs from cache."
+}
+
 build_dependencies() {
     local lock_sha
     lock_sha="$(sha256_file "$SCRIPT_DIR/versions.env")"
-    if [ -f "$EXTERN_ROOT/.duckyslicer-dependencies" ] && \
+    if dependency_tree_is_complete "$EXTERN_ROOT" && \
         [ "$(tr -d '\n' < "$EXTERN_ROOT/.duckyslicer-dependencies")" = "$lock_sha" ]; then
+        if ! dependency_tree_is_complete "$DEPENDENCY_OUTPUT_CACHE_ROOT" || \
+            [ "$(tr -d '\n' < "$DEPENDENCY_OUTPUT_CACHE_ROOT/.duckyslicer-dependencies" 2>/dev/null || true)" != "$lock_sha" ]; then
+            store_dependency_output_cache "$lock_sha"
+        fi
         echo "Native dependencies already match the lock file."
+        return
+    fi
+    if restore_dependency_output_cache "$lock_sha"; then
         return
     fi
 
@@ -302,6 +351,7 @@ build_dependencies() {
     build_libnoise
 
     printf '%s\n' "$lock_sha" > "$EXTERN_ROOT/.duckyslicer-dependencies"
+    store_dependency_output_cache "$lock_sha"
 }
 
 build_nlopt() {
