@@ -170,6 +170,7 @@ class PrepareLocalPlayBundleTest(unittest.TestCase):
                         output,
                         root / "physical.json",
                         root / "startup.json",
+                        root / "orca.json",
                     )
             gate_command = run_mock.call_args_list[0].args[0]
             self.assertTrue(gate_command[1].endswith("tools/run_local_gate.py"))

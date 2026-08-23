@@ -172,7 +172,14 @@ class PrepareLocalReleaseTest(unittest.TestCase):
                 ),
             ):
                 with self.assertRaisesRegex(OSError, "disk full"):
-                    prepare_release("1.2.3", 42, output, root / "physical.json", root / "startup.json")
+                    prepare_release(
+                        "1.2.3",
+                        42,
+                        output,
+                        root / "physical.json",
+                        root / "startup.json",
+                        root / "orca.json",
+                    )
             gate_command = run_mock.call_args_list[0].args[0]
             self.assertTrue(gate_command[1].endswith("tools/run_local_gate.py"))
             self.assertEqual("--require-api-36", gate_command[-1])

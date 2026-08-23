@@ -206,6 +206,10 @@ app-owned profile with
 `ANDROID_SERIAL=<api-36-serial> ./android/gradlew -p android :app:generateBaselineProfile`
 when the initial workspace journey changes; the generated rules are first-party-only
 and deterministically sorted before commit.
+The physical runner's `--retain-gcode` output must also pass
+`tools/run_desktop_orca_qualification.py` against a source- and toolchain-verified CLI
+from the pinned slicing engine. Local APK and Play preparation require that complete
+nine-case report through `--orca-report`; threshold-only Android success is not release evidence.
 Reconstructable VBOs must be released when Android
 reports that the UI is hidden or the process is in the background, then rebuilt lazily on
 the first visible frame. Keep this policy pure and host-tested alongside the real ARM64

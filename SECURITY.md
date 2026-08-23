@@ -56,6 +56,11 @@ and component allowlists, disabled backup and release debugging, isolated slicer
 attributes, and content-only external project imports. A new transitive component or
 permission fails the build until it is reviewed explicitly.
 
+Release preparation also requires a source-commit-bound comparison of every physical
+qualification corpus G-code result with a source- and toolchain-verified CLI from the pinned
+desktop slicing engine. The report must cover all nine cases without layer, role, extrusion,
+tool-routing, profile, or support-geometry differences.
+
 The same Gradle build used by pull-request verification is traced by CodeQL for
 Java and Kotlin using the extended security query suite. Analysis runs for trusted
 repository pull requests and every push to `main`; untrusted fork pull requests do

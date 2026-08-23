@@ -224,6 +224,7 @@ def prepare_play_bundle(
     output_root: Path,
     physical_report: Path,
     startup_report: Path,
+    orca_report: Path,
 ) -> PlayBundleIdentity:
     validate_release_inputs(version_name, version_code)
     exposed_signing = signing_variables(os.environ)
@@ -233,7 +234,12 @@ def prepare_play_bundle(
             + ", ".join(exposed_signing)
         )
     source_commit = verify_checkout()
-    verify_release_qualifications(physical_report, startup_report, source_commit)
+    verify_release_qualifications(
+        physical_report,
+        startup_report,
+        orca_report,
+        source_commit,
+    )
     build_tools = android_build_tools(os.environ)
     output = output_root.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -332,6 +338,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
     parser.add_argument("--version-code", required=True, type=int)
     parser.add_argument("--physical-report", required=True, type=Path)
     parser.add_argument("--startup-report", required=True, type=Path)
+    parser.add_argument("--orca-report", required=True, type=Path)
     parser.add_argument(
         "--output",
         type=Path,
@@ -349,6 +356,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             output,
             options.physical_report,
             options.startup_report,
+            options.orca_report,
         )
     except (OSError, ReleasePreparationError, ValueError, zipfile.BadZipFile) as error:
         print(f"Local Play preparation failed: {error}", file=sys.stderr)

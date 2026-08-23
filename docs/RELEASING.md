@@ -63,12 +63,23 @@ key prevents publishing a compatible update under the same Android identity.
 
 1. Switch to a clean `main`, initialize recursive submodules, and run the physical
    rendering/slicing and startup qualifications on an awake, unlocked representative
-   ARM64 phone. Both reports are ignored local evidence and record the exact source
-   commit; emulators are rejected for these measurements.
+   ARM64 phone. Retain the physical corpus G-code, then compare all nine cases with a
+   verified CLI from the pinned desktop slicing-engine source. The comparison tool configures
+   and rebuilds that CLI when its source, compatibility inputs, toolchain, or binary digest
+   changes; otherwise it reuses the exact verified build. All three reports are ignored
+   local evidence and record the exact source commit; emulators are rejected for the
+   physical measurements. Both physical runners refuse a dirty checkout, a non-`main`
+   branch, or a source commit that changes while evidence is being collected.
 
    ```shell
-   python3 tools/run_physical_qualification.py --serial <physical-serial>
+   python3 tools/run_physical_qualification.py \
+     --serial <physical-serial> \
+     --retain-gcode build/qualification/physical-gcode
    python3 tools/run_startup_qualification.py --serial <physical-serial>
+   python3 tools/run_desktop_orca_qualification.py \
+     --android-report build/qualification/physical-report.json \
+     --android-gcode build/qualification/physical-gcode/simple-part.gcode \
+     --output build/qualification/desktop-orca-release
    ```
 
 2. The preparation
@@ -81,10 +92,11 @@ key prevents publishing a compatible update under the same Android identity.
      --version 0.2.0-rc.1 \
      --version-code 5 \
      --physical-report build/qualification/physical-report.json \
-     --startup-report build/qualification/startup-report.json
+     --startup-report build/qualification/startup-report.json \
+     --orca-report build/qualification/desktop-orca-release/comparison-report.json
    ```
 
-3. Review the two physical reports, generated `LOCAL-RELEASE.json`, source diff,
+3. Review the three qualification reports, generated `LOCAL-RELEASE.json`, source diff,
    dependency changes, license
    notices, and profile catalog. Archive the named local R8 mapping and native symbols
    with the private release record, but upload only the recorded unsigned APK to the
@@ -153,7 +165,8 @@ For each Play candidate:
      --version 0.2.0-rc.1 \
      --version-code 5 \
      --physical-report build/qualification/physical-report.json \
-     --startup-report build/qualification/startup-report.json
+     --startup-report build/qualification/startup-report.json \
+     --orca-report build/qualification/desktop-orca-release/comparison-report.json
    ```
 
 2. Review

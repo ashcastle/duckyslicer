@@ -21,6 +21,7 @@ try:
         best_effort,
         foreground_rejection,
         physical_rejection,
+        qualification_source_commit,
         query_identity,
     )
     from tools.run_qualification_corpus import captured, online_devices
@@ -32,6 +33,7 @@ except ModuleNotFoundError:  # Direct `python tools/run_startup_qualification.py
         best_effort,
         foreground_rejection,
         physical_rejection,
+        qualification_source_commit,
         query_identity,
     )
     from run_qualification_corpus import captured, online_devices
@@ -73,6 +75,7 @@ def changed_benchmark(before: dict[Path, int]) -> Path:
 
 
 def qualify(serial: str, output: Path) -> dict[str, object]:
+    source_commit = qualification_source_commit()
     identity = query_identity(serial)
     rejection = physical_rejection(identity)
     if rejection:
@@ -110,7 +113,7 @@ def qualify(serial: str, output: Path) -> dict[str, object]:
         ratios = analyze(benchmark)
     except AnalysisError as error:
         raise RunnerError(str(error)) from error
-    source_commit = captured(("git", "rev-parse", "HEAD"), timeout=20).strip()
+    qualification_source_commit(source_commit)
     evidence: dict[str, object] = {
         "schemaVersion": 1,
         "sourceCommit": source_commit,

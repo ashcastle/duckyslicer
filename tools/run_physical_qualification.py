@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import re
@@ -30,6 +31,7 @@ try:
         adb,
         build,
         captured,
+        captured_stdout_bytes,
         online_devices,
         validate_report,
     )
@@ -48,6 +50,7 @@ except ModuleNotFoundError:  # Direct `python tools/run_physical_qualification.p
         adb,
         build,
         captured,
+        captured_stdout_bytes,
         online_devices,
         validate_report,
     )
@@ -522,11 +525,25 @@ def sample_pss_kb(serial: str, package: str = QUALIFICATION_APPLICATION_ID) -> i
     return parse_total_pss_kb(output)
 
 
+def qualification_source_commit(expected: str | None = None) -> str:
+    status = captured(("git", "status", "--porcelain", "--untracked-files=normal"), timeout=20)
+    if status.strip():
+        raise RunnerError("Release qualification requires a clean Git checkout")
+    branch = captured(("git", "branch", "--show-current"), timeout=20).strip()
+    if branch != "main":
+        raise RunnerError(f"Release qualification must run on main, found: {branch or 'detached'}")
+    commit = captured(("git", "rev-parse", "HEAD"), timeout=20).strip()
+    if expected is not None and commit != expected:
+        raise RunnerError("Source commit changed during release qualification")
+    return commit
+
+
 def run_instrumented_case(
     serial: str,
     identifier: str,
     *,
     qualification_cycles: int = 1,
+    retain_gcode: bool = False,
     timeout_seconds: int = 1_800,
 ) -> dict[str, object]:
     best_effort(adb(serial, "logcat", "-c"))
@@ -535,8 +552,7 @@ def run_instrumented_case(
         timeout=30,
     )
     thermal_before = thermal_snapshot(serial)
-    command = adb(
-        serial,
+    arguments = [
         "shell",
         "am",
         "instrument",
@@ -554,8 +570,11 @@ def run_instrumented_case(
         "-e",
         "qualificationCycles",
         str(qualification_cycles),
-        f"{QUALIFICATION_TEST_APPLICATION_ID}/{RUNNER}",
-    )
+    ]
+    if retain_gcode:
+        arguments.extend(("-e", "retainCorpusGcode", "true"))
+    arguments.append(f"{QUALIFICATION_TEST_APPLICATION_ID}/{RUNNER}")
+    command = adb(serial, *arguments)
     started = time.monotonic()
     try:
         process = subprocess.Popen(
@@ -622,7 +641,9 @@ def run(
     *,
     skip_build: bool = False,
     case_ids: set[str] | None = None,
+    retain_gcode: Path | None = None,
 ) -> dict[str, object]:
+    source_commit = qualification_source_commit()
     manifest = load_manifest()
     validate(manifest)
     identity = query_identity(serial)
@@ -670,6 +691,8 @@ def run(
         selected_ids = {case["id"] for case in selected_cases}
         if case_ids is not None and selected_ids != case_ids:
             raise RunnerError("Unknown qualification case: " + ", ".join(sorted(case_ids - selected_ids)))
+        if retain_gcode is not None:
+            retain_gcode.mkdir(parents=True, exist_ok=True)
         case_results: list[dict[str, object]] = []
         first_report: dict[str, object] | None = None
         for case in selected_cases:
@@ -680,6 +703,7 @@ def run(
                 serial,
                 identifier,
                 qualification_cycles=qualification_cycles,
+                retain_gcode=retain_gcode is not None,
             )
             payload = captured(
                 adb(
@@ -704,6 +728,26 @@ def run(
                     required_soak_cycles=qualification_cycles,
                 )
             validate_resource_budget(host_metrics, identity, identifier)
+            if retain_gcode is not None:
+                gcode = captured_stdout_bytes(
+                    adb(
+                        serial,
+                        "exec-out",
+                        "run-as",
+                        QUALIFICATION_APPLICATION_ID,
+                        "cat",
+                        f"files/qualification/gcode/{identifier}.gcode",
+                    ),
+                    timeout=120,
+                )
+                actual_digest = hashlib.sha256(gcode).hexdigest()
+                expected_digest = case_payload.get("gcodeSha256")
+                if actual_digest != expected_digest:
+                    raise RunnerError(
+                        f"Physical qualification G-code digest differs for {identifier}: "
+                        f"report={expected_digest!r} retained={actual_digest}",
+                    )
+                (retain_gcode / f"{identifier}.gcode").write_bytes(gcode)
             case_payload["host"] = host_metrics
             case_results.append(case_payload)
             if first_report is None:
@@ -712,7 +756,8 @@ def run(
             raise RunnerError("Physical qualification selected no corpus cases")
         report = first_report
         report["source"] = "physical-android"
-        report["sourceCommit"] = captured(("git", "rev-parse", "HEAD"), timeout=20).strip()
+        qualification_source_commit(source_commit)
+        report["sourceCommit"] = source_commit
         report["generatedAtUtc"] = datetime.now(timezone.utc).isoformat()
         report["device"] = asdict(identity)
         report["qualificationPackage"] = {
@@ -741,6 +786,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--case", action="append", dest="cases", help="run one named case; repeatable")
     parser.add_argument("--skip-build", action="store_true", help="reuse existing locally built debug APKs")
     parser.add_argument(
+        "--retain-gcode",
+        type=Path,
+        metavar="DIR",
+        help="retain digest-verified corpus G-code for the desktop-engine comparison",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=ROOT / "build/qualification/physical-report.json",
@@ -756,6 +807,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.output,
             skip_build=args.skip_build,
             case_ids=set(args.cases) if args.cases else None,
+            retain_gcode=args.retain_gcode,
         )
     except (CorpusError, RunnerError) as error:
         print(f"error: {error}", file=sys.stderr)

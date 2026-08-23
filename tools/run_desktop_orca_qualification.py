@@ -4,27 +4,35 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import math
+import platform
 import shutil
 import subprocess
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 
 try:
     from tools.qualification_corpus import CORPUS_ROOT, MANIFEST, load_manifest, validate
+    from tools.run_physical_qualification import RunnerError, qualification_source_commit
 except ModuleNotFoundError:  # Direct `python tools/run_desktop_orca_qualification.py` execution.
     from qualification_corpus import CORPUS_ROOT, MANIFEST, load_manifest, validate
+    from run_physical_qualification import RunnerError, qualification_source_commit
 
 
 ROOT = Path(__file__).resolve().parent.parent
 ORCA_ROOT = ROOT / "third_party/android-slicer-runtime/app/src/main/cpp/orcaslicer"
-DEFAULT_BINARY = ORCA_ROOT / "build/qualification-desktop/src/Snapmaker_Orca"
+DEFAULT_BUILD_DIR = ORCA_ROOT / "build/qualification-desktop"
+DEFAULT_BINARY = DEFAULT_BUILD_DIR / "src/Snapmaker_Orca"
 DEFAULT_ANDROID_GCODE = ROOT / "build/qualification/android-gcode/simple-part.gcode"
 DEFAULT_ANDROID_REPORT = ROOT / "build/qualification/android-report.json"
 DEFAULT_OUTPUT = ROOT / "build/qualification/desktop-orca"
+COMPAT_ROOT = ROOT / "qualification/desktop-orca-compat"
+COMPAT_FILES = (COMPAT_ROOT / "modern-clang-enum.patch",)
+DESKTOP_BUILD_MODE = "pinned-source-rebuilt"
 ROLE_NAMES = (
     "outerWall",
     "innerWall",
@@ -61,6 +69,161 @@ def captured(command: Sequence[str], *, cwd: Path, timeout: int = 1_800) -> str:
             f"Command failed ({result.returncode}): {' '.join(command)}\n{output[-8_000:]}"
         )
     return output
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def compatibility_sha256() -> str:
+    digest = hashlib.sha256()
+    for path in COMPAT_FILES:
+        if not path.is_file():
+            raise DesktopQualificationError(f"Desktop compatibility input is missing: {path}")
+        digest.update(path.relative_to(ROOT).as_posix().encode())
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def desktop_configure_command(build_dir: Path) -> tuple[str, ...]:
+    if sys.platform != "darwin" or platform.machine() != "arm64":
+        raise DesktopQualificationError(
+            "The reproducible desktop Orca qualification build currently requires macOS ARM64",
+        )
+    dependencies = ORCA_ROOT / "deps/build/arm64/OrcaSlicer_dep/usr/local"
+    if not dependencies.is_dir():
+        raise DesktopQualificationError(
+            "Pinned desktop Orca dependencies are missing; build the arm64 dependency bundle first",
+        )
+    compatibility_sha256()
+    return (
+        "cmake",
+        "-S",
+        str(ORCA_ROOT),
+        "-B",
+        str(build_dir),
+        "-G",
+        "Ninja",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DSLIC3R_GUI=ON",
+        "-DORCA_TOOLS=OFF",
+        "-DSLIC3R_STATIC=ON",
+        "-DSLIC3R_SENTRY=OFF",
+        "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+        "-DCMAKE_OSX_ARCHITECTURES=arm64",
+        "-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0",
+        f"-DCMAKE_PREFIX_PATH={dependencies}",
+        "-DCMAKE_CXX_FLAGS=",
+    )
+
+
+@contextlib.contextmanager
+def modern_clang_compatibility() -> Iterator[None]:
+    patch = COMPAT_ROOT / "modern-clang-enum.patch"
+    targets = (
+        "src/slic3r/GUI/wxMediaCtrl2.h",
+        "src/libslic3r/Support/TreeSupport3D.cpp",
+        "src/slic3r/GUI/PartPlate.cpp",
+    )
+    clean = subprocess.run(
+        ("git", "diff", "--quiet", "--", *targets),
+        cwd=ORCA_ROOT,
+        check=False,
+    )
+    if clean.returncode != 0:
+        raise DesktopQualificationError(
+            "Pinned desktop source has local changes in a compatibility target",
+        )
+    apply_command = (
+        "git",
+        "apply",
+        "--unidiff-zero",
+        "--whitespace=nowarn",
+        str(patch),
+    )
+    captured(
+        ("git", "apply", "--unidiff-zero", "--check", str(patch)),
+        cwd=ORCA_ROOT,
+        timeout=20,
+    )
+    captured(apply_command, cwd=ORCA_ROOT, timeout=20)
+    try:
+        yield
+    finally:
+        captured(
+            ("git", "apply", "--unidiff-zero", "--check", "--reverse", str(patch)),
+            cwd=ORCA_ROOT,
+            timeout=20,
+        )
+        captured(
+            ("git", "apply", "--unidiff-zero", "--reverse", str(patch)),
+            cwd=ORCA_ROOT,
+            timeout=20,
+        )
+        restored = subprocess.run(
+            ("git", "diff", "--quiet", "--", *targets),
+            cwd=ORCA_ROOT,
+            check=False,
+        )
+        if restored.returncode != 0:
+            raise DesktopQualificationError("Pinned desktop source was not restored after build")
+
+
+def desktop_build_identity(build_dir: Path) -> dict[str, object]:
+    configure = desktop_configure_command(build_dir)
+    return {
+        "schemaVersion": 1,
+        "sourceRevision": captured(("git", "rev-parse", "HEAD"), cwd=ORCA_ROOT, timeout=20),
+        "compatibilitySha256": compatibility_sha256(),
+        "configureCommand": list(configure),
+        "cmakeVersion": captured(("cmake", "--version"), cwd=ROOT, timeout=20),
+        "compilerVersion": captured(("c++", "--version"), cwd=ROOT, timeout=20),
+    }
+
+
+def build_pinned_desktop_cli(build_dir: Path, binary: Path) -> tuple[str, str, bool]:
+    identity = desktop_build_identity(build_dir)
+    stamp = build_dir / ".ducky-qualification-build.json"
+    if stamp.is_file() and binary.is_file():
+        try:
+            recorded = json.loads(stamp.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            recorded = None
+        binary_digest = file_sha256(binary)
+        if isinstance(recorded, dict) and recorded == {
+            **identity,
+            "binarySha256": binary_digest,
+        }:
+            return binary_digest, str(identity["compatibilitySha256"]), True
+
+    captured(tuple(identity["configureCommand"]), cwd=ROOT)
+    command = (
+        "cmake",
+        "--build",
+        str(build_dir),
+        "--config",
+        "Release",
+        "--target",
+        "Snapmaker_Orca",
+        "--parallel",
+        "8",
+    )
+    with modern_clang_compatibility():
+        captured(command, cwd=ROOT)
+    if not binary.is_file():
+        raise DesktopQualificationError(f"Pinned desktop Orca binary is missing after build: {binary}")
+    binary_digest = file_sha256(binary)
+    stamp.write_text(
+        json.dumps({**identity, "binarySha256": binary_digest}, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return binary_digest, str(identity["compatibilitySha256"]), False
 
 
 def parse_config_block(path: Path) -> dict[str, str]:
@@ -283,6 +446,13 @@ def write_profile(path: Path, profile_type: str, config: Mapping[str, str]) -> N
         # The CLI rejects a system process unless it explicitly names the
         # system machine preset loaded alongside it.
         document["compatible_printers"] = ["Ducky qualification machine"]
+        # Android's embedded core accepts relative E without a layer hook. The
+        # desktop CLI validates that preset more strictly; the reset has no
+        # geometry or profile-fingerprint effect and prevents E precision loss.
+        if document.get("use_relative_e_distances") == "1" and not document.get(
+            "layer_change_gcode"
+        ):
+            document["layer_change_gcode"] = "G92 E0"
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
@@ -458,6 +628,7 @@ def compare_case(
 
 def run(
     binary: Path,
+    build_dir: Path,
     android_gcode: Path,
     android_report_path: Path,
     output: Path,
@@ -471,15 +642,21 @@ def run(
         raise DesktopQualificationError(
             f"Desktop source revision differs: expected={expected_revision} actual={actual_revision}"
         )
-    if not binary.is_file():
-        raise DesktopQualificationError(f"Pinned desktop Orca binary is missing: {binary}")
-    base_config = parse_config_block(android_gcode)
     try:
         android_report = json.loads(android_report_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise DesktopQualificationError(f"Could not read Android report: {error}") from error
     if android_report.get("engineRevision") != expected_revision:
         raise DesktopQualificationError("Android report uses a different Orca revision")
+    release_source_commit: str | None = None
+    if android_report.get("source") == "physical-android":
+        release_source_commit = str(android_report.get("sourceCommit", ""))
+        qualification_source_commit(release_source_commit)
+    desktop_binary_sha256, compatibility_digest, build_cache_hit = build_pinned_desktop_cli(
+        build_dir,
+        binary,
+    )
+    base_config = parse_config_block(android_gcode)
     android_cases = {
         case["id"]: case for case in android_report.get("cases", []) if isinstance(case, dict)
     }
@@ -562,14 +739,22 @@ def run(
     report = {
         "schemaVersion": 1,
         "source": "desktop-orca",
+        "sourceCommit": android_report.get("sourceCommit"),
         "engineRevision": expected_revision,
+        "desktopBuildMode": DESKTOP_BUILD_MODE,
+        "desktopBuildCacheHit": build_cache_hit,
+        "desktopBinarySha256": desktop_binary_sha256,
+        "desktopCompatibilitySha256": compatibility_digest,
         "manifestSha256": hashlib.sha256(MANIFEST.read_bytes()).hexdigest(),
         "androidReport": str(android_report_path),
+        "androidReportSha256": file_sha256(android_report_path),
         "androidConfigGcode": str(android_gcode),
         "cases": reports,
         "passed": not failures,
         "failures": failures,
     }
+    if release_source_commit is not None:
+        qualification_source_commit(release_source_commit)
     report_path = output / "comparison-report.json"
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if failures:
@@ -583,6 +768,7 @@ def run(
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, default=DEFAULT_BINARY)
+    parser.add_argument("--build-dir", type=Path, default=DEFAULT_BUILD_DIR)
     parser.add_argument("--android-gcode", type=Path, default=DEFAULT_ANDROID_GCODE)
     parser.add_argument("--android-report", type=Path, default=DEFAULT_ANDROID_REPORT)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
@@ -591,12 +777,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         run(
             args.binary.resolve(),
+            args.build_dir.resolve(),
             args.android_gcode.resolve(),
             args.android_report.resolve(),
             args.output.resolve(),
             set(args.cases) if args.cases else None,
         )
-    except DesktopQualificationError as error:
+    except (DesktopQualificationError, RunnerError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     return 0

@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from tools.qualification_corpus import (
     MANIFEST,
@@ -28,15 +29,84 @@ from tools.run_qualification_corpus import (
     validate_report,
 )
 from tools.run_desktop_orca_qualification import (
+    DesktopQualificationError,
     analyze_gcode,
     bed_center,
+    build_pinned_desktop_cli,
     compare_case,
+    desktop_configure_command,
     parse_config_block,
     write_assembly,
+    write_profile,
 )
 
 
 class QualificationCorpusTest(unittest.TestCase):
+    def test_desktop_build_cache_requires_the_exact_binary_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            build = Path(directory)
+            binary = build / "src/Snapmaker_Orca"
+            binary.parent.mkdir()
+            binary.write_bytes(b"pinned desktop binary")
+            digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+            identity = {
+                "schemaVersion": 1,
+                "sourceRevision": "a" * 40,
+                "compatibilitySha256": "b" * 64,
+                "configureCommand": ["cmake"],
+                "cmakeVersion": "cmake test",
+                "compilerVersion": "clang test",
+            }
+            (build / ".ducky-qualification-build.json").write_text(
+                json.dumps({**identity, "binarySha256": digest}),
+                encoding="utf-8",
+            )
+            with patch(
+                "tools.run_desktop_orca_qualification.desktop_build_identity",
+                return_value=identity,
+            ):
+                self.assertEqual(
+                    (digest, "b" * 64, True),
+                    build_pinned_desktop_cli(build, binary),
+                )
+
+    def test_desktop_process_adapts_relative_extrusion_validation_only(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "process.json"
+            write_profile(
+                output,
+                "process",
+                {"use_relative_e_distances": "1", "layer_height": "0.2"},
+            )
+            document = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual("G92 E0", document["layer_change_gcode"])
+        self.assertEqual(["Ducky qualification machine"], document["compatible_printers"])
+
+    def test_desktop_orca_build_is_rebuilt_from_pinned_source(self) -> None:
+        with (
+            patch(
+                "tools.run_desktop_orca_qualification.sys.platform",
+                "darwin",
+            ),
+            patch(
+                "tools.run_desktop_orca_qualification.platform.machine",
+                return_value="arm64",
+            ),
+        ):
+            command = desktop_configure_command(Path("/tmp/ducky-build"))
+        self.assertIn("-DSLIC3R_GUI=ON", command)
+        self.assertIn("-DSLIC3R_STATIC=ON", command)
+        self.assertIn("-DCMAKE_OSX_ARCHITECTURES=arm64", command)
+        self.assertIn(str(Path("/tmp/ducky-build")), command)
+        self.assertIn("-DCMAKE_CXX_FLAGS=", command)
+
+        with patch(
+            "tools.run_desktop_orca_qualification.sys.platform",
+            "linux",
+        ):
+            with self.assertRaisesRegex(DesktopQualificationError, "macOS ARM64"):
+                desktop_configure_command(Path("/tmp/ducky-build"))
+
     def test_checked_in_corpus_is_deterministic_and_complete(self) -> None:
         manifest = load_manifest()
         validate(manifest)

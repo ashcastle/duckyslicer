@@ -1,0 +1,21 @@
+diff --git a/src/slic3r/GUI/wxMediaCtrl2.h b/src/slic3r/GUI/wxMediaCtrl2.h
+--- a/src/slic3r/GUI/wxMediaCtrl2.h
++++ b/src/slic3r/GUI/wxMediaCtrl2.h
+@@ -39 +39 @@ public:
+-    static constexpr wxMediaState MEDIASTATE_BUFFERING = (wxMediaState) 6;
++    inline static const wxMediaState MEDIASTATE_BUFFERING = (wxMediaState) 6;
+diff --git a/src/libslic3r/Support/TreeSupport3D.cpp b/src/libslic3r/Support/TreeSupport3D.cpp
+--- a/src/libslic3r/Support/TreeSupport3D.cpp
++++ b/src/libslic3r/Support/TreeSupport3D.cpp
+@@ -10 +10,3 @@
+-#include "../../../../src/sapil_diagnostics.h"
++namespace sapil {
++inline void diagnostics_note_clipper_point(long long, long long, const char *) {}
++}
+diff --git a/src/slic3r/GUI/PartPlate.cpp b/src/slic3r/GUI/PartPlate.cpp
+--- a/src/slic3r/GUI/PartPlate.cpp
++++ b/src/slic3r/GUI/PartPlate.cpp
+@@ -1377,0 +1378,3 @@ static void expand_plate_extruders(std::vector<int>& ids)
++    if (wxTheApp == nullptr)
++        return;
++

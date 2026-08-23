@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 import unittest
 from unittest.mock import patch
 
+from tools.qualification_corpus import MANIFEST, REQUIRED_CASES, load_manifest
 from tools.test_analyze_startup_benchmark import result
+from tools.run_desktop_orca_qualification import compatibility_sha256
 from tools.verify_release_qualifications import (
     QualificationEvidenceError,
+    validate_orca_conformance,
     validate_physical,
     validate_startup,
 )
@@ -27,6 +31,35 @@ def physical_device(*, serial: str = "R3CN123456") -> dict[str, object]:
         "boot_qemu": "0",
         "build_fingerprint": "vendor/device/release",
         "memory_total_kb": 8_000_000,
+    }
+
+
+def orca_report() -> dict[str, object]:
+    manifest = load_manifest()
+    return {
+        "schemaVersion": 1,
+        "source": "desktop-orca",
+        "sourceCommit": COMMIT,
+        "engineRevision": manifest["engine"]["revision"],
+        "manifestSha256": hashlib.sha256(MANIFEST.read_bytes()).hexdigest(),
+        "androidReportSha256": "9" * 64,
+        "desktopBuildMode": "pinned-source-rebuilt",
+        "desktopBuildCacheHit": False,
+        "desktopBinarySha256": "d" * 64,
+        "desktopCompatibilitySha256": compatibility_sha256(),
+        "passed": True,
+        "failures": [],
+        "cases": [
+            {
+                "id": identifier,
+                "layers": 100,
+                "emittedLayers": 100,
+                "extrusionMotions": 10_000,
+                "profileFingerprint": "c" * 64,
+                "differences": [],
+            }
+            for identifier in sorted(REQUIRED_CASES)
+        ],
     }
 
 
@@ -86,6 +119,33 @@ class VerifyReleaseQualificationsTest(unittest.TestCase):
         }
         with self.assertRaisesRegex(QualificationEvidenceError, "do not match"):
             validate_startup(document, COMMIT)
+
+    def test_accepts_only_complete_clean_orca_conformance_for_the_commit(self) -> None:
+        document = orca_report()
+        validate_orca_conformance(document, COMMIT, "9" * 64)
+
+        document["cases"][0]["differences"] = ["outer wall differs"]
+        with self.assertRaisesRegex(QualificationEvidenceError, "differs"):
+            validate_orca_conformance(document, COMMIT, "9" * 64)
+
+        document = orca_report()
+        document["cases"].pop()
+        with self.assertRaisesRegex(QualificationEvidenceError, "every corpus case"):
+            validate_orca_conformance(document, COMMIT, "9" * 64)
+
+        document = orca_report()
+        document["sourceCommit"] = "b" * 40
+        with self.assertRaisesRegex(QualificationEvidenceError, "different source commit"):
+            validate_orca_conformance(document, COMMIT, "9" * 64)
+
+        document = orca_report()
+        document["desktopCompatibilitySha256"] = "f" * 64
+        with self.assertRaisesRegex(QualificationEvidenceError, "stale compatibility"):
+            validate_orca_conformance(document, COMMIT, "9" * 64)
+
+        document = orca_report()
+        with self.assertRaisesRegex(QualificationEvidenceError, "different physical report"):
+            validate_orca_conformance(document, COMMIT, "8" * 64)
 
 
 if __name__ == "__main__":

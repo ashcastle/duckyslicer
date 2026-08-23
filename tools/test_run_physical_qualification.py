@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from tools.run_physical_qualification import (
     DeviceIdentity,
@@ -23,6 +24,7 @@ from tools.run_physical_qualification import (
     parse_thermal_status,
     parse_total_pss_kb,
     physical_rejection,
+    qualification_source_commit,
     output_application_id,
     validate_dense_render,
     validate_resource_budget,
@@ -49,6 +51,31 @@ def identity(**overrides: object) -> DeviceIdentity:
 
 
 class PhysicalQualificationTest(unittest.TestCase):
+    def test_release_evidence_is_bound_to_a_stable_clean_main_commit(self) -> None:
+        with patch(
+            "tools.run_physical_qualification.captured",
+            side_effect=("", "main", "a" * 40),
+        ):
+            self.assertEqual("a" * 40, qualification_source_commit())
+        with patch(
+            "tools.run_physical_qualification.captured",
+            side_effect=(" M android/app.kt",),
+        ):
+            with self.assertRaisesRegex(RunnerError, "clean Git checkout"):
+                qualification_source_commit()
+        with patch(
+            "tools.run_physical_qualification.captured",
+            side_effect=("", "feature", "a" * 40),
+        ):
+            with self.assertRaisesRegex(RunnerError, "must run on main"):
+                qualification_source_commit()
+        with patch(
+            "tools.run_physical_qualification.captured",
+            side_effect=("", "main", "b" * 40),
+        ):
+            with self.assertRaisesRegex(RunnerError, "changed during"):
+                qualification_source_commit("a" * 40)
+
     def test_qualification_package_is_isolated_from_the_release(self) -> None:
         self.assertEqual("com.ashcastle.duckyslicer.qualification", QUALIFICATION_APPLICATION_ID)
         self.assertEqual(

@@ -218,9 +218,11 @@ def verify_release_contract(sources: dict[str, str]) -> None:
             '"unsignedSha256": self.unsigned_sha256',
             '"localR8MappingSha256": self.local_r8_mapping_sha256',
             '"localNativeSymbolsSha256": self.local_native_symbols_sha256',
-            "verify_release_qualifications(physical_report, startup_report, source_commit)",
+            "verify_release_qualifications(",
+            "orca_report,",
             'parser.add_argument("--physical-report", required=True, type=Path)',
             'parser.add_argument("--startup-report", required=True, type=Path)',
+            'parser.add_argument("--orca-report", required=True, type=Path)',
         ),
     )
 
@@ -238,6 +240,7 @@ def verify_release_contract(sources: dict[str, str]) -> None:
             "must not be uploaded to the public github release",
             "--physical-report",
             "--startup-report",
+            "--orca-report",
         ),
         "SECURITY.md": (
             "release apk is built twice on the maintainer's local machine",
