@@ -359,6 +359,8 @@ jobs:
           PLAY_VERSION_NAME: ${{ inputs.version_name }}
           PLAY_VERSION_CODE: ${{ inputs.version_code }}
           PLAY_RELEASE_NOTES: ${{ inputs.release_notes }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          TRANSPORT_TAG: ${{ inputs.transport_tag }}
         run: |
           set -euo pipefail
           signed_aab="signed/DuckySlicer-$PLAY_VERSION_NAME-play.aab"
@@ -469,6 +471,27 @@ jobs:
             <<<"$commit_response" >/dev/null
           edit_committed="true"
 
+          signed_sha256=$(awk '{print $1}' "$checksum_file")
+          publish_receipt="signed/DuckySlicer-$PLAY_VERSION_NAME-PLAY-PUBLISH.json"
+          jq -n \
+            --arg package_name "$PLAY_PACKAGE_NAME" \
+            --arg version_name "$PLAY_VERSION_NAME" \
+            --arg version_code "$PLAY_VERSION_CODE" \
+            --arg previous_maximum "$highest_version_code" \
+            --arg source_commit "$SOURCE_COMMIT" \
+            --arg transport_tag "$TRANSPORT_TAG" \
+            --arg signed_asset "$(basename "$signed_aab")" \
+            --arg signed_sha256 "$signed_sha256" \
+            --arg edit_id "$edit_id" \
+            --arg workflow_run "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{schemaVersion: 1, packageName: $package_name, versionName: $version_name, versionCode: ($version_code | tonumber), track: "internal", status: "completed", previousMaximumVersionCode: ($previous_maximum | tonumber), sourceCommit: $source_commit, transportTag: $transport_tag, signedAsset: $signed_asset, signedSha256: $signed_sha256, editId: $edit_id, workflowRun: $workflow_run}' \
+            > "$publish_receipt"
+          jq -e \
+            --arg version_code "$PLAY_VERSION_CODE" \
+            --arg signed_sha256 "$signed_sha256" \
+            '.schemaVersion == 1 and .track == "internal" and .status == "completed" and (.versionCode | tostring) == $version_code and .signedSha256 == $signed_sha256' \
+            "$publish_receipt" >/dev/null
+
           {
             echo "### Google Play internal release"
             echo "- Package: $PLAY_PACKAGE_NAME"
@@ -476,6 +499,13 @@ jobs:
             echo "- Previous maximum versionCode: $highest_version_code"
             echo "- Track: internal"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: duckyslicer-play-receipt-${{ inputs.version_code }}
+          path: signed/DuckySlicer-*-PLAY-PUBLISH.json
+          if-no-files-found: error
+          retention-days: 90
 
   cleanup:
     needs: [validate, sign, publish]

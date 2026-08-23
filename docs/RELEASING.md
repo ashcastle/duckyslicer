@@ -217,7 +217,10 @@ For each Play candidate:
    uploads only the exact AAB, updates only `internal`, validates the edit, and commits
    with `ERROR_IF_IN_REVIEW` so an existing review is never cancelled. A failed run
    deletes its uncommitted edit. Retain the workflow URL with the release record.
-   The cleanup job removes the private draft but keeps the durable source tag.
+   Retain the 90-day `duckyslicer-play-receipt-<versionCode>` artifact, which binds
+   the source commit, transport tag, signed AAB SHA-256, version codes, edit, track,
+   and workflow URL. The cleanup job removes the private draft but keeps the durable
+   source tag.
 5. Treat the unsigned universal delivery APK as a packaging and 16 KB inspection
    artifact; Android cannot install it until it is signed. Install the Play-signed
    build from the internal test track on representative physical devices before any

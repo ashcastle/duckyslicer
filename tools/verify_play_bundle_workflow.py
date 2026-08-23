@@ -253,6 +253,17 @@ def verify_play_bundle_workflow(sources: dict[str, str]) -> None:
             and "Previous maximum versionCode" in publisher
             and "GITHUB_STEP_SUMMARY" in publisher
         ),
+        "retains a source- and digest-bound publication receipt": (
+            "DuckySlicer-$PLAY_VERSION_NAME-PLAY-PUBLISH.json" in publisher
+            and "schemaVersion: 1" in publisher
+            and "previousMaximumVersionCode" in publisher
+            and "sourceCommit" in publisher
+            and "transportTag" in publisher
+            and "signedSha256" in publisher
+            and "workflowRun" in publisher
+            and "duckyslicer-play-receipt-${{ inputs.version_code }}" in publisher
+            and "retention-days: 90" in publisher
+        ),
     }
     for description, valid in publisher_rules.items():
         if not valid:

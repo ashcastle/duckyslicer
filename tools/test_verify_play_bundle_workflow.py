@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -93,7 +94,7 @@ def run_real_publisher(
     uploaded: str | None = None,
     commit_failure: bool = False,
     upload_origin: str | None = None,
-) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+) -> tuple[subprocess.CompletedProcess[str], list[str], dict[str, object] | None]:
     workflow = (ROOT / ".github/workflows/play-bundle.yml").read_text(encoding="utf-8")
     script = named_run_block(
         workflow,
@@ -129,6 +130,11 @@ def run_real_publisher(
                 "FAKE_PLAY_LOG": str(log),
                 "GITHUB_STEP_SUMMARY": str(root / "summary.md"),
                 "RUNNER_TEMP": str(root),
+                "SOURCE_COMMIT": "a" * 40,
+                "TRANSPORT_TAG": "play-v0.2.0-rc.1-15",
+                "GITHUB_SERVER_URL": "https://github.com",
+                "GITHUB_REPOSITORY": "ashcastle/duckyslicer",
+                "GITHUB_RUN_ID": "12345",
             }
         )
         if uploaded is not None:
@@ -146,7 +152,13 @@ def run_real_publisher(
             check=False,
         )
         requests = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
-        return result, requests
+        receipt_path = signed / "DuckySlicer-0.2.0-rc.1-PLAY-PUBLISH.json"
+        receipt = (
+            json.loads(receipt_path.read_text(encoding="utf-8"))
+            if receipt_path.exists()
+            else None
+        )
+        return result, requests, receipt
 
 
 def valid_sources() -> dict[str, str]:
@@ -271,6 +283,12 @@ jobs:
           edit_committed="true"
           echo '### Google Play internal release' >> "$GITHUB_STEP_SUMMARY"
           echo 'Previous maximum versionCode' >> "$GITHUB_STEP_SUMMARY"
+          echo 'DuckySlicer-$PLAY_VERSION_NAME-PLAY-PUBLISH.json schemaVersion: 1'
+          echo 'previousMaximumVersionCode sourceCommit transportTag signedSha256 workflowRun'
+      - uses: actions/upload-artifact@0123456789012345678901234567890123456789
+        with:
+          name: duckyslicer-play-receipt-${{ inputs.version_code }}
+          retention-days: 90
   cleanup:
     needs: [validate, sign, publish]
     if: ${{ always() && needs.validate.result == 'success' }}
@@ -401,41 +419,50 @@ class VerifyPlayBundleWorkflowTest(unittest.TestCase):
             verify_play_bundle_workflow(sources)
 
     def test_real_publisher_block_commits_one_new_internal_bundle(self) -> None:
-        result, requests = run_real_publisher()
+        result, requests, receipt = run_real_publisher()
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertTrue(any("bundles?uploadType=resumable" in request for request in requests))
         self.assertTrue(any(request.startswith("PUT https://androidpublisher.googleapis.com/upload/") for request in requests))
         self.assertTrue(any("tracks/internal" in request for request in requests))
         self.assertTrue(any("ERROR_IF_IN_REVIEW" in request for request in requests))
         self.assertFalse(any(request.startswith("DELETE ") for request in requests))
+        self.assertIsNotNone(receipt)
+        self.assertEqual(15, receipt["versionCode"] if receipt else None)
+        self.assertEqual("internal", receipt["track"] if receipt else None)
+        self.assertEqual("a" * 40, receipt["sourceCommit"] if receipt else None)
+        self.assertRegex(str(receipt["signedSha256"] if receipt else ""), r"^[0-9a-f]{64}$")
 
     def test_real_publisher_block_rejects_reused_version_before_upload(self) -> None:
-        result, requests = run_real_publisher(version_code="14", maximum="14")
+        result, requests, receipt = run_real_publisher(version_code="14", maximum="14")
         self.assertNotEqual(0, result.returncode)
         self.assertIn("not greater than Play's current maximum", result.stderr)
         self.assertFalse(any("uploadType=resumable" in request for request in requests))
         self.assertTrue(any(request.startswith("DELETE ") for request in requests))
+        self.assertIsNone(receipt)
 
     def test_real_publisher_block_rolls_back_a_review_conflict(self) -> None:
-        result, requests = run_real_publisher(commit_failure=True)
+        result, requests, receipt = run_real_publisher(commit_failure=True)
         self.assertNotEqual(0, result.returncode)
         self.assertTrue(any("ERROR_IF_IN_REVIEW" in request for request in requests))
         self.assertTrue(any(request.startswith("DELETE ") for request in requests))
+        self.assertIsNone(receipt)
 
     def test_real_publisher_block_rejects_an_unexpected_uploaded_code(self) -> None:
-        result, requests = run_real_publisher(uploaded="16")
+        result, requests, receipt = run_real_publisher(uploaded="16")
         self.assertNotEqual(0, result.returncode)
         self.assertIn("instead of 15", result.stderr)
         self.assertTrue(any(request.startswith("DELETE ") for request in requests))
+        self.assertIsNone(receipt)
 
     def test_real_publisher_block_rejects_a_foreign_upload_session(self) -> None:
-        result, requests = run_real_publisher(
+        result, requests, receipt = run_real_publisher(
             upload_origin="https://example.invalid/steal-upload"
         )
         self.assertNotEqual(0, result.returncode)
         self.assertIn("invalid resumable upload origin", result.stderr)
         self.assertFalse(any(request.startswith("PUT ") for request in requests))
         self.assertTrue(any(request.startswith("DELETE ") for request in requests))
+        self.assertIsNone(receipt)
 
     def test_rejects_play_preparation_without_api36_runtime_gate(self) -> None:
         sources = valid_sources()
