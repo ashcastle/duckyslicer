@@ -98,6 +98,8 @@ class ProfileStoreMigrationTest {
                 remove("extrusionRateSmoothingExternalOnly")
                 remove("travelSpeedZ")
                 remove("purgeVolumes")
+                remove("flushMultiplierOverrideEnabled")
+                remove("flushMultiplier")
                 remove("skeletonInfillDensity")
                 remove("skinInfillDensity")
                 remove("skinInfillDepth")
@@ -208,6 +210,8 @@ class ProfileStoreMigrationTest {
             assertEquals(ExtrusionRateSmoothingSettings(), restoredSlicing.extrusionRateSmoothing)
             assertEquals(0f, restoredSlicing.travelSpeedZ)
             assertEquals(emptyList<Float>(), restoredSlicing.multiMaterial.purgeVolumes)
+            assertFalse(restoredSlicing.multiMaterial.flushMultiplierOverrideEnabled)
+            assertEquals(0.3f, restoredSlicing.multiMaterial.flushMultiplier)
             assertFalse(restoredSlicing.multiMaterial.primeTowerFramework)
             assertTrue(restoredSlicing.multiMaterial.primeTowerSkipPoints)
             assertFalse(restoredSlicing.multiMaterial.primeTowerFlatIroning)
@@ -376,6 +380,8 @@ class ProfileStoreMigrationTest {
                     innerWalls = true,
                 ),
                 multiMaterial = MultiMaterialSettings(
+                    flushMultiplierOverrideEnabled = true,
+                    flushMultiplier = 1.25f,
                     primeTowerPositionX = 123.5f,
                     primeTowerPositionY = 87.5f,
                     primeTowerBrimChamfer = false,
@@ -401,6 +407,8 @@ class ProfileStoreMigrationTest {
             assertEquals(12.5f, restored.travelJerk)
             assertEquals(options.scarfSeam, restored.scarfSeam)
             assertEquals(7, restored.supportCoverage.enforcedLayers)
+            assertTrue(restored.multiMaterial.flushMultiplierOverrideEnabled)
+            assertEquals(1.25f, restored.multiMaterial.flushMultiplier)
             assertEquals(123.5f, restored.multiMaterial.primeTowerPositionX)
             assertEquals(87.5f, restored.multiMaterial.primeTowerPositionY)
             assertFalse(restored.multiMaterial.primeTowerBrimChamfer)

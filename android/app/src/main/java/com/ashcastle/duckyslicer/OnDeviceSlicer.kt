@@ -704,6 +704,8 @@ data class RetractionSettings(
 data class MultiMaterialSettings(
     val primeVolume: Float = 45f,
     val purgeVolumes: List<Float> = emptyList(),
+    val flushMultiplierOverrideEnabled: Boolean = false,
+    val flushMultiplier: Float = 0.3f,
     val primeTowerPositionX: Float = 170f,
     val primeTowerPositionY: Float = 140f,
     val primeTowerBrimWidth: Float = 3f,
@@ -1306,7 +1308,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 95,
+    val schemaVersion: Int = 96,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -2601,6 +2603,8 @@ data class SliceOptions(
                 .map(RetractionSettings::retractionDistanceWhenCut).toFloatArray()
             native.primeVolume = multiMaterial.primeVolume
             native.purgeVolumes = multiMaterial.resolvedPurgeVolumes(nativeFilaments.size).toFloatArray()
+            native.flushMultiplierOverrideEnabled = multiMaterial.flushMultiplierOverrideEnabled
+            native.flushMultiplier = multiMaterial.flushMultiplier
             native.wipeTowerX = multiMaterial.primeTowerPositionX
             native.wipeTowerY = multiMaterial.primeTowerPositionY
             native.singleExtruderMultiMaterial = printerProfile.singleExtruderMultiMaterial

@@ -181,6 +181,8 @@ class SliceOptionsPersistenceTest {
                 multiMaterial = MultiMaterialSettings(
                     primeVolume = 61.5f,
                     purgeVolumes = listOf(0f, 65f, 175f, 0f),
+                    flushMultiplierOverrideEnabled = true,
+                    flushMultiplier = 1.25f,
                     primeTowerPositionX = 123.5f,
                     primeTowerPositionY = 87.5f,
                     primeTowerBrimWidth = 4.5f,
@@ -388,6 +390,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(42f, native.wipeTowerWidth)
         assertEquals(61.5f, native.primeVolume)
         assertEquals(listOf(0f, 65f, 175f, 0f), native.purgeVolumes.toList())
+        assertTrue(native.flushMultiplierOverrideEnabled)
+        assertEquals(1.25f, native.flushMultiplier)
         assertEquals(123.5f, native.wipeTowerX)
         assertEquals(87.5f, native.wipeTowerY)
         assertEquals(false, native.singleExtruderMultiMaterial)
@@ -1038,6 +1042,8 @@ class SliceOptionsPersistenceTest {
                 remove("extrusionRateSmoothingExternalOnly")
                 remove("travelSpeedZ")
                 remove("purgeVolumes")
+                remove("flushMultiplierOverrideEnabled")
+                remove("flushMultiplier")
                 remove("skeletonInfillDensity")
                 remove("skinInfillDensity")
                 remove("skinInfillDepth")
@@ -1178,6 +1184,8 @@ class SliceOptionsPersistenceTest {
         assertEquals(0f, restored.travelSpeedZ)
         assertEquals(0f, restored.toNativeConfig().travelSpeedZ)
         assertEquals(emptyList<Float>(), restored.multiMaterial.purgeVolumes)
+        assertFalse(restored.multiMaterial.flushMultiplierOverrideEnabled)
+        assertEquals(0.3f, restored.multiMaterial.flushMultiplier)
         assertFalse(restored.multiMaterial.primeTowerFramework)
         assertTrue(restored.multiMaterial.primeTowerSkipPoints)
         assertFalse(restored.multiMaterial.primeTowerFlatIroning)

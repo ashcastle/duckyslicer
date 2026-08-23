@@ -19,7 +19,7 @@ class FirstLayerInspectionSettingsTest {
         assertTrue(requireNotNull(storedProfile.toPrinterProfileOrNull()).scanFirstLayer)
 
         val storedProject = options.toProjectJson()
-        assertEquals(96, storedProject.getInt("formatVersion"))
+        assertEquals(97, storedProject.getInt("formatVersion"))
         val restored = requireNotNull(storedProject.toProjectSliceOptionsOrNull())
         assertTrue(restored.printerProfile.scanFirstLayer)
         assertTrue(restored.toNativeConfig().scanFirstLayer)

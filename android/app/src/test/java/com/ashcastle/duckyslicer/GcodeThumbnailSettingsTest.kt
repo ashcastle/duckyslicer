@@ -35,7 +35,7 @@ class GcodeThumbnailSettingsTest {
         assertEquals(definitions, requireNotNull(profileJson.toPrinterProfileOrNull()).gcodeThumbnails)
 
         val projectJson = SliceOptions().selectPrinter(printer).toProjectJson()
-        assertEquals(96, projectJson.getInt("formatVersion"))
+        assertEquals(97, projectJson.getInt("formatVersion"))
         val restored = requireNotNull(projectJson.toProjectSliceOptionsOrNull())
         assertEquals(definitions, restored.printerProfile.gcodeThumbnails)
         assertEquals(definitions, restored.toNativeConfig().gcodeThumbnails)

@@ -6052,6 +6052,13 @@ private fun SlicingSettingsSheet(
                             onOptionsChanged(options.copy(multiMaterial = it))
                         },
                     )
+                    PurgeMultiplierSettings(
+                        settings = options.multiMaterial,
+                        showInactive = settingsQuery.isNotBlank(),
+                        onChanged = {
+                            onOptionsChanged(options.copy(multiMaterial = it))
+                        },
+                    )
                     PrimeTowerStructureSettings(
                         settings = options.multiMaterial,
                         showInactive = settingsQuery.isNotBlank(),
@@ -7454,6 +7461,36 @@ private fun PrimeTowerBrimChamferSettings(
                         primeTowerBrimChamferMaxWidth = (it * 2f).roundToInt() / 2f,
                     ),
                 )
+            },
+        )
+    }
+}
+
+@Composable
+private fun PurgeMultiplierSettings(
+    settings: MultiMaterialSettings,
+    showInactive: Boolean,
+    onChanged: (MultiMaterialSettings) -> Unit,
+) {
+    SettingsSwitch(
+        label = stringResource(R.string.custom_purge_multiplier),
+        checked = settings.flushMultiplierOverrideEnabled,
+        onCheckedChange = {
+            onChanged(settings.copy(flushMultiplierOverrideEnabled = it))
+        },
+    )
+    if (settings.flushMultiplierOverrideEnabled || showInactive) {
+        val percentage = settings.flushMultiplier * 100f
+        val maximum = max(300f, percentage)
+        SettingSlider(
+            label = stringResource(R.string.purge_multiplier),
+            valueText = stringResource(R.string.percent_value, percentage.roundToInt()),
+            value = percentage,
+            range = 0f..maximum,
+            steps = maximum.roundToInt().coerceAtLeast(2) - 1,
+            enabled = settings.flushMultiplierOverrideEnabled,
+            onValueChange = {
+                onChanged(settings.copy(flushMultiplier = it.roundToInt() / 100f))
             },
         )
     }

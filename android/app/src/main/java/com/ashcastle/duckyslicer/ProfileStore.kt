@@ -7,7 +7,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 98
+internal const val USER_PROFILE_SCHEMA_VERSION = 99
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -992,6 +992,8 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("wipeTowerWidth", wipeTowerWidth)
     .put("primeVolume", multiMaterial.primeVolume)
     .put("purgeVolumes", JSONArray(multiMaterial.purgeVolumes))
+    .put("flushMultiplierOverrideEnabled", multiMaterial.flushMultiplierOverrideEnabled)
+    .put("flushMultiplier", multiMaterial.flushMultiplier)
     .put("primeTowerPositionX", multiMaterial.primeTowerPositionX)
     .put("primeTowerPositionY", multiMaterial.primeTowerPositionY)
     .put("primeTowerBrimWidth", multiMaterial.primeTowerBrimWidth)
@@ -1594,6 +1596,8 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         multiMaterial = MultiMaterialSettings(
             primeVolume = optDouble("primeVolume", 45.0).toFloat(),
             purgeVolumes = purgeVolumeList("purgeVolumes"),
+            flushMultiplierOverrideEnabled = optBoolean("flushMultiplierOverrideEnabled"),
+            flushMultiplier = optDouble("flushMultiplier", 0.3).toFloat(),
             primeTowerPositionX = optDouble("primeTowerPositionX", 170.0).toFloat(),
             primeTowerPositionY = optDouble("primeTowerPositionY", 140.0).toFloat(),
             primeTowerBrimWidth = optDouble("primeTowerBrimWidth", 3.0).toFloat(),

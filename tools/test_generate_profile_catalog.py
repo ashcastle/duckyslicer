@@ -402,6 +402,7 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "enable_prime_tower": "1",
                 "prime_tower_width": "42",
                 "prime_volume": "61.5",
+                "flush_multiplier": "1.25",
                 "wipe_tower_x": ["123.5"],
                 "wipe_tower_y": ["87.5"],
                 "prime_tower_brim_width": "4.5",
@@ -485,6 +486,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertTrue(profile["wipeTowerEnabled"])
         self.assertEqual(42.0, profile["wipeTowerWidth"])
         self.assertEqual(61.5, profile["primeVolume"])
+        self.assertTrue(profile["flushMultiplierOverrideEnabled"])
+        self.assertEqual(1.25, profile["flushMultiplier"])
         self.assertEqual(123.5, profile["primeTowerPositionX"])
         self.assertEqual(87.5, profile["primeTowerPositionY"])
         self.assertEqual(4.5, profile["primeTowerBrimWidth"])

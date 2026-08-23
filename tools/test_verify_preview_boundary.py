@@ -366,7 +366,9 @@ def valid_sources() -> dict[str, str]:
             "native.wipeTowerX = multiMaterial.primeTowerPositionX "
             "native.wipeTowerY = multiMaterial.primeTowerPositionY "
             "native.primeTowerBrimChamfer = multiMaterial.primeTowerBrimChamfer "
-            "native.primeTowerBrimChamferMaxWidth = multiMaterial.primeTowerBrimChamferMaxWidth"
+            "native.primeTowerBrimChamferMaxWidth = multiMaterial.primeTowerBrimChamferMaxWidth "
+            "native.flushMultiplierOverrideEnabled = multiMaterial.flushMultiplierOverrideEnabled "
+            "native.flushMultiplier = multiMaterial.flushMultiplier"
         ),
         "SlicerProcessService.kt": (
             "result.estimatedFilamentMm KEY_FILAMENT_MM "
@@ -419,6 +421,7 @@ def valid_sources() -> dict[str, str]:
             "primeTowerWallTypesProduceDistinctExtrusionGeometry "
             "primeTowerPositionMovesThePhysicalTowerWithoutMovingTheObjects "
             "primeTowerBrimChamferChangesPhysicalMultiLayerBrimGeometry "
+            "flushMultiplierChangesPhysicalPurgeExtrusionWithoutMovingObjectPaths "
             "purgeRoutingChangesRealInfillAndObjectExtrusionPaths "
             "supportPurgeRoutingAndSolubleInterfaceChangeRealMaterialPaths "
             "setOf(0, 1, 2, 3) analysis.objectExtrusionByTool.filterValues "

@@ -92,4 +92,27 @@ class PrimeTowerSettingsTest {
             )
         }
     }
+
+    @Test
+    fun validatesFlushMultiplierBoundsAndFiniteValues() {
+        val base = QualityProfile.STANDARD.multiMaterial
+        listOf(0f, 0.3f, 10f).forEach { valid ->
+            assertTrue(
+                ProfileValidation.slicing(
+                    QualityProfile.STANDARD.copy(
+                        multiMaterial = base.copy(flushMultiplier = valid),
+                    ),
+                ),
+            )
+        }
+        listOf(-0.01f, 10.01f, Float.NaN, Float.POSITIVE_INFINITY).forEach { invalid ->
+            assertFalse(
+                ProfileValidation.slicing(
+                    QualityProfile.STANDARD.copy(
+                        multiMaterial = base.copy(flushMultiplier = invalid),
+                    ),
+                ),
+            )
+        }
+    }
 }

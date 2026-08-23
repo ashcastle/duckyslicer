@@ -91,6 +91,8 @@ def valid_sources() -> dict[str, str]:
             " primeTowerPositionX = (it * 2f) primeTowerPositionY = (it * 2f)"
             " R.string.prime_tower_brim_chamfer R.string.prime_tower_brim_chamfer_max_width"
             " primeTowerBrimChamfer = it primeTowerBrimChamferMaxWidth ="
+            " R.string.custom_purge_multiplier R.string.purge_multiplier"
+            " flushMultiplierOverrideEnabled = it flushMultiplier = it.roundToInt() / 100f"
             " R.string.segmented_region_max_width R.string.segmented_region_interlocking_depth"
             " segmentedRegionMaxWidth = segmentedRegionInterlockingDepth ="
             " segmentedRegionInterlockingDepth = if (it)"

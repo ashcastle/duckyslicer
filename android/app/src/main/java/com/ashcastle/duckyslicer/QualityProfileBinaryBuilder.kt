@@ -170,6 +170,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var wipeTowerEnabled: Boolean = base.wipeTowerEnabled
     private var wipeTowerWidth: Float = base.wipeTowerWidth
     private var primeVolume: Float = base.multiMaterial.primeVolume
+    private var flushMultiplierOverrideEnabled: Boolean = base.multiMaterial.flushMultiplierOverrideEnabled
+    private var flushMultiplier: Float = base.multiMaterial.flushMultiplier
     private var primeTowerPositionX: Float = base.multiMaterial.primeTowerPositionX
     private var primeTowerPositionY: Float = base.multiMaterial.primeTowerPositionY
     private var primeTowerBrimWidth: Float = base.multiMaterial.primeTowerBrimWidth
@@ -634,6 +636,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         wipeTowerEnabled = input.readCatalogBoolean()
         wipeTowerWidth = input.readFloat()
         primeVolume = input.readFloat()
+        flushMultiplierOverrideEnabled = input.readCatalogBoolean()
+        flushMultiplier = input.readFloat()
         primeTowerPositionX = input.readFloat()
         primeTowerPositionY = input.readFloat()
         primeTowerBrimWidth = input.readFloat()
@@ -916,6 +920,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         wipeTowerWidth = wipeTowerWidth,
         multiMaterial = MultiMaterialSettings(
             primeVolume = primeVolume,
+            flushMultiplierOverrideEnabled = flushMultiplierOverrideEnabled,
+            flushMultiplier = flushMultiplier,
             primeTowerPositionX = primeTowerPositionX,
             primeTowerPositionY = primeTowerPositionY,
             primeTowerBrimWidth = primeTowerBrimWidth,
@@ -1364,6 +1370,8 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("wipeTowerEnabled", BINARY_BOOL),
     BinaryField("wipeTowerWidth", BINARY_FLOAT),
     BinaryField("primeVolume", BINARY_FLOAT),
+    BinaryField("flushMultiplierOverrideEnabled", BINARY_BOOL),
+    BinaryField("flushMultiplier", BINARY_FLOAT),
     BinaryField("primeTowerPositionX", BINARY_FLOAT),
     BinaryField("primeTowerPositionY", BINARY_FLOAT),
     BinaryField("primeTowerBrimWidth", BINARY_FLOAT),

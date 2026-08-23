@@ -404,6 +404,7 @@ internal object ProfileValidation {
             profile.wipeTowerWidth in 10f..300f &&
             profile.multiMaterial.primeVolume in 1f..1_000f &&
             purgeVolumesAreValid(profile.multiMaterial.purgeVolumes) &&
+            profile.multiMaterial.flushMultiplier in 0f..10f &&
             profile.multiMaterial.primeTowerPositionX in -1_000f..1_000f &&
             profile.multiMaterial.primeTowerPositionY in -1_000f..1_000f &&
             profile.multiMaterial.primeTowerBrimWidth in 0f..100f &&

@@ -72,6 +72,7 @@ BUILD_INPUTS = (
     "native/slicer-runtime/nozzle-volume.patch",
     "native/slicer-runtime/profile-options.patch",
     "native/slicer-runtime/prime-tower-chamfer.patch",
+    "native/slicer-runtime/flush-multiplier.patch",
     "native/slicer-runtime/runtime.patch",
     "native/slicer-runtime/versions.env",
     "localization/i18n/ca/OrcaSlicer_ca.po",

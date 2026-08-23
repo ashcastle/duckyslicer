@@ -127,6 +127,8 @@ class ProfileBundleTest {
                         smallAreaFlowCompensationModel = "0,0\n0.5,0.6\n10,1",
                     ),
                     multiMaterial = MultiMaterialSettings(
+                        flushMultiplierOverrideEnabled = true,
+                        flushMultiplier = 1.25f,
                         primeTowerPositionX = 123.5f,
                         primeTowerPositionY = 87.5f,
                         primeTowerBrimChamfer = false,
@@ -254,6 +256,8 @@ class ProfileBundleTest {
             }
             assertTrue(importedSlicing.smallAreaFlowCompensation)
             assertEquals("0,0\n0.5,0.6\n10,1", importedSlicing.smallAreaFlowCompensationModel)
+            assertTrue(importedSlicing.multiMaterial.flushMultiplierOverrideEnabled)
+            assertEquals(1.25f, importedSlicing.multiMaterial.flushMultiplier)
             assertEquals(123.5f, importedSlicing.multiMaterial.primeTowerPositionX)
             assertEquals(87.5f, importedSlicing.multiMaterial.primeTowerPositionY)
             assertFalse(importedSlicing.multiMaterial.primeTowerBrimChamfer)

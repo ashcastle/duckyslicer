@@ -483,6 +483,8 @@ data class SliceConfig(
     @JvmField var extruderRetractionDistanceWhenCut: FloatArray = floatArrayOf()
     @JvmField var primeVolume: Float = 45f
     @JvmField var purgeVolumes: FloatArray = floatArrayOf()
+    @JvmField var flushMultiplierOverrideEnabled: Boolean = false
+    @JvmField var flushMultiplier: Float = 0.3f
     @JvmField var singleExtruderMultiMaterial: Boolean = false
     @JvmField var purgeInPrimeTower: Boolean = false
     @JvmField var primeTowerBrimWidth: Float = 3f

@@ -113,6 +113,94 @@ class OrcaMultiColorPaintInstrumentedTest {
     }
 
     @Test
+    fun flushMultiplierChangesPhysicalPurgeExtrusionWithoutMovingObjectPaths() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val modelFile = File(context.cacheDir, "flush-multiplier-box.stl")
+        val outputs = mutableListOf<File>()
+        try {
+            instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
+                modelFile.outputStream().use(input::copyTo)
+            }
+            val model = inspectModel(modelFile.absolutePath)
+            val printer = PrinterProfile.CUSTOM_CARTESIAN.copy(
+                id = "flush-multiplier-semm",
+                name = "Flush multiplier SEMM",
+                singleExtruderMultiMaterial = true,
+                extruderCount = 2,
+            )
+            val primary = FilamentProfile.GENERIC_PLA.copy(
+                id = "flush-multiplier-primary",
+                name = "Flush multiplier primary",
+                builtIn = false,
+                compatiblePrinters = listOf(printer.name),
+            )
+            val secondary = primary.copy(
+                id = "flush-multiplier-secondary",
+                name = "Flush multiplier secondary",
+            )
+            val objects = listOf(
+                ProjectObject(
+                    id = "flush-multiplier-left",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = -20f),
+                    filamentSlot = 0,
+                ),
+                ProjectObject(
+                    id = "flush-multiplier-right",
+                    model = model,
+                    transform = ModelTransform(offsetXmm = 20f),
+                    filamentSlot = 1,
+                ),
+            )
+            val base = SliceOptions()
+                .selectPrinter(printer)
+                .selectFilament(primary)
+                .selectQuality(QualityProfile.DRAFT)
+                .copy(
+                    filamentSlots = listOf(primary, secondary),
+                    wipeTowerEnabled = true,
+                    brimType = "no_brim",
+                    brimWidth = 0f,
+                    skirtLoops = 0,
+                    multiMaterial = MultiMaterialSettings(
+                        purgeVolumes = listOf(0f, 260f, 260f, 0f),
+                        flushMultiplierOverrideEnabled = true,
+                    ),
+                )
+
+            fun slice(multiplier: Float): Pair<String, MultiColorGcodeAnalysis> {
+                val outcome = OnDeviceSlicer.slice(
+                    objects,
+                    base.copy(
+                        multiMaterial = base.multiMaterial.copy(flushMultiplier = multiplier),
+                    ),
+                ).also { outputs += it.output }
+                val gcode = outcome.output.readText()
+                return gcode to analyzePositiveExtrusion(gcode)
+            }
+
+            val (lowGcode, low) = slice(0.25f)
+            val (highGcode, high) = slice(1f)
+            assertTrue(lowGcode.contains("; flush_multiplier = 0.25"))
+            assertTrue(highGcode.contains("; flush_multiplier = 1"))
+            assertTrue(
+                "A larger multiplier must produce more physical prime-tower purge extrusion",
+                high.primeTowerExtrusionByTool.values.sum() >
+                    low.primeTowerExtrusionByTool.values.sum() + 5.0,
+            )
+            assertEquals(
+                "Purge scaling must not rewrite object extrusion paths",
+                low.nonTowerMotionSignature(),
+                high.nonTowerMotionSignature(),
+            )
+        } finally {
+            outputs.forEach(File::delete)
+            modelFile.delete()
+        }
+    }
+
+    @Test
     fun supportPurgeRoutingAndSolubleInterfaceChangeRealMaterialPaths() {
         val modelFile = supportOverhangModel()
         val outputs = mutableListOf<File>()

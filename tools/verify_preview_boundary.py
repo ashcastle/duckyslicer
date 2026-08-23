@@ -464,6 +464,7 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
             "primeTowerWallTypesProduceDistinctExtrusionGeometry",
             "primeTowerPositionMovesThePhysicalTowerWithoutMovingTheObjects",
             "primeTowerBrimChamferChangesPhysicalMultiLayerBrimGeometry",
+            "flushMultiplierChangesPhysicalPurgeExtrusionWithoutMovingObjectPaths",
             "purgeRoutingChangesRealInfillAndObjectExtrusionPaths",
             "supportPurgeRoutingAndSolubleInterfaceChangeRealMaterialPaths",
             "setOf(0, 1, 2, 3)",
@@ -940,6 +941,8 @@ def verify_preview_boundary(sources: dict[str, str]) -> None:
         "native.wipeTowerY = multiMaterial.primeTowerPositionY",
         "native.primeTowerBrimChamfer = multiMaterial.primeTowerBrimChamfer",
         "native.primeTowerBrimChamferMaxWidth = multiMaterial.primeTowerBrimChamferMaxWidth",
+        "native.flushMultiplierOverrideEnabled = multiMaterial.flushMultiplierOverrideEnabled",
+        "native.flushMultiplier = multiMaterial.flushMultiplier",
     ):
         if marker not in outcome:
             raise VerificationError(f"prime tower position mapping is missing: {marker}")
