@@ -40,11 +40,13 @@ Play bundles use a separate upload key in a separate protected `play` environmen
 The AAB and universal delivery APK are built twice on the maintainer's local machine
 and must be byte-for-byte reproducible. GitHub never builds the Play AAB. The manual
 Play workflow validates only the digest-pinned local AAB from a private draft, does
-not check out or execute repository code in validation, signing, or cleanup, pins the
-upload-certificate fingerprint, and stops at a signed Actions artifact. Validation
-and cleanup can inspect or remove the private draft but receive no signing material;
-the signer can read only the validated Actions artifact. The workflow has no Play
-Console credentials and cannot select a track or start a rollout.
+not check out or execute repository code in validation, signing, publishing, or
+cleanup, and pins the upload-certificate fingerprint. Validation and cleanup receive
+no signing material; only the signer receives the upload key. Optional internal-track
+publishing uses Workload Identity Federation and a 15-minute Android Publisher token;
+the publisher receives no upload key or long-lived Google credential. It rejects
+stale version codes, production-like tracks, and an existing review via
+`ERROR_IF_IN_REVIEW`, and deletes an uncommitted edit after failure.
 The unsigned AAB is rejected unless it embeds its R8 mapping and full native debug
 symbols for DuckySlicer's Rust boundary and inherited slicer runtime. Those diagnostics
 are uploaded only as AAB metadata for Play crash symbolication and are not app code or

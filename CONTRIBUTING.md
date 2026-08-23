@@ -259,8 +259,11 @@ symbols for the owned Rust and inherited slicer libraries. GitHub never builds t
 Play AAB. Its manual workflow may
 only validate the private draft, sign the exact digest in the protected `play`
 environment, retain the signed AAB plus checksum as an Actions artifact, and remove
-the draft without deleting its source tag. It must use a separate Play upload key and
-never uploads to Play Console.
+the draft without deleting its source tag. It must use a separate Play upload key.
+Optional internal-track publishing must remain a separate job with no signing or
+long-lived Google secret, use Workload Identity Federation, reject non-increasing
+version codes, commit with `ERROR_IF_IN_REVIEW`, and roll back every uncommitted edit.
+Do not extend this workflow to alpha, beta, production, or an automatic trigger.
 Both local release paths inspect the final merged APK manifest, not only the source
 manifest. API levels, permissions, backup/debug state, application components, and
 content-URI import filters are fail-closed allowlists. Any dependency that changes the

@@ -137,9 +137,11 @@ GitHub never builds the Play AAB. The manually dispatched **Sign Local Play Bund
 workflow only downloads a digest-pinned AAB from a private draft, validates its source
 tag and native structure, signs it in the protected `play` environment, and removes
 the private draft while retaining the source tag. It uses a separate Play upload key
-instead of the GitHub APK release key and never uploads to Play Console. The operator
-downloads the `duckyslicer-play-signed` Actions artifact, checks its SHA-256 file, and
-uploads the AAB manually.
+instead of the GitHub APK release key. By default it stops at the
+`duckyslicer-play-signed` Actions artifact. An explicitly approved
+`publish_internal=true` dispatch can instead publish that exact signed digest to the
+Play internal track through the Android Publisher Edits API. Production, staged
+rollout, and promotion remain separate Console decisions.
 
 Create an RSA 2048-bit-or-stronger upload key outside the repository, register its
 public certificate in Play Console, and protect the `play` environment with required
@@ -153,6 +155,24 @@ reviewers. Configure only these environment secrets:
 Add the normalized 64-character upload-certificate fingerprint as the public
 `DUCKYSLICER_PLAY_CERT_SHA256` environment variable. Keep the upload key separate
 from the Play-managed app signing key and the GitHub APK signing key.
+
+For optional internal-track publishing, enable the Google Play Android Developer API
+and grant a dedicated service account only the app-level release permission it needs
+in Play Console. Configure GitHub-to-Google Workload Identity Federation so the trust
+condition accepts only `ashcastle/duckyslicer`, `refs/heads/main`, and the protected
+`play` environment. Add these public environment variables:
+
+- `DUCKYSLICER_GOOGLE_WORKLOAD_IDENTITY_PROVIDER`: full provider resource name
+- `DUCKYSLICER_GOOGLE_PLAY_SERVICE_ACCOUNT`: dedicated service-account email
+
+Do not add a service-account JSON key, OAuth client secret, or refresh token. The
+publisher receives a 15-minute token for only the `androidpublisher` scope, while the
+signer remains the only job that can access the upload key.
+
+The Publishing API can update only an existing Play app with at least one binary
+already uploaded. Complete the first upload and required legal declarations in Play
+Console before enabling this automation. Later AABs use a resumable upload session;
+the workflow rejects a session URL outside Google's Android Publisher origin.
 
 For each Play candidate:
 
@@ -187,18 +207,22 @@ For each Play candidate:
 
 3. Dispatch `play-bundle.yml` from `main` with the six exact metadata values:
    `versionName`, `versionCode`, `sourceCommit`, `transportTag`, `unsignedAsset`, and
-   `unsignedSha256`. Approve the protected `play` environment. The validator and
-   signer each recheck the unsigned digest; neither checks out or executes repository
-   code.
-4. Download `duckyslicer-play-signed`, verify its `.sha256` file, and retain the
-   workflow run URL with the release record. The cleanup job removes the private
-   draft even when signing fails after validation, but deliberately keeps the tag as
-   durable corresponding-source identity.
+   `unsignedSha256`; also provide reviewed English `releaseNotes` and the explicit
+   publication choice. Leave
+   `publishInternal=false` for a signing-only handoff, or set it to `true` to request
+   the internal track. Approve the protected `play` environment. No job checks out or
+   executes repository code.
+4. For an internal publication, the keyless publisher rechecks the signed checksum,
+   opens an edit, rejects a `versionCode` no greater than Play's current maximum,
+   uploads only the exact AAB, updates only `internal`, validates the edit, and commits
+   with `ERROR_IF_IN_REVIEW` so an existing review is never cancelled. A failed run
+   deletes its uncommitted edit. Retain the workflow URL with the release record.
+   The cleanup job removes the private draft but keeps the durable source tag.
 5. Treat the unsigned universal delivery APK as a packaging and 16 KB inspection
-   artifact; Android cannot install it until it is signed. Upload only the signed AAB
-   to Play Console, then install the Play-signed build from an internal test track on
-   representative physical devices before rollout. Track selection, release notes,
-   review, staged rollout, and rollback remain explicit Console actions.
+   artifact; Android cannot install it until it is signed. Install the Play-signed
+   build from the internal test track on representative physical devices before any
+   promotion. Production selection, staged rollout, review submission, and rollback
+   remain explicit Console actions.
 
 Before each Play upload, verify the public privacy-policy URL is reachable:
 `https://github.com/ashcastle/duckyslicer/blob/main/PRIVACY.md`. The same bilingual

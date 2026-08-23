@@ -27,6 +27,15 @@ on:
         description: SHA-256 recorded by the local Play metadata
         required: true
         type: string
+      release_notes:
+        description: English internal-track release notes (1-500 characters)
+        required: true
+        type: string
+      publish_internal:
+        description: Publish the signed bundle to the Play internal track
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -49,6 +58,8 @@ jobs:
       TRANSPORT_TAG: ${{ inputs.transport_tag }}
       UNSIGNED_ASSET: ${{ inputs.unsigned_asset }}
       UNSIGNED_SHA256: ${{ inputs.unsigned_sha256 }}
+      PLAY_RELEASE_NOTES: ${{ inputs.release_notes }}
+      PUBLISH_INTERNAL: ${{ inputs.publish_internal }}
     steps:
       - name: Validate local Play identity and private draft
         run: |
@@ -70,6 +81,16 @@ jobs:
           fi
           if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
             echo "source_commit must be a full lowercase commit SHA" >&2
+            exit 1
+          fi
+          if [ "$PUBLISH_INTERNAL" != "true" ] && \
+            [ "$PUBLISH_INTERNAL" != "false" ]; then
+            echo "publish_internal must be a boolean" >&2
+            exit 1
+          fi
+          if [ -z "$PLAY_RELEASE_NOTES" ] || \
+            [ "${#PLAY_RELEASE_NOTES}" -gt 500 ]; then
+            echo "release_notes must contain 1-500 characters" >&2
             exit 1
           fi
           expected_tag="play-v$PLAY_VERSION_NAME-$PLAY_VERSION_CODE"
@@ -287,8 +308,177 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  cleanup:
+  publish:
     needs: [validate, sign]
+    if: ${{ inputs.publish_internal }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: play
+    permissions:
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: duckyslicer-play-signed
+          path: signed
+
+      - name: Validate keyless Play publisher configuration
+        env:
+          WORKLOAD_IDENTITY_PROVIDER: ${{ vars.DUCKYSLICER_GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}
+          PLAY_SERVICE_ACCOUNT: ${{ vars.DUCKYSLICER_GOOGLE_PLAY_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          test -n "$WORKLOAD_IDENTITY_PROVIDER"
+          test -n "$PLAY_SERVICE_ACCOUNT"
+          if [[ ! "$WORKLOAD_IDENTITY_PROVIDER" =~ ^projects/[0-9]+/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$ ]]; then
+            echo "Play Workload Identity provider has an invalid resource name" >&2
+            exit 1
+          fi
+          if [[ ! "$PLAY_SERVICE_ACCOUNT" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.iam\.gserviceaccount\.com$ ]]; then
+            echo "Play publisher service account has an invalid email" >&2
+            exit 1
+          fi
+
+      - id: google_auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.DUCKYSLICER_GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.DUCKYSLICER_GOOGLE_PLAY_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          access_token_lifetime: 900s
+          create_credentials_file: false
+          export_environment_variables: false
+          request_reason: DuckySlicer Play internal release ${{ inputs.version_name }} (${{ inputs.version_code }})
+
+      - name: Publish the exact signed bundle to the internal track
+        env:
+          PLAY_ACCESS_TOKEN: ${{ steps.google_auth.outputs.access_token }}
+          PLAY_PACKAGE_NAME: com.ashcastle.duckyslicer
+          PLAY_VERSION_NAME: ${{ inputs.version_name }}
+          PLAY_VERSION_CODE: ${{ inputs.version_code }}
+          PLAY_RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: |
+          set -euo pipefail
+          signed_aab="signed/DuckySlicer-$PLAY_VERSION_NAME-play.aab"
+          checksum_file="$signed_aab.sha256"
+          test -s "$signed_aab"
+          test -s "$checksum_file"
+          (
+            cd signed
+            sha256sum --check "DuckySlicer-$PLAY_VERSION_NAME-play.aab.sha256"
+          )
+          if [ -z "$PLAY_ACCESS_TOKEN" ]; then
+            echo "Play publisher did not receive a short-lived access token" >&2
+            exit 1
+          fi
+
+          api_root="https://androidpublisher.googleapis.com/androidpublisher/v3/applications/$PLAY_PACKAGE_NAME"
+          upload_root="https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications/$PLAY_PACKAGE_NAME"
+          auth_header="Authorization: Bearer $PLAY_ACCESS_TOKEN"
+          edit_id=""
+          edit_committed="false"
+          cleanup_edit() {
+            if [ -n "$edit_id" ] && [ "$edit_committed" != "true" ]; then
+              curl --fail-with-body --silent --show-error \
+                --request DELETE --header "$auth_header" \
+                "$api_root/edits/$edit_id" >/dev/null || true
+            fi
+          }
+          trap cleanup_edit EXIT
+
+          edit_response=$(curl --fail-with-body --silent --show-error \
+            --request POST --header "$auth_header" \
+            --header 'Content-Type: application/json' --data '{}' \
+            "$api_root/edits")
+          edit_id=$(jq -er '.id' <<<"$edit_response")
+          if [[ ! "$edit_id" =~ ^[0-9]+$ ]]; then
+            echo "Play returned an invalid edit identifier" >&2
+            exit 1
+          fi
+
+          bundles_response=$(curl --fail-with-body --silent --show-error \
+            --header "$auth_header" "$api_root/edits/$edit_id/bundles")
+          highest_version_code=$(jq -er \
+            '[.bundles[]?.versionCode | tonumber] | max // 0' \
+            <<<"$bundles_response")
+          if [ "$PLAY_VERSION_CODE" -le "$highest_version_code" ]; then
+            echo "versionCode $PLAY_VERSION_CODE is not greater than Play's current maximum $highest_version_code" >&2
+            exit 1
+          fi
+
+          bundle_size=$(wc -c < "$signed_aab" | tr -d '[:space:]')
+          if [[ ! "$bundle_size" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Signed Play bundle has an invalid byte size" >&2
+            exit 1
+          fi
+          upload_headers="$RUNNER_TEMP/duckyslicer-play-upload.headers"
+          curl --fail-with-body --silent --show-error \
+            --connect-timeout 20 --max-time 60 \
+            --request POST --header "$auth_header" \
+            --header 'Content-Type: application/json; charset=UTF-8' \
+            --header 'Content-Length: 0' \
+            --header 'X-Upload-Content-Type: application/octet-stream' \
+            --header "X-Upload-Content-Length: $bundle_size" \
+            --dump-header "$upload_headers" --output /dev/null \
+            "$upload_root/edits/$edit_id/bundles?uploadType=resumable"
+          upload_session=$(awk 'tolower($0) ~ /^location:/ { line=$0; sub(/^[^:]*:[[:space:]]*/, "", line); print line }' \
+            "$upload_headers" | tail -1 | tr -d '\r')
+          if [[ ! "$upload_session" =~ ^https://androidpublisher\.googleapis\.com/upload/ ]]; then
+            echo "Play returned an invalid resumable upload origin" >&2
+            exit 1
+          fi
+          upload_response=$(curl --fail-with-body --silent --show-error \
+            --connect-timeout 20 --max-time 300 \
+            --request PUT --header "$auth_header" \
+            --header 'Content-Type: application/octet-stream' \
+            --header "Content-Length: $bundle_size" \
+            --data-binary "@$signed_aab" "$upload_session")
+          uploaded_version_code=$(jq -er '.versionCode | tostring' \
+            <<<"$upload_response")
+          if [ "$uploaded_version_code" != "$PLAY_VERSION_CODE" ]; then
+            echo "Play uploaded versionCode $uploaded_version_code instead of $PLAY_VERSION_CODE" >&2
+            exit 1
+          fi
+
+          track_payload=$(jq -n \
+            --arg track internal \
+            --arg name "$PLAY_VERSION_NAME" \
+            --arg version_code "$PLAY_VERSION_CODE" \
+            --arg notes "$PLAY_RELEASE_NOTES" \
+            '{track: $track, releases: [{name: $name, versionCodes: [$version_code], status: "completed", releaseNotes: [{language: "en-US", text: $notes}]}]}')
+          track_response=$(curl --fail-with-body --silent --show-error \
+            --request PUT --header "$auth_header" \
+            --header 'Content-Type: application/json' \
+            --data "$track_payload" \
+            "$api_root/edits/$edit_id/tracks/internal")
+          jq -e --arg version_code "$PLAY_VERSION_CODE" \
+            '.track == "internal" and any(.releases[]?.versionCodes[]?; . == $version_code)' \
+            <<<"$track_response" >/dev/null
+
+          curl --fail-with-body --silent --show-error \
+            --request POST --header "$auth_header" \
+            --header 'Content-Type: application/json' --data '{}' \
+            "$api_root/edits/$edit_id:validate" >/dev/null
+          commit_response=$(curl --fail-with-body --silent --show-error \
+            --request POST --header "$auth_header" \
+            --header 'Content-Type: application/json' --data '{}' \
+            "$api_root/edits/$edit_id:commit?changesInReviewBehavior=ERROR_IF_IN_REVIEW")
+          jq -e --arg edit_id "$edit_id" '.id == $edit_id' \
+            <<<"$commit_response" >/dev/null
+          edit_committed="true"
+
+          {
+            echo "### Google Play internal release"
+            echo "- Package: $PLAY_PACKAGE_NAME"
+            echo "- Version: $PLAY_VERSION_NAME ($PLAY_VERSION_CODE)"
+            echo "- Previous maximum versionCode: $highest_version_code"
+            echo "- Track: internal"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  cleanup:
+    needs: [validate, sign, publish]
     if: ${{ always() && needs.validate.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
