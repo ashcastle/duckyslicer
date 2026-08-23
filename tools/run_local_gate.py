@@ -35,6 +35,7 @@ STATIC_VERIFIERS = (
     "verify_profile_editor.py",
     "verify_open_source_distribution.py",
     "verify_runtime_resilience.py",
+    "verify_startup_performance.py",
     "verify_data_practices.py",
     "verify_support_diagnostics.py",
     "verify_project_archive.py",

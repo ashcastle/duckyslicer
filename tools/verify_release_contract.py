@@ -205,6 +205,7 @@ def verify_release_contract(sources: dict[str, str]) -> None:
             "verify_reproducible(candidate_symbols, RELEASE_NATIVE_SYMBOLS)",
             "verify_release_diagnostics(RELEASE_MAPPING, RELEASE_NATIVE_SYMBOLS)",
             'ROOT / "tools/verify_apk.py"',
+            '"--require-runtime-profiles"',
             'ROOT / "tools/verify_artifact_manifest.py"',
             'ROOT / "tools/verify_artifact_localization.py"',
             'branch != "main"',
@@ -217,6 +218,9 @@ def verify_release_contract(sources: dict[str, str]) -> None:
             '"unsignedSha256": self.unsigned_sha256',
             '"localR8MappingSha256": self.local_r8_mapping_sha256',
             '"localNativeSymbolsSha256": self.local_native_symbols_sha256',
+            "verify_release_qualifications(physical_report, startup_report, source_commit)",
+            'parser.add_argument("--physical-report", required=True, type=Path)',
+            'parser.add_argument("--startup-report", required=True, type=Path)',
         ),
     )
 
@@ -232,6 +236,8 @@ def verify_release_contract(sources: dict[str, str]) -> None:
             "local-native-symbols",
             "local-r8-mapping",
             "must not be uploaded to the public github release",
+            "--physical-report",
+            "--startup-report",
         ),
         "SECURITY.md": (
             "release apk is built twice on the maintainer's local machine",

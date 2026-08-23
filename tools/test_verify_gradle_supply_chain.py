@@ -86,6 +86,28 @@ class VerifyGradleSupplyChainTest(unittest.TestCase):
                 self.assertTrue(supply_chain.is_dynamic(version))
         self.assertFalse(supply_chain.is_dynamic("2.3.21"))
 
+    def test_combines_dependency_locks_from_every_android_module(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app_lock = root / "app.lock"
+            profile_lock = root / "profile.lock"
+            app_lock.write_text("example:app:1.0=debugRuntimeClasspath\n", encoding="utf-8")
+            profile_lock.write_text(
+                "example:benchmark:2.0=nonMinifiedReleaseRuntimeClasspath\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(
+                supply_chain,
+                "LOCKFILES",
+                (app_lock, profile_lock),
+            ):
+                self.assertEqual(
+                    2,
+                    supply_chain.verify_lockfiles(
+                        {"example:app:1.0", "example:benchmark:2.0"},
+                    ),
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

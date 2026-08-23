@@ -67,6 +67,7 @@ jobs:
           python3 tools/verify_profile_editor.py
           python3 tools/verify_open_source_distribution.py
           python3 tools/verify_runtime_resilience.py
+          python3 tools/verify_startup_performance.py
           python3 tools/verify_data_practices.py
           python3 tools/verify_support_diagnostics.py
           python3 tools/verify_project_archive.py
@@ -96,6 +97,7 @@ jobs:
         working-directory: android
         run: |
           ./gradlew --dependency-verification=strict \
+            :baselineprofile:compileNonMinifiedReleaseKotlin \
             :app:testDebugUnitTest :app:assembleDebug \
             :app:assembleDebugAndroidTest :app:lintDebug \
             :app:writeDebugDependencyInventory
@@ -110,7 +112,7 @@ jobs:
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 \
             android/app/build/outputs/apk/debug/app-debug.apk
-          python3 -m unittest tools.test_verify_apk tools.test_verify_artifact_manifest tools.test_verify_artifact_localization tools.test_generate_android_translations tools.test_verify_localization tools.test_verify_community_health tools.test_verify_store_listing tools.test_verify_repository_hygiene tools.test_verify_no_embedded_credentials tools.test_verify_gradle_supply_chain tools.test_verify_dependency_audit tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_slice_storage tools.test_verify_preview_boundary tools.test_verify_profile_editor tools.test_verify_open_source_distribution tools.test_verify_runtime_resilience tools.test_verify_data_practices tools.test_verify_support_diagnostics tools.test_verify_project_archive tools.test_verify_release_contract tools.test_verify_play_bundle_workflow tools.test_prepare_local_release tools.test_prepare_local_play_bundle tools.test_generate_license_inventory tools.test_generate_offline_licenses tools.test_generate_profile_catalog tools.test_generate_sbom tools.test_generate_source_bundle tools.test_verify_reproducible_release tools.test_verify_workflows
+          python3 -m unittest tools.test_verify_apk tools.test_verify_artifact_manifest tools.test_verify_artifact_localization tools.test_generate_android_translations tools.test_verify_localization tools.test_verify_community_health tools.test_verify_store_listing tools.test_verify_repository_hygiene tools.test_verify_no_embedded_credentials tools.test_verify_gradle_supply_chain tools.test_verify_dependency_audit tools.test_verify_native_safety tools.test_verify_android_isolation tools.test_verify_slice_storage tools.test_verify_preview_boundary tools.test_verify_profile_editor tools.test_verify_open_source_distribution tools.test_verify_runtime_resilience tools.test_verify_startup_performance tools.test_verify_release_qualifications tools.test_verify_data_practices tools.test_verify_support_diagnostics tools.test_verify_project_archive tools.test_verify_release_contract tools.test_verify_play_bundle_workflow tools.test_prepare_local_release tools.test_prepare_local_play_bundle tools.test_generate_license_inventory tools.test_generate_offline_licenses tools.test_generate_profile_catalog tools.test_generate_sbom tools.test_generate_source_bundle tools.test_verify_reproducible_release tools.test_verify_workflows
           python3 tools/verify_slice_storage.py
           python3 tools/verify_preview_boundary.py
           python3 tools/verify_profile_editor.py

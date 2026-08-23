@@ -1,5 +1,9 @@
 plugins {
     id("com.android.application") version "9.3.1" apply false
+    id("com.android.test") version "9.3.1" apply false
+    // 1.5 is the first line compatible with AGP 9's new DSL. Keep this build-only
+    // plug-in pinned until the corresponding stable release is available.
+    id("androidx.baselineprofile") version "1.5.0-rc01" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.21" apply false
 }
 

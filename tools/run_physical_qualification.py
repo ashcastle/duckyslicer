@@ -712,6 +712,7 @@ def run(
             raise RunnerError("Physical qualification selected no corpus cases")
         report = first_report
         report["source"] = "physical-android"
+        report["sourceCommit"] = captured(("git", "rev-parse", "HEAD"), timeout=20).strip()
         report["generatedAtUtc"] = datetime.now(timezone.utc).isoformat()
         report["device"] = asdict(identity)
         report["qualificationPackage"] = {

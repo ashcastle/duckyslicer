@@ -1,0 +1,10 @@
+# Default review ownership
+* @ashcastle
+
+# Security- and release-critical surfaces
+/.github/workflows/ @ashcastle
+/android/gradle/ @ashcastle
+/native/slicer-runtime/ @ashcastle
+/tools/prepare_local_release.py @ashcastle
+/tools/prepare_local_play_bundle.py @ashcastle
+/SECURITY.md @ashcastle

@@ -6,9 +6,11 @@ import unittest
 from tools.verify_apk import (
     PAGE_ALIGNMENT,
     REQUIRED_LEGAL_ASSETS,
+    REQUIRED_RUNTIME_PROFILES,
     VerificationError,
     inspect_elf,
     inspect_legal_assets,
+    inspect_runtime_profiles,
 )
 
 
@@ -95,6 +97,27 @@ class VerifyApkTest(unittest.TestCase):
         ):
             with self.assertRaisesRegex(VerificationError, "legal asset"):
                 inspect_legal_assets(invalid)
+
+    def test_accepts_compiled_runtime_profiles(self) -> None:
+        inspect_runtime_profiles(
+            {
+                name: magic + bytes(minimum_size)
+                for name, (magic, minimum_size) in REQUIRED_RUNTIME_PROFILES.items()
+            }
+        )
+
+    def test_rejects_missing_or_invalid_runtime_profiles(self) -> None:
+        complete = {
+            name: magic + bytes(minimum_size)
+            for name, (magic, minimum_size) in REQUIRED_RUNTIME_PROFILES.items()
+        }
+        for invalid in (
+            {"assets/dexopt/baseline.prof": complete["assets/dexopt/baseline.prof"]},
+            {**complete, "assets/dexopt/baseline.prof": b"invalid"},
+            {**complete, "assets/dexopt/baseline.profm": b"invalid"},
+        ):
+            with self.assertRaisesRegex(VerificationError, "startup profile"):
+                inspect_runtime_profiles(invalid)
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.ReportDrawnWhen
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -489,6 +490,14 @@ private fun DuckySlicerScreen(
     }
     val remoteMessageIsError = remoteOperationMessage?.isError ?: false
     val remoteBusy = remoteOperationState.busy
+
+    ReportDrawnWhen {
+        initialWorkspaceReady(
+            projectRestored = projectTransferState.restored,
+            profileCatalogLoaded = profileLibraryState.catalogLoaded,
+            profileRecentsLoaded = profileLibraryState.recentsLoaded,
+        )
+    }
 
     fun clearCompletedSlice(plateId: String = selectedPlateId) {
         sliceOperationModel.clearCompleted()
@@ -1774,3 +1783,9 @@ private fun DuckySlicerScreen(
         )
     }
 }
+
+internal fun initialWorkspaceReady(
+    projectRestored: Boolean,
+    profileCatalogLoaded: Boolean,
+    profileRecentsLoaded: Boolean,
+): Boolean = projectRestored && profileCatalogLoaded && profileRecentsLoaded

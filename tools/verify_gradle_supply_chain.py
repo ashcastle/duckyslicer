@@ -13,7 +13,12 @@ ROOT = Path(__file__).resolve().parent.parent
 ANDROID_ROOT = ROOT / "android"
 BUILD_SCRIPT = ANDROID_ROOT / "build.gradle.kts"
 APP_BUILD_SCRIPT = ANDROID_ROOT / "app/build.gradle.kts"
-LOCKFILE = ANDROID_ROOT / "app/gradle.lockfile"
+BASELINE_PROFILE_BUILD_SCRIPT = ANDROID_ROOT / "baselineprofile/build.gradle.kts"
+MODULE_BUILD_SCRIPTS = (APP_BUILD_SCRIPT, BASELINE_PROFILE_BUILD_SCRIPT)
+LOCKFILES = (
+    ANDROID_ROOT / "app/gradle.lockfile",
+    ANDROID_ROOT / "baselineprofile/gradle.lockfile",
+)
 METADATA = ANDROID_ROOT / "gradle/verification-metadata.xml"
 WRAPPER = ANDROID_ROOT / "gradle/wrapper/gradle-wrapper.properties"
 SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -63,12 +68,16 @@ def verify_wrapper() -> None:
 
 def declared_versions() -> set[str]:
     root_script = require_file(BUILD_SCRIPT)
-    app_script = require_file(APP_BUILD_SCRIPT)
     if "lockAllConfigurations()" not in root_script:
         raise VerificationError("all Gradle configurations must participate in dependency locking")
 
-    coordinates = {match[0] for match in MAVEN_COORDINATE.findall(app_script)}
-    versions = [match[1] for match in MAVEN_COORDINATE.findall(app_script)]
+    coordinates: set[str] = set()
+    versions: list[str] = []
+    for build_script in MODULE_BUILD_SCRIPTS:
+        source = require_file(build_script)
+        matches = MAVEN_COORDINATE.findall(source)
+        coordinates.update(match[0] for match in matches)
+        versions.extend(match[1] for match in matches)
     versions.extend(PLUGIN_VERSION.findall(root_script))
     dynamic = sorted(version for version in versions if is_dynamic(version))
     if dynamic:
@@ -76,18 +85,19 @@ def declared_versions() -> set[str]:
     return coordinates
 
 
-def verify_lockfile(required_coordinates: set[str]) -> int:
+def verify_lockfiles(required_coordinates: set[str]) -> int:
     locked_coordinates: set[str] = set()
-    for line in require_file(LOCKFILE).splitlines():
-        if not line or line.startswith("#") or line.startswith("empty="):
-            continue
-        coordinate, separator, configurations = line.partition("=")
-        if not separator or coordinate.count(":") != 2 or not configurations:
-            raise VerificationError(f"invalid dependency lock entry: {line}")
-        version = coordinate.rsplit(":", 1)[1]
-        if is_dynamic(version):
-            raise VerificationError(f"dynamic version in dependency lock: {coordinate}")
-        locked_coordinates.add(coordinate)
+    for lockfile in LOCKFILES:
+        for line in require_file(lockfile).splitlines():
+            if not line or line.startswith("#") or line.startswith("empty="):
+                continue
+            coordinate, separator, configurations = line.partition("=")
+            if not separator or coordinate.count(":") != 2 or not configurations:
+                raise VerificationError(f"invalid dependency lock entry: {line}")
+            version = coordinate.rsplit(":", 1)[1]
+            if is_dynamic(version):
+                raise VerificationError(f"dynamic version in dependency lock: {coordinate}")
+            locked_coordinates.add(coordinate)
     if not locked_coordinates:
         raise VerificationError("dependency lock is empty")
     missing = sorted(required_coordinates - locked_coordinates)
@@ -163,12 +173,15 @@ def digest(path: Path) -> str:
 
 def main() -> None:
     verify_wrapper()
-    lock_count = verify_lockfile(declared_versions())
+    lock_count = verify_lockfiles(declared_versions())
     component_count, artifact_count = verify_metadata()
+    lock_digest = hashlib.sha256(
+        "".join(digest(lockfile) for lockfile in LOCKFILES).encode("ascii")
+    ).hexdigest()
     print(
         f"Verified Gradle supply chain: {lock_count} locked modules, "
         f"{component_count} checksum-pinned components, {artifact_count} artifacts; "
-        f"lock={digest(LOCKFILE)[:12]}, metadata={digest(METADATA)[:12]}"
+        f"locks={lock_digest[:12]}, metadata={digest(METADATA)[:12]}"
     )
 
 

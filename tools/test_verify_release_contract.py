@@ -89,6 +89,7 @@ jobs:
                 "verify_reproducible(candidate_symbols, RELEASE_NATIVE_SYMBOLS)",
                 "verify_release_diagnostics(RELEASE_MAPPING, RELEASE_NATIVE_SYMBOLS)",
                 'ROOT / "tools/verify_apk.py"',
+                '"--require-runtime-profiles"',
                 'ROOT / "tools/verify_artifact_manifest.py"',
                 'ROOT / "tools/verify_artifact_localization.py"',
                 'branch != "main"',
@@ -101,6 +102,9 @@ jobs:
                 '"unsignedSha256": self.unsigned_sha256',
                 '"localR8MappingSha256": self.local_r8_mapping_sha256',
                 '"localNativeSymbolsSha256": self.local_native_symbols_sha256',
+                "verify_release_qualifications(physical_report, startup_report, source_commit)",
+                'parser.add_argument("--physical-report", required=True, type=Path)',
+                'parser.add_argument("--startup-report", required=True, type=Path)',
             )
         ),
         "RELEASING.md": (
@@ -110,7 +114,7 @@ jobs:
             "appends the signed APK SHA-256, signing-certificate fingerprint, and source tag. "
             "Use DuckySlicer_16KB_API36 on Android 16/API 36. Preserve the "
             "LOCAL-NATIVE-SYMBOLS and LOCAL-R8-MAPPING files; they must not be uploaded "
-            "to the public GitHub Release."
+            "to the public GitHub Release. Pass --physical-report and --startup-report."
         ),
         "SECURITY.md": (
             "The Release APK is built twice on the maintainer's local machine. "

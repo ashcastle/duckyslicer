@@ -196,6 +196,16 @@ software-renderer traces are useful for locating regressions but do not replace 
 physical-device gate. The dense workload also repeats three times in one instrumentation
 session so process restarts, continuing UI-PSS growth, and warmed-up slicing/Preview
 regressions fail instead of being hidden by a fresh process.
+Release startup evidence is collected separately with
+`python3 tools/run_startup_qualification.py --serial <physical-serial>`. It runs cold
+startup both without compilation and with the checked-in Baseline Profile, requires
+TTID and TTFD samples, rejects large regressions, and refuses emulator results as
+release evidence. Both local release preparers require this startup report and the
+complete physical qualification report for the exact source commit. Regenerate the
+app-owned profile with
+`ANDROID_SERIAL=<api-36-serial> ./android/gradlew -p android :app:generateBaselineProfile`
+when the initial workspace journey changes; the generated rules are first-party-only
+and deterministically sorted before commit.
 Reconstructable VBOs must be released when Android
 reports that the UI is hidden or the process is in the background, then rebuilt lazily on
 the first visible frame. Keep this policy pure and host-tested alongside the real ARM64
@@ -254,7 +264,8 @@ merged manifest requires explicit security review and a policy update.
 
 ## Updating Android dependencies
 
-Gradle dependency changes must update both `android/app/gradle.lockfile` and
+Gradle dependency changes must update `android/app/gradle.lockfile`,
+`android/baselineprofile/gradle.lockfile`, and
 `android/gradle/verification-metadata.xml`. Generate trust data from an empty
 Gradle user home so previously cached plug-in metadata cannot hide a missing
 checksum, then review every new coordinate and checksum before committing it:
@@ -264,12 +275,15 @@ cd android
 verification_home="$(mktemp -d)"
 GRADLE_USER_HOME="$verification_home" ./gradlew --no-daemon \
   --write-locks --write-verification-metadata sha256 \
+  :baselineprofile:compileNonMinifiedReleaseKotlin \
   :app:testDebugUnitTest :app:lintRelease :app:assembleDebug \
   :app:assembleDebugAndroidTest :app:assembleRelease
 
 cd ..
 python3 tools/verify_gradle_supply_chain.py
-git diff -- android/app/gradle.lockfile android/gradle/verification-metadata.xml
+git diff -- android/app/gradle.lockfile \
+  android/baselineprofile/gradle.lockfile \
+  android/gradle/verification-metadata.xml
 ```
 
 Do not add trusted-artifact or ignored-key bypasses. If a repository publishes a

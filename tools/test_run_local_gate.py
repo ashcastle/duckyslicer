@@ -183,6 +183,7 @@ physical unauthorized transport_id:3
                 "verify_apk.py",
                 "verify_artifact_localization.py",
                 "verify_artifact_manifest.py",
+                "verify_release_qualifications.py",
                 "verify_reproducible_release.py",
             }
         }

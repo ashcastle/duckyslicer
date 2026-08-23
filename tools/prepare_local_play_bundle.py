@@ -29,6 +29,7 @@ from tools.prepare_local_release import (
     verify_checkout,
     verify_unsigned_apk,
 )
+from tools.verify_release_qualifications import verify_release_qualifications
 from tools.verify_reproducible_release import verify_reproducible
 
 
@@ -221,6 +222,8 @@ def prepare_play_bundle(
     version_name: str,
     version_code: int,
     output_root: Path,
+    physical_report: Path,
+    startup_report: Path,
 ) -> PlayBundleIdentity:
     validate_release_inputs(version_name, version_code)
     exposed_signing = signing_variables(os.environ)
@@ -230,6 +233,7 @@ def prepare_play_bundle(
             + ", ".join(exposed_signing)
         )
     source_commit = verify_checkout()
+    verify_release_qualifications(physical_report, startup_report, source_commit)
     build_tools = android_build_tools(os.environ)
     output = output_root.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -326,6 +330,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", required=True, help="SemVer without a leading v")
     parser.add_argument("--version-code", required=True, type=int)
+    parser.add_argument("--physical-report", required=True, type=Path)
+    parser.add_argument("--startup-report", required=True, type=Path)
     parser.add_argument(
         "--output",
         type=Path,
@@ -337,7 +343,13 @@ def main(arguments: Sequence[str] | None = None) -> int:
         or ROOT / "build/local-play" / f"{options.version}-{options.version_code}"
     )
     try:
-        identity = prepare_play_bundle(options.version, options.version_code, output)
+        identity = prepare_play_bundle(
+            options.version,
+            options.version_code,
+            output,
+            options.physical_report,
+            options.startup_report,
+        )
     except (OSError, ReleasePreparationError, ValueError, zipfile.BadZipFile) as error:
         print(f"Local Play preparation failed: {error}", file=sys.stderr)
         return 1

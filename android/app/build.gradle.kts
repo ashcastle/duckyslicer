@@ -5,6 +5,7 @@ import org.gradle.api.tasks.TaskProvider
 
 plugins {
     id("com.android.application")
+    id("androidx.baselineprofile")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
@@ -386,6 +387,32 @@ android {
     }
 }
 
+baselineProfile {
+    automaticGenerationDuringBuild = false
+    mergeIntoMain = true
+    saveInSrc = true
+}
+
+val committedBaselineProfiles = listOf(
+    projectDir.resolve("src/main/generated/baselineProfiles/baseline-prof.txt"),
+    projectDir.resolve("src/main/generated/baselineProfiles/startup-prof.txt"),
+)
+
+tasks.matching { task -> task.name == "generateBaselineProfile" }.configureEach {
+    doLast {
+        committedBaselineProfiles.forEach { profile ->
+            check(profile.isFile) { "Baseline profile was not generated: ${profile.absolutePath}" }
+            val normalized = profile.readLines()
+                .filter(String::isNotBlank)
+                .map { rule -> rule.replace(Regex("^[HSP]+(?=L)"), "HSP") }
+                .distinct()
+                .sorted()
+            check(normalized.isNotEmpty()) { "Baseline profile is empty: ${profile.absolutePath}" }
+            profile.writeText(normalized.joinToString(separator = "\n", postfix = "\n"))
+        }
+    }
+}
+
 tasks.configureEach {
     if (name.contains("resources", ignoreCase = true) || name.contains("lint", ignoreCase = true)) {
         dependsOn(generateAndroidTranslations)
@@ -425,4 +452,5 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.7.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20251224")
+    baselineProfile(project(":baselineprofile"))
 }

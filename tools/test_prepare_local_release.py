@@ -163,6 +163,7 @@ class PrepareLocalReleaseTest(unittest.TestCase):
                     "tools.prepare_local_release.android_build_tools",
                     return_value=root,
                 ),
+                patch("tools.prepare_local_release.verify_release_qualifications"),
                 patch("tools.prepare_local_release.run") as run_mock,
                 patch("tools.prepare_local_release.verify_unsigned_apk"),
                 patch(
@@ -171,7 +172,7 @@ class PrepareLocalReleaseTest(unittest.TestCase):
                 ),
             ):
                 with self.assertRaisesRegex(OSError, "disk full"):
-                    prepare_release("1.2.3", 42, output)
+                    prepare_release("1.2.3", 42, output, root / "physical.json", root / "startup.json")
             gate_command = run_mock.call_args_list[0].args[0]
             self.assertTrue(gate_command[1].endswith("tools/run_local_gate.py"))
             self.assertEqual("--require-api-36", gate_command[-1])

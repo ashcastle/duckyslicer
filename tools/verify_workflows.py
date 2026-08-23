@@ -152,6 +152,15 @@ def main() -> None:
         "runtime persistence and LAN inputs are bounded": (
             "python3 tools/verify_runtime_resilience.py"
         ),
+        "app startup optimization is structurally verified": (
+            "python3 tools/verify_startup_performance.py"
+        ),
+        "startup profile generator is compiled": (
+            ":baselineprofile:compileNonMinifiedReleaseKotlin"
+        ),
+        "startup optimization policy is unit tested": (
+            "tools.test_verify_startup_performance"
+        ),
         "component license inventory is generated": (
             "python3 tools/generate_license_inventory.py"
         ),

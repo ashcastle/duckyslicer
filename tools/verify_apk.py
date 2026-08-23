@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import re
 import struct
 import sys
@@ -56,6 +57,10 @@ REQUIRED_LEGAL_ASSETS = {
         b"Boost Software License",
     ),
 }
+REQUIRED_RUNTIME_PROFILES = {
+    "assets/dexopt/baseline.prof": (b"pro\x00010\x00", 1_024),
+    "assets/dexopt/baseline.profm": (b"prm\x00002\x00", 100),
+}
 
 
 class VerificationError(ValueError):
@@ -108,6 +113,15 @@ def inspect_legal_assets(entries: dict[str, bytes]) -> None:
             raise VerificationError(f"APK is missing required legal asset: {name}")
         if not all(marker in data for marker in markers):
             raise VerificationError(f"APK legal asset is incomplete or stale: {name}")
+
+
+def inspect_runtime_profiles(entries: dict[str, bytes]) -> None:
+    for name, (magic, minimum_size) in REQUIRED_RUNTIME_PROFILES.items():
+        data = entries.get(name)
+        if data is None:
+            raise VerificationError(f"APK is missing compiled app startup profile: {name}")
+        if len(data) < minimum_size or not data.startswith(magic):
+            raise VerificationError(f"APK startup profile is invalid or empty: {name}")
 
 
 def inspect_elf(data: bytes, name: str) -> int:
@@ -177,7 +191,7 @@ def zip_data_offset(apk: Path, entry: zipfile.ZipInfo) -> int:
     return entry.header_offset + ZIP_LOCAL_HEADER_SIZE + name_length + extra_length
 
 
-def verify_apk(apk: Path) -> tuple[int, int]:
+def verify_apk(apk: Path, *, require_runtime_profiles: bool = False) -> tuple[int, int]:
     if not apk.is_file():
         raise VerificationError(f"APK is unavailable: {apk}")
     with zipfile.ZipFile(apk) as archive:
@@ -218,6 +232,14 @@ def verify_apk(apk: Path) -> tuple[int, int]:
                 if name in names
             }
         )
+        if require_runtime_profiles:
+            inspect_runtime_profiles(
+                {
+                    name: archive.read(name)
+                    for name in REQUIRED_RUNTIME_PROFILES
+                    if name in names
+                }
+            )
 
         load_segments = 0
         for name, entry in sorted(native_entries.items()):
@@ -233,17 +255,25 @@ def verify_apk(apk: Path) -> tuple[int, int]:
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        raise SystemExit("usage: verify_apk.py APK")
-    apk = Path(sys.argv[1]).resolve()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("apk", type=Path)
+    parser.add_argument("--require-runtime-profiles", action="store_true")
+    arguments = parser.parse_args()
+    apk = arguments.apk.resolve()
     try:
-        library_count, load_count = verify_apk(apk)
+        library_count, load_count = verify_apk(
+            apk,
+            require_runtime_profiles=arguments.require_runtime_profiles,
+        )
     except (OSError, zipfile.BadZipFile, VerificationError) as error:
         raise SystemExit(f"APK verification failed: {error}") from error
+    profile_summary = (
+        "compiled startup profiles, " if arguments.require_runtime_profiles else ""
+    )
     print(
         f"Verified {apk}: {library_count} allowlisted ARM64 libraries, "
         f"{load_count} 16 KB-compatible LOAD segments, one binary profile catalog, "
-        "and offline privacy and legal materials"
+        f"{profile_summary}and offline privacy and legal materials"
     )
 
 

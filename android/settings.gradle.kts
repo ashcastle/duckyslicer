@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "DuckySlicer"
 include(":app")
+include(":baselineprofile")

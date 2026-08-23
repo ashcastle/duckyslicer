@@ -61,18 +61,31 @@ key prevents publishing a compatible update under the same Android identity.
 
 ## Release procedure
 
-1. Switch to a clean `main` and initialize recursive submodules. The preparation
+1. Switch to a clean `main`, initialize recursive submodules, and run the physical
+   rendering/slicing and startup qualifications on an awake, unlocked representative
+   ARM64 phone. Both reports are ignored local evidence and record the exact source
+   commit; emulators are rejected for these measurements.
+
+   ```shell
+   python3 tools/run_physical_qualification.py --serial <physical-serial>
+   python3 tools/run_startup_qualification.py --serial <physical-serial>
+   ```
+
+2. The preparation
    command fetches `origin/main` itself and refuses a stale or divergent checkout.
-2. Choose a SemVer and a positive Android `versionCode` greater than every previously
+   Choose a SemVer and a positive Android `versionCode` greater than every previously
    released build, then prepare the candidate locally:
 
    ```shell
    python3 tools/prepare_local_release.py \
      --version 0.2.0-rc.1 \
-     --version-code 5
+     --version-code 5 \
+     --physical-report build/qualification/physical-report.json \
+     --startup-report build/qualification/startup-report.json
    ```
 
-3. Review the generated `LOCAL-RELEASE.json`, source diff, dependency changes, license
+3. Review the two physical reports, generated `LOCAL-RELEASE.json`, source diff,
+   dependency changes, license
    notices, and profile catalog. Archive the named local R8 mapping and native symbols
    with the private release record, but upload only the recorded unsigned APK to the
    draft Release. Perform an offline import, slice, full-layer preview, and G-code
@@ -138,7 +151,9 @@ For each Play candidate:
    ```shell
    python3 tools/prepare_local_play_bundle.py \
      --version 0.2.0-rc.1 \
-     --version-code 5
+     --version-code 5 \
+     --physical-report build/qualification/physical-report.json \
+     --startup-report build/qualification/startup-report.json
    ```
 
 2. Review

@@ -21,6 +21,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools.verify_reproducible_release import verify_reproducible
+from tools.verify_release_qualifications import verify_release_qualifications
 
 
 ANDROID = ROOT / "android"
@@ -252,7 +253,14 @@ def verify_unsigned_apk(
 ) -> None:
     if not apk.is_file() or apk.stat().st_size <= 0:
         raise ReleasePreparationError(f"Unsigned release APK is missing: {apk}")
-    run((sys.executable, str(ROOT / "tools/verify_apk.py"), str(apk)))
+    run(
+        (
+            sys.executable,
+            str(ROOT / "tools/verify_apk.py"),
+            "--require-runtime-profiles",
+            str(apk),
+        )
+    )
     run(
         (
             sys.executable,
@@ -341,7 +349,13 @@ def write_metadata(path: Path, identity: ReleaseIdentity) -> None:
     os.replace(temporary, path)
 
 
-def prepare_release(version_name: str, version_code: int, output_root: Path) -> ReleaseIdentity:
+def prepare_release(
+    version_name: str,
+    version_code: int,
+    output_root: Path,
+    physical_report: Path,
+    startup_report: Path,
+) -> ReleaseIdentity:
     validate_release_inputs(version_name, version_code)
     exposed_signing = signing_variables(os.environ)
     if exposed_signing:
@@ -350,6 +364,7 @@ def prepare_release(version_name: str, version_code: int, output_root: Path) -> 
             + ", ".join(exposed_signing)
         )
     source_commit = verify_checkout()
+    verify_release_qualifications(physical_report, startup_report, source_commit)
     build_tools = android_build_tools(os.environ)
     output = output_root.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -439,6 +454,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", required=True, help="SemVer without a leading v")
     parser.add_argument("--version-code", required=True, type=int)
+    parser.add_argument("--physical-report", required=True, type=Path)
+    parser.add_argument("--startup-report", required=True, type=Path)
     parser.add_argument(
         "--output",
         type=Path,
@@ -447,7 +464,13 @@ def main(arguments: Sequence[str] | None = None) -> int:
     options = parser.parse_args(arguments)
     output = options.output or ROOT / "build/local-release" / options.version
     try:
-        identity = prepare_release(options.version, options.version_code, output)
+        identity = prepare_release(
+            options.version,
+            options.version_code,
+            output,
+            options.physical_report,
+            options.startup_report,
+        )
     except (OSError, ReleasePreparationError, ValueError) as error:
         print(f"Local release preparation failed: {error}", file=sys.stderr)
         return 1

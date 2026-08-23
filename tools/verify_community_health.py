@@ -104,6 +104,8 @@ def verify_community_health(sources: dict[str, str]) -> None:
         "SUPPORT.md",
         "SECURITY.md",
         "PRIVACY.md",
+        "GOVERNANCE.md",
+        "CODEOWNERS",
     }
     missing = sorted(expected_sources - sources.keys())
     if missing:
@@ -209,6 +211,8 @@ def verify_community_health(sources: dict[str, str]) -> None:
         "SUPPORT.md": "issues/new?template=bug_report.yml",
         "SECURITY.md": "security/advisories",
         "PRIVACY.md": "issues/new?template=support_question.yml",
+        "GOVERNANCE.md": "docs/RELEASING.md",
+        "CODEOWNERS": "* @ashcastle",
     }
     for document, marker in documentation_markers.items():
         if marker not in sources[document]:
@@ -233,6 +237,8 @@ def read_sources() -> dict[str, str]:
         "SUPPORT.md": (ROOT / "SUPPORT.md").read_text(encoding="utf-8"),
         "SECURITY.md": (ROOT / "SECURITY.md").read_text(encoding="utf-8"),
         "PRIVACY.md": (ROOT / "PRIVACY.md").read_text(encoding="utf-8"),
+        "GOVERNANCE.md": (ROOT / "GOVERNANCE.md").read_text(encoding="utf-8"),
+        "CODEOWNERS": (ROOT / ".github/CODEOWNERS").read_text(encoding="utf-8"),
     }
 
 
@@ -243,7 +249,7 @@ def main() -> None:
         raise SystemExit(f"Community-health verification failed: {error}") from error
     print(
         "Verified safe security guidance, bounded public contribution forms, "
-        "and scheduled pinned dependency review"
+        "review ownership, governance, and scheduled pinned dependency review"
     )
 
 
