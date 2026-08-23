@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from tools.verify_workflows import literal_run_blocks, shell_syntax_errors
+from tools.verify_workflows import (
+    ccache_lock_errors,
+    literal_run_blocks,
+    shell_syntax_errors,
+)
 
 
 class VerifyWorkflowsTest(unittest.TestCase):
@@ -29,6 +33,23 @@ class VerifyWorkflowsTest(unittest.TestCase):
         errors = shell_syntax_errors("broken.yml", source)
         self.assertEqual(1, len(errors))
         self.assertIn("invalid Bash syntax", errors[0])
+
+    def test_accepts_exact_checksum_locked_ccache_asset(self) -> None:
+        source = """CCACHE_TOOL_VERSION=4.13.6
+CCACHE_TOOL_ARCHIVE=ccache-4.13.6-linux-x86_64-glibc.tar.xz
+CCACHE_TOOL_URL=https://github.com/ccache/ccache/releases/download/v4.13.6/ccache-4.13.6-linux-x86_64-glibc.tar.xz
+CCACHE_TOOL_SHA256=508b2a1217dc6e04a23e967c7b95a0fb45d8a7e16fde9e180919698f2e2be060
+"""
+        self.assertEqual([], ccache_lock_errors(source))
+
+    def test_rejects_unlocked_ccache_asset(self) -> None:
+        source = """CCACHE_TOOL_VERSION=latest
+CCACHE_TOOL_ARCHIVE=ccache.tar.xz
+CCACHE_TOOL_URL=https://example.com/ccache.tar.xz
+CCACHE_TOOL_SHA256=unverified
+"""
+        errors = ccache_lock_errors(source)
+        self.assertGreaterEqual(len(errors), 4)
 
 
 if __name__ == "__main__":

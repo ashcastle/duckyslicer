@@ -14,6 +14,49 @@ PINNED_REF = re.compile(r"[0-9a-f]{40}")
 USES = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)", re.MULTILINE)
 JOB = re.compile(r"^  ([A-Za-z0-9_-]+):\s*$", re.MULTILINE)
 RUN = re.compile(r"^(?P<indent>\s*)(?:-\s*)?run:\s*\|\s*$")
+SHA256 = re.compile(r"[0-9a-f]{64}")
+
+
+def parse_env_lock(source: str) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in source.splitlines():
+        if not line or line.lstrip().startswith("#"):
+            continue
+        if "=" not in line:
+            raise ValueError(f"invalid environment lock line: {line!r}")
+        key, value = line.split("=", 1)
+        if not key or not value or key in values:
+            raise ValueError(f"invalid environment lock entry: {line!r}")
+        values[key] = value
+    return values
+
+
+def ccache_lock_errors(source: str) -> list[str]:
+    try:
+        values = parse_env_lock(source)
+    except ValueError as error:
+        return [str(error)]
+    required = {
+        "CCACHE_TOOL_VERSION",
+        "CCACHE_TOOL_ARCHIVE",
+        "CCACHE_TOOL_URL",
+        "CCACHE_TOOL_SHA256",
+    }
+    if set(values) != required:
+        return [f"ccache lock fields mismatch: {sorted(set(values) ^ required)}"]
+    version = values["CCACHE_TOOL_VERSION"]
+    archive = f"ccache-{version}-linux-x86_64-glibc.tar.xz"
+    url = f"https://github.com/ccache/ccache/releases/download/v{version}/{archive}"
+    errors: list[str] = []
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+        errors.append("ccache version is not an exact semantic version")
+    if values["CCACHE_TOOL_ARCHIVE"] != archive:
+        errors.append("ccache archive does not match the locked version and platform")
+    if values["CCACHE_TOOL_URL"] != url:
+        errors.append("ccache URL is not the exact official release asset")
+    if SHA256.fullmatch(values["CCACHE_TOOL_SHA256"]) is None:
+        errors.append("ccache SHA-256 is not a lowercase 64-character digest")
+    return errors
 
 
 def job_sections(workflow: str) -> dict[str, str]:
@@ -100,6 +143,12 @@ def main() -> None:
                 errors.append(f"{workflow.name}: Action is not pinned to a full commit: {reference}")
 
     android_source = (WORKFLOW_ROOT / "android.yml").read_text(encoding="utf-8")
+    errors.extend(
+        f"ccache.env: {error}"
+        for error in ccache_lock_errors(
+            (ROOT / "native/slicer-runtime/ccache.env").read_text(encoding="utf-8")
+        )
+    )
     release_source = (WORKFLOW_ROOT / "sign-local-release.yml").read_text(encoding="utf-8")
     play_source = (WORKFLOW_ROOT / "play-bundle.yml").read_text(encoding="utf-8")
     android_jobs = job_sections(android_source)
@@ -154,6 +203,25 @@ def main() -> None:
             "hashFiles('native/slicer-runtime/versions.env', "
             "'native/slicer-runtime/build.sh') }}"
         ),
+        "native compiler cache tool is checksum verified": (
+            "sha256sum --check --strict"
+        ),
+        "native compiler cache output is persisted separately": (
+            "build/native-slicer/compiler-cache"
+        ),
+        "native compiler cache follows every runtime input": (
+            "android-native-ccache-v1-${{ runner.os }}-${{ hashFiles("
+        ),
+        "native compiler cache hashes the compiler binary": (
+            "CCACHE_COMPILERCHECK: content"
+        ),
+        "C compiler uses the content cache": (
+            "CMAKE_C_COMPILER_LAUNCHER: ccache"
+        ),
+        "C++ compiler uses the content cache": (
+            "CMAKE_CXX_COMPILER_LAUNCHER: ccache"
+        ),
+        "native compiler cache statistics are visible": "ccache --show-stats",
         "Orca runtime process isolation is verified": (
             "python3 tools/verify_android_isolation.py"
         ),
@@ -176,6 +244,7 @@ def main() -> None:
             "python3 tools/generate_license_inventory.py"
         ),
         "offline license policy is unit tested": "tools.test_generate_offline_licenses",
+        "native archive license policy is unit tested": "tools.test_native_license_policy",
         "source bundle policy is unit tested": "tools.test_generate_source_bundle",
         "release reproducibility policy is unit tested": (
             "tools.test_verify_reproducible_release"
