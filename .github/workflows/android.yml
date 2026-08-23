@@ -84,6 +84,8 @@ jobs:
             build/native-slicer/dependency-sources
             build/native-slicer/dependency-output
           key: android-native-dependencies-v2-${{ runner.os }}-${{ hashFiles('native/slicer-runtime/versions.env', 'native/slicer-runtime/build.sh') }}
+          restore-keys: |
+            android-native-${{ runner.os }}-${{ hashFiles('native/slicer-runtime/versions.env', 'native/slicer-runtime/*.patch') }}
 
       - name: Check Rust
         working-directory: rust/duckyslicer-jni

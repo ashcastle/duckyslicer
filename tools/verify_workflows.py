@@ -154,6 +154,11 @@ def main() -> None:
             "hashFiles('native/slicer-runtime/versions.env', "
             "'native/slicer-runtime/build.sh') }}"
         ),
+        "legacy native cache seeding requires its exact prior input hash": (
+            "android-native-${{ runner.os }}-${{ "
+            "hashFiles('native/slicer-runtime/versions.env', "
+            "'native/slicer-runtime/*.patch') }}"
+        ),
         "Orca runtime process isolation is verified": (
             "python3 tools/verify_android_isolation.py"
         ),
