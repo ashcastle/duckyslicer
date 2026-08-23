@@ -1,6 +1,6 @@
 package com.ashcastle.duckyslicer
 
-import java.io.File
+import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -32,7 +32,7 @@ class HeightRangeModifiersTest {
                 ),
             ),
         )
-        val sidecar = File.createTempFile("height-ranges", ".bin")
+        val sidecar = Files.createTempFile("height-ranges-", ".bin").toFile()
         try {
             modifiers.writeSidecar(sidecar)
 
