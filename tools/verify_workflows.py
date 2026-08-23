@@ -303,6 +303,14 @@ def main() -> None:
         and codeql_analyze_index < gradle_index
     ):
         errors.append("android.yml: CodeQL must analyze after the Kotlin build")
+    if (
+        gradle_index >= 0
+        and codeql_analyze_index >= 0
+        and "--no-build-cache" not in verify_job[gradle_index:codeql_analyze_index]
+    ):
+        errors.append(
+            "android.yml: the traced Kotlin build must disable Gradle build-cache reuse"
+        )
 
     if "device-tests" in android_jobs or "runs-on: macos-14" in android_source:
         errors.append("android.yml: hosted emulator jobs are not allowed")

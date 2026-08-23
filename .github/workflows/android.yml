@@ -96,7 +96,7 @@ jobs:
       - name: Build, test, lint, and assemble debug APK
         working-directory: android
         run: |
-          ./gradlew --dependency-verification=strict \
+          ./gradlew --dependency-verification=strict --no-build-cache \
             :baselineprofile:compileNonMinifiedReleaseKotlin \
             :app:testDebugUnitTest :app:assembleDebug \
             :app:assembleDebugAndroidTest :app:lintDebug \
