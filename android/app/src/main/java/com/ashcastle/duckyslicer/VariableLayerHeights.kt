@@ -31,8 +31,15 @@ data class VariableLayerRange(
 
 data class VariableLayerHeights(
     val ranges: List<VariableLayerRange> = emptyList(),
+    val adaptiveQuality: Float? = null,
 ) {
     init {
+        require(adaptiveQuality == null || adaptiveQuality.isFinite() && adaptiveQuality in 0f..1f) {
+            "Adaptive layer quality is invalid"
+        }
+        require(adaptiveQuality == null || ranges.isEmpty()) {
+            "Adaptive and manual layer heights cannot be combined"
+        }
         require(ranges.size <= MAX_RANGES) { "Too many variable layer ranges" }
         require(ranges == ranges.sortedBy(VariableLayerRange::startRatio)) {
             "Variable layer ranges are not sorted"
@@ -44,10 +51,15 @@ data class VariableLayerHeights(
         }
     }
 
+    val isConfigured: Boolean
+        get() = adaptiveQuality != null || ranges.isNotEmpty()
+
     fun writeSidecar(output: File) {
         FileOutputStream(output).use { fileStream ->
             DataOutputStream(BufferedOutputStream(fileStream)).use { writer ->
                 writer.write(MAGIC)
+                writer.writeInt(if (adaptiveQuality != null) MODE_ADAPTIVE else MODE_MANUAL)
+                writer.writeFloat(adaptiveQuality ?: 0f)
                 writer.writeInt(ranges.size)
                 ranges.forEach { range ->
                     writer.writeFloat(range.startRatio)
@@ -64,9 +76,11 @@ data class VariableLayerHeights(
     }
 
     companion object {
-        val MAGIC = byteArrayOf('D'.code.toByte(), 'V'.code.toByte(), 'L'.code.toByte(), '1'.code.toByte())
+        val MAGIC = byteArrayOf('D'.code.toByte(), 'V'.code.toByte(), 'L'.code.toByte(), '2'.code.toByte())
+        const val MODE_MANUAL = 0
+        const val MODE_ADAPTIVE = 1
         const val MAX_RANGES = 32
-        const val HEADER_BYTES = 8L
+        const val HEADER_BYTES = 16L
         const val ENTRY_BYTES = 12L
         const val MAX_SIDECAR_BYTES = HEADER_BYTES + MAX_RANGES.toLong() * ENTRY_BYTES
     }

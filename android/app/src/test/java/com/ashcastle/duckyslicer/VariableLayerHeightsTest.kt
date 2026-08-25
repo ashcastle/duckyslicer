@@ -23,6 +23,8 @@ class VariableLayerHeightsTest {
                 val magic = ByteArray(4)
                 reader.readFully(magic)
                 assertArrayEquals(VariableLayerHeights.MAGIC, magic)
+                assertEquals(VariableLayerHeights.MODE_MANUAL, reader.readInt())
+                assertEquals(0f, reader.readFloat(), 0f)
                 assertEquals(2, reader.readInt())
                 assertEquals(0.1f, reader.readFloat(), 0f)
                 assertEquals(0.3f, reader.readFloat(), 0f)
@@ -37,6 +39,30 @@ class VariableLayerHeightsTest {
             )
         } finally {
             output.delete()
+        }
+    }
+
+    @Test
+    fun adaptiveModeWritesQualityWithoutManualRanges() {
+        val adaptive = VariableLayerHeights(adaptiveQuality = 0.35f)
+        val output = Files.createTempFile("adaptive-layers", ".bin").toFile()
+        try {
+            adaptive.writeSidecar(output)
+            DataInputStream(output.inputStream().buffered()).use { reader ->
+                reader.skipBytes(4)
+                assertEquals(VariableLayerHeights.MODE_ADAPTIVE, reader.readInt())
+                assertEquals(0.35f, reader.readFloat(), 0f)
+                assertEquals(0, reader.readInt())
+            }
+            assertEquals(VariableLayerHeights.HEADER_BYTES, output.length())
+        } finally {
+            output.delete()
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            VariableLayerHeights(
+                ranges = listOf(VariableLayerRange(0.1f, 0.2f, 0.1f)),
+                adaptiveQuality = 0.5f,
+            )
         }
     }
 

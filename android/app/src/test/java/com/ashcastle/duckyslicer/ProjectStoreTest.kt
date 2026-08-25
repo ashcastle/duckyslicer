@@ -92,7 +92,7 @@ class ProjectStoreTest {
                     seamPaint = SeamPaint().paint(0, SeamPaintState.BLOCK),
                     multiColorPaint = MultiColorPaint().paint(0, 0),
                     variableLayerHeights = VariableLayerHeights(
-                        listOf(VariableLayerRange(0.25f, 0.75f, 0.08f)),
+                        adaptiveQuality = 0.35f,
                     ),
                     processOverrides = ObjectProcessOverrides(
                         wallLoops = 5,
@@ -188,7 +188,7 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(73, persisted.getInt("schemaVersion"))
+        assertEquals(74, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),

@@ -121,6 +121,9 @@ prepare_runtime_source() {
     if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/project-3mf.patch" 2>/dev/null; then
         git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/project-3mf.patch"
     fi
+    if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/adaptive-layer-height.patch" 2>/dev/null; then
+        git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/adaptive-layer-height.patch"
+    fi
     if git -C "$SOURCE_ROOT" apply --reverse --check "$SCRIPT_DIR/flush-multiplier.patch" 2>/dev/null; then
         git -C "$SOURCE_ROOT" apply --reverse "$SCRIPT_DIR/flush-multiplier.patch"
     fi
@@ -187,6 +190,9 @@ prepare_runtime_source() {
     git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/flush-multiplier.patch" 2>/dev/null || \
         die "runtime flush-multiplier bridge contains unreviewed changes"
     git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/flush-multiplier.patch"
+    git -C "$SOURCE_ROOT" apply --check "$SCRIPT_DIR/adaptive-layer-height.patch" 2>/dev/null || \
+        die "runtime adaptive-layer-height bridge contains unreviewed changes"
+    git -C "$SOURCE_ROOT" apply "$SCRIPT_DIR/adaptive-layer-height.patch"
 
     local engine_root="$SOURCE_ROOT/app/src/main/cpp/orcaslicer"
     local engine_patches=(

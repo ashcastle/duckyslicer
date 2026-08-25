@@ -122,7 +122,7 @@ class ProjectArchiveTest {
                 ),
                 transform = ModelTransform(offsetXmm = -18f, rotationXdeg = 90f),
                 variableLayerHeights = VariableLayerHeights(
-                    listOf(VariableLayerRange(0.1f, 0.4f, 0.12f)),
+                    adaptiveQuality = 0.65f,
                 ),
                 heightRangeModifiers = HeightRangeModifiers(
                     listOf(
@@ -153,7 +153,7 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(71, manifest.getInt("schemaVersion"))
+            assertEquals(72, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(

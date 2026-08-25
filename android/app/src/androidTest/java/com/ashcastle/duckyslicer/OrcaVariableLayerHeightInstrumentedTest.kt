@@ -12,6 +12,63 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class OrcaVariableLayerHeightInstrumentedTest {
     @Test
+    fun automaticModeUsesOrcaAdaptiveProfileAndProducesNonUniformLayers() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        val store = ProjectStore(context)
+        projectRoot.deleteRecursively()
+        try {
+            val source = store.createModelDestination("adaptive-cylinder.stl")
+            instrumentation.context.assets.open("models/dense-cylinder.stl").use { input ->
+                source.outputStream().use(input::copyTo)
+            }
+            val model = inspectModel(source.absolutePath).copy(fileName = source.name)
+            val options = SliceOptions()
+                .selectPrinter(PrinterProfile.U1_04)
+                .copy(
+                    layerHeight = 0.2f,
+                    firstLayerHeight = 0.2f,
+                    bedSizeX = 100f,
+                    bedSizeY = 100f,
+                    bedPolygon = rectangularBedPolygon(100f, 100f),
+                )
+
+            val baseline = OnDeviceSlicer.slice(listOf(ProjectObject("fixed", model)), options)
+            val adaptive = OnDeviceSlicer.slice(
+                listOf(
+                    ProjectObject(
+                        id = "adaptive",
+                        model = model,
+                        variableLayerHeights = VariableLayerHeights(adaptiveQuality = 0.5f),
+                    ),
+                ),
+                options,
+            )
+            val adaptiveZ = adaptive.output.readLines()
+                .asSequence()
+                .filter { it.startsWith(";Z:") }
+                .mapNotNull { it.removePrefix(";Z:").toFloatOrNull() }
+                .toList()
+            val adaptiveDeltas = adaptiveZ.zipWithNext { first, second -> second - first }
+                .filter { it > 0.01f }
+
+            assertTrue("adaptive layer list is empty", adaptiveDeltas.isNotEmpty())
+            assertTrue(
+                "Expected at least two automatic layer heights, got $adaptiveDeltas",
+                adaptiveDeltas.any { abs(it - 0.2f) > 0.01f } &&
+                    adaptiveDeltas.distinctBy { (it * 100f).toInt() }.size >= 2,
+            )
+            assertTrue(
+                "fixed=${baseline.layers}, adaptive=${adaptive.layers}",
+                adaptive.layers != baseline.layers,
+            )
+        } finally {
+            projectRoot.deleteRecursively()
+        }
+    }
+
+    @Test
     fun objectRangeUsesOrcaLayerConfigAndChangesRealLayerCount() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

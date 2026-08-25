@@ -75,6 +75,7 @@ val buildSlicerRuntime = tasks.register<Exec>("buildSlicerRuntime") {
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/engine-branding.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/engine-support-flow-ratios.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/adaptive-pressure-advance.patch"))
+    inputs.file(repositoryRoot.resolve("native/slicer-runtime/adaptive-layer-height.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/nozzle-hardness-safety.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/nozzle-height-safety.patch"))
     inputs.file(repositoryRoot.resolve("native/slicer-runtime/gcode-thumbnail.patch"))

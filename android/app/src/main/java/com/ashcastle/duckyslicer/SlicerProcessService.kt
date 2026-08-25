@@ -3398,6 +3398,14 @@ class SlicerProcessService : Service() {
             require(magic.contentEquals(VariableLayerHeights.MAGIC)) {
                 "Variable layer height format is invalid"
             }
+            val mode = reader.readInt()
+            require(mode == VariableLayerHeights.MODE_MANUAL || mode == VariableLayerHeights.MODE_ADAPTIVE) {
+                "Variable layer height mode is invalid"
+            }
+            val adaptiveQuality = reader.readFloat()
+            require(adaptiveQuality.isFinite() && adaptiveQuality in 0f..1f) {
+                "Adaptive layer quality is invalid"
+            }
             val count = reader.readInt()
             require(count in 0..VariableLayerHeights.MAX_RANGES) {
                 "Variable layer height count is invalid"
@@ -3409,6 +3417,9 @@ class SlicerProcessService : Service() {
             VariableLayerHeights(
                 List(count) {
                     VariableLayerRange(reader.readFloat(), reader.readFloat(), reader.readFloat())
+                },
+                adaptiveQuality = adaptiveQuality.takeIf {
+                    mode == VariableLayerHeights.MODE_ADAPTIVE
                 },
             )
         }

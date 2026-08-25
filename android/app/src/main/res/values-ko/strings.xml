@@ -169,6 +169,10 @@
     <string name="paint_seam">심 채색</string>
     <string name="variable_layer_height">가변 레이어 높이</string>
     <string name="variable_layer_height_hint">필요한 높이 구간만 더 촘촘하게 출력합니다.</string>
+    <string name="automatic_layer_height">자동</string>
+    <string name="manual_layer_height">수동</string>
+    <string name="automatic_layer_height_hint">더 매끄럽고 빠르게 출력하도록 모델 경사에 맞춰 레이어 높이를 조절합니다.</string>
+    <string name="surface_detail">표면 디테일</string>
     <string name="variable_layer_range_summary">%1$d–%2$d%% · %3$.2f mm</string>
     <string name="variable_layer_range_percent">모델 높이 · %1$d–%2$d%%</string>
     <string name="add_layer_range">구간 추가</string>

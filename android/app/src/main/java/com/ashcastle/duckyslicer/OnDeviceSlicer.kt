@@ -2911,7 +2911,7 @@ object OnDeviceSlicer {
             }
             val variableLayerHeightFiles = objects.mapIndexed { index, projectObject ->
                 projectObject.variableLayerHeights
-                    .takeIf { it.ranges.isNotEmpty() }
+                    .takeIf(VariableLayerHeights::isConfigured)
                     ?.let {
                         File.createTempFile(
                             "slice-layers-$index-",

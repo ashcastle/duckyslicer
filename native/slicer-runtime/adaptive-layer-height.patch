@@ -1,0 +1,189 @@
+diff --git a/app/src/main/cpp/src/sapil_model.cpp b/app/src/main/cpp/src/sapil_model.cpp
+--- a/app/src/main/cpp/src/sapil_model.cpp
++++ b/app/src/main/cpp/src/sapil_model.cpp
+@@ -1,6 +1,7 @@
+ #include "../include/sapil.h"
+ #include "sapil_internal.h"
+ #include "sapil_diagnostics.h"
++#include "sapil_variable_layer_height.h"
+ #include <fstream>
+ #include <algorithm>
+ #include <atomic>
+@@ -1140,6 +1141,7 @@ void SlicerEngine::clearModel() {
+     g_model_preview_extruders.clear();
+     g_rotation_base_positions.clear();
+     g_rotation_base_rotations.clear();
++    clear_adaptive_layer_height_requests();
+     { extern void resetLastRotation(); resetLastRotation(); }
+     { extern void resetLoadTimeScaleFactors(); resetLoadTimeScaleFactors(); }
+     g_files_dir.clear();
+diff --git a/app/src/main/cpp/src/sapil_print.cpp b/app/src/main/cpp/src/sapil_print.cpp
+--- a/app/src/main/cpp/src/sapil_print.cpp
++++ b/app/src/main/cpp/src/sapil_print.cpp
+@@ -2,6 +2,7 @@
+ #include "sapil_internal.h"
+ #include "sapil_diagnostics.h"
+ #include "sapil_gcode_thumbnail.h"
++#include "sapil_variable_layer_height.h"
+ #include <algorithm>
+ #include <atomic>
+ #include <thread>
+@@ -21,6 +22,7 @@
+ #include "libslic3r/GCode/GCodeProcessor.hpp"
+ #include "libslic3r/GCode/Thumbnails.hpp"
+ #include "libslic3r/Model.hpp"
++#include "libslic3r/Slicing.hpp"
+ #include "libslic3r/Config.hpp"
+ #include "libslic3r/Exception.hpp"
+ #include "libslic3r/ClipperUtils.hpp"
+@@ -2020,6 +2022,7 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+     }
+ 
+     try {
++        const auto adaptive_layer_height_requests = take_adaptive_layer_height_requests();
+         constexpr std::size_t MAX_GCODE_TEMPLATE_BYTES = 262144;
+         auto valid_filament_gcodes = [&](const std::vector<std::string>& templates) {
+             if (!templates.empty() && templates.size() != static_cast<std::size_t>(config.extruder_count)) {
+@@ -2676,6 +2679,29 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+ 
+         // Apply the config to the print
+         print.apply(model, dpc);
++        bool adaptive_layer_heights_generated = false;
++        for (const auto& [object_index, quality] : adaptive_layer_height_requests) {
++            if (object_index < 0 || static_cast<std::size_t>(object_index) >= model.objects.size()) {
++                throw std::invalid_argument("Adaptive layer height object is unavailable");
++            }
++            Slic3r::ModelObject* model_object = model.objects[static_cast<std::size_t>(object_index)];
++            Slic3r::PrintObject* print_object = nullptr;
++            for (Slic3r::PrintObject* candidate : print.objects()) {
++                if (candidate != nullptr && candidate->model_object() != nullptr &&
++                    candidate->model_object()->id() == model_object->id()) {
++                    print_object = candidate;
++                    break;
++                }
++            }
++            if (print_object == nullptr) {
++                throw std::invalid_argument("Adaptive layer height object could not be prepared");
++            }
++            model_object->layer_height_profile.set(Slic3r::layer_height_profile_adaptive(
++                print_object->slicing_parameters(),
++                *model_object,
++                quality));
++            adaptive_layer_heights_generated = true;
++        }
+         // The pinned Orca engine resolves shrinkage from Print::extruders(). A fresh Print has no
+         // PrintObjects during its first apply(), so that lookup is intentionally empty and the
+         // initial object transforms use neutral compensation. Re-apply only when compensation was
+@@ -2686,7 +2712,8 @@ SliceResult SlicerEngine::slice(const SliceConfig& config, ProgressCallback prog
+                 return std::abs(value - 100.0f) > 0.0001f;
+             });
+         };
+-        if (shrinkage_requested(config.filament_shrinkages) ||
++        if (adaptive_layer_heights_generated ||
++            shrinkage_requested(config.filament_shrinkages) ||
+             shrinkage_requested(config.filament_shrinkage_compensation_z)) {
+             print.apply(model, dpc);
+         }
+diff --git a/app/src/main/cpp/src/sapil_variable_layer_height.cpp b/app/src/main/cpp/src/sapil_variable_layer_height.cpp
+--- a/app/src/main/cpp/src/sapil_variable_layer_height.cpp
++++ b/app/src/main/cpp/src/sapil_variable_layer_height.cpp
+@@ -7,9 +7,11 @@
+ #include <fstream>
+ #include <string>
+ #include <tuple>
++#include <unordered_map>
+ #include <vector>
+ 
+ #include "libslic3r/Model.hpp"
++#include "sapil_variable_layer_height.h"
+ 
+ namespace sapil {
+ extern Slic3r::Model g_model;
+@@ -17,10 +19,12 @@ extern Slic3r::Model g_model;
+ 
+ namespace {
+ 
+-constexpr std::array<unsigned char, 4> MAGIC{'D', 'V', 'L', '1'};
++constexpr std::array<unsigned char, 4> MAGIC{'D', 'V', 'L', '2'};
+ constexpr std::uint32_t MAX_RANGES = 32;
+-constexpr std::uint64_t HEADER_BYTES = 8;
++constexpr std::uint64_t HEADER_BYTES = 16;
+ constexpr std::uint64_t ENTRY_BYTES = 12;
++constexpr std::uint32_t MODE_MANUAL = 0;
++constexpr std::uint32_t MODE_ADAPTIVE = 1;
+ constexpr float MINIMUM_LAYER_HEIGHT_MM = 0.01F;
+ constexpr float MAXIMUM_LAYER_HEIGHT_MM = 2.0F;
+ 
+@@ -62,8 +66,16 @@ bool apply_variable_layer_heights(int object_index, const std::string& sidecar_p
+     if (!input.read(reinterpret_cast<char*>(magic.data()), magic.size()) || magic != MAGIC) {
+         return false;
+     }
++    std::uint32_t mode = 0;
++    float adaptive_quality = 0.0F;
+     std::uint32_t count = 0;
++    if (!read_u32_be(input, mode) || !read_f32_be(input, adaptive_quality) ||
++        (mode != MODE_MANUAL && mode != MODE_ADAPTIVE) ||
++        !std::isfinite(adaptive_quality) || adaptive_quality < 0.0F || adaptive_quality > 1.0F) {
++        return false;
++    }
+     if (!read_u32_be(input, count) || count > MAX_RANGES) return false;
++    if (mode == MODE_ADAPTIVE && count != 0) return false;
+     const std::uint64_t expected_size = HEADER_BYTES + static_cast<std::uint64_t>(count) * ENTRY_BYTES;
+     if (static_cast<std::uint64_t>(size) != expected_size) return false;
+ 
+@@ -89,6 +101,14 @@ bool apply_variable_layer_heights(int object_index, const std::string& sidecar_p
+         previous_end = end_ratio;
+     }
+ 
++    if (mode == MODE_ADAPTIVE) {
++        sapil::g_adaptive_layer_height_requests[object_index] = adaptive_quality;
++        object->layer_config_ranges.clear();
++        object->layer_height_profile.clear();
++        return true;
++    }
++
++    sapil::g_adaptive_layer_height_requests.erase(object_index);
+     const double object_height = object->raw_mesh_bounding_box().size().z();
+     if (!std::isfinite(object_height) || object_height <= 0.0) return false;
+     Slic3r::t_layer_config_ranges native_ranges;
+@@ -109,6 +129,24 @@ bool apply_variable_layer_heights(int object_index, const std::string& sidecar_p
+ 
+ } // namespace
+ 
++namespace sapil {
++
++std::unordered_map<int, float> g_adaptive_layer_height_requests;
++
++void clear_adaptive_layer_height_requests()
++{
++    g_adaptive_layer_height_requests.clear();
++}
++
++std::unordered_map<int, float> take_adaptive_layer_height_requests()
++{
++    std::unordered_map<int, float> result;
++    result.swap(g_adaptive_layer_height_requests);
++    return result;
++}
++
++} // namespace sapil
++
+ extern "C" JNIEXPORT jboolean JNICALL
+ Java_com_u1_slicer_NativeLibrary_applyVariableLayerHeights(
+         JNIEnv* env, jobject, jint object_index, jstring sidecar_path)
+diff --git a/app/src/main/cpp/src/sapil_variable_layer_height.h b/app/src/main/cpp/src/sapil_variable_layer_height.h
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/cpp/src/sapil_variable_layer_height.h
+@@ -0,0 +1,11 @@
++#pragma once
++
++#include <unordered_map>
++
++namespace sapil {
++
++extern std::unordered_map<int, float> g_adaptive_layer_height_requests;
++void clear_adaptive_layer_height_requests();
++std::unordered_map<int, float> take_adaptive_layer_height_requests();
++
++} // namespace sapil

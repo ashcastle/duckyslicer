@@ -368,7 +368,11 @@ internal object ProjectArchiveCodec {
                     requireAxisScales = schemaVersion >= 6,
                 ),
                 variableLayerHeights = if (schemaVersion >= 3) {
-                    value.getJSONArray("variableLayerHeights").toArchiveVariableLayerHeights()
+                    if (schemaVersion >= 72) {
+                        value.getJSONObject("variableLayerHeights").toArchiveVariableLayerHeights()
+                    } else {
+                        value.getJSONArray("variableLayerHeights").toArchiveVariableLayerHeights()
+                    }
                 } else {
                     VariableLayerHeights()
                 },
@@ -638,13 +642,19 @@ private fun JSONArray.toArchiveMultiColorPaint(): MultiColorPaint {
     return MultiColorPaint(facets)
 }
 
-private fun VariableLayerHeights.toArchiveJson() = JSONArray().also { values ->
-    ranges.forEach { range ->
-        values.put(range.startRatio.toDouble())
-        values.put(range.endRatio.toDouble())
-        values.put(range.layerHeightMm.toDouble())
-    }
-}
+private fun VariableLayerHeights.toArchiveJson() = JSONObject()
+    .put("mode", if (adaptiveQuality != null) "adaptive" else "manual")
+    .put("quality", adaptiveQuality?.toDouble() ?: JSONObject.NULL)
+    .put(
+        "ranges",
+        JSONArray().also { values ->
+            ranges.forEach { range ->
+                values.put(range.startRatio.toDouble())
+                values.put(range.endRatio.toDouble())
+                values.put(range.layerHeightMm.toDouble())
+            }
+        },
+    )
 
 private fun BrimPoints.toArchiveJson() = JSONArray().also { values ->
     points.forEach { point ->
@@ -680,6 +690,21 @@ private fun JSONArray.toArchiveVariableLayerHeights(): VariableLayerHeights {
                 endRatio = getDouble(offset + 1).toFloat(),
                 layerHeightMm = getDouble(offset + 2).toFloat(),
             )
+        },
+    )
+}
+
+private fun JSONObject.toArchiveVariableLayerHeights(): VariableLayerHeights {
+    val mode = getString("mode")
+    require(mode == "manual" || mode == "adaptive")
+    val ranges = getJSONArray("ranges").toArchiveVariableLayerHeights().ranges
+    return VariableLayerHeights(
+        ranges = ranges,
+        adaptiveQuality = if (mode == "adaptive") {
+            getDouble("quality").toFloat()
+        } else {
+            require(isNull("quality"))
+            null
         },
     )
 }
@@ -797,6 +822,6 @@ private const val MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES
 private const val MAX_PROJECT_ARCHIVE_ENTRY_NAME = 128
 private const val PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"
 private const val MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1
-private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 71
+private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 72
 private const val PROJECT_ARCHIVE_MANIFEST = "manifest.json"
 private val PROJECT_ARCHIVE_MODEL_ENTRY = Regex("models/[0-9]{3}\\.stl")

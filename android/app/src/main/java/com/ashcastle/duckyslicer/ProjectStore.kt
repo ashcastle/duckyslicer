@@ -425,9 +425,11 @@ internal class ProjectStore(
         val id = value.getString("id").takeIf { it.length in 1..MAX_ID_LENGTH }
             ?: error("Invalid object id")
         val transform = value.getJSONObject("transform").toModelTransform()
-        val variableLayerHeights = value.optJSONArray("variableLayerHeights")
-            ?.toVariableLayerHeights()
-            ?: VariableLayerHeights()
+        val variableLayerHeights = if (schemaVersion >= 74) {
+            value.optJSONObject("variableLayerHeights")?.toVariableLayerHeights()
+        } else {
+            value.optJSONArray("variableLayerHeights")?.toVariableLayerHeights()
+        } ?: VariableLayerHeights()
         val processOverrides = value.optJSONObject("processOverrides")
             ?.toObjectProcessOverrides()
             ?: ObjectProcessOverrides()
@@ -621,8 +623,13 @@ internal class ProjectStore(
             value.getJSONObject("transform").toModelTransform()
             if (schemaVersion >= 5) {
                 require(
-                    value.optJSONArray("variableLayerHeights")
-                        ?.toVariableLayerHeights() != null,
+                    if (schemaVersion >= 74) {
+                        value.optJSONObject("variableLayerHeights")
+                            ?.toVariableLayerHeights() != null
+                    } else {
+                        value.optJSONArray("variableLayerHeights")
+                            ?.toVariableLayerHeights() != null
+                    },
                 )
             }
             if (schemaVersion in 6..8) {
@@ -912,13 +919,19 @@ internal class ProjectStore(
         }
     }.isSuccess
 
-    private fun VariableLayerHeights.toStoredJson() = JSONArray().also { values ->
-        ranges.forEach { range ->
-            values.put(range.startRatio.toDouble())
-            values.put(range.endRatio.toDouble())
-            values.put(range.layerHeightMm.toDouble())
-        }
-    }
+    private fun VariableLayerHeights.toStoredJson() = JSONObject()
+        .put("mode", if (adaptiveQuality != null) "adaptive" else "manual")
+        .put("quality", adaptiveQuality?.toDouble() ?: JSONObject.NULL)
+        .put(
+            "ranges",
+            JSONArray().also { values ->
+                ranges.forEach { range ->
+                    values.put(range.startRatio.toDouble())
+                    values.put(range.endRatio.toDouble())
+                    values.put(range.layerHeightMm.toDouble())
+                }
+            },
+        )
 
     private fun BrimPoints.toStoredJson() = JSONArray().also { values ->
         points.forEach { point ->
@@ -973,6 +986,21 @@ internal class ProjectStore(
         )
     }
 
+    private fun JSONObject.toVariableLayerHeights(): VariableLayerHeights {
+        val mode = getString("mode")
+        require(mode == "manual" || mode == "adaptive") { "Invalid variable layer mode" }
+        val ranges = getJSONArray("ranges").toVariableLayerHeights().ranges
+        return VariableLayerHeights(
+            ranges = ranges,
+            adaptiveQuality = if (mode == "adaptive") {
+                getDouble("quality").toFloat()
+            } else {
+                require(isNull("quality")) { "Manual layer heights cannot have adaptive quality" }
+                null
+            },
+        )
+    }
+
     private fun JSONObject.checkedFloat(
         key: String,
         minimum: Float,
@@ -1015,7 +1043,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 73
+        const val SCHEMA_VERSION = 74
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"

@@ -2834,117 +2834,189 @@ private fun VariableLayerHeightSheet(
                     color = Color(0xFFB8BAB3),
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                staged.ranges.forEachIndexed { index, range ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                selectedIndex = index
-                                selectedRange = range.startRatio..range.endRatio
-                                selectedLayerHeight = range.layerHeightMm
-                                rangeError = false
-                            },
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (selectedIndex == index) {
-                                Color(0xFF4A4430)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Button(
+                        onClick = {
+                            staged = VariableLayerHeights(adaptiveQuality = staged.adaptiveQuality ?: 0.5f)
+                            selectedIndex = -1
+                            rangeError = false
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (staged.adaptiveQuality != null) {
+                                WorkspaceYellow
                             } else {
-                                Color(0xFF343530)
+                                Color(0xFF3A3B37)
+                            },
+                            contentColor = if (staged.adaptiveQuality != null) {
+                                WorkspaceBlack
+                            } else {
+                                Color(0xFFF4F4EE)
                             },
                         ),
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(start = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                stringResource(
-                                    R.string.variable_layer_range_summary,
-                                    (range.startRatio * 100).roundToInt(),
-                                    (range.endRatio * 100).roundToInt(),
-                                    range.layerHeightMm,
-                                ),
-                                modifier = Modifier.weight(1f),
-                            )
-                            IconButton(
-                                onClick = {
-                                    staged = VariableLayerHeights(
-                                        staged.ranges.filterIndexed { itemIndex, _ ->
-                                            itemIndex != index
-                                        },
-                                    )
-                                    selectedIndex = -1
+                        Text(stringResource(R.string.automatic_layer_height))
+                    }
+                    Button(
+                        onClick = {
+                            if (staged.adaptiveQuality != null) staged = VariableLayerHeights()
+                            selectedIndex = -1
+                            rangeError = false
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (staged.adaptiveQuality == null) {
+                                WorkspaceYellow
+                            } else {
+                                Color(0xFF3A3B37)
+                            },
+                            contentColor = if (staged.adaptiveQuality == null) {
+                                WorkspaceBlack
+                            } else {
+                                Color(0xFFF4F4EE)
+                            },
+                        ),
+                    ) {
+                        Text(stringResource(R.string.manual_layer_height))
+                    }
+                }
+                val adaptiveQuality = staged.adaptiveQuality
+                if (adaptiveQuality != null) {
+                    Text(
+                        stringResource(R.string.automatic_layer_height_hint),
+                        color = Color(0xFFB8BAB3),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    TransformSlider(
+                        label = stringResource(R.string.surface_detail),
+                        valueText = stringResource(
+                            R.string.percent_value,
+                            ((1f - adaptiveQuality) * 100f).roundToInt(),
+                        ),
+                        value = 1f - adaptiveQuality,
+                        range = 0f..1f,
+                        steps = 9,
+                        enabled = true,
+                        onValueChange = {
+                            staged = VariableLayerHeights(adaptiveQuality = 1f - it)
+                        },
+                    )
+                } else {
+                    staged.ranges.forEachIndexed { index, range ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedIndex = index
+                                    selectedRange = range.startRatio..range.endRatio
+                                    selectedLayerHeight = range.layerHeightMm
                                     rangeError = false
                                 },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (selectedIndex == index) {
+                                    Color(0xFF4A4430)
+                                } else {
+                                    Color(0xFF343530)
+                                },
+                            ),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(start = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Icon(
-                                    Icons.Default.DeleteOutline,
-                                    stringResource(R.string.remove_layer_range),
+                                Text(
+                                    stringResource(
+                                        R.string.variable_layer_range_summary,
+                                        (range.startRatio * 100).roundToInt(),
+                                        (range.endRatio * 100).roundToInt(),
+                                        range.layerHeightMm,
+                                    ),
+                                    modifier = Modifier.weight(1f),
                                 )
+                                IconButton(
+                                    onClick = {
+                                        staged = VariableLayerHeights(
+                                            staged.ranges.filterIndexed { itemIndex, _ ->
+                                                itemIndex != index
+                                            },
+                                        )
+                                        selectedIndex = -1
+                                        rangeError = false
+                                    },
+                                ) {
+                                    Icon(
+                                        Icons.Default.DeleteOutline,
+                                        stringResource(R.string.remove_layer_range),
+                                    )
+                                }
                             }
                         }
                     }
-                }
-                Text(
-                    stringResource(
-                        R.string.variable_layer_range_percent,
-                        (selectedRange.start * 100).roundToInt(),
-                        (selectedRange.endInclusive * 100).roundToInt(),
-                    ),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                RangeSlider(
-                    value = selectedRange,
-                    onValueChange = {
-                        selectedRange = it
-                        rangeError = false
-                    },
-                    valueRange = 0f..1f,
-                    steps = 19,
-                    colors = SliderDefaults.colors(
-                        thumbColor = WorkspaceYellow,
-                        activeTrackColor = WorkspaceYellow,
-                        inactiveTrackColor = Color(0xFF555650),
-                    ),
-                )
-                TransformSlider(
-                    label = stringResource(R.string.layer_height),
-                    valueText = stringResource(
-                        R.string.millimeters_value_precise,
-                        selectedLayerHeight,
-                    ),
-                    value = selectedLayerHeight,
-                    range = minimumLayerHeight..maximumLayerHeight,
-                    steps = ((maximumLayerHeight - minimumLayerHeight) / 0.01f)
-                        .roundToInt().coerceAtLeast(1) - 1,
-                    enabled = true,
-                    onValueChange = {
-                        selectedLayerHeight = it
-                        rangeError = false
-                    },
-                )
-                if (rangeError) {
-                    Text(
-                        stringResource(R.string.layer_ranges_overlap),
-                        color = Color(0xFFFF8A80),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Button(
-                    onClick = ::stageRange,
-                    enabled = selectedIndex >= 0 ||
-                        staged.ranges.size < VariableLayerHeights.MAX_RANGES,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF3A3B37),
-                        contentColor = Color(0xFFF4F4EE),
-                    ),
-                ) {
                     Text(
                         stringResource(
-                            if (selectedIndex >= 0) R.string.update_layer_range
-                            else R.string.add_layer_range,
+                            R.string.variable_layer_range_percent,
+                            (selectedRange.start * 100).roundToInt(),
+                            (selectedRange.endInclusive * 100).roundToInt(),
+                        ),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    RangeSlider(
+                        value = selectedRange,
+                        onValueChange = {
+                            selectedRange = it
+                            rangeError = false
+                        },
+                        valueRange = 0f..1f,
+                        steps = 19,
+                        colors = SliderDefaults.colors(
+                            thumbColor = WorkspaceYellow,
+                            activeTrackColor = WorkspaceYellow,
+                            inactiveTrackColor = Color(0xFF555650),
                         ),
                     )
+                    TransformSlider(
+                        label = stringResource(R.string.layer_height),
+                        valueText = stringResource(
+                            R.string.millimeters_value_precise,
+                            selectedLayerHeight,
+                        ),
+                        value = selectedLayerHeight,
+                        range = minimumLayerHeight..maximumLayerHeight,
+                        steps = ((maximumLayerHeight - minimumLayerHeight) / 0.01f)
+                            .roundToInt().coerceAtLeast(1) - 1,
+                        enabled = true,
+                        onValueChange = {
+                            selectedLayerHeight = it
+                            rangeError = false
+                        },
+                    )
+                    if (rangeError) {
+                        Text(
+                            stringResource(R.string.layer_ranges_overlap),
+                            color = Color(0xFFFF8A80),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Button(
+                        onClick = ::stageRange,
+                        enabled = selectedIndex >= 0 ||
+                            staged.ranges.size < VariableLayerHeights.MAX_RANGES,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF3A3B37),
+                            contentColor = Color(0xFFF4F4EE),
+                        ),
+                    ) {
+                        Text(
+                            stringResource(
+                                if (selectedIndex >= 0) R.string.update_layer_range
+                                else R.string.add_layer_range,
+                            ),
+                        )
+                    }
                 }
             }
             Row(

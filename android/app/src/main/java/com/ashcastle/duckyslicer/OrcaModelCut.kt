@@ -113,7 +113,7 @@ internal suspend fun cutProjectObject(
             clearedObjectSettings = projectObject.supportPaint.facets.isNotEmpty() ||
                 projectObject.seamPaint.facets.isNotEmpty() ||
                 projectObject.multiColorPaint.facets.isNotEmpty() ||
-                projectObject.variableLayerHeights.ranges.isNotEmpty() ||
+                projectObject.variableLayerHeights.isConfigured ||
                 projectObject.heightRangeModifiers.ranges.isNotEmpty() ||
                 projectObject.brimPoints.points.isNotEmpty(),
         )

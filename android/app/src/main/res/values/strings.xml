@@ -169,6 +169,10 @@
     <string name="paint_seam">Paint seam</string>
     <string name="variable_layer_height">Variable layer height</string>
     <string name="variable_layer_height_hint">Use finer layers only where the model needs them.</string>
+    <string name="automatic_layer_height">Automatic</string>
+    <string name="manual_layer_height">Manual</string>
+    <string name="automatic_layer_height_hint">Match layer height to the model’s slopes for smoother surfaces and faster printing.</string>
+    <string name="surface_detail">Surface detail</string>
     <string name="variable_layer_range_summary">%1$d–%2$d%% · %3$.2f mm</string>
     <string name="variable_layer_range_percent">Model height · %1$d–%2$d%%</string>
     <string name="add_layer_range">Add range</string>
