@@ -5415,6 +5415,12 @@ private fun SlicingSettingsSheet(
                             },
                         )
                     }
+                    SupportFlowSettings(
+                        options = options,
+                        showInterface = supportAvailability.haveSupportMaterial &&
+                            supportAvailability.haveInterface || isSearchingSettings,
+                        onOptionsChanged = onOptionsChanged,
+                    )
                     SettingsGroupTitle(stringResource(R.string.support_filament_routing))
                     FilamentSlotSetting(
                         label = stringResource(R.string.support_filament),
@@ -6892,6 +6898,39 @@ private fun SlicingSettingsSheet(
                 profilesOpen = false
             },
             onDismiss = { profilesOpen = false },
+        )
+    }
+}
+
+@Composable
+private fun SupportFlowSettings(
+    options: SliceOptions,
+    showInterface: Boolean,
+    onOptionsChanged: (SliceOptions) -> Unit,
+) {
+    SettingsGroupTitle(stringResource(R.string.feature_flow_ratio))
+    SettingSlider(
+        label = stringResource(R.string.support_flow_ratio),
+        valueText = stringResource(R.string.flow_ratio_value, options.supportFlowRatio),
+        value = options.supportFlowRatio,
+        range = 0f..2f,
+        steps = 199,
+        onValueChange = {
+            onOptionsChanged(options.copy(supportFlowRatio = (it * 100f).roundToInt() / 100f))
+        },
+    )
+    if (showInterface) {
+        SettingSlider(
+            label = stringResource(R.string.support_interface_flow_ratio),
+            valueText = stringResource(R.string.flow_ratio_value, options.supportInterfaceFlowRatio),
+            value = options.supportInterfaceFlowRatio,
+            range = 0f..2f,
+            steps = 199,
+            onValueChange = {
+                onOptionsChanged(
+                    options.copy(supportInterfaceFlowRatio = (it * 100f).roundToInt() / 100f),
+                )
+            },
         )
     }
 }

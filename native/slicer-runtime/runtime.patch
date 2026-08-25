@@ -93,7 +93,7 @@ diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
 index 116a4a85..669271fe 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -40,17 +40,139 @@ struct SliceConfig {
+@@ -40,17 +40,141 @@ struct SliceConfig {
      int perimeters = 2;
      int top_solid_layers = 5;
      int bottom_solid_layers = 4;
@@ -182,6 +182,8 @@ index 116a4a85..669271fe 100644
 +    float internal_bridge_flow_ratio = 1.0f;
 +    float top_surface_flow_ratio = 1.0f;
 +    float bottom_surface_flow_ratio = 1.0f;
++    float support_flow_ratio = 1.0f;
++    float support_interface_flow_ratio = 1.0f;
 +    float bridge_density = 100.0f;
 +    float internal_bridge_density = 100.0f;
 +    float bridge_angle = 0.0f;
@@ -923,7 +925,7 @@ diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_
 index d93efb7d..cf6b9fdd 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -92,31 +92,292 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -92,31 +92,294 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.perimeters = getInt("perimeters");
      config.top_solid_layers = getInt("topSolidLayers");
      config.bottom_solid_layers = getInt("bottomSolidLayers");
@@ -1004,6 +1006,8 @@ index d93efb7d..cf6b9fdd 100644
 +    config.internal_bridge_flow_ratio = getFloat("internalBridgeFlowRatio");
 +    config.top_surface_flow_ratio = getFloat("topSurfaceFlowRatio");
 +    config.bottom_surface_flow_ratio = getFloat("bottomSurfaceFlowRatio");
++    config.support_flow_ratio = getFloat("supportFlowRatio");
++    config.support_interface_flow_ratio = getFloat("supportInterfaceFlowRatio");
 +    config.bridge_density = getFloat("bridgeDensity");
 +    config.internal_bridge_density = getFloat("internalBridgeDensity");
 +    config.bridge_angle = getFloat("bridgeAngle");
@@ -1421,7 +1425,7 @@ index d93efb7d..cf6b9fdd 100644
  
      env->DeleteLocalRef(cls);
      return config;
-@@ -235,27 +667,294 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -235,27 +669,296 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setInt("perimeters", config.perimeters);
      setInt("topSolidLayers", config.top_solid_layers);
      setInt("bottomSolidLayers", config.bottom_solid_layers);
@@ -1501,6 +1505,8 @@ index d93efb7d..cf6b9fdd 100644
 +    setFloat("internalBridgeFlowRatio", config.internal_bridge_flow_ratio);
 +    setFloat("topSurfaceFlowRatio", config.top_surface_flow_ratio);
 +    setFloat("bottomSurfaceFlowRatio", config.bottom_surface_flow_ratio);
++    setFloat("supportFlowRatio", config.support_flow_ratio);
++    setFloat("supportInterfaceFlowRatio", config.support_interface_flow_ratio);
 +    setFloat("bridgeDensity", config.bridge_density);
 +    setFloat("internalBridgeDensity", config.internal_bridge_density);
 +    setFloat("bridgeAngle", config.bridge_angle);
@@ -2449,7 +2455,7 @@ index 8d61c9cf..6bd1edf6 100644
  void SlicerEngine::cancelSlice() {
      g_slice_cancel.store(true, std::memory_order_release);
      auto* print = g_active_print.load(std::memory_order_acquire);
-@@ -183,84 +264,290 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -183,84 +264,292 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
      dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
      dpc.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(config.bottom_solid_layers));
@@ -2630,6 +2636,8 @@ index 8d61c9cf..6bd1edf6 100644
 +    dpc.set_key_value("internal_bridge_flow",      new Slic3r::ConfigOptionFloat(config.internal_bridge_flow_ratio));
 +    dpc.set_key_value("top_solid_infill_flow_ratio", new Slic3r::ConfigOptionFloat(config.top_surface_flow_ratio));
 +    dpc.set_key_value("bottom_solid_infill_flow_ratio", new Slic3r::ConfigOptionFloat(config.bottom_surface_flow_ratio));
++    dpc.set_key_value("support_flow_ratio", new Slic3r::ConfigOptionFloat(config.support_flow_ratio));
++    dpc.set_key_value("support_interface_flow_ratio", new Slic3r::ConfigOptionFloat(config.support_interface_flow_ratio));
 +    dpc.set_key_value("bridge_density",             new Slic3r::ConfigOptionPercent(config.bridge_density));
 +    dpc.set_key_value("internal_bridge_density",    new Slic3r::ConfigOptionPercent(config.internal_bridge_density));
 +    dpc.set_key_value("bridge_angle",               new Slic3r::ConfigOptionFloat(config.bridge_angle));

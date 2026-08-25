@@ -37,6 +37,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var internalBridgeFlowRatio: Float = base.internalBridgeFlowRatio
     private var topSurfaceFlowRatio: Float = base.topSurfaceFlowRatio
     private var bottomSurfaceFlowRatio: Float = base.bottomSurfaceFlowRatio
+    private var supportFlowRatio: Float = base.supportFlowRatio
+    private var supportInterfaceFlowRatio: Float = base.supportInterfaceFlowRatio
     private var bridgeDensity: Float = base.bridgeDensity
     private var internalBridgeDensity: Float = base.internalBridgeDensity
     private var bridgeAngle: Float = base.bridgeAngle
@@ -403,6 +405,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         internalBridgeFlowRatio = input.readFloat()
         topSurfaceFlowRatio = input.readFloat()
         bottomSurfaceFlowRatio = input.readFloat()
+        supportFlowRatio = input.readFloat()
+        supportInterfaceFlowRatio = input.readFloat()
         bridgeDensity = input.readFloat()
         internalBridgeDensity = input.readFloat()
         bridgeAngle = input.readFloat()
@@ -778,6 +782,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         internalBridgeFlowRatio = internalBridgeFlowRatio,
         topSurfaceFlowRatio = topSurfaceFlowRatio,
         bottomSurfaceFlowRatio = bottomSurfaceFlowRatio,
+        supportFlowRatio = supportFlowRatio,
+        supportInterfaceFlowRatio = supportInterfaceFlowRatio,
         bridgeDensity = bridgeDensity,
         internalBridgeDensity = internalBridgeDensity,
         bridgeAngle = bridgeAngle,
@@ -1158,6 +1164,8 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("internalBridgeFlowRatio", BINARY_FLOAT),
     BinaryField("topSurfaceFlowRatio", BINARY_FLOAT),
     BinaryField("bottomSurfaceFlowRatio", BINARY_FLOAT),
+    BinaryField("supportFlowRatio", BINARY_FLOAT),
+    BinaryField("supportInterfaceFlowRatio", BINARY_FLOAT),
     BinaryField("bridgeDensity", BINARY_FLOAT),
     BinaryField("internalBridgeDensity", BINARY_FLOAT),
     BinaryField("bridgeAngle", BINARY_FLOAT),

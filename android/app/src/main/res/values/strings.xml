@@ -481,6 +481,8 @@
     <string name="internal_bridge_flow_ratio">Internal bridge flow</string>
     <string name="top_surface_flow_ratio">Top surface flow</string>
     <string name="bottom_surface_flow_ratio">Bottom surface flow</string>
+    <string name="support_flow_ratio">Support flow ratio</string>
+    <string name="support_interface_flow_ratio">Support interface flow ratio</string>
     <string name="travel_speed">Travel speed</string>
     <string name="vertical_travel_speed">Vertical travel speed</string>
     <string name="use_travel_speed">Use travel speed</string>

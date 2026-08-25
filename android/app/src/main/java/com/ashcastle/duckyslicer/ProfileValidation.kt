@@ -232,6 +232,10 @@ internal object ProfileValidation {
                 profile.bottomSurfaceFlowRatio,
             ).all { it in 0.1f..2f } &&
             listOf(
+                profile.supportFlowRatio,
+                profile.supportInterfaceFlowRatio,
+            ).all { it in 0f..2f } &&
+            listOf(
                 profile.defaultAcceleration,
                 profile.outerWallAcceleration,
                 profile.innerWallAcceleration,

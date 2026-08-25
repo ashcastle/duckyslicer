@@ -1936,6 +1936,8 @@ class NativeEngineInstrumentedTest {
                 internalBridgeFlowRatio = 0.95f,
                 topSurfaceFlowRatio = 0.97f,
                 bottomSurfaceFlowRatio = 0.98f,
+                supportFlowRatio = 0.86f,
+                supportInterfaceFlowRatio = 1.14f,
                 bridgeDensity = 88f,
                 internalBridgeDensity = 74f,
                 bridgeAngle = 18f,
@@ -2381,6 +2383,8 @@ class NativeEngineInstrumentedTest {
         assertEquals(64f, restored.slicing.last().firstLayerInfillSpeed)
         assertEquals(54f, restored.slicing.last().supportInterfaceSpeed)
         assertEquals(0.92f, restored.slicing.last().bridgeFlowRatio)
+        assertEquals(0.86f, restored.slicing.last().supportFlowRatio)
+        assertEquals(1.14f, restored.slicing.last().supportInterfaceFlowRatio)
         assertEquals(0.85f, restored.slicing.last().topShellThickness)
         assertEquals(4, restored.slicing.last().supportInterfaceTopLayers)
         assertEquals(0.25f, restored.slicing.last().supportInterfaceSpacing)
@@ -3707,6 +3711,44 @@ class NativeEngineInstrumentedTest {
                     signatures.mapValues { (_, motions) -> motions.hashCode() },
                 styles.size,
                 signatures.values.toSet().size,
+            )
+        } finally {
+            outputs.forEach(File::delete)
+            modelFile.delete()
+        }
+    }
+
+    @Test
+    fun supportFlowRatiosChangePhysicalSupportExtrusion() {
+        val modelFile = supportPaintOverhangModel()
+        val model = inspectModel(modelFile.absolutePath)
+        val outputs = mutableListOf<File>()
+        val base = SliceOptions()
+            .selectQuality(QualityProfile.DRAFT)
+            .copy(
+                supportEnabled = true,
+                supportType = "normal(auto)",
+                supportInterfaceTopLayers = 3,
+            )
+
+        try {
+            fun slice(options: SliceOptions): String = OnDeviceSlicer.slice(
+                listOf(ProjectObject("support-flow", model)),
+                options,
+            ).also { outputs += it.output }.output.readText()
+
+            val baseline = slice(base.copy(supportFlowRatio = 1f, supportInterfaceFlowRatio = 1f))
+            val adjusted = slice(base.copy(supportFlowRatio = 0.72f, supportInterfaceFlowRatio = 1.18f))
+            val baselineMotions = supportExtrusionMotion(baseline)
+            val adjustedMotions = supportExtrusionMotion(adjusted)
+
+            assertTrue("The fixture must generate physical support extrusion", baselineMotions.isNotEmpty())
+            assertTrue(adjusted.contains("; support_flow_ratio = 0.72"))
+            assertTrue(adjusted.contains("; support_interface_flow_ratio = 1.18"))
+            assertNotEquals(
+                "Support flow ratios must change physical extrusion, not only G-code metadata",
+                baselineMotions,
+                adjustedMotions,
             )
         } finally {
             outputs.forEach(File::delete)
@@ -5694,6 +5736,8 @@ class NativeEngineInstrumentedTest {
                 internalBridgeFlowRatio = 0.96f,
                 topSurfaceFlowRatio = 0.97f,
                 bottomSurfaceFlowRatio = 0.98f,
+                supportFlowRatio = 0.86f,
+                supportInterfaceFlowRatio = 1.14f,
                 bridgeDensity = 87f,
                 internalBridgeDensity = 73f,
                 bridgeAngle = 19f,
@@ -5974,6 +6018,11 @@ class NativeEngineInstrumentedTest {
         assertTrue("Internal bridge flow must reach Orca", gcode.contains("; internal_bridge_flow = 0.96"))
         assertTrue("Top surface flow must reach Orca", gcode.contains("; top_solid_infill_flow_ratio = 0.97"))
         assertTrue("Bottom surface flow must reach Orca", gcode.contains("; bottom_solid_infill_flow_ratio = 0.98"))
+        assertTrue("Support flow must reach Orca", gcode.contains("; support_flow_ratio = 0.86"))
+        assertTrue(
+            "Support interface flow must reach Orca",
+            gcode.contains("; support_interface_flow_ratio = 1.14"),
+        )
         assertTrue("External bridge density must reach Orca", gcode.contains("; bridge_density = 87%"))
         assertTrue("Internal bridge density must reach Orca", gcode.contains("; internal_bridge_density = 73%"))
         assertTrue("Bridge support policy must reach Orca", gcode.contains("; bridge_no_support = 1"))

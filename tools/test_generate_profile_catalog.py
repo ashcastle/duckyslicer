@@ -778,6 +778,8 @@ class GenerateProfileCatalogTest(unittest.TestCase):
                 "support_ironing_pattern": "concentric",
                 "support_ironing_flow": "17%",
                 "support_ironing_spacing": "0.18",
+                "support_flow_ratio": "0.86",
+                "support_interface_flow_ratio": "1.14",
             },
             {},
         )
@@ -791,6 +793,20 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual("concentric", profile["supportIroningPattern"])
         self.assertEqual(17.0, profile["supportIroningFlow"])
         self.assertEqual(0.18, profile["supportIroningSpacing"])
+        self.assertEqual(0.86, profile["supportFlowRatio"])
+        self.assertEqual(1.14, profile["supportInterfaceFlowRatio"])
+
+        defaults = build_process(
+            "Example",
+            {
+                "name": "Default support flow",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+            },
+            {},
+        )
+        self.assertEqual(1.0, defaults["supportFlowRatio"])
+        self.assertEqual(1.0, defaults["supportInterfaceFlowRatio"])
 
     def test_preserves_multi_object_print_sequence(self) -> None:
         profile = build_process(

@@ -703,6 +703,31 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun supportFlowRatiosAreSearchableAdjustableSettings() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val slicingProfile = context.getString(R.string.slicing_profile)
+        val supports = context.getString(R.string.supports)
+        val searchSettings = context.getString(R.string.search_settings)
+        val labels = listOf(
+            context.getString(R.string.support_flow_ratio),
+            context.getString(R.string.support_interface_flow_ratio),
+        )
+        launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE_PROFILES).use {
+            tapCenter(waitForNode(slicingProfile) { it.isClickable })
+            tapCenter(waitForNode(supports) { it.isClickable })
+            labels.forEach { label ->
+                replaceEditableText(searchSettings, label)
+                val slider = scrollUntilNode(
+                    label,
+                    scrollAnchorLabel = searchSettings,
+                    timeoutMillis = EXTENDED_SCROLL_TIMEOUT_MILLIS,
+                ) { node -> node.className?.toString() == SEEK_BAR_CLASS }
+                assertTrue("$label must be an adjustable support setting", slider.isEnabled)
+            }
+        }
+    }
+
+    @Test
     fun objectSettingsExposeOrcaCategoriesAndStickyThirtySeventyActions() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val title = context.getString(R.string.object_process_settings)

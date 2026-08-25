@@ -1014,6 +1014,8 @@ data class QualityProfile(
     val internalBridgeFlowRatio: Float = 1f,
     val topSurfaceFlowRatio: Float = 1f,
     val bottomSurfaceFlowRatio: Float = 1f,
+    val supportFlowRatio: Float = 1f,
+    val supportInterfaceFlowRatio: Float = 1f,
     val bridgeDensity: Float = 100f,
     val internalBridgeDensity: Float = 100f,
     val bridgeAngle: Float = 0f,
@@ -1413,6 +1415,8 @@ data class SliceOptions(
     val internalBridgeFlowRatio: Float = quality.internalBridgeFlowRatio,
     val topSurfaceFlowRatio: Float = quality.topSurfaceFlowRatio,
     val bottomSurfaceFlowRatio: Float = quality.bottomSurfaceFlowRatio,
+    val supportFlowRatio: Float = quality.supportFlowRatio,
+    val supportInterfaceFlowRatio: Float = quality.supportInterfaceFlowRatio,
     val bridgeDensity: Float = quality.bridgeDensity,
     val internalBridgeDensity: Float = quality.internalBridgeDensity,
     val bridgeAngle: Float = quality.bridgeAngle,
@@ -1862,6 +1866,8 @@ data class SliceOptions(
         internalBridgeFlowRatio = profile.internalBridgeFlowRatio,
         topSurfaceFlowRatio = profile.topSurfaceFlowRatio,
         bottomSurfaceFlowRatio = profile.bottomSurfaceFlowRatio,
+        supportFlowRatio = profile.supportFlowRatio,
+        supportInterfaceFlowRatio = profile.supportInterfaceFlowRatio,
         bridgeDensity = profile.bridgeDensity,
         internalBridgeDensity = profile.internalBridgeDensity,
         bridgeAngle = profile.bridgeAngle,
@@ -2334,6 +2340,8 @@ data class SliceOptions(
             filamentDensities = nativeFilaments.map(FilamentProfile::density).toFloatArray(),
             filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
+            native.supportFlowRatio = supportFlowRatio
+            native.supportInterfaceFlowRatio = supportInterfaceFlowRatio
             native.machineMaxJunctionDeviation = maxJunctionDeviation
             native.nozzleMaterial = printerProfile.nozzleMaterial.nativeValue
             native.nozzleHrc = printerProfile.nozzleHrc

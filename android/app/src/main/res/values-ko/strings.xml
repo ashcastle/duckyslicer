@@ -481,6 +481,8 @@
     <string name="internal_bridge_flow_ratio">내부 브리지 유량</string>
     <string name="top_surface_flow_ratio">상단 표면 유량</string>
     <string name="bottom_surface_flow_ratio">하단 표면 유량</string>
+    <string name="support_flow_ratio">서포트 유량 비율</string>
+    <string name="support_interface_flow_ratio">서포트 인터페이스 유량 비율</string>
     <string name="travel_speed">이동 속도</string>
     <string name="vertical_travel_speed">수직 이동 속도</string>
     <string name="use_travel_speed">이동 속도 사용</string>

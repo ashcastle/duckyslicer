@@ -193,6 +193,7 @@ prepare_runtime_source() {
         "$SCRIPT_DIR/engine-profile-options.patch"
         "$SCRIPT_DIR/engine-nozzle-volume.patch"
         "$SCRIPT_DIR/engine-branding.patch"
+        "$SCRIPT_DIR/engine-support-flow-ratios.patch"
     )
     local engine_patches_applied=true
     local engine_patch

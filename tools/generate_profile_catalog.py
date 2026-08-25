@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 99
+SCHEMA_VERSION = 100
 MAX_FILAMENT_SLOTS = 16
 MAX_GCODE_THUMBNAILS = 8
 SUPPORTED_GCODE_THUMBNAIL_FORMATS = {"PNG", "JPG", "QOI", "BTT_TFT", "COLPIC"}
@@ -1238,6 +1238,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "internalBridgeFlowRatio": number(raw.get("internal_bridge_flow"), 1),
         "topSurfaceFlowRatio": number(raw.get("top_solid_infill_flow_ratio"), 1),
         "bottomSurfaceFlowRatio": number(raw.get("bottom_solid_infill_flow_ratio"), 1),
+        "supportFlowRatio": number(raw.get("support_flow_ratio"), 1),
+        "supportInterfaceFlowRatio": number(raw.get("support_interface_flow_ratio"), 1),
         "bridgeDensity": number(raw.get("bridge_density"), 100),
         "internalBridgeDensity": number(raw.get("internal_bridge_density"), 100),
         "bridgeAngle": number(raw.get("bridge_angle"), 0),
@@ -1656,6 +1658,10 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
                 "topSurfaceFlowRatio",
                 "bottomSurfaceFlowRatio",
             ]
+        )
+        and all(
+            0 <= profile[key] <= 2
+            for key in ["supportFlowRatio", "supportInterfaceFlowRatio"]
         )
         and all(
             0 <= profile[key] <= 100_000

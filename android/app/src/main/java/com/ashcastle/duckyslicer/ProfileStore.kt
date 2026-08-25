@@ -7,7 +7,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 99
+internal const val USER_PROFILE_SCHEMA_VERSION = 100
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -344,6 +344,8 @@ class ProfileStore private constructor(
             internalBridgeFlowRatio = options.internalBridgeFlowRatio,
             topSurfaceFlowRatio = options.topSurfaceFlowRatio,
             bottomSurfaceFlowRatio = options.bottomSurfaceFlowRatio,
+            supportFlowRatio = options.supportFlowRatio,
+            supportInterfaceFlowRatio = options.supportInterfaceFlowRatio,
             bridgeDensity = options.bridgeDensity,
             internalBridgeDensity = options.internalBridgeDensity,
             bridgeAngle = options.bridgeAngle,
@@ -837,6 +839,8 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("internalBridgeFlowRatio", internalBridgeFlowRatio)
     .put("topSurfaceFlowRatio", topSurfaceFlowRatio)
     .put("bottomSurfaceFlowRatio", bottomSurfaceFlowRatio)
+    .put("supportFlowRatio", supportFlowRatio)
+    .put("supportInterfaceFlowRatio", supportInterfaceFlowRatio)
     .put("bridgeDensity", bridgeDensity)
     .put("internalBridgeDensity", internalBridgeDensity)
     .put("bridgeAngle", bridgeAngle)
@@ -1418,6 +1422,8 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         internalBridgeFlowRatio = optDouble("internalBridgeFlowRatio", 1.0).toFloat(),
         topSurfaceFlowRatio = optDouble("topSurfaceFlowRatio", 1.0).toFloat(),
         bottomSurfaceFlowRatio = optDouble("bottomSurfaceFlowRatio", 1.0).toFloat(),
+        supportFlowRatio = optDouble("supportFlowRatio", 1.0).toFloat(),
+        supportInterfaceFlowRatio = optDouble("supportInterfaceFlowRatio", 1.0).toFloat(),
         bridgeDensity = optDouble("bridgeDensity", 100.0).toFloat(),
         internalBridgeDensity = optDouble("internalBridgeDensity", 100.0).toFloat(),
         bridgeAngle = optDouble("bridgeAngle", 0.0).toFloat(),

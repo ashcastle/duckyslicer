@@ -809,6 +809,10 @@ class SliceOptionsPersistenceTest {
         assertEquals(0.96f, restored.internalBridgeFlowRatio)
         assertEquals(0.97f, restored.topSurfaceFlowRatio)
         assertEquals(0.98f, restored.bottomSurfaceFlowRatio)
+        assertEquals(0.86f, restored.supportFlowRatio)
+        assertEquals(1.14f, restored.supportInterfaceFlowRatio)
+        assertEquals(0.86f, restored.toNativeConfig().supportFlowRatio)
+        assertEquals(1.14f, restored.toNativeConfig().supportInterfaceFlowRatio)
         assertEquals(0.8f, restored.topShellThickness)
         assertEquals(0.7f, restored.bottomShellThickness)
         assertEquals(44f, restored.quality.surfaceDensity.topPercent)
@@ -1549,6 +1553,8 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         internalBridgeFlowRatio = 0.96f,
         topSurfaceFlowRatio = 0.97f,
         bottomSurfaceFlowRatio = 0.98f,
+        supportFlowRatio = 0.86f,
+        supportInterfaceFlowRatio = 1.14f,
         bridgeDensity = 87f,
         internalBridgeDensity = 73f,
         bridgeAngle = 17f,

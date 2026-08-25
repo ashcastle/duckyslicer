@@ -1,0 +1,56 @@
+diff --git a/src/libslic3r/GCode.cpp b/src/libslic3r/GCode.cpp
+--- a/src/libslic3r/GCode.cpp
++++ b/src/libslic3r/GCode.cpp
+@@ -8060,6 +8060,10 @@ std::string GCode::_extrude(const ExtrusionPath& path, std::string description,
+         _mm3_per_mm *= m_config.bottom_solid_infill_flow_ratio;
+     else if (path.role() == erInternalBridgeInfill)
+         _mm3_per_mm *= m_config.internal_bridge_flow;
++    else if (path.role() == erSupportMaterial)
++        _mm3_per_mm *= m_config.support_flow_ratio;
++    else if (path.role() == erSupportMaterialInterface)
++        _mm3_per_mm *= m_config.support_interface_flow_ratio;
+     else if (sloped)
+         _mm3_per_mm *= m_config.scarf_joint_flow_ratio;
+     // Effective extrusion length per distance unit = (filament_flow_ratio/cross_section) * mm3_per_mm / print flow ratio
+diff --git a/src/libslic3r/PrintConfig.cpp b/src/libslic3r/PrintConfig.cpp
+--- a/src/libslic3r/PrintConfig.cpp
++++ b/src/libslic3r/PrintConfig.cpp
+@@ -1138,6 +1138,26 @@ void PrintConfigDef::init_fff_params()
+     def->mode = comAdvanced;
+     def->set_default_value(new ConfigOptionFloat(1));
+ 
++    def = this->add("support_flow_ratio", coFloat);
++    def->label = L("Support flow ratio");
++    def->category = L("Advanced");
++    def->tooltip = L("This factor affects the amount of material for support.\n\n"
++                     "The actual support flow used is calculated by multiplying this value by the filament flow ratio, and if set, the object's flow ratio.");
++    def->min = 0;
++    def->max = 2;
++    def->mode = comAdvanced;
++    def->set_default_value(new ConfigOptionFloat(1));
++
++    def = this->add("support_interface_flow_ratio", coFloat);
++    def->label = L("Support interface flow ratio");
++    def->category = L("Advanced");
++    def->tooltip = L("This factor affects the amount of material for the support interface.\n\n"
++                     "The actual support interface flow used is calculated by multiplying this value by the filament flow ratio, and if set, the object's flow ratio.");
++    def->min = 0;
++    def->max = 2;
++    def->mode = comAdvanced;
++    def->set_default_value(new ConfigOptionFloat(1));
++
+ 
+     def = this->add("precise_outer_wall",coBool);
+     def->label = L("Precise wall");
+diff --git a/src/libslic3r/PrintConfig.hpp b/src/libslic3r/PrintConfig.hpp
+--- a/src/libslic3r/PrintConfig.hpp
++++ b/src/libslic3r/PrintConfig.hpp
+@@ -1080,6 +1080,8 @@ PRINT_CONFIG_CLASS_DEFINE(
+     ((ConfigOptionFloat,                small_perimeter_threshold))
+     ((ConfigOptionFloat,                top_solid_infill_flow_ratio))
+     ((ConfigOptionFloat,                bottom_solid_infill_flow_ratio))
++    ((ConfigOptionFloat,                support_flow_ratio))
++    ((ConfigOptionFloat,                support_interface_flow_ratio))
+     ((ConfigOptionFloatOrPercent,       infill_anchor))
+     ((ConfigOptionFloatOrPercent,       infill_anchor_max))
+ 

@@ -86,6 +86,8 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         internalBridgeFlowRatio = internalBridgeFlowRatio,
         topSurfaceFlowRatio = topSurfaceFlowRatio,
         bottomSurfaceFlowRatio = bottomSurfaceFlowRatio,
+        supportFlowRatio = supportFlowRatio,
+        supportInterfaceFlowRatio = supportInterfaceFlowRatio,
         bridgeDensity = bridgeDensity,
         internalBridgeDensity = internalBridgeDensity,
         bridgeAngle = bridgeAngle,

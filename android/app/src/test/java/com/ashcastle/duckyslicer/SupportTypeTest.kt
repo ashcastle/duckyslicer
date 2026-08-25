@@ -48,6 +48,24 @@ class SupportTypeTest {
     }
 
     @Test
+    fun supportFlowRatiosUseTheEngineBounds() {
+        assertTrue(
+            ProfileValidation.slicing(
+                QualityProfile.STANDARD.copy(
+                    supportFlowRatio = 0f,
+                    supportInterfaceFlowRatio = 2f,
+                ),
+            ),
+        )
+        assertFalse(ProfileValidation.slicing(QualityProfile.STANDARD.copy(supportFlowRatio = -0.01f)))
+        assertFalse(
+            ProfileValidation.slicing(
+                QualityProfile.STANDARD.copy(supportInterfaceFlowRatio = 2.01f),
+            ),
+        )
+    }
+
+    @Test
     fun supportSettingFamiliesFollowTypeStyleAndEnabledState() {
         assertTrue("normal(auto)".isAutomaticSupportType())
         assertTrue("tree(auto)".isAutomaticSupportType())

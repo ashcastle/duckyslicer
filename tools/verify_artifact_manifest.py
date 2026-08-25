@@ -208,6 +208,78 @@ def _expected_main_filters() -> set[
                 )
             ),
         ),
+        (
+            ("android.intent.action.VIEW",),
+            ("android.intent.category.DEFAULT",),
+            tuple(
+                sorted(
+                    (
+                        (("mimeType", "application/sla"),),
+                        (("mimeType", "application/vnd.ms-3mfdocument"),),
+                        (("mimeType", "application/vnd.ms-package.3dmanufacturing-3dmodel+xml"),),
+                        (("mimeType", "application/vnd.ms-pki.stl"),),
+                        (("mimeType", "application/x-tgif"),),
+                        (("mimeType", "model/3mf"),),
+                        (("mimeType", "model/obj"),),
+                        (("mimeType", "model/stl"),),
+                        (("scheme", "content"),),
+                    )
+                )
+            ),
+        ),
+        (
+            ("android.intent.action.VIEW",),
+            ("android.intent.category.DEFAULT",),
+            tuple(
+                sorted(
+                    (
+                        (("host", "*"),),
+                        (("mimeType", "application/octet-stream"),),
+                        (("pathPattern", ".*.3MF"),),
+                        (("pathPattern", ".*.3mf"),),
+                        (("pathPattern", ".*.OBJ"),),
+                        (("pathPattern", ".*.obj"),),
+                        (("pathPattern", ".*.STL"),),
+                        (("pathPattern", ".*.stl"),),
+                        (("scheme", "content"),),
+                    )
+                )
+            ),
+        ),
+        (
+            ("android.intent.action.VIEW",),
+            ("android.intent.category.DEFAULT",),
+            tuple(
+                sorted(
+                    (
+                        (("host", "*"),),
+                        (("mimeType", "application/x-zip-compressed"),),
+                        (("mimeType", "application/zip"),),
+                        (("pathPattern", ".*.3MF"),),
+                        (("pathPattern", ".*.3mf"),),
+                        (("scheme", "content"),),
+                    )
+                )
+            ),
+        ),
+        (
+            ("android.intent.action.SEND",),
+            ("android.intent.category.DEFAULT",),
+            tuple(
+                sorted(
+                    (
+                        (("mimeType", "application/sla"),),
+                        (("mimeType", "application/vnd.ms-3mfdocument"),),
+                        (("mimeType", "application/vnd.ms-package.3dmanufacturing-3dmodel+xml"),),
+                        (("mimeType", "application/vnd.ms-pki.stl"),),
+                        (("mimeType", "application/x-tgif"),),
+                        (("mimeType", "model/3mf"),),
+                        (("mimeType", "model/obj"),),
+                        (("mimeType", "model/stl"),),
+                    )
+                )
+            ),
+        ),
     }
 
 
