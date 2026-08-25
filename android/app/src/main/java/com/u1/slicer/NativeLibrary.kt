@@ -56,7 +56,12 @@ class NativeLibrary(
 
     external fun applyHeightRangeModifiers(objectIndex: Int, sidecarPath: String): Boolean
     external fun applyBrimPoints(objectIndex: Int, sidecarPath: String): Boolean
-    external fun nativeSetLayerPauses(printZValues: FloatArray, messages: Array<String>): Boolean
+    external fun nativeSetLayerEvents(
+        pausePrintZValues: FloatArray,
+        pauseMessages: Array<String>,
+        filamentChangePrintZValues: FloatArray,
+        filamentChangeExtruders: IntArray,
+    ): Boolean
     external fun getObjectBoundingBoxes(): FloatArray
     external fun nativeGetObjectWorldAABBMins(): FloatArray
     external fun nativeExportLoadedObjects(outputDirectory: String): Array<String>?

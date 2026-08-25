@@ -36,11 +36,21 @@ class PlateSliceResultsTest {
         val secondObject = projectObject("second-object")
         val firstOptions = SliceOptions().copy(fillDensity = 0.15f)
         val secondOptions = SliceOptions().copy(fillDensity = 0.45f)
+        val secondPauses = LayerPauseEvents().put(LayerPauseEvent(4.2f, "Check print"))
+        val secondFilamentChanges = LayerFilamentChanges().put(
+            LayerFilamentChange(printZMm = 6.4f, filamentSlot = 1),
+        )
         val snapshot = ProjectSnapshot(
             selectedPlateId = "second-plate",
             plates = listOf(
                 ProjectPlate("first-plate", listOf(firstObject), firstObject.id),
-                ProjectPlate("second-plate", listOf(secondObject), secondObject.id),
+                ProjectPlate(
+                    id = "second-plate",
+                    objects = listOf(secondObject),
+                    selectedObjectId = secondObject.id,
+                    layerPauseEvents = secondPauses,
+                    layerFilamentChanges = secondFilamentChanges,
+                ),
             ),
         )
         val options = mapOf(
@@ -53,6 +63,8 @@ class PlateSliceResultsTest {
         assertEquals("second-plate", selected.plateId)
         assertEquals(listOf(secondObject), selected.objects)
         assertEquals(secondOptions, selected.options)
+        assertEquals(secondPauses, selected.layerPauseEvents)
+        assertEquals(secondFilamentChanges, selected.layerFilamentChanges)
         assertNull(snapshot.sliceInput(options - "second-plate"))
     }
 

@@ -1154,4 +1154,12 @@
     <string name="preview_changes_pending">내보내거나 출력하기 전에 다시 슬라이스하세요.</string>
     <string name="layer_pause_height">%1$.2f mm에서 일시정지</string>
     <string name="remove_layer_pause_height">%1$.2f mm 일시정지 삭제</string>
+    <string name="add_layer_filament_change">%1$d 레이어에서 필라멘트 변경</string>
+    <string name="edit_layer_filament_change">%1$d 레이어 필라멘트 수정</string>
+    <string name="choose_layer_filament">필라멘트 선택</string>
+    <string name="current_selection">현재 선택</string>
+    <string name="saved_layer_filament_changes">저장된 필라멘트 변경 %1$d개</string>
+    <string name="layer_filament_change_height">%1$.2f mm · T%2$d</string>
+    <string name="remove_layer_filament_change_height">%1$.2f mm 필라멘트 변경 삭제</string>
+    <string name="layer_filament_change_unavailable">모델에 필라멘트 하나만 사용하고 사용 가능한 필라멘트가 두 개 이상이어야 합니다.</string>
 </resources>

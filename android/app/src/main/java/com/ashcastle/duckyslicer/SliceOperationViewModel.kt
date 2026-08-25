@@ -54,6 +54,7 @@ internal class SliceOperationViewModel : ViewModel() {
         objects: List<ProjectObject>,
         options: SliceOptions,
         layerPauseEvents: LayerPauseEvents = LayerPauseEvents(),
+        layerFilamentChanges: LayerFilamentChanges = LayerFilamentChanges(),
     ): Boolean {
         if (objects.isEmpty() || mutableState.value.busy || operationJob.get()?.isActive == true) {
             return false
@@ -73,6 +74,7 @@ internal class SliceOperationViewModel : ViewModel() {
                 objects,
                 options,
                 layerPauseEvents = layerPauseEvents,
+                layerFilamentChanges = layerFilamentChanges,
                 foregroundSession = foregroundSession,
                 cancellationRequested = { cancellationRequested(foregroundSession) },
                 onProgress = onProgress,

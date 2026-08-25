@@ -179,6 +179,7 @@ internal class ProjectStore(
                         },
                         selectedObjectId = archivedPlate.selectedObjectId,
                         layerPauseEvents = archivedPlate.layerPauseEvents,
+                        layerFilamentChanges = archivedPlate.layerFilamentChanges,
                     )
                 },
             )
@@ -267,8 +268,19 @@ internal class ProjectStore(
                 val objects = restoreObjects(value.getJSONArray("objects"))
                 val requestedSelection = value.takeUnless { it.isNull("selectedObjectId") }
                     ?.optString("selectedObjectId")?.takeIf(String::isNotBlank)
-                options[plateId] = value.getJSONObject("sliceOptions")
+                val restoredOptions = value.getJSONObject("sliceOptions")
                     .toProjectSliceOptionsOrNull() ?: error("Invalid plate settings")
+                options[plateId] = restoredOptions
+                val layerFilamentChanges = if (schemaVersion >= 76) {
+                    value.getJSONArray("layerFilamentChanges").toLayerFilamentChanges()
+                } else {
+                    LayerFilamentChanges()
+                }
+                require(
+                    layerFilamentChanges.values.all {
+                        it.filamentSlot in restoredOptions.resolvedFilamentSlots().indices
+                    },
+                ) { "Layer filament change is unavailable" }
                 ProjectPlate(
                     id = plateId,
                     objects = objects,
@@ -278,6 +290,7 @@ internal class ProjectStore(
                     } else {
                         LayerPauseEvents()
                     },
+                    layerFilamentChanges = layerFilamentChanges,
                 )
             }
             val selectedPlateId = root.getString("selectedPlateId")
@@ -372,6 +385,10 @@ internal class ProjectStore(
                                     plate.selectedObjectId ?: JSONObject.NULL,
                                 )
                                 .put("layerPauseEvents", plate.layerPauseEvents.toProjectJson())
+                                .put(
+                                    "layerFilamentChanges",
+                                    plate.layerFilamentChanges.toProjectJson(),
+                                )
                                 .put("sliceOptions", requireNotNull(plateOptions[plate.id]).toProjectJson())
                                 .put(
                                     "objects",
@@ -593,9 +610,20 @@ internal class ProjectStore(
                 val selected = value.takeUnless { it.isNull("selectedObjectId") }
                     ?.optString("selectedObjectId")?.takeIf(String::isNotBlank)
                 require(selected == null || selected in localIds)
-                require(value.getJSONObject("sliceOptions").toProjectSliceOptionsOrNull() != null)
+                val options = requireNotNull(
+                    value.getJSONObject("sliceOptions").toProjectSliceOptionsOrNull(),
+                )
                 if (schemaVersion >= 75) {
                     value.getJSONArray("layerPauseEvents").toLayerPauseEvents()
+                }
+                if (schemaVersion >= 76) {
+                    val changes = value.getJSONArray("layerFilamentChanges")
+                        .toLayerFilamentChanges()
+                    require(
+                        changes.values.all {
+                            it.filamentSlot in options.resolvedFilamentSlots().indices
+                        },
+                    )
                 }
             }
             val selectedPlateId = root.getString("selectedPlateId")
@@ -1053,7 +1081,7 @@ internal class ProjectStore(
             return removed
         }
 
-        const val SCHEMA_VERSION = 75
+        const val SCHEMA_VERSION = 76
         const val MIN_SUPPORTED_SCHEMA_VERSION = 1
         const val PROJECT_DIRECTORY = "projects"
         const val MODEL_IMPORT_DIRECTORY_PREFIX = ".model-import-"

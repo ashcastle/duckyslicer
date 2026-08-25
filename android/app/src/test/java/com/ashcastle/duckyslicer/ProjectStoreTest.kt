@@ -189,6 +189,9 @@ class ProjectStoreTest {
                         layerPauseEvents = LayerPauseEvents(
                             listOf(LayerPauseEvent(5.2f, "Check insert")),
                         ),
+                        layerFilamentChanges = LayerFilamentChanges(
+                            listOf(LayerFilamentChange(7.4f, 1)),
+                        ),
                     )
                 },
             )
@@ -198,18 +201,25 @@ class ProjectStoreTest {
         val restored = ProjectStore(root, ::inspectedModel).loadProject()
 
         val persisted = JSONObject(File(root, "current_project.json").readText())
-        assertEquals(75, persisted.getInt("schemaVersion"))
+        assertEquals(76, persisted.getInt("schemaVersion"))
         assertEquals(
             setOf("schemaVersion", "selectedPlateId", "plates"),
             persisted.keys().asSequence().toSet(),
         )
         val persistedPlate = persisted.getJSONArray("plates").getJSONObject(0)
         assertEquals(
-            setOf("id", "selectedObjectId", "layerPauseEvents", "sliceOptions", "objects"),
+            setOf(
+                "id", "selectedObjectId", "layerPauseEvents",
+                "layerFilamentChanges", "sliceOptions", "objects",
+            ),
             persistedPlate.keys().asSequence().toSet(),
         )
         assertEquals(legacyProjectPlateId(), persistedPlate.getString("id"))
         assertEquals(snapshot.activePlate.layerPauseEvents, restored.snapshot.activePlate.layerPauseEvents)
+        assertEquals(
+            snapshot.activePlate.layerFilamentChanges,
+            restored.snapshot.activePlate.layerFilamentChanges,
+        )
         val persistedObject = persistedPlate.getJSONArray("objects").getJSONObject(0)
         assertEquals(
             setOf(

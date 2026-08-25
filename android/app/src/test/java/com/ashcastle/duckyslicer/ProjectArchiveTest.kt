@@ -144,6 +144,9 @@ class ProjectArchiveTest {
                                     LayerPauseEvent(8.8f),
                                 ),
                             ),
+                            layerFilamentChanges = LayerFilamentChanges(
+                                listOf(LayerFilamentChange(4.2f, 1)),
+                            ),
                         )
                     },
                 )
@@ -166,11 +169,14 @@ class ProjectArchiveTest {
                 setOf("format", "schemaVersion", "selectedPlateId", "plates"),
                 manifest.keys().asSequence().toSet(),
             )
-            assertEquals(73, manifest.getInt("schemaVersion"))
+            assertEquals(74, manifest.getInt("schemaVersion"))
             assertEquals(legacyProjectPlateId(), manifest.getString("selectedPlateId"))
             val manifestPlate = manifest.getJSONArray("plates").getJSONObject(0)
             assertEquals(
-                setOf("id", "selectedObjectId", "layerPauseEvents", "sliceOptions", "objects"),
+                setOf(
+                    "id", "selectedObjectId", "layerPauseEvents",
+                    "layerFilamentChanges", "sliceOptions", "objects",
+                ),
                 manifestPlate.keys().asSequence().toSet(),
             )
             assertEquals(
@@ -208,6 +214,10 @@ class ProjectArchiveTest {
             assertEquals(
                 snapshot.activePlate.layerPauseEvents,
                 imported.snapshot.activePlate.layerPauseEvents,
+            )
+            assertEquals(
+                snapshot.activePlate.layerFilamentChanges,
+                imported.snapshot.activePlate.layerFilamentChanges,
             )
             assertEquals(2, imported.snapshot.objects.size)
             assertEquals(first.singleVolume.id, imported.snapshot.objects[0].singleVolume.id)

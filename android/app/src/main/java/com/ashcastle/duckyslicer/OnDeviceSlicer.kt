@@ -2824,11 +2824,37 @@ object OnDeviceSlicer {
         objects: List<ProjectObject>,
         options: SliceOptions = SliceOptions(),
         layerPauseEvents: LayerPauseEvents = LayerPauseEvents(),
+        layerFilamentChanges: LayerFilamentChanges = LayerFilamentChanges(),
         foregroundSession: ForegroundSliceSession? = null,
         cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit = {},
     ): SliceOutcome {
         val filamentSlots = options.resolvedFilamentSlots()
+        require(
+            layerFilamentChanges.values.all { it.filamentSlot in filamentSlots.indices },
+        ) { "Layer filament change is unavailable" }
+        if (layerFilamentChanges.values.isNotEmpty()) {
+            var hasImportedMultiColorAnnotations = false
+            val objectFilamentSlots = buildSet {
+                objects.forEach { projectObject ->
+                    projectObject.volumes.forEach { volume ->
+                        if (volume.role.acceptsFilament) add(volume.filamentSlot)
+                        if (volume.role.acceptsFacetPaint) {
+                            addAll(volume.multiColorPaint.facets.values)
+                            hasImportedMultiColorAnnotations =
+                                hasImportedMultiColorAnnotations ||
+                                volume.orcaFacetAnnotations.multiColor.maximumState > 0
+                        }
+                    }
+                }
+            }
+            require(
+                filamentSlots.size > 1 && objectFilamentSlots.size <= 1 &&
+                    !hasImportedMultiColorAnnotations
+            ) {
+                "Layer filament changes require one object filament and multiple available filaments"
+            }
+        }
         if (options.spiralMode) {
             require(objects.size == 1) { "Spiral vase supports one object" }
             require(
@@ -3037,6 +3063,7 @@ object OnDeviceSlicer {
                     orcaSeamAnnotationFiles = orcaSeamAnnotationFiles,
                     orcaMultiColorAnnotationFiles = orcaMultiColorAnnotationFiles,
                     layerPauseEvents = layerPauseEvents,
+                    layerFilamentChanges = layerFilamentChanges,
                     foregroundSession = foregroundSession,
                     cancellationRequested = cancellationRequested,
                     onProgress = onProgress,

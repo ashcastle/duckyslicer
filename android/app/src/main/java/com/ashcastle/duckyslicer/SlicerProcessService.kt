@@ -60,6 +60,7 @@ internal object SlicerProcessClient {
             ProjectVolumeRole.MODEL_PART.nativeValue
         },
         layerPauseEvents: LayerPauseEvents = LayerPauseEvents(),
+        layerFilamentChanges: LayerFilamentChanges = LayerFilamentChanges(),
         foregroundSession: ForegroundSliceSession? = null,
         cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit,
@@ -82,6 +83,7 @@ internal object SlicerProcessClient {
         volumeRoles,
         List(transformedModels.size) { null },
         layerPauseEvents,
+        layerFilamentChanges,
         foregroundSession,
         cancellationRequested,
         null,
@@ -109,6 +111,7 @@ internal object SlicerProcessClient {
         orcaSeamAnnotationFiles: List<File?> = List(transformedModels.size) { null },
         orcaMultiColorAnnotationFiles: List<File?> = List(transformedModels.size) { null },
         layerPauseEvents: LayerPauseEvents = LayerPauseEvents(),
+        layerFilamentChanges: LayerFilamentChanges = LayerFilamentChanges(),
         foregroundSession: ForegroundSliceSession? = null,
         cancellationRequested: () -> Boolean = { false },
         onProgress: (Int) -> Unit,
@@ -131,6 +134,7 @@ internal object SlicerProcessClient {
         volumeRoles,
         volumeConfigFiles,
         layerPauseEvents,
+        layerFilamentChanges,
         foregroundSession,
         cancellationRequested,
         null,
@@ -166,6 +170,7 @@ internal object SlicerProcessClient {
             IntArray(transformedModels.size) { ProjectVolumeRole.MODEL_PART.nativeValue },
             List(transformedModels.size) { null },
             LayerPauseEvents(),
+            LayerFilamentChanges(),
             null,
             { false },
             maximumGcodeBytes,
@@ -817,6 +822,7 @@ internal object SlicerProcessClient {
         volumeRoles: IntArray,
         volumeConfigFiles: List<File?>,
         layerPauseEvents: LayerPauseEvents,
+        layerFilamentChanges: LayerFilamentChanges,
         foregroundSession: ForegroundSliceSession?,
         cancellationRequested: () -> Boolean,
         maximumGcodeBytesForTest: Int?,
@@ -877,6 +883,15 @@ internal object SlicerProcessClient {
         val volumeConfigPaths = volumeConfigFiles.map { it?.absolutePath.orEmpty() }
         val pausePrintZValues = layerPauseEvents.values.map(LayerPauseEvent::printZMm).toFloatArray()
         val pauseMessages = layerPauseEvents.values.map(LayerPauseEvent::message)
+        val filamentChangePrintZValues = layerFilamentChanges.values
+            .map(LayerFilamentChange::printZMm)
+            .toFloatArray()
+        val filamentChangeSlots = layerFilamentChanges.values
+            .map(LayerFilamentChange::filamentSlot)
+            .toIntArray()
+        require(
+            filamentChangeSlots.all { it in options.resolvedFilamentSlots().indices },
+        ) { "Layer filament change is unavailable" }
         require(
             safeGcodeFileName(inputFilenameBase).removeSuffix(".gcode") == inputFilenameBase
         ) { "Invalid input filename" }
@@ -947,6 +962,14 @@ internal object SlicerProcessClient {
             )
             putFloatArray(SlicerProcessContract.KEY_LAYER_PAUSE_Z_VALUES, pausePrintZValues)
             putStringArrayList(SlicerProcessContract.KEY_LAYER_PAUSE_MESSAGES, ArrayList(pauseMessages))
+            putFloatArray(
+                SlicerProcessContract.KEY_LAYER_FILAMENT_CHANGE_Z_VALUES,
+                filamentChangePrintZValues,
+            )
+            putIntArray(
+                SlicerProcessContract.KEY_LAYER_FILAMENT_CHANGE_SLOTS,
+                filamentChangeSlots,
+            )
             putString(SlicerProcessContract.KEY_OPTIONS, optionsText)
             putString(SlicerProcessContract.KEY_INPUT_FILENAME_BASE, inputFilenameBase)
             putIntArray(SlicerProcessContract.KEY_OBJECT_VOLUME_COUNTS, objectVolumeCounts)
@@ -2318,6 +2341,23 @@ class SlicerProcessService : Service() {
                 LayerPauseEvent(pausePrintZValues[index], pauseMessages[index])
             },
         )
+        val filamentChangePrintZValues = requireNotNull(
+            extras.getFloatArray(SlicerProcessContract.KEY_LAYER_FILAMENT_CHANGE_Z_VALUES),
+        ) { "Layer filament change heights are unavailable" }
+        val filamentChangeSlots = requireNotNull(
+            extras.getIntArray(SlicerProcessContract.KEY_LAYER_FILAMENT_CHANGE_SLOTS),
+        ) { "Layer filament change slots are unavailable" }
+        require(filamentChangePrintZValues.size == filamentChangeSlots.size) {
+            "Layer filament changes are invalid"
+        }
+        val layerFilamentChanges = LayerFilamentChanges(
+            filamentChangePrintZValues.indices.map { index ->
+                LayerFilamentChange(
+                    filamentChangePrintZValues[index],
+                    filamentChangeSlots[index],
+                )
+            },
+        )
         val optionsText = requireNotNull(extras.getString(SlicerProcessContract.KEY_OPTIONS)) {
             "Slice settings are unavailable"
         }
@@ -2373,6 +2413,9 @@ class SlicerProcessService : Service() {
         ) { "Filament assignments are unavailable" }
         val availableFilaments = options.resolvedFilamentSlots()
         require(
+            layerFilamentChanges.values.all { it.filamentSlot in availableFilaments.indices },
+        ) { "Layer filament change is unavailable" }
+        require(
             filamentSlots.size == models.size &&
                 filamentSlots.indices.all { index ->
                     if (volumeRoles[index].acceptsFilament) {
@@ -2387,6 +2430,22 @@ class SlicerProcessService : Service() {
                     annotation.annotation.maximumState <= availableFilaments.size
                 },
         ) { "Filament assignments are invalid" }
+        if (layerFilamentChanges.values.isNotEmpty()) {
+            val objectFilaments = buildSet {
+                filamentSlots.indices.forEach { index ->
+                    if (volumeRoles[index].acceptsFilament) add(filamentSlots[index])
+                    multiColorPaintFiles[index]?.filamentSlots?.let(::addAll)
+                }
+            }
+            require(
+                availableFilaments.size > 1 && objectFilaments.size <= 1 &&
+                    orcaMultiColorAnnotations.filterNotNull().all {
+                        it.annotation.maximumState == 0
+                    }
+            ) {
+                "Layer filament changes require one object filament and multiple available filaments"
+            }
+        }
         val maximumGcodeBytes = if (
             BuildConfig.DEBUG &&
             extras.containsKey(SlicerProcessContract.KEY_MAXIMUM_GCODE_BYTES_FOR_TEST)
@@ -2417,6 +2476,7 @@ class SlicerProcessService : Service() {
                 volumeRoles,
                 volumeConfigFiles,
                 layerPauseEvents,
+                layerFilamentChanges,
                 options,
                 inputFilenameBase,
                 maximumGcodeBytes,
@@ -3065,6 +3125,7 @@ class SlicerProcessService : Service() {
         volumeRoles: List<ProjectVolumeRole>,
         volumeConfigFiles: List<File?>,
         layerPauseEvents: LayerPauseEvents,
+        layerFilamentChanges: LayerFilamentChanges,
         options: SliceOptions,
         inputFilenameBase: String,
         maximumGcodeBytes: Int,
@@ -3190,11 +3251,13 @@ class SlicerProcessService : Service() {
                 }
             }
             check(
-                runtime.nativeSetLayerPauses(
+                runtime.nativeSetLayerEvents(
                     layerPauseEvents.values.map(LayerPauseEvent::printZMm).toFloatArray(),
                     layerPauseEvents.values.map(LayerPauseEvent::message).toTypedArray(),
+                    layerFilamentChanges.values.map(LayerFilamentChange::printZMm).toFloatArray(),
+                    layerFilamentChanges.values.map { it.filamentSlot + 1 }.toIntArray(),
                 ),
-            ) { "Layer pause events could not be applied" }
+            ) { "Layer events could not be applied" }
             val nativeConfig = options.toNativeConfig().apply {
                 this.maximumGcodeBytes = maximumGcodeBytes
                 this.inputFilenameBase = inputFilenameBase
@@ -3791,6 +3854,8 @@ private object SlicerProcessContract {
     const val KEY_BRIM_POINT_PATHS = "brimPointPaths"
     const val KEY_LAYER_PAUSE_Z_VALUES = "layerPauseZValues"
     const val KEY_LAYER_PAUSE_MESSAGES = "layerPauseMessages"
+    const val KEY_LAYER_FILAMENT_CHANGE_Z_VALUES = "layerFilamentChangeZValues"
+    const val KEY_LAYER_FILAMENT_CHANGE_SLOTS = "layerFilamentChangeSlots"
     const val KEY_OPTIONS = "options"
     const val KEY_INPUT_FILENAME_BASE = "inputFilenameBase"
     const val KEY_MAXIMUM_GCODE_BYTES_FOR_TEST = "maximumGcodeBytesForTest"

@@ -81,6 +81,7 @@ def _strings(name: str, source: str) -> dict[str, str]:
 def verify_project_archive(sources: dict[str, str]) -> None:
     required_files = {
         "ProjectArchive.kt",
+        "LayerFilamentChanges.kt",
         "HeightRangeModifiers.kt",
         "OrcaFacetAnnotations.kt",
         "ProjectVolumeSemantics.kt",
@@ -133,7 +134,7 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES + 1",
             'PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"',
             "MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1",
-            "PROJECT_ARCHIVE_SCHEMA_VERSION = 73",
+            "PROJECT_ARCHIVE_SCHEMA_VERSION = 74",
             "ArchivedProjectPlate",
             "ArchivedProjectVolume",
             'put("role", volume.role.name)',
@@ -170,6 +171,9 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             'put("layerPauseEvents", plate.layerPauseEvents.toProjectJson())',
             "schemaVersion >= 73",
             'getJSONArray("layerPauseEvents").toLayerPauseEvents()',
+            '"layerFilamentChanges",',
+            "schemaVersion >= 74",
+            'getJSONArray("layerFilamentChanges").toLayerFilamentChanges()',
             "checkCancellation: () -> Unit = {}",
             "copyArchiveBytes(input, archive, model.length(), checkCancellation)",
             "val copied = copyArchiveBytes(",
@@ -203,16 +207,32 @@ def verify_project_archive(sources: dict[str, str]) -> None:
             "ProjectArchiveCodec.write(snapshot, plateOptions, output, checkCancellation)",
             "beginCommit: () -> Unit = {}",
             "beginCommit()",
-            "SCHEMA_VERSION = 75",
+            "SCHEMA_VERSION = 76",
             "schemaVersion >= 70",
             "schemaVersion >= 75",
+            "schemaVersion >= 76",
             'put("layerPauseEvents", plate.layerPauseEvents.toProjectJson())',
             'getJSONArray("layerPauseEvents").toLayerPauseEvents()',
+            '"layerFilamentChanges",',
+            'getJSONArray("layerFilamentChanges").toLayerFilamentChanges()',
             'put("heightRangeModifiers", heightRangeModifiers.toProjectJson())',
             'put("role", role.name)',
             'put("config", config.toJson())',
         ),
     )
+    _require_markers(
+        "LayerFilamentChanges.kt",
+        sources["LayerFilamentChanges.kt"],
+        (
+            "data class LayerFilamentChange",
+            "data class LayerFilamentChanges",
+            "MAX_EVENTS = 256",
+            "constrainedToSlotCount",
+            "fun LayerFilamentChanges.toProjectJson",
+            "fun JSONArray.toLayerFilamentChanges",
+        ),
+    )
+
     _require_markers(
         "HeightRangeModifiers.kt",
         sources["HeightRangeModifiers.kt"],
@@ -700,8 +720,8 @@ def verify_project_archive(sources: dict[str, str]) -> None:
         (
             "manifest.json",
             "models/000.stl",
-            "schema version `72`",
-            "Schema 1 through 72 projects remain readable",
+            "schema version `74`",
+            "Schema 1 through 74 projects remain readable",
             "brim chamfer policy",
             "parameter modifier",
             "support blocker",
@@ -913,6 +933,9 @@ def read_sources() -> dict[str, str]:
     tests = ROOT / "android/app/src"
     return {
         "ProjectArchive.kt": (package / "ProjectArchive.kt").read_text(encoding="utf-8"),
+        "LayerFilamentChanges.kt": (package / "LayerFilamentChanges.kt").read_text(
+            encoding="utf-8"
+        ),
         "HeightRangeModifiers.kt": (package / "HeightRangeModifiers.kt").read_text(
             encoding="utf-8"
         ),

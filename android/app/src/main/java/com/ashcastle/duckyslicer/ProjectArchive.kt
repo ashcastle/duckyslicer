@@ -60,6 +60,7 @@ internal data class ArchivedProjectPlate(
     val selectedObjectId: String?,
     val sliceOptions: SliceOptions,
     val layerPauseEvents: LayerPauseEvents,
+    val layerFilamentChanges: LayerFilamentChanges,
 )
 
 internal data class StagedArchiveModel(
@@ -153,6 +154,10 @@ internal object ProjectArchiveCodec {
                                     plate.selectedObjectId ?: JSONObject.NULL,
                                 )
                                 .put("layerPauseEvents", plate.layerPauseEvents.toProjectJson())
+                                .put(
+                                    "layerFilamentChanges",
+                                    plate.layerFilamentChanges.toProjectJson(),
+                                )
                                 .put(
                                     "sliceOptions",
                                     requireNotNull(plateOptions[plate.id]).toProjectJson(),
@@ -322,7 +327,24 @@ internal object ProjectArchiveCodec {
                 } else {
                     LayerPauseEvents()
                 }
-                ArchivedProjectPlate(id, objects, selected, options, layerPauseEvents)
+                val layerFilamentChanges = if (schemaVersion >= 74) {
+                    value.getJSONArray("layerFilamentChanges").toLayerFilamentChanges()
+                } else {
+                    LayerFilamentChanges()
+                }
+                require(
+                    layerFilamentChanges.values.all {
+                        it.filamentSlot in options.resolvedFilamentSlots().indices
+                    },
+                ) { "Layer filament change is unavailable" }
+                ArchivedProjectPlate(
+                    id,
+                    objects,
+                    selected,
+                    options,
+                    layerPauseEvents,
+                    layerFilamentChanges,
+                )
             }
         } else {
             val objects = parseArchivedObjects(root.getJSONArray("objects"), schemaVersion, objectIds)
@@ -339,6 +361,7 @@ internal object ProjectArchiveCodec {
                     selected,
                     options,
                     LayerPauseEvents(),
+                    LayerFilamentChanges(),
                 ),
             )
         }
@@ -837,6 +860,6 @@ private const val MAX_PROJECT_ARCHIVE_ENTRIES = ProjectStore.MAX_PROJECT_VOLUMES
 private const val MAX_PROJECT_ARCHIVE_ENTRY_NAME = 128
 private const val PROJECT_ARCHIVE_FORMAT = "com.ashcastle.duckyslicer.project"
 private const val MIN_PROJECT_ARCHIVE_SCHEMA_VERSION = 1
-private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 73
+private const val PROJECT_ARCHIVE_SCHEMA_VERSION = 74
 private const val PROJECT_ARCHIVE_MANIFEST = "manifest.json"
 private val PROJECT_ARCHIVE_MODEL_ENTRY = Regex("models/[0-9]{3}\\.stl")

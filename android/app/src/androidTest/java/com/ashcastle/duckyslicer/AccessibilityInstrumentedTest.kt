@@ -233,6 +233,30 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun previewLayerFilamentChangeExposesSelectionAndRemoval() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val addLabel = context.getString(R.string.add_layer_filament_change, 300)
+        val chooseLabel = context.getString(R.string.choose_layer_filament)
+        val filamentTwo = context.getString(R.string.preview_filament_number, 2)
+        val removeLabel = context.getString(R.string.remove_layer_filament_change_height, 60.05f)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_PREVIEW).use {
+            val addNode = scrollUntilClickable(addLabel)
+            assertTrue(addNode.isFocusable)
+            assertTrue(addNode.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            assertTrue(
+                waitForNodes(setOf(chooseLabel)).any { it.effectiveLabel().contains(chooseLabel) },
+            )
+            val filamentNode = waitForNodes(setOf(filamentTwo)).single {
+                it.isClickable && it.effectiveLabel().contains(filamentTwo)
+            }
+            assertTrue(filamentNode.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val removeNode = scrollUntilClickable(removeLabel)
+            assertTrue(removeNode.isFocusable)
+            assertTrue(removeNode.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        }
+    }
+
+    @Test
     fun profileSliderAndSwitchExposeTheirSettingNamesOnce() {
         launchHarness(AccessibilityHarnessActivity.SCREEN_PROFILE).use {
             val nodes = waitForNodes(setOf(TEST_SETTING_LABEL, TEST_SWITCH_LABEL))

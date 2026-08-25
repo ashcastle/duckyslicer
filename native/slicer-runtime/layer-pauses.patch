@@ -1,11 +1,13 @@
 diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -820,6 +820,7 @@ public:
+@@ -820,6 +820,9 @@ public:
      std::string getVolumeName(int objIdx, int volIdx) const;
      int  getVolumeExtruder(int objIdx, int volIdx) const;
      bool setVolumeExtruder(int objIdx, int volIdx, int slot);
-+    bool setLayerPauses(const std::vector<std::pair<float, std::string>>& pauses);
++    bool setLayerEvents(
++        const std::vector<std::pair<float, std::string>>& pauses,
++        const std::vector<std::pair<float, int>>& filament_changes);
  
  private:
      struct Impl;
@@ -20,17 +22,20 @@ diff --git a/app/src/main/cpp/src/sapil_model.cpp b/app/src/main/cpp/src/sapil_m
  #include "libslic3r/TriangleSelector.hpp"
  #include "libslic3r/QuadricEdgeCollapse.hpp"
  #include "libslic3r/Semver.hpp"
-@@ -1127,6 +1128,38 @@ void SlicerEngine::cancelPreviewMesh() {
+@@ -1127,6 +1128,58 @@ void SlicerEngine::cancelPreviewMesh() {
      SAPIL_LOGI("cancelPreviewMesh: signalled cancellation");
  }
  
-+bool SlicerEngine::setLayerPauses(
-+        const std::vector<std::pair<float, std::string>>& pauses) {
-+    if (!g_model_loaded || pauses.size() > 256) return false;
++bool SlicerEngine::setLayerEvents(
++        const std::vector<std::pair<float, std::string>>& pauses,
++        const std::vector<std::pair<float, int>>& filament_changes) {
++    if (!g_model_loaded || pauses.size() > 256 || filament_changes.size() > 256)
++        return false;
 +
 +    Slic3r::CustomGCode::Info info;
-+    info.mode = Slic3r::CustomGCode::SingleExtruder;
-+    info.gcodes.reserve(pauses.size());
++    info.mode = filament_changes.empty() ?
++        Slic3r::CustomGCode::SingleExtruder : Slic3r::CustomGCode::MultiAsSingle;
++    info.gcodes.reserve(pauses.size() + filament_changes.size());
 +    float previous_z = 0.0f;
 +    for (const auto& pause : pauses) {
 +        const float print_z = pause.first;
@@ -52,6 +57,23 @@ diff --git a/app/src/main/cpp/src/sapil_model.cpp b/app/src/main/cpp/src/sapil_m
 +        });
 +        previous_z = print_z;
 +    }
++    previous_z = 0.0f;
++    for (const auto& change : filament_changes) {
++        const float print_z = change.first;
++        if (!std::isfinite(print_z) || print_z < 0.001f || print_z > 10000.0f ||
++            print_z <= previous_z || change.second < 1 || change.second > 16) {
++            return false;
++        }
++        info.gcodes.emplace_back(Slic3r::CustomGCode::Item{
++            static_cast<double>(print_z),
++            Slic3r::CustomGCode::ToolChange,
++            change.second,
++            "",
++            "",
++        });
++        previous_z = print_z;
++    }
++    std::stable_sort(info.gcodes.begin(), info.gcodes.end());
 +    g_model.plates_custom_gcodes[g_model.curr_plate_index] = std::move(info);
 +    return true;
 +}
@@ -62,24 +84,31 @@ diff --git a/app/src/main/cpp/src/sapil_model.cpp b/app/src/main/cpp/src/sapil_m
 diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slicer_wrapper.cpp
 --- a/app/src/main/cpp/src/slicer_wrapper.cpp
 +++ b/app/src/main/cpp/src/slicer_wrapper.cpp
-@@ -538,4 +538,35 @@ Java_com_u1_slicer_NativeLibrary_nativeSetVolumeExtruder(
+@@ -538,4 +538,59 @@ Java_com_u1_slicer_NativeLibrary_nativeSetVolumeExtruder(
      return (g_engine && g_engine->setVolumeExtruder(objIdx, volIdx, slot)) ? JNI_TRUE : JNI_FALSE;
  }
  
 +JNIEXPORT jboolean JNICALL
-+Java_com_u1_slicer_NativeLibrary_nativeSetLayerPauses(
-+        JNIEnv* env, jobject, jfloatArray jprint_z_values, jobjectArray jmessages) {
-+    if (!g_engine || !jprint_z_values || !jmessages) return JNI_FALSE;
-+    const jsize count = env->GetArrayLength(jprint_z_values);
-+    if (count < 0 || count > 256 || env->GetArrayLength(jmessages) != count) return JNI_FALSE;
++Java_com_u1_slicer_NativeLibrary_nativeSetLayerEvents(
++        JNIEnv* env, jobject, jfloatArray jpause_z_values, jobjectArray jmessages,
++        jfloatArray jchange_z_values, jintArray jchange_extruders) {
++    if (!g_engine || !jpause_z_values || !jmessages ||
++        !jchange_z_values || !jchange_extruders) return JNI_FALSE;
++    const jsize pause_count = env->GetArrayLength(jpause_z_values);
++    const jsize change_count = env->GetArrayLength(jchange_z_values);
++    if (pause_count < 0 || pause_count > 256 ||
++        env->GetArrayLength(jmessages) != pause_count ||
++        change_count < 0 || change_count > 256 ||
++        env->GetArrayLength(jchange_extruders) != change_count) return JNI_FALSE;
 +
-+    std::vector<jfloat> print_z_values(static_cast<size_t>(count));
-+    if (count > 0) env->GetFloatArrayRegion(jprint_z_values, 0, count, print_z_values.data());
++    std::vector<jfloat> pause_z_values(static_cast<size_t>(pause_count));
++    if (pause_count > 0)
++        env->GetFloatArrayRegion(jpause_z_values, 0, pause_count, pause_z_values.data());
 +    if (env->ExceptionCheck()) return JNI_FALSE;
 +
 +    std::vector<std::pair<float, std::string>> pauses;
-+    pauses.reserve(static_cast<size_t>(count));
-+    for (jsize index = 0; index < count; ++index) {
++    pauses.reserve(static_cast<size_t>(pause_count));
++    for (jsize index = 0; index < pause_count; ++index) {
 +        auto* value = static_cast<jstring>(env->GetObjectArrayElement(jmessages, index));
 +        if (!value || env->ExceptionCheck()) {
 +            if (value) env->DeleteLocalRef(value);
@@ -90,23 +119,45 @@ diff --git a/app/src/main/cpp/src/slicer_wrapper.cpp b/app/src/main/cpp/src/slic
 +            env->DeleteLocalRef(value);
 +            return JNI_FALSE;
 +        }
-+        pauses.emplace_back(print_z_values[static_cast<size_t>(index)], message);
++        pauses.emplace_back(pause_z_values[static_cast<size_t>(index)], message);
 +        env->ReleaseStringUTFChars(value, message);
 +        env->DeleteLocalRef(value);
 +    }
-+    return g_engine->setLayerPauses(pauses) ? JNI_TRUE : JNI_FALSE;
++
++    std::vector<jfloat> change_z_values(static_cast<size_t>(change_count));
++    std::vector<jint> change_extruders(static_cast<size_t>(change_count));
++    if (change_count > 0) {
++        env->GetFloatArrayRegion(
++            jchange_z_values, 0, change_count, change_z_values.data());
++        env->GetIntArrayRegion(
++            jchange_extruders, 0, change_count, change_extruders.data());
++    }
++    if (env->ExceptionCheck()) return JNI_FALSE;
++    std::vector<std::pair<float, int>> filament_changes;
++    filament_changes.reserve(static_cast<size_t>(change_count));
++    for (jsize index = 0; index < change_count; ++index) {
++        filament_changes.emplace_back(
++            change_z_values[static_cast<size_t>(index)],
++            change_extruders[static_cast<size_t>(index)]);
++    }
++    return g_engine->setLayerEvents(pauses, filament_changes) ? JNI_TRUE : JNI_FALSE;
 +}
 +
  } // extern "C"
 diff --git a/app/src/main/java/com/u1/slicer/NativeLibrary.kt b/app/src/main/java/com/u1/slicer/NativeLibrary.kt
 --- a/app/src/main/java/com/u1/slicer/NativeLibrary.kt
 +++ b/app/src/main/java/com/u1/slicer/NativeLibrary.kt
-@@ -337,6 +337,9 @@ class NativeLibrary {
+@@ -337,6 +337,14 @@ class NativeLibrary {
      /** Assign a 1-indexed extruder slot to one volume — used by the Parts panel. */
      external fun nativeSetVolumeExtruder(objIdx: Int, volIdx: Int, slot: Int): Boolean
  
-+    /** Replace Orca's current-plate pause events. Heights must be unique and ordered. */
-+    external fun nativeSetLayerPauses(printZValues: FloatArray, messages: Array<String>): Boolean
++    /** Replace Orca's current-plate pauses and whole-layer filament changes. */
++    external fun nativeSetLayerEvents(
++        pausePrintZValues: FloatArray,
++        pauseMessages: Array<String>,
++        filamentChangePrintZValues: FloatArray,
++        filamentChangeExtruders: IntArray,
++    ): Boolean
 +
      // ---- Progress Callback (called from native code) ----
      fun onSliceProgress(percentage: Int, stage: String) {

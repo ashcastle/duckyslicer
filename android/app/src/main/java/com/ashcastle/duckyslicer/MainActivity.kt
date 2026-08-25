@@ -1298,6 +1298,7 @@ private fun DuckySlicerScreen(
                 input.objects,
                 input.options,
                 input.layerPauseEvents,
+                input.layerFilamentChanges,
             )
         ) {
             plateSliceResults = plateSliceResults.clear(input.plateId)
@@ -1356,6 +1357,7 @@ private fun DuckySlicerScreen(
         projectObjects = projectObjects,
         selectedObjectId = projectHistory.current.selectedObjectId,
         layerPauseEvents = projectHistory.current.activePlate.layerPauseEvents,
+        layerFilamentChanges = projectHistory.current.activePlate.layerFilamentChanges,
         sliceOptions = sliceOptions,
         profileCatalog = profileCatalog,
         profileRecents = profileRecents,
@@ -1908,6 +1910,29 @@ private fun DuckySlicerScreen(
         onRemoveLayerPause = { printZMm ->
             val current = projectTransferModel.state.value.history
             val next = current.removeLayerPause(printZMm)
+            if (next != current && projectTransferModel.updateHistory(current, next)) {
+                invalidateSliceAfterPreviewEdit()
+                notice = null
+                error = null
+            }
+        },
+        onPutLayerFilamentChange = { _, printZMm, filamentSlot ->
+            val current = projectTransferModel.state.value.history
+            val next = current.putLayerFilamentChange(
+                LayerFilamentChange(
+                    printZMm = printZMm,
+                    filamentSlot = filamentSlot,
+                ),
+            )
+            if (next != current && projectTransferModel.updateHistory(current, next)) {
+                invalidateSliceAfterPreviewEdit()
+                notice = null
+                error = null
+            }
+        },
+        onRemoveLayerFilamentChange = { printZMm ->
+            val current = projectTransferModel.state.value.history
+            val next = current.removeLayerFilamentChange(printZMm)
             if (next != current && projectTransferModel.updateHistory(current, next)) {
                 invalidateSliceAfterPreviewEdit()
                 notice = null

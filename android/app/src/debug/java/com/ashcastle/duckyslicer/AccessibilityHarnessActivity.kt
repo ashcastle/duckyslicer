@@ -230,6 +230,7 @@ private fun PreviewAccessibilityHarness() {
     var visibleRoles by remember { mutableStateOf((0 until 10).toSet()) }
     var colorMode by remember { mutableStateOf(PreviewColorMode.FEATURE) }
     var pauseEvents by remember { mutableStateOf(LayerPauseEvents()) }
+    var filamentChanges by remember { mutableStateOf(LayerFilamentChanges()) }
     PreviewControls(
         preview = GcodeLayerPreview(
             startLayer = 0,
@@ -248,6 +249,10 @@ private fun PreviewAccessibilityHarness() {
             roleSegmentCounts = intArrayOf(300, 0, 0, 0, 0, 0, 0, 0, 0, 0),
         ),
         layerPauseEvents = pauseEvents,
+        layerFilamentChanges = filamentChanges,
+        layerFilamentChangesAvailable = true,
+        filamentColors = listOf(0xFFFFCF40.toInt(), 0xFF44D7FF.toInt()),
+        layerFilamentColors = listOf(0xFFFFCF40.toInt(), 0xFF44D7FF.toInt()),
         toolpathOpacity = opacity,
         onToolpathOpacityChanged = { opacity = it },
         toolpathDepthContrast = depthContrast,
@@ -263,6 +268,14 @@ private fun PreviewAccessibilityHarness() {
             pauseEvents = pauseEvents.put(LayerPauseEvent(printZMm))
         },
         onRemoveLayerPause = { printZMm -> pauseEvents = pauseEvents.remove(printZMm) },
+        onPutLayerFilamentChange = { _, printZMm, filamentSlot ->
+            filamentChanges = filamentChanges.put(
+                LayerFilamentChange(printZMm, filamentSlot),
+            )
+        },
+        onRemoveLayerFilamentChange = { printZMm ->
+            filamentChanges = filamentChanges.remove(printZMm)
+        },
     )
 }
 
@@ -376,6 +389,7 @@ private fun WorkspaceAccessibilityHarness(
         projectObjects = activePlate.objects,
         selectedObjectId = activePlate.selectedObjectId,
         layerPauseEvents = activePlate.layerPauseEvents,
+        layerFilamentChanges = activePlate.layerFilamentChanges,
         sliceOptions = SliceOptions(),
         profileCatalog = ProfileCatalog(),
         profileRecents = ProfileRecents(),
@@ -569,6 +583,8 @@ private fun WorkspaceAccessibilityHarness(
         onLayerRangeSelected = { _, _ -> },
         onAddLayerPause = { _, _ -> },
         onRemoveLayerPause = {},
+        onPutLayerFilamentChange = { _, _, _ -> },
+        onRemoveLayerFilamentChange = {},
         onAppSettingsChanged = {},
         onSupportReportExport = {},
         onCancelSupportReportExport = {},

@@ -444,6 +444,20 @@ private val ToolpathStyles = listOf(
 
 private val ToolpathDrawOrder = listOf(8, 2, 4, 9, 3, 5, 7, 1, 0, 6)
 
+internal fun List<ProjectObject>.supportLayerFilamentChanges(): Boolean {
+    val usedSlots = HashSet<Int>()
+    forEach { projectObject ->
+        projectObject.volumes.forEach { volume ->
+            if (volume.role.acceptsFilament) usedSlots += volume.filamentSlot
+            if (volume.role.acceptsFacetPaint) {
+                usedSlots += volume.multiColorPaint.facets.values
+                if (volume.orcaFacetAnnotations.multiColor.maximumState > 0) return false
+            }
+        }
+    }
+    return usedSlots.size <= 1
+}
+
 enum class WorkspaceTab {
     SLICE,
     PREVIEW,
@@ -460,6 +474,7 @@ internal fun WorkspaceScreen(
     projectObjects: List<ProjectObject>,
     selectedObjectId: String?,
     layerPauseEvents: LayerPauseEvents,
+    layerFilamentChanges: LayerFilamentChanges,
     sliceOptions: SliceOptions,
     profileCatalog: ProfileCatalog,
     profileRecents: ProfileRecents,
@@ -564,6 +579,8 @@ internal fun WorkspaceScreen(
     onLayerRangeSelected: (Int, Int) -> Unit,
     onAddLayerPause: (Int, Float) -> Unit,
     onRemoveLayerPause: (Float) -> Unit,
+    onPutLayerFilamentChange: (Int, Float, Int) -> Unit,
+    onRemoveLayerFilamentChange: (Float) -> Unit,
     onAppSettingsChanged: (AppSettings) -> Unit,
     onSupportReportExport: (Uri) -> Unit,
     onCancelSupportReportExport: () -> Unit,
@@ -583,6 +600,9 @@ internal fun WorkspaceScreen(
     val selectedSingleVolume = selectedObject?.singleVolumeOrNull
     val availableFilaments = sliceOptions.resolvedFilamentSlots()
     val filamentColors = sliceOptions.previewFilamentColors()
+    val layerFilamentColors = sliceOptions.resolvedFilamentColors()
+    val layerFilamentChangesAvailable = availableFilaments.size > 1 &&
+        projectObjects.supportLayerFilamentChanges()
     val modelDimensions = (selectedObject ?: projectObjects.firstOrNull())?.geometry()?.let {
         listOf(it.maxX - it.minX, it.maxY - it.minY, it.maxZ - it.minZ)
     }
@@ -1081,7 +1101,10 @@ internal fun WorkspaceScreen(
                     visibleToolpathRoles = visibleToolpathRoles,
                     previewColorMode = previewColorMode,
                     filamentColors = filamentColors,
+                    layerFilamentColors = layerFilamentColors,
                     layerPauseEvents = layerPauseEvents,
+                    layerFilamentChanges = layerFilamentChanges,
+                    layerFilamentChangesAvailable = layerFilamentChangesAvailable,
                     onPreviewColorModeChanged = { mode -> previewColorModeName = mode.name },
                     onToolpathRoleVisibilityChanged = { role, visible ->
                         visibleToolpathRoles = if (visible) {
@@ -1093,6 +1116,8 @@ internal fun WorkspaceScreen(
                     onLayerRangeSelected = onLayerRangeSelected,
                     onAddLayerPause = onAddLayerPause,
                     onRemoveLayerPause = onRemoveLayerPause,
+                    onPutLayerFilamentChange = onPutLayerFilamentChange,
+                    onRemoveLayerFilamentChange = onRemoveLayerFilamentChange,
                     onGoToSlice = { onTabSelected(WorkspaceTab.SLICE) },
                     modifier = Modifier.align(panelAlignment).heightIn(max = panelMaxHeight),
                 )
@@ -6595,12 +6620,17 @@ private fun PreviewSheet(
     visibleToolpathRoles: Set<Int>,
     previewColorMode: PreviewColorMode,
     filamentColors: List<Int>,
+    layerFilamentColors: List<Int>,
     layerPauseEvents: LayerPauseEvents,
+    layerFilamentChanges: LayerFilamentChanges,
+    layerFilamentChangesAvailable: Boolean,
     onPreviewColorModeChanged: (PreviewColorMode) -> Unit,
     onToolpathRoleVisibilityChanged: (Int, Boolean) -> Unit,
     onLayerRangeSelected: (Int, Int) -> Unit,
     onAddLayerPause: (Int, Float) -> Unit,
     onRemoveLayerPause: (Float) -> Unit,
+    onPutLayerFilamentChange: (Int, Float, Int) -> Unit,
+    onRemoveLayerFilamentChange: (Float) -> Unit,
     onGoToSlice: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -6669,7 +6699,10 @@ private fun PreviewSheet(
                         PreviewControls(
                             preview = preview,
                             filamentColors = filamentColors,
+                            layerFilamentColors = layerFilamentColors,
                             layerPauseEvents = layerPauseEvents,
+                            layerFilamentChanges = layerFilamentChanges,
+                            layerFilamentChangesAvailable = layerFilamentChangesAvailable,
                             toolpathOpacity = toolpathOpacity,
                             onToolpathOpacityChanged = onToolpathOpacityChanged,
                             toolpathDepthContrast = toolpathDepthContrast,
@@ -6681,6 +6714,8 @@ private fun PreviewSheet(
                             onLayerRangeSelected = onLayerRangeSelected,
                             onAddLayerPause = onAddLayerPause,
                             onRemoveLayerPause = onRemoveLayerPause,
+                            onPutLayerFilamentChange = onPutLayerFilamentChange,
+                            onRemoveLayerFilamentChange = onRemoveLayerFilamentChange,
                         )
                     }
                 }
@@ -6772,7 +6807,10 @@ private fun PreviewSummaryHeader(
 internal fun PreviewControls(
     preview: GcodeLayerPreview,
     filamentColors: List<Int> = DefaultFilamentColors,
+    layerFilamentColors: List<Int> = filamentColors,
     layerPauseEvents: LayerPauseEvents = LayerPauseEvents(),
+    layerFilamentChanges: LayerFilamentChanges = LayerFilamentChanges(),
+    layerFilamentChangesAvailable: Boolean = false,
     toolpathOpacity: Float,
     onToolpathOpacityChanged: (Float) -> Unit,
     toolpathDepthContrast: Float,
@@ -6784,12 +6822,17 @@ internal fun PreviewControls(
     onLayerRangeSelected: (Int, Int) -> Unit,
     onAddLayerPause: (Int, Float) -> Unit = { _, _ -> },
     onRemoveLayerPause: (Float) -> Unit = {},
+    onPutLayerFilamentChange: (Int, Float, Int) -> Unit = { _, _, _ -> },
+    onRemoveLayerFilamentChange: (Float) -> Unit = {},
 ) {
     val lastLayerIndex = (preview.layerCount - 1).coerceAtLeast(0)
     val safeStartLayer = preview.startLayer.coerceIn(0, lastLayerIndex)
     val safeEndLayer = preview.endLayer.coerceIn(safeStartLayer, lastLayerIndex)
     var selectedRange by remember(safeStartLayer, safeEndLayer, preview.layerCount) {
         mutableStateOf(safeStartLayer.toFloat()..safeEndLayer.toFloat())
+    }
+    var filamentChangeTarget by remember(preview.layerCount) {
+        mutableStateOf<Pair<Int, Float>?>(null)
     }
     val rangeColors = duckySliderColors()
     val toolpathVisibilityLabel = stringResource(R.string.toolpath_visibility_control)
@@ -6943,6 +6986,7 @@ internal fun PreviewControls(
         val selectedLayerIndex = selectedRange.endInclusive.roundToInt()
         val selectedLayerZ = preview.printZForLayer(selectedLayerIndex)
         val selectedPause = selectedLayerZ?.let(layerPauseEvents::eventAt)
+        val selectedFilamentChange = selectedLayerZ?.let(layerFilamentChanges::changeAt)
         Button(
             onClick = {
                 selectedLayerZ?.let { printZ ->
@@ -6974,6 +7018,43 @@ internal fun PreviewControls(
                 fontWeight = FontWeight.SemiBold,
             )
         }
+        if (layerFilamentChangesAvailable) {
+            Button(
+                onClick = {
+                    selectedLayerZ?.let { printZ ->
+                        filamentChangeTarget = selectedLayerIndex to printZ
+                    }
+                },
+                enabled = selectedLayerZ != null &&
+                    (selectedFilamentChange != null ||
+                        layerFilamentChanges.values.size < LayerFilamentChanges.MAX_EVENTS),
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF353631),
+                    contentColor = Color(0xFFF4F4EE),
+                ),
+            ) {
+                Icon(Icons.Default.Palette, null)
+                Spacer(Modifier.width(7.dp))
+                Text(
+                    stringResource(
+                        if (selectedFilamentChange == null) {
+                            R.string.add_layer_filament_change
+                        } else {
+                            R.string.edit_layer_filament_change
+                        },
+                        selectedLayerIndex + 1,
+                    ),
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        } else if (layerFilamentChanges.values.isNotEmpty()) {
+            Text(
+                stringResource(R.string.layer_filament_change_unavailable),
+                color = Color(0xFFFFCC4D),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
         if (layerPauseEvents.values.isNotEmpty()) {
             Text(
                 stringResource(R.string.saved_layer_pauses, layerPauseEvents.values.size),
@@ -6997,6 +7078,51 @@ internal fun PreviewControls(
                     )
                     IconButton(
                         onClick = { onRemoveLayerPause(event.printZMm) },
+                        modifier = Modifier.semantics {
+                            contentDescription = removeDescription
+                        },
+                    ) {
+                        Icon(Icons.Default.DeleteOutline, null)
+                    }
+                }
+            }
+        }
+        if (layerFilamentChanges.values.isNotEmpty()) {
+            Text(
+                stringResource(
+                    R.string.saved_layer_filament_changes,
+                    layerFilamentChanges.values.size,
+                ),
+                color = Color(0xFFC8C9C2),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            layerFilamentChanges.values.forEach { change ->
+                val removeDescription = stringResource(
+                    R.string.remove_layer_filament_change_height,
+                    change.printZMm,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Surface(
+                        modifier = Modifier.size(18.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        color = filamentSlotColor(change.filamentSlot, layerFilamentColors),
+                    ) {}
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        stringResource(
+                            R.string.layer_filament_change_height,
+                            change.printZMm,
+                            change.filamentSlot + 1,
+                        ),
+                        modifier = Modifier.weight(1f),
+                        color = Color(0xFFF4F4EE),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    IconButton(
+                        onClick = { onRemoveLayerFilamentChange(change.printZMm) },
                         modifier = Modifier.semantics {
                             contentDescription = removeDescription
                         },
@@ -7125,6 +7251,49 @@ internal fun PreviewControls(
                 }
             }
         }
+    }
+    filamentChangeTarget?.let { (layerIndex, printZMm) ->
+        AlertDialog(
+            onDismissRequest = { filamentChangeTarget = null },
+            title = { Text(stringResource(R.string.choose_layer_filament)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    layerFilamentColors.forEachIndexed { slot, _ ->
+                        TextButton(
+                            onClick = {
+                                onPutLayerFilamentChange(layerIndex, printZMm, slot)
+                                filamentChangeTarget = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(22.dp),
+                                shape = RoundedCornerShape(7.dp),
+                                color = filamentSlotColor(slot, layerFilamentColors),
+                            ) {}
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                stringResource(R.string.preview_filament_number, slot + 1),
+                                modifier = Modifier.weight(1f),
+                                color = Color(0xFFF4F4EE),
+                            )
+                            if (layerFilamentChanges.changeAt(printZMm)?.filamentSlot == slot) {
+                                Text(
+                                    stringResource(R.string.current_selection),
+                                    color = Color(0xFFFFCF40),
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { filamentChangeTarget = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
     }
 }
 

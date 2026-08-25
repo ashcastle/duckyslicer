@@ -71,6 +71,48 @@ class NativeEngineInstrumentedTest {
     }
 
     @Test
+    fun selectedPreviewLayerCanSwitchTheWholeModelToAnotherFilament() {
+        val model = fixtureModel()
+        val projectObject = ProjectObject("layer-filament", inspectModel(model.absolutePath))
+        val options = SliceOptions()
+            .selectPrinter(PrinterProfile.CUSTOM_CARTESIAN.copy(extruderCount = 2))
+            .selectFilament(FilamentProfile.PLA)
+            .copy(
+                filamentSlots = listOf(FilamentProfile.PLA, FilamentProfile.PETG),
+                filamentColors = listOf(0xF6C945, 0x44D7FF),
+                wipeTowerEnabled = false,
+            )
+        val baseline = OnDeviceSlicer.slice(listOf(projectObject), options)
+        try {
+            val baselinePreview = loadGcodePreview(baseline.output.absolutePath, 0, Int.MAX_VALUE)
+            val selectedLayer = (baselinePreview.layerCount / 2).coerceAtLeast(1)
+            val selectedPrintZ = requireNotNull(baselinePreview.printZForLayer(selectedLayer))
+
+            val changed = OnDeviceSlicer.slice(
+                listOf(projectObject),
+                options,
+                layerFilamentChanges = LayerFilamentChanges(
+                    listOf(LayerFilamentChange(selectedPrintZ, filamentSlot = 1)),
+                ),
+            )
+            try {
+                val preview = loadGcodePreview(changed.output.absolutePath, 0, Int.MAX_VALUE)
+                assertTrue("The original filament must print below the selected layer", preview.toolSegmentCounts[0] > 0)
+                assertTrue("The selected filament must print above the selected layer", preview.toolSegmentCounts[1] > 0)
+                assertTrue(
+                    "Orca must emit the selected physical tool",
+                    changed.output.readLines().any { it.trim() == "T1" },
+                )
+            } finally {
+                changed.output.delete()
+            }
+        } finally {
+            baseline.output.delete()
+            model.delete()
+        }
+    }
+
+    @Test
     fun automaticPreviewQualityResolvesToAConcreteDeviceTier() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val capabilities = previewDeviceCapabilities(context)
