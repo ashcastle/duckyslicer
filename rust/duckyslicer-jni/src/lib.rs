@@ -1,6 +1,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
-use std::collections::{HashMap, HashSet};
+use std::cmp::Ordering as CmpOrdering;
+use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::ffi::{CStr, c_char};
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
@@ -642,20 +643,121 @@ fn simplify_continuous_path(segments: Vec<[f32; 6]>, limit: usize) -> Vec<[f32; 
         return Vec::new();
     }
 
-    let source_count = segments.len();
-    let mut simplified = Vec::with_capacity(limit);
-    let mut start_x = segments[0][0];
-    let mut start_y = segments[0][1];
-    for selected_index in 0..limit {
-        let end_index = ((selected_index + 1) * source_count / limit)
-            .saturating_sub(1)
-            .min(source_count - 1);
-        let source = segments[end_index];
-        simplified.push([start_x, start_y, source[2], source[3], source[4], source[5]]);
-        start_x = source[2];
-        start_y = source[3];
+    let vertex_count = segments.len() + 1;
+    let mut previous = (0..vertex_count)
+        .map(|index| index.checked_sub(1))
+        .collect::<Vec<_>>();
+    let mut next = (0..vertex_count)
+        .map(|index| (index + 1 < vertex_count).then_some(index + 1))
+        .collect::<Vec<_>>();
+    let mut removed = vec![false; vertex_count];
+    let mut generations = vec![0_u32; vertex_count];
+    let mut candidates = BinaryHeap::with_capacity(vertex_count.saturating_sub(2));
+
+    for index in 1..vertex_count - 1 {
+        candidates.push(PathVertexCandidate {
+            area: path_vertex_area(&segments, index - 1, index, index + 1),
+            index,
+            generation: 0,
+        });
+    }
+
+    let mut remaining_segments = segments.len();
+    let mut minimum_area = 0.0_f64;
+    while remaining_segments > limit {
+        let Some(candidate) = candidates.pop() else {
+            break;
+        };
+        if removed[candidate.index] || generations[candidate.index] != candidate.generation {
+            continue;
+        }
+        let (Some(left), Some(right)) = (previous[candidate.index], next[candidate.index]) else {
+            continue;
+        };
+
+        removed[candidate.index] = true;
+        previous[right] = Some(left);
+        next[left] = Some(right);
+        remaining_segments -= 1;
+        minimum_area = minimum_area.max(candidate.area);
+
+        for neighbor in [left, right] {
+            let (Some(neighbor_left), Some(neighbor_right)) = (previous[neighbor], next[neighbor])
+            else {
+                continue;
+            };
+            generations[neighbor] = generations[neighbor].wrapping_add(1);
+            candidates.push(PathVertexCandidate {
+                area: path_vertex_area(&segments, neighbor_left, neighbor, neighbor_right)
+                    .max(minimum_area),
+                index: neighbor,
+                generation: generations[neighbor],
+            });
+        }
+    }
+
+    let retained = (0..vertex_count)
+        .filter(|index| !removed[*index])
+        .collect::<Vec<_>>();
+    let mut simplified = Vec::with_capacity(retained.len().saturating_sub(1));
+    for pair in retained.windows(2) {
+        let start = path_vertex(&segments, pair[0]);
+        let end = path_vertex(&segments, pair[1]);
+        let metadata = segments[pair[1] - 1];
+        simplified.push([start[0], start[1], end[0], end[1], metadata[4], metadata[5]]);
     }
     simplified
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PathVertexCandidate {
+    area: f64,
+    index: usize,
+    generation: u32,
+}
+
+impl PartialEq for PathVertexCandidate {
+    fn eq(&self, other: &Self) -> bool {
+        self.area.to_bits() == other.area.to_bits()
+            && self.index == other.index
+            && self.generation == other.generation
+    }
+}
+
+impl Eq for PathVertexCandidate {}
+
+impl PartialOrd for PathVertexCandidate {
+    fn partial_cmp(&self, other: &Self) -> Option<CmpOrdering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PathVertexCandidate {
+    fn cmp(&self, other: &Self) -> CmpOrdering {
+        other
+            .area
+            .total_cmp(&self.area)
+            .then_with(|| other.index.cmp(&self.index))
+            .then_with(|| other.generation.cmp(&self.generation))
+    }
+}
+
+fn path_vertex(segments: &[[f32; 6]], index: usize) -> [f32; 2] {
+    if index == 0 {
+        [segments[0][0], segments[0][1]]
+    } else {
+        [segments[index - 1][2], segments[index - 1][3]]
+    }
+}
+
+fn path_vertex_area(segments: &[[f32; 6]], left: usize, center: usize, right: usize) -> f64 {
+    let left = path_vertex(segments, left);
+    let center = path_vertex(segments, center);
+    let right = path_vertex(segments, right);
+    let twice_area = (f64::from(center[0] - left[0]) * f64::from(right[1] - left[1])
+        - f64::from(center[1] - left[1]) * f64::from(right[0] - left[0]))
+    .abs();
+    twice_area * 0.5
 }
 
 fn compact_preview_paths(mut paths: Vec<PreviewPath>, limit: usize) -> Vec<PreviewPath> {
@@ -3358,6 +3460,54 @@ mod tests {
                 .segments
                 .windows(2)
                 .all(|pair| pair[0][2] == pair[1][0] && pair[0][3] == pair[1][1])
+        );
+    }
+
+    #[test]
+    fn path_simplification_preserves_high_information_vertices() {
+        let source = vec![
+            [0.0, 0.0, 1.0, 0.0, 0.2, 0.0],
+            [1.0, 0.0, 2.0, 0.0, 0.2, 0.0],
+            [2.0, 0.0, 3.0, 10.0, 0.2, 0.0],
+            [3.0, 10.0, 4.0, 0.0, 0.2, 0.0],
+            [4.0, 0.0, 5.0, 0.0, 0.2, 0.0],
+        ];
+
+        let simplified = simplify_continuous_path(source, 2);
+
+        assert_eq!(simplified.len(), 2);
+        assert_eq!(simplified.first().expect("first segment")[..2], [0.0, 0.0]);
+        assert_eq!(simplified.last().expect("last segment")[2..4], [5.0, 0.0]);
+        assert!(simplified.iter().any(|segment| {
+            [segment[0], segment[1]] == [3.0, 10.0] || [segment[2], segment[3]] == [3.0, 10.0]
+        }));
+        assert!(
+            simplified
+                .windows(2)
+                .all(|pair| { pair[0][2] == pair[1][0] && pair[0][3] == pair[1][1] })
+        );
+    }
+
+    #[test]
+    fn path_simplification_keeps_closed_contours_closed_and_deterministic() {
+        let source = vec![
+            [0.0, 0.0, 10.0, 0.0, 0.2, 0.0],
+            [10.0, 0.0, 10.0, 10.0, 0.2, 0.0],
+            [10.0, 10.0, 0.0, 10.0, 0.2, 0.0],
+            [0.0, 10.0, 0.0, 0.0, 0.2, 0.0],
+        ];
+
+        let first = simplify_continuous_path(source.clone(), 3);
+        let second = simplify_continuous_path(source, 3);
+
+        assert_eq!(first, second);
+        assert_eq!(first.len(), 3);
+        assert_eq!(first.first().expect("first segment")[..2], [0.0, 0.0]);
+        assert_eq!(first.last().expect("last segment")[2..4], [0.0, 0.0]);
+        assert!(
+            first
+                .windows(2)
+                .all(|pair| { pair[0][2] == pair[1][0] && pair[0][3] == pair[1][1] })
         );
     }
 
