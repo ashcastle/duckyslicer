@@ -65,6 +65,16 @@ internal fun legacyProjectPlateId(): String = UUID.nameUUIDFromBytes(
     "com.ashcastle.duckyslicer:legacy-plate".toByteArray(Charsets.UTF_8),
 ).toString()
 
+internal fun normalizedProjectObjectName(value: String): String? {
+    val normalized = value.trim()
+    return normalized.takeIf {
+        it.length in 1..ProjectStore.MAX_DISPLAY_NAME_LENGTH &&
+            it != "." && it != ".." &&
+            it.none { character -> character.isISOControl() } &&
+            '/' !in it && '\\' !in it
+    }
+}
+
 data class ProjectObject(
     val id: String,
     val volumes: List<ProjectVolume>,
@@ -447,6 +457,32 @@ data class ProjectHistoryState(
             current.copy(
                 plates = nextPlates,
                 selectedPlateId = targetPlateId,
+            ),
+        )
+    }
+
+    fun renameObject(objectId: String, requestedName: String): ProjectHistoryState {
+        val name = requireNotNull(normalizedProjectObjectName(requestedName)) {
+            "Object name is invalid"
+        }
+        val selected = current.objects.firstOrNull { it.id == objectId } ?: return this
+        val primaryVolumeId = selected.primaryModelPart.id
+        if (selected.primaryModelPart.model.fileName == name) return this
+        val renamed = selected.copy(
+            volumes = selected.volumes.map { volume ->
+                if (volume.id == primaryVolumeId) {
+                    volume.copy(model = volume.model.copy(fileName = name))
+                } else {
+                    volume
+                }
+            },
+        )
+        return record(
+            current.updateActivePlate(
+                objects = current.objects.map { projectObject ->
+                    if (projectObject.id == objectId) renamed else projectObject
+                },
+                selectedObjectId = current.selectedObjectId,
             ),
         )
     }

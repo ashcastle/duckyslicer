@@ -88,6 +88,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -522,6 +523,7 @@ internal fun WorkspaceScreen(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onDuplicate: (String) -> Unit,
+    onRenameObject: (String, String) -> Unit,
     onMoveObjectToPlate: (String, String) -> Unit,
     onArrange: () -> Unit,
     onAutoLay: () -> Unit,
@@ -1116,6 +1118,7 @@ internal fun WorkspaceScreen(
                     canDuplicateObject = projectPlates.sumOf { it.objects.size } <
                         ProjectStore.MAX_PROJECT_OBJECTS,
                     onDuplicateObject = onDuplicate,
+                    onRenameObject = onRenameObject,
                     onMoveObjectToPlate = onMoveObjectToPlate,
                     onRemoveObject = onRemoveModel,
                     onNewProject = onNewProject,
@@ -6845,6 +6848,7 @@ private fun ProjectSheet(
     onObjectSelected: (String) -> Unit,
     canDuplicateObject: Boolean,
     onDuplicateObject: (String) -> Unit,
+    onRenameObject: (String, String) -> Unit,
     onMoveObjectToPlate: (String, String) -> Unit,
     onRemoveObject: (String) -> Unit,
     onNewProject: () -> Unit,
@@ -6857,6 +6861,8 @@ private fun ProjectSheet(
     var confirmReplacement by remember { mutableStateOf(false) }
     var confirmNewProject by remember { mutableStateOf(false) }
     var objectMenuId by remember { mutableStateOf<String?>(null) }
+    var renameObjectId by remember { mutableStateOf<String?>(null) }
+    var renameValue by remember { mutableStateOf("") }
     var moveObjectId by remember { mutableStateOf<String?>(null) }
     var removeObjectId by remember { mutableStateOf<String?>(null) }
     WorkspaceCard(modifier) {
@@ -6912,6 +6918,15 @@ private fun ProjectSheet(
                         expanded = objectMenuId == projectObject.id,
                         onDismissRequest = { objectMenuId = null },
                     ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.rename_object)) },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = {
+                                objectMenuId = null
+                                renameObjectId = projectObject.id
+                                renameValue = displayName
+                            },
+                        )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.duplicate_object)) },
                             leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
@@ -7064,6 +7079,41 @@ private fun ProjectSheet(
             },
             dismissButton = {
                 TextButton(onClick = { confirmNewProject = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+    val renameTarget = objects.firstOrNull { it.id == renameObjectId }
+    if (renameTarget != null) {
+        val currentName = renameTarget.primaryModelPart.model.fileName
+        val normalizedName = normalizedProjectObjectName(renameValue)
+        AlertDialog(
+            onDismissRequest = { renameObjectId = null },
+            title = { Text(stringResource(R.string.rename_object)) },
+            text = {
+                OutlinedTextField(
+                    value = renameValue,
+                    onValueChange = { renameValue = it },
+                    label = { Text(stringResource(R.string.object_name)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        renameObjectId = null
+                        onRenameObject(renameTarget.id, requireNotNull(normalizedName))
+                    },
+                    enabled = normalizedName != null && normalizedName != currentName,
+                    colors = primaryButtonColors(),
+                ) {
+                    Text(stringResource(R.string.save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameObjectId = null }) {
                     Text(stringResource(R.string.cancel))
                 }
             },

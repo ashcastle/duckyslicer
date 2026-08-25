@@ -1541,6 +1541,18 @@ private fun DuckySlicerScreen(
                 }
             }
         },
+        onRenameObject = { objectId, name ->
+            val current = projectTransferModel.state.value.history
+            val nextHistory = current.renameObject(objectId, name)
+            if (
+                nextHistory != current &&
+                projectTransferModel.updateHistory(current, nextHistory)
+            ) {
+                clearCompletedSlice()
+                notice = null
+                error = null
+            }
+        },
         onMoveObjectToPlate = { objectId, targetPlateId ->
             val current = projectTransferModel.state.value.history
             val sourcePlateId = current.current.selectedPlateId

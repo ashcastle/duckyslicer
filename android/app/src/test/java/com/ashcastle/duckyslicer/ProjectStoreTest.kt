@@ -26,6 +26,24 @@ class ProjectStoreTest {
     }
 
     @Test
+    fun renamedObjectDisplayNameSurvivesDurableStorage() = withStore { _, store ->
+        val modelFile = store.createModelDestination("original.stl").apply {
+            writeText("solid renamed")
+        }
+        val renamed = ProjectHistoryState()
+            .add(ProjectObject("renamed", inspectedModel(modelFile)))
+            .renameObject("renamed", "printable-case.stl")
+
+        store.save(renamed.current)
+        val restored = store.loadProject()
+
+        assertEquals(
+            "printable-case.stl",
+            restored.snapshot.selectedObject!!.primaryModelPart.model.fileName,
+        )
+    }
+
+    @Test
     fun confirmedProjectResetDeletesOnlyItsPrivateModelFiles() = withStore { root, store ->
         val removed = store.createModelDestination("removed.stl").apply { writeText("remove") }
         val unrelated = store.createModelDestination("new-import.stl").apply { writeText("keep") }

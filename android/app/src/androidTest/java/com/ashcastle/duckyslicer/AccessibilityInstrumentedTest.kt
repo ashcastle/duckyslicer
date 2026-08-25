@@ -451,6 +451,31 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun projectObjectRenameRequiresAValidEditableName() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val actions = context.getString(R.string.object_actions, "accessibility.stl")
+        val rename = context.getString(R.string.rename_object)
+        val name = context.getString(R.string.object_name)
+        val save = context.getString(R.string.save)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_PROJECT).use {
+            val actionsButton = waitForNode(actions) {
+                it.isClickable && it.effectiveLabel() == actions
+            }
+            assertTrue(actionsButton.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val renameAction = waitForNode(rename) {
+                it.isClickable && it.effectiveLabel() == rename
+            }
+            assertTrue(renameAction.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+
+            replaceEditableText(name, "renamed-model.stl")
+            val saveAction = waitForNode(save) {
+                it.isClickable && it.isEnabled && it.effectiveLabel() == save
+            }
+            assertTrue("A valid object name must be directly saveable", saveAction.isFocusable)
+        }
+    }
+
+    @Test
     fun projectObjectCanChooseAnotherPlateAsItsMoveTarget() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val actions = context.getString(R.string.object_actions, "accessibility.stl")

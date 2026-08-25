@@ -718,4 +718,38 @@ class ProjectStateTest {
             state.moveObjectToPlate("first", "missing-plate")
         }
     }
+
+    @Test
+    fun renamingAnObjectUpdatesOnlyItsPrimaryPartAndIsUndoable() {
+        val base = projectObject("assembly")
+        val auxiliary = base.singleVolume.copy(
+            id = "auxiliary",
+            model = base.singleVolume.model.copy(fileName = "modifier.stl"),
+            role = ProjectVolumeRole.PARAMETER_MODIFIER,
+        )
+        var state = ProjectHistoryState().add(base.copy(volumes = listOf(base.singleVolume, auxiliary)))
+
+        state = state.renameObject("assembly", "  enclosure.stl  ")
+
+        assertEquals("enclosure.stl", state.current.selectedObject!!.primaryModelPart.model.fileName)
+        assertEquals("modifier.stl", state.current.selectedObject!!.volumes.last().model.fileName)
+        state = state.undo()
+        assertEquals("assembly.stl", state.current.selectedObject!!.primaryModelPart.model.fileName)
+        state = state.redo()
+        assertEquals("enclosure.stl", state.current.selectedObject!!.primaryModelPart.model.fileName)
+    }
+
+    @Test
+    fun objectNamesRejectBlankPathsControlsAndOversizedValues() {
+        assertEquals("case.stl", normalizedProjectObjectName(" case.stl "))
+        assertEquals(null, normalizedProjectObjectName("   "))
+        assertEquals(null, normalizedProjectObjectName(".."))
+        assertEquals(null, normalizedProjectObjectName("folder/model.stl"))
+        assertEquals(null, normalizedProjectObjectName("folder\\model.stl"))
+        assertEquals(null, normalizedProjectObjectName("model\nstl"))
+        assertEquals(
+            null,
+            normalizedProjectObjectName("x".repeat(ProjectStore.MAX_DISPLAY_NAME_LENGTH + 1)),
+        )
+    }
 }
