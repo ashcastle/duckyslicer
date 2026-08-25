@@ -837,6 +837,10 @@ class SliceOptionsPersistenceTest {
         assertEquals(1_200f, restored.topSurfaceAcceleration)
         assertEquals(5_000f, restored.travelAcceleration)
         assertEquals(600f, restored.firstLayerAcceleration)
+        assertEquals(37f, restored.firstLayerTravelAcceleration)
+        assertEquals(true, restored.firstLayerTravelAccelerationPercent)
+        assertEquals(37f, restored.toNativeConfig().firstLayerTravelAcceleration)
+        assertEquals(true, restored.toNativeConfig().firstLayerTravelAccelerationPercent)
         assertEquals(47f, restored.bridgeAcceleration)
         assertEquals(true, restored.bridgeAccelerationPercent)
         assertEquals(4_321f, restored.sparseInfillAcceleration)
@@ -1772,6 +1776,8 @@ internal fun restoredSettingsFixture(): SliceOptions = SliceOptions()
         topSurfaceAcceleration = 1_200f,
         travelAcceleration = 5_000f,
         firstLayerAcceleration = 600f,
+        firstLayerTravelAcceleration = 37f,
+        firstLayerTravelAccelerationPercent = true,
         bridgeAcceleration = 47f,
         bridgeAccelerationPercent = true,
         sparseInfillAcceleration = 4_321f,

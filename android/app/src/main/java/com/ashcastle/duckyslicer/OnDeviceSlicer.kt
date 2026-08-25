@@ -1031,6 +1031,8 @@ data class QualityProfile(
     val topSurfaceAcceleration: Float = 0f,
     val travelAcceleration: Float = 0f,
     val firstLayerAcceleration: Float = 0f,
+    val firstLayerTravelAcceleration: Float = 100f,
+    val firstLayerTravelAccelerationPercent: Boolean = true,
     val bridgeAcceleration: Float = 50f,
     val bridgeAccelerationPercent: Boolean = true,
     val sparseInfillAcceleration: Float = 100f,
@@ -1310,7 +1312,7 @@ data class ProfileCatalog(
     val printers: List<PrinterProfile> = PrinterProfile.builtIns,
     val filaments: List<FilamentProfile> = FilamentProfile.builtIns,
     val slicing: List<QualityProfile> = QualityProfile.builtIns,
-    val schemaVersion: Int = 96,
+    val schemaVersion: Int = 101,
     val sourceRevision: String = "ducky-fallback",
     val rejectedCount: Int = 0,
 )
@@ -1432,6 +1434,8 @@ data class SliceOptions(
     val topSurfaceAcceleration: Float = quality.topSurfaceAcceleration,
     val travelAcceleration: Float = quality.travelAcceleration,
     val firstLayerAcceleration: Float = quality.firstLayerAcceleration,
+    val firstLayerTravelAcceleration: Float = quality.firstLayerTravelAcceleration,
+    val firstLayerTravelAccelerationPercent: Boolean = quality.firstLayerTravelAccelerationPercent,
     val bridgeAcceleration: Float = quality.bridgeAcceleration,
     val bridgeAccelerationPercent: Boolean = quality.bridgeAccelerationPercent,
     val sparseInfillAcceleration: Float = quality.sparseInfillAcceleration,
@@ -1883,6 +1887,8 @@ data class SliceOptions(
         topSurfaceAcceleration = profile.topSurfaceAcceleration,
         travelAcceleration = profile.travelAcceleration,
         firstLayerAcceleration = profile.firstLayerAcceleration,
+        firstLayerTravelAcceleration = profile.firstLayerTravelAcceleration,
+        firstLayerTravelAccelerationPercent = profile.firstLayerTravelAccelerationPercent,
         bridgeAcceleration = profile.bridgeAcceleration,
         bridgeAccelerationPercent = profile.bridgeAccelerationPercent,
         sparseInfillAcceleration = profile.sparseInfillAcceleration,
@@ -2340,6 +2346,8 @@ data class SliceOptions(
             filamentDensities = nativeFilaments.map(FilamentProfile::density).toFloatArray(),
             filamentCosts = nativeFilaments.map(FilamentProfile::costPerKilogram).toFloatArray(),
         ).also { native ->
+            native.firstLayerTravelAcceleration = firstLayerTravelAcceleration
+            native.firstLayerTravelAccelerationPercent = firstLayerTravelAccelerationPercent
             native.supportFlowRatio = supportFlowRatio
             native.supportInterfaceFlowRatio = supportInterfaceFlowRatio
             native.machineMaxJunctionDeviation = maxJunctionDeviation

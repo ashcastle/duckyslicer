@@ -901,6 +901,44 @@ class GenerateProfileCatalogTest(unittest.TestCase):
         self.assertEqual(5.5, profile["firstLayerJerk"])
         self.assertEqual(12.5, profile["travelJerk"])
 
+    def test_preserves_first_layer_travel_acceleration_units(self) -> None:
+        absolute = build_process(
+            "Example",
+            {
+                "name": "Absolute first layer travel acceleration",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "initial_layer_travel_acceleration": "1234",
+            },
+            {},
+        )
+        percentage = build_process(
+            "Example",
+            {
+                "name": "Relative first layer travel acceleration",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+                "initial_layer_travel_acceleration": "37%",
+            },
+            {},
+        )
+        defaults = build_process(
+            "Example",
+            {
+                "name": "Inherited first layer travel acceleration",
+                "layer_height": "0.2",
+                "initial_layer_print_height": "0.2",
+            },
+            {},
+        )
+
+        self.assertEqual(1234.0, absolute["firstLayerTravelAcceleration"])
+        self.assertFalse(absolute["firstLayerTravelAccelerationPercent"])
+        self.assertEqual(37.0, percentage["firstLayerTravelAcceleration"])
+        self.assertTrue(percentage["firstLayerTravelAccelerationPercent"])
+        self.assertEqual(100.0, defaults["firstLayerTravelAcceleration"])
+        self.assertTrue(defaults["firstLayerTravelAccelerationPercent"])
+
     def test_preserves_sequential_print_head_clearance(self) -> None:
         profile = build_printer(
             "Example",

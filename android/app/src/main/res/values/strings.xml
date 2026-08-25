@@ -510,6 +510,7 @@
     <string name="top_surface_acceleration">Top surface acceleration</string>
     <string name="travel_acceleration">Travel acceleration</string>
     <string name="first_layer_acceleration">First layer acceleration</string>
+    <string name="first_layer_travel_acceleration">First layer travel acceleration</string>
     <string name="supports">Supports</string>
     <string name="sparse_infill_pattern">Sparse infill pattern</string>
     <string name="top_surface_pattern">Top surface pattern</string>

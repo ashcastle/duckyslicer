@@ -510,6 +510,7 @@
     <string name="top_surface_acceleration">상단 표면 가속도</string>
     <string name="travel_acceleration">이동 가속도</string>
     <string name="first_layer_acceleration">첫 레이어 가속도</string>
+    <string name="first_layer_travel_acceleration">첫 레이어 이동 가속도</string>
     <string name="supports">서포트</string>
     <string name="sparse_infill_pattern">희소 인필 패턴</string>
     <string name="top_surface_pattern">상단 표면 패턴</string>

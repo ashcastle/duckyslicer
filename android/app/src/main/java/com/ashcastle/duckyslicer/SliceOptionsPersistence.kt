@@ -103,6 +103,8 @@ internal fun SliceOptions.toProjectJson(): JSONObject {
         topSurfaceAcceleration = topSurfaceAcceleration,
         travelAcceleration = travelAcceleration,
         firstLayerAcceleration = firstLayerAcceleration,
+        firstLayerTravelAcceleration = firstLayerTravelAcceleration,
+        firstLayerTravelAccelerationPercent = firstLayerTravelAccelerationPercent,
         bridgeAcceleration = bridgeAcceleration,
         bridgeAccelerationPercent = bridgeAccelerationPercent,
         sparseInfillAcceleration = sparseInfillAcceleration,

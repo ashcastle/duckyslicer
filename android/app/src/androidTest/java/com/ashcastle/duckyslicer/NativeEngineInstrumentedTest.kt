@@ -824,10 +824,13 @@ class NativeEngineInstrumentedTest {
             .copy(
                 travelSpeed = 400f,
                 defaultAcceleration = 2_000f,
+                travelAcceleration = 4_000f,
             )
         val absolute = OnDeviceSlicer.slice(
             fixtureModel(),
             base.copy(
+                firstLayerTravelAcceleration = 1_111f,
+                firstLayerTravelAccelerationPercent = false,
                 gcodeSettings = GcodeSettings(
                     initialLayerTravelSpeed = 40f,
                     initialLayerTravelSpeedPercent = false,
@@ -839,6 +842,8 @@ class NativeEngineInstrumentedTest {
         val percentage = OnDeviceSlicer.slice(
             fixtureModel(),
             base.copy(
+                firstLayerTravelAcceleration = 37f,
+                firstLayerTravelAccelerationPercent = true,
                 gcodeSettings = GcodeSettings(
                     initialLayerTravelSpeed = 25f,
                     initialLayerTravelSpeedPercent = true,
@@ -874,6 +879,26 @@ class NativeEngineInstrumentedTest {
             assertTrue(
                 "25% of a 400 mm/s travel speed must emit F6000",
                 6_000f in firstLayerTravelFeeds(percentageGcode),
+            )
+            fun throughFirstLayerAccelerationCommands(gcode: String): List<Float> {
+                val lines = gcode.lineSequence().toList()
+                val layerMarkers = lines.indices.filter { lines[it] == ";LAYER_CHANGE" }
+                assertTrue("A real slice needs at least two layers", layerMarkers.size >= 2)
+                return lines.subList(0, layerMarkers[1])
+                    .mapNotNull { line ->
+                        Regex("SET_VELOCITY_LIMIT ACCEL=([0-9.]+)")
+                            .find(line)?.groupValues?.get(1)?.toFloatOrNull()
+                    }
+            }
+            val absoluteAccelerations = throughFirstLayerAccelerationCommands(absoluteGcode)
+            val percentageAccelerations = throughFirstLayerAccelerationCommands(percentageGcode)
+            assertTrue(
+                "Absolute first-layer travel acceleration must change emitted motion commands; actual=$absoluteAccelerations",
+                1_111f in absoluteAccelerations,
+            )
+            assertTrue(
+                "37% of 4000 mm/s² travel acceleration must emit 1480 mm/s²; actual=$percentageAccelerations",
+                1_480f in percentageAccelerations,
             )
             val velocityLimits = Regex(
                 "SET_VELOCITY_LIMIT ACCEL=([0-9.]+) ACCEL_TO_DECEL=([0-9.]+)",
@@ -5871,6 +5896,8 @@ class NativeEngineInstrumentedTest {
                 topSurfaceAcceleration = 1_234f,
                 travelAcceleration = 5_678f,
                 firstLayerAcceleration = 678f,
+                firstLayerTravelAcceleration = 37f,
+                firstLayerTravelAccelerationPercent = true,
                 bridgeAcceleration = 47f,
                 bridgeAccelerationPercent = true,
                 sparseInfillAcceleration = 4_321f,
@@ -6119,6 +6146,10 @@ class NativeEngineInstrumentedTest {
         assertTrue("Top-surface acceleration must reach Orca", gcode.contains("; top_surface_acceleration = 1234"))
         assertTrue("Travel acceleration must reach Orca", gcode.contains("; travel_acceleration = 5678"))
         assertTrue("First-layer acceleration must reach Orca", gcode.contains("; initial_layer_acceleration = 678"))
+        assertTrue(
+            "First-layer travel acceleration must preserve percent units",
+            gcode.contains("; initial_layer_travel_acceleration = 37%"),
+        )
         assertTrue("Bridge acceleration must preserve percent units", gcode.contains("; bridge_acceleration = 47%"))
         assertTrue("Sparse infill acceleration must preserve absolute units", gcode.contains("; sparse_infill_acceleration = 4321"))
         assertTrue("Internal solid acceleration must preserve percent units", gcode.contains("; internal_solid_infill_acceleration = 83%"))

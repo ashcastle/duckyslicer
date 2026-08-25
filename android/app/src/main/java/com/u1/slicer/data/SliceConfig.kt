@@ -264,6 +264,8 @@ data class SliceConfig(
     @JvmField var maximumGcodeBytes: Int = 1_073_741_824,
 ) {
     // Keep newly added JNI fields out of the already large generated constructor signature.
+    @JvmField var firstLayerTravelAcceleration: Float = 100f
+    @JvmField var firstLayerTravelAccelerationPercent: Boolean = true
     @JvmField var supportFlowRatio: Float = 1f
     @JvmField var supportInterfaceFlowRatio: Float = 1f
     @JvmField var machineMaxJunctionDeviation: Float = 0f

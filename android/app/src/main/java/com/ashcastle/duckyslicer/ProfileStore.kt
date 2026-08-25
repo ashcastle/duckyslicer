@@ -7,7 +7,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-internal const val USER_PROFILE_SCHEMA_VERSION = 100
+internal const val USER_PROFILE_SCHEMA_VERSION = 101
 internal const val MAX_USER_PROFILES = 4_096
 
 /** Stores schema-versioned user profiles in app-private storage. */
@@ -361,6 +361,8 @@ class ProfileStore private constructor(
             topSurfaceAcceleration = options.topSurfaceAcceleration,
             travelAcceleration = options.travelAcceleration,
             firstLayerAcceleration = options.firstLayerAcceleration,
+            firstLayerTravelAcceleration = options.firstLayerTravelAcceleration,
+            firstLayerTravelAccelerationPercent = options.firstLayerTravelAccelerationPercent,
             bridgeAcceleration = options.bridgeAcceleration,
             bridgeAccelerationPercent = options.bridgeAccelerationPercent,
             sparseInfillAcceleration = options.sparseInfillAcceleration,
@@ -856,6 +858,8 @@ internal fun QualityProfile.toProfileJson() = JSONObject()
     .put("topSurfaceAcceleration", topSurfaceAcceleration)
     .put("travelAcceleration", travelAcceleration)
     .put("firstLayerAcceleration", firstLayerAcceleration)
+    .put("firstLayerTravelAcceleration", firstLayerTravelAcceleration)
+    .put("firstLayerTravelAccelerationPercent", firstLayerTravelAccelerationPercent)
     .put("bridgeAcceleration", bridgeAcceleration)
     .put("bridgeAccelerationPercent", bridgeAccelerationPercent)
     .put("sparseInfillAcceleration", sparseInfillAcceleration)
@@ -1439,6 +1443,8 @@ internal fun JSONObject.toQualityProfileOrNull(): QualityProfile? = runCatching 
         topSurfaceAcceleration = optDouble("topSurfaceAcceleration", 0.0).toFloat(),
         travelAcceleration = optDouble("travelAcceleration", 0.0).toFloat(),
         firstLayerAcceleration = optDouble("firstLayerAcceleration", 0.0).toFloat(),
+        firstLayerTravelAcceleration = optDouble("firstLayerTravelAcceleration", 100.0).toFloat(),
+        firstLayerTravelAccelerationPercent = optBoolean("firstLayerTravelAccelerationPercent", true),
         bridgeAcceleration = optDouble("bridgeAcceleration", 50.0).toFloat(),
         bridgeAccelerationPercent = optBoolean("bridgeAccelerationPercent", true),
         sparseInfillAcceleration = optDouble("sparseInfillAcceleration", 100.0).toFloat(),

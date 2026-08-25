@@ -243,6 +243,10 @@ internal object ProfileValidation {
                 profile.travelAcceleration,
                 profile.firstLayerAcceleration,
             ).all { it in 0f..100_000f } &&
+            featureAccelerationIsValid(
+                profile.firstLayerTravelAcceleration,
+                profile.firstLayerTravelAccelerationPercent,
+            ) &&
             featureAccelerationIsValid(profile.bridgeAcceleration, profile.bridgeAccelerationPercent) &&
             featureAccelerationIsValid(profile.sparseInfillAcceleration, profile.sparseInfillAccelerationPercent) &&
             featureAccelerationIsValid(

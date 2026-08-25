@@ -1,0 +1,84 @@
+diff --git a/src/libslic3r/GCode.cpp b/src/libslic3r/GCode.cpp
+--- a/src/libslic3r/GCode.cpp
++++ b/src/libslic3r/GCode.cpp
+@@ -8769,8 +8769,9 @@ std::string GCode::travel_to(const Point& point, ExtrusionRole role, std::string
+     double       jerk_to_set         = 0.0;
+     unsigned int acceleration_to_set = 0;
+     if (this->on_first_layer()) {
+-        if (m_config.default_acceleration.value > 0 && m_config.initial_layer_acceleration.value > 0) {
+-            acceleration_to_set = (unsigned int) floor(m_config.initial_layer_acceleration.value + 0.5);
++        const double first_layer_travel_acceleration = m_config.get_abs_value("initial_layer_travel_acceleration");
++        if (m_config.default_acceleration.value > 0 && first_layer_travel_acceleration > 0) {
++            acceleration_to_set = (unsigned int) floor(first_layer_travel_acceleration + 0.5);
+         }
+         if (m_config.default_jerk.value > 0 && m_config.initial_layer_jerk.value > 0) {
+             jerk_to_set = m_config.initial_layer_jerk.value;
+diff --git a/src/libslic3r/Preset.cpp b/src/libslic3r/Preset.cpp
+--- a/src/libslic3r/Preset.cpp
++++ b/src/libslic3r/Preset.cpp
+@@ -862,7 +862,7 @@ static std::vector<std::string> s_Preset_print_options {
+     "inner_wall_speed", "outer_wall_speed", "sparse_infill_speed", "internal_solid_infill_speed",
+     "top_surface_speed", "support_speed", "support_object_xy_distance", "support_object_first_layer_gap", "support_interface_speed",
+     "bridge_speed", "internal_bridge_speed", "gap_infill_speed", "travel_speed", "travel_speed_z", "initial_layer_speed",
+-    "outer_wall_acceleration", "initial_layer_acceleration", "top_surface_acceleration", "default_acceleration", "skirt_type", "skirt_loops", "skirt_speed","min_skirt_length", "skirt_distance", "skirt_start_angle", "skirt_height","single_loop_draft_shield", "draft_shield",
++    "outer_wall_acceleration", "initial_layer_acceleration", "initial_layer_travel_acceleration", "top_surface_acceleration", "default_acceleration", "skirt_type", "skirt_loops", "skirt_speed","min_skirt_length", "skirt_distance", "skirt_start_angle", "skirt_height","single_loop_draft_shield", "draft_shield",
+     "brim_width", "brim_object_gap", "brim_type", "brim_ears_max_angle", "brim_ears_detection_length", "enable_support", "support_type", "support_threshold_angle", "support_threshold_overlap","enforce_support_layers",
+     "raft_layers", "raft_first_layer_density", "raft_first_layer_expansion", "raft_contact_distance", "raft_expansion",
+     "support_base_pattern", "support_base_pattern_spacing", "support_expansion", "support_style",
+diff --git a/src/libslic3r/Print.cpp b/src/libslic3r/Print.cpp
+--- a/src/libslic3r/Print.cpp
++++ b/src/libslic3r/Print.cpp
+@@ -572,6 +572,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
+         "outer_wall_acceleration",
+         "inner_wall_acceleration",
+         "initial_layer_acceleration",
++        "initial_layer_travel_acceleration",
+         "top_surface_acceleration",
+         "bridge_acceleration",
+         "travel_acceleration",
+@@ -2050,6 +2051,7 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons*
+                         "outer_wall_acceleration",
+                         "bridge_acceleration",
+                         "initial_layer_acceleration",
++                        "initial_layer_travel_acceleration",
+                         "sparse_infill_acceleration",
+                         "internal_solid_infill_acceleration",
+                         "top_surface_acceleration",
+@@ -2080,6 +2082,7 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons*
+                     if (max_travel > 0) {
+                         accel_to_check = {
+                             "travel_acceleration",
++                            "initial_layer_travel_acceleration",
+                         };
+                         warning_key = check_motion_ability_object_setting(accel_to_check, max_travel);
+                         if (!warning_key.empty()) {
+diff --git a/src/libslic3r/PrintConfig.cpp b/src/libslic3r/PrintConfig.cpp
+--- a/src/libslic3r/PrintConfig.cpp
++++ b/src/libslic3r/PrintConfig.cpp
+@@ -2692,6 +2692,15 @@ void PrintConfigDef::init_fff_params()
+     def->mode = comAdvanced;
+     def->set_default_value(new ConfigOptionFloat(300));
+ 
++    def = this->add("initial_layer_travel_acceleration", coFloatOrPercent);
++    def->label = L("Initial layer travel");
++    def->tooltip = L("Travel acceleration of the initial layer. Percentage values are relative to travel acceleration.");
++    def->sidetext = L("mm/s² or %");
++    def->min = 0;
++    def->mode = comAdvanced;
++    def->ratio_over = "travel_acceleration";
++    def->set_default_value(new ConfigOptionFloatOrPercent(100, true));
++
+     def = this->add("accel_to_decel_enable", coBool);
+     def->label = L("Enable accel_to_decel");
+     def->tooltip = L("Klipper's max_accel_to_decel will be adjusted automatically.");
+diff --git a/src/libslic3r/PrintConfig.hpp b/src/libslic3r/PrintConfig.hpp
+--- a/src/libslic3r/PrintConfig.hpp
++++ b/src/libslic3r/PrintConfig.hpp
+@@ -939,6 +939,7 @@ PRINT_CONFIG_CLASS_DEFINE(
+     ((ConfigOptionFloat,              inner_wall_acceleration))
+     ((ConfigOptionFloat,              top_surface_acceleration))
+     ((ConfigOptionFloat,              initial_layer_acceleration))
++    ((ConfigOptionFloatOrPercent,     initial_layer_travel_acceleration))
+     ((ConfigOptionFloatOrPercent,     bridge_acceleration))
+     ((ConfigOptionFloat,              travel_acceleration))
+     ((ConfigOptionFloatOrPercent,     sparse_infill_acceleration))

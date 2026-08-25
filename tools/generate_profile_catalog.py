@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 100
+SCHEMA_VERSION = 101
 MAX_FILAMENT_SLOTS = 16
 MAX_GCODE_THUMBNAILS = 8
 SUPPORTED_GCODE_THUMBNAIL_FORMATS = {"PNG", "JPG", "QOI", "BTT_TFT", "COLPIC"}
@@ -1156,6 +1156,9 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
     internal_solid_infill_acceleration, internal_solid_infill_acceleration_percent = float_or_percent(
         raw.get("internal_solid_infill_acceleration"), "100%"
     )
+    initial_layer_travel_acceleration, initial_layer_travel_acceleration_percent = float_or_percent(
+        raw.get("initial_layer_travel_acceleration"), "100%"
+    )
     infill_combination_height, infill_combination_height_percent = float_or_percent(
         raw.get("infill_combination_max_layer_height"), "100%"
     )
@@ -1263,6 +1266,8 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         "topSurfaceAcceleration": number(raw.get("top_surface_acceleration"), 0),
         "travelAcceleration": number(raw.get("travel_acceleration"), 0),
         "firstLayerAcceleration": number(raw.get("initial_layer_acceleration"), 0),
+        "firstLayerTravelAcceleration": initial_layer_travel_acceleration,
+        "firstLayerTravelAccelerationPercent": initial_layer_travel_acceleration_percent,
         "bridgeAcceleration": bridge_acceleration,
         "bridgeAccelerationPercent": bridge_acceleration_percent,
         "sparseInfillAcceleration": sparse_infill_acceleration,
@@ -1676,7 +1681,12 @@ def build_process(brand: str, raw: dict[str, Any], printer_nozzles: dict[str, fl
         )
         and all(
             0 <= profile[key] <= (1_000 if profile[f"{key}Percent"] else 100_000)
-            for key in ["bridgeAcceleration", "sparseInfillAcceleration", "internalSolidInfillAcceleration"]
+            for key in [
+                "firstLayerTravelAcceleration",
+                "bridgeAcceleration",
+                "sparseInfillAcceleration",
+                "internalSolidInfillAcceleration",
+            ]
         )
         and all(
             0 <= profile[key] <= 2_000

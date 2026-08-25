@@ -93,7 +93,7 @@ diff --git a/app/src/main/cpp/include/sapil.h b/app/src/main/cpp/include/sapil.h
 index 116a4a85..669271fe 100644
 --- a/app/src/main/cpp/include/sapil.h
 +++ b/app/src/main/cpp/include/sapil.h
-@@ -40,17 +40,141 @@ struct SliceConfig {
+@@ -40,17 +40,143 @@ struct SliceConfig {
      int perimeters = 2;
      int top_solid_layers = 5;
      int bottom_solid_layers = 4;
@@ -201,6 +201,8 @@ index 116a4a85..669271fe 100644
 +    float top_surface_acceleration = 0.0f;
 +    float travel_acceleration = 0.0f;
 +    float first_layer_acceleration = 0.0f;
++    float first_layer_travel_acceleration = 100.0f;
++    bool first_layer_travel_acceleration_percent = true;
 +    float bridge_acceleration = 50.0f;
 +    bool bridge_acceleration_percent = true;
 +    float sparse_infill_acceleration = 100.0f;
@@ -925,7 +927,7 @@ diff --git a/app/src/main/cpp/src/sapil_config.cpp b/app/src/main/cpp/src/sapil_
 index d93efb7d..cf6b9fdd 100644
 --- a/app/src/main/cpp/src/sapil_config.cpp
 +++ b/app/src/main/cpp/src/sapil_config.cpp
-@@ -92,31 +92,294 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
+@@ -92,31 +92,296 @@ SliceConfig configFromJava(JNIEnv* env, jobject jconfig) {
      config.perimeters = getInt("perimeters");
      config.top_solid_layers = getInt("topSolidLayers");
      config.bottom_solid_layers = getInt("bottomSolidLayers");
@@ -1023,6 +1025,8 @@ index d93efb7d..cf6b9fdd 100644
 +    config.top_surface_acceleration = getFloat("topSurfaceAcceleration");
 +    config.travel_acceleration = getFloat("travelAcceleration");
 +    config.first_layer_acceleration = getFloat("firstLayerAcceleration");
++    config.first_layer_travel_acceleration = getFloat("firstLayerTravelAcceleration");
++    config.first_layer_travel_acceleration_percent = getBool("firstLayerTravelAccelerationPercent");
 +    config.bridge_acceleration = getFloat("bridgeAcceleration");
 +    config.bridge_acceleration_percent = getBool("bridgeAccelerationPercent");
 +    config.sparse_infill_acceleration = getFloat("sparseInfillAcceleration");
@@ -1425,7 +1429,7 @@ index d93efb7d..cf6b9fdd 100644
  
      env->DeleteLocalRef(cls);
      return config;
-@@ -235,27 +669,296 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
+@@ -235,27 +669,298 @@ jobject configToJava(JNIEnv* env, const SliceConfig& config) {
      setInt("perimeters", config.perimeters);
      setInt("topSolidLayers", config.top_solid_layers);
      setInt("bottomSolidLayers", config.bottom_solid_layers);
@@ -1522,6 +1526,8 @@ index d93efb7d..cf6b9fdd 100644
 +    setFloat("topSurfaceAcceleration", config.top_surface_acceleration);
 +    setFloat("travelAcceleration", config.travel_acceleration);
 +    setFloat("firstLayerAcceleration", config.first_layer_acceleration);
++    setFloat("firstLayerTravelAcceleration", config.first_layer_travel_acceleration);
++    setBool("firstLayerTravelAccelerationPercent", config.first_layer_travel_acceleration_percent);
 +    setFloat("bridgeAcceleration", config.bridge_acceleration);
 +    setBool("bridgeAccelerationPercent", config.bridge_acceleration_percent);
 +    setFloat("sparseInfillAcceleration", config.sparse_infill_acceleration);
@@ -2455,7 +2461,7 @@ index 8d61c9cf..6bd1edf6 100644
  void SlicerEngine::cancelSlice() {
      g_slice_cancel.store(true, std::memory_order_release);
      auto* print = g_active_print.load(std::memory_order_acquire);
-@@ -183,84 +264,292 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
+@@ -183,84 +264,294 @@ static void applyConfigToPrusa(Slic3r::DynamicPrintConfig& dpc, const SliceConfi
      dpc.set_key_value("wall_loops", new Slic3r::ConfigOptionInt(config.perimeters));
      dpc.set_key_value("top_shell_layers", new Slic3r::ConfigOptionInt(config.top_solid_layers));
      dpc.set_key_value("bottom_shell_layers", new Slic3r::ConfigOptionInt(config.bottom_solid_layers));
@@ -2794,6 +2800,8 @@ index 8d61c9cf..6bd1edf6 100644
 +    dpc.set_key_value("top_surface_acceleration",      new Slic3r::ConfigOptionFloat(top_surface_acceleration));
 +    dpc.set_key_value("travel_acceleration",           new Slic3r::ConfigOptionFloat(travel_acceleration));
 +    dpc.set_key_value("initial_layer_acceleration",    new Slic3r::ConfigOptionFloat(first_layer_acceleration));
++    dpc.set_key_value("initial_layer_travel_acceleration", new Slic3r::ConfigOptionFloatOrPercent(
++        config.first_layer_travel_acceleration, config.first_layer_travel_acceleration_percent));
 +    dpc.set_key_value("bridge_acceleration", new Slic3r::ConfigOptionFloatOrPercent(
 +        config.bridge_acceleration, config.bridge_acceleration_percent));
 +    dpc.set_key_value("sparse_infill_acceleration", new Slic3r::ConfigOptionFloatOrPercent(

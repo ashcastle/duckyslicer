@@ -2999,6 +2999,7 @@ private fun SlicingSettingsSheet(
             options.topSurfaceAcceleration,
             options.travelAcceleration,
             options.firstLayerAcceleration,
+            options.firstLayerTravelAcceleration.takeUnless { options.firstLayerTravelAccelerationPercent } ?: 0f,
         ).maxOrNull() ?: 20_000f
         val featureAccelerationSteps = (maximumFeatureAcceleration / 100f).roundToInt().coerceAtLeast(2) - 1
         val maximumFeatureJerk = listOf(
@@ -4796,94 +4797,11 @@ private fun SlicingSettingsSheet(
                     steps = flowRatioSteps,
                     onValueChange = { onOptionsChanged(options.copy(bottomSurfaceFlowRatio = it)) },
                 )
-                SettingsGroupTitle(stringResource(R.string.feature_acceleration))
-                SettingSlider(
-                    label = stringResource(R.string.default_acceleration),
-                    valueText = stringResource(R.string.acceleration_value, options.defaultAcceleration),
-                    value = options.defaultAcceleration,
-                    range = 0f..maximumFeatureAcceleration,
-                    steps = featureAccelerationSteps,
-                    onValueChange = { onOptionsChanged(options.copy(defaultAcceleration = (it / 100f).roundToInt() * 100f)) },
-                )
-                SettingSlider(
-                    label = stringResource(R.string.outer_wall_acceleration),
-                    valueText = stringResource(R.string.acceleration_value, options.outerWallAcceleration),
-                    value = options.outerWallAcceleration,
-                    range = 0f..maximumFeatureAcceleration,
-                    steps = featureAccelerationSteps,
-                    onValueChange = { onOptionsChanged(options.copy(outerWallAcceleration = (it / 100f).roundToInt() * 100f)) },
-                )
-                SettingSlider(
-                    label = stringResource(R.string.inner_wall_acceleration),
-                    valueText = stringResource(R.string.acceleration_value, options.innerWallAcceleration),
-                    value = options.innerWallAcceleration,
-                    range = 0f..maximumFeatureAcceleration,
-                    steps = featureAccelerationSteps,
-                    onValueChange = { onOptionsChanged(options.copy(innerWallAcceleration = (it / 100f).roundToInt() * 100f)) },
-                )
-                SettingSlider(
-                    label = stringResource(R.string.top_surface_acceleration),
-                    valueText = stringResource(R.string.acceleration_value, options.topSurfaceAcceleration),
-                    value = options.topSurfaceAcceleration,
-                    range = 0f..maximumFeatureAcceleration,
-                    steps = featureAccelerationSteps,
-                    onValueChange = { onOptionsChanged(options.copy(topSurfaceAcceleration = (it / 100f).roundToInt() * 100f)) },
-                )
-                SettingSlider(
-                    label = stringResource(R.string.travel_acceleration),
-                    valueText = stringResource(R.string.acceleration_value, options.travelAcceleration),
-                    value = options.travelAcceleration,
-                    range = 0f..maximumFeatureAcceleration,
-                    steps = featureAccelerationSteps,
-                    onValueChange = { onOptionsChanged(options.copy(travelAcceleration = (it / 100f).roundToInt() * 100f)) },
-                )
-                SettingSlider(
-                    label = stringResource(R.string.first_layer_acceleration),
-                    valueText = stringResource(R.string.acceleration_value, options.firstLayerAcceleration),
-                    value = options.firstLayerAcceleration,
-                    range = 0f..maximumFeatureAcceleration,
-                    steps = featureAccelerationSteps,
-                    onValueChange = { onOptionsChanged(options.copy(firstLayerAcceleration = (it / 100f).roundToInt() * 100f)) },
-                )
-                AccelerationOrPercentSetting(
-                    label = stringResource(R.string.bridge_acceleration),
-                    value = options.bridgeAcceleration,
-                    percent = options.bridgeAccelerationPercent,
-                    maximumAbsolute = maximumFeatureAcceleration,
-                    onValueChange = { onOptionsChanged(options.copy(bridgeAcceleration = it)) },
-                    onPercentChange = { selectedPercent, adjustedValue ->
-                        onOptionsChanged(options.copy(bridgeAcceleration = adjustedValue, bridgeAccelerationPercent = selectedPercent))
-                    },
-                )
-                AccelerationOrPercentSetting(
-                    label = stringResource(R.string.sparse_infill_acceleration),
-                    value = options.sparseInfillAcceleration,
-                    percent = options.sparseInfillAccelerationPercent,
-                    maximumAbsolute = maximumFeatureAcceleration,
-                    onValueChange = { onOptionsChanged(options.copy(sparseInfillAcceleration = it)) },
-                    onPercentChange = { selectedPercent, adjustedValue ->
-                        onOptionsChanged(
-                            options.copy(
-                                sparseInfillAcceleration = adjustedValue,
-                                sparseInfillAccelerationPercent = selectedPercent,
-                            ),
-                        )
-                    },
-                )
-                AccelerationOrPercentSetting(
-                    label = stringResource(R.string.internal_solid_acceleration),
-                    value = options.internalSolidInfillAcceleration,
-                    percent = options.internalSolidInfillAccelerationPercent,
-                    maximumAbsolute = maximumFeatureAcceleration,
-                    onValueChange = { onOptionsChanged(options.copy(internalSolidInfillAcceleration = it)) },
-                    onPercentChange = { selectedPercent, adjustedValue ->
-                        onOptionsChanged(
-                            options.copy(
-                                internalSolidInfillAcceleration = adjustedValue,
-                                internalSolidInfillAccelerationPercent = selectedPercent,
-                            ),
-                        )
-                    },
+                AccelerationSettings(
+                    options = options,
+                    maximumFeatureAcceleration = maximumFeatureAcceleration,
+                    featureAccelerationSteps = featureAccelerationSteps,
+                    onOptionsChanged = onOptionsChanged,
                 )
                 SettingsGroupTitle(stringResource(R.string.feature_jerk))
                 SettingSlider(
@@ -7754,6 +7672,102 @@ private fun AccelerationOrPercentSetting(
         steps = if (percent) 299 else (maximum / 100f).roundToInt().coerceAtLeast(2) - 1,
         onValueChange = {
             onValueChange(if (percent) it.roundToInt().toFloat() else (it / 100f).roundToInt() * 100f)
+        },
+    )
+}
+
+@Composable
+private fun AccelerationSettings(
+    options: SliceOptions,
+    maximumFeatureAcceleration: Float,
+    featureAccelerationSteps: Int,
+    onOptionsChanged: (SliceOptions) -> Unit,
+) {
+    SettingsGroupTitle(stringResource(R.string.feature_acceleration))
+    listOf(
+        Triple(R.string.default_acceleration, options.defaultAcceleration) { value: Float ->
+            options.copy(defaultAcceleration = value)
+        },
+        Triple(R.string.outer_wall_acceleration, options.outerWallAcceleration) { value: Float ->
+            options.copy(outerWallAcceleration = value)
+        },
+        Triple(R.string.inner_wall_acceleration, options.innerWallAcceleration) { value: Float ->
+            options.copy(innerWallAcceleration = value)
+        },
+        Triple(R.string.top_surface_acceleration, options.topSurfaceAcceleration) { value: Float ->
+            options.copy(topSurfaceAcceleration = value)
+        },
+        Triple(R.string.travel_acceleration, options.travelAcceleration) { value: Float ->
+            options.copy(travelAcceleration = value)
+        },
+        Triple(R.string.first_layer_acceleration, options.firstLayerAcceleration) { value: Float ->
+            options.copy(firstLayerAcceleration = value)
+        },
+    ).forEach { (labelResource, value, update) ->
+        SettingSlider(
+            label = stringResource(labelResource),
+            valueText = stringResource(R.string.acceleration_value, value),
+            value = value,
+            range = 0f..maximumFeatureAcceleration,
+            steps = featureAccelerationSteps,
+            onValueChange = {
+                onOptionsChanged(update((it / 100f).roundToInt() * 100f))
+            },
+        )
+    }
+    AccelerationOrPercentSetting(
+        label = stringResource(R.string.first_layer_travel_acceleration),
+        value = options.firstLayerTravelAcceleration,
+        percent = options.firstLayerTravelAccelerationPercent,
+        maximumAbsolute = maximumFeatureAcceleration,
+        onValueChange = { onOptionsChanged(options.copy(firstLayerTravelAcceleration = it)) },
+        onPercentChange = { selectedPercent, adjustedValue ->
+            onOptionsChanged(
+                options.copy(
+                    firstLayerTravelAcceleration = adjustedValue,
+                    firstLayerTravelAccelerationPercent = selectedPercent,
+                ),
+            )
+        },
+    )
+    AccelerationOrPercentSetting(
+        label = stringResource(R.string.bridge_acceleration),
+        value = options.bridgeAcceleration,
+        percent = options.bridgeAccelerationPercent,
+        maximumAbsolute = maximumFeatureAcceleration,
+        onValueChange = { onOptionsChanged(options.copy(bridgeAcceleration = it)) },
+        onPercentChange = { selectedPercent, adjustedValue ->
+            onOptionsChanged(options.copy(bridgeAcceleration = adjustedValue, bridgeAccelerationPercent = selectedPercent))
+        },
+    )
+    AccelerationOrPercentSetting(
+        label = stringResource(R.string.sparse_infill_acceleration),
+        value = options.sparseInfillAcceleration,
+        percent = options.sparseInfillAccelerationPercent,
+        maximumAbsolute = maximumFeatureAcceleration,
+        onValueChange = { onOptionsChanged(options.copy(sparseInfillAcceleration = it)) },
+        onPercentChange = { selectedPercent, adjustedValue ->
+            onOptionsChanged(
+                options.copy(
+                    sparseInfillAcceleration = adjustedValue,
+                    sparseInfillAccelerationPercent = selectedPercent,
+                ),
+            )
+        },
+    )
+    AccelerationOrPercentSetting(
+        label = stringResource(R.string.internal_solid_acceleration),
+        value = options.internalSolidInfillAcceleration,
+        percent = options.internalSolidInfillAccelerationPercent,
+        maximumAbsolute = maximumFeatureAcceleration,
+        onValueChange = { onOptionsChanged(options.copy(internalSolidInfillAcceleration = it)) },
+        onPercentChange = { selectedPercent, adjustedValue ->
+            onOptionsChanged(
+                options.copy(
+                    internalSolidInfillAcceleration = adjustedValue,
+                    internalSolidInfillAccelerationPercent = selectedPercent,
+                ),
+            )
         },
     )
 }

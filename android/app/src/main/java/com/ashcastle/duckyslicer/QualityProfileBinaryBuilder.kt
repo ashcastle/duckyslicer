@@ -54,6 +54,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
     private var topSurfaceAcceleration: Float = base.topSurfaceAcceleration
     private var travelAcceleration: Float = base.travelAcceleration
     private var firstLayerAcceleration: Float = base.firstLayerAcceleration
+    private var firstLayerTravelAcceleration: Float = base.firstLayerTravelAcceleration
+    private var firstLayerTravelAccelerationPercent: Boolean = base.firstLayerTravelAccelerationPercent
     private var bridgeAcceleration: Float = base.bridgeAcceleration
     private var bridgeAccelerationPercent: Boolean = base.bridgeAccelerationPercent
     private var sparseInfillAcceleration: Float = base.sparseInfillAcceleration
@@ -425,6 +427,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         topSurfaceAcceleration = input.readFloat()
         travelAcceleration = input.readFloat()
         firstLayerAcceleration = input.readFloat()
+        firstLayerTravelAcceleration = input.readFloat()
+        firstLayerTravelAccelerationPercent = input.readCatalogBoolean()
         bridgeAcceleration = input.readFloat()
         bridgeAccelerationPercent = input.readCatalogBoolean()
         sparseInfillAcceleration = input.readFloat()
@@ -799,6 +803,8 @@ internal class QualityProfileBinaryBuilder(base: QualityProfile = QualityProfile
         topSurfaceAcceleration = topSurfaceAcceleration,
         travelAcceleration = travelAcceleration,
         firstLayerAcceleration = firstLayerAcceleration,
+        firstLayerTravelAcceleration = firstLayerTravelAcceleration,
+        firstLayerTravelAccelerationPercent = firstLayerTravelAccelerationPercent,
         bridgeAcceleration = bridgeAcceleration,
         bridgeAccelerationPercent = bridgeAccelerationPercent,
         sparseInfillAcceleration = sparseInfillAcceleration,
@@ -1181,6 +1187,8 @@ internal val QUALITY_BINARY_FIELDS = arrayOf(
     BinaryField("topSurfaceAcceleration", BINARY_FLOAT),
     BinaryField("travelAcceleration", BINARY_FLOAT),
     BinaryField("firstLayerAcceleration", BINARY_FLOAT),
+    BinaryField("firstLayerTravelAcceleration", BINARY_FLOAT),
+    BinaryField("firstLayerTravelAccelerationPercent", BINARY_BOOL),
     BinaryField("bridgeAcceleration", BINARY_FLOAT),
     BinaryField("bridgeAccelerationPercent", BINARY_BOOL),
     BinaryField("sparseInfillAcceleration", BINARY_FLOAT),
