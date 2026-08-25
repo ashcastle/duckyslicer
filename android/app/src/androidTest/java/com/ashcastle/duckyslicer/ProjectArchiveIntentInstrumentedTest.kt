@@ -23,6 +23,99 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ProjectArchiveIntentInstrumentedTest {
     @Test
+    fun multipleSelectedModelDocumentsCommitAsOneProjectEdit() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        val owner = ViewModelStore()
+        val first = File(context.cacheDir, "batch-first.stl")
+        val second = File(context.cacheDir, "batch-second.stl")
+        projectRoot.deleteRecursively()
+        try {
+            listOf(first, second).forEach { destination ->
+                instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
+                    destination.outputStream().use(input::copyTo)
+                }
+            }
+            val application = context.applicationContext as Application
+            val model = ViewModelProvider(
+                owner,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[ProjectTransferViewModel::class.java]
+            waitForReadySession(model)
+            val uris = listOf(first, second).map { source ->
+                FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.debug-files",
+                    source,
+                )
+            }
+
+            assertTrue(model.importModels(uris))
+            val completed = waitForEditCompletion(model, expectedRevision = 1)
+
+            assertEquals(ProjectEditKind.MODEL_IMPORT, completed.editCompletion?.kind)
+            assertEquals(2, completed.editCompletion?.objectCount)
+            assertEquals(
+                listOf("batch-first.stl", "batch-second.stl"),
+                completed.history.current.objects.map { it.model.fileName },
+            )
+            assertEquals(0f, completed.history.current.objects[0].transform.offsetXmm)
+            assertEquals(24f, completed.history.current.objects[1].transform.offsetXmm)
+            assertTrue(completed.history.canUndo)
+        } finally {
+            owner.clear()
+            first.delete()
+            second.delete()
+            projectRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun failedModelInMultipleSelectionRollsBackEveryEarlierDocument() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
+        val owner = ViewModelStore()
+        val valid = File(context.cacheDir, "batch-valid.stl")
+        val invalid = File(context.cacheDir, "batch-invalid.txt")
+        projectRoot.deleteRecursively()
+        try {
+            instrumentation.context.assets.open("20mmbox-LF.stl").use { input ->
+                valid.outputStream().use(input::copyTo)
+            }
+            invalid.writeText("not a model")
+            val application = context.applicationContext as Application
+            val model = ViewModelProvider(
+                owner,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(application),
+            )[ProjectTransferViewModel::class.java]
+            waitForReadySession(model)
+            val uris = listOf(valid, invalid).map { source ->
+                FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.debug-files",
+                    source,
+                )
+            }
+
+            assertTrue(model.importModels(uris))
+            val completed = waitForEditCompletion(model, expectedRevision = 0)
+
+            assertEquals(ProjectEditFailure.GENERIC, completed.editCompletion?.failure)
+            assertTrue(completed.history.current.allObjects.isEmpty())
+            assertFalse(
+                File(projectRoot, "models").listFiles().orEmpty().any { it.isFile },
+            )
+        } finally {
+            owner.clear()
+            valid.delete()
+            invalid.delete()
+            projectRoot.deleteRecursively()
+        }
+    }
+
+    @Test
     fun newProjectPersistsAnEmptyWorkspaceAndKeepsTheActiveProfiles() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val projectRoot = File(context.filesDir, ProjectStore.PROJECT_DIRECTORY)
@@ -446,6 +539,16 @@ class ProjectArchiveIntentInstrumentedTest {
             SystemClock.sleep(WAIT_POLL_MILLIS)
         }
         throw AssertionError("Timed out waiting for retained project session: $objectId")
+    }
+
+    private fun waitForReadySession(model: ProjectTransferViewModel) {
+        val deadline = SystemClock.elapsedRealtime() + WAIT_TIMEOUT_MILLIS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val state = model.state.value
+            if (state.restored && !state.busy && state.editCompletion == null) return
+            SystemClock.sleep(WAIT_POLL_MILLIS)
+        }
+        throw AssertionError("Timed out waiting for an empty retained project session")
     }
 
     private fun waitForPersistence(model: ProjectTransferViewModel, revision: Long) {

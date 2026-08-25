@@ -822,47 +822,62 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
     }
 
     @Synchronized
-    fun importModels(uri: Uri): Boolean {
-        if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
+    fun importModels(uri: Uri): Boolean = importModels(listOf(uri))
+
+    @Synchronized
+    fun importModels(uris: List<Uri>): Boolean {
+        val requestedUris = uris.toList()
+        if (
+            requestedUris.isEmpty() ||
+            requestedUris.any { it.scheme != ContentResolver.SCHEME_CONTENT }
+        ) return false
         val snapshot = mutableState.value.history.current
         val objectCount = snapshot.objects.size
         val totalObjectCount = snapshot.allObjects.size
         val totalVolumeCount = snapshot.allObjects.sumOf { it.volumes.size }
-        if (totalObjectCount >= ProjectStore.MAX_PROJECT_OBJECTS) return false
+        if (
+            totalObjectCount >= ProjectStore.MAX_PROJECT_OBJECTS ||
+            requestedUris.size > ProjectStore.MAX_PROJECT_OBJECTS - totalObjectCount
+        ) return false
         val baseline = startEditLocked(ProjectEditKind.MODEL_IMPORT) ?: return false
         val cancellation = DocumentTransferCancellation()
         activeModelImportTransfer = ActiveModelImportTransfer(baseline.operation, cancellation)
         viewModelScope.launch(Dispatchers.IO) {
             var installed = emptyList<ProjectObject>()
             try {
-                val imported = importOrcaModels(
-                    getApplication<Application>(),
-                    uri,
-                    projectStore,
-                    baseline.options,
-                    baseline.operation.requestId,
-                    cancellation,
-                )
-                installed = imported
-                require(totalObjectCount + imported.size <= ProjectStore.MAX_PROJECT_OBJECTS) {
-                    "Project has too many imported objects"
-                }
-                require(
-                    totalVolumeCount + imported.sumOf { it.volumes.size } <=
-                        ProjectStore.MAX_PROJECT_VOLUMES
-                ) { "Project has too many imported volumes" }
-                val distance = ((objectCount + 1) / 2) * 24f
-                val offset = when {
-                    objectCount == 0 -> 0f
-                    objectCount % 2 == 1 -> distance
-                    else -> -distance
-                }
-                val placed = imported.map { projectObject ->
-                    projectObject.copy(
-                        transform = projectObject.transform.copy(
-                            offsetXmm = projectObject.transform.offsetXmm + offset,
-                        ),
+                val placed = ArrayList<ProjectObject>()
+                requestedUris.forEach { uri ->
+                    val imported = importOrcaModels(
+                        getApplication<Application>(),
+                        uri,
+                        projectStore,
+                        baseline.options,
+                        baseline.operation.requestId,
+                        cancellation,
                     )
+                    require(imported.isNotEmpty()) { "Model document contains no objects" }
+                    installed = installed + imported
+                    require(
+                        totalObjectCount + installed.size <= ProjectStore.MAX_PROJECT_OBJECTS
+                    ) { "Project has too many imported objects" }
+                    require(
+                        totalVolumeCount + installed.sumOf { it.volumes.size } <=
+                            ProjectStore.MAX_PROJECT_VOLUMES
+                    ) { "Project has too many imported volumes" }
+                    val groupPosition = objectCount + placed.size
+                    val distance = ((groupPosition + 1) / 2) * 24f
+                    val offset = when {
+                        groupPosition == 0 -> 0f
+                        groupPosition % 2 == 1 -> distance
+                        else -> -distance
+                    }
+                    placed += imported.map { projectObject ->
+                        projectObject.copy(
+                            transform = projectObject.transform.copy(
+                                offsetXmm = projectObject.transform.offsetXmm + offset,
+                            ),
+                        )
+                    }
                 }
                 val nextHistory = baseline.history.addAll(placed)
                 val requiredFilamentSlots = placed
@@ -880,7 +895,7 @@ internal class ProjectTransferViewModel(application: Application) : AndroidViewM
                         objectCount = placed.size,
                     )
                 ) {
-                    imported.deleteInstalledModels()
+                    installed.deleteInstalledModels()
                 }
             } catch (failure: CancellationException) {
                 installed.deleteInstalledModels()

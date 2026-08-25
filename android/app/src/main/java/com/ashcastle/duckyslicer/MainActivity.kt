@@ -1056,10 +1056,12 @@ private fun DuckySlicerScreen(
         }
     }
 
-    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val filePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
         if (
-            uri != null && projectRestored && !projectTransferBusy && !slicing &&
-            !previewLoading && projectTransferModel.importModels(uri)
+            uris.isNotEmpty() && projectRestored && !projectTransferBusy && !slicing &&
+            !previewLoading && projectTransferModel.importModels(uris)
         ) {
             error = null
             notice = null
