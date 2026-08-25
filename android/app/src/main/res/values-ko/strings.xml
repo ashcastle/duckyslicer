@@ -956,6 +956,9 @@
     <string name="filament_color">필라멘트 색상</string>
     <string name="filament_color_for_tool">T%1$d 색상</string>
     <string name="filament_color_option">색상 %1$d</string>
+    <string name="custom_filament_color">사용자 색상</string>
+    <string name="filament_color_code_example">예: #F6C945</string>
+    <string name="use_filament_color">이 색상 사용</string>
     <string name="object_filament">오브젝트 필라멘트</string>
     <string name="filament_tool_summary">T%1$d · %2$s</string>
     <string name="filament_slot_unavailable">이 프린터에서 사용할 수 있는 필라멘트 슬롯이 없습니다.</string>

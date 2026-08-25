@@ -651,6 +651,8 @@ class AccessibilityInstrumentedTest {
         val toolColor = context.getString(R.string.filament_color_for_tool, 1)
         val firstColor = context.getString(R.string.filament_color_option, 1)
         val secondColor = context.getString(R.string.filament_color_option, 2)
+        val customColor = context.getString(R.string.custom_filament_color)
+        val useColor = context.getString(R.string.use_filament_color)
         val revert = context.getString(R.string.revert_changes)
         val apply = context.getString(R.string.apply_changes)
         launchHarness(AccessibilityHarnessActivity.SCREEN_WORKSPACE_PROFILES).use {
@@ -659,7 +661,9 @@ class AccessibilityInstrumentedTest {
             assertTrue("Filament color must be editable from the active slot profile", picker.isFocusable)
             tapCenter(picker)
 
-            val pickerNodes = waitForNodes(setOf(toolColor, firstColor, secondColor))
+            val pickerNodes = waitForNodes(
+                setOf(toolColor, firstColor, secondColor, customColor),
+            )
             assertTrue(pickerNodes.any { it.isHeading && it.effectiveLabel().contains(toolColor) })
             assertTrue(
                 "The current project color must expose its selected state",
@@ -668,8 +672,14 @@ class AccessibilityInstrumentedTest {
                         it.effectiveLabel().contains(firstColor)
                 },
             )
-            val alternative = pickerNodes.first { it.isClickable && it.effectiveLabel() == secondColor }
-            assertTrue(alternative.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            assertTrue(
+                "Custom color must be exposed as an editable field",
+                pickerNodes.any { it.isEditable && it.effectiveLabel().contains(customColor) },
+            )
+            replaceEditableText(customColor, "#01A2FF")
+            assertTrue(waitForNode(useColor) { it.isClickable }.performAction(
+                AccessibilityNodeInfo.ACTION_CLICK,
+            ))
 
             val actions = waitForNodes(setOf(revert, apply))
             assertTrue(actions.any { it.isClickable && it.effectiveLabel() == revert })

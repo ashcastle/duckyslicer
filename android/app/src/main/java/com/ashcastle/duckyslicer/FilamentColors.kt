@@ -1,5 +1,7 @@
 package com.ashcastle.duckyslicer
 
+import java.util.Locale
+
 internal val DefaultFilamentColors: List<Int> = listOf(
     0xF6C945,
     0x44D7FF,
@@ -21,6 +23,29 @@ internal val DefaultFilamentColors: List<Int> = listOf(
 
 internal const val MIN_FILAMENT_RGB = 0x000000
 internal const val MAX_FILAMENT_RGB = 0xFFFFFF
+
+internal fun filamentColorText(color: Int): String {
+    require(color in MIN_FILAMENT_RGB..MAX_FILAMENT_RGB) { "Filament color is invalid" }
+    return String.format(Locale.ROOT, "#%06X", color)
+}
+
+internal fun parseFilamentColor(value: String): Int? {
+    val normalized = value.trim().removePrefix("#")
+    if (normalized.length != 6 || normalized.any { it.digitToIntOrNull(16) == null }) return null
+    return normalized.toIntOrNull(16)?.takeIf { it in MIN_FILAMENT_RGB..MAX_FILAMENT_RGB }
+}
+
+internal fun filamentColorContrast(color: Int): Int {
+    require(color in MIN_FILAMENT_RGB..MAX_FILAMENT_RGB) { "Filament color is invalid" }
+    val red = color shr 16 and 0xFF
+    val green = color shr 8 and 0xFF
+    val blue = color and 0xFF
+    return if (red * 299 + green * 587 + blue * 114 >= 150_000) {
+        MIN_FILAMENT_RGB
+    } else {
+        MAX_FILAMENT_RGB
+    }
+}
 
 internal fun defaultFilamentColor(slot: Int): Int =
     DefaultFilamentColors[Math.floorMod(slot, DefaultFilamentColors.size)]

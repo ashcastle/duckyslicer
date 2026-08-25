@@ -3014,6 +3014,10 @@ private fun FilamentColorSetting(
         }
     }
     if (pickerOpen) {
+        var customColorText by rememberSaveable(color) {
+            mutableStateOf(filamentColorText(color))
+        }
+        val customColor = parseFilamentColor(customColorText)
         ModalBottomSheet(
             onDismissRequest = { pickerOpen = false },
             containerColor = Color(0xFF282925),
@@ -3022,6 +3026,7 @@ private fun FilamentColorSetting(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -3031,6 +3036,40 @@ private fun FilamentColorSetting(
                     modifier = Modifier.semantics { heading() },
                     style = MaterialTheme.typography.titleLarge,
                 )
+                OutlinedTextField(
+                    value = customColorText,
+                    onValueChange = { value ->
+                        customColorText = value.trim().take(7)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.custom_filament_color)) },
+                    supportingText = {
+                        Text(stringResource(R.string.filament_color_code_example))
+                    },
+                    leadingIcon = {
+                        Surface(
+                            modifier = Modifier.size(24.dp),
+                            color = customColor
+                                ?.let { Color(0xFF000000.toInt() or it) }
+                                ?: Color.Transparent,
+                            shape = MaterialTheme.shapes.extraLarge,
+                        ) {}
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                    isError = customColor == null,
+                )
+                Button(
+                    onClick = {
+                        onSelected(checkNotNull(customColor))
+                        pickerOpen = false
+                    },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    enabled = customColor != null && customColor != color,
+                ) {
+                    Text(stringResource(R.string.use_filament_color))
+                }
+                HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
                 (listOf(color) + DefaultFilamentColors)
                     .distinct()
                     .chunked(4)
@@ -3041,14 +3080,12 @@ private fun FilamentColorSetting(
                         ) {
                             rowColors.forEach { choice ->
                                 val selectedChoice = choice == color
-                                val optionNumber = DefaultFilamentColors.indexOf(choice)
-                                    .takeIf { it >= 0 }
-                                    ?.plus(1)
-                                    ?: 1
-                                val optionLabel = stringResource(
-                                    R.string.filament_color_option,
-                                    optionNumber,
-                                )
+                                val optionIndex = DefaultFilamentColors.indexOf(choice)
+                                val optionLabel = if (optionIndex >= 0) {
+                                    stringResource(R.string.filament_color_option, optionIndex + 1)
+                                } else {
+                                    stringResource(R.string.custom_filament_color)
+                                }
                                 Surface(
                                     modifier = Modifier
                                         .weight(1f)
@@ -3074,7 +3111,14 @@ private fun FilamentColorSetting(
                                             horizontalArrangement = Arrangement.Center,
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
-                                            Text("✓", color = Color.Black, fontWeight = FontWeight.Bold)
+                                            Text(
+                                                "✓",
+                                                color = Color(
+                                                    0xFF000000.toInt() or
+                                                        filamentColorContrast(choice),
+                                                ),
+                                                fontWeight = FontWeight.Bold,
+                                            )
                                         }
                                     }
                                 }
