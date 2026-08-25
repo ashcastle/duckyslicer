@@ -7,6 +7,9 @@
     <string name="undo">실행 취소</string>
     <string name="redo">다시 실행</string>
     <string name="duplicate_object">오브젝트 복제</string>
+    <string name="object_actions">%1$s 작업</string>
+    <string name="remove_object_title">이 오브젝트를 제거할까요?</string>
+    <string name="remove_object_body">%1$s 오브젝트가 이 플레이트에서 제거됩니다.</string>
     <string name="arrange_objects">오브젝트 정렬</string>
     <string name="arrange_done">오브젝트를 정렬했습니다.</string>
     <string name="arrange_error">이 베드에 오브젝트를 정렬할 수 없습니다.</string>

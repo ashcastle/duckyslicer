@@ -108,6 +108,7 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "fun cutSelectedModel(heightRatio: Float, placeOnCut: Boolean)",
         "fun createPrimitive(",
         "fun importModels(uri: Uri)",
+        "fun importModels(uris: List<Uri>)",
         "startEditLocked",
         "withCompletedEdit",
         "deleteInstalledModels",
@@ -143,7 +144,8 @@ def verify_resilience(sources: dict[str, str]) -> None:
         "projectTransferModel.splitSelectedModel()",
         "projectTransferModel.cutSelectedModel(heightRatio, placeOnCut)",
         "projectTransferModel.createPrimitive(primitive, sizeMm, displayName)",
-        "projectTransferModel.importModels(uri)",
+        "projectTransferModel.importModels(uris)",
+        "projectTransferModel.importModels(request.uri)",
         "projectTransferModel::cancelActiveEdit",
     ):
         if marker not in main:

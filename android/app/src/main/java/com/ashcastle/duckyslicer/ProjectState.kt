@@ -372,16 +372,23 @@ data class ProjectHistoryState(
         )
     }
 
-    fun removeSelected(): ProjectHistoryState {
-        val selected = current.selectedObject ?: return this
-        val remaining = current.objects.filterNot { it.id == selected.id }
+    fun remove(objectId: String): ProjectHistoryState {
+        if (current.objects.none { it.id == objectId }) return this
+        val remaining = current.objects.filterNot { it.id == objectId }
+        val nextSelection = when {
+            current.selectedObjectId != objectId -> current.selectedObjectId
+            else -> remaining.lastOrNull()?.id
+        }
         return record(
             current.updateActivePlate(
                 objects = remaining,
-                selectedObjectId = remaining.lastOrNull()?.id,
+                selectedObjectId = nextSelection,
             ),
         )
     }
+
+    fun removeSelected(): ProjectHistoryState =
+        current.selectedObjectId?.let(::remove) ?: this
 
     fun clear(): ProjectHistoryState = if (current.objects.isEmpty()) {
         this
@@ -412,8 +419,8 @@ data class ProjectHistoryState(
     fun selectPlate(plateId: String): ProjectHistoryState =
         copy(current = current.selectPlate(plateId))
 
-    fun duplicateSelected(newId: String): ProjectHistoryState {
-        val selected = current.selectedObject ?: return this
+    fun duplicate(objectId: String, newId: String): ProjectHistoryState {
+        val selected = current.objects.firstOrNull { it.id == objectId } ?: return this
         require(current.allObjects.none { it.id == newId }) { "Duplicate project object id" }
         require(current.allObjects.size < ProjectStore.MAX_PROJECT_OBJECTS) {
             "Project has too many objects"
@@ -433,6 +440,9 @@ data class ProjectHistoryState(
             ),
         )
     }
+
+    fun duplicateSelected(newId: String): ProjectHistoryState =
+        current.selectedObjectId?.let { duplicate(it, newId) } ?: this
 
     fun applyOrcaArrangement(
         arrangement: OrcaArrangement,

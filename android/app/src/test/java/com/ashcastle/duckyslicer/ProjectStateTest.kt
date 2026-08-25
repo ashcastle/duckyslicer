@@ -101,6 +101,31 @@ class ProjectStateTest {
     }
 
     @Test
+    fun objectListActionsTargetTheirObjectWithoutASelectionRace() {
+        val first = projectObject("first")
+        val second = projectObject("second")
+        var state = ProjectHistoryState().add(first).add(second)
+        assertEquals("second", state.current.selectedObjectId)
+
+        state = state.duplicate(first.id, "first-copy")
+        assertEquals(listOf("first", "second", "first-copy"), state.current.objects.map { it.id })
+        assertEquals("first-copy", state.current.selectedObjectId)
+        assertEquals(12f, state.current.selectedObject!!.transform.offsetXmm)
+
+        state = state.remove(second.id)
+        assertEquals(listOf("first", "first-copy"), state.current.objects.map { it.id })
+        assertEquals(
+            "Removing an unselected row must preserve the current selection",
+            "first-copy",
+            state.current.selectedObjectId,
+        )
+
+        state = state.remove("first-copy")
+        assertEquals(listOf("first"), state.current.objects.map { it.id })
+        assertEquals("first", state.current.selectedObjectId)
+    }
+
+    @Test
     fun splitReplacementIsOneUndoableEditAtTheOriginalListPosition() {
         val before = projectObject("compound")
         val trailing = projectObject("trailing")

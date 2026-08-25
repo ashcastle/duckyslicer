@@ -56,6 +56,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.SaveAlt
@@ -518,7 +519,7 @@ internal fun WorkspaceScreen(
     onObjectFilamentSelected: (FilamentProfile) -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
-    onDuplicate: () -> Unit,
+    onDuplicate: (String) -> Unit,
     onArrange: () -> Unit,
     onAutoLay: () -> Unit,
     onLayOnFace: (String, FloatArray) -> Boolean,
@@ -540,7 +541,7 @@ internal fun WorkspaceScreen(
     onObjectProcessOverridesChanged: (ObjectProcessOverrides) -> Unit,
     onHeightRangeModifiersChanged: (HeightRangeModifiers) -> Unit,
     onRemoveAuxiliaryVolume: (String) -> Unit,
-    onRemoveModel: () -> Unit,
+    onRemoveModel: (String) -> Unit,
     onSlice: () -> Unit,
     onCancelSlice: () -> Unit,
     onSave: () -> Unit,
@@ -820,7 +821,9 @@ internal fun WorkspaceScreen(
                     canRedo = canRedo,
                     onUndo = onUndo,
                     onRedo = onRedo,
-                    onDuplicate = onDuplicate,
+                    canDuplicate = projectPlates.sumOf { it.objects.size } <
+                        ProjectStore.MAX_PROJECT_OBJECTS,
+                    onDuplicate = { onDuplicate(selectedObject.id) },
                     transformGizmoMode = transformGizmoMode,
                     onTransformGizmoModeChanged = { transformGizmoMode = it },
                     onAutoLay = onAutoLay,
@@ -864,7 +867,7 @@ internal fun WorkspaceScreen(
                     },
                     onMore = { showModelTools = true },
                     onRemove = {
-                        onRemoveModel()
+                        onRemoveModel(selectedObject.id)
                     },
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 132.dp),
                 )
@@ -1088,6 +1091,10 @@ internal fun WorkspaceScreen(
                     exporting = projectExporting,
                     cancellationRequested = projectTransferCancellationRequested,
                     onObjectSelected = onObjectSelected,
+                    canDuplicateObject = projectPlates.sumOf { it.objects.size } <
+                        ProjectStore.MAX_PROJECT_OBJECTS,
+                    onDuplicateObject = onDuplicate,
+                    onRemoveObject = onRemoveModel,
                     onNewProject = onNewProject,
                     onOpenProject = onOpenProject,
                     onSaveProject = onSaveProject,
@@ -1229,7 +1236,7 @@ internal fun WorkspaceScreen(
             onTransformCommitted = onModelTransformCommitted,
             onRemoveModel = {
                 showModelTools = false
-                onRemoveModel()
+                onRemoveModel(selectedObject.id)
             },
             onDismiss = { showModelTools = false },
         )
@@ -6135,6 +6142,7 @@ private fun ObjectToolRail(
     canRedo: Boolean,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
+    canDuplicate: Boolean,
     onDuplicate: () -> Unit,
     transformGizmoMode: TransformGizmoMode,
     onTransformGizmoModeChanged: (TransformGizmoMode) -> Unit,
@@ -6230,7 +6238,7 @@ private fun ObjectToolRail(
                 IconButton(onClick = onMeasure, enabled = !editingBusy) {
                     Icon(Icons.Default.Straighten, stringResource(R.string.measure_model))
                 }
-                IconButton(onClick = onDuplicate, enabled = !editingBusy) {
+                IconButton(onClick = onDuplicate, enabled = canDuplicate && !editingBusy) {
                     Icon(Icons.Default.ContentCopy, stringResource(R.string.duplicate_object))
                 }
                 IconButton(onClick = onMore, enabled = !editingBusy) {
@@ -6759,6 +6767,9 @@ private fun ProjectSheet(
     exporting: Boolean,
     cancellationRequested: Boolean,
     onObjectSelected: (String) -> Unit,
+    canDuplicateObject: Boolean,
+    onDuplicateObject: (String) -> Unit,
+    onRemoveObject: (String) -> Unit,
     onNewProject: () -> Unit,
     onOpenProject: () -> Unit,
     onSaveProject: () -> Unit,
@@ -6768,6 +6779,8 @@ private fun ProjectSheet(
 ) {
     var confirmReplacement by remember { mutableStateOf(false) }
     var confirmNewProject by remember { mutableStateOf(false) }
+    var objectMenuId by remember { mutableStateOf<String?>(null) }
+    var removeObjectId by remember { mutableStateOf<String?>(null) }
     WorkspaceCard(modifier) {
         Text(
             stringResource(R.string.tab_project),
@@ -6781,19 +6794,71 @@ private fun ProjectSheet(
         )
         objects.forEach { projectObject ->
             val selected = projectObject.id == selectedObjectId
-            Surface(
-                onClick = { onObjectSelected(projectObject.id) },
-                color = if (selected) WorkspaceYellow.copy(alpha = 0.18f) else Color.Transparent,
-                contentColor = if (selected) WorkspaceYellow else Color(0xFFE2E3DD),
-                shape = RoundedCornerShape(12.dp),
+            val displayName = projectObject.primaryModelPart.model.fileName
+            Row(
                 modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    projectObject.primaryModelPart.model.fileName,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Surface(
+                    onClick = { onObjectSelected(projectObject.id) },
+                    color = if (selected) {
+                        WorkspaceYellow.copy(alpha = 0.18f)
+                    } else {
+                        Color.Transparent
+                    },
+                    contentColor = if (selected) WorkspaceYellow else Color(0xFFE2E3DD),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        displayName,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Box {
+                    IconButton(
+                        onClick = {
+                            onObjectSelected(projectObject.id)
+                            objectMenuId = projectObject.id
+                        },
+                        enabled = !busy && !importing && !exporting,
+                    ) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            stringResource(R.string.object_actions, displayName),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = objectMenuId == projectObject.id,
+                        onDismissRequest = { objectMenuId = null },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.duplicate_object)) },
+                            leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
+                            enabled = canDuplicateObject,
+                            onClick = {
+                                objectMenuId = null
+                                onDuplicateObject(projectObject.id)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.remove_model)) },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.DeleteOutline,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF8A80),
+                                )
+                            },
+                            onClick = {
+                                objectMenuId = null
+                                removeObjectId = projectObject.id
+                            },
+                        )
+                    }
+                }
             }
         }
         Text(
@@ -6909,6 +6974,34 @@ private fun ProjectSheet(
             },
             dismissButton = {
                 TextButton(onClick = { confirmNewProject = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+    val removalTarget = objects.firstOrNull { it.id == removeObjectId }
+    if (removalTarget != null) {
+        val displayName = removalTarget.primaryModelPart.model.fileName
+        AlertDialog(
+            onDismissRequest = { removeObjectId = null },
+            title = { Text(stringResource(R.string.remove_object_title)) },
+            text = { Text(stringResource(R.string.remove_object_body, displayName)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        removeObjectId = null
+                        onRemoveObject(removalTarget.id)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFD9534F),
+                        contentColor = Color.White,
+                    ),
+                ) {
+                    Text(stringResource(R.string.remove_model))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { removeObjectId = null }) {
                     Text(stringResource(R.string.cancel))
                 }
             },

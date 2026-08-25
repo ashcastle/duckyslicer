@@ -396,6 +396,36 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun projectObjectActionsExposeDuplicateAndConfirmedRemoval() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val modelName = "accessibility.stl"
+        val actions = context.getString(R.string.object_actions, modelName)
+        val duplicate = context.getString(R.string.duplicate_object)
+        val remove = context.getString(R.string.remove_model)
+        val confirmation = context.getString(R.string.remove_object_title)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_PROJECT).use {
+            val actionsButton = waitForNode(actions) {
+                it.isClickable && it.effectiveLabel() == actions
+            }
+            assertTrue("Each project object needs a focusable actions button", actionsButton.isFocusable)
+            assertTrue(actionsButton.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+
+            val menuNodes = waitForNodes(setOf(duplicate, remove))
+            assertTrue(menuNodes.any { it.isClickable && it.effectiveLabel() == duplicate })
+            val removeAction = menuNodes.first {
+                it.isClickable && it.effectiveLabel() == remove
+            }
+            assertTrue(removeAction.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            assertTrue(
+                "Object removal from the project list must require confirmation",
+                waitForNodes(setOf(confirmation)).any {
+                    it.effectiveLabel().contains(confirmation)
+                },
+            )
+        }
+    }
+
+    @Test
     fun plateSwitcherExposesSelectionAddAndConfirmedRemovalActions() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val firstLabel = context.getString(R.string.plate_number, 1)

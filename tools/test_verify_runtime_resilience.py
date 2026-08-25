@@ -24,7 +24,8 @@ def valid_sources() -> dict[str, str]:
             "fun autoLaySelectedModel() fun arrangeProjectObjects() "
             "fun splitSelectedModel() "
             "fun cutSelectedModel(heightRatio: Float, placeOnCut: Boolean) "
-            "fun createPrimitive( fun importModels(uri: Uri) startEditLocked "
+            "fun createPrimitive( fun importModels(uri: Uri) fun importModels(uris: List<Uri>) "
+            "startEditLocked "
             "withCompletedEdit deleteInstalledModels val requestId: String "
             "val cancellationRequested: Boolean ProjectEditFailure.CANCELED "
             "fun cancelActiveEdit() SlicerProcessClient.cancelProjectRequestAsync(operation.requestId) "
@@ -174,7 +175,9 @@ def valid_sources() -> dict[str, str]:
             "projectTransferModel.splitSelectedModel() "
             "projectTransferModel.cutSelectedModel(heightRatio, placeOnCut) "
             "projectTransferModel.createPrimitive(primitive, sizeMm, displayName) "
-            "projectTransferModel.importModels(uri) projectTransferModel::cancelActiveEdit"
+            "projectTransferModel.importModels(uris) "
+            "projectTransferModel.importModels(request.uri) "
+            "projectTransferModel::cancelActiveEdit"
         ),
         "WorkspaceScreen.kt": (
             "projectEditActive: Boolean projectEditCancellationRequested: Boolean "
@@ -449,6 +452,24 @@ class VerifyRuntimeResilienceTest(unittest.TestCase):
             "fun cancelActiveEdit()", "leave project edit running"
         )
         with self.assertRaisesRegex(VerificationError, "autosave corruption guard"):
+            verify_resilience(sources)
+
+    def test_rejects_multiple_document_picker_bypassing_retained_import(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+            "projectTransferModel.importModels(uris)",
+            "import selected documents in the Activity",
+        )
+        with self.assertRaisesRegex(VerificationError, "retained project edit dispatch"):
+            verify_resilience(sources)
+
+    def test_rejects_external_model_open_bypassing_retained_import(self) -> None:
+        sources = valid_sources()
+        sources["MainActivity.kt"] = sources["MainActivity.kt"].replace(
+            "projectTransferModel.importModels(request.uri)",
+            "import the external model in the Activity",
+        )
+        with self.assertRaisesRegex(VerificationError, "retained project edit dispatch"):
             verify_resilience(sources)
 
     def test_rejects_final_project_owner_leaving_native_edit_running(self) -> None:

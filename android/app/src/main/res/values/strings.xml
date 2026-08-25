@@ -7,6 +7,9 @@
     <string name="undo">Undo</string>
     <string name="redo">Redo</string>
     <string name="duplicate_object">Duplicate object</string>
+    <string name="object_actions">Actions for %1$s</string>
+    <string name="remove_object_title">Remove this object?</string>
+    <string name="remove_object_body">%1$s will be removed from this plate.</string>
     <string name="arrange_objects">Arrange objects</string>
     <string name="arrange_done">Objects arranged.</string>
     <string name="arrange_error">The objects could not be arranged on this bed.</string>

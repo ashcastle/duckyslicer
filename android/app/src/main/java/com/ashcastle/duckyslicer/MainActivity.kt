@@ -1532,11 +1532,13 @@ private fun DuckySlicerScreen(
                 }
             }
         },
-        onDuplicate = {
+        onDuplicate = { objectId ->
             val current = projectTransferModel.state.value.history
-            val nextHistory = current.duplicateSelected(UUID.randomUUID().toString())
-            if (projectTransferModel.updateHistory(current, nextHistory)) {
-                clearCompletedSlice()
+            if (current.current.allObjects.size < ProjectStore.MAX_PROJECT_OBJECTS) {
+                val nextHistory = current.duplicate(objectId, UUID.randomUUID().toString())
+                if (projectTransferModel.updateHistory(current, nextHistory)) {
+                    clearCompletedSlice()
+                }
             }
         },
         onArrange = ::arrangeProjectObjects,
@@ -1765,18 +1767,17 @@ private fun DuckySlicerScreen(
                 error = null
             }
         },
-        onRemoveModel = {
+        onRemoveModel = { objectId ->
             val current = projectTransferModel.state.value.history
             if (
                 projectTransferModel.updateHistory(
                     current,
-                    current.removeSelected(),
+                    current.remove(objectId),
                 )
             ) {
                 clearCompletedSlice()
                 notice = null
                 error = null
-                selectedTab = WorkspaceTab.SLICE
             }
         },
         onSlice = startSlice,
