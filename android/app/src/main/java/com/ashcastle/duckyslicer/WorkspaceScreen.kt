@@ -522,6 +522,7 @@ internal fun WorkspaceScreen(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onDuplicate: (String) -> Unit,
+    onMoveObjectToPlate: (String, String) -> Unit,
     onArrange: () -> Unit,
     onAutoLay: () -> Unit,
     onLayOnFace: (String, FloatArray) -> Boolean,
@@ -1100,6 +1101,8 @@ internal fun WorkspaceScreen(
 
                 WorkspaceTab.PROJECT -> ProjectSheet(
                     objects = projectObjects,
+                    plates = projectPlates,
+                    selectedPlateId = selectedPlateId,
                     hasProjectContent = projectPlates.size > 1 || projectPlates.any {
                         it.objects.isNotEmpty()
                     },
@@ -1113,6 +1116,7 @@ internal fun WorkspaceScreen(
                     canDuplicateObject = projectPlates.sumOf { it.objects.size } <
                         ProjectStore.MAX_PROJECT_OBJECTS,
                     onDuplicateObject = onDuplicate,
+                    onMoveObjectToPlate = onMoveObjectToPlate,
                     onRemoveObject = onRemoveModel,
                     onNewProject = onNewProject,
                     onOpenProject = onOpenProject,
@@ -6829,6 +6833,8 @@ internal fun PreviewControls(
 @Composable
 private fun ProjectSheet(
     objects: List<ProjectObject>,
+    plates: List<ProjectPlate>,
+    selectedPlateId: String,
     hasProjectContent: Boolean,
     selectedObjectId: String?,
     outcome: SliceOutcome?,
@@ -6839,6 +6845,7 @@ private fun ProjectSheet(
     onObjectSelected: (String) -> Unit,
     canDuplicateObject: Boolean,
     onDuplicateObject: (String) -> Unit,
+    onMoveObjectToPlate: (String, String) -> Unit,
     onRemoveObject: (String) -> Unit,
     onNewProject: () -> Unit,
     onOpenProject: () -> Unit,
@@ -6850,6 +6857,7 @@ private fun ProjectSheet(
     var confirmReplacement by remember { mutableStateOf(false) }
     var confirmNewProject by remember { mutableStateOf(false) }
     var objectMenuId by remember { mutableStateOf<String?>(null) }
+    var moveObjectId by remember { mutableStateOf<String?>(null) }
     var removeObjectId by remember { mutableStateOf<String?>(null) }
     WorkspaceCard(modifier) {
         Text(
@@ -6913,6 +6921,18 @@ private fun ProjectSheet(
                                 onDuplicateObject(projectObject.id)
                             },
                         )
+                        if (plates.size > 1) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.move_object)) },
+                                leadingIcon = {
+                                    Icon(Icons.Default.OpenWith, contentDescription = null)
+                                },
+                                onClick = {
+                                    objectMenuId = null
+                                    moveObjectId = projectObject.id
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.remove_model)) },
                             leadingIcon = {
@@ -7044,6 +7064,47 @@ private fun ProjectSheet(
             },
             dismissButton = {
                 TextButton(onClick = { confirmNewProject = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+    val moveTarget = objects.firstOrNull { it.id == moveObjectId }
+    if (moveTarget != null) {
+        AlertDialog(
+            onDismissRequest = { moveObjectId = null },
+            title = { Text(stringResource(R.string.move_object)) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    plates.forEachIndexed { index, plate ->
+                        if (plate.id != selectedPlateId) {
+                            Surface(
+                                onClick = {
+                                    moveObjectId = null
+                                    onMoveObjectToPlate(moveTarget.id, plate.id)
+                                },
+                                color = Color(0xFF343531),
+                                contentColor = Color(0xFFF4F4EE),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    stringResource(R.string.plate_number, index + 1),
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { moveObjectId = null }) {
                     Text(stringResource(R.string.cancel))
                 }
             },

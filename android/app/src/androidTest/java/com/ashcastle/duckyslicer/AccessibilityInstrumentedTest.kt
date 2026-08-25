@@ -451,6 +451,30 @@ class AccessibilityInstrumentedTest {
     }
 
     @Test
+    fun projectObjectCanChooseAnotherPlateAsItsMoveTarget() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val actions = context.getString(R.string.object_actions, "accessibility.stl")
+        val move = context.getString(R.string.move_object)
+        val secondPlate = context.getString(R.string.plate_number, 2)
+        launchHarness(AccessibilityHarnessActivity.SCREEN_PROJECT_PLATES).use {
+            val actionsButton = waitForNode(actions) {
+                it.isClickable && it.effectiveLabel() == actions
+            }
+            assertTrue(actionsButton.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val moveAction = waitForNode(move) {
+                it.isClickable && it.effectiveLabel() == move
+            }
+            assertTrue(moveAction.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            assertTrue(
+                "Moving an object must expose every other plate as a direct target",
+                waitForNodes(setOf(secondPlate)).any {
+                    it.isClickable && it.effectiveLabel() == secondPlate
+                },
+            )
+        }
+    }
+
+    @Test
     fun plateSwitcherExposesSelectionAddAndConfirmedRemovalActions() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val firstLabel = context.getString(R.string.plate_number, 1)

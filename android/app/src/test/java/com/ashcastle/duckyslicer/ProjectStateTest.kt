@@ -676,4 +676,46 @@ class ProjectStateTest {
         assertEquals(listOf(firstPlateId), state.current.plates.map(ProjectPlate::id))
         assertEquals(state, state.removeSelectedPlate())
     }
+
+    @Test
+    fun movingAnObjectBetweenPlatesIsAtomicSelectedAndUndoable() {
+        var state = ProjectHistoryState()
+            .add(projectObject("first"))
+            .add(projectObject("second"))
+        val sourcePlateId = state.current.selectedPlateId
+        state = state.addPlate("target")
+        state = state.selectPlate(sourcePlateId)
+
+        state = state.moveObjectToPlate("first", "target")
+
+        assertEquals("target", state.current.selectedPlateId)
+        assertEquals(listOf("first"), state.current.objects.map(ProjectObject::id))
+        assertEquals("first", state.current.selectedObjectId)
+        val source = state.current.plates.first { it.id == sourcePlateId }
+        assertEquals(listOf("second"), source.objects.map(ProjectObject::id))
+        assertEquals("second", source.selectedObjectId)
+
+        state = state.undo()
+        assertEquals(sourcePlateId, state.current.selectedPlateId)
+        assertEquals(listOf("first", "second"), state.current.objects.map(ProjectObject::id))
+        assertEquals("second", state.current.selectedObjectId)
+        assertTrue(state.current.plates.first { it.id == "target" }.objects.isEmpty())
+
+        state = state.redo()
+        assertEquals("target", state.current.selectedPlateId)
+        assertEquals(listOf("first"), state.current.objects.map(ProjectObject::id))
+    }
+
+    @Test
+    fun movingToTheSameOrMissingSourceObjectDoesNothing() {
+        var state = ProjectHistoryState().add(projectObject("first"))
+        val plateId = state.current.selectedPlateId
+        state = state.addPlate("target").selectPlate(plateId)
+
+        assertEquals(state, state.moveObjectToPlate("first", plateId))
+        assertEquals(state, state.moveObjectToPlate("missing", "target"))
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            state.moveObjectToPlate("first", "missing-plate")
+        }
+    }
 }

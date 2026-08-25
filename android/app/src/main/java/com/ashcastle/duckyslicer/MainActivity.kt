@@ -1541,6 +1541,20 @@ private fun DuckySlicerScreen(
                 }
             }
         },
+        onMoveObjectToPlate = { objectId, targetPlateId ->
+            val current = projectTransferModel.state.value.history
+            val sourcePlateId = current.current.selectedPlateId
+            val nextHistory = current.moveObjectToPlate(objectId, targetPlateId)
+            if (
+                nextHistory != current &&
+                projectTransferModel.updateHistory(current, nextHistory)
+            ) {
+                clearCompletedSlice(sourcePlateId)
+                plateSliceResults = plateSliceResults.clear(targetPlateId)
+                notice = null
+                error = null
+            }
+        },
         onArrange = ::arrangeProjectObjects,
         onAutoLay = ::autoLaySelectedModel,
         onLayOnFace = ::laySelectedFaceOnBed,

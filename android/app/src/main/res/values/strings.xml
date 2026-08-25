@@ -7,6 +7,7 @@
     <string name="undo">Undo</string>
     <string name="redo">Redo</string>
     <string name="duplicate_object">Duplicate object</string>
+    <string name="move_object">Move</string>
     <string name="object_actions">Actions for %1$s</string>
     <string name="remove_object_title">Remove this object?</string>
     <string name="remove_object_body">%1$s will be removed from this plate.</string>

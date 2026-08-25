@@ -419,6 +419,38 @@ data class ProjectHistoryState(
     fun selectPlate(plateId: String): ProjectHistoryState =
         copy(current = current.selectPlate(plateId))
 
+    fun moveObjectToPlate(objectId: String, targetPlateId: String): ProjectHistoryState {
+        val sourcePlateId = current.selectedPlateId
+        if (targetPlateId == sourcePlateId) return this
+        val movingObject = current.objects.firstOrNull { it.id == objectId } ?: return this
+        require(current.plates.any { it.id == targetPlateId }) { "Target plate is unavailable" }
+
+        val sourceObjects = current.objects.filterNot { it.id == objectId }
+        val sourceSelection = when {
+            current.selectedObjectId != objectId -> current.selectedObjectId
+            else -> sourceObjects.lastOrNull()?.id
+        }
+        val nextPlates = current.plates.map { plate ->
+            when (plate.id) {
+                sourcePlateId -> plate.copy(
+                    objects = sourceObjects,
+                    selectedObjectId = sourceSelection,
+                )
+                targetPlateId -> plate.copy(
+                    objects = plate.objects + movingObject,
+                    selectedObjectId = movingObject.id,
+                )
+                else -> plate
+            }
+        }
+        return record(
+            current.copy(
+                plates = nextPlates,
+                selectedPlateId = targetPlateId,
+            ),
+        )
+    }
+
     fun duplicate(objectId: String, newId: String): ProjectHistoryState {
         val selected = current.objects.firstOrNull { it.id == objectId } ?: return this
         require(current.allObjects.none { it.id == newId }) { "Duplicate project object id" }
