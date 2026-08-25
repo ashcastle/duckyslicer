@@ -1553,6 +1553,25 @@ private fun DuckySlicerScreen(
                 error = null
             }
         },
+        onCopyObjectToPlate = { objectId, targetPlateId ->
+            val current = projectTransferModel.state.value.history
+            val nextHistory = current.copyObjectToPlate(
+                objectId = objectId,
+                targetPlateId = targetPlateId,
+                newId = UUID.randomUUID().toString(),
+            )
+            if (
+                nextHistory != current &&
+                projectTransferModel.updateHistory(current, nextHistory)
+            ) {
+                plateSliceResults = plateSliceResults.clear(targetPlateId)
+                sliceOperationModel.clearCompleted()
+                layerPreview = null
+                remoteOperationModel.invalidateUpload()
+                notice = null
+                error = null
+            }
+        },
         onMoveObjectToPlate = { objectId, targetPlateId ->
             val current = projectTransferModel.state.value.history
             val sourcePlateId = current.current.selectedPlateId

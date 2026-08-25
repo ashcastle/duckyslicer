@@ -461,6 +461,41 @@ data class ProjectHistoryState(
         )
     }
 
+    fun copyObjectToPlate(
+        objectId: String,
+        targetPlateId: String,
+        newId: String,
+    ): ProjectHistoryState {
+        val sourcePlateId = current.selectedPlateId
+        if (targetPlateId == sourcePlateId) return this
+        val sourceObject = current.objects.firstOrNull { it.id == objectId } ?: return this
+        require(current.plates.any { it.id == targetPlateId }) { "Target plate is unavailable" }
+        require(current.allObjects.none { it.id == newId }) { "Duplicate project object id" }
+        require(current.allObjects.size < ProjectStore.MAX_PROJECT_OBJECTS) {
+            "Project has too many objects"
+        }
+
+        val copiedObject = sourceObject.copy(
+            id = newId,
+            volumes = sourceObject.rebaseVolumeIds(newId),
+        )
+        return record(
+            current.copy(
+                plates = current.plates.map { plate ->
+                    if (plate.id == targetPlateId) {
+                        plate.copy(
+                            objects = plate.objects + copiedObject,
+                            selectedObjectId = copiedObject.id,
+                        )
+                    } else {
+                        plate
+                    }
+                },
+                selectedPlateId = targetPlateId,
+            ),
+        )
+    }
+
     fun renameObject(objectId: String, requestedName: String): ProjectHistoryState {
         val name = requireNotNull(normalizedProjectObjectName(requestedName)) {
             "Object name is invalid"

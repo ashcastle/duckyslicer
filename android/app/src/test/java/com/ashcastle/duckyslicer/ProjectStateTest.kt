@@ -720,6 +720,80 @@ class ProjectStateTest {
     }
 
     @Test
+    fun copyingAnObjectToAnotherPlatePreservesContentAndIsAtomic() {
+        val sourceObject = projectObject("painted").copy(
+            transform = ModelTransform(
+                offsetXmm = 18f,
+                offsetYmm = -9f,
+                rotationZdeg = 35f,
+                scale = 1.2f,
+                scaleY = 1.2f,
+                scaleZ = 1.2f,
+            ),
+            processOverrides = ObjectProcessOverrides(wallLoops = 4),
+            brimPoints = BrimPoints(listOf(BrimPoint(1f, 2f, 0f, 3f))),
+            volumes = listOf(
+                projectObject("painted").singleVolume.copy(
+                    supportPaint = SupportPaint().paint(0, SupportPaintState.ENFORCE),
+                    filamentSlot = 2,
+                ),
+            ),
+        )
+        var state = ProjectHistoryState().add(sourceObject)
+        val sourcePlateId = state.current.selectedPlateId
+        state = state.addPlate("target").selectPlate(sourcePlateId)
+
+        state = state.copyObjectToPlate("painted", "target", "painted-copy")
+
+        assertEquals("target", state.current.selectedPlateId)
+        assertEquals(listOf("painted-copy"), state.current.objects.map(ProjectObject::id))
+        assertEquals("painted-copy", state.current.selectedObjectId)
+        val copied = state.current.selectedObject!!
+        assertEquals(sourceObject.transform, copied.transform)
+        assertEquals(sourceObject.processOverrides, copied.processOverrides)
+        assertEquals(sourceObject.brimPoints, copied.brimPoints)
+        assertEquals(sourceObject.singleVolume.model, copied.singleVolume.model)
+        assertEquals(sourceObject.singleVolume.supportPaint, copied.singleVolume.supportPaint)
+        assertEquals(sourceObject.singleVolume.filamentSlot, copied.singleVolume.filamentSlot)
+        assertTrue(sourceObject.singleVolume.id != copied.singleVolume.id)
+        assertEquals(
+            listOf("painted"),
+            state.current.plates.first { it.id == sourcePlateId }.objects.map(ProjectObject::id),
+        )
+
+        state = state.undo()
+        assertEquals(sourcePlateId, state.current.selectedPlateId)
+        assertEquals(listOf("painted"), state.current.objects.map(ProjectObject::id))
+        assertTrue(state.current.plates.first { it.id == "target" }.objects.isEmpty())
+
+        state = state.redo()
+        assertEquals("target", state.current.selectedPlateId)
+        assertEquals("painted-copy", state.current.selectedObjectId)
+    }
+
+    @Test
+    fun copyingToTheSamePlateOrFromAMissingObjectDoesNothing() {
+        var state = ProjectHistoryState().add(projectObject("first"))
+        val sourcePlateId = state.current.selectedPlateId
+        state = state.addPlate("target").selectPlate(sourcePlateId)
+
+        assertEquals(
+            state,
+            state.copyObjectToPlate("first", sourcePlateId, "unused-copy"),
+        )
+        assertEquals(
+            state,
+            state.copyObjectToPlate("missing", "target", "unused-copy"),
+        )
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            state.copyObjectToPlate("first", "missing-plate", "copy")
+        }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            state.copyObjectToPlate("first", "target", "first")
+        }
+    }
+
+    @Test
     fun renamingAnObjectUpdatesOnlyItsPrimaryPartAndIsUndoable() {
         val base = projectObject("assembly")
         val auxiliary = base.singleVolume.copy(

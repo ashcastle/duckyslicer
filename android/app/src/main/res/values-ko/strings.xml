@@ -7,6 +7,7 @@
     <string name="undo">실행 취소</string>
     <string name="redo">다시 실행</string>
     <string name="duplicate_object">오브젝트 복제</string>
+    <string name="copy_to_plate">다른 플레이트로 복사</string>
     <string name="move_object">이동</string>
     <string name="rename_object">이름 변경</string>
     <string name="object_name">이름</string>

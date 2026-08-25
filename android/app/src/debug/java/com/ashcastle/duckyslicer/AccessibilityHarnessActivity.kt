@@ -479,6 +479,7 @@ private fun WorkspaceAccessibilityHarness(
         onRedo = {},
         onDuplicate = {},
         onRenameObject = { _, _ -> },
+        onCopyObjectToPlate = { _, _ -> },
         onMoveObjectToPlate = { _, _ -> },
         onArrange = {},
         onAutoLay = {},

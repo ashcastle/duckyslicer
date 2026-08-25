@@ -524,6 +524,7 @@ internal fun WorkspaceScreen(
     onRedo: () -> Unit,
     onDuplicate: (String) -> Unit,
     onRenameObject: (String, String) -> Unit,
+    onCopyObjectToPlate: (String, String) -> Unit,
     onMoveObjectToPlate: (String, String) -> Unit,
     onArrange: () -> Unit,
     onAutoLay: () -> Unit,
@@ -1119,6 +1120,7 @@ internal fun WorkspaceScreen(
                         ProjectStore.MAX_PROJECT_OBJECTS,
                     onDuplicateObject = onDuplicate,
                     onRenameObject = onRenameObject,
+                    onCopyObjectToPlate = onCopyObjectToPlate,
                     onMoveObjectToPlate = onMoveObjectToPlate,
                     onRemoveObject = onRemoveModel,
                     onNewProject = onNewProject,
@@ -6849,6 +6851,7 @@ private fun ProjectSheet(
     canDuplicateObject: Boolean,
     onDuplicateObject: (String) -> Unit,
     onRenameObject: (String, String) -> Unit,
+    onCopyObjectToPlate: (String, String) -> Unit,
     onMoveObjectToPlate: (String, String) -> Unit,
     onRemoveObject: (String) -> Unit,
     onNewProject: () -> Unit,
@@ -6863,6 +6866,7 @@ private fun ProjectSheet(
     var objectMenuId by remember { mutableStateOf<String?>(null) }
     var renameObjectId by remember { mutableStateOf<String?>(null) }
     var renameValue by remember { mutableStateOf("") }
+    var copyObjectId by remember { mutableStateOf<String?>(null) }
     var moveObjectId by remember { mutableStateOf<String?>(null) }
     var removeObjectId by remember { mutableStateOf<String?>(null) }
     WorkspaceCard(modifier) {
@@ -6937,6 +6941,17 @@ private fun ProjectSheet(
                             },
                         )
                         if (plates.size > 1) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.copy_to_plate)) },
+                                leadingIcon = {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = null)
+                                },
+                                enabled = canDuplicateObject,
+                                onClick = {
+                                    objectMenuId = null
+                                    copyObjectId = projectObject.id
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.move_object)) },
                                 leadingIcon = {
@@ -7114,6 +7129,47 @@ private fun ProjectSheet(
             },
             dismissButton = {
                 TextButton(onClick = { renameObjectId = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+    val copyTarget = objects.firstOrNull { it.id == copyObjectId }
+    if (copyTarget != null) {
+        AlertDialog(
+            onDismissRequest = { copyObjectId = null },
+            title = { Text(stringResource(R.string.copy_to_plate)) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    plates.forEachIndexed { index, plate ->
+                        if (plate.id != selectedPlateId) {
+                            Surface(
+                                onClick = {
+                                    copyObjectId = null
+                                    onCopyObjectToPlate(copyTarget.id, plate.id)
+                                },
+                                color = Color(0xFF343531),
+                                contentColor = Color(0xFFF4F4EE),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    stringResource(R.string.plate_number, index + 1),
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { copyObjectId = null }) {
                     Text(stringResource(R.string.cancel))
                 }
             },
